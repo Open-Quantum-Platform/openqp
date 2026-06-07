@@ -1199,6 +1199,15 @@ class Molecule:
         except AttributeError:
             data['td_energies'] = np.array([0]).tolist()
 
+        # save NMR isotropic shielding if available (CGO or GIAO).
+        # Flat atom-major array -> (natom, 5) in ppm; columns =
+        # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].
+        try:
+            sh = np.array(self.data['OQP::nmr_shielding']).reshape(-1, 5)
+            data['nmr_shielding'] = sh.tolist()
+        except (AttributeError, KeyError, TypeError, ValueError):
+            pass
+
         # save gradients if available
         data['grad'] = np.array(self.get_grad()).tolist()
         data['nac'] = np.array(self.get_nac()).tolist()

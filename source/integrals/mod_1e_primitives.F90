@@ -37,6 +37,13 @@ MODULE mod_1e_primitives
  PUBLIC comp_coulomb_int1_prim
  PUBLIC comp_kin_ovl_int1_prim
  PUBLIC comp_lz_int1_prim
+ PUBLIC comp_amom_int1_prim
+ PUBLIC comp_giao_overlap_deriv_prim
+ PUBLIC comp_giao_h10_core_prim
+ PUBLIC comp_nmr_dia_int1_prim
+
+ PUBLIC comp_pso_int1_prim
+ PUBLIC comp_giao_a01gp_prim
  public comp_mult_int1_prim
  public comp_allmult_int1_prim
  PUBLIC comp_coulomb_dampch_int1_prim
@@ -472,6 +479,654 @@ END SUBROUTINE
     END ASSOCIATE
 
 END SUBROUTINE
+
+!> @brief Compute primitive block of angular momentum integrals about a
+!>        gauge origin `o`, all three components.
+!> @details Computes the real, antisymmetric matrix elements of the orbital
+!>  angular momentum operator measured about the point `o`:
+!>    \f$ A_a = \epsilon_{abc} (r-o)_b \partial_c \f$, a,b,c = x,y,z
+!>  i.e. \f$ L = -i\,(r-o)\times\nabla = -i\,A \f$, so the physical angular
+!>  momentum operator is \f$ -i \f$ times the block returned here.
+!>  Each component factorizes into a product of 1D factors: a moment-about-`o`
+!>  factor on one axis, a ket-derivative factor on another, and a plain overlap
+!>  on the third. The ket derivative uses the Gaussian rule
+!>    \f$ \partial \phi_\nu = 2\alpha_\nu \phi_{\nu+1} - n_\nu \phi_{\nu-1} \f$.
+!> @param[in]       cp          shell pair data
+!> @param[in]       id          current pair of primitives
+!> @param[in]       o           gauge origin
+!> @param[inout]    blk         block of 1e angular momentum integrals (:,1:3)
+!
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE comp_amom_int1_prim(cp, id, o, blk)
+!dir$ attributes inline :: comp_amom_int1_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(in) :: o(:)
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    INTEGER :: i, j, nx, ny, nz, mx, my, mz, ij, jmax
+    REAL(REAL64) :: aj
+    REAL(REAL64) :: sx0, sy0, sz0, mx1, my1, mz1, dx, dy, dz
+    real(real64) :: xyzmom(3,0:1,0:max_ang+1,0:max_ang)
+
+    ASSOCIATE (pp => cp%p(id))
+    aj = pp%aj
+    ! moments about `o` (mom 0 = overlap, mom 1 = (q-o) moment),
+    ! ket angular momentum extended by 1 to allow the ket derivative.
+    CALL multipole_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang, cp%jang+1, o, 1, xyzmom)
+
+    ij = 0
+    jmax = cp%jnao
+    DO i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      IF (cp%iandj) jmax = i
+      DO j = 1, jmax
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij+1
+
+        ! plain overlaps
+        sx0 = xyzmom(X__,0,mx,nx)
+        sy0 = xyzmom(Y__,0,my,ny)
+        sz0 = xyzmom(Z__,0,mz,nz)
+        ! (q-o) moments
+        mx1 = xyzmom(X__,1,mx,nx)
+        my1 = xyzmom(Y__,1,my,ny)
+        mz1 = xyzmom(Z__,1,mz,nz)
+        ! ket derivatives: 2*aj*S(ket+1) - n_ket*S(ket-1)
+        dx = 2*aj*xyzmom(X__,0,mx+1,nx) - mx*xyzmom(X__,0,max(mx-1,0),nx)
+        dy = 2*aj*xyzmom(Y__,0,my+1,ny) - my*xyzmom(Y__,0,max(my-1,0),ny)
+        dz = 2*aj*xyzmom(Z__,0,mz+1,nz) - mz*xyzmom(Z__,0,max(mz-1,0),nz)
+
+        ! A_x = (y-o_y) d_z - (z-o_z) d_y
+        blk(ij,X__) = blk(ij,X__) + pp%expfac * sx0 * (my1*dz - mz1*dy)
+        ! A_y = (z-o_z) d_x - (x-o_x) d_z
+        blk(ij,Y__) = blk(ij,Y__) + pp%expfac * sy0 * (mz1*dx - mx1*dz)
+        ! A_z = (x-o_x) d_y - (y-o_y) d_x
+        blk(ij,Z__) = blk(ij,Z__) + pp%expfac * sz0 * (mx1*dy - my1*dx)
+      END DO
+    END DO
+
+    END ASSOCIATE
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO/London overlap magnetic derivative block.
+!> @details Accumulates the real coefficient of the imaginary first magnetic
+!>  derivative of the AO overlap matrix, omitting the common factor i.  For a
+!>  bra function centered at R_mu and ket function centered at R_nu,
+!>    S10_a(mu,nu) = 0.5 * [(R_mu - R_nu) x <mu|r|nu>]_a.
+!>  This is the first native GIAO one-electron building block; it is not wired
+!>  into the NMR shielding dispatch until h10/two-electron/CPHF terms pass the
+!>  benchmark matrix.
+ SUBROUTINE comp_giao_overlap_deriv_prim(cp, id, blk)
+!dir$ attributes inline :: comp_giao_overlap_deriv_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    INTEGER :: i, j, nx, ny, nz, mx, my, mz, ij, jmax
+    REAL(REAL64) :: sx0, sy0, sz0, mx1, my1, mz1, mu_x, mu_y, mu_z
+    REAL(REAL64) :: dr(3), zero(3)
+    real(real64) :: xyzmom(3,0:1,0:max_ang,0:max_ang)
+
+    zero = 0.0_real64
+    dr = cp%ri(:3) - cp%rj(:3)
+
+    ASSOCIATE (pp => cp%p(id))
+    CALL multipole_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang, cp%jang, zero, 1, xyzmom)
+
+    ij = 0
+    jmax = cp%jnao
+    DO i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      IF (cp%iandj) jmax = i
+      DO j = 1, jmax
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij+1
+
+        sx0 = xyzmom(X__,0,mx,nx)
+        sy0 = xyzmom(Y__,0,my,ny)
+        sz0 = xyzmom(Z__,0,mz,nz)
+        mx1 = xyzmom(X__,1,mx,nx)
+        my1 = xyzmom(Y__,1,my,ny)
+        mz1 = xyzmom(Z__,1,mz,nz)
+        mu_x = mx1*sy0*sz0
+        mu_y = sx0*my1*sz0
+        mu_z = sx0*sy0*mz1
+
+        blk(ij,X__) = blk(ij,X__) + 0.5_real64*pp%expfac*(dr(Y__)*mu_z - dr(Z__)*mu_y)
+        blk(ij,Y__) = blk(ij,Y__) + 0.5_real64*pp%expfac*(dr(Z__)*mu_x - dr(X__)*mu_z)
+        blk(ij,Z__) = blk(ij,Z__) + 0.5_real64*pp%expfac*(dr(X__)*mu_y - dr(Y__)*mu_x)
+      END DO
+    END DO
+
+    END ASSOCIATE
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO/London first-order core-Hamiltonian magnetic derivative.
+!> @details Accumulates the real coefficient of the imaginary RHF GIAO h10 one-
+!>  electron operator, omitting the common factor i.  The convention follows the
+!>  libcint RHF NMR core-orbital convention
+!>  h10_core = - int1e_ignuc(asym) - int1e_igkin.  The assembled
+!>  int1_giao_h10_core routine adds the separate -0.5*int1e_giao_irjxp
+!>  one-electron GIAO term.  This is still not a shielding, does not include the
+!>  GIAO two-electron Fock derivative, and must not ungate nmr_gauge=giao by
+!>  itself.
+ SUBROUTINE comp_giao_h10_core_prim(cp, id, coord, zq, nat, blk)
+!dir$ attributes inline :: comp_giao_h10_core_prim
+
+    type(shpair_t), intent(in)  :: cp
+    integer, intent(in) :: id
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS
+    type(rys_root_t) :: ryscomp
+    integer :: i, j, ic, nx, ny, nz, mx, my, mz, ij, jmax
+    real(real64) :: xx, dij, kin0, nuc0, kin_mom(3), nuc_mom(3), mom(3), cvec(3)
+    real(real64) :: ovl_x0, ovl_y0, ovl_z0, ovl_x1, ovl_y1, ovl_z1
+    real(real64) :: rys_x0, rys_y0, rys_z0, rys_x1, rys_y1, rys_z1
+    real(real64) :: xyzovl(0:max_ang+2,0:max_ang+1,3)
+    real(real64) :: xyzkin(0:max_ang_pad,0:max_ang+1,3)
+    real(real64) :: xyzin(0:2*max_ang+1, 0:max_ang+1,3,NRT)
+!dir$ assume_aligned blk : 64
+!dir$ assume_aligned xyzkin : 64
+!dir$ assume_aligned xyzovl : 64
+!dir$ assume_aligned xyzin : 64
+
+    cvec = cp%ri(:3) - cp%rj(:3)
+
+    associate (pp => cp%p(id))
+    call overlap_xyz(cp%ri, cp%rj, pp%r, pp%aa1, cp%iang+1, cp%jang+2, xyzovl)
+    call kinetic_xyz_j(xyzkin, xyzovl, cp%iang+1, cp%jang, pp%aj)
+
+    ij = 0
+    jmax = cp%jnao
+    do i = 1, cp%inao
+      nx = CART_X(i,cp%iang)
+      ny = CART_Y(i,cp%iang)
+      nz = CART_Z(i,cp%iang)
+      if (cp%iandj) jmax = i
+      do j = 1, jmax
+        mx = CART_X(j,cp%jang)
+        my = CART_Y(j,cp%jang)
+        mz = CART_Z(j,cp%jang)
+        ij = ij + 1
+
+        ovl_x0 = xyzovl(mx,nx,X__)
+        ovl_y0 = xyzovl(my,ny,Y__)
+        ovl_z0 = xyzovl(mz,nz,Z__)
+        ovl_x1 = xyzovl(mx,nx+1,X__)
+        ovl_y1 = xyzovl(my,ny+1,Y__)
+        ovl_z1 = xyzovl(mz,nz+1,Z__)
+
+        kin0 = xyzkin(mx,nx,X__)*ovl_y0*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz,Z__)
+        kin_mom(X__) = xyzkin(mx,nx+1,X__)*ovl_y0*ovl_z0 &
+             + ovl_x1*xyzkin(my,ny,Y__)*ovl_z0 &
+             + ovl_x1*ovl_y0*xyzkin(mz,nz,Z__) &
+             + cp%ri(X__)*kin0
+        kin_mom(Y__) = xyzkin(mx,nx,X__)*ovl_y1*ovl_z0 &
+             + ovl_x0*xyzkin(my,ny+1,Y__)*ovl_z0 &
+             + ovl_x0*ovl_y1*xyzkin(mz,nz,Z__) &
+             + cp%ri(Y__)*kin0
+        kin_mom(Z__) = xyzkin(mx,nx,X__)*ovl_y0*ovl_z1 &
+             + ovl_x0*xyzkin(my,ny,Y__)*ovl_z1 &
+             + ovl_x0*ovl_y0*xyzkin(mz,nz+1,Z__) &
+             + cp%ri(Z__)*kin0
+        nuc_mom = 0.0_real64
+        nuc0 = 0.0_real64
+
+        do ic = 1, nat
+          xx = pp%aa*sum((pp%r(:3) - coord(:,ic))**2)
+          ryscomp%nroots = cp%nroots
+          ryscomp%x = xx
+          call QGaussRys(ryscomp, cp, id, coord(:,ic), -zq(ic), xyzin, 1)
+          dij = pp%expfac*TWOPI*pp%aa1
+          nuc0 = nuc0 + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(X__) = nuc_mom(X__) + dij*sum(xyzin(mx,nx+1,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Y__) = nuc_mom(Y__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny+1,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz,Z__,1:cp%nroots))
+          nuc_mom(Z__) = nuc_mom(Z__) + dij*sum(xyzin(mx,nx,X__,1:cp%nroots) &
+                                * xyzin(my,ny,Y__,1:cp%nroots) &
+                                * xyzin(mz,nz+1,Z__,1:cp%nroots))
+        end do
+        nuc_mom(:) = nuc_mom(:) + cp%ri(:)*nuc0
+
+        mom = pp%expfac*kin_mom + nuc_mom
+        blk(ij,X__) = blk(ij,X__) + 0.5_real64*(cvec(Y__)*mom(Z__) - cvec(Z__)*mom(Y__))
+        blk(ij,Y__) = blk(ij,Y__) + 0.5_real64*(cvec(Z__)*mom(X__) - cvec(X__)*mom(Z__))
+        blk(ij,Z__) = blk(ij,Z__) + 0.5_real64*(cvec(X__)*mom(Y__) - cvec(Y__)*mom(X__))
+      end do
+    end do
+
+    end associate
+
+ END SUBROUTINE
+
+
+!> @brief Density-contracted NMR diamagnetic shielding integrals for one nucleus.
+!> @details Accumulates the nine components
+!>    g_ab = sum_{mu,nu} D_{mu,nu} <mu| (r-o)_a (r-c)_b / |r-c|^3 |nu>
+!>  for a given nucleus at `c` and gauge origin `o`, summing over the primitive
+!>  pairs of the contracted shell pair. The diamagnetic shielding tensor is then
+!>    sigma^dia_{ts}(N) = (alpha^2/2) [ delta_ts * (g_xx+g_yy+g_zz) - g_{s,t} ].
+!>  The field factor (r-c) and the gauge-moment factor (r-o) are both inserted by
+!>  Cartesian index raising on the Rys nuclear-attraction kernel (the same
+!>  mechanism as der_helfey_xyz), reusing one extra bra order for the field and a
+!>  second for the (r-o) moment on the diagonal components.
+!> @param[in]       cp     shell pair data
+!> @param[in]       c      nucleus coordinates
+!> @param[in]       o      gauge origin
+!> @param[in]       den    density matrix block (i=bra, j=ket)
+!> @param[inout]    gdia   3x3 accumulator for the contracted integrals
+!
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE comp_nmr_dia_int1_prim(cp, c, o, den, gdia)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), o(3)
+    REAL(REAL64), INTENT(IN) :: den(:,:)
+    REAL(REAL64), INTENT(INOUT) :: gdia(3,3)
+
+    integer, parameter :: NRT = MAX_NROOTS+3
+    type(rys_root_t) :: ryscomp
+    REAL(REAL64) :: xx, ww, tt, bb, dd(3), rji(3), ric(3), rio(3), fac
+    INTEGER :: id, k, nr, ni, nj, a, b, m, kd(3)
+    INTEGER :: i, j, ix, iy, iz, jx, jy, jz
+    REAL(REAL64) :: prod, accum
+    ! Rys kernel: (ket, bra, coord, root); bra extended by 2
+    real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
+    ! field factor (r-c): bra extended by 1
+    real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)
+    ! per-coord factors by kind: 0=plain,1=field,2=moment,3=moment*field
+    real(real64) :: facK(0:max_ang, 0:max_ang, 3, 0:3, NRT)
+!dir$ assume_aligned xyzin : 64
+
+    ric = cp%ri(:3) - c(:3)
+    rio = cp%ri(:3) - o(:3)
+    rji = cp%rj(:3) - cp%ri(:3)
+
+    DO id = 1, cp%numpairs
+      ASSOCIATE (pp => cp%p(id), &
+                 iang => cp%iang, jang => cp%jang, &
+                 inao => cp%inao, jnao => cp%jnao)
+
+      nr = cp%nroots + 1
+      xx = pp%aa*sum((pp%r-c)**2)
+      ryscomp%nroots = nr
+      ryscomp%x = xx
+      call ryscomp%evaluate()
+
+      DO k = 1, nr
+        ww = ryscomp%w(k)*ryscomp%u(k)
+        tt = ryscomp%u(k)/(1.0d0+ryscomp%u(k))
+        bb = 0.5d0*(1.0d0-tt)/pp%aa
+        dd = (pp%r-cp%rj) - tt*(pp%r-c)
+
+        xyzin(0,0,1,k) = 1.0d0
+        xyzin(0,0,2,k) = 1.0d0
+        xyzin(0,0,3,k) = ww
+        xyzin(1,0,1,k) = dd(1)
+        xyzin(1,0,2,k) = dd(2)
+        xyzin(1,0,3,k) = dd(3)*ww
+
+        ! VRR (Lj+1,0)
+        DO nj = 2, (iang+jang)+2
+          xyzin(nj,0,:,k) = dd*xyzin(nj-1,0,:,k) + (nj-1)*bb*xyzin(nj-2,0,:,k)
+        END DO
+        ! HRR (Lj,Li+1), bra up to iang+2
+        nj = (iang+jang)+2
+        DO ni = 1, iang+2
+          nj = nj-1
+          xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + rji(1)*xyzin(0:nj,ni-1,1,k)
+          xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + rji(2)*xyzin(0:nj,ni-1,2,k)
+          xyzin(0:nj,ni,3,k) = xyzin(1:nj+1,ni-1,3,k) + rji(3)*xyzin(0:nj,ni-1,3,k)
+        END DO
+
+        ! field factor (r-c)_coord, bra 0:iang+1
+        DO m = 1, 3
+          fld(0:jang,0:iang+1,m,k) = xyzin(0:jang,1:iang+2,m,k) &
+                                   + ric(m)*xyzin(0:jang,0:iang+1,m,k)
+        END DO
+
+        ! per-coord factors, bra 0:iang
+        DO m = 1, 3
+          ! kind 0: plain
+          facK(0:jang,0:iang,m,0,k) = xyzin(0:jang,0:iang,m,k)
+          ! kind 1: field
+          facK(0:jang,0:iang,m,1,k) = fld(0:jang,0:iang,m,k)
+          ! kind 2: (r-o) moment of plain
+          facK(0:jang,0:iang,m,2,k) = xyzin(0:jang,1:iang+1,m,k) &
+                                    + rio(m)*xyzin(0:jang,0:iang,m,k)
+          ! kind 3: (r-o) moment of field  = field with extra (r-o) raise
+          facK(0:jang,0:iang,m,3,k) = fld(0:jang,1:iang+1,m,k) &
+                                    + rio(m)*fld(0:jang,0:iang,m,k)
+        END DO
+      END DO
+
+      fac = pp%expfac*TWOPI*2.0d0
+
+      DO a = 1, 3
+        DO b = 1, 3
+          ! kind per coordinate for this (a,b)
+          DO m = 1, 3
+            if (m==a .and. m==b) then
+              kd(m) = 3
+            else if (m==a) then
+              kd(m) = 2
+            else if (m==b) then
+              kd(m) = 1
+            else
+              kd(m) = 0
+            end if
+          END DO
+
+          accum = 0.0d0
+          DO i = 1, inao
+            ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+            DO j = 1, jnao
+              jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+              prod = sum( facK(jx,ix,1,kd(1),1:nr) &
+                        * facK(jy,iy,2,kd(2),1:nr) &
+                        * facK(jz,iz,3,kd(3),1:nr) )
+              accum = accum + den(i,j)*prod
+            END DO
+          END DO
+          gdia(a,b) = gdia(a,b) + fac*accum
+        END DO
+      END DO
+
+      END ASSOCIATE
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Compute primitive block of PSO (paramagnetic spin-orbit) integrals
+!>        for one nucleus, all three components.
+!> @details Real antisymmetric matrix elements of the operator
+!>    A_a = [(r-c) x grad]_a / |r-c|^3     (so the physical PSO operator is -i*A).
+!>  The field factor (r-c)/|r-c|^3 is inserted by a der_helfey-style raise on the
+!>  Rys nuclear kernel (validated in the diamagnetic term); the grad factor is the
+!>  ket derivative 2*aj*S(ket+1) - n_ket*S(ket-1) (as in the angular momentum term).
+!>  Loops over the primitive pairs of the shell pair internally.
+!> @param[in]       cp     shell pair data
+!> @param[in]       c      nucleus coordinates
+!> @param[inout]    blk    block of PSO integrals (:,1:3)
+!
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE comp_pso_int1_prim(cp, c, blk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS+3
+    type(rys_root_t) :: ryscomp
+    REAL(REAL64) :: xx, ww, tt, bb, dd(3), rji(3), ric(3), fac, aj
+    INTEGER :: id, k, nr, ni, nj, m
+    INTEGER :: i, j, ix, iy, iz, jx, jy, jz, ij, jmax
+    REAL(REAL64) :: px, py, pz
+    real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
+    real(real64) :: fld(0:max_ang, 0:max_ang, 3, NRT)   ! (ket,bra,coord,root)
+    real(real64) :: dkt(0:max_ang, 0:max_ang, 3, NRT)   ! ket derivative
+!dir$ assume_aligned xyzin : 64
+
+    ric = cp%ri(:3) - c(:3)
+    rji = cp%rj(:3) - cp%ri(:3)
+
+    DO id = 1, cp%numpairs
+      ASSOCIATE (pp => cp%p(id), &
+                 iang => cp%iang, jang => cp%jang, &
+                 inao => cp%inao, jnao => cp%jnao)
+
+      aj = pp%aj
+      nr = cp%nroots + 1
+      xx = pp%aa*sum((pp%r-c)**2)
+      ryscomp%nroots = nr
+      ryscomp%x = xx
+      call ryscomp%evaluate()
+
+      DO k = 1, nr
+        ww = ryscomp%w(k)*ryscomp%u(k)
+        tt = ryscomp%u(k)/(1.0d0+ryscomp%u(k))
+        bb = 0.5d0*(1.0d0-tt)/pp%aa
+        dd = (pp%r-cp%rj) - tt*(pp%r-c)
+
+        xyzin(0,0,1,k) = 1.0d0
+        xyzin(0,0,2,k) = 1.0d0
+        xyzin(0,0,3,k) = ww
+        xyzin(1,0,1,k) = dd(1)
+        xyzin(1,0,2,k) = dd(2)
+        xyzin(1,0,3,k) = dd(3)*ww
+
+        DO nj = 2, (iang+jang)+2
+          xyzin(nj,0,:,k) = dd*xyzin(nj-1,0,:,k) + (nj-1)*bb*xyzin(nj-2,0,:,k)
+        END DO
+        nj = (iang+jang)+2
+        DO ni = 1, iang+1
+          nj = nj-1
+          xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + rji(1)*xyzin(0:nj,ni-1,1,k)
+          xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + rji(2)*xyzin(0:nj,ni-1,2,k)
+          xyzin(0:nj,ni,3,k) = xyzin(1:nj+1,ni-1,3,k) + rji(3)*xyzin(0:nj,ni-1,3,k)
+        END DO
+
+        ! field factor (r-c)_coord, bra 0:iang
+        DO m = 1, 3
+          fld(0:jang,0:iang,m,k) = xyzin(0:jang,1:iang+1,m,k) &
+                                 + ric(m)*xyzin(0:jang,0:iang,m,k)
+        END DO
+        ! ket derivative (2*aj*S(ket+1) - n_ket*S(ket-1)), ket 0:jang, bra 0:iang
+        dkt(0,0:iang,1:3,k) = 2.0d0*aj*xyzin(1,0:iang,1:3,k)
+        DO nj = 1, jang
+          dkt(nj,0:iang,1:3,k) = 2.0d0*aj*xyzin(nj+1,0:iang,1:3,k) &
+                               - nj*xyzin(nj-1,0:iang,1:3,k)
+        END DO
+      END DO
+
+      ! The raw field+ket-derivative product carries a small spurious symmetric
+      ! component for off-center nuclei. The full (non-packed) block is emitted
+      ! here so the caller (pso_integrals) can antisymmetrise A=(M-M^T)/2, which
+      ! is exact for the anti-Hermitian PSO operator and removes that error.
+      ! Hence NO iandj triangular packing below.
+      fac = pp%expfac*TWOPI*2.0d0
+
+      ij = 0
+      jmax = jnao
+      DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jmax
+          jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+          ij = ij+1
+
+          ! PSO_x = P_x (fld_y dz - dy fld_z); etc (P=plain xyzin)
+          px = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz,3,1:nr) &
+                    - dkt(jy,iy,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          py = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix,1,1:nr) &
+                    - dkt(jz,iz,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          pz = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) &
+                    - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+
+          blk(ij,X__) = blk(ij,X__) + fac*px
+          blk(ij,Y__) = blk(ij,Y__) + fac*py
+          blk(ij,Z__) = blk(ij,Z__) + fac*pz
+        END DO
+      END DO
+
+      END ASSOCIATE
+    END DO
+
+ END SUBROUTINE
+
+!> @brief Primitive GIAO a01gp gauge-correction integrals (9 components).
+!> @details a01gp = (g | nabla-rinv cross p |): the GIAO/London first-order
+!>  derivative of the PSO operator at nucleus c.  Returns
+!>    blk(ij,(a-1)*3+col) = (cvec x M^{(col)})_a ,
+!>  with cvec = R_bra - R_ket and M^{(col)}_b = <mu|(r-R_bra)_b PSO_col|nu>
+!>  (the bra-position-weighted PSO, built by raising the bra angular momentum by
+!>  one in coordinate b, no center shift).  Full (both-triangle) block, no
+!>  packing.  The overall sign/scale is calibrated by the caller against the
+!>  libcint int1e_a01gp oracle.
+ SUBROUTINE comp_giao_a01gp_prim(cp, c, cvec, blk)
+    TYPE(shpair_t), INTENT(IN) :: cp
+    REAL(REAL64), INTENT(IN) :: c(3), cvec(3)
+    REAL(REAL64), CONTIGUOUS, INTENT(INOUT) :: blk(:,:)
+
+    integer, parameter :: X__ = 1, Y__ = 2, Z__ = 3
+    integer, parameter :: NRT = MAX_NROOTS+3
+    type(rys_root_t) :: ryscomp
+    REAL(REAL64) :: xx, ww, tt, bb, dd(3), rji(3), ric(3), fac, aj
+    INTEGER :: id, k, nr, ni, nj, m, a, col
+    INTEGER :: i, j, ix, iy, iz, jx, jy, jz, ij, jmax
+    REAL(REAL64) :: mm(3,3), pbase(3)   ! M^{(col)}_b : (b, col); base PSO
+    real(real64) :: xyzin(0:2*max_ang+3, 0:max_ang+2, 3, NRT)
+    real(real64) :: fld(0:max_ang, 0:max_ang+1, 3, NRT)   ! (ket,bra,coord,root)
+    real(real64) :: dkt(0:max_ang, 0:max_ang+1, 3, NRT)   ! ket derivative
+!dir$ assume_aligned xyzin : 64
+
+    ric = cp%ri(:3) - c(:3)
+    rji = cp%rj(:3) - cp%ri(:3)
+
+    DO id = 1, cp%numpairs
+      ASSOCIATE (pp => cp%p(id), &
+                 iang => cp%iang, jang => cp%jang, &
+                 inao => cp%inao, jnao => cp%jnao)
+
+      aj = pp%aj
+      ! One more Rys root than the PSO term: the extra bra-position raise
+      ! (r-R_bra) increases the polynomial order by one.
+      nr = cp%nroots + 2
+      xx = pp%aa*sum((pp%r-c)**2)
+      ryscomp%nroots = nr
+      ryscomp%x = xx
+      call ryscomp%evaluate()
+
+      DO k = 1, nr
+        ww = ryscomp%w(k)*ryscomp%u(k)
+        tt = ryscomp%u(k)/(1.0d0+ryscomp%u(k))
+        bb = 0.5d0*(1.0d0-tt)/pp%aa
+        dd = (pp%r-cp%rj) - tt*(pp%r-c)
+
+        xyzin(0,0,1,k) = 1.0d0
+        xyzin(0,0,2,k) = 1.0d0
+        xyzin(0,0,3,k) = ww
+        xyzin(1,0,1,k) = dd(1)
+        xyzin(1,0,2,k) = dd(2)
+        xyzin(1,0,3,k) = dd(3)*ww
+
+        DO nj = 2, (iang+jang)+3
+          xyzin(nj,0,:,k) = dd*xyzin(nj-1,0,:,k) + (nj-1)*bb*xyzin(nj-2,0,:,k)
+        END DO
+        nj = (iang+jang)+3
+        DO ni = 1, iang+2
+          nj = nj-1
+          xyzin(0:nj,ni,1,k) = xyzin(1:nj+1,ni-1,1,k) + rji(1)*xyzin(0:nj,ni-1,1,k)
+          xyzin(0:nj,ni,2,k) = xyzin(1:nj+1,ni-1,2,k) + rji(2)*xyzin(0:nj,ni-1,2,k)
+          xyzin(0:nj,ni,3,k) = xyzin(1:nj+1,ni-1,3,k) + rji(3)*xyzin(0:nj,ni-1,3,k)
+        END DO
+
+        ! field factor (r-c)_coord, bra 0:iang+1
+        DO m = 1, 3
+          fld(0:jang,0:iang+1,m,k) = xyzin(0:jang,1:iang+2,m,k) &
+                                   + ric(m)*xyzin(0:jang,0:iang+1,m,k)
+        END DO
+        ! ket derivative, bra 0:iang+1
+        dkt(0,0:iang+1,1:3,k) = 2.0d0*aj*xyzin(1,0:iang+1,1:3,k)
+        DO nj = 1, jang
+          dkt(nj,0:iang+1,1:3,k) = 2.0d0*aj*xyzin(nj+1,0:iang+1,1:3,k) &
+                                 - nj*xyzin(nj-1,0:iang+1,1:3,k)
+        END DO
+      END DO
+
+      fac = pp%expfac*TWOPI*2.0d0
+
+      ij = 0
+      jmax = jnao
+      DO i = 1, inao
+        ix = CART_X(i,iang); iy = CART_Y(i,iang); iz = CART_Z(i,iang)
+        DO j = 1, jmax
+          jx = CART_X(j,jang); jy = CART_Y(j,jang); jz = CART_Z(j,jang)
+          ij = ij+1
+
+          ! M^{(col)}_b : bra-position-weighted PSO (raise bra coord b by one).
+          ! col=1 (PSO_x):
+          mm(1,1) = sum( xyzin(jx,ix+1,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          mm(2,1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy+1,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy+1,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          mm(3,1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz+1,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz+1,3,1:nr) ) )
+          ! col=2 (PSO_y):
+          mm(1,2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix+1,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix+1,1,1:nr) ) )
+          mm(2,2) = sum( xyzin(jy,iy+1,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          mm(3,2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz+1,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz+1,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          ! col=3 (PSO_z):
+          mm(1,3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix+1,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix+1,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+          mm(2,3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy+1,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy+1,2,1:nr) ) )
+          mm(3,3) = sum( xyzin(jz,iz+1,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+
+          ! Base (un-raised) PSO components, to complete R0I = (r-R_bra) + R_bra,
+          ! i.e. the position is referenced to the molecular origin (libcint
+          ! convention), not the bra center.  M^{(col)}_b += R_bra,b * PSO_col.
+          pbase(1) = sum( xyzin(jx,ix,1,1:nr) * &
+                    ( fld(jy,iy,2,1:nr)*dkt(jz,iz,3,1:nr) - dkt(jy,iy,2,1:nr)*fld(jz,iz,3,1:nr) ) )
+          pbase(2) = sum( xyzin(jy,iy,2,1:nr) * &
+                    ( fld(jz,iz,3,1:nr)*dkt(jx,ix,1,1:nr) - dkt(jz,iz,3,1:nr)*fld(jx,ix,1,1:nr) ) )
+          pbase(3) = sum( xyzin(jz,iz,3,1:nr) * &
+                    ( fld(jx,ix,1,1:nr)*dkt(jy,iy,2,1:nr) - dkt(jx,ix,1,1:nr)*fld(jy,iy,2,1:nr) ) )
+          do col = 1, 3
+            mm(1,col) = mm(1,col) + cp%ri(1)*pbase(col)
+            mm(2,col) = mm(2,col) + cp%ri(2)*pbase(col)
+            mm(3,col) = mm(3,col) + cp%ri(3)*pbase(col)
+          end do
+
+          DO col = 1, 3
+            blk(ij,(1-1)*3+col) = blk(ij,(1-1)*3+col) + &
+              fac*( cvec(Y__)*mm(Z__,col) - cvec(Z__)*mm(Y__,col) )
+            blk(ij,(2-1)*3+col) = blk(ij,(2-1)*3+col) + &
+              fac*( cvec(Z__)*mm(X__,col) - cvec(X__)*mm(Z__,col) )
+            blk(ij,(3-1)*3+col) = blk(ij,(3-1)*3+col) + &
+              fac*( cvec(X__)*mm(Y__,col) - cvec(Y__)*mm(X__,col) )
+          END DO
+        END DO
+      END DO
+
+      END ASSOCIATE
+    END DO
+
+ END SUBROUTINE
 
 !> @brief Compute primitive block of multipole integrals of order `MOM`
 !> @param[in]       cp          shell pair data

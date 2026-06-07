@@ -40,6 +40,7 @@ module int2_compute
 
   type eri_data_t
     logical :: attenuated_ints = .false.
+    logical :: rys_only = .false.
     integer :: ids(4)
     integer :: flips(4)
     integer :: am(4)
@@ -143,6 +144,10 @@ module int2_compute
     type(int2_pair_storage) :: ppairs
 
     logical :: attenuated = .false.
+    !> Force the native Rys path for all L>2 quartets, bypassing libint even
+    !> when it is compiled in.  Consumers whose validated reference data was
+    !> produced with the Rys kernels (e.g. the NMR magnetic response) set this.
+    logical :: rys_only = .false.
     real(kind=dp) :: mu = 1.0d99
 
     ! Symmetry petite list (loaded from tagarray when pyoqp enables
@@ -423,7 +428,7 @@ contains
   subroutine int2_compute_t_set_screening(this)
     implicit none
     class(int2_compute_t), intent(inout) :: this
-    call ints_exchange(this%basis, this%schwarz_ints_regular)
+    call ints_exchange(this%basis, this%schwarz_ints_regular, rys_only=this%rys_only)
   end subroutine int2_compute_t_set_screening
 
 !###############################################################################
@@ -566,7 +571,8 @@ contains
       if (this%attenuated) then
         if (.not.allocated(this%schwarz_ints_attenuated)) then
           allocate(this%schwarz_ints_attenuated, mold=this%schwarz_ints_regular)
-          call ints_exchange(this%basis, this%schwarz_ints_attenuated, this%mu**2)
+          call ints_exchange(this%basis, this%schwarz_ints_attenuated, this%mu**2, &
+                             rys_only=this%rys_only)
         end if
         this%schwarz_ints => this%schwarz_ints_attenuated
       else
@@ -621,6 +627,7 @@ contains
     allocate(eri_data%gdat)
 
     eri_data%attenuated_ints = this%attenuated
+    eri_data%rys_only = this%rys_only
     eri_data%mu2 = this%mu**2
 
     if (libint2_active) then
@@ -914,7 +921,8 @@ contains
     eri_data%nbf = (eri_data%am+1)*(eri_data%am+2)/2
 
     rotspd = max_am <= 2
-    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints
+    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints &
+             .and..not.eri_data%rys_only
     rys = .not.rotspd.and..not.libint
 
     if (rotspd) then
@@ -1262,7 +1270,7 @@ contains
 
 !###############################################################################
 
-  subroutine ints_exchange(basis, schwarz_ints, mu2)
+  subroutine ints_exchange(basis, schwarz_ints, mu2, rys_only)
     use int2e_rotaxis, only: genr22
     use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
     use int2e_libint, only: libint_compute_eri, libint_print_eri
@@ -1277,6 +1285,7 @@ contains
     type(basis_set), intent(in) :: basis
     real(kind=dp), intent(inout) :: schwarz_ints(:,:)
     real(kind=dp), optional, intent(in) :: mu2
+    logical, optional, intent(in) :: rys_only
 
     real(kind=dp), parameter :: &
       ic_exchng  = 1.0d-15, &
@@ -1293,7 +1302,7 @@ contains
     integer :: am(4), max_am
     integer :: ok
     logical :: rotspd, libint, zero_shq, rys
-    logical :: attenuated
+    logical :: attenuated, rys_only_
     real(kind=dp) :: vmax
     real(kind=dp), allocatable, target :: ints(:)
     real(kind=dp), pointer :: pints(:,:,:,:)
@@ -1303,6 +1312,8 @@ contains
     type(int2_pair_storage) :: ppairs
 
     attenuated = present(mu2)
+    rys_only_ = .false.
+    if (present(rys_only)) rys_only_ = rys_only
 
     lmax = maxval(basis%am)
     if (lmax < 0 .or. lmax > 6) call show_message("Basis set agular momentum exceeds max. supported", WITH_ABORT)
@@ -1328,7 +1339,7 @@ contains
         max_am = maxval(am)
 
         rotspd = max_am <= 2
-        libint = .not.rotspd.and.libint2_active.and..not.attenuated
+        libint = .not.rotspd.and.libint2_active.and..not.attenuated.and..not.rys_only_
         rys = .not.rotspd.and..not.libint
         if (rotspd) then
           if (attenuated) then
