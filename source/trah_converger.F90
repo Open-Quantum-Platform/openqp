@@ -550,15 +550,13 @@ contains
         mw = mw + 1
         call aug_matvec(infos, conv, g, V(:,mw), n, W(:,mw)); used = used + 1
       end do
-      ! Rayleigh matrix Tm = V^T W  (m x m, symmetric)
+      ! Rayleigh matrix Tm = V^T W  (m x m, symmetric); BLAS over the large nn dim
       allocate(Tm(m,m))
-      do i = 1, m
-        Tm(i,:m) = matmul(V(:,i), W(:,:m))
-      end do
+      call dgemm('T','N', m, m, nn, 1.0_dp, V, nn, W, nn, 0.0_dp, Tm, m)
       call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
       theta = eig(1)                       ! lowest eigenvalue
-      u  = matmul(V(:,:m), Tm(:,1))        ! Ritz vector
-      au = matmul(W(:,:m), Tm(:,1))        ! A u
+      call dgemv('N', nn, m, 1.0_dp, V, nn, Tm(:,1), 1, 0.0_dp, u, 1)   ! Ritz vector
+      call dgemv('N', nn, m, 1.0_dp, W, nn, Tm(:,1), 1, 0.0_dp, au, 1)  ! A u
       deallocate(Tm)
       r = au - theta*u                     ! residual
       rnorm = norm2(r)
@@ -628,11 +626,12 @@ contains
         call conv%calc_h_op(infos, V(:,mw), hx); W(:,mw) = 2.0_dp*hx
       end do
       allocate(Tm(m,m))
-      do i = 1, m; Tm(i,:m) = matmul(V(:,i), W(:,:m)); end do
+      call dgemm('T','N', m, m, n, 1.0_dp, V, n, W, n, 0.0_dp, Tm, m)
       call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
       theta = eig(1)
-      u = matmul(V(:,:m), Tm(:,1))
-      r = matmul(W(:,:m), Tm(:,1)) - theta*u
+      call dgemv('N', n, m, 1.0_dp, V, n, Tm(:,1), 1, 0.0_dp, u, 1)
+      call dgemv('N', n, m, 1.0_dp, W, n, Tm(:,1), 1, 0.0_dp, r, 1)
+      r = r - theta*u
       deallocate(Tm)
       rnorm = norm2(r)
       if (rnorm < 1.0e-5_dp .or. m == mmax) exit
