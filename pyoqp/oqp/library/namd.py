@@ -602,20 +602,30 @@ class NAMD_SOC(NAMD):
         self.e0 = 0.0
 
     # ------------------------------------------------------------------ #
-    def _electronic_soc(self):
-        """SCF + singlet MRSF + triplet MRSF + soc_mrsf; returns (eval_ha, U)."""
+    def _electronic_soc(self, with_overlap=False):
+        """SCF + singlet MRSF + triplet MRSF + soc_mrsf; returns (eval_ha, U).
+
+        Stores the current singlet/triplet response vectors (for the MCH state
+        overlap) and, when with_overlap, the MO overlap vs the previous geometry.
+        """
         mol = self.mol
         sp = SinglePoint(mol)
         ref = sp.reference()
         self.e_ref = float(ref[0])
 
+        if with_overlap:
+            mol.back_door = (self.prev_xyz, self.prev_data)
+            BasisOverlap(mol).overlap()                     # sets OQP::overlap_mo
+
         mol.data.set_tdhf_multiplicity(1)
         sing = sp.excitation(ref)
+        self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
         trip = sp.excitation(ref)
+        self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
@@ -624,11 +634,158 @@ class NAMD_SOC(NAMD):
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)           # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
              + 1j * np.array(mol.data['OQP::soc_evec_im'])).reshape(self.nstate_soc, self.nstate_soc)
-        # lowest MCH excitation (Hartree) that soc_eval is referenced to
         self.e0 = float(min(np.array(sing[1:]).min() - self.e_ref,
                             np.array(trip[1:]).min() - self.e_ref)) if len(sing) > 1 else 0.0
         eval_ha = eval_wn / HA_TO_WAVENUM                                   # Hartree rel e0
         return eval_ha, u
+
+    # ------------------------------------------------------------------ #
+    # spin-adiabatic couplings (SHARC scheme)
+    # ------------------------------------------------------------------ #
+    def _mch_overlap(self):
+        """Block-diagonal MCH state overlap S(t-dt,t) over the spin-adiabatic
+        basis (ns singlets + 3*nt triplet Ms sublevels). Singlet and triplet
+        spatial overlaps come from get_states_overlap; triplet Ms sublevels
+        share the spatial overlap and are spin-orthogonal across Ms; singlet-
+        triplet blocks vanish (different spin)."""
+        mol = self.mol
+        ns, nt, n = self.ns, self.nt, self.nstate_soc
+
+        mol.data.set_tdhf_multiplicity(1)
+        mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
+        mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
+        oqp.get_states_overlap(mol)
+        s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
+
+        mol.data.set_tdhf_multiplicity(3)
+        mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
+        mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
+        oqp.get_states_overlap(mol)
+        s_t = np.array(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
+
+        s = np.zeros((n, n))
+        s[:ns, :ns] = s_s
+        for m in range(3):
+            for i in range(nt):
+                for j in range(nt):
+                    s[ns + i * 3 + m, ns + j * 3 + m] = s_t[i, j]
+        return s
+
+    @staticmethod
+    def _phase_track(u, u_prev, s_mch, eval_cur, tol=5.0e-5):
+        """Align the freshly diagonalised U to the previous step on the
+        spin-adiabatic overlap T = U_prev^dag S_MCH U, using orthogonal
+        Procrustes WITHIN each (near-)degenerate energy group only.
+
+        Diagonalisation returns eigenvectors with arbitrary phase AND arbitrary
+        rotation within degenerate subspaces (e.g. the three triplet Ms
+        sublevels).  Restricting the alignment to degenerate blocks (which are
+        adjacent since soc_eval is energy-sorted) removes that artifact while
+        preserving the energy<->state correspondence (a global rotation would
+        mix non-degenerate states and desynchronise eval).  Singleton groups
+        reduce to a phase fix."""
+        t = u_prev.conj().T @ s_mch @ u
+        n = u.shape[1]
+        w = np.eye(n, dtype=complex)
+        i = 0
+        while i < n:
+            j = i + 1
+            while j < n and abs(eval_cur[j] - eval_cur[i]) < tol:
+                j += 1
+            g = list(range(i, j))
+            sub = t[np.ix_(g, g)]
+            a_mat, _, bh = np.linalg.svd(sub)
+            w[np.ix_(g, g)] = bh.conj().T @ a_mat.conj().T
+            i = j
+        u_aligned = u @ w
+        t_aligned = u_prev.conj().T @ s_mch @ u_aligned
+        return u_aligned, t_aligned
+
+    def _propagate_and_hop(self, eval_prev, eval_cur, t):
+        """Local-diabatization (SHARC) propagation of the spin-adiabatic
+        amplitudes + fewest-switches hop + isotropic velocity rescaling.
+
+        The orthonormalised spin-adiabatic overlap T (T[I,J]=<I(t)|J(t+dt)>) is
+        used directly as the basis-change propagator, which is unitary and
+        therefore robust to the arbitrary within-subspace rotation of degenerate
+        states (e.g. the triplet Ms sublevels):
+
+            P = diag(e^{-i E(t+dt) dt/2}) . T_u^dag . diag(e^{-i E(t) dt/2})
+            c(t+dt) = P c(t)
+
+        Hop probabilities (SHARC) attribute the active-state population loss to
+        the states it flowed into through P.
+        """
+        from scipy.linalg import sqrtm
+        n = self.nstate_soc
+        a = self.active - 1
+        dt = self.dt
+
+        tu = t @ np.linalg.inv(sqrtm(t.conj().T @ t))       # nearest unitary
+        d1 = np.exp(-1j * eval_prev * dt / 2.0)
+        d2 = np.exp(-1j * eval_cur * dt / 2.0)
+        p = (d2[:, None]) * tu.conj().T * (d1[None, :])     # propagator c(t+dt)=P c(t)
+
+        c_old = self.coef.copy()
+        c_new = p @ c_old
+        nrm = np.linalg.norm(c_new)
+        if nrm > 0:
+            c_new = c_new / nrm
+
+        # SHARC hop probabilities: distribute the active-state population loss
+        rho_a = abs(c_old[a]) ** 2
+        dp = rho_a - abs(c_new[a]) ** 2
+        cmhp = np.zeros(n)
+        if dp > 0.0 and rho_a > 1e-30:
+            flux = np.array([max(0.0, np.real(np.conj(c_new[j]) * p[j, a] * c_old[a]))
+                             for j in range(n)])
+            flux[a] = 0.0
+            fsum = flux.sum()
+            if fsum > 1e-30:
+                cmhp = (dp / rho_a) * flux / fsum
+
+        # energy-based decoherence correction (Granucci-Persico)
+        if self.decoherence == 1:
+            ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+            if ekin > 0:
+                p_others = 0.0
+                for k in range(n):
+                    if k == a:
+                        continue
+                    gap = abs(eval_cur[k] - eval_cur[a])
+                    if gap < 1e-12:
+                        p_others += abs(c_new[k]) ** 2
+                        continue
+                    tau = (1.0 / gap) * (1.0 + self.edc_c / ekin)
+                    c_new[k] *= np.exp(-dt / tau)
+                    p_others += abs(c_new[k]) ** 2
+                pa = abs(c_new[a]) ** 2
+                if pa > 1e-30:
+                    c_new[a] *= np.sqrt(max(0.0, 1.0 - p_others) / pa)
+        self.coef = c_new
+
+        # fewest-switches hop decision
+        rand = float(self.rng.random())
+        hopped = False
+        lower = 0.0
+        for j in range(n):
+            if j == a:
+                continue
+            upper = lower + cmhp[j]
+            if lower < rand < upper:
+                de = eval_cur[a] - eval_cur[j]             # E_old - E_new
+                ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+                if de < 0.0 and ekin < abs(de):
+                    break                                  # frustrated hop
+                if abs(de) > self.thrshe:
+                    break
+                scale = np.sqrt(max(0.0, 1.0 + de / ekin)) if ekin > 0 else 1.0
+                self.vel = scale * self.vel                # isotropic rescale
+                self.active = j + 1
+                hopped = True
+                break
+            lower = upper
+        return hopped
 
     def _dominant_component(self, u, active):
         """Largest |U|^2 MCH component of the active spin-adiabatic state.
@@ -656,36 +813,72 @@ class NAMD_SOC(NAMD):
     # ------------------------------------------------------------------ #
     def run(self):
         mol = self.mol
-        dump_log(mol, title='PyOQP: SOC-NAMD (spin-adiabatic, dominant-component gradient)')
+        dump_log(mol, title='PyOQP: SOC-NAMD (ISC, SHARC spin-adiabatic FSSH)')
 
         r = mol.get_system().reshape((self.natom, 3))
 
-        eval_ha, u = self._electronic_soc()
+        # initial electronic structure + active-surface force
+        eval_ha, u = self._electronic_soc(with_overlap=False)
         grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
         accel = -grad / self.mass[:, None]
-        self._log_soc(0, eval_ha, e_pure, mult, state, w)
+        self._ulog = u
+        self._store_prev(r, u, eval_ha)
+        self._log_soc(0, e_pure, mult, state, w, False)
 
         for istep in range(1, self.nstep + 1):
+            # velocity-Verlet position update
             r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
             mol.update_system(r.reshape(-1))
 
-            eval_ha, u = self._electronic_soc()
+            # electronic structure (+ MO overlap vs previous geometry)
+            eval_ha, u = self._electronic_soc(with_overlap=True)
+
+            # spin-adiabatic overlap: MCH overlap -> Procrustes-align U -> T
+            s_mch = self._mch_overlap()
+            u, t = self._phase_track(u, self.prev_u, s_mch, eval_ha)
+
+            # active-surface force (dominant MCH component) + velocity update
             grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
             accel_new = -grad / self.mass[:, None]
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
 
+            # local-diabatization propagation + fewest-switches hop
+            hopped = self._propagate_and_hop(self.prev_eval, eval_ha, t)
+            if hopped:
+                grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+                accel_new = -grad / self.mass[:, None]
+
             accel = accel_new
-            self._log_soc(istep, eval_ha, e_pure, mult, state, w)
+            self._ulog = u
+            self._store_prev(r, u, eval_ha)
+            self._log_soc(istep, e_pure, mult, state, w, hopped)
 
         dump_log(mol, title='PyOQP: SOC-NAMD trajectory complete')
 
-    def _log_soc(self, istep, eval_ha, e_pure, mult, state, w):
+    def _store_prev(self, r, u, eval_ha):
+        self.prev_xyz = copy.deepcopy(r.reshape(-1))
+        self.prev_data = copy.deepcopy(self.mol.get_data())
+        self.prev_u = u.copy()
+        self.prev_eval = eval_ha.copy()
+        self.prev_sbvec = self.sbvec.copy()
+        self.prev_tbvec = self.tbvec.copy()
+
+    def _log_soc(self, istep, e_pure, mult, state, w, hopped):
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
-        e_adiab_abs = self.e_ref + self.e0 + float(eval_ha[self.active - 1])
+        # manifold-summed populations via the MCH projection (U c): the spin
+        # character is in the MCH basis, where the first ns components are
+        # singlets and the rest triplet Ms sublevels. The adiabatic states are
+        # energy-sorted mixtures, so summing adiabatic amplitudes by index is
+        # not the spin character.
+        mch = self._ulog @ self.coef
+        pmch = np.abs(mch) ** 2
+        pop_s = float(pmch[:self.ns].sum())
+        pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
             title=(f'SOC-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+e_pure:.8f}  '
-                   f'E_pure={e_pure:.8f}  E_adiab={e_adiab_abs:.8f}  E_kin={ekin:.8f}  '
-                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})'),
+                   f'E_pure={e_pure:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
+                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})  '
+                   f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
