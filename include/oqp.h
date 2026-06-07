@@ -247,4 +247,7 @@ void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
+void nmr_shielding(struct oqp_handle_t *inf);
+void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
+void nmr_giao_shielding(struct oqp_handle_t *inf);
 

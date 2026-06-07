@@ -1266,4 +1266,54 @@ contains
 
 !###############################################################################
 
+
+!-------------------------------------------------------------------------------
+
+!> @brief Project Davidson expansion vectors onto each root's dominant irrep.
+!> @detail Response-space symmetry blocking (Phase IV): for a totally
+!>   symmetric reference the response matrix is block-diagonal over the
+!>   irreps of the excitation pairs, so each root's residual can be
+!>   confined to the dominant irrep of its current Ritz vector. No-op
+!>   unless pyoqp staged OQP::sym_pair_irrep (use_response_symmetry).
+  subroutine sym_response_project(infos, ritz_full, qvec, nstates)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: ritz_full(:,:)
+    real(kind=dp), intent(inout) :: qvec(:,:)
+    integer, intent(in) :: nstates
+
+    integer(8), contiguous, pointer :: pair_irrep(:)
+    integer(4) :: status
+    integer :: istate, ipair, best, nirr, xvec_dim
+    real(kind=dp), allocatable :: weight(:)
+
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, status=status)
+    if (status /= TA_OK) return
+
+    xvec_dim = ubound(qvec, 1)
+    if (size(pair_irrep) /= xvec_dim) return
+    nirr = int(maxval(pair_irrep))
+    if (nirr < 1) return
+
+    allocate(weight(nirr))
+    do istate = 1, nstates
+      weight = 0.0_dp
+      do ipair = 1, xvec_dim
+        weight(int(pair_irrep(ipair))) = &
+            weight(int(pair_irrep(ipair))) + ritz_full(ipair, istate)**2
+      end do
+      best = maxloc(weight, 1)
+      do ipair = 1, xvec_dim
+        if (int(pair_irrep(ipair)) /= best) qvec(ipair, istate) = 0.0_dp
+      end do
+    end do
+
+  end subroutine sym_response_project
+
 end module tdhf_lib

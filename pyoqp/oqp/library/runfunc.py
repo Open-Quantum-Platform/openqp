@@ -16,6 +16,10 @@ from oqp.library.libgeometric import (
     GeometricOpt,
     GeometricTSOpt,
 )
+from oqp.library.liboqp import (
+    OQPOpt, OQPTSOpt, OQPMECIOpt, OQPMECPOpt, OQPTCIOpt,
+    OQPNEBOpt, OQPIRCOpt, OQPMEPOpt,
+)
 
 
 def compute_energy(mol):
@@ -27,6 +31,11 @@ def compute_energy(mol):
 
     # compute properties
     compute_scf_prop(mol)
+
+    # re-save mol data so property results (e.g. OQP::nmr_shielding) reach the
+    # JSON; the save inside SinglePoint.energy() runs before properties exist
+    if mol.config['guess']['save_mol']:
+        mol.save_data()
 
 
 def compute_scf_prop(mol):
@@ -41,6 +50,27 @@ def compute_scf_prop(mol):
             oqp.lowdin(mol)
         elif prop == 'resp':
             oqp.resp_charges(mol)
+        elif prop == 'nmr':
+            scf_type = mol.config.get("scf", {}).get("type", "rhf")
+            if isinstance(scf_type, str):
+                scf_type = scf_type.lower()
+
+            nmr_gauge = mol.config.get("properties", {}).get("nmr_gauge", "cgo")
+            if isinstance(nmr_gauge, str):
+                nmr_gauge = nmr_gauge.lower()
+            if nmr_gauge == "cgo":
+                if scf_type in ("uhf", "rohf"):
+                    raise NotImplementedError(
+                        "CGO NMR shielding supports closed-shell RHF references only. "
+                        "Use properties.nmr_gauge=giao for open-shell (UHF/ROHF) NMR."
+                    )
+                oqp.nmr_shielding(mol)
+            elif nmr_gauge == "giao":
+                oqp.nmr_giao_shielding(mol)
+            else:
+                raise ValueError(
+                    f"Unknown NMR gauge formulation {nmr_gauge!r}; expected 'cgo' or 'giao'"
+                )
         else:
             raise ValueError(f'Unknown property: {prop}')
 
@@ -185,6 +215,7 @@ def get_optimizer(mol):
             'mecp': MECPOpt,
             'mep': MEP,
             'ts': None,
+            'tci': None,
             'irc': None,
             'neb': None,
         },
@@ -194,12 +225,23 @@ def get_optimizer(mol):
             'mecp': GeometricMECPOpt,
             'mep': None,
             'ts': GeometricTSOpt,
+            'tci': None,
             'irc': GeometricIRCOpt,
             'neb': GeometricNEBOpt,
         },
+        'oqp': {
+            'optimize': OQPOpt,
+            'meci': OQPMECIOpt,
+            'mecp': OQPMECPOpt,
+            'mep': OQPMEPOpt,
+            'ts': OQPTSOpt,
+            'tci': OQPTCIOpt,
+            'irc': OQPIRCOpt,
+            'neb': OQPNEBOpt,
+        },
     }
 
-    if opt_lib[lib][runtype]:
+    if opt_lib[lib].get(runtype):
         return opt_lib[lib][runtype](mol)
 
     else:

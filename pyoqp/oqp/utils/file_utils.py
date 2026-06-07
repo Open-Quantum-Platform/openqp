@@ -79,7 +79,12 @@ def how_long(start, end):
         int(((walltime % 86400) % 3600) % 60))
     return walltime
 
+
+def _to_yes_no(value):
+    return 'yes' if bool(value) else 'no'
 @mpi_dump
+
+
 def dump_log(mol, title=None, section=None, info=None, must_print=False):
     # function to write information to main log
     logfile = mol.log
@@ -190,6 +195,38 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP charge:                       %s
     
 """ % (natom, charge)
+
+
+    if section == 'symmetry':
+        metadata = mol.symmetry_metadata if isinstance(getattr(mol, 'symmetry_metadata', {}), dict) else {}
+        symmetry_status = metadata.get('status', 'disabled')
+        loginfo += """
+   PyOQP symmetry status:                      %s
+   PyOQP symmetry requested point group:       %s
+   PyOQP symmetry requested subgroup:          %s
+   PyOQP symmetry detected point group:        %s
+   PyOQP symmetry detected subgroup:           %s
+   PyOQP symmetry label MO:                   %s
+   PyOQP symmetry label states:               %s
+   PyOQP symmetry label modes:                %s
+   PyOQP symmetry use integral symmetry:      %s
+   PyOQP symmetry use response symmetry:      %s
+   PyOQP symmetry strict:                     %s
+   PyOQP symmetry tolerance:                  %s
+""" % (
+            symmetry_status,
+            metadata.get('requested_point_group', metadata.get('point_group', 'auto')),
+            metadata.get('requested_subgroup', metadata.get('subgroup', 'auto')),
+            metadata.get('detected_point_group', metadata.get('point_group', 'c1')),
+            metadata.get('detected_subgroup', metadata.get('subgroup', 'c1')),
+            _to_yes_no(metadata.get('label_mo', True)),
+            _to_yes_no(metadata.get('label_states', True)),
+            _to_yes_no(metadata.get('label_modes', True)),
+            _to_yes_no(metadata.get('use_integral_symmetry', False)),
+            _to_yes_no(metadata.get('use_response_symmetry', False)),
+            _to_yes_no(metadata.get('strict', False)),
+            metadata.get('tolerance', 1.0e-5),
+        )
 
     if section in ['scf']:
         loginfo += """

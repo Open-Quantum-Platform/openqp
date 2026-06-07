@@ -30,6 +30,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_nmr_shielding = OQP_prefix // "nmr_shielding"
+  character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
+    "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
+    "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
   character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
   character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
   character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
@@ -53,6 +57,16 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+
+  ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
+  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
+  character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
+  character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
+  character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
+  character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
+  character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
