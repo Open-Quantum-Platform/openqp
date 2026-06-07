@@ -9,6 +9,52 @@ import sys
 import time
 import argparse
 from signal import signal, SIGINT, SIG_DFL
+
+
+def _apply_omp_threads_from_input(argv):
+    """Honour an OpenMP thread-count request from the input file or CLI BEFORE
+    the native OpenMP runtime initialises (it caches OMP_NUM_THREADS when liboqp
+    loads, so this must run before `import oqp`).
+
+    Sources, highest precedence first:
+      * CLI:   --omp N   (or --omp=N)
+      * input: a line  `omp_threads = N`  (typically in the [input] section)
+
+    The value sets OMP_NUM_THREADS (threads per process / MPI rank).  If neither
+    is given, the existing environment / built-in default is left untouched.
+    """
+    import re
+    n = None
+    for i, a in enumerate(argv):
+        if a in ("--omp", "--omp-threads") and i + 1 < len(argv):
+            n = argv[i + 1]
+            break
+        if a.startswith("--omp="):
+            n = a.split("=", 1)[1]
+            break
+    if n is None:
+        inp = next((a for a in argv[1:]
+                    if not a.startswith("-") and os.path.isfile(a)), None)
+        if inp:
+            try:
+                with open(inp, encoding="utf-8", errors="ignore") as fh:
+                    m = re.search(r"(?mi)^[ \t]*omp_threads[ \t]*=[ \t]*(\d+)",
+                                  fh.read())
+                if m:
+                    n = m.group(1)
+            except OSError:
+                pass
+    if n is not None:
+        try:
+            ni = int(n)
+        except (TypeError, ValueError):
+            return
+        if ni >= 1:
+            os.environ["OMP_NUM_THREADS"] = str(ni)
+
+
+_apply_omp_threads_from_input(sys.argv)
+
 import oqp
 from oqp.utils.file_utils import dump_log
 from oqp.utils.input_checker import check_input_values
@@ -187,10 +233,30 @@ class Runner:
             diff = None
         return message, diff
 
+def _warn_if_no_openmp():
+    """Warn when threads were requested but liboqp was built without OpenMP, so
+    the request (input omp_threads / --omp / OMP_NUM_THREADS) has no effect."""
+    try:
+        want = int(os.environ.get("OMP_NUM_THREADS", "1"))
+    except ValueError:
+        want = 1
+    if want <= 1:
+        return
+    try:
+        have = bool(oqp.lib.oqp_have_openmp())
+    except Exception:
+        return
+    if not have:
+        print(f"PyOQP WARNING: {want} OpenMP threads were requested "
+              "(omp_threads/--omp/OMP_NUM_THREADS) but this OpenQP build has no "
+              "OpenMP support; the calculation will run serially.")
+
+
 def main():
     """
     Main function to handle command-line arguments and run OQP.
     """
+    _warn_if_no_openmp()
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file')
@@ -202,6 +268,10 @@ def main():
                              '  other  - Run tests in examples/other')
     parser.add_argument('--silent', action='store_true', help='run silently')
     parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
+    parser.add_argument('--omp', metavar='N', type=int,
+                        help='OpenMP threads per process/MPI rank (overrides the\n'
+                             "input's omp_threads and OMP_NUM_THREADS; applied\n"
+                             'before the OpenMP runtime loads)')
     args = parser.parse_args()
 
     if args.run_tests:

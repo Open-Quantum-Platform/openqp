@@ -177,6 +177,7 @@ struct electron_shell {
 
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
+int oqp_have_openmp(void);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
         int32_t *type_id, int32_t *ndims, int64_t *dims, void **v);
 int64_t oqp_alloc(struct oqp_handle_t *c_handle, char *code,

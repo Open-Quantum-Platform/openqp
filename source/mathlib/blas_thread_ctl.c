@@ -82,3 +82,20 @@ oqp_blas_thread_set(int64_t n)
 }
 
 #endif
+
+/*
+ * @brief Whether liboqp was compiled with OpenMP support (1) or not (0).
+ *
+ * Lets the Python frontend warn that an `omp_threads` / OMP_NUM_THREADS request
+ * has no effect on a serial build.  Compiled with the project's C flags, which
+ * include -fopenmp when ENABLE_OPENMP is on, so _OPENMP reflects the build.
+ */
+int
+oqp_have_openmp(void)
+{
+#ifdef _OPENMP
+    return 1;
+#else
+    return 0;
+#endif
+}

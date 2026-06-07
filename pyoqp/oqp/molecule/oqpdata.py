@@ -55,6 +55,11 @@ OQP_CONFIG_SCHEMA = {
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
+        # OpenMP threads per process / MPI rank. 0 = leave OMP_NUM_THREADS / the
+        # built-in default untouched. Applied before the OpenMP runtime loads
+        # (see pyoqp._apply_omp_threads_from_input); a build without OpenMP
+        # ignores it with a warning.
+        'omp_threads': {'type': int, 'default': '0'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
