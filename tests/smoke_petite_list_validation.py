@@ -128,8 +128,11 @@ def main():
         detected = meta.get('detected_subgroup')
         diff = abs(e_sym - e_ref)
 
+        # 'disabled_symmetry_broken_scf' is the documented fail-safe when
+        # the stability check keeps a broken-symmetry solution (energy must
+        # then match C1 trivially and exactly).
         ok = (diff <= GATE
-              and active.get('status') == 'active'
+              and active.get('status') in ('active', 'disabled_symmetry_broken_scf')
               and detected == subgroup)
         status = 'ok  ' if ok else 'FAIL'
         print(f'[{status}] {name:24s} subgroup={detected} '

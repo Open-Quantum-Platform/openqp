@@ -1362,9 +1362,13 @@ jc:   do j = 1, maxj
 
           do l = 1, maxl
 
-            val = eri_data%pints(l,k,j,i)*eri_data%weight
+            ! Cutoff on the unweighted value keeps the screening set
+            ! identical to the C1 path; the petite orbit weight is applied
+            ! after.
+            val = eri_data%pints(l,k,j,i)
 
             if (abs(val)<cutoff) cycle
+            val = val*eri_data%weight
             nint = nint + 1
 
             i1 = i+loci

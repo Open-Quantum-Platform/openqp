@@ -487,6 +487,15 @@ class SinglePoint(Calculator):
             # downstream quantities such as range-separated excited gradients).
             snapshot = self._snapshot_scf_state()
             dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
+
+            # Stability-following explores symmetry-breaking rotations whose
+            # densities are not totally symmetric, so the petite-list
+            # reduction must be off during (and after, if a broken-symmetry
+            # solution is kept) this stage.
+            petite_staged = self._petite_is_staged()
+            if petite_staged:
+                self._set_petite_enabled(False)
+
             data.set_scf_converger_type('trah')
             data.set_trah_stability(True)
             data.set_sd_scf(False)
@@ -496,6 +505,10 @@ class SinglePoint(Calculator):
 
             if trah_ok and e_post < e_pre - 1.0e-7:
                 # The converged point was unstable: keep the lower solution.
+                # The kept density may be symmetry-broken: petite stays off.
+                if petite_staged:
+                    self.mol.symmetry_metadata['integral_symmetry']['status'] = \
+                        'disabled_symmetry_broken_scf'
                 dump_log(self.mol,
                          title='PyOQP: SCF point was unstable; relaxed to a lower '
                                'solution (dE = %.3e Hartree)' % (e_post - e_pre),
@@ -509,6 +522,9 @@ class SinglePoint(Calculator):
                         setattr(self.mol.mol_energy, attr, value)
                     except Exception:
                         pass
+                # Symmetric solution kept: the petite reduction is valid again.
+                if petite_staged:
+                    self._set_petite_enabled(True)
                 if not trah_ok:
                     # Re-run the primary converger (warm-started) so mol_energy
                     # is consistent with the restored orbitals.
@@ -528,6 +544,21 @@ class SinglePoint(Calculator):
         'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
         'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
     )
+
+    def _petite_is_staged(self):
+        """True when the petite-list reduction maps are staged and active."""
+        meta = getattr(self.mol, 'symmetry_metadata', None)
+        if not meta:
+            return False
+        return meta.get('integral_symmetry', {}).get('status') == 'active'
+
+    def _set_petite_enabled(self, enabled):
+        import numpy as np
+        try:
+            self.mol.data['OQP::sym_petite_enable'] = \
+                np.array([1 if enabled else 0], dtype=np.int64)
+        except Exception:
+            pass
 
     def _snapshot_scf_state(self):
         """Deep-copy the tags that define the current converged SCF solution."""

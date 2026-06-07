@@ -49,7 +49,16 @@ Validation gate: round-trip test — apply the Fortran-side maps to the
 overlap matrix and confirm invariance (reuse the one-electron block
 diagnostics in Python on the same data).
 
-## 3. Phase I: petite-list skeleton Fock (the core)
+## 3. Phase I: petite-list skeleton Fock (the core) [VALIDATED 2026-06-07]
+
+Validation results (tests/smoke_petite_list_validation.py, RHF/ROHF/UHF
+6-31G*): all 7 cases pass the <= 1e-10 Ha gate vs C1 (worst 4.1e-12,
+benzene |G|=8). Engagement proven by a corrupted-map probe (wrong Fock ->
+SCF divergence). UHF triplet water exercises the fail-safe: the TRAH
+stability stage keeps a broken-symmetry solution, petite disables itself
+(status disabled_symmetry_broken_scf) and the energy matches C1 exactly.
+Screening uses the unweighted cutoff so the integral set is identical to
+the C1 path.
 
 Anchor points in `source/integrals/int2.F90` (module `int2_compute`):
 
