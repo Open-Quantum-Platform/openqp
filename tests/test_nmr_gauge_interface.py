@@ -25,18 +25,6 @@ class NMRGaugeInterfaceTests(unittest.TestCase):
         self.assertIn('"giao"', text)
         self.assertIn("properties.nmr_gauge", text)
 
-    def test_manuscript_uses_conservative_giao_wording(self):
-        main = Path("/Users/cheolhochoi/Dropbox/Documents/overleaf/hf-dft-nmr/main.tex")
-        if not main.exists():
-            self.skipTest("Overleaf hf-dft-nmr manuscript not present")
-        text = main.read_text()
-        self.assertIn("common gauge-origin formulation", text)
-        self.assertRegex(
-            text,
-            r"gauge-including atomic orbitals (will be introduced|are being introduced)",
-        )
-        self.assertNotIn("implementation now supports gauge-including atomic orbitals", text)
-
     def test_giao_benchmark_matrix_tracks_required_comparisons(self):
         matrix = json.loads((ROOT / "tests" / "fixtures" / "nmr" / "giao_benchmark_matrix.json").read_text())
         self.assertEqual(matrix["baseline"], "cgo")

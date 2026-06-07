@@ -4,6 +4,12 @@ These notes record the build/install recipes verified for the gated NMR
 CGO/GIAO development branch. They are build-environment notes only; they do not
 claim native GIAO shielding support.
 
+> **Caveat (historical):** the LP64 recipes below (`-DLINALG_LIB_INT64=OFF`,
+> `BLA_SIZEOF_INTEGER=4`, `INTEGER_SIZE=4`) predate the upstream change that
+> made ILP64 BLAS/LAPACK mandatory (current CMake rejects LP64 with a
+> FATAL_ERROR). They are kept for the historical record of the ABI debugging
+> only — build current sources with ILP64 (`LINALG_LIB_INT64=ON`, the default).
+
 ## Verified macOS Apple Silicon pip install
 
 Use Homebrew GCC/GFortran and native Apple Accelerate BLAS/LAPACK. Clear stale

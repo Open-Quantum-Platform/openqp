@@ -230,7 +230,10 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
         self.assertEqual(mol.config["scf"]["type"], before)
         self.assertEqual(calls["nmr"], 0, "ROHF NMR must not dispatch to the CGO routine")
 
-    def test_live_rohf_nmr_request_fails_after_rohf_scf_without_cgo_dispatch(self):
+    def test_live_rohf_cgo_nmr_request_fails_fast_without_cgo_dispatch(self):
+        """A live ROHF + nmr_gauge=cgo request must fail (fail-fast at the
+        input check) and must never produce CGO NMR output or silently fall
+        back to an RHF/UHF reference."""
         suffix = {
             "Darwin": "dylib",
             "Linux": "so",
@@ -266,15 +269,16 @@ class ROHFStatusAndInterfaceTests(unittest.TestCase):
             )
             log = inp.with_suffix(".log").read_text() if inp.with_suffix(".log").exists() else ""
 
+        combined = proc.stdout + proc.stderr
         self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("ROHF NMR shielding requested", proc.stderr)
-        self.assertIn("ROHF SCF/reference support exists", proc.stderr)
-        self.assertIn("ROHF NMR response support is separate", proc.stderr)
-        self.assertIn("SCF type = ROHF", log)
-        self.assertIn("Final ROHF energy", log)
+        # The input checker rejects ROHF + CGO before any SCF dispatch and
+        # points the user at the GIAO route.
+        self.assertIn("CGO NMR shielding supports closed-shell RHF references only", combined)
+        self.assertIn("nmr_gauge=giao", combined)
+        # No NMR output and no silent RHF/UHF fallback may appear anywhere.
+        self.assertNotIn("NMR shielding", log)
         self.assertNotIn("Final RHF energy", log)
         self.assertNotIn("Final UHF energy", log)
-        self.assertNotIn("NMR shielding", log)
 
     def test_rohf_nmr_giao_is_routed_to_giao_not_cgo(self):
         runfunc, calls = load_runfunc_with_stubs()

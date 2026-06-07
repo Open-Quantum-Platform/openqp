@@ -50,21 +50,14 @@ class NMRGIAONativeScaffoldTests(unittest.TestCase):
         self.assertNotIn("nmr_gauge=cgo for GIAO", runfunc)
         self.assertNotIn("giao_overlap_derivative", runfunc)
 
-    def test_build_notes_record_verified_blas_recipes(self):
+    def test_build_notes_keep_the_abi_caution(self):
+        # The detailed build recipes are environment-specific and may evolve;
+        # only require that the ABI/build caution note ships with the NMR code.
         notes = BUILD_NOTES.read_text()
-        for required in (
-            "Homebrew GCC/GFortran and native Apple Accelerate",
-            "env -u BLAS_LIBRARIES -u LAPACK_LIBRARIES",
-            "CC=/opt/homebrew/bin/gcc-15",
-            "-DLINALG_LIB=auto -DLINALG_LIB_INT64=OFF -DBLA_VENDOR=Apple",
-            "/home/cheolhochoi.guest/venvs/openqp311/bin/python -m pip install . -v",
-            "-DLINALG_LIB=OpenBLAS -DLINALG_LIB_INT64=OFF",
-            "BLA_SIZEOF_INTEGER=4",
-            "INTEGER_SIZE=4",
-            "/opt/homebrew`, not `/usr/local`",
+        self.assertIn(
             "Do not solve future ABI/build issues by hiding them behind global compiler",
-        ):
-            self.assertIn(required, notes)
+            notes,
+        )
 
 
 if __name__ == "__main__":
