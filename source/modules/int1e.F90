@@ -49,6 +49,8 @@ contains
       hcore(:), tmat(:), smat(:)
     character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
       OQP_SM, OQP_TM, OQP_Hcore /)
+    character(len=*), parameter :: tags_stale(1) = (/ character(len=80) :: &
+      OQP_QMAT /)
 
     logical dbg
     dbg = .false.
@@ -80,6 +82,8 @@ contains
     nbf2 = basis%nbf*(basis%nbf+1)/2
 
     call infos%dat%remove_records(tags_general)
+!   The overlap matrix changes, so the cached Q = S^(-1/2) is stale
+    call infos%dat%remove_records(tags_stale)
 
     call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
     call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)

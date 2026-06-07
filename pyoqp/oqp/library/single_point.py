@@ -944,12 +944,24 @@ class Hessian(Calculator):
             raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
 
         hessian = self.mol.set_hessian_result(raw_hessian)
+
+        # The native electronic Hessian excludes the empirical dftd4 dispersion
+        # term.  The numerical Hessian includes it implicitly (each displaced
+        # gradient is dispersion-corrected), so add d2 E_disp / dR2 here to keep
+        # the analytic path consistent with the numerical one.
+        disp_hessian = self._dispersion_hessian()
+        d4_added = np.ndim(disp_hessian) != 0
+        if d4_added:
+            hessian = hessian + disp_hessian
+            self.mol.hessian = hessian
+
         metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
         metadata.update({
             'backend': 'native_openqp',
             'native_openqp_kernel': True,
             'native_openqp_cphf_solver_exercised': True,
             'native_openqp_final_assembly': True,
+            'native_openqp_d4_dispersion': d4_added,
             'no_external_hessian_backend': True,
             'no_numerical_fallback': True,
             'shape': list(hessian.shape),
@@ -974,6 +986,49 @@ class Hessian(Calculator):
         raise NotImplementedError(
             f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
         )
+
+    def _dispersion_hessian(self):
+        """D4 dispersion contribution to the analytic Hessian, or 0.0 if disabled.
+
+        dftd4 exposes the dispersion energy and gradient (not a Hessian), so we
+        central-difference its analytic gradient with the same step the numerical
+        Hessian uses.  dftd4 gradients are cheap (~ms), so the 6N evaluations add
+        negligible cost.  Coordinates are in Bohr and the result is in
+        Hartree/Bohr**2, matching the native electronic Hessian, with the same
+        atom-major (x, y, z) ordering used throughout.
+        """
+        if not self.mol.config.get('input', {}).get('d4', False):
+            return 0.0
+
+        try:
+            from dftd4.interface import DampingParam, DispersionModel
+        except Exception as exc:  # pragma: no cover - exercised only without dftd4
+            raise RuntimeError(
+                'hess.type=analytical with input.d4=true requires the dftd4 package; '
+                'install dftd4 or use hess.type=numerical.'
+            ) from exc
+
+        functional = self.mol.config['input']['functional'].lower() or 'hf'
+        func_for_d4 = 'bhlyp' if functional in ('bhhlyp',) else functional
+        param = DampingParam(method=func_for_d4)
+
+        atoms = self.mol.get_atoms()
+        dx = self.mol.config['hess']['dx']
+        flat = np.asarray(self.mol.get_system(), dtype=float).reshape(-1)
+        ncoord = flat.size
+
+        def disp_grad(coord_flat):
+            model = DispersionModel(atoms, coord_flat.reshape((-1, 3)))
+            res = model.get_dispersion(param, grad=True)
+            return np.asarray(res['gradient'], dtype=float).reshape(-1)
+
+        hess = np.zeros((ncoord, ncoord))
+        for i in range(ncoord):
+            cp = flat.copy(); cp[i] += dx
+            cm = flat.copy(); cm[i] -= dx
+            hess[i, :] = (disp_grad(cp) - disp_grad(cm)) / (2.0 * dx)
+        # symmetrize (the FD asymmetry is O(dx**2))
+        return 0.5 * (hess + hess.T)
 
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'

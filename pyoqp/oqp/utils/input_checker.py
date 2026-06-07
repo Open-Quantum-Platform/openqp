@@ -952,14 +952,25 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
     method = _as_lower(_get(config, "input", "method", "hf"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    functional = _as_lower(_get(config, "input", "functional", ""))
     state = _get(config, "hess", "state", 0)
 
+    # The native analytic-Hessian derivative-integral machinery now covers the
+    # features that were previously gated to the numerical Hessian:
+    #   * ECP second derivatives -- libecpint deriv order 2, contracted in
+    #     hf_hessian via add_ecphess + the ECP core-derivative in the CPHF response;
+    #   * range-separated (CAM/LC) functionals -- the erfc-attenuated two-pass split
+    #     in grd2_hess_driver (skeleton), grd2_driver (fock_deriv_contract response)
+    #     and fock_jk (cphf), keyed off infos%dft%cam_flag.
+    # Both are finite-difference validated for RHF/RKS, UHF/UKS and ROHF/ROKS.
     if method == "hf":
         if state != 0:
             return "unsupported_feature", "HF/DFT analytic Hessian supports only hess.state=0 in this scaffold."
-        if scf_type != "rhf":
-            return "unsupported_scf_type", "Native HF/DFT analytic Hessian currently supports closed-shell RHF/RKS references only."
-        return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
+        if scf_type == "rhf":
+            return "supported", "Native OpenQP HF/DFT ground-state analytic Hessian dispatch is enabled."
+        if scf_type in ("uhf", "rohf"):
+            return "supported", f"Native OpenQP open-shell ({scf_type.upper()}) HF/DFT analytic Hessian dispatch is enabled."
+        return "unsupported_scf_type", "Native analytic Hessian supports RHF/RKS, UHF/UKS and ROHF/ROKS references for this scftype. Use [hess] type=numerical."
 
     if method == "tdhf":
         if td_type == "mrsf":
