@@ -1061,7 +1061,7 @@ contains
 
   end subroutine multiexp_radial_grid
 
-  subroutine dftexcor(basis,molGrid,iscftyp,fa,fb,coeffa,coeffb,nbf,nbf_tri,eexc,totele,totkin, infos)
+  subroutine dftexcor(basis,molGrid,iscftyp,fa,fb,coeffa,coeffb,nbf,nbf_tri,eexc,totele,totkin, infos, sym_atom_weight)
     use basis_tools, only: basis_set
     use mod_dft_gridint_energy, only: dmatd_blk
     use types, only: information
@@ -1074,6 +1074,8 @@ contains
     real(kind=dp), intent(inout) :: fa(*),fb(*),coeffa(*),coeffb(*)
     integer, intent(in) :: iscftyp, nbf, nbf_tri
     real(kind=dp), intent(out) :: eexc, totele, totkin
+    !> Optional symmetry-reduction atom weights (orbit size or zero).
+    real(kind=dp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
     integer :: nang, maxl
     logical :: urohf
     real(kind=dp) :: t0, t1
@@ -1091,9 +1093,16 @@ contains
     totkin = 0.0d0
     eexc   = 0.0d0
 !$  t0 = omp_get_wtime()
-    call dmatd_blk(basis, molGrid, coeffa,coeffb,fa,fb, &
-                     eexc,totele,totkin, &
-                     nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+    if (present(sym_atom_weight)) then
+      call dmatd_blk(basis, molGrid, coeffa,coeffb,fa,fb, &
+                       eexc,totele,totkin, &
+                       nang,nbf,infos%dft%grid_density_cutoff,urohf, infos, &
+                       sym_atom_weight)
+    else
+      call dmatd_blk(basis, molGrid, coeffa,coeffb,fa,fb, &
+                       eexc,totele,totkin, &
+                       nang,nbf,infos%dft%grid_density_cutoff,urohf, infos)
+    end if
 !$  t1 = omp_get_wtime()
 !$  write(iw,'(4X,"DFT XC integration time:",F10.3," s")') t1-t0
 

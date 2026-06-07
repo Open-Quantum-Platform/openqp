@@ -55,7 +55,8 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_lib, only: int2_td_data_t
+    use tdhf_lib, only: sym_response_project, &
+      int2_td_data_t
     use tdhf_lib, only: &
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
       rpaechk, rpaprint, rpanewb
@@ -79,6 +80,7 @@ contains
 
     real(kind=dp), allocatable :: scr2(:)
     real(kind=dp), allocatable :: ab2_mo(:,:), scr3(:,:)
+    real(kind=dp), allocatable :: sym_ritz(:,:)
     real(kind=dp), allocatable :: eex(:), spin_square(:)
     real(kind=dp), allocatable :: amb(:,:), &
                                   apb(:,:)
@@ -357,6 +359,10 @@ contains
       for_trnsf_b_vec = vr_p
       call sfresvec(scr3,bvec_mo,ab2_mo,vr_p,eex,nvec,rnorm,nstates)
       call sfqvec(scr3,xm,eex,nstates)
+
+!     Response-space symmetry blocking (no-op unless staged by pyoqp).
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
+      call sym_response_project(infos, sym_ritz, scr3, nstates)
 
       call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 

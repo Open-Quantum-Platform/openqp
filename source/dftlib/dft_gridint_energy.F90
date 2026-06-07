@@ -296,7 +296,8 @@ contains
 !> @author Vladimir Mironov
   subroutine dmatd_blk(basis, molGrid, coeffa, coeffb, fa, fb, &
                        exc, totele, totkin, &
-                       mxAngMom, nbf, dft_threshold, urohf, infos)
+                       mxAngMom, nbf, dft_threshold, urohf, infos, &
+                       sym_atom_weight)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
@@ -315,6 +316,8 @@ contains
     real(kind=fp), target, intent(inout) :: coeffa(nbf, *), coeffb(nbf, *)
     real(kind=fp), intent(inout) :: fa(*), fb(*)
     real(kind=fp), intent(in) :: dft_threshold
+    !> Optional symmetry-reduction atom weights (orbit size or zero).
+    real(kind=fp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
 
     type(xc_consumer_ks_t) :: dat
     type(xc_options_t) :: xc_opts
@@ -351,6 +354,8 @@ contains
     xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
     ! skip ao_prune_grid if it is pruned grid (SG1)
     if(infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
