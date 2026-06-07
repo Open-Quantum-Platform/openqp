@@ -532,9 +532,10 @@ contains
   subroutine int2_twoei(this, int2_consumer)
 
     use int2e_libint, ONLY: libint2_init_eri, libint2_cleanup_eri
-    use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT
+    use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT, c_int64_t
     use types, only: information
     use constants, only: NUM_CART_BF
+    use blas_thread, only: blas_thread_count, blas_thread_set
 !$  use omp_lib
 
     implicit none
@@ -566,11 +567,26 @@ contains
     type(int2_storage_t) :: int2_storage
     type(eri_data_t), allocatable :: eri_data
     integer :: ok
+    integer(c_int64_t) :: nBlasThreads
 
     nshell = this%basis%nshell
     npairs = nshell*(nshell+1)/2
     allocate(pair_i(npairs), pair_j(npairs))
     call int2_build_shell_pair_map(nshell, pair_i, pair_j)
+
+    ! Hardwire BLAS to a single thread for the duration of the OpenMP 2e build.
+    ! The Fock build is OpenMP-parallel and calls no BLAS itself, but a threaded
+    ! BLAS keeps an idle worker pool that spins and oversubscribes the cores
+    ! against the integral threads (measured ~1.5x slowdown at 28 threads). This
+    ! uses the BLAS library's own runtime setter (openblas_set_num_threads /
+    ! MKL_Set_Num_Threads / BLIS) so it CANNOT be overridden by a stray
+    ! OPENBLAS_NUM_THREADS/MKL_NUM_THREADS in the environment.  The previous
+    ! thread count is restored on exit, so diagonalisation and other BLAS-heavy
+    ! phases outside this routine keep their full threading.  No-op (-1) for
+    ! reference BLAS / Apple Accelerate where no setter is exported.
+    nBlasThreads = -1
+    nBlasThreads = blas_thread_count()
+    if (nBlasThreads > 0) call blas_thread_set(1_c_int64_t)
 
 
     ! preparations for screening
@@ -750,6 +766,8 @@ contains
 
     deallocate(eri_data)
 !$omp end parallel
+    ! restore BLAS threading for diagonalisation / other BLAS-heavy phases
+    if (nBlasThreads > 0) call blas_thread_set(nBlasThreads)
     deallocate(pair_i, pair_j)
     call int2_consumer%pe%init(this%pe%comm, this%pe%use_mpi)
     call int2_consumer%parallel_stop()
