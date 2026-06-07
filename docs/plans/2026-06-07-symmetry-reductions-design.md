@@ -170,6 +170,31 @@ fails to converge).
 - Gate: state energies vs unblocked solver to <= 1e-8 on water MRSF
   (states 1A1/1B1/1A2 from the smoke test), plus a c1 fallback test.
 
+## 6b. Measured performance (2026-06-07, 8 threads, gcc-15/OpenMP, M-series Mac)
+
+Idealized D2h acenes, stability stage disabled (it dominates both sides
+identically), tests/smoke_petite_benchmark.py:
+
+  system        basis     method   t_C1     t_petite  speedup   |dE|
+  benzene       6-31G*    RHF       0.5 s    0.2 s     2.4x     2e-12
+  benzene       6-31G*    BHHLYP    0.6 s    0.3 s     2.2x     2e-12
+  naphthalene   6-31G*    RHF       1.9 s    0.9 s     2.1x     1e-11
+  naphthalene   6-31G*    BHHLYP    3.1 s    1.1 s     2.7x     6e-12
+  anthracene    6-31G*    RHF       4.4 s    1.8 s     2.4x     1e-11
+  anthracene    6-31G*    BHHLYP    7.6 s    2.7 s     2.8x     4e-11
+  naphthalene   cc-pVTZ   RHF     124.5 s   36.6 s     3.4x     1e-09
+
+The Fock-only reduction bound is |G| = 8; whole-run numbers are diluted
+by diagonalization/DIIS/guess and the per-quartet petite test, and
+improve with kernel cost (cc-pVTZ f functions: 3.4x). With the TRAH
+stability verification included, whole-run speedups drop to ~1.2x --
+that stage is unreduced and dominates large runs.
+
+A frame-determinism fix came out of this benchmark: the abelian frame
+choice now prefers candidates closest to the identity, since degenerate
+axis assignments (e.g. naphthalene's three D2h axes) otherwise let the
+reorientation iteration ping-pong between equivalent frames and bail.
+
 ## 7. Failure-mode policy
 
 Any inconsistency detected at runtime (orbit map mismatch, 'mixed'

@@ -403,7 +403,15 @@ def _abelian_resolution(
     candidates.append(('c1', np.eye(3)))
 
     group_rank = {'d2h': 0, 'd2': 1, 'c2h': 2, 'c2v': 3, 'c2': 4, 'cs': 5, 'ci': 6, 'c1': 7}
-    candidates.sort(key=lambda item: group_rank[item[0]])
+    # Secondary key: prefer frames closest to the identity. This makes the
+    # frame choice deterministic for geometries already in a valid standard
+    # orientation (degenerate axis assignments, e.g. the three C2 axes of
+    # d2h, would otherwise let repeated detections ping-pong between
+    # equivalent frames and the reorientation iteration never converge).
+    candidates.sort(key=lambda item: (
+        group_rank[item[0]],
+        float(np.abs(item[1] - np.eye(3)).max()),
+    ))
 
     for group, rotation in candidates:
         operations = _verify_group(charges, coords, rotation, group, tol)
