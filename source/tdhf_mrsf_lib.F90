@@ -2771,7 +2771,7 @@ contains
     nmo = size(mo_a, 2)
 
     write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
-    write(iw,'(A)') '                       UMRSF: Jacobi rotation of MOs'
+    write(iw,'(A)') '                       UMRSF-TDDFT: Jacobi rotation of MOs'
     write(iw,'(A)') '                    ++++++++++++++++++++++++++++++++++++++++'
     write(iw,'(A)') ''
 

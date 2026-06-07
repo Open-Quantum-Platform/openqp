@@ -737,7 +737,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.type",
-            "UMRSF requires a UHF reference.",
+            "UMRSF-TDDFT requires a UHF reference.",
             value=scf_type,
             expected="uhf",
             action="Set [scf] type=uhf.",
@@ -928,7 +928,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
             "gradients, Hessians, and Z-vectors are not implemented.",
             value=f"{td_type}/{runtype}",
             expected="energy",
-            action="Use runtype=energy for UMRSF until UMRSF gradients/Z-vectors are implemented.",
+            action="Use runtype=energy for UMRSF-TDDFT until UMRSF-TDDFT gradients/Z-vectors are implemented.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
@@ -1180,7 +1180,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "mrsf":
             return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "umrsf":
-            return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
+            return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if td_type in {"tda", "rpa"}:

@@ -202,7 +202,7 @@ contains
     if (.not. umrsf .and. scf_type==3) roref = .true.
 
     if (umrsf .and. scf_type/=2) then
-      call show_message('U-MRSF requires UHF reference (SCFTYPE=2).',with_abort)
+      call show_message('UMRSF-TDDFT requires UHF reference (SCFTYPE=2).',with_abort)
     else if (umrsf) then
       uhfref = .true.
     end if
@@ -553,7 +553,7 @@ contains
           else if (infos%tddft%spc_coco /= 0.0_dp .or. &
                    infos%tddft%spc_ovov /= 0.0_dp .or. &
                    infos%tddft%spc_coov /= 0.0_dp) then
-            call show_message('UMRSF spin-pair coupling overrides require nonzero HFscale.', with_abort)
+            call show_message('UMRSF-TDDFT spin-pair coupling overrides require nonzero HFscale.', with_abort)
           end if
         else
           if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
