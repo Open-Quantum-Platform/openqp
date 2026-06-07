@@ -2,7 +2,7 @@ module fock_deriv_mod
 !> @brief Two-electron derivative-Fock contraction  tr(M . F^x[P])  for the
 !>   CPHF nuclear right-hand side, built natively on top of the validated 2e
 !>   gradient driver (grd2_driver) with no changes to the Rys internals and no
-!>   libint.
+!>   the native Rys integral code.
 !>
 !>   The 2e gradient driver contracts the derivative ERIs d(uv|ls)/dx with a
 !>   four-index density product supplied by a grd2_compute_data_t extension. The

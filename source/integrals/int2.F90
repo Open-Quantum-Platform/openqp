@@ -3,7 +3,6 @@
 module int2_compute
   use precision, only: dp
 
-  use int2e_libint, only: libint_t, libint2_active
   use int2e_rys, only: int2_rys_data_t
   use basis_tools, only: basis_set
   use atomic_structure_m, only: atomic_structure
@@ -44,7 +43,6 @@ module int2_compute
     integer :: nbf(4)
     real(kind=dp) :: mu2 = 1.0d99
     real(kind=dp), pointer :: pints(:,:,:,:)
-    type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t), allocatable :: gdat
     real(kind=dp), allocatable :: ints(:)
   end type eri_data_t
@@ -212,9 +210,6 @@ contains
     use types, only: information
     use oqp_tagarray_driver
 
-    use int2e_libint, only: &
-      libint_static_init
-
     implicit none
 
     character(len=*), parameter :: subroutine_name = "int2_compute_t_init"
@@ -238,7 +233,6 @@ contains
     call this%cutoffs%set(cutoff, ec1*cutoff, ec2*cutoff, cx1*log(10.0d0))
 
     call this%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
-    if (libint2_active) call libint_static_init
 
     call this%ppairs%alloc(basis, this%cutoffs)
     call this%ppairs%compute(basis, this%cutoffs)
@@ -346,8 +340,6 @@ contains
 
   subroutine int2_twoei(this, int2_consumer)
 
-    use int2e_libint, ONLY: libint2_init_eri, libint2_cleanup_eri
-    use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT
     use types, only: information
     use constants, only: NUM_CART_BF
 !$  use omp_lib
@@ -449,10 +441,6 @@ contains
     eri_data%attenuated_ints = this%attenuated
     eri_data%mu2 = this%mu**2
 
-    if (libint2_active) then
-        allocate(eri_data%erieval(this%basis%mxcontr**4))
-        call libint2_init_eri(eri_data%erieval, int(4, C_INT), C_NULL_PTR)
-    end if
     call eri_data%gdat%init(lmax, this%cutoffs, ok)
 
     call int2_storage%init(this%buf_size)
@@ -530,10 +518,6 @@ contains
 !$omp end do
     end if
 
-    if (libint2_active) then
-        call libint2_cleanup_eri(eri_data%erieval)
-        deallocate(eri_data%erieval)
-    end if
     call eri_data%gdat%clean()
     call int2_storage%clean()
 
@@ -694,7 +678,6 @@ contains
   subroutine shellquartet(basis, ppairs, cutoffs, eri_data, zero_shq)
     use io_constants, only: iw
     use int2e_rotaxis, only: genr22
-    use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_rys, only: int2_rys_compute, rys_print_eri
     use iso_c_binding, only: c_f_pointer
     implicit none
@@ -703,7 +686,7 @@ contains
     type(int2_cutoffs_t), intent(in) :: cutoffs
     type(eri_data_t), intent(inout), target :: eri_data
     logical, intent(out) :: zero_shq
-    logical :: rotspd, libint, rys
+    logical :: rotspd, rys
     integer :: nbf(4)
     logical, parameter :: dbg_output = .false.
 !    logical, parameter :: dbg_output = .true.
@@ -717,8 +700,7 @@ contains
     eri_data%nbf = (eri_data%am+1)*(eri_data%am+2)/2
 
     rotspd = max_am <= 2
-    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints
-    rys = .not.rotspd.and..not.libint
+    rys = .not.rotspd
 
     if (rotspd) then
 
@@ -732,15 +714,6 @@ contains
 
       eri_data%nbf = eri_data%nbf(eri_data%flips)
       eri_data%pints(1:eri_data%nbf(4), 1:eri_data%nbf(3), 1:eri_data%nbf(2), 1:eri_data%nbf(1)) => eri_data%ints
-
-    else if (libint) then
-
-      call libint_compute_eri(basis, ppairs, cutoffs, eri_data%ids, 0, eri_data%erieval, eri_data%flips, zero_shq)
-      if (zero_shq) return
-      nbf = eri_data%nbf(eri_data%flips)
-      eri_data%nbf = nbf
-      call c_f_pointer(eri_data%erieval(1)%targets(1), eri_data%pints, shape=nbf([4,3,2,1]))
-      call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
 
     else if (rys) then
 
@@ -771,7 +744,6 @@ contains
                   eri_data%am(eri_data%flips), &
                   eri_data%flips
       end block
-      if (libint) call libint_print_eri(basis, eri_data%ids, 0, eri_data%erieval, eri_data%flips)
       if (rys) call rys_print_eri(eri_data%gdat, eri_data%pints)
 
     end if
@@ -1067,13 +1039,9 @@ contains
 
   subroutine ints_exchange(basis, schwarz_ints, mu2)
     use int2e_rotaxis, only: genr22
-    use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
-    use int2e_libint, only: libint_compute_eri, libint_print_eri
-    use int2e_libint, only: libint_t, libint2_active
     use int2e_rys, only: int2_rys_compute
     use types, only: information
     use constants, only: NUM_CART_BF
-    use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT,  c_f_pointer
 
     implicit none
 
@@ -1095,12 +1063,11 @@ contains
     integer :: i, j, jmax
     integer :: am(4), max_am
     integer :: ok
-    logical :: rotspd, libint, zero_shq, rys
+    logical :: rotspd, zero_shq, rys
     logical :: attenuated
     real(kind=dp) :: vmax
     real(kind=dp), allocatable, target :: ints(:)
     real(kind=dp), pointer :: pints(:,:,:,:)
-    type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t) :: gdat
     type(int2_cutoffs_t) :: cutoffs
     type(int2_pair_storage) :: ppairs
@@ -1113,10 +1080,6 @@ contains
 !   Set very tight cutoff
     call cutoffs%set(ic_exchng, ei1_exchng, ei2_exchng, cux_exchng)
 
-    if (libint2_active) then
-        allocate(erieval(basis%mxcontr**4))
-        call libint2_init_eri(erieval, int(4, C_INT), C_NULL_PTR)
-    end if
     allocate(ints(NUM_CART_BF(lmax)**4), source=0.0d0)
     call gdat%init(lmax, cutoffs, ok)
 
@@ -1131,8 +1094,7 @@ contains
         max_am = maxval(am)
 
         rotspd = max_am <= 2
-        libint = .not.rotspd.and.libint2_active.and..not.attenuated
-        rys = .not.rotspd.and..not.libint
+        rys = .not.rotspd
         if (rotspd) then
           if (attenuated) then
             call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
@@ -1142,11 +1104,6 @@ contains
           nbf = am(flips)
           nbf = (nbf+1)*(nbf+2)/2
           vmax = maxval(abs(ints(1:product(nbf))))
-        else if (libint) then
-          nbf = am(flips)
-          call libint_compute_eri(basis, ppairs, cutoffs, shell_ids, 0, erieval, flips, zero_shq)
-          call c_f_pointer(erieval(1)%targets(1), pints, shape=nbf([4,3,2,1]))
-          vmax = maxval(abs(pints))
         else if (rys) then
           call gdat%set_ids(basis, shell_ids)
           if (attenuated) then
@@ -1164,10 +1121,6 @@ contains
       end do
     end do
 
-    if (libint2_active) then
-        call libint2_cleanup_eri(erieval)
-        deallocate(erieval)
-    end if
     call gdat%clean()
   end subroutine ints_exchange
 

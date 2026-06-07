@@ -20,7 +20,6 @@ option(BUILD_SHARED_LIBS "Enable shared build"               ON)
 
 option(BUILD_TESTING     "Enable some simple tests"          ON)
 
-option(USE_LIBINT        "Use Libint two-electron code"      ON)
 
 set(LINALG_LIB auto CACHE STRING "Select BLAS & LAPACK Library")
 # See BLA_VENDOR in FindBLAS documentation
@@ -183,10 +182,6 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
-endif()
-
-if(USE_LIBINT)
-    FortranCInterface_VERIFY(CXX)
 endif()
 
 if(ENABLE_PYTHON)

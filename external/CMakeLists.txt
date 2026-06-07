@@ -1,30 +1,5 @@
 include(ExternalProject)
 
-if(${USE_LIBINT})
-set(LIBINT2_SOURCE_DIR ${CMAKE_SOURCE_DIR}/external/libint CACHE INTERNAL "LIBINT2_SOURCE_DIR")
-set(LIBINT2_PREFIX ${CMAKE_BINARY_DIR}/external/libint CACHE INTERNAL "LIBINT2_PREFIX")
-
-ExternalProject_Add(libint2
-    PREFIX ${LIBINT2_PREFIX}
-    URL https://qchemlab.knu.ac.kr/vmironov/oqp-libint/-/archive/v2.7.1.1-am4/oqp-libint-v2.7.1.1-am4.tar.gz
-    TLS_VERIFY TRUE
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/external/libint
-    BINARY_DIR ${LIBINT2_PREFIX}/build-${CMAKE_Fortran_COMPILER_ID}
-    STAMP_DIR  ${LIBINT2_PREFIX}/stamp-${CMAKE_Fortran_COMPILER_ID}
-    BUILD_BYPRODUCTS ${LIBINT2_PREFIX}/build-${CMAKE_Fortran_COMPILER_ID}/libint2.a
-    UPDATE_COMMAND ""
-    INSTALL_COMMAND ""
-    CMAKE_ARGS -DENABLE_FORTRAN=ON
-               -DREQUIRE_CXX_API=OFF
-               -DENABLE_MPFR=OFF
-               -DLIBINT2_SHGAUSS_ORDERING=standard
-               -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-               -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-               -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-               -DLIBINT2_BUILD_SHARED_AND_STATIC_LIBS=${BUILD_SHARED_LIBS}
-               -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
-)
-endif()
 
 set(NLOPT_PREFIX ${CMAKE_BINARY_DIR}/external/nlopt CACHE INTERNAL "NLOPT_PREFIX")
 ExternalProject_Add(nlopt

@@ -5,7 +5,7 @@ module cphf_mod
 !>   The static CPHF A-matrix is the orbital Hessian (A+B)_{ia,jb}, the same
 !>   operator the TDDFT Z-vector solver applies. This module reuses that exact
 !>   operator -- built from the native Rys 2e engine via int2_td_data_t plus the
-!>   DFT XC kernel (tddft_fxc) -- so it has no libint dependency. It drives the
+!>   DFT XC kernel (tddft_fxc) -- and drives the
 !>   existing pcg solver with:
 !>     update  : U(MO,occ-vir) -> AO density (iatogen) -> response Fock (A+B)
 !>               -> MO occ-vir (mntoia) + orbital-energy diagonal (e_a-e_i) U

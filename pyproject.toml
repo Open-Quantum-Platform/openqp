@@ -37,7 +37,6 @@ wheel.install-dir = "oqp"
 wheel.packages = ["pyoqp/oqp"]
 
 [tool.scikit-build.cmake.define]
-USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
 LINALG_LIB_INT64 = "ON"
 CMAKE_INSTALL_PREFIX = "."

@@ -56,7 +56,6 @@ On macOS, use the Homebrew GCC toolchain for C/C++/Fortran and the native Accele
 ```bash
 cd openqp
 cmake -B build -G Ninja \
-  -DUSE_LIBINT=OFF \
   -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 \
   -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 \
   -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
@@ -73,7 +72,7 @@ pip install .
 
 ```bash
 cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
+cmake -B build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 ninja -C build install
 cd pyoqp
 pip install .
@@ -83,7 +82,7 @@ pip install .
 
 ```bash
 cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
+cmake -B build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 ninja -C build install
 cd pyoqp
 pip install .
@@ -93,13 +92,12 @@ pip install .
 
 ```bash
 cd openqp
-cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
+cmake -B build -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 make -C build install
 cd pyoqp
 pip install .
 ```
 
-- Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
 - The Linux/manual examples above use ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default). The macOS example uses native Accelerate BLAS/LAPACK with `-DLINALG_LIB_INT64=OFF`.
 
 #### Environmental Settings
