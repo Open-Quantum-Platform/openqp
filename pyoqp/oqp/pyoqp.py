@@ -9,6 +9,55 @@ import sys
 import time
 import argparse
 from signal import signal, SIGINT, SIG_DFL
+
+
+def _set_threading_defaults():
+    """Set conservative nested-threading defaults before native libraries load.
+
+    OpenQP parallelizes the native integral and response kernels with OpenMP.
+    BLAS must NOT spawn a second worker-thread layer inside those OMP regions,
+    or it oversubscribes the cores (OMP_threads x BLAS_threads) and stalls --
+    measured 1.53x faster on caffeine/6-31G(d,p) at 24 threads with sequential
+    BLAS (31.1s -> 20.3s).  GNU libgomp worker stacks also need headroom for the
+    integral kernels on macOS/arm64 (otherwise a startup segfault).  All values
+    are setdefault, so an explicit user environment still wins.
+    """
+    defaults = {
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "BLIS_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "OMP_STACKSIZE": "256M",
+        "GOMP_STACKSIZE": "256M",
+    }
+    if sys.platform == "darwin":
+        # macOS default: use the PERFORMANCE-core count, not all logical cores.
+        # On Apple Silicon spilling onto the efficiency cores oversubscribes and
+        # slows the integral build; on Intel Macs all cores are equal.  Derive it
+        # per-host (hw.perflevel0.physicalcpu = P-cores on Apple Silicon, falling
+        # back to hw.physicalcpu / os.cpu_count()) instead of a fixed cap, so we
+        # never over- or under-subscribe a given machine.  setdefault, so an
+        # explicit OMP_NUM_THREADS still wins.
+        import subprocess
+        ncore = None
+        for key in ("hw.perflevel0.physicalcpu", "hw.physicalcpu"):
+            try:
+                ncore = int(subprocess.check_output(
+                    ["sysctl", "-n", key], stderr=subprocess.DEVNULL).strip())
+            except Exception:
+                ncore = None
+            if ncore and ncore > 0:
+                break
+        if not ncore or ncore < 1:
+            ncore = os.cpu_count() or 1
+        defaults["OMP_NUM_THREADS"] = str(ncore)
+
+    for key, value in defaults.items():
+        os.environ.setdefault(key, value)
+
+
+_set_threading_defaults()
+
 import oqp
 from oqp.utils.file_utils import dump_log
 from oqp.utils.input_checker import check_input_values
@@ -53,6 +102,7 @@ class Runner:
         # Define the mapping of run types to their respective functions
         self.run_func = {
             'energy': compute_energy,
+            'ekt': compute_energy,
             'grad': compute_grad,
             'nac': compute_nac,
             'nacme': compute_nacme,
@@ -62,6 +112,7 @@ class Runner:
             'mecp': compute_geom,
             'mep': compute_geom,
             'ts': compute_geom,
+            'tci': compute_geom,
             'irc': compute_geom,
             'neb': compute_geom,
             'hess': compute_hess,
@@ -83,7 +134,11 @@ class Runner:
             self.mol.load_config(input_file)
 
         # check input values set default omp_num_threads
-        check_input_values(self.mol.config)
+        _input_file = getattr(self.mol, "input_file", None)
+        check_input_values(
+            self.mol.config,
+            input_dir=os.path.dirname(os.path.abspath(_input_file)) if _input_file else None,
+        )
 
         # Reload mol if possible
         self.reload()
@@ -92,6 +147,7 @@ class Runner:
         self.mol.start_time = start_time
 
         dump_log(self.mol, title='', section='start')
+        dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
 
     def run(self, test_mod=False):
         """

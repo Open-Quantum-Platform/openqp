@@ -151,6 +151,9 @@ module types
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
+    ! PCM implicit solvent (energy-only, ddX backend; off by default)
+    logical(c_bool) :: pcm_enabled = .false.     !< Enable PCM reaction-field contribution to SCF
+    real(c_double)  :: pcm_epsilon = 78.3553_dp  !< Solvent dielectric constant (water default)
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
@@ -175,9 +178,9 @@ module types
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
     integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
-    integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES)
+    integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES legacy), 2 (MINRES), 3 (AUTO)
     integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
-    logical(c_bool) :: umrsf= .False.      !< UMRSF branch calculations switch in td_mrsf_energy module
+    logical(c_bool) :: umrsf = .false.     !< UMRSF branch calculations switch in td_mrsf_energy module
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator

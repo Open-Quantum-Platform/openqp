@@ -12,7 +12,7 @@ method=hf
 [scf]
 type=rhf
 multiplicity=1
-maxit=50
+maxit=30
 
 [optimize]
 lib=geometric

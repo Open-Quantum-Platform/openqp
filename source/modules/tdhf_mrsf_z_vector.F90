@@ -1,8 +1,13 @@
 module tdhf_mrsf_z_vector_mod
 
+  use precision, only: dp
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite, ieee_value, ieee_quiet_nan
+  use zvector_common, only: sanitize_zvector_preconditioner
   implicit none
 
   character(len=*), parameter :: module_name = "tdhf_mrsf_z_vector_mod"
+  real(kind=dp), parameter :: GMRES_DENOMINATOR_FLOOR = 1.0d-14
+  real(kind=dp), parameter :: MRSF_ZVEC_DENOMINATOR_FLOOR = 1.0d-14
 
   ! Module-level work arrays for GMRES to avoid repeated allocation
   real(kind=8), allocatable :: gmres_wrk1(:,:), gmres_wrk2(:,:), gmres_wrk3(:,:)
@@ -22,18 +27,28 @@ contains
     integer, intent(in) :: nbf, nocca, noccb
     integer :: nvira, nvirb, ok
     
+    if (nbf <= 0 .or. nocca < 0 .or. noccb < 0) then
+      call show_message('Invalid GMRES work dimensions before allocation', with_abort)
+    end if
+
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    if (nvira <= 0 .or. nvirb <= 0) then
+      call show_message('Invalid GMRES occupied/virtual dimensions before allocation', with_abort)
+    end if
+
     if (gmres_work_allocated) then
-      ! Check if dimensions match
+      ! Check if dimensions match and every reusable array is still allocated.
       if (gmres_nbf == nbf .and. gmres_nocca == nocca .and. gmres_noccb == noccb) then
-        return  ! Arrays already allocated with correct size
+        if (gmres_work_arrays_allocated()) then
+          return  ! Arrays already allocated with correct size
+        end if
+        call cleanup_gmres_work()
       else
         ! Deallocate old arrays before reallocating
         call cleanup_gmres_work()
       end if
     end if
-    
-    nvira = nbf - nocca
-    nvirb = nbf - noccb
     
     allocate(gmres_wrk1(nbf,nbf), &
              gmres_wrk2(nbf,nbf), &
@@ -54,6 +69,18 @@ contains
     
   end subroutine init_gmres_work
   
+  ! Return true only when every reusable GMRES work array is allocated.
+  logical function gmres_work_arrays_allocated()
+    implicit none
+
+    gmres_work_arrays_allocated = allocated(gmres_wrk1) .and. &
+                                  allocated(gmres_wrk2) .and. &
+                                  allocated(gmres_wrk3) .and. &
+                                  allocated(gmres_pa) .and. &
+                                  allocated(gmres_ab1_mo_a) .and. &
+                                  allocated(gmres_ab1_mo_b)
+  end function gmres_work_arrays_allocated
+
   ! Cleanup GMRES work arrays
   subroutine cleanup_gmres_work()
     implicit none
@@ -138,11 +165,34 @@ contains
     real(kind=dp), allocatable :: w(:)       ! Work vector
     real(kind=dp), allocatable :: Ax(:)      ! A*x
     
-    real(kind=dp) :: beta, h_ij, temp, error, error_initial
+    real(kind=dp) :: beta, h_ij, temp, error, error_initial, true_residual
+    real(kind=dp) :: max_abs_overlap
+    real(kind=dp), parameter :: gmres_reorth_threshold = 1.0d-10
     integer :: i, j, k, iter, m, restart_count, inner_iter
-    logical :: converged
+    logical :: converged, unstable, happy_breakdown
     
     ! Initialize GMRES work arrays ONCE at the beginning
+    if (n <= 0 .or. restart <= 0) then
+      write(iw,'(" GMRES: invalid dimensions provided (n/restart)")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
+    if (size(b) /= n .or. size(x) /= n) then
+      write(iw,'(" GMRES: vector size does not match problem size")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
+    if (size(mo_a,1) /= nbf .or. size(mo_b,1) /= nbf) then
+      write(iw,'(" GMRES: invalid basis-size arguments")')
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      return
+    end if
+
     call init_gmres_work(nbf, nocca, noccb)
     
     ! Allocate workspace
@@ -160,6 +210,8 @@ contains
     iter_out = 0
     restart_count = 0
     converged = .false.
+    unstable = .false.
+    happy_breakdown = .false.
     
     write(iw,'(/," GMRES Solver Parameters:")')
     write(iw,'("   Problem size        : ", I8)') n
@@ -174,11 +226,43 @@ contains
     call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
                        nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                        fa, fb, scale_exch, dft)
+    if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. any(.not. ieee_is_finite(b))) then
+      write(iw,'(" GMRES: initial residual has non-finite input")')
+      call flush(iw)
+      error_out = huge(1.0_dp)
+      error_initial = huge(1.0_dp)
+      iter_out = 0
+      unstable = .true.
+    else
     r = b - Ax
     error_initial = sqrt(dot_product(r, r))
+    if (error_initial == 0.0_dp) then
+      write(iw,'(" GMRES: initial residual is exactly zero")')
+      call flush(iw)
+      error_out = error_initial
+      iter_out = 0
+      converged = .true.
+    else
+    if (.not. ieee_is_finite(error_initial)) then
+      write(iw,'(" GMRES: initial residual is non-finite; aborting iterative safety")')
+      call flush(iw)
+      error_out = huge(1.0_dp)
+      iter_out = 0
+      unstable = .true.
+    else if (error_initial < GMRES_DENOMINATOR_FLOOR) then
+      write(iw,'(" GMRES: initial residual is already below denominator floor")')
+      call flush(iw)
+      error_out = error_initial
+      iter_out = 0
+      converged = .true.
+      end if
+    end if
+    end if
     
-    ! Outer iteration loop (restarts)
-    do iter = 1, max_iter
+    if (unstable .or. converged) then
+      ! Safety fallback or exact-zero residual handled above; skip GMRES iterations
+    else
+      do iter = 1, max_iter
       
       restart_count = restart_count + 1
       
@@ -186,25 +270,55 @@ contains
       call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
                          nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                          fa, fb, scale_exch, dft)
+      if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. any(.not. ieee_is_finite(b))) then
+        write(iw,'(" GMRES: non-finite values during restart residual setup")')
+        unstable = .true.
+        exit
+      end if
       r = b - Ax
+      if (any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite residual during restart")')
+        unstable = .true.
+        exit
+      end if
+      true_residual = sqrt(dot_product(r, r))
+      if (.not. ieee_is_finite(true_residual)) then
+        write(iw,'(" GMRES: non-finite true residual during restart")')
+        unstable = .true.
+        exit
+      end if
+      if (true_residual < tol) then
+        error_out = true_residual
+        error = true_residual
+        converged = .true.
+        exit
+      end if
       
       ! Apply preconditioner to residual
       call apply_precond(r, V(:,1))
+      if (any(.not. ieee_is_finite(V(:,1))) .or. any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite preconditioned residual")')
+        unstable = .true.
+        exit
+      end if
       
       beta = sqrt(dot_product(V(:,1), V(:,1)))
+      if (any(.not. ieee_is_finite(V(:,1)))) then
+        write(iw,'(" GMRES: non-finite basis vector prior to scaling")')
+        unstable = .true.
+        exit
+      end if
+      if (.not. ieee_is_finite(beta) .or. beta < GMRES_DENOMINATOR_FLOOR) then
+        write(iw,'(" GMRES: degenerate residual norm at restart ", I3)') restart_count
+        unstable = .true.
+        exit
+      end if
       
-      ! Check for convergence
-      error = beta
+      ! Report the true residual; beta is only the preconditioned Arnoldi seed norm.
+      error = true_residual
       if (iter == 1) then
         write(iw,'(I6,8x,"  0",2x,1p,F13.8,1x,F13.8)') &
               restart_count, error, error/error_initial
-      end if
-      
-      if (error < tol) then
-        error_out = error
-        iter_out = iter
-        converged = .true.
-        exit
       end if
       
       V(:,1) = V(:,1) / beta
@@ -216,6 +330,7 @@ contains
       
       ! Arnoldi process
       inner_iter = 0
+      happy_breakdown = .false.
       do j = 1, m
         inner_iter = j
         
@@ -223,33 +338,85 @@ contains
         call apply_operator(V(:,j), w, infos, basis, molGrid, int2_driver, &
                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
                            fa, fb, scale_exch, dft)
+        if (any(.not. ieee_is_finite(w)) .or. any(.not. ieee_is_finite(V(:,j)))) then
+          write(iw,'(" GMRES: non-finite basis/operator values at inner step", I3)') j
+          unstable = .true.
+          exit
+        end if
         
         ! Apply preconditioner
         call apply_precond(w, V(:,j+1))
+        if (any(.not. ieee_is_finite(V(:,j+1))) .or. any(.not. ieee_is_finite(w))) then
+          write(iw,'(" GMRES: non-finite preconditioned vector at inner step", I3)') j
+          unstable = .true.
+          exit
+        end if
         
         ! Modified Gram-Schmidt orthogonalization
         do i = 1, j
           H(i,j) = dot_product(V(:,j+1), V(:,i))
+          if (.not. ieee_is_finite(H(i,j))) then
+            unstable = .true.
+            exit
+          end if
           V(:,j+1) = V(:,j+1) - H(i,j) * V(:,i)
         end do
-        
-        ! Reorthogonalization for numerical stability
-        do i = 1, j
-          temp = dot_product(V(:,j+1), V(:,i))
-          H(i,j) = H(i,j) + temp
-          V(:,j+1) = V(:,j+1) - temp * V(:,i)
-        end do
-        
-        H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))
-        
-        ! Check for breakdown
-        if (abs(H(j+1,j)) < 1.0d-12) then
-          write(iw,'(" GMRES: Lucky breakdown at iteration ", I3)') j
-          inner_iter = j
+        if (unstable) then
+          write(iw,'(" GMRES: non-finite H entry during orthogonalization")')
           exit
         end if
         
-        V(:,j+1) = V(:,j+1) / H(j+1,j)
+        ! Reorthogonalize only when residual overlap drift is measurable.
+        max_abs_overlap = 0.0_dp
+        do i = 1, j
+          temp = dot_product(V(:,j+1), V(:,i))
+          if (.not. ieee_is_finite(temp)) then
+            unstable = .true.
+            exit
+          end if
+          max_abs_overlap = max(max_abs_overlap, abs(temp))
+        end do
+        if (unstable) then
+          write(iw,'(" GMRES: non-finite overlap during re-orthogonalization check")')
+          exit
+        end if
+        if (max_abs_overlap > gmres_reorth_threshold) then
+          ! GMRES MGS reorthogonalization pass
+          do i = 1, j
+            temp = dot_product(V(:,j+1), V(:,i))
+            H(i,j) = H(i,j) + temp
+            if (.not. ieee_is_finite(temp) .or. .not. ieee_is_finite(H(i,j))) then
+              unstable = .true.
+              exit
+            end if
+            V(:,j+1) = V(:,j+1) - temp * V(:,i)
+          end do
+          if (unstable) then
+            write(iw,'(" GMRES: non-finite H entry during re-orthogonalization")')
+            exit
+          end if
+        end if
+        
+        H(j+1,j) = sqrt(dot_product(V(:,j+1), V(:,j+1)))
+        if (any(.not. ieee_is_finite(V(:,j+1)))) then
+          unstable = .true.
+          exit
+        end if
+        
+        ! Check for breakdown
+        if (.not. ieee_is_finite(H(j+1,j))) then
+          write(iw,'(" GMRES: non-finite Arnoldi norm at iteration ", I3)') j
+          inner_iter = j
+          unstable = .true.
+          exit
+        else if (abs(H(j+1,j)) < GMRES_DENOMINATOR_FLOOR) then
+          write(iw,'(" GMRES: happy breakdown at iteration ", I3, "; recomputing true residual")') j
+          inner_iter = j
+          H(j+1,j) = 0.0_dp
+          happy_breakdown = .true.
+        else
+          V(:,j+1) = V(:,j+1) / H(j+1,j)
+        end if
         
         ! Apply previous Givens rotations
         do i = 1, j-1
@@ -258,6 +425,10 @@ contains
           H(i,j) = temp
         end do
         
+        if (.not. ieee_is_finite(H(j,j)) .or. .not. ieee_is_finite(H(j+1,j))) then
+          unstable = .true.
+          exit
+        end if
         ! Compute new Givens rotation
         call givens_rotation(H(j,j), H(j+1,j), c(j), s(j))
         
@@ -270,7 +441,7 @@ contains
         g(j) = temp
         
         ! Check convergence
-        error = abs(g(j+1)) 
+        error = abs(g(j+1))
         iter_out = iter_out + 1
         
         ! Print progress every 5 inner iterations or at convergence
@@ -285,6 +456,11 @@ contains
           inner_iter = j
           exit
         end if
+
+        if (happy_breakdown) then
+          inner_iter = j
+          exit
+        end if
         
         if (iter_out >= max_iter) then
           inner_iter = j
@@ -292,16 +468,36 @@ contains
         end if
       end do
       
-      ! Solve upper triangular system for y
-      call back_substitution(H(1:inner_iter,1:inner_iter), g(1:inner_iter), &
-                             y(1:inner_iter), inner_iter)
+      if (inner_iter > 0 .and. .not. unstable) then
+        ! Solve upper triangular system for y
+        call back_substitution(H(1:inner_iter,1:inner_iter), g(1:inner_iter), &
+                               y(1:inner_iter), inner_iter, unstable)
+      end if
       
+      if (unstable) then
+        error_out = huge(1.0_dp)
+        exit
+      end if
+
       ! Update solution: x = x + V*y
       do i = 1, inner_iter
         x = x + y(i) * V(:,i)
       end do
-      
-      error_out = error
+      if (any(.not. ieee_is_finite(x))) then
+        write(iw,'(" GMRES: non-finite solution update")')
+        unstable = .true.
+        error_out = huge(1.0_dp)
+        exit
+      end if
+
+      call recompute_gmres_true_residual(true_residual, unstable)
+      if (unstable) then
+        error_out = huge(1.0_dp)
+        exit
+      end if
+      error_out = true_residual
+      converged = true_residual < tol
+      error = true_residual
       
       if (converged .or. iter_out >= max_iter) exit
       
@@ -312,6 +508,7 @@ contains
       end if
       
     end do
+    end if
     
     ! Final status
     write(iw,'(" ---------   -----  -------------   ---------")')
@@ -320,10 +517,18 @@ contains
             iter_out, restart_count-1
       write(iw,'(" Final residual norm: ", 1p,e13.6)') error_out
     else
-      write(iw,'(" GMRES did not converge within ", I4, " iterations")') max_iter
+      if (unstable) then
+        write(iw,'(" GMRES terminated due to numerical instability")')
+      else
+        write(iw,'(" GMRES did not converge within ", I4, " iterations")') max_iter
+      end if
       write(iw,'(" Final residual norm: ", 1p,e13.6)') error_out
     end if
-    write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
+    if (ieee_is_finite(error_initial) .and. abs(error_initial) >= GMRES_DENOMINATOR_FLOOR) then
+      write(iw,'(" Relative reduction : ", 1p,e13.6)') error_out/error_initial
+    else
+      write(iw,'(" Relative reduction : not available")')
+    end if
     call flush(iw)
     
     ! Clean up local arrays
@@ -333,36 +538,115 @@ contains
     
   contains
     
+    subroutine recompute_gmres_true_residual(true_residual, unstable)
+      real(kind=dp), intent(out) :: true_residual
+      logical, intent(out) :: unstable
+
+      call apply_operator(x, Ax, infos, basis, molGrid, int2_driver, &
+                         nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                         fa, fb, scale_exch, dft)
+      if (any(.not. ieee_is_finite(Ax)) .or. any(.not. ieee_is_finite(x)) .or. &
+          any(.not. ieee_is_finite(b))) then
+        write(iw,'(" GMRES: non-finite values during true residual recomputation")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      r = b - Ax
+      if (any(.not. ieee_is_finite(r))) then
+        write(iw,'(" GMRES: non-finite true residual vector")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      true_residual = sqrt(dot_product(r, r))
+      if (.not. ieee_is_finite(true_residual)) then
+        write(iw,'(" GMRES: non-finite true residual norm")')
+        true_residual = huge(1.0_dp)
+        unstable = .true.
+        return
+      end if
+
+      unstable = .false.
+    end subroutine recompute_gmres_true_residual
+
     subroutine givens_rotation(a, b, c, s)
       real(kind=dp), intent(in) :: a, b
       real(kind=dp), intent(out) :: c, s
-      real(kind=dp) :: r
+      real(kind=dp) :: r, scale
       
-      if (abs(b) < 1.0d-14) then
+      if (.not. ieee_is_finite(a) .or. .not. ieee_is_finite(b) .or. &
+          (abs(a) < GMRES_DENOMINATOR_FLOOR .and. abs(b) < GMRES_DENOMINATOR_FLOOR)) then
         c = 1.0_dp
         s = 0.0_dp
       else
-        r = sqrt(a*a + b*b)
+        scale = max(abs(a), abs(b))
+        r = scale * sqrt((a/scale)**2 + (b/scale)**2)
         c = a / r
         s = b / r
       end if
     end subroutine givens_rotation
     
-    subroutine back_substitution(A, b, x, n)
+    subroutine back_substitution(A, b, x, n, unstable)
       integer, intent(in) :: n
       real(kind=dp), intent(in) :: A(n,n), b(n)
       real(kind=dp), intent(out) :: x(n)
+      logical, intent(out) :: unstable
       integer :: i, j
-      
+      real(kind=dp) :: rhs
+
+      if (n <= 0) then
+        unstable = .true.
+        return
+      end if
+
+      if (.not. ieee_is_finite(A(n,n)) .or. abs(A(n,n)) < GMRES_DENOMINATOR_FLOOR) then
+        unstable = .true.
+        return
+      end if
+      if (.not. ieee_is_finite(b(n))) then
+        unstable = .true.
+        return
+      end if
+
       x(n) = b(n) / A(n,n)
+      if (.not. ieee_is_finite(x(n))) then
+        unstable = .true.
+        return
+      end if
       do i = n-1, 1, -1
-        x(i) = b(i)
+        if (.not. ieee_is_finite(A(i,i)) .or. abs(A(i,i)) < GMRES_DENOMINATOR_FLOOR) then
+          unstable = .true.
+          return
+        end if
+
+        if (.not. ieee_is_finite(b(i))) then
+          unstable = .true.
+          return
+        end if
+        rhs = b(i)
         do j = i+1, n
-          x(i) = x(i) - A(i,j) * x(j)
+          if (.not. ieee_is_finite(A(i,j))) then
+            unstable = .true.
+            return
+          end if
+          rhs = rhs - A(i,j) * x(j)
         end do
-        x(i) = x(i) / A(i,i)
+        if (.not. ieee_is_finite(rhs)) then
+          unstable = .true.
+          return
+        end if
+        x(i) = rhs / A(i,i)
+        if (.not. ieee_is_finite(x(i))) then
+          unstable = .true.
+          return
+        end if
       end do
+      unstable = .false.
     end subroutine back_substitution
+
     
   end subroutine gmres_solve
 
@@ -401,6 +685,12 @@ contains
     
     nvira = nbf - nocca
     nvirb = nbf - noccb
+
+    if (any(.not. ieee_is_finite(x_in))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      write(*,'(" MRSF z-vector operator rejected non-finite input")')
+      return
+    end if
     
     ! Ensure work arrays are initialized and have correct dimensions
     if (.not. gmres_work_allocated .or. &
@@ -459,6 +749,14 @@ contains
           threshold = 1.0d-15, &
           infos = infos)
     end if
+
+    if (any(.not. ieee_is_finite(ab1))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      write(*,'(" MRSF z-vector operator rejected non-finite response")')
+      call int2_data%clean()
+      deallocate(int2_data)
+      return
+    end if
     
     ! Transform to MO basis - Fixed to use correct mo_b for beta
     call mntoia(ab1(:,:,1), gmres_ab1_mo_a, mo_a, mo_a, nocca, nocca)
@@ -479,9 +777,14 @@ contains
     implicit none
     real(kind=dp), intent(in) :: x_in(:), xminv(:)
     real(kind=dp), intent(out) :: x_out(:)
-    
+
+    if (any(.not. ieee_is_finite(x_in)) .or. any(.not. ieee_is_finite(xminv))) then
+      x_out = ieee_value(0.0_dp, ieee_quiet_nan)
+      return
+    end if
+
     x_out = xminv * x_in
-    
+
   end subroutine apply_z_precond
 
   subroutine tdhf_mrsf_z_vector_C(c_handle) bind(C, name="tdhf_mrsf_z_vector")
@@ -524,6 +827,7 @@ contains
       mrsfqrorhs, mrsfqropcal, mrsfqrowcal
     use oqp_linalg
     use printing, only: print_module_info
+    use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
 
 
     implicit none
@@ -551,6 +855,9 @@ contains
     integer :: nocca, nvira, noccb, nvirb
     integer :: nbf, nbf_tri
     integer :: iter, gmres_iter
+    type(minres_t) :: mr
+    integer :: minres_iter
+    integer, target :: minres_dummy
     real(kind=dp) :: cnvtol, scale_exch, scale_exch2
     logical :: roref = .false.
     integer :: mrst
@@ -573,10 +880,10 @@ contains
     integer :: nsocc, lzdim, xvec_dim
 
   ! General data
-    real(kind=dp) :: alpha, error
+    real(kind=dp) :: alpha, error, pap
     character(len=10) :: solver_name
 
-    logical :: dft
+    logical :: dft, mrsf_zvector_breakdown
     integer :: scf_type, mol_mult, target_state
 
     ! tagarray
@@ -600,6 +907,7 @@ contains
     if (scf_type==3) roref = .true.
 
     dft = infos%control%hamilton == 20
+    mrsf_zvector_breakdown = .false.
 
   ! Files open
   ! 3. LOG: Write: Main output file
@@ -716,12 +1024,17 @@ contains
                &/1x,66("-")/)')
     end if
 
-    ! Determine solver name for output
-    if (infos%tddft%z_solver == 1) then
+    ! Determine solver name for output (0=CG, 1=GMRES legacy, 2=MINRES, 3=AUTO)
+    select case (infos%tddft%z_solver)
+    case (3)
+      solver_name = "AUTO"
+    case (2)
+      solver_name = "MINRES"
+    case (1)
       solver_name = "GMRES"
-    else
+    case default
       solver_name = "CG"
-    end if
+    end select
 
     ! Save unrelaxed density matrices and the `b=A*x` vector for target state
     if (mrst==1 .or. mrst==3 ) then
@@ -756,186 +1069,10 @@ contains
       , 'Solver method      is', trim(solver_name)
     call flush(iw)
 
-  ! Prepare for ROHF
-    ! Fock matrices A and B
-    if( roref )then
-        wrk1t(1:nbf*nbf) => wrk1
-  !   Alapha
-      call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
-      call unpack_matrix(wrk1t, fa)
-
-  !   Beta
-      call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
-      call unpack_matrix(wrk1t, fb)
-    end if
-
-  ! Make density like part
-    call unpack_matrix(ta, pa(:,:,1))
-    call unpack_matrix(tb, pa(:,:,2))
-
-  ! Initialize ERI calculations
-    scale_exch = 1.0_dp
-    scale_exch2 = 1.0_dp
-    if (dft) then
-       scale_exch = infos%dft%HFscale    !> Reference HF exchange
-       scale_exch2 = infos%tddft%HFscale !> Response HF exchange
-    end if
-
-    if (mrst==1 .or. mrst==3 ) then
-
-      int2_data_st = int2_mrsf_data_t( &
-          d3 = fmrst1, &
-          tamm_dancoff = .true., &
-          scale_exchange = scale_exch2, &
-          scale_coulomb = scale_exch2)
-
-    else if( mrst==5  )then
-
-      int2_data_q = int2_td_data_t( &
-          d2=bvec, &
-          int_apb = .false., &
-          int_amb = .false., &
-          tamm_dancoff = .true., &
-          scale_exchange = scale_exch2)
-
-    end if
-
-    int2_data = int2_tdgrd_data_t( &
-        d2 = pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
-
-    call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-    ab1 => int2_data%apb(:,:,:,1)
-
-    pa = pa*2
-    call utddft_fxc( &
-        basis = basis, &
-        molGrid = molGrid, &
-        isVecs = .true., &
-        wfa = mo_a, &
-        wfb = mo_b, &
-        fxa = ab1(:,:,1:1), &
-        fxb = ab1(:,:,2:2), &
-        dxa = pa(:,:,1:1), &
-        dxb = pa(:,:,2:2), &
-        nmtx = 1, &
-        threshold = 1.0d-15, &
-        infos = infos)
-
-!   ALPHA: AO(M,N) -> MO(IA+)
-    call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
-
-    call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
-
-    if (mrst==1 .or. mrst==3) then
-
-      call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
-      call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
-
-      fmrst1(1,7,:,:) = td_abxc
-
-      td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
-
-    ! Initialize ERI calculations
-      call int2_driver%run(int2_data_st, &
-            cam = dft.and.infos%dft%cam_flag, &
-            alpha = infos%tddft%cam_alpha, &
-            alpha_coulomb = infos%tddft%cam_alpha, &
-            beta = infos%tddft%cam_beta,&
-            beta_coulomb = infos%tddft%cam_beta, &
-            mu = infos%tddft%cam_mu)
-      fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
-
-    ! Scaling factor if triplet
-      if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
-
-      ! Spin pair coupling
-      if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
-         fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
-      if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
-         fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
-      if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
-         fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
-
-      call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), wrk2, wrk1)
-
-      call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
-
-      call iatogen(bvec_mo_d(:,1), wrk3, nocca, noccb)
-
-      call dgemm('n', 't', nbf, nocca, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
-      call dgemm('t', 'n', nbf, nbf, nocca, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
-
-   ! spin pair ov-ov, co-co, co-ov coupling
-      call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
-
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-      call dgemm('n', 't', nocca, nocca, nvirb, &
-                -1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tij, nocca)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-      call dgemm('t', 'n', nvirb, nvirb, nocca, &
-                 1.0_dp, bvec_mo_d, nocca, &
-                         bvec_mo_d, nocca, &
-                 0.0_dp, tab, nvirb)
-
-      call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                   Tij, Tab, Fa, Fb, nocca, noccb)
-
-    else if(mrst==5) then
-
-   !  Initialize ERI calculations
-      call int2_driver%run(int2_data_q, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%tddft%cam_alpha, &
-            beta=infos%tddft%cam_beta,&
-            mu=infos%tddft%cam_mu)
-
-      call orthogonal_transform('n', nbf, mo_a, int2_data_q%amb(:,:,1,1), wrk2, wrk1)
-
-      call iatogen(bvec_mo(:,target_state),wrk3,noccb,nocca)
-
-      call dgemm('t', 'n', nbf, nbf, noccb, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxa, nbf)
-      call dgemm('n', 't', nbf, noccb, nbf, &
-                 2.0_dp, wrk2, nbf, &
-                         wrk3, nbf, &
-                 0.0_dp, hxb, nbf)
-
-   !  Unrelaxed difference density matries T_ij and T_ab
-   !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-      call dgemm('n', 't', noccb, noccb, nvira, &
-                -1.0_dp, bvec_mo(:,target_state), noccb, &
-                         bvec_mo(:,target_state), noccb, &
-                 0.0_dp, tij, noccb)
-
-   !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-      call dgemm('t', 'n', nvira, nvira, noccb, &
-                 1.0_dp, bvec_mo(:,target_state), noccb, &
-                         bvec_mo(:,target_state), noccb, &
-                 0.0_dp, tab, nvira)
-
-      call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
-                      tab, tij, fa, fb, nocca, noccb)
-    end if
+    ! ======================================================================
+    ! Step 1: assemble the z-vector right-hand side and Fock/density pieces.
+    ! ======================================================================
+    call build_mrsf_zvector_rhs()
 
     write(*,'(/3x,25("-")&
              &/6x,"START Z-VECTOR LOOP (",A,")"&
@@ -943,25 +1080,76 @@ contains
     call flush(iw)
 
     call sfromcal(xm, xminv, mo_energy_a, fa, fb, nocca, noccb)
+    call sanitize_zvector_preconditioner(xm, xminv, iw, MRSF_ZVEC_DENOMINATOR_FLOOR, "MRSF")
 
-    ! Choose solver based on input option (0=CG, 1=GMRES)
-    if (infos%tddft%z_solver == 1) then
-      
-      ! ============================================
-      ! GMRES SOLVER
-      ! ============================================
-      
-      ! Check preconditioner condition
-      if (any(abs(xminv) < 1.0d-12) .or. any(abs(xminv) > 1.0d12)) then
-        write(iw,'(" Warning: Preconditioner poorly conditioned, applying regularization")')
-        where(abs(xminv) < 1.0d-12) xminv = sign(1.0d-12, xminv)
-        where(abs(xminv) > 1.0d12) xminv = sign(1.0d12, xminv)
-      end if
-      
-      ! Initial guess with same strategy as CG
+    ! ======================================================================
+    ! Step 2: solve the z-vector linear system.
+    !   0 = CG (default)   1 = GMRES (legacy)   2 = MINRES   3 = AUTO (CG->MINRES->GMRES)
+    ! ======================================================================
+    select case (infos%tddft%z_solver)
+    case (2)
+      call run_mrsf_minres_zvector()
+    case (1)
+      call run_mrsf_gmres_zvector()
+    case (3)
+      call run_mrsf_zvector_auto()
+    case default
+      call run_mrsf_cg_zvector()
+    end select
+
+! -----------------------------------------------
+    if (mrsf_zvector_breakdown) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector breakdown"&
+             &/3x,24("-")/)')
+       call flush(iw)
+       call int2_data%clean()
+       call int2_driver%clean()
+       if (dft) call dftclean(infos)
+       call measure_time(print_total=1, log_unit=iw)
+       call cleanup_gmres_work()
+       close(iw)
+       return
+    end if
+
+    if (error>cnvtol) then
+       infos%mol_energy%Z_Vector_converged=.false.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector not converged"&
+             &/3x,24("-")/)')
+       write(iw,'(" MRSF z-vector solver reached the maximum iterations; solver = ",A)') trim(solver_name)
+       write(iw,'(" final residual = ",1p,e13.6)') error
+    else
+       infos%mol_energy%Z_Vector_converged=.true.
+       write(*,'(/3x,24("-")&
+             &/6x,"Z-Vector converged"&
+             &/3x,24("-")/)')
+    endif
+
+    call flush(iw)
+
+    ! ======================================================================
+    ! Step 3: build the relaxed density (td_p) and energy-weighted density (wao).
+    ! ======================================================================
+    call build_mrsf_relaxed_density_and_w()
+
+    call int2_driver%clean()
+
+    if (dft) call dftclean(infos)
+
+    call measure_time(print_total=1, log_unit=iw)
+    ! Clean up GMRES work arrays
+    call cleanup_gmres_work()
+
+    close(iw)
+
+  contains
+
+    ! GMRES z-vector solve.  Reports breakdown via mrsf_zvector_breakdown so the
+    ! auto driver can detect failure uniformly across solvers.
+    subroutine run_mrsf_gmres_zvector()
       xk = 0.0_dp
-
-      ! Call GMRES solver
       call gmres_solve( &
           apply_operator = apply_z_operator, &
           apply_precond = lambda_precond, &
@@ -971,39 +1159,96 @@ contains
           restart = min(infos%tddft%gmres_dim, lzdim), &
           max_iter = infos%control%maxit_zv, &
           tol = cnvtol, &
-          infos = infos, &
-          basis = basis, &
-          molGrid = molGrid, &
+          infos = infos, basis = basis, molGrid = molGrid, &
           int2_driver = int2_driver, &
-          nocca = nocca, &
-          noccb = noccb, &
-          nbf = nbf, &
-          mo_a = mo_a, &
-          mo_b = mo_b, &
-          mo_energy_a = mo_energy_a, &
-          fa = fa, &
-          fb = fb, &
-          scale_exch = scale_exch, &
-          dft = dft, &
-          error_out = error, &
-          iter_out = gmres_iter, &
-          iw = iw)
-
+          nocca = nocca, noccb = noccb, nbf = nbf, &
+          mo_a = mo_a, mo_b = mo_b, mo_energy_a = mo_energy_a, &
+          fa = fa, fb = fb, scale_exch = scale_exch, dft = dft, &
+          error_out = error, iter_out = gmres_iter, iw = iw)
+      if (.not. ieee_is_finite(error) .or. error > cnvtol) then
+        if (.not. ieee_is_finite(error)) mrsf_zvector_breakdown = .true.
+      end if
       write(iw,'(/," Final Summary:")')
       write(iw,'(" GMRES total iterations: ", I4)') gmres_iter
       write(iw,'(" Final error norm      : ", 1p,e13.6)') error
       write(iw,'(" Convergence criterion : ", 1p,e13.6)') cnvtol
       call flush(iw)
-      
-      ! Clean up GMRES work arrays
       call cleanup_gmres_work()
-      
-    else
-      
+    end subroutine run_mrsf_gmres_zvector
+
+    ! MINRES z-vector solve: symmetric short-recurrence solver (Paige-Saunders)
+    ! that stays stable when (A+B) turns indefinite, at CG-like cost.  Uses the
+    ! same apply_z_operator / apply_z_precond as CG and GMRES.
+    subroutine run_mrsf_minres_zvector()
+      xk = 0.0_dp
+      call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
+                   dat=minres_dummy, tol=cnvtol)
+      minres_iter = 0
+      if (mr%errcode == MINRES_OK) then
+        do iter = 1, infos%control%maxit_zv
+          call mr%step()
+          minres_iter = iter
+          if (mr%errcode /= MINRES_OK) exit
+        end do
+      end if
+      if (mr%errcode == MINRES_CONVERGED .or. mr%errcode == MINRES_OK) then
+        xk = mr%x
+        error = mr%error
+      else
+        write(iw,'(" MRSF MINRES Z-Vector breakdown (errcode=",I0,")")') int(mr%errcode)
+        mrsf_zvector_breakdown = .true.
+        error = huge(1.0_dp)
+      end if
+      call mr%clean()
+      write(iw,'(/," Final Summary:")')
+      write(iw,'(" MINRES total iterations: ", I4)') minres_iter
+      write(iw,'(" Final error norm       : ", 1p,e13.6)') error
+      write(iw,'(" Convergence criterion  : ", 1p,e13.6)') cnvtol
+      call flush(iw)
+    end subroutine run_mrsf_minres_zvector
+
+    ! AUTO driver: try CG (cheap, needs SPD), fall back to MINRES (CG-cost,
+    ! robust on indefinite operators), then GMRES (general, priciest).  rhs and
+    ! the preconditioner xminv are solver-independent and reused; only xk and
+    ! the breakdown flag reset between attempts.  solver_name is updated to the
+    ! solver that actually converged so the summary reflects reality.
+    subroutine run_mrsf_zvector_auto()
+      call run_mrsf_cg_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(CG)"
+        return
+      end if
+      write(iw,'(/," [AUTO] CG did not converge (breakdown/maxit); ", &
+                 &"falling back to MINRES")')
+      call flush(iw)
+      mrsf_zvector_breakdown = .false.
+      call run_mrsf_minres_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(MINRES)"
+        return
+      end if
+      write(iw,'(/," [AUTO] MINRES did not converge; falling back to GMRES")')
+      call flush(iw)
+      mrsf_zvector_breakdown = .false.
+      call run_mrsf_gmres_zvector()
+      if (.not. mrsf_zvector_breakdown .and. ieee_is_finite(error) &
+          .and. error <= cnvtol) then
+        solver_name = "AUTO(GMRES)"
+      else
+        solver_name = "AUTO(failed)"
+      end if
+    end subroutine run_mrsf_zvector_auto
+
+    ! Preconditioned CG z-vector solve (default path).  All state is
+    ! reached by host association, matching the inline version exactly.
+    subroutine run_mrsf_cg_zvector()
+
       ! ============================================
       ! ORIGINAL CONJUGATE GRADIENT SOLVER
       ! ============================================
-      
+
       ! Initial guess with same strategy as CG
       xk = 0.0_dp
 
@@ -1057,6 +1302,12 @@ contains
                    nocca, noccb)
 
       call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+      if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
+          any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
+        write(iw,'(" MRSF CG Z-Vector breakdown: non-finite initial PCG state")')
+        mrsf_zvector_breakdown = .true.
+        error = huge(1.0_dp)
+      end if
 
       write(iw,'(" Initial error =",3x,1p,e10.3,1x,"/",1p,e10.3)') error, cnvtol
       call flush(iw)
@@ -1113,12 +1364,45 @@ contains
         call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                      nocca, noccb)
 
-        alpha = 1.0_dp/dot_product(pk, lhs)
+        if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite lhs/search direction")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
+
+        pap = dot_product(pk, lhs)
+        if (.not. ieee_is_finite(pap) .or. abs(pap) < MRSF_ZVEC_DENOMINATOR_FLOOR) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: unsafe p^T A p denominator")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
+
+        alpha = 1.0_dp / pap
+        if (.not. ieee_is_finite(alpha)) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite alpha")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
         xk = xk + pk * alpha
         errv = errv - alpha*lhs
+        if (any(.not. ieee_is_finite(xk)) .or. any(.not. ieee_is_finite(errv))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite solution/residual update")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
         error = dot_product(errv, errv)
+        if (.not. ieee_is_finite(error)) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite residual norm")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
         write(iw,'(" Iter#",I2," Error =",&
               &3x,1p,e10.3,1x,"/",1p,e10.3)') &
                 iter, error, cnvtol
@@ -1127,132 +1411,15 @@ contains
         if (error<cnvtol) exit
 
         call pcgb(pk, errv, xminv)
+        if (any(.not. ieee_is_finite(pk))) then
+          write(iw,'(" MRSF CG Z-Vector breakdown: non-finite search direction after preconditioner")')
+          mrsf_zvector_breakdown = .true.
+          error = huge(1.0_dp)
+          exit
+        end if
 
       end do
-      
-    end if  ! End solver selection
-
-! -----------------------------------------------
-    if (error>cnvtol) then
-       infos%mol_energy%Z_Vector_converged=.false.
-       write(*,'(/3x,24("-")&
-             &/6x,"Z-Vector not converged"&
-             &/3x,24("-")/)')
-    else
-       infos%mol_energy%Z_Vector_converged=.true.
-       write(*,'(/3x,24("-")&
-             &/6x,"Z-Vector converged"&
-             &/3x,24("-")/)')
-    endif
-
-    call flush(iw)
-
-    if (mrst==1 .or. mrst==3) then
-
-      call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
-
-    else if (mrst==5) then
-
-      call mrsfqropcal(wrk1, wrk2, tab, tij, xk, nocca, noccb)
-
-    end if
-
- !  Update density for alpha
-    call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
-
- !  Update density for beta
-    call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
-    call int2_data%clean()
-    deallocate(int2_data)
-    int2_data = int2_tdgrd_data_t( &
-        d2 = pa, &
-        int_apb = .true., &
-        int_amb = .false., &
-        tamm_dancoff = .false., &
-        scale_exchange = scale_exch)
-
-    call int2_driver%run(int2_data, &
-            cam=dft.and.infos%dft%cam_flag, &
-            alpha=infos%dft%cam_alpha, &
-            beta=infos%dft%cam_beta,&
-            mu=infos%dft%cam_mu)
-    ab1 => int2_data%apb(:,:,:,1)
-
-    call symmetrize_matrix(pa(:,:,1), nbf)
-    call symmetrize_matrix(pa(:,:,2), nbf)
-    call pack_matrix(pa(:,:,1), td_p(:,1))
-    call pack_matrix(pa(:,:,2), td_p(:,2))
-
-    td_p = 0.5_dp*td_p
-
-    call utddft_fxc( &
-        basis = basis, &
-        molGrid = molGrid, &
-        isVecs = .true., &
-        wfa = mo_a, &
-        wfb = mo_b, &
-        fxa = ab1(:,:,1:1), &
-        fxb = ab1(:,:,2:2), &
-        dxa = pa(:,:,1:1), &
-        dxb = pa(:,:,2:2), &
-        nmtx = 1, &
-        threshold = 1.0d-15, &
-        infos = infos)
-
-!   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
-    call dgemm('n', 'n', nbf, nocca, nbf,  &
-               1.0_dp, ab1(:,:,1), nbf,  &
-                       mo_a, nbf,  &
-               0.0_dp, wrk2, nbf)
-    call dgemm('t', 'n', nocca, nocca, nbf,  &
-               1.0_dp, mo_a,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppija, nocca)
-!   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
-    call dgemm('n', 'n', nbf, noccb, nbf,  &
-               1.0_dp, ab1(:,:,2), nbf,  &
-                       mo_b, nbf,  &
-               0.0_dp, wrk2, nbf)
-    call dgemm('t', 'n', noccb, noccb, nbf,  &
-               1.0_dp, mo_b,  nbf,  &
-                       wrk2,  nbf,  &
-               0.0_dp, ppijb, noccb)
-
-!   Calculate W (in MO basis)
-    wmo => wrk3
-    wmo = 0
-    if (mrst==1 .or. mrst==3) then
-
-      call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                      hxa, hxb, ppija, ppijb, &
-                      nocca, noccb)
-
-    else if (mrst==5) then
-
-      call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, &
-                       hxa, hxb, ppija, ppijb, &
-                       nocca, noccb)
-
-    end if
-
-    call orthogonal_transform('t', nbf, mo_a, wmo, wrk2, wrk1)
-    call symmetrize_matrix(wrk2, nbf)
-    call pack_matrix(wrk2, wao)
-    wao = wao*0.5_dp
-!   ROHF, half one more time:
-    wao = wao*0.5_dp
-
-    call int2_driver%clean()
-
-    if (dft) call dftclean(infos)
-
-    call measure_time(print_total=1, log_unit=iw)
-    ! Clean up GMRES work arrays
-    call cleanup_gmres_work()
-
-    close(iw)
-
-  contains
+          end subroutine run_mrsf_cg_zvector
 
     ! Lambda wrapper for preconditioner
     subroutine lambda_precond(x_in, x_out)
@@ -1260,6 +1427,314 @@ contains
       real(kind=dp), intent(out) :: x_out(:)
       call apply_z_precond(x_in, x_out, xminv)
     end subroutine lambda_precond
+
+    ! minres_matvec(y, x, dat) wrappers: y is the output, x the input, dat is
+    ! unused (the solver context is reached by host association).
+    subroutine minres_apply_op(y, x, dat)
+      use iso_c_binding, only: c_ptr
+      real(kind=dp) :: x(:)
+      real(kind=dp) :: y(:)
+      type(c_ptr) :: dat
+      call apply_z_operator(x, y, infos, basis, molGrid, int2_driver, &
+                            nocca, noccb, nbf, mo_a, mo_b, mo_energy_a, &
+                            fa, fb, scale_exch, dft)
+    end subroutine minres_apply_op
+
+    subroutine minres_apply_pc(y, x, dat)
+      use iso_c_binding, only: c_ptr
+      real(kind=dp) :: x(:)
+      real(kind=dp) :: y(:)
+      type(c_ptr) :: dat
+      call apply_z_precond(x, y, xminv)
+    end subroutine minres_apply_pc
+
+
+    ! Build the relaxed (z-vector) density (-> td_p) and energy-weighted
+    ! density W (-> wao) from the converged z-vector xk.  Host association
+    ! preserves behavior versus the previous inline tail.
+    subroutine build_mrsf_relaxed_density_and_w()
+      if (mrst==1 .or. mrst==3) then
+
+        call sfropcal(wrk1, wrk2, tij, tab, xk, nocca, noccb)
+
+      else if (mrst==5) then
+
+        call mrsfqropcal(wrk1, wrk2, tab, tij, xk, nocca, noccb)
+
+      end if
+
+   !  Update density for alpha
+      call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
+
+   !  Update density for beta
+      call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+      call int2_data%clean()
+      deallocate(int2_data)
+      int2_data = int2_tdgrd_data_t( &
+          d2 = pa, &
+          int_apb = .true., &
+          int_amb = .false., &
+          tamm_dancoff = .false., &
+          scale_exchange = scale_exch)
+
+      call int2_driver%run(int2_data, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%dft%cam_alpha, &
+              beta=infos%dft%cam_beta,&
+              mu=infos%dft%cam_mu)
+      ab1 => int2_data%apb(:,:,:,1)
+
+      call symmetrize_matrix(pa(:,:,1), nbf)
+      call symmetrize_matrix(pa(:,:,2), nbf)
+      call pack_matrix(pa(:,:,1), td_p(:,1))
+      call pack_matrix(pa(:,:,2), td_p(:,2))
+
+      td_p = 0.5_dp*td_p
+
+      call utddft_fxc( &
+          basis = basis, &
+          molGrid = molGrid, &
+          isVecs = .true., &
+          wfa = mo_a, &
+          wfb = mo_b, &
+          fxa = ab1(:,:,1:1), &
+          fxb = ab1(:,:,2:2), &
+          dxa = pa(:,:,1:1), &
+          dxb = pa(:,:,2:2), &
+          nmtx = 1, &
+          threshold = 1.0d-15, &
+          infos = infos)
+
+  !   ALPHA AO(M,N) -> MO(I-,J-) ... LPPIJA
+      call dgemm('n', 'n', nbf, nocca, nbf,  &
+                 1.0_dp, ab1(:,:,1), nbf,  &
+                         mo_a, nbf,  &
+                 0.0_dp, wrk2, nbf)
+      call dgemm('t', 'n', nocca, nocca, nbf,  &
+                 1.0_dp, mo_a,  nbf,  &
+                         wrk2,  nbf,  &
+                 0.0_dp, ppija, nocca)
+  !   BETA: AO(M,N) -> MO(I-,J-) ... LPPIJB
+      call dgemm('n', 'n', nbf, noccb, nbf,  &
+                 1.0_dp, ab1(:,:,2), nbf,  &
+                         mo_b, nbf,  &
+                 0.0_dp, wrk2, nbf)
+      call dgemm('t', 'n', noccb, noccb, nbf,  &
+                 1.0_dp, mo_b,  nbf,  &
+                         wrk2,  nbf,  &
+                 0.0_dp, ppijb, noccb)
+
+  !   Calculate W (in MO basis)
+      wmo => wrk3
+      wmo = 0
+      if (mrst==1 .or. mrst==3) then
+
+        call mrsfrowcal(wmo, mo_energy_a, fa, fb, xk, &
+                        hxa, hxb, ppija, ppijb, &
+                        nocca, noccb)
+
+      else if (mrst==5) then
+
+        call mrsfqrowcal(wmo, mo_energy_a, fa, fb, xk, &
+                         hxa, hxb, ppija, ppijb, &
+                         nocca, noccb)
+
+      end if
+
+      call orthogonal_transform('t', nbf, mo_a, wmo, wrk2, wrk1)
+      call symmetrize_matrix(wrk2, nbf)
+      call pack_matrix(wrk2, wao)
+      wao = wao*0.5_dp
+  !   ROHF, half one more time:
+      wao = wao*0.5_dp
+    end subroutine build_mrsf_relaxed_density_and_w
+
+
+    ! Assemble the z-vector right-hand side (rhs) and the ROHF Fock/density
+    ! intermediates it needs.  Host association preserves behavior versus the
+    ! previous inline RHS construction.
+    subroutine build_mrsf_zvector_rhs()
+    ! Prepare for ROHF
+      ! Fock matrices A and B
+      if( roref )then
+          wrk1t(1:nbf*nbf) => wrk1
+    !   Alapha
+        call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, wrk1)
+        call unpack_matrix(wrk1t, fa)
+
+    !   Beta
+        call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, wrk1)
+        call unpack_matrix(wrk1t, fb)
+      end if
+
+    ! Make density like part
+      call unpack_matrix(ta, pa(:,:,1))
+      call unpack_matrix(tb, pa(:,:,2))
+
+    ! Initialize ERI calculations
+      scale_exch = 1.0_dp
+      scale_exch2 = 1.0_dp
+      if (dft) then
+         scale_exch = infos%dft%HFscale    !> Reference HF exchange
+         scale_exch2 = infos%tddft%HFscale !> Response HF exchange
+      end if
+
+      if (mrst==1 .or. mrst==3 ) then
+
+        int2_data_st = int2_mrsf_data_t( &
+            d3 = fmrst1, &
+            tamm_dancoff = .true., &
+            scale_exchange = scale_exch2, &
+            scale_coulomb = scale_exch2)
+
+      else if( mrst==5  )then
+
+        int2_data_q = int2_td_data_t( &
+            d2=bvec, &
+            int_apb = .false., &
+            int_amb = .false., &
+            tamm_dancoff = .true., &
+            scale_exchange = scale_exch2)
+
+      end if
+
+      int2_data = int2_tdgrd_data_t( &
+          d2 = pa, &
+          int_apb = .true., &
+          int_amb = .false., &
+          tamm_dancoff = .false., &
+          scale_exchange = scale_exch)
+
+      call int2_driver%run(int2_data, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%dft%cam_alpha, &
+              beta=infos%dft%cam_beta,&
+              mu=infos%dft%cam_mu)
+      ab1 => int2_data%apb(:,:,:,1)
+
+      pa = pa*2
+      call utddft_fxc( &
+          basis = basis, &
+          molGrid = molGrid, &
+          isVecs = .true., &
+          wfa = mo_a, &
+          wfb = mo_b, &
+          fxa = ab1(:,:,1:1), &
+          fxb = ab1(:,:,2:2), &
+          dxa = pa(:,:,1:1), &
+          dxb = pa(:,:,2:2), &
+          nmtx = 1, &
+          threshold = 1.0d-15, &
+          infos = infos)
+
+  !   ALPHA: AO(M,N) -> MO(IA+)
+      call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
+
+      call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
+
+      if (mrst==1 .or. mrst==3) then
+
+        call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
+        call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
+
+        fmrst1(1,7,:,:) = td_abxc
+
+        td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
+
+      ! Initialize ERI calculations
+        call int2_driver%run(int2_data_st, &
+              cam = dft.and.infos%dft%cam_flag, &
+              alpha = infos%tddft%cam_alpha, &
+              alpha_coulomb = infos%tddft%cam_alpha, &
+              beta = infos%tddft%cam_beta,&
+              beta_coulomb = infos%tddft%cam_beta, &
+              mu = infos%tddft%cam_mu)
+        fmrst2 => int2_data_st%f3(:,:,:,:,1)! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+
+      ! Scaling factor if triplet
+        if (mrst==3) fmrst2(:,1:6,:,:) = -1.0_dp*fmrst2(:,1:6,:,:)
+
+        ! Spin pair coupling
+        if (infos%tddft%spc_coco /= infos%tddft%hfscale) &
+           fmrst2(:,6,:,:) = fmrst2(:,6,:,:) * infos%tddft%spc_coco / infos%tddft%hfscale
+        if (infos%tddft%spc_ovov /= infos%tddft%hfscale) &
+           fmrst2(:,5,:,:) = fmrst2(:,5,:,:) * infos%tddft%spc_ovov / infos%tddft%hfscale
+        if (infos%tddft%spc_coov /= infos%tddft%hfscale) &
+           fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:) * infos%tddft%spc_coov / infos%tddft%hfscale
+
+        call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), wrk2, wrk1)
+
+        call mrsfxvec(infos, bvec_mo(:,target_state), bvec_mo_d(:,1))
+
+        call iatogen(bvec_mo_d(:,1), wrk3, nocca, noccb)
+
+        call dgemm('n', 't', nbf, nocca, nbf, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxa, nbf)
+        call dgemm('t', 'n', nbf, nbf, nocca, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxb, nbf)
+
+     ! spin pair ov-ov, co-co, co-ov coupling
+        call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
+
+     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
+        call dgemm('n', 't', nocca, nocca, nvirb, &
+                  -1.0_dp, bvec_mo_d, nocca, &
+                           bvec_mo_d, nocca, &
+                   0.0_dp, tij, nocca)
+
+     !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
+        call dgemm('t', 'n', nvirb, nvirb, nocca, &
+                   1.0_dp, bvec_mo_d, nocca, &
+                           bvec_mo_d, nocca, &
+                   0.0_dp, tab, nvirb)
+
+        call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
+                     Tij, Tab, Fa, Fb, nocca, noccb)
+
+      else if(mrst==5) then
+
+     !  Initialize ERI calculations
+        call int2_driver%run(int2_data_q, &
+              cam=dft.and.infos%dft%cam_flag, &
+              alpha=infos%tddft%cam_alpha, &
+              beta=infos%tddft%cam_beta,&
+              mu=infos%tddft%cam_mu)
+
+        call orthogonal_transform('n', nbf, mo_a, int2_data_q%amb(:,:,1,1), wrk2, wrk1)
+
+        call iatogen(bvec_mo(:,target_state),wrk3,noccb,nocca)
+
+        call dgemm('t', 'n', nbf, nbf, noccb, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxa, nbf)
+        call dgemm('n', 't', nbf, noccb, nbf, &
+                   2.0_dp, wrk2, nbf, &
+                           wrk3, nbf, &
+                   0.0_dp, hxb, nbf)
+
+     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
+        call dgemm('n', 't', noccb, noccb, nvira, &
+                  -1.0_dp, bvec_mo(:,target_state), noccb, &
+                           bvec_mo(:,target_state), noccb, &
+                   0.0_dp, tij, noccb)
+
+     !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
+        call dgemm('t', 'n', nvira, nvira, noccb, &
+                   1.0_dp, bvec_mo(:,target_state), noccb, &
+                           bvec_mo(:,target_state), noccb, &
+                   0.0_dp, tab, nvira)
+
+        call mrsfqrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
+                        tab, tij, fa, fb, nocca, noccb)
+      end if
+    end subroutine build_mrsf_zvector_rhs
 
   end subroutine tdhf_mrsf_z_vector
 

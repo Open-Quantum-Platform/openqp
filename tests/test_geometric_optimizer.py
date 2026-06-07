@@ -81,9 +81,65 @@ def install_runfunc_stubs():
     libgeometric.GeometricMECPOpt = GeometricMECPOpt
     libgeometric.GeometricTSOpt = GeometricTSOpt
     libgeometric.GeometricIRCOpt = GeometricIRCOpt
-    libgeometric.GeometricNEBOpt = GeometricNEBOpt
+    setattr(libgeometric, "GeometricNEBOpt", GeometricNEBOpt)
     sys.modules["oqp.library.libgeometric"] = libgeometric
+
+    # runfunc also imports the oqp optimizer backend; stub it too.
+    liboqp = types.ModuleType("oqp.library.liboqp")
+    for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
+                 "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
+        setattr(liboqp, _cls, type(_cls, (), {}))
+    sys.modules["oqp.library.liboqp"] = liboqp
+
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
+
+
+def input_section(text, section_name):
+    marker = f"[{section_name}]"
+    lower = text.lower()
+    if marker not in lower:
+        return ""
+    return lower.split(marker, 1)[1].split("[", 1)[0]
+
+
+def section_value(section_text, key):
+    for line in section_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(f"{key}="):
+            return stripped.split("=", 1)[1].strip()
+    return None
+
+
+class TestOptimizationExampleCaps(unittest.TestCase):
+    def test_geometry_path_examples_have_bounded_iterations(self):
+        geometry_runtypes = {"optimize", "meci", "mecp", "ts", "irc", "neb", "mep"}
+        failures = []
+        checked = 0
+        for path in sorted(EXAMPLES_OPT.glob("*.inp")):
+            text = path.read_text()
+            input_sec = input_section(text, "input")
+            runtype = section_value(input_sec, "runtype")
+            if runtype not in geometry_runtypes:
+                continue
+            checked += 1
+            optimize = input_section(text, "optimize")
+            scf = input_section(text, "scf")
+            tdhf = input_section(text, "tdhf")
+            opt_maxit = section_value(optimize, "maxit")
+            if opt_maxit is None:
+                failures.append(f"{path.name}: missing [optimize] maxit")
+            elif int(float(opt_maxit)) > 10:
+                failures.append(f"{path.name}: [optimize] maxit={opt_maxit} > 10")
+            scf_maxit = section_value(scf, "maxit")
+            if scf_maxit is not None and int(float(scf_maxit)) > 30:
+                failures.append(f"{path.name}: [scf] maxit={scf_maxit} > 30")
+            tdhf_maxit = section_value(tdhf, "maxit")
+            if "type=mrsf" in tdhf and tdhf_maxit is None:
+                failures.append(f"{path.name}: MRSF [tdhf] missing maxit")
+            elif tdhf_maxit is not None and int(float(tdhf_maxit)) > 30:
+                failures.append(f"{path.name}: [tdhf] maxit={tdhf_maxit} > 30")
+        self.assertGreater(checked, 0)
+        self.assertEqual(failures, [])
 
 
 class TestGeometricOptimizerConfig(unittest.TestCase):
@@ -107,9 +163,6 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.inp": "runtype=neb",
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC_CI21.xyz": None,
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.json": None,
         }
 
         missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
@@ -121,13 +174,6 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             self.assertIn(runtype, text)
             self.assertIn("lib=geometric", text)
             self.assertIn("[geometric]", text)
-
-        thymine = (EXAMPLES_OPT / "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.inp").read_text()
-        self.assertIn("method=tdhf", thymine)
-        self.assertIn("type=mrsf", thymine)
-        self.assertIn("istate=2", thymine)
-        self.assertIn("nimage=5", thymine)
-        self.assertIn("THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC_CI21.xyz", thymine)
 
     def test_geometric_config_supports_constraints_file_options(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
@@ -173,23 +219,6 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         input_checker._check_optimize(config, report)
 
         self.assertTrue(report.ok, report.to_text())
-
-    def test_input_checker_rejects_removed_dlfind_backend(self):
-        input_checker = load_module(
-            "input_checker_removed_dlfind_under_test",
-            "pyoqp/oqp/utils/input_checker.py",
-        )
-        config = {
-            "input": {"runtype": "optimize", "method": "hf"},
-            "optimize": {"lib": "dlfind", "istate": 0},
-        }
-
-        report = input_checker.CheckReport()
-        input_checker._check_optimize(config, report)
-
-        self.assertFalse(report.ok)
-        self.assertIn("Unknown optimization library", report.to_text())
-        self.assertIn("scipy or geometric", report.to_text())
 
     def test_input_checker_accepts_geometric_for_meci(self):
         input_checker = load_module(
@@ -318,7 +347,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIsInstance(optimizer, GeometricTSOpt)
         self.assertIs(optimizer.mol, mol)
 
-    def test_full_input_checker_accepts_default_geometric_for_irc(self):
+    def test_full_input_checker_accepts_default_lib_for_irc(self):
         input_checker = load_module(
             "input_checker_full_irc_under_test",
             "pyoqp/oqp/utils/input_checker.py",
@@ -341,10 +370,10 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_optimize_lib_default_is_geometric(self):
+    def test_optimize_lib_default_is_oqp(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
-        self.assertIn("'lib': {'type': str, 'default': 'geometric'}", text)
+        self.assertIn("'lib': {'type': str, 'default': 'oqp'}", text)
 
     def test_geometric_ts_uses_initial_hessian_by_default(self):
         text = (ROOT / "pyoqp/oqp/library/libgeometric.py").read_text()

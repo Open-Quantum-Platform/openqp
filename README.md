@@ -2,31 +2,36 @@
 
 Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
-### Key Features
+### Capabilities
 
-- **Autonomous Modules of Quantum Chemistry Theories for Easy Interoperability**
-- **Flexible prototyping through a Python wrapper, PyOQP**
-- **Ground and Excited State Properties** by [MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296)
-- **Nonadiabatic Coupling** based on [TLF Technology](https://doi.org/10.1021/acs.jpclett.1c00932) using **MRSF-TDDFT**
-- **New Exchange-Correlation Functionals** of [**DTCAM** series](https://doi.org/10.1021/acs.jctc.4c00640) for MRSF-TDDFT
-- **Ground State Properties** by HF and DFT theories
-- [geomeTRIC](https://github.com/leeping/geomeTRIC) optimizer backend for state-specific optimization, MECI, MECP, transition-state searches, constrained optimizations, and IRC paths
-- [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) Integration to support Artificial Intelligence Ab Initio Molecular Dynamics
-- [LibXC](https://gitlab.com/libxc/libxc) Integration to support a variety of exchange-correlation functionals
-- [basis_set_exchange](https://github.com/MolSSI-BSE/basis_set_exchange) Integration to support a variety of basis sets
-- [libecpint](https://github.com/robashaw/libecpint) Integration to support a variety of Effective Core Potentials
-- **Support for [Molden](https://www.theochem.ru.nl/molden/) File Format** for visualization, compatible with many graphic software tools
-- [DFT-D4 Dispersion Correction](https://dftd4.readthedocs.io/en/latest/)
-- **OpenMP and MPI Parallelization** and **BLAS/LAPACK Optimization** for high performance
-- [OpenTrustRegion library](https://github.com/eriksen-lab/opentrustregion) for stable SCF convergence
-- Native PySCF-based advanced initial guesses, plus optional [MOKIT](https://github.com/1234zou/MOKIT) support for broader external wavefunction conversion workflows
-- Native PySCF-backed initial guesses: `guess.type=pyscf`, `guess.type=sad`, and `guess.type=sap`
-- [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) browser-based visualization for OpenQP outputs, supporting local log, JSON, Molden, cube, and XYZ inspection
-  
+**Electronic structure**
+- HF and DFT (LibXC functionals) with RHF, ROHF, and UHF references
+- TDHF/TDDFT, SF-TDDFT, and **MRSF-TDDFT** including the DTCAM-series functionals
+- **UMRSF-TDDFT** excitation energies from a UHF reference (energy-only)
+- **MRSF-EKT** ionization potentials and electron affinities with Dyson orbitals and pole strengths
+
+**Properties & spectroscopy**
+- Analytic gradients; native analytic HF/DFT Hessians covering open-shell (UHF/ROHF) references, ECPs, and range-separated (CAM/LRC) functionals
+- Vibrational frequencies, thermochemistry, and native **IR and Raman intensities**
+- **NMR chemical shieldings** with CGO and GIAO (London-orbital) gauge treatments
+- MRSF-TDDFT **nonadiabatic couplings** (NACME) for dynamics workflows
+
+**Geometry & reaction paths**
+- Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB
+- Built-in native optimizer (`lib=oqp`, TRIC/DLC + restricted-step RFO), plus geomeTRIC and SciPy backends
+
+**Reliability & performance**
+- Point-group **symmetry**: detection, MO/state/mode labels, and petite-list reductions accelerating integrals, XC, gradients, and response
+- DFT grids: Lebedev plus SG-0/SG-1/SG-2/SG-3 pruned grids with per-element DE2 radial quadrature; OpenMP-parallel XC kernels
+- Native initial guesses (`hcore`, `huckel`, `modhuckel`, `minao`, `sap`), JSON restart, OpenTrustRegion (TRAH) SCF stabilization, Davidson auto-restart, and MINRES/AUTO Z-vector fallbacks
+- OpenMP/MPI parallelism, ILP64 BLAS/LAPACK, pip installs, and Docker images
+
+**Ecosystem**
+- LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and the browser-based [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) viewer
+
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
 - **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
-- **Ionization Potential/Electron Affinity** by [**EKT**-MRSF-TDDFT](https://doi.org/10.1021/acs.jpclett.1c02494)
 
 ### Quickstart
 
@@ -53,11 +58,30 @@ git clone https://github.com/Open-Quantum-Platform/openqp.git
 cd openqp
 pip install .
 ```
-This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Python dependencies including PySCF are installed automatically, so `guess.type=pyscf`, `sad`, and `sap` work without installing MOKIT. MOKIT remains useful only for broader external wavefunction conversion workflows.
+This is the recommended source install path. It builds and installs the OpenQP Python package and native library together, so setting `OPENQP_ROOT` is not required for normal `openqp` command-line use after installation. Native initial guesses such as `huckel`, `modhuckel`, `minao`, and `sap` work without external guess-generation dependencies.
 
-#### Detailed compile for developers
+or 
+#### Detailed Compile
 
-The `pip install .` command above is the normal and recommended source install path. The manual CMake commands below are intended for developers who need to inspect or debug the native build directly. After changing build options, run `pip install .` again from the repository root so the installed `openqp` command uses the same source tree and installed native library.
+##### macOS with Homebrew GCC and native BLAS
+
+On macOS, use the Homebrew GCC toolchain for C/C++/Fortran and the native Accelerate BLAS/LAPACK provider. Replace `gcc-15`, `g++-15`, and `gfortran-15` with the installed Homebrew GCC version if needed.
+
+```bash
+cd openqp
+cmake -B build -G Ninja \
+  -DUSE_LIBINT=OFF \
+  -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 \
+  -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 \
+  -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
+  -DCMAKE_INSTALL_PREFIX=. \
+  -DENABLE_OPENMP=ON \
+  -DLINALG_LIB=auto \
+  -DLINALG_LIB_INT64=OFF
+ninja -C build install
+cd pyoqp
+pip install .
+```
 
 ##### OpenMP Support
 
@@ -65,6 +89,7 @@ The `pip install .` command above is the normal and recommended source install p
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 ninja -C build install
+cd pyoqp
 pip install .
 ```
 
@@ -74,6 +99,7 @@ pip install .
 cd openqp
 cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 ninja -C build install
+cd pyoqp
 pip install .
 ```
 
@@ -83,24 +109,18 @@ pip install .
 cd openqp
 cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
 make -C build install
+cd pyoqp
 pip install .
 ```
 
 - Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- OpenQP requires ILP64 BLAS/LAPACK. The compile examples above pass `-DLINALG_LIB_INT64=ON`; this is also the default, and `-DLINALG_LIB_INT64=OFF` is rejected at configure time. Ensure the selected BLAS/LAPACK library uses 8-byte integers, for example MKL ILP64 or an ILP64 OpenBLAS/LAPACK build.
+- The Linux/manual examples above use ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default). The macOS example uses native Accelerate BLAS/LAPACK with `-DLINALG_LIB_INT64=OFF`.
 
-#### Runtime environment
-
-A package installed with `pip install .` does not require `OPENQP_ROOT` for normal `openqp` command-line use. Set only runtime tuning variables as needed:
+#### Environmental Settings
 
 ```bash
+export OPENQP_ROOT=/path/to/openqp                           # Path to the Root of openqp
 export OMP_NUM_THREADS=4                                     # The number of cores to be used for OpenMP runs
-```
-
-If you are running directly from an uninstalled manual CMake tree, set `OPENQP_ROOT` and the library path for that tree:
-
-```bash
-export OPENQP_ROOT=/path/to/openqp                           # Path to the root of an uninstalled OpenQP tree
 export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
 ```
 
@@ -130,6 +150,34 @@ For OpenMP and MPI run:
 ```bash
 mpirun -np number_of_mpi openqp any_example_file.inp
 ```
+
+#### Performance and threading
+
+OpenQP parallelizes the two-electron integral / Fock build with OpenMP. A few
+defaults and knobs keep it efficient:
+
+- **Sequential BLAS inside the integral build (automatic).** A threaded BLAS
+  keeps its own worker pool that would oversubscribe the cores against the
+  OpenMP integral threads. OpenQP forces BLAS to a single thread for the
+  duration of the integral build (via the BLAS library's own runtime setter, so
+  it cannot be re-introduced by a stray `OPENBLAS_NUM_THREADS`/`MKL_NUM_THREADS`)
+  and restores full BLAS threading afterward for diagonalization and other
+  BLAS-heavy phases. The frontend also sets conservative `*_NUM_THREADS=1` and
+  `OMP_STACKSIZE` defaults (via `setdefault`, so an explicit environment wins).
+  Measured ~1.5x faster at 24-28 threads on a dedicated node; near-ideal scaling
+  to the performance-core count.
+
+- **Low-memory Fock accumulator (automatic for large, sparse systems).** The
+  Fock build normally keeps one Fock copy per thread
+  (`fockdim x nfocks x nthreads`); for large bases on many cores this can reach
+  several GB. OpenQP can instead accumulate into a single shared Fock with atomic
+  updates (~`Nthreads`x less memory). It auto-engages only when the replicated
+  buffers would exceed a cap **and** the density is sparse (so atomic contention
+  is negligible). Controls:
+  - `OQP_FOCK_MEM_MB` — replicated-memory cap in MB before switching (default `4096`).
+  - `OQP_FOCK_SPARSITY` — significant shell-pair fraction below which the density
+    is considered sparse (default `0.5`).
+  - `OQP_FOCK_ATOMIC=1`/`0` — force the shared-atomic / replicated mode regardless.
 
 ### Detailed Documentation
 

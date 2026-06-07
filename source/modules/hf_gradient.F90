@@ -42,6 +42,8 @@ module hf_gradient_mod
   private
 
   public hf_gradient
+  public grd2_rhf_compute_data_t
+  public grd2_uhf_compute_data_t
 
 !###############################################################################
 
@@ -73,9 +75,8 @@ contains
 
     type(information), target, intent(inout) :: infos
 
-    integer :: b_size, c_size, s_size
     type(basis_Set), pointer :: basis
-    logical :: urohf, dft
+    logical :: dft
     type(dft_grid_t) :: molGrid
 
 !   3. LOG: Write: Main output file
@@ -83,18 +84,11 @@ contains
 !
     call print_module_info('HF_DFT_Gradient','Computing Gradient of HF/DFT')
 
-    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
     dft = infos%control%hamilton == 20
 
 !   Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
-
-!   Allocate memory
-    b_size = basis%nbf*(basis%nbf+1)/2
-    c_size = basis%nbf
-    s_size = (basis%nshell**2+basis%nshell)/2
-
 
 !   Compute 1e gradient
 
@@ -351,6 +345,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_rhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -361,7 +359,8 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    real(kind=dp) :: coulfact, xcfact, df1, nrmij, nrmijk
+    logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
@@ -370,6 +369,7 @@ contains
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
+    do_exchange = xcfact/=0.0_dp
 
     dabmax = 0
     loc = basis%ao_offset(id)-1
@@ -383,20 +383,21 @@ contains
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
+        nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
+          nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
             df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
-            if (xcfact/=0.0_dp) then
-              dq1 = this%d2a(i1,k1)*this%d2a(j1,l1) &
-                  + this%d2a(i1,l1)*this%d2a(j1,k1)
-              df1 = df1-xcfact*dq1
+            if (do_exchange) then
+              df1 = df1 - xcfact*( this%d2a(i1,k1)*this%d2a(j1,l1) &
+                                 + this%d2a(i1,l1)*this%d2a(j1,k1) )
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
           end do
         end do
       end do
@@ -408,6 +409,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_uhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -418,7 +423,8 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, nrmij, nrmijk
+    logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
@@ -427,6 +433,7 @@ contains
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
+    do_exchange = xcfact/=0.0_dp
 
     dabmax = 0
     loc = basis%ao_offset(id)-1
@@ -440,14 +447,16 @@ contains
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
+        nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
+          nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
             df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
-            if (xcfact/=0.0_dp) then
+            if (do_exchange) then
               dq1 = this%d2a(i1,k1)*this%d2a(j1,l1) &
                   + this%d2a(i1,l1)*this%d2a(j1,k1) &
                   + this%d2b(i1,k1)*this%d2b(j1,l1) &
@@ -455,7 +464,7 @@ contains
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
           end do
         end do
       end do

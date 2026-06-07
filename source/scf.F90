@@ -56,7 +56,8 @@ contains
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
-    use mathlib, only: traceprod_sym_packed, matrix_invsqrt
+    use mathlib, only: traceprod_sym_packed
+    use qmat_cache, only: get_qmat_cached
     use mathlib, only: unpack_matrix
     use io_constants, only: IW
     use basis_tools, only: basis_set
@@ -403,8 +404,9 @@ contains
     !==============================================================================
     call measure_time(print_total=1, log_unit=IW)
 
-    ! Prepare orthogonalization matrix (S^-1/2)
-    call matrix_invsqrt(smat, qmat, nbf)
+    ! Prepare orthogonalization matrix (S^-1/2), reusing the
+    ! copy cached during the initial guess when available
+    call get_qmat_cached(infos, smat, qmat, nbf)
 
     ! Compute Nuclear-Nuclear energy
 !    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
@@ -475,86 +477,10 @@ contains
     diis_name = [character(len=6) :: "none", "c-DIIS", "e-DIIS", "a-DIIS", "v-DIIS"]
     diis_reset = infos%control%diis_reset_mod
 
-    ! Initialize SCF Convergence Accelerator
-    select case (infos%control%converger_type)
-    case (scf_diis) ! Pure DIIS Accelerators
-      ! Set up DIIS convergence accelerator
-      if (infos%control%diis_type == 5) then
-        ! v-DIIS setup: combination of E-DIIS and C-DIIS with vshift
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis, &
-                                      conv_ediis, &
-                                      conv_cdiis], &
-                       thresholds   =[ethr_cdiis_big, &
-                                      ethr_ediis, &
-                                      infos%control%vdiis_cdiis_switch], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-        if (infos%control%vshift == 0.0_dp) then
-          infos%control%vshift = 0.1_dp
-          vshift = 0.1_dp
-          write(IW, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
-        end if
-      elseif (infos%control%vshift /= 0.0_dp) then
-        ! Custom vshift setup with E-DIIS and C-DIIS
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis, &
-                                      conv_ediis, &
-                                      conv_cdiis], &
-                       thresholds   =[ethr_cdiis_big, &
-                                      ethr_ediis, &
-                                      infos%control%vshift_cdiis_switch], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-      else
-        ! Standard DIIS setup from input
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[infos%control%diis_type], &
-                       thresholds   =[infos%control%diis_method_threshold], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-      end if
-
-    case (scf_bfgs) ! Pure SOSCF Accelerator
-      use_soscf = .true.
-      ! Pure SOSCF strategy
-      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                     maxvec=infos%control%maxit, &
-                     subconvergers=[conv_soscf], &
-                     thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
-                     overlap=smat_full, &
-                     overlap_sqrt=qmat, &
-                     num_focks=soscf_nfocks, &
-                     scf_type=infos%control%scftype, &
-                     verbose=infos%control%verbose)
-      ! Configure the SOSCF converger with SOSCF input parameters
-      call set_soscf_parametres(infos, conv)
-    case (scf_trah) ! Pure TRAH Accelerator
-      use_trah = .true.
-        call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                       maxvec=infos%control%maxit, &
-                       subconvergers=[conv_trah], &
-                       thresholds=[huge(1.0_dp)], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=soscf_nfocks, &
-                       scf_type=infos%control%scftype, &
-                       verbose=infos%control%verbose, &
-                       sd_scf=infos%control%sd_scf)
-
-      ! Configure the TRAH converger with input parameters
-      call set_trah_parametres(infos, molgrid, conv)
-
-    end select
+    ! Initialize SCF Convergence Accelerator (single source of truth)
+    call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
+                            maxdiis, diis_nfocks, soscf_nfocks, &
+                            smat_full, qmat, vshift, use_soscf, use_trah)
 
 
     ! Initialize DFT exchange-correlation energy
@@ -782,19 +708,22 @@ contains
       !----------------------------------------------------------------------------
       ! Print iteration information
       if (infos%control%pfon) then
-        write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,fmt="(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       elseif (infos%control%converger_type == scf_bfgs) then
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(rms_grad), fmt_real14(rms_dp), vshift, &
               trim(conv_res%active_converger_name)
       elseif(use_trah) then
 !              write(IW, "(10x, '')")
       else
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name)
       end if
       call flush(IW)
@@ -1284,6 +1213,118 @@ contains
     end if
   end subroutine handle_homo_lumo_gap
 
+  !> @brief Configure the SCF convergence accelerator (DIIS / SOSCF / TRAH).
+  !>
+  !> Single source of truth for converger selection.  Behaviour is identical
+  !> to the former inline select-case in scf_driver; it is factored out here so
+  !> all converger-selection logic lives in one place.
+  !>
+  !>   converger_type = scf_diis : DIIS family
+  !>       diis_type = 5 (v-DIIS) -> [c-DIIS, e-DIIS, c-DIIS], auto vshift=0.1
+  !>       vshift /= 0            -> [c-DIIS, e-DIIS, c-DIIS] with custom vshift
+  !>       otherwise             -> single diis_type method
+  !>   converger_type = scf_bfgs : SOSCF (active from the first iteration)
+  !>   converger_type = scf_trah : TRAH trust-region
+  subroutine init_scf_converger(infos, molgrid, conv, nbf, nelec_a, nelec_b, &
+                                maxdiis, diis_nfocks, soscf_nfocks, &
+                                smat_full, qmat, vshift, use_soscf, use_trah)
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_converger, only: scf_conv, conv_cdiis, conv_ediis, conv_soscf, conv_trah
+    use scf_addons, only: scf_diis, scf_bfgs, scf_trah
+
+    implicit none
+
+    type(information), intent(inout) :: infos
+    type(dft_grid_t), intent(in) :: molgrid
+    type(scf_conv), intent(inout) :: conv
+    integer, intent(in) :: nbf, nelec_a, nelec_b
+    integer, intent(in) :: maxdiis, diis_nfocks, soscf_nfocks
+    real(kind=dp), intent(in) :: smat_full(:,:), qmat(:,:)
+    real(kind=dp), intent(inout) :: vshift
+    logical, intent(out) :: use_soscf, use_trah
+
+    real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! c-DIIS error threshold
+    real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! e-DIIS error threshold
+
+    use_soscf = .false.
+    use_trah = .false.
+
+    select case (infos%control%converger_type)
+    case (scf_diis) ! DIIS family
+      if (infos%control%diis_type == 5) then
+        ! v-DIIS: cascade of c-DIIS / e-DIIS / c-DIIS with level shift
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, ethr_ediis, &
+                                      infos%control%vdiis_cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=infos%control%verbose)
+        if (infos%control%vshift == 0.0_dp) then
+          infos%control%vshift = 0.1_dp
+          vshift = 0.1_dp
+          write(iw, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
+        end if
+      elseif (infos%control%vshift /= 0.0_dp) then
+        ! Custom level shift with c-DIIS / e-DIIS / c-DIIS cascade
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, ethr_ediis, &
+                                      infos%control%vshift_cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=infos%control%verbose)
+      else
+        ! Standard single DIIS method from input
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[infos%control%diis_type], &
+                       thresholds   =[infos%control%diis_method_threshold], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=infos%control%verbose)
+      end if
+
+    case (scf_bfgs) ! SOSCF
+      use_soscf = .true.
+      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                     maxvec=infos%control%maxit, &
+                     subconvergers=[conv_soscf], &
+                     thresholds   =[huge(1.0_dp)], &
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=soscf_nfocks, &
+                     scf_type=infos%control%scftype, &
+                     verbose=infos%control%verbose)
+      call set_soscf_parametres(infos, conv)
+
+    case (scf_trah) ! TRAH
+      use_trah = .true.
+      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                     maxvec=infos%control%maxit, &
+                     subconvergers=[conv_trah], &
+                     thresholds   =[huge(1.0_dp)], &
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=soscf_nfocks, &
+                     scf_type=infos%control%scftype, &
+                     verbose=infos%control%verbose, &
+                     sd_scf=infos%control%sd_scf)
+      call set_trah_parametres(infos, molgrid, conv)
+
+    case default
+    end select
+
+  end subroutine init_scf_converger
+
   !> @In this implementation, we don’t need these parameters— they were added,
   !> @but they appear to be unnecessary right now.
   !> @brief Configures parameters for the Second-Order SCF (SOSCF) convergence accelerator.
@@ -1610,5 +1651,30 @@ contains
 
      deallocate(WS, T, wrk)
    end subroutine rohf_fix
+
+  !> @brief Format a value for a 17-char SCF iteration table column.
+  !> @detail Uses the usual fixed-point form while the value fits the column
+  !>         and falls back to scientific notation (same width) otherwise, so
+  !>         pathological values print as numbers instead of '*****'.
+  function fmt_real17(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=17) :: str
+    if (val == val .and. abs(val) < 1.0e5_dp) then
+      write(str, '(f17.10)') val
+    else
+      write(str, '(es17.8e3)') val
+    end if
+  end function fmt_real17
+
+  !> @brief Same as fmt_real17 for the 14-char error/gradient columns.
+  function fmt_real14(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=14) :: str
+    if (val == val .and. abs(val) < 1.0e4_dp) then
+      write(str, '(f14.8)') val
+    else
+      write(str, '(es14.5e3)') val
+    end if
+  end function fmt_real14
 end module scf
 

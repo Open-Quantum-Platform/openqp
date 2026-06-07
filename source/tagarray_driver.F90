@@ -19,6 +19,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B = OQP_prefix // "VEC_MO_B"
   character(len=*), parameter, public :: OQP_Hcore = OQP_prefix // "Hcore"
   character(len=*), parameter, public :: OQP_SM = OQP_prefix // "SM"
+  character(len=*), parameter, public :: OQP_QMAT = OQP_prefix // "QMAT"
   character(len=*), parameter, public :: OQP_TM = OQP_prefix // "TM"
   character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
   character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
@@ -33,6 +34,17 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
   character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
   character(len=*), parameter, public :: OQP_td_bvec_mo_t = OQP_prefix // "td_bvec_mo_t"                  !new
+  character(len=*), parameter, public :: OQP_nmr_shielding = OQP_prefix // "nmr_shielding"
+  character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
+    "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
+    "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_orbitals_mo = OQP_prefix // "mrsf_ekt_orbitals_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_eigenvalues = OQP_prefix // "mrsf_ekt_eigenvalues"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_strengths = OQP_prefix // "mrsf_ekt_strengths"
+  character(len=*), parameter, public :: OQP_hf_hessian = OQP_prefix // "hf_hessian"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
@@ -55,6 +67,16 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_hsoc_re = OQP_prefix // "soc_hsoc_re"
   character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
 
+  ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
+  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
+  character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
+  character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
+  character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
+  character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
+  character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
+
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_FOCK_A_comment = "Alpha-spin triangle Fock matrix"
@@ -65,6 +87,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B_comment = "Coefficients of beta molecular orbitals"
   character(len=*), parameter, public :: OQP_Hcore_comment = "triangle core Hamiltonian matrix"
   character(len=*), parameter, public :: OQP_SM_comment = "triangle Overlap matrix"
+  character(len=*), parameter, public :: OQP_QMAT_comment = "canonical orthogonalizer Q = S^(-1/2), full (nbf x nbf)"
   character(len=*), parameter, public :: OQP_TM_comment = "triangle Kinetic-Energy matrix"
   character(len=*), parameter, public :: OQP_WAO_comment = "??? WAO ???"
   character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
@@ -89,11 +112,13 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
   character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
   character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
-  
-  character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
+
+  character(len=*), parameter, public :: all_tags(39) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
+    OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
+    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, OQP_hf_hessian, &
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &

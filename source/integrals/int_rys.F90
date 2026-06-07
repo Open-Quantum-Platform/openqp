@@ -39,6 +39,7 @@ module int2e_rys
     private
     public :: int2_rys_data_t
     public :: int2_rys_compute
+    public :: int2_rys_compute_ordered_am
     public :: rys_print_eri
 
 contains
@@ -251,6 +252,24 @@ contains
 
 
   end subroutine int2_rys_compute
+
+  subroutine int2_rys_compute_ordered_am(ints, gdat, ppairs, ids, am, zero_shq)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    real(kind=dp), intent(inout) :: ints(*)
+    type(int2_rys_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    integer, intent(in) :: ids(4), am(4)
+    logical, intent(out) :: zero_shq
+
+    gdat%id = ids
+    gdat%am = am
+    gdat%flips = [1, 2, 3, 4]
+    call int2_rys_compute(ints, gdat, ppairs, zero_shq)
+
+  end subroutine int2_rys_compute_ordered_am
 
   subroutine compute(gdat, ng, nmax, mmax, ints)
 

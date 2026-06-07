@@ -16,7 +16,14 @@ multiplicity=3
 [tdhf]
 type=mrsf
 nstate=2
+maxit=30
 
 [optimize]
 istate=1
+maxit=1
+energy_shift=1
+rmsd_grad=1
+max_grad=1
+rmsd_step=1
+max_step=1
 

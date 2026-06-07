@@ -23,7 +23,7 @@ contains
     use basis_tools, only: basis_set
     use guess, only: get_ab_initio_density, &
                      get_ab_initio_orbital
-    use mathlib, only: matrix_invsqrt
+    use qmat_cache, only: get_qmat_cached
     use util, only: measure_time
     use messages, only: show_message, WITH_ABORT
     use strings, only: Cstring, fstring
@@ -108,7 +108,7 @@ contains
 
   !  End of Readings.................................
   !
-    call matrix_invsqrt(smat, qmat, nbf)
+    call get_qmat_cached(infos, smat, qmat, nbf)
   !
   !  Calculate Hcore MO
     call Get_ab_initio_orbital(Hcore, MO_A, MO_Energy_A, QMat)

@@ -274,6 +274,7 @@ module scf_addons
     real(kind=dp) :: eexc     ! Exchange-correlation energy for DFT
     real(kind=dp) :: totele   ! Total electron density for DFT
     real(kind=dp) :: totkin   ! Total kinetic energy for DFT
+    real(kind=dp) :: e_pcm = 0.0_dp ! PCM solvent reaction-field energy (provisional; ddX path)
   contains
     procedure :: print_e => print_scf_energy
   end type scf_energy_t
@@ -323,6 +324,9 @@ contains
      write(IW,"('                One electron energy =',F19.10)") this%ehf1
      write(IW,"('                Two electron energy =',F19.10)") this%vee
      write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
+     if (this%e_pcm /= 0.0_dp) then
+        write(IW,"('           PCM solvent energy (prov) =',F19.10)") this%e_pcm
+     end if
      write(IW,"(38X,18('-'))")
      write(IW,"('                       TOTAL energy =',F19.10)") this%etot
      write(IW,*)
@@ -1056,7 +1060,7 @@ contains
   !> @param[inout] f Fock matrices to be updated (triangular format).
   !> @param[in] scalefactor Optional scaling factor for exchange (default = 1.0).
   !> @param[inout] infos System information.
-  subroutine fock_jk(basis, d, f, infos, scale_exch, nschwz, f_old, scale_coul)
+  subroutine fock_jk(basis, d, f, infos, scale_exch, nschwz, f_old, scale_coul, petite)
     use precision, only: dp
     use io_constants, only: iw
     use util, only: measure_time
@@ -1075,6 +1079,10 @@ contains
     real(kind=dp), target, intent(in) :: d(:,:)
     real(kind=dp), intent(inout) :: f(:,:)
     real(kind=dp), optional ,intent(inout) :: f_old(:,:)
+    !> Opt into the symmetry petite-list reduction. Only valid for totally
+    !> symmetric densities (SCF Fock); response/CPHF/Hessian callers with
+    !> perturbed densities must not set this.
+    logical, optional, intent(in) :: petite
 
 
     integer :: i, ii, nf
@@ -1093,6 +1101,11 @@ contains
 
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
+    if (present(petite)) then
+      ! Petite-list reduction: only valid for totally symmetric densities
+      ! (SCF Fock); the skeleton matrix is symmetrized below.
+      if (petite) call int2_driver%enable_petite(infos)
+    end if
     call int2_driver%set_screening()
 
     select case (infos%control%scftype)
@@ -1128,9 +1141,217 @@ contains
       end do
     end do
 
+    ! Petite-list runs produce a skeleton matrix; project onto the
+    ! totally symmetric component: F <- (1/|G|) sum_op T_op F T_op^T.
+    if (int2_driver%petite) call symmetrize_skeleton_fock(infos, basis, f)
+
     call int2_driver%clean()
 
   end subroutine fock_jk
+
+!--------------------------------------------------------------------------------
+
+!> @brief Symmetrize a packed-triangular skeleton Fock matrix.
+!> @detail Applies F <- (1/|G|) sum_op T_op F T_op^T where T_op is the
+!>   signed AO permutation of each abelian symmetry operation (standard
+!>   orientation), using the maps written by pyoqp. No-op if the maps are
+!>   missing.
+  subroutine symmetrize_skeleton_fock(infos, basis, f)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: f(:,:)
+
+    real(kind=dp), contiguous, pointer :: blocks(:)
+    integer(4) :: status
+    integer :: nbf
+
+    nbf = basis%nbf
+    call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+    if (status == TA_OK) then
+      call symmetrize_skeleton_blocked(infos, basis, f, blocks)
+    else
+      call symmetrize_skeleton_signed(infos, nbf, f)
+    end if
+
+  end subroutine symmetrize_skeleton_fock
+
+!--------------------------------------------------------------------------------
+
+!> @brief Full-group skeleton symmetrization with dense per-shell blocks.
+!> @detail F <- (1/|G|) sum_op T_op F T_op^T where T_op permutes shells and
+!>   mixes components within each shell (non-abelian operations such as the
+!>   C6 rotations of D6h). Blocks staged by pyoqp, column-major per shell,
+!>   concatenated shell-by-shell then op-by-op.
+  subroutine symmetrize_skeleton_blocked(infos, basis, f, blocks)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(inout) :: f(:,:)
+    real(kind=dp), contiguous, intent(in) :: blocks(:)
+
+    integer(8), contiguous, pointer :: shell_map(:)
+    integer(4) :: status
+    integer :: nbf, nshell, nops, iop, nf, k, j, s, off_k, off_j
+    integer :: mu, nu, idx, blk0, blk_per_op
+    real(kind=dp), allocatable :: fsq(:,:), y(:,:), acc(:,:)
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, shell_map, status=status)
+    if (status /= TA_OK) return
+
+    nbf = basis%nbf
+    nshell = basis%nshell
+    if (mod(size(shell_map), nshell) /= 0) return
+    nops = int(size(shell_map)/nshell)
+    if (nops < 2) return
+
+    blk_per_op = 0
+    do k = 1, nshell
+      s = shell_size(basis, k, nbf)
+      blk_per_op = blk_per_op + s*s
+    end do
+    if (size(blocks) /= nops*blk_per_op) return
+
+    allocate(fsq(nbf, nbf), y(nbf, nbf), acc(nbf, nbf))
+
+    do nf = 1, ubound(f, 2)
+      ! unpack the packed lower triangle
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          fsq(mu, nu) = f(idx, nf)
+          fsq(nu, mu) = f(idx, nf)
+        end do
+      end do
+
+      acc = 0.0_dp
+      do iop = 1, nops
+        ! Operator transform: F <- T^T F T (T maps shell k to shell j with
+        ! block B_k; T is metric-orthogonal, not orthogonal, so the
+        ! transpose side matters once d shells mix under rotations).
+        ! Y = T^T F : rows of source shell k get B_k^T @ rows of shell j.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            y(off_k+1:off_k+s, :) = matmul(transpose(b), fsq(off_j+1:off_j+s, :))
+          end associate
+          blk0 = blk0 + s*s
+        end do
+        ! acc += Y T : columns of source shell k get Y cols j @ B_k.
+        blk0 = (iop-1)*blk_per_op
+        do k = 1, nshell
+          s = shell_size(basis, k, nbf)
+          j = int(shell_map((iop-1)*nshell + k))
+          off_k = basis%ao_offset(k) - 1
+          off_j = basis%ao_offset(j) - 1
+          associate(b => reshape(blocks(blk0+1:blk0+s*s), [s, s]))
+            acc(:, off_k+1:off_k+s) = acc(:, off_k+1:off_k+s) &
+                + matmul(y(:, off_j+1:off_j+s), b)
+          end associate
+          blk0 = blk0 + s*s
+        end do
+      end do
+
+      acc = acc/real(nops, dp)
+
+      idx = 0
+      do mu = 1, nbf
+        do nu = 1, mu
+          idx = idx + 1
+          f(idx, nf) = acc(mu, nu)
+        end do
+      end do
+    end do
+
+  contains
+
+    integer function shell_size(basis, k, nbf) result(s)
+      type(basis_set), intent(in) :: basis
+      integer, intent(in) :: k, nbf
+      if (k < basis%nshell) then
+        s = basis%ao_offset(k+1) - basis%ao_offset(k)
+      else
+        s = nbf - basis%ao_offset(k) + 1
+      end if
+    end function shell_size
+
+  end subroutine symmetrize_skeleton_blocked
+
+!--------------------------------------------------------------------------------
+
+!> @brief Abelian (signed-permutation) skeleton symmetrization.
+  subroutine symmetrize_skeleton_signed(infos, nbf, f)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nbf
+    real(kind=dp), intent(inout) :: f(:,:)
+
+    integer(8), contiguous, pointer :: target_map(:)
+    real(kind=dp), contiguous, pointer :: sign_map(:)
+    real(kind=dp), allocatable :: acc(:)
+    integer(4) :: status
+    integer :: nops, iop, nf, mu, nu, tm, tn, a, b, idx, tidx, base
+
+    call tagarray_get_data(infos%dat, OQP_sym_ao_target, target_map, status=status)
+    if (status /= TA_OK) return
+    call tagarray_get_data(infos%dat, OQP_sym_ao_sign, sign_map, status=status)
+    if (status /= TA_OK) return
+    if (size(sign_map) /= size(target_map)) return
+    if (mod(size(target_map), nbf) /= 0) return
+
+    ! Flat layout, AO index fastest: target(mu, op) = target_map((op-1)*nbf+mu).
+    nops = int(size(target_map)/nbf)
+    if (nops < 2) return
+
+    allocate(acc(nbf*(nbf+1)/2))
+
+    do nf = 1, ubound(f, 2)
+      acc = 0.0_dp
+      do iop = 1, nops
+        base = (iop-1)*nbf
+        idx = 0
+        do mu = 1, nbf
+          tm = int(target_map(base + mu))
+          do nu = 1, mu
+            idx = idx + 1
+            tn = int(target_map(base + nu))
+            a = max(tm, tn)
+            b = min(tm, tn)
+            tidx = a*(a-1)/2 + b
+            acc(tidx) = acc(tidx) &
+                    + sign_map(base + mu)*sign_map(base + nu)*f(idx, nf)
+          end do
+        end do
+      end do
+      f(:, nf) = acc/real(nops, dp)
+    end do
+
+  end subroutine symmetrize_skeleton_signed
   !> @brief Builds AO-space linear response vector(s) in packed (triangular) form.
   !> @detail Forms the Coulomb/exchange response and, when using DFT, the
   !>         exchange–correlation kernel contribution in AO space.
@@ -1260,6 +1481,8 @@ contains
     use dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
     implicit none
 
     type(basis_set), intent(in) :: basis
@@ -1267,6 +1490,10 @@ contains
     real(kind=dp), intent(inout) :: mo_a(:,:)
     real(kind=dp), intent(inout) :: mo_b(:,:)
     real(kind=dp), intent(out) :: pfxc(:,:)
+    real(kind=dp), contiguous, pointer :: sym_atom_weight(:)
+    integer(8), contiguous, pointer :: sym_petite_flag(:)
+    integer(4) :: sym_status
+    logical :: sym_active
     real(kind=dp), intent(out) :: eexc
     real(kind=dp), intent(out) :: totele
     real(kind=dp), intent(out) :: totkin
@@ -1284,8 +1511,39 @@ contains
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
 
+    ! Symmetry XC reduction: integrate only unique atoms' grid slices
+    ! (orbit-weighted) and symmetrize the resulting skeleton XC matrix.
+    ! Gated by the same petite flag as the two-electron reduction, so the
+    ! stability-stage fail-safe applies here as well.
+    sym_active = .false.
+    sym_atom_weight => null()
+    call tagarray_get_data(infos%dat, OQP_sym_petite, sym_petite_flag, status=sym_status)
+    if (sym_status == TA_OK) then
+      if (sym_petite_flag(1) /= 0) then
+        call tagarray_get_data(infos%dat, OQP_sym_atom_weight, sym_atom_weight, &
+                               status=sym_status)
+        sym_active = sym_status == TA_OK
+        if (sym_active) sym_active = size(sym_atom_weight) == infos%mol_prop%natom
+      end if
+    end if
+
     ! Calculate exchange-correlation based on SCF type
-    if (scf_type == scf_rhf) then
+    if (sym_active) then
+      if (scf_type == scf_rhf) then
+        call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      else if (scf_type == scf_uhf) then
+        call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      else if (scf_type == scf_rohf) then
+        mo_b = mo_a
+        call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      end if
+      ! The reduced-grid XC matrix is a skeleton: project onto the totally
+      ! symmetric component (the XC energy/electron count are already exact).
+      call symmetrize_skeleton_fock(infos, basis, pfxc)
+    else if (scf_type == scf_rhf) then
       ! Restricted calculation - same matrix for alpha and beta
       call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
                     nbf, nbf_tri, eexc, totele, totkin, infos)
@@ -1325,6 +1583,9 @@ contains
   !> @param[inout,opt] f_old Previously accumulated packed Fock(ces) for incremental build.
   !> @param[inout,opt] d_old Previous packed density(ies) for incremental build.
   !> @note For DFT hybrids, exchange scaling is taken from infos%dft%HFscale.
+  !> @note Continuum solvent (PCM) is the single canonical runtime path: gated on
+  !>       infos%control%pcm_enabled, applied via add_pcm_reaction_field, and
+  !>       reported in E%e_pcm. There is no second reaction-field hook.
   !> @throws error stop if DFT is requested but molgrid/mo_a are not provided.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
@@ -1335,6 +1596,7 @@ contains
     use types,           only : information
     use mod_dft_molgrid, only : dft_grid_t
     use mathlib,          only : traceprod_sym_packed
+    use solvent_pcm,      only : add_pcm_reaction_field
     implicit none
 
     type(basis_set),   intent(in)    :: basis
@@ -1367,11 +1629,11 @@ contains
     nbf      = basis%nbf
     if(present(d_old) .and. present(f_old)) then
       d = d - d_old
-      call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old)
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old, petite=.true.)
       d = d + d_old
       d_old = d
     else
-      call fock_jk(basis, d, f, infos, scale_factor, nschwz)
+      call fock_jk(basis, d, f, infos, scale_factor, nschwz, petite=.true.)
     end if
     ii = 0
     do ii = 1, nfocks
@@ -1391,6 +1653,18 @@ contains
 
     E%ehf = 0.5_dp * (E%ehf + E%ehf1)
     E%etot = E%ehf + E%nenergy
+
+    ! PCM solvent reaction field (provisional energy-only path; ddX backend).
+    ! Mirrors the XC pattern below: the V_pcm operator is added to the Fock
+    ! blocks used for the next density update, and a distinct E_pcm term is
+    ! added to the total energy. It is applied AFTER the vacuum HF energy is
+    ! formed so the reaction field is not double-counted in E%ehf. Gated on
+    ! pcm_enabled; aborts at runtime if built without ddX (OQP_ENABLE_DDX).
+    E%e_pcm = 0.0_dp
+    if (infos%control%pcm_enabled) then
+      call add_pcm_reaction_field(basis, infos, d, nfocks, f, E%e_pcm)
+      E%etot = E%etot + E%e_pcm
+    end if
 
     if (.not. is_dft) return
 
@@ -1429,6 +1703,8 @@ contains
   !> @param[inout,opt] dens_old Previous packed density(ies) for incremental build.
   !> @param[inout,opt] f_old    Previous packed Fock(ces) for incremental build.
   !> @param[inout,opt] nschwz   (Output) count of Schwarz-screened quartets.
+  !> @note Continuum solvent (PCM) is driven entirely inside calc_jk_xc via the
+  !>       single infos%control%pcm_enabled gate; calc_fock takes no PCM argument.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
