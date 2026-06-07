@@ -16,7 +16,9 @@ from oqp.library.libgeometric import (
     GeometricOpt,
     GeometricTSOpt,
 )
-from oqp.library.libnative import NativeOpt, NativeTSOpt, NativeMECIOpt, NativeMECPOpt
+from oqp.library.libnative import (
+    NativeOpt, NativeTSOpt, NativeMECIOpt, NativeMECPOpt, NativeTCIOpt,
+)
 
 
 def compute_energy(mol):
@@ -186,6 +188,7 @@ def get_optimizer(mol):
             'mecp': MECPOpt,
             'mep': MEP,
             'ts': None,
+            'tci': None,
             'irc': None,
             'neb': None,
         },
@@ -195,6 +198,7 @@ def get_optimizer(mol):
             'mecp': GeometricMECPOpt,
             'mep': None,
             'ts': GeometricTSOpt,
+            'tci': None,
             'irc': GeometricIRCOpt,
             'neb': GeometricNEBOpt,
         },
@@ -204,12 +208,13 @@ def get_optimizer(mol):
             'mecp': NativeMECPOpt,
             'mep': None,
             'ts': NativeTSOpt,
+            'tci': NativeTCIOpt,
             'irc': None,
             'neb': None,
         },
     }
 
-    if opt_lib[lib][runtype]:
+    if opt_lib[lib].get(runtype):
         return opt_lib[lib][runtype](mol)
 
     else:

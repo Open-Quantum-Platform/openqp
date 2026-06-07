@@ -1,0 +1,41 @@
+[input]
+system=
+ C          -1.6699351346837055       0.1537249235528157      -1.5459803491111643
+ C          -1.8079415266835852      -0.0386075716896284      -0.1602069788110266
+ H          -2.6609567768367581       0.2572290722092156      -2.0290359598415040
+ H          -1.2898503996116444      -0.7568524635289917      -2.0470428696820342
+ H          -1.3096398768036397       0.6557118321425524       0.5396052278505126
+ H          -2.3820842951209360      -0.7983813277099963       0.4308517619153288
+runtype=tci
+functional=bhhlyp
+charge=0
+method=tdhf
+basis=6-31g*
+
+[scf]
+type=rohf
+maxit=30
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=5
+maxit=30
+
+[optimize]
+lib=native
+maxit=2
+istate=1
+jstate=2
+kstate=3
+pen_sigma=2.0
+pen_incre=1.2
+energy_gap=2e-3
+rmsd_grad=2e-3
+max_grad=4e-3
+rmsd_step=4e-3
+max_step=8e-3
+
+[native]
+coordsys=auto
+trust=0.15

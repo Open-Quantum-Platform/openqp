@@ -22,7 +22,7 @@ import numpy as np
 
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
 from oqp.library.native_engine import NativeEngine
-from oqp.utils.file_utils import dump_log
+from oqp.utils.file_utils import dump_log, dump_data
 
 
 class _NativeRunner:
@@ -111,3 +111,114 @@ class NativeMECPOpt(_NativeRunner, MECPOpt):
 
     def __init__(self, mol):
         MECPOpt.__init__(self, mol)
+
+
+class NativeTCIOpt(_NativeRunner, MECIOpt):
+    r"""Three-state conical intersection (TCI) search by adaptive penalty.
+
+    Generalizes the Levine-Martinez two-state penalty to three states
+    (i < j < k) by penalizing the two consecutive gaps, following the adaptive
+    penalty-function method for three-state CIs with MRSF-TDDFT
+    (Lee, Back, et al., J. Phys. Chem. A 2021, 125, 9580):
+
+        F  = (E_i + E_j + E_k) / 3 + sigma * [ P(g_ji) + P(g_kj) ]
+        P(d)  = d^2 / (d + alpha)
+        P'(d) = (d^2 + 2 alpha d) / (d + alpha)^2
+        dF = (G_i + G_j + G_k) / 3
+             + sigma * [ P'(g_ji) (G_j - G_i) + P'(g_kj) (G_k - G_j) ]
+
+    with g_ji = E_j - E_i, g_kj = E_k - E_j.  ``sigma`` grows by ``pen_incre``
+    each step (the adaptive tightening); ``alpha`` defaults to the RMS of the
+    larger gap-gradient when ``pen_alpha == 0``.  Convergence requires BOTH
+    consecutive gaps below ``energy_gap``.  Reuses ``MECIOpt`` infrastructure;
+    only the objective is three-state.
+    """
+
+    mode = "min"
+
+    def __init__(self, mol):
+        MECIOpt.__init__(self, mol)
+
+    def one_step(self, coordinates):
+        if not (self.istate < self.jstate < self.kstate):
+            raise ValueError(
+                "TCI requires istate < jstate < kstate, got "
+                f"{self.istate}/{self.jstate}/{self.kstate}")
+
+        self.itr += 1
+        dump_log(self.mol, title="PyOQP: Geometry Optimization Step %s" % self.itr)
+        do_init_scf = True if self.itr == 1 else self.init_scf
+
+        self.mol.update_system(coordinates)
+        energies = self.sp.energy(do_init_scf=do_init_scf)
+
+        self.grad.grads = [self.istate, self.jstate, self.kstate]
+        grads = self.grad.gradient()
+        self.mol.energies = energies
+        self.mol.grads = grads
+        energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
+        self.mol.energies = energies
+        self.mol.grads = grads
+
+        return self._tci_penalty(coordinates, energies, grads)
+
+    def _tci_penalty(self, coordinates, energies, grads):
+        ei = energies[self.istate]
+        ej = energies[self.jstate]
+        ek = energies[self.kstate]
+        gi = grads[self.istate].reshape(-1)
+        gj = grads[self.jstate].reshape(-1)
+        gk = grads[self.kstate].reshape(-1)
+
+        g_ji = ej - ei
+        g_kj = ek - ej
+        dg_ji = gj - gi
+        dg_kj = gk - gj
+
+        if self.alpha == 0:
+            scale = max(np.mean(dg_ji ** 2) ** 0.5,
+                        np.mean(dg_kj ** 2) ** 0.5)
+            alpha = scale if scale > 1.0e-12 else 1.0e-6
+        else:
+            alpha = self.alpha
+
+        self.sigma *= self.incre
+
+        def pen(d):
+            return d * d / (d + alpha)
+
+        def dpen(d):
+            return (d * d + 2.0 * alpha * d) / (d + alpha) ** 2
+
+        avg_e = (ei + ej + ek) / 3.0
+        f = avg_e + self.weights * self.sigma * (pen(g_ji) + pen(g_kj))
+        df_avg = (gi + gj + gk) / 3.0
+        df_pen = dpen(g_ji) * dg_ji + dpen(g_kj) * dg_kj
+        df = df_avg + self.weights * self.sigma * df_pen
+
+        max_gap = max(abs(g_ji), abs(g_kj))
+        de = f - self.pre_energy
+        rmsd_step = np.mean((coordinates - self.pre_coord) ** 2) ** 0.5
+        max_step = np.amax(np.abs(coordinates - self.pre_coord))
+        rmsd_grad = np.mean(df ** 2) ** 0.5
+        max_grad = np.amax(np.abs(df))
+
+        self.metrics['itr'] = self.itr
+        self.metrics['sigma'] = self.sigma
+        self.metrics['de'] = de
+        self.metrics['gap'] = max_gap
+        self.metrics['rmsd_step'] = rmsd_step
+        self.metrics['max_step'] = max_step
+        self.metrics['rmsd_grad'] = rmsd_grad
+        self.metrics['max_grad'] = max_grad
+
+        self.pre_energy = f
+        self.pre_coord = coordinates.copy()
+        dump_data(
+            self.mol,
+            (self.itr, self.atoms, coordinates, f, de, max_gap, rmsd_step,
+             max_step, rmsd_grad, max_grad, g_ji, g_kj),
+            title='TCI',
+            fpath=self.mol.log_path,
+        )
+        return f, df

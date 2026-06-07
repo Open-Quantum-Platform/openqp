@@ -199,6 +199,40 @@ class TestDispatchAndValidation(unittest.TestCase):
         lib_errs = [d for d in report3.errors if d.path == "optimize.lib"]
         self.assertEqual(lib_errs, [], "native/meci should be allowed")
 
+    def test_tci_validation(self):
+        utils = sys.modules.setdefault("oqp.utils",
+                                       types.ModuleType("oqp.utils"))
+        utils.__path__ = []
+        mpi = types.ModuleType("oqp.utils.mpi_utils")
+        mpi.MPIManager = type("MPIManager", (), {})
+        sys.modules["oqp.utils.mpi_utils"] = mpi
+        ic = _load("oqp.utils.input_checker",
+                   ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py")
+        self.assertIn("tci", ic.SUPPORTED_RUNTYPES)
+
+        # valid: native, tdhf, strictly increasing states
+        ok = ic.CheckReport()
+        ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
+                            "optimize": {"lib": "native", "istate": 1,
+                                         "jstate": 2, "kstate": 3}}, ok)
+        self.assertEqual([d for d in ok.errors if d.path in
+                          ("optimize.lib", "optimize.kstate")], [])
+
+        # invalid ordering
+        bad = ic.CheckReport()
+        ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
+                            "optimize": {"lib": "native", "istate": 1,
+                                         "jstate": 2, "kstate": 2}}, bad)
+        self.assertTrue(any(d.path == "optimize.kstate" for d in bad.errors))
+
+        # tci only on native
+        geo = ic.CheckReport()
+        ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
+                            "optimize": {"lib": "geometric", "istate": 1,
+                                         "jstate": 2, "kstate": 3}}, geo)
+        self.assertTrue(any("only through the native" in d.message
+                            for d in geo.errors))
+
 
 class TestNativeExample(unittest.TestCase):
     def test_example_exists_and_capped(self):
