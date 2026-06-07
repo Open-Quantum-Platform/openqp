@@ -292,9 +292,11 @@ class NAMD_QMMM(NAMD):
 
     def __init__(self, mol):
         super().__init__(mol)
+        import openmm as mm
         import openmm.app as app
         import openmm.unit as u
         from oqp.library.qmmm_driver import OpenQpQMMM
+        self._mm = mm
         self._app = app
         self._u = u
 
@@ -394,6 +396,50 @@ class NAMD_QMMM(NAMD):
         g = g + np.array(mol.data["OQP::ESPF_GRAD"]).reshape(-1, 3)
         return g
 
+    def _potqm_force(self, pchg, sign=1.0):
+        """QM-QM Ewald self-interaction correction force (a.u.), QM atoms only.
+
+        Mirrors electrostatic_potential's energy construction but for forces:
+        with the QM atoms carrying their ESPF charges and all MM charges zeroed,
+        the (Ewald - direct) force difference is the periodic QM-QM correction
+        force.  Returns a (natom_all, 3) array (nonzero only on QM atoms).
+        """
+        u = self._u
+        f = np.zeros((self.natom_all, 3))
+        simew = self.mm.get("simew")
+        simor = self.mm.get("simor")
+        if simew is None or simor is None:
+            return f
+        nbew = next(x for x in simew.system.getForces() if isinstance(x, self._mm.NonbondedForce))
+        nbor = next(x for x in simor.system.getForces() if isinstance(x, self._mm.NonbondedForce))
+        # save + set charges: QM -> pchg, everything else -> 0
+        saved = []
+        for i in range(self.natom_all):
+            c_e, s_e, e_e = nbew.getParticleParameters(i)
+            c_o, s_o, e_o = nbor.getParticleParameters(i)
+            saved.append((c_e, s_e, e_e, c_o, s_o, e_o))
+            q = 0.0
+            if i in self.qm_atoms:
+                q = float(pchg[np.where(self.qm_atoms == i)[0][0]])
+            nbew.setParticleParameters(i, q * u.elementary_charge, 0.0, 0.0)
+            nbor.setParticleParameters(i, q * u.elementary_charge, 0.0, 0.0)
+        nbew.updateParametersInContext(simew.context)
+        nbor.updateParametersInContext(simor.context)
+        kj = u.kilojoule_per_mole / u.nanometer
+        f_ew = np.array(simew.context.getState(getForces=True).getForces(asNumpy=True).value_in_unit(kj))
+        f_or = np.array(simor.context.getState(getForces=True).getForces(asNumpy=True).value_in_unit(kj))
+        f_corr = sign * (f_ew - f_or) / HABOHR_TO_KJMOLNM      # a.u.
+        for k, i in enumerate(self.qm_atoms):
+            f[i] = f_corr[i]
+        # restore
+        for i in range(self.natom_all):
+            c_e, s_e, e_e, c_o, s_o, e_o = saved[i]
+            nbew.setParticleParameters(i, c_e, s_e, e_e)
+            nbor.setParticleParameters(i, c_o, s_o, e_o)
+        nbew.updateParametersInContext(simew.context)
+        nbor.updateParametersInContext(simor.context)
+        return f
+
     def _total_force(self, potmm):
         """Assemble full-system force (a.u.) and total potential energy (Ha)."""
         mol = self.mol
@@ -412,6 +458,12 @@ class NAMD_QMMM(NAMD):
         f_all = gmm.copy()
         for k, i in enumerate(self.qm_atoms):
             f_all[i] = f_all[i] - gqm[k]
+        # periodic QM-QM Ewald self-interaction correction force (QM atoms only;
+        # physically correct but small for large boxes -- NOT the dominant
+        # source of the remaining periodic force-energy drift, which is the PME
+        # embedding consistency term, still under development)
+        if self.periodic:
+            f_all = f_all + self._potqm_force(pchg, sign=1.0)
         # remove net (COM) force
         f_all -= f_all.mean(axis=0)
 
