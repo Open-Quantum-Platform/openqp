@@ -1616,7 +1616,6 @@ contains
     real(kind=dp), intent(in) :: error
     class(subconverger), pointer :: conv
     integer :: i, nconv
-    logical :: use_soscf_now
 
     nconv = ubound(self%thresholds, 1)
     do i = 0, nconv
@@ -1624,16 +1623,6 @@ contains
     end do
 
     conv => self%sconv(min(i,nconv))%s
-    use_soscf_now = .false.
-    do i = 0, nconv
-      select type (sc => self%sconv(i)%s)
-      type is (soscf_converger)
-        ! SOSCF exists in the set of convergers
-        ! Check if we should use it based on current iteration
-        use_soscf_now = .true.
-        exit
-      end select
-    end do
     ! Continue using the 'SD' converger if
     ! already initiated
     if (i == 0 .and. self%step > 0) then

@@ -57,7 +57,7 @@ OQP_CONFIG_SCHEMA = {
         'd4': {'type': bool, 'default': 'False'},
     },
     'guess': {
-        'type': {'type': string, 'default': 'sap'},
+        'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
@@ -838,7 +838,7 @@ class OQPData:
 
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
-        pruned_list = ['SG1', ]
+        pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
         if pruned != "":
             pruned = pruned.upper()
             if pruned in pruned_list:
