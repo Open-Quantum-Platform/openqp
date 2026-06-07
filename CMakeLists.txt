@@ -146,6 +146,12 @@ endif()
 set(BLA_SIZEOF_INTEGER 8)
 set(OTR_SUFFIX "_64")
 set(OTR_DEFS "-DUSE_ILP64")
+
+# Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
+# external library is neither downloaded nor compiled, otr_interface.F90 is dropped
+# from the build, and the TRAH dispatch falls back to the native solver for every
+# trh_impl. Default ON preserves the validated gradient/MRSF reference paths.
+option(ENABLE_OPENTRAH "Build and link the external OpenTrustRegion (OpenTRAH) solver" ON)
 if(ENABLE_OPENMP)
   find_package(OpenMP 3.1 REQUIRED)
 endif()
@@ -166,7 +172,7 @@ if(APPLE)
 endif()
 
 if(${LINALG_LIB} STREQUAL none)
-    message(FATAL_ERROR "LINALG_LIB=none is not supported because OpenQP builds and links OpenTrustRegion, which requires BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
+    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
 endif()
 
 # Resolve BLAS/LAPACK before configuring external projects. OpenTrustRegion

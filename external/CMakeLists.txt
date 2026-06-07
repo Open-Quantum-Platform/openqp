@@ -144,6 +144,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
 endif()
+if(ENABLE_OPENTRAH)
 set(otr_integer_flags "")
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
     set(otr_integer_flags "-fdefault-integer-8")
@@ -193,6 +194,7 @@ ExternalProject_Add(libopentrustregion
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   add_dependencies(libopentrustregion LAPACK)
 endif()
+endif() # ENABLE_OPENTRAH
 
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)

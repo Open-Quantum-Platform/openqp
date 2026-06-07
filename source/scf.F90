@@ -540,6 +540,7 @@ contains
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
+#ifdef OQP_HAVE_OPENTRAH
       if (infos%control%trh_impl == 1) then
         write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
               &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
@@ -548,6 +549,10 @@ contains
               &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021);', &
               &/,5x,' https://github.com/eriksen-lab/opentrustregion]')")
       end if
+#else
+      write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
+            &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
+#endif
 
     else
       write(IW,fmt="&
@@ -1430,9 +1435,12 @@ contains
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger, scf_conv_result
+#ifdef OQP_HAVE_OPENTRAH
     use otr_interface, only: init_trah_solver, run_trah_solver
+#endif
     use trah_native,   only: trah_native_run
     use scf_addons, only: scf_energy_t
+    use io_constants, only: IW
 
     implicit none
 
@@ -1448,6 +1456,7 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
+#ifdef OQP_HAVE_OPENTRAH
           if (infos%control%trh_impl == 1) then
             ! native Fortran trust-region augmented-Hessian solver (opt-in: trh_impl=native)
             call trah_native_run(infos, mol_grid, sc, res, energy)
@@ -1456,6 +1465,13 @@ contains
             call init_trah_solver(infos, mol_grid, sc , energy)
             call run_trah_solver(res)
           end if
+#else
+          ! OpenTRAH not compiled (-DENABLE_OPENTRAH=OFF): use the native solver for
+          ! every trh_impl (the external gradient/MRSF reference paths are unavailable).
+          if (infos%control%trh_impl /= 1) &
+            write(IW,'(5X,A)') 'NOTE: OpenTRAH (OpenTrustRegion) is not compiled; using native TRAH.'
+          call trah_native_run(infos, mol_grid, sc, res, energy)
+#endif
       end select
     end do
 
