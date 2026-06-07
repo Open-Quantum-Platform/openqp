@@ -24,7 +24,7 @@ maxit=30
 
 [optimize]
 optimizer=bfgs
-maxit=2
+maxit=1
 istate=1
 jstate=2
 energy_shift=1
