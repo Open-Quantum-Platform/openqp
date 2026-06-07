@@ -58,7 +58,17 @@ class OQPEngine:
         self.logger = logger
 
         self.coords = build_coordinates(self.atoms, self.x, coordsys=coordsys)
-        self.coordsys = type(self.coords).__name__
+        # Report the requested coordinate system by name (TRIC and RIC are both
+        # RedundantInternalCoordinates objects, so the class name is ambiguous),
+        # and flag when it fell back to Cartesians (e.g. for a linear molecule).
+        requested = (coordsys or "tric").lower()
+        if requested in ("auto",):
+            requested = "tric"
+        label = {"cart": "CART", "cartesian": "CART"}.get(requested, requested.upper())
+        if (type(self.coords).__name__ == "CartesianCoordinates"
+                and requested not in ("cart", "cartesian")):
+            label = f"{label}->CART(fallback)"
+        self.coordsys = label
         self.H = self.coords.guess_hessian(self.x)
         self._prev = None
 
