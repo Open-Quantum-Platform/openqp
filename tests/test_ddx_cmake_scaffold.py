@@ -55,31 +55,6 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("ddx_get_xi", source)
         self.assertIn("ddx_get_cavity", source)
 
-    def test_mapping_doc_records_ddx_fock_uncertainty(self):
-        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
-        self.assertIn("state%q", text)
-        self.assertIn("ddx_get_xi` projects ddPCM `state%q", text)
-        self.assertIn("Fock/Kohn-Sham operator", text)
-        self.assertIn("unweighted total solute electrostatic potential", text)
-        self.assertIn("cavity-projected `state%q`", text)
-
-    def test_seam_doc_records_single_canonical_runtime_path(self):
-        text = (ROOT / "docs" / "solvent_ddx_scf_integration_seam.md").read_text(encoding="utf-8")
-        self.assertIn("Canonical runtime path", text)
-        self.assertIn("infos%control%pcm_enabled", text)
-        self.assertIn("add_pcm_reaction_field", text)
-        self.assertIn("E%e_pcm", text)
-        self.assertIn("has been **removed**", text)
-
-    def test_validation_matrix_records_single_canonical_runtime_path(self):
-        text = (ROOT / "docs" / "solvent_pcm_validation_matrix.md").read_text(encoding="utf-8")
-        self.assertIn("Canonical runtime path", text)
-        self.assertIn("add_pcm_reaction_field", text)
-        self.assertIn("E%e_pcm", text)
-        self.assertIn("no second runtime PCM path", text)
-        # The energy convention is explicitly NOT yet claimed validated.
-        self.assertIn("does **not** claim the canonical PCM energy convention is validated", text)
-
 
 if __name__ == "__main__":
     unittest.main()

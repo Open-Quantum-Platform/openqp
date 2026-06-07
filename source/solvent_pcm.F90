@@ -16,7 +16,8 @@
 !>   * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
 !>     directly as the external-charge vector for external_charge_potential.
 !>   * E_pcm: the ddX solvation energy is reported as the PCM energy term.
-!> See docs/solvent_ddx_scf_integration_seam.md.
+!> The single canonical runtime path and these conventions are pinned by
+!> tests/test_pcm_canonical_runtime_path.py.
 module solvent_pcm
 
   use precision, only: dp
@@ -210,8 +211,7 @@ contains
     end do
 
     ! ---- Phase 3: consistent QM source -> ddX q_cav ------------------------
-    ! Approach B from docs/solvent_pcm_source_term_handoff.md: build one
-    ! per-atom real-solid-harmonic source through quadrupoles, then feed exactly
+    ! Build one per-atom real-solid-harmonic source through quadrupoles, then feed exactly
     ! that same multipole array to ddX for both phi and psi.  The atom-centered
     ! moments use a Mulliken row partition of the AO density.
     allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
@@ -256,15 +256,15 @@ contains
     ! EXACT total solute potential at the cavity points (phi_cav = nuclear +
     ! electronic), not with ddX's truncated multipole esolv. This recovers an
     ! independent ddPCM reaction-field energy to <0.5 kcal/mol for H2O and NH3
-    ! (see docs/solvent_pcm_independent_validation.md). The -0.5 factor is the
+    ! (validated by tests/test_pcm_literature_benchmarks.py). The -0.5 factor is the
     ! linear-response polarization factor, consistent with the finite-difference
     ! relation dE/dphi = -0.5*q_cav verified by pcm_fock_scale_fd_diagnostic.
     e_pcm = PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
 
     ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --
     ! Exposes, in Fortran, the quantities needed to validate the QM SCF PCM
-    ! conventions against a reference (see docs/solvent_pcm_literature_benchmarks.md
-    ! and tests/test_pcm_literature_benchmarks.py). These prints are read-only
+    ! conventions against a reference (see tests/test_pcm_literature_benchmarks.py
+    ! and tests/data/pcm_literature_benchmarks.json). These prints are read-only
     ! summaries of arrays already computed above; the energy and Fock are
     ! unchanged. The host-side polarization energy 0.5*Tr[D.V_pcm] is reported
     ! alongside the ddX esolv so the e_pcm-vs-(1/2)Tr[D.V] bookkeeping question

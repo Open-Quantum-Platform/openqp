@@ -3,8 +3,7 @@
 This harness drives the **Fortran/OpenQP** PCM path (`pcm_enabled` ->
 `add_pcm_reaction_field` -> `E%e_pcm` -> ddX C adapter) through real
 single-point inputs and compares the computed solvation energy against the
-reference targets in ``tests/data/pcm_literature_benchmarks.json``
-(see ``docs/solvent_pcm_literature_benchmarks.md``).
+reference targets in ``tests/data/pcm_literature_benchmarks.json``.
 
 Skip semantics (so the gate never produces false confidence):
 
@@ -223,8 +222,7 @@ def _make_pcm_diagnostics_test(bench):
             self.skipTest(
                 f"benchmark '{bench['id']}' is not a verified gate "
                 f"(status={bench.get('status')!r}); see physical_review in "
-                "tests/data/pcm_literature_benchmarks.json and "
-                "docs/solvent_pcm_source_term_review.md."
+                "tests/data/pcm_literature_benchmarks.json."
             )
         proc, log = _run(_input_text(bench, pcm_on=True))
         if _ddx_unavailable(log):
@@ -238,8 +236,7 @@ def _make_pcm_diagnostics_test(bench):
                 f"'{bench['id']}' cavity with the committed defaults (FMM on, "
                 "small molecule). Verified ddX-enabled run; raising maxiter does "
                 "not help, disabling FMM converges but yields physically wrong "
-                "e_pcm. See docs/solvent_pcm_literature_benchmarks.md "
-                "(empirical ddX run). This skip auto-activates once the "
+                "e_pcm. This skip auto-activates once the "
                 "convergence/convention blockers are resolved."
             )
         # #5 SCF convergence; #2 finite nonzero e_pcm; #4 total moved off vacuum.
@@ -311,8 +308,7 @@ def _make_pcm_reference_test(bench):
             self.skipTest(
                 f"benchmark '{bench['id']}' has no verified reference yet "
                 f"(category={bench.get('category')!r}, status={bench.get('status')!r}); "
-                "populate tests/data/pcm_literature_benchmarks.json per "
-                "docs/solvent_pcm_literature_benchmarks.md (literature_value, or a "
+                "populate tests/data/pcm_literature_benchmarks.json (literature_value, or a "
                 "pyddx trusted_reference_regression under the identical protocol)."
             )
         proc, log = _run(_input_text(bench, pcm_on=True))

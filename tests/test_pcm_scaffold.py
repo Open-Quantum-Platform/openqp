@@ -382,27 +382,6 @@ epsilon=water
         self.assertIn("pcm.epsilon", errors)
         self.assertIn("must be numeric", errors["pcm.epsilon"])
 
-    def test_validation_matrix_documents_energy_only_mrsf_reference_target(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        self.assertTrue(matrix_path.exists(), "PCM validation matrix document is required")
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("MRSF-TDDFT with PCM-solvated ROHF reference", text)
-        self.assertIn("runtype=energy", text)
-        self.assertIn("independent-reference", text)
-        self.assertIn("analytic PCM gradients", text)
-        self.assertIn("ddX q_cav sign/scale is provisional", text)
-
-    def test_validation_matrix_documents_single_canonical_runtime_path(self):
-        matrix_path = ROOT / "docs" / "solvent_pcm_validation_matrix.md"
-        text = matrix_path.read_text(encoding="utf-8")
-        self.assertIn("Canonical runtime path", text)
-        self.assertIn("infos%control%pcm_enabled", text)
-        self.assertIn("add_pcm_reaction_field", text)
-        self.assertIn("E%e_pcm", text)
-        # The retired second path and its plumbing are documented as removed.
-        self.assertIn("removed during reconciliation", text)
-        self.assertIn("no second runtime PCM path", text)
-
 
 if __name__ == "__main__":
     unittest.main()

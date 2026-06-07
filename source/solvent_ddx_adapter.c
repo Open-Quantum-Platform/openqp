@@ -888,7 +888,7 @@ int oqp_ddx_pcm_solve(int natom, const double* xyz_bohr, const double* charges,
    * psi is the solute source in spherical harmonics. For this first energy
    * gate it is built from nuclear monopoles only (charges as Z), matching the
    * branch's explicit-PCM smoke. Folding the electronic density into psi is a
-   * deferred refinement; see docs/solvent_ddx_scf_integration_seam.md.
+   * deferred refinement.
    */
   for (int i = 0; i < nsph; ++i) {
     solute_multipoles[i] = charges[i] / sqrt(4.0 * M_PI);
