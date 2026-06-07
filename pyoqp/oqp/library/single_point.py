@@ -645,8 +645,10 @@ class SinglePoint(Calculator):
             dump_log(self.mol, title='PyOQP: MRSF-EKT steps', section='tdhf')
             if ekt_ip:
                 self.energy_func['mrsf_ekt_ip'](self.mol)
+                self.mol.snapshot_mrsf_ekt_results('ip')
             if ekt_ea:
                 self.energy_func['mrsf_ekt_ea'](self.mol)
+                self.mol.snapshot_mrsf_ekt_results('ea')
             return
 
         # check td type
