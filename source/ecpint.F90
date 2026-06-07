@@ -56,6 +56,13 @@ module libecpint_wrapper
             type(c_ptr), value :: integrator
         end function compute_first_derivs
 
+        function compute_second_derivs(integrator) bind(c, name="compute_second_derivs")
+            use iso_c_binding, only : c_ptr
+            use libecp_result
+            type(ecp_result) :: compute_second_derivs
+            type(c_ptr), value :: integrator
+        end function compute_second_derivs
+
         subroutine free_integrator(integrator) bind(c, name="free_integrator")
             use iso_c_binding, only : c_ptr
             type(c_ptr), value :: integrator
