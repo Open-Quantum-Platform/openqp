@@ -5,7 +5,7 @@
 !> @author Mohsen Mazaherifar
 !> @date January 2025
 module ecp_tool
-    use iso_c_binding, only: c_double, c_ptr, c_int,&
+    use iso_c_binding, only: c_double, c_ptr, c_int, c_int64_t,&
             c_f_pointer, C_LOC, c_null_ptr
     use, intrinsic :: iso_fortran_env, only: real64
     use libecpint_wrapper
@@ -63,12 +63,14 @@ contains
             end do
         end do
 
+        ! free the C-side buffer BEFORE nulling the local handle: free_result
+        ! takes the struct by value, so nulling first would leak the buffer
+        call free_result(result_ptr)
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
 
         call free_integrator(integrator)
-        call free_result(result_ptr)
 
     end subroutine add_ecpint
 
@@ -97,7 +99,9 @@ contains
         real(real64), allocatable :: res_x(:), res_y(:), res_z(:)
         real(real64), allocatable :: deloc(:,:)
         integer :: i, j, c, n, natm, prim
-        integer :: tri_size, full_size
+        integer :: tri_size
+        ! 64-bit: slice offsets reach 3*natm*nbf^2 and overflow default integers
+        integer(c_int64_t) :: full_size
         integer(c_int) :: driv_order
 
         if (.not.(basis%ecp_params%is_ecp)) then
@@ -107,7 +111,7 @@ contains
         driv_order = 1
 
         tri_size = basis%nbf * (basis%nbf + 1) / 2
-        full_size = basis%nbf * basis%nbf
+        full_size = int(basis%nbf, c_int64_t) * basis%nbf
 
         allocate(res_x(full_size))
         allocate(res_y(full_size))
@@ -153,12 +157,13 @@ contains
 
         de(:, 1:natm) = de(:, 1:natm) + deloc(:, 1:natm)
 
+        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
+        call free_result(result_ptr)
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
 
         call free_integrator(integrator)
-        call free_result(result_ptr)
 
     end subroutine add_ecpder
 
@@ -188,7 +193,9 @@ contains
         type(c_ptr) :: integrator
         real(c_double), pointer :: libecp_res(:)
         real(real64), allocatable :: res_c(:)
-        integer :: nbf, full_size, natm, n, cc, i, j
+        integer :: nbf, natm, n, cc, i, j
+        ! 64-bit: slice offsets reach 3*natm*nbf^2 and overflow default integers
+        integer(c_int64_t) :: full_size
         integer(c_int) :: driv_order
 
         dVecp = 0.0_dp
@@ -198,7 +205,7 @@ contains
 
         driv_order = 1
         nbf = basis%nbf
-        full_size = nbf * nbf
+        full_size = int(nbf, c_int64_t) * nbf
         natm = size(coord, dim=2)
         allocate(res_c(full_size))
 
@@ -220,12 +227,13 @@ contains
             end do
         end do
 
+        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
+        call free_result(result_ptr)
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
 
         call free_integrator(integrator)
-        call free_result(result_ptr)
         deallocate(res_c)
 
     end subroutine ecp_deriv_ints
@@ -262,9 +270,11 @@ contains
         type(c_ptr) :: integrator
         real(c_double), pointer :: libecp_res(:)
         real(real64), allocatable :: blk(:)
-        integer :: nbf, mat_sz, natm
+        integer :: nbf, natm
         integer :: iat, jat, ia0, ja0, hstart, base, ncomp, n
         integer :: a, b, i, j, c, prim
+        ! 64-bit: block offsets reach 3N(3N+1)/2 * nbf^2 and overflow default integers
+        integer(c_int64_t) :: mat_sz
         integer(c_int) :: driv_order
         integer :: amap(9), bmap(9)
         real(real64) :: val
@@ -275,7 +285,7 @@ contains
 
         driv_order = 2
         nbf = basis%nbf
-        mat_sz = nbf * nbf
+        mat_sz = int(nbf, c_int64_t) * nbf
         natm = size(coord, dim=2)
         allocate(blk(mat_sz))
 
@@ -332,12 +342,13 @@ contains
             end do
         end do
 
+        ! free the C-side buffer BEFORE nulling the local handle (see add_ecpint)
+        call free_result(result_ptr)
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
 
         call free_integrator(integrator)
-        call free_result(result_ptr)
         deallocate(blk)
 
     end subroutine add_ecphess

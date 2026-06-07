@@ -9,12 +9,16 @@
 #include <iostream>
 #include <memory>
 #include <iomanip>
+#include <cstdint>
 
 extern "C" {
 
     typedef struct {
         double *data;
-        int size;
+        // 64-bit: the second-derivative payload is 3N(3N+1)/2 * nbf^2 doubles,
+        // which overflows a 32-bit count already around ~50 atoms / 500 basis
+        // functions. (Mirrored by integer(c_int64_t) in source/ecpint.F90.)
+        int64_t size;
     } ResultArray;
 
     // Initialize integrator and set Gaussian basis
@@ -60,18 +64,18 @@ extern "C" {
         factory->compute_first_derivs();
         std::vector<std::shared_ptr<std::vector<double>>> first_derivs = factory->get_first_derivs();
 
-        int total_size = 0;
+        int64_t total_size = 0;
         for (const auto& vec : first_derivs) {
-            total_size += vec->size();
+            total_size += static_cast<int64_t>(vec->size());
         }
 
         ResultArray result;
         result.size = total_size;
         result.data = new double[total_size];
-        int index = 0;
+        int64_t index = 0;
         for (const auto& vec : first_derivs) {
             std::copy(vec->begin(), vec->end(), result.data + index);
-            index += vec->size();
+            index += static_cast<int64_t>(vec->size());
         }
 
         return result;
@@ -83,18 +87,23 @@ extern "C" {
         factory->compute_second_derivs();
         std::vector<std::shared_ptr<std::vector<double>>> second_derivs = factory->get_second_derivs();
 
-        int total_size = 0;
+        // NOTE: libecpint already holds the full second-derivative set
+        // internally, and this wrapper copies it into one more concatenated
+        // buffer, so the peak footprint is ~2x the payload
+        // (3N(3N+1)/2 * nbf^2 doubles). A chunked per-component hand-off
+        // would halve that, but is constrained by the libecpint API.
+        int64_t total_size = 0;
         for (const auto& vec : second_derivs) {
-            total_size += vec->size();
+            total_size += static_cast<int64_t>(vec->size());
         }
 
         ResultArray result;
         result.size = total_size;
         result.data = new double[total_size];
-        int index = 0;
+        int64_t index = 0;
         for (const auto& vec : second_derivs) {
             std::copy(vec->begin(), vec->end(), result.data + index);
-            index += vec->size();
+            index += static_cast<int64_t>(vec->size());
         }
 
         return result;
