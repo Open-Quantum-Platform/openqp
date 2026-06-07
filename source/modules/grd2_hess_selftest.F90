@@ -58,7 +58,8 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
 
     ! Fixed closed-shell RHF density-fetch object (same one the gradient uses)
-    gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = basis%nbf )
+    gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = basis%nbf, &
+                                     bfnrm = basis%bfnrm )
     call gcomp%init()
 
     allocate(hess_an(n3,n3), hess_fd(n3,n3), source=0.0_dp)
@@ -186,7 +187,8 @@ contains
     call eijden(wlag, nbf, infos)
     pden = dmat_a
 
-    gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = nbf )
+    gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = nbf, &
+                                     bfnrm = basis%bfnrm )
     call gcomp%init()
 
     ! analytic skeleton (1e + 2e, no nuclear repulsion)
@@ -341,7 +343,8 @@ contains
 
     ! open-shell 2e density-fetch object (same one the open-shell gradient uses)
     gcomp = grd2_uhf_compute_data_t( da = dmat_a, db = dmat_b, &
-                                     hfscale = 1.0_dp, nbf = nbf )
+                                     hfscale = 1.0_dp, nbf = nbf, &
+                                     bfnrm = basis%bfnrm )
     call gcomp%init()
 
     ! analytic skeleton (1e + 2e, no nuclear repulsion)
