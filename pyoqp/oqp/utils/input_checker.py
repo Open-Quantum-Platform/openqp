@@ -710,6 +710,7 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     alternative_scf = _as_lower(_get(config, "scf", "alternative_scf", "trah"))
     init_scf = _as_lower(_get(config, "scf", "init_scf", "no"))
     functional = _get(config, "input", "functional", "")
+    scal_rel = _get(config, "scf", "scal_rel", 0)
 
     if scf_type not in SCF_TYPES:
         report.add(
@@ -800,6 +801,16 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             "KS-style initial SCF requires a DFT functional.",
             value=init_scf,
             action="Set [input] functional or use rhf/uhf/rohf/no for init_scf.",
+        )
+
+    if scal_rel not in {0, 1, 2}:
+        report.add(
+            "ERROR",
+            "scf.scal_rel",
+            "Unknown scalar relativistic correction order.",
+            value=scal_rel,
+            expected="0 (off), 1 (DK1), or 2 (DK2)",
+            action="Set [scf] scal_rel to 0, 1, or 2.",
         )
 
 

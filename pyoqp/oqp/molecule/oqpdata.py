@@ -115,6 +115,7 @@ OQP_CONFIG_SCHEMA = {
         'init_converger': {'type': string, 'default': 'None'},
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
+        'scal_rel': {'type': int, 'default': '0'},
         'converger_type': {'type': string, 'default': 'diis'},
         'stability': {'type': bool, 'default': 'True'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
@@ -332,6 +333,7 @@ class OQPData:
             "incremental": "set_scf_incremental",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
+            "scal_rel": "set_scf_scal_rel",
             "converger_type": "set_scf_converger_type",
             "soscf_reset_mod": "set_scf_soscf_reset_mod",
             "soscf_mode": "set_scf_soscf_mode",
@@ -604,6 +606,10 @@ class OQPData:
     def set_scf_rstctmo(self, rstctmo):
         """restrict MO """
         self._data.control.rstctmo = rstctmo
+
+    def set_scf_scal_rel(self, scal_rel):
+        """Set scalar relativistic correction order: 0=off, 1=DK1, 2=DK2."""
+        self._data.control.scal_rel = scal_rel
 
     def set_scf_active_basis(self, active_basis):
         """Select basis set: 0 => info%basis
