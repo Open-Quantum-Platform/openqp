@@ -2,9 +2,10 @@ from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
 from oqp.utils.input_parser import OQPConfigParser  # your class
 from oqp.pyoqp import Runner                        # your Runner
 from oqp.utils.kword_map import resolve_param_key   # your pure dotted resolver
+from oqp.library.single_point import SinglePoint
 import os
 class OPENQP:
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, silent: bool):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for k, v in cfg.items():
             if k == "input.system":
@@ -22,10 +23,11 @@ class OPENQP:
             input_file=None,
             log="oqp_project.log",
             input_dict=self.config_str,
-            silent=0,
-            usempi=True
+            silent=True,
+            usempi=False
         )
         self.mol = self.runner.mol
+        self.sp = SinglePoint(self.mol)
 
     def _normalize_system(self, system):
         """

@@ -57,6 +57,15 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  character(len=*), parameter, public :: OQP_mm_potential = OQP_prefix // "mm_potential"
+  character(len=*), parameter, public :: OQP_Hqmmm = OQP_prefix // "hamiltonian_qmmm"
+  character(len=*), parameter, public :: OQP_partial_charges = OQP_prefix // "partial_charges"
+  character(len=*), parameter, public :: OQP_mm_energy = OQP_prefix // "mm_energy"
+  character(len=*), parameter, public :: OQP_mm_gradient = OQP_prefix // "mm_gradient"
+  character(len=*), parameter, public :: OQP_ESPF_CORR = OQP_prefix // "ESPF_CORR"
+  character(len=*), parameter, public :: OQP_POTQM = OQP_prefix // "POTQM"
+  character(len=*), parameter, public :: OQP_POTMM = OQP_prefix // "POTMM"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD = OQP_prefix // "ESPF_GRAD"
 
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
   ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
@@ -89,7 +98,16 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
+  character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
+  character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"
+  character(len=*), parameter, public :: OQP_mm_gradient_comment = "MM gradient"
+  character(len=*), parameter, public :: OQP_Hqmmm_comment = "triangle QM/MM Hamiltonian matrix"
+  character(len=*), parameter, public :: OQP_espf_corr_comment = "ESPF one-electron operators for each QM atom"
   character(len=*), parameter, public :: OQP_log_filename_comment = OQP_prefix // "log filename"
+  character(len=*), parameter, public :: OQP_potqm_comment = OQP_prefix // "Quantum contribution to the potential"
+  character(len=*), parameter, public :: OQP_potmm_comment = OQP_prefix // "MM contribution to the potential"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD_comment = OQP_prefix // "ESP contribution to the gradient"
   character(len=*), parameter, public :: OQP_basis_filename_comment = OQP_prefix // "basis filename"
   character(len=*), parameter, public :: OQP_hbasis_filename_comment = OQP_prefix // "Huckel basis_filename for Huckel Guess"
   character(len=*), parameter, public :: OQP_nac_comment = OQP_prefix // "nonadiabatic coupling nstates x nstates"
@@ -107,7 +125,10 @@ module oqp_tagarray_driver
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
-    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap /)
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
+    OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
+    OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM /)
+
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
     module procedure tagarray_get_data_real64_val, tagarray_get_data_real64_1d, tagarray_get_data_real64_2d, tagarray_get_data_real64_3d

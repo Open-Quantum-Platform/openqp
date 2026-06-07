@@ -828,6 +828,8 @@ contains
     use oqp_linalg
     use printing, only: print_module_info
     use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
+    use population_analysis, only: mulliken_excited
+    use qmmm_mod, only: form_esp_charges_excited
 
 
     implicit none
@@ -1133,6 +1135,11 @@ contains
     ! Step 3: build the relaxed density (td_p) and energy-weighted density (wao).
     ! ======================================================================
     call build_mrsf_relaxed_density_and_w()
+
+    ! QM/MM (ESPF): excited-state Mulliken population and ESP charges for the
+    ! relaxed density, needed for the MM electrostatic embedding gradient.
+    call mulliken_excited(infos)
+    call form_esp_charges_excited(infos)
 
     call int2_driver%clean()
 

@@ -1,0 +1,23 @@
+HEADER    ala
+COMPND
+SOURCE
+ATOM      1  CH3 ACE     1      -0.028   0.101  -0.091
+ATOM      2  C   ACE     1      -0.023   0.157   1.419
+ATOM      3  O   ACE     1       1.014   0.404   2.021
+ATOM      4  H1  ACE     1       0.978   0.305  -0.455
+ATOM      5  H2  ACE     1      -0.715   0.851  -0.477
+ATOM      6  H3  ACE     1      -0.339  -0.891  -0.414
+ATOM      7  N   ALA     2      -1.183  -0.077   2.026
+ATOM      8  CA  ALA     2      -1.370  -0.108   3.477
+ATOM      9  C   ALA     2      -2.450  -1.132   3.872
+ATOM     10  O   ALA     2      -3.296  -1.508   3.068
+ATOM     11  H   ALA     2      -1.986  -0.315   1.463
+ATOM     12  HA  ALA     2      -0.433  -0.408   3.951
+ATOM     13  CB  ALA     2      -1.730   1.305   3.959
+ATOM     14  HB1 ALA     2      -1.842   1.311   5.044
+ATOM     15  HB2 ALA     2      -2.665   1.629   3.500
+ATOM     16  HB3 ALA     2      -0.935   2.000   3.685
+ATOM     17  N   NH2     3      -2.452  -1.588   5.119
+ATOM     18  H1  NH2     3      -1.760  -1.272   5.777
+ATOM     19  H2  NH2     3      -3.162  -2.253   5.377
+END

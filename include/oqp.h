@@ -79,7 +79,7 @@ struct dft_parameters {
     bool dft_wt_der;
 };
 
- struct tddft_parameters {
+struct tddft_parameters {
     int64_t nstate;
     int64_t target_state;
     int64_t maxvec;
@@ -153,6 +153,7 @@ struct control_parameters {
     bool      sd_scf;
     bool      pcm_enabled;
     double    pcm_epsilon;
+    bool      qmmm_flag;
 };
 
 struct mpi_communicator {
@@ -256,3 +257,7 @@ void nmr_shielding(struct oqp_handle_t *inf);
 void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
 void nmr_giao_shielding(struct oqp_handle_t *inf);
 
+void espf_op_corr(struct oqp_handle_t *inf);
+void form_esp_charges(struct oqp_handle_t *inf);
+void grad_esp_qmmm(struct oqp_handle_t *inf);
+void grad_esp_qmmm_excited(struct oqp_handle_t *inf);

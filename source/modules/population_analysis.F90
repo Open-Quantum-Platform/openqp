@@ -13,6 +13,7 @@ module population_analysis
   public run_population_analysis
   public POP_MULLIKEN
   public POP_LOWDIN
+  public mulliken_excited
 
 !--------------------------------------------------------------------------------
 
@@ -55,8 +56,6 @@ contains
   end subroutine lowdin_C
 
 !--------------------------------------------------------------------------------
-
-!--------------------------------------------------------------------------------
 !--------------------------------------------------------------------------------
 !> @brief Mulliken population analysis for MRSF-TDDFT excited states
 !>
@@ -66,7 +65,7 @@ contains
 !>
 !> @param[in]  infos   OQP handle
 !>
-!> @author   Mohsen Mazaherifar
+!> @author   Mohsen
 !>
 !> REVISION HISTORY:
 !> @date _Apr, 2026_ Initial release
@@ -82,6 +81,8 @@ contains
     use mathlib, only: unpack_matrix
     implicit none
 
+    character(len=*), parameter :: module_name = "mulliken_excited"
+
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
@@ -95,12 +96,15 @@ contains
     ! tagarray pointers
     real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), smat(:)
     real(kind=dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+!    character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
+!      OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
+!      OQP_td_energies /)
     character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
       OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
 
     character(len=*), parameter :: subroutine_name = "mulliken_excited"
 
-    open (unit=IW, file=infos%log_filename, position="append")
+!    open (unit=IW, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms

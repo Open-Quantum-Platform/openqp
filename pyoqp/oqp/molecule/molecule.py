@@ -41,6 +41,8 @@ class Molecule:
         self.input_file = input_file
         self.log = log
         self.log_path = os.path.dirname(log)
+        if self.log_path == '':
+            self.log_path = os.path.dirname(os.path.abspath(__file__))
         self.energies = None
         self.grads = None
         self.dcm = []  # Nstate, Nstate
@@ -71,6 +73,7 @@ class Molecule:
             'OQP::hf_hessian',
             'OQP::td_states_overlap',
             'OQP::dc_matrix', 'OQP::nac_matrix',
+            'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges'
         ]
         self.skip_tag = {"rhf": ['OQP::DM_B', 'OQP::FOCK_B', 'OQP::E_MO_B', 'OQP::VEC_MO_B'],
                          "rohf": [],
@@ -1055,6 +1058,26 @@ class Molecule:
                     f"energy, psinrm, ehf1, vee, nenergy, vne, vnn, "
                     f"vtot, tkin, virial, or 'all'."
                 )
+    def get_atoms2(self, prop=None):
+        """
+        Get atomic data.
+        Parameters
+        ----------
+        prop : str or None
+            If None, return full atomic data dict.
+            If a string, return that specific atomic property.
+            Available keys: 'natom', 'coords', 'charge', 'mass'
+        Returns
+        -------
+        dict or np.ndarray
+        """
+        data = self.data.atomic_data
+        if prop is None:
+            return data
+        if prop not in data:
+            raise KeyError(f"Unknown atomic property '{prop}'. "
+                           f"Available keys: {list(data.keys())}")
+        return data[prop]
 
     def get_grad(self):
         """

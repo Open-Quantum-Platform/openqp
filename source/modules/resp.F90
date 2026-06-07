@@ -8,6 +8,7 @@ module resp_mod
 
   private
   public oqp_resp_charges
+  public add_atom_grid
   public resp_charges_C
 
 !--------------------------------------------------------------------------------
@@ -224,7 +225,7 @@ contains
             q=infos%atoms%zn - infos%basis%ecp_zn_num, &
             pot=pot(:nptcur))
 
-!   Fit ESP c8harges
+!   Fit ESP charges
     call chg_fit_mk( &
             x=xyz(:nptcur,1), &
             y=xyz(:nptcur,2), &
