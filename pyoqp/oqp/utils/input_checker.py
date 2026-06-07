@@ -12,7 +12,7 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
+    "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
 }
 NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
@@ -23,7 +23,7 @@ GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
-OPT_LIBS = {"scipy", "geometric"}
+OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
 SCF_PROPS = {"el_mom", "mulliken"}
@@ -38,7 +38,7 @@ WIKI_HELP = {
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
-    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
+    "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
 
@@ -841,6 +841,10 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     if runtype in {"meci", "mecp"}:
         requested.append(_get(config, "optimize", "istate", 0))
         requested.append(_get(config, "optimize", "jstate", 0))
+    if runtype == "tci":
+        requested.append(_get(config, "optimize", "istate", 0))
+        requested.append(_get(config, "optimize", "jstate", 0))
+        requested.append(_get(config, "optimize", "kstate", 0))
     if runtype == "hess":
         requested.append(_get(config, "hess", "state", 0))
     if runtype in {"nac", "bp", "nacme"}:
@@ -861,7 +865,8 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
         )
 
 
-def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
+def _check_runtype(config: dict[str, Any], report: CheckReport,
+                   input_dir: str | None = None) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
@@ -937,7 +942,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         _check_optimize(config, report)
 
     if runtype == "neb":
-        _check_neb(config, report)
+        _check_neb(config, report, input_dir)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
@@ -952,10 +957,11 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
-    lib = _as_lower(_get(config, "optimize", "lib", "geometric"))
+    lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
     optimizer = _as_lower(_get(config, "optimize", "optimizer", "bfgs"))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
+    kstate = _get(config, "optimize", "kstate", 0)
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
@@ -1051,14 +1057,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [optimize] lib=geometric for runtype=ts/irc.",
         )
 
-    if runtype == "neb" and lib != "geometric":
+    if runtype == "neb" and lib not in {"geometric", "oqp"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is currently wired only through geomeTRIC.",
+            "NEB is wired through geomeTRIC and the oqp optimizer.",
             value=lib,
-            expected="geometric",
-            action="Set [optimize] lib=geometric for runtype=neb.",
+            expected="geometric or oqp",
+            action="Set [optimize] lib=geometric or lib=oqp for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -1071,8 +1077,43 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
+    if lib == "oqp" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb", "irc", "mep"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "The oqp optimizer currently supports optimize, ts, meci, mecp, tci, neb, irc, and mep.",
+            value=f"{lib}/{runtype}",
+            expected="optimize, ts, meci, mecp, tci, neb, irc, or mep",
+            action="Choose a supported oqp runtype.",
+        )
 
-def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+    if runtype == "tci":
+        if method != "tdhf":
+            report.add(
+                "ERROR", "input.method",
+                "Three-state CI (tci) optimization requires method=tdhf.",
+                value=method, expected="tdhf",
+                action="Set [input] method=tdhf and configure [tdhf].",
+            )
+        if not (istate < jstate < kstate):
+            report.add(
+                "ERROR", "optimize.kstate",
+                "TCI requires istate < jstate < kstate.",
+                value=f"{istate}/{jstate}/{kstate}",
+                expected="istate < jstate < kstate",
+                action="Set three increasing state indices (e.g. 1/2/3).",
+            )
+        if lib != "oqp":
+            report.add(
+                "ERROR", "optimize.lib",
+                "Three-state CI (tci) is currently wired only through the oqp optimizer.",
+                value=lib, expected="oqp",
+                action="Set [optimize] lib=oqp for runtype=tci.",
+            )
+
+
+def _check_neb(config: dict[str, Any], report: CheckReport,
+               input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
     product = _get(config, "neb", "product", "")
@@ -1106,14 +1147,21 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             expected="XYZ filename",
             action="Set [neb] product to a product-endpoint XYZ file.",
         )
-    elif not os.path.exists(os.path.abspath(str(product))):
-        report.add(
-            "ERROR",
-            "neb.product",
-            "NEB product endpoint file does not exist.",
-            value=product,
-            action="Fix the product path or place the XYZ file in the working directory.",
-        )
+    else:
+        # The product endpoint may be given relative to the input file (where it
+        # is normally stored beside the .inp), not just the current directory.
+        candidates = [os.path.abspath(str(product))]
+        if input_dir and not os.path.isabs(str(product)):
+            candidates.append(os.path.abspath(os.path.join(input_dir, str(product))))
+        if not any(os.path.exists(c) for c in candidates):
+            report.add(
+                "ERROR",
+                "neb.product",
+                "NEB product endpoint file does not exist.",
+                value=product,
+                action="Fix the product path, or place the XYZ file beside the input "
+                       "file or in the working directory.",
+            )
 
     if nimage < 3:
         report.add(
@@ -1441,8 +1489,14 @@ def check_input_values(
     *,
     raise_error: bool = True,
     emit: bool = True,
+    input_dir: str | None = None,
 ) -> CheckReport:
-    """Validate an already parsed OpenQP config and return a diagnostic report."""
+    """Validate an already parsed OpenQP config and return a diagnostic report.
+
+    ``input_dir`` is the directory of the input file, used to resolve paths
+    (e.g. the NEB product endpoint) that are stored relative to the input file
+    rather than the current working directory.
+    """
 
     report = CheckReport()
     method = _as_lower(_get(config, "input", "method", "hf"))
@@ -1466,7 +1520,7 @@ def check_input_values(
     _check_tdhf(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
-    _check_runtype(config, report)
+    _check_runtype(config, report, input_dir)
 
     if _get(config, "input", "d4", False) and not _get(config, "input", "functional", ""):
         report.add(
