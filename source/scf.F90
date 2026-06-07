@@ -56,7 +56,8 @@ contains
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
-    use mathlib, only: traceprod_sym_packed, matrix_invsqrt
+    use mathlib, only: traceprod_sym_packed
+    use qmat_cache, only: get_qmat_cached
     use mathlib, only: unpack_matrix
     use io_constants, only: IW
     use basis_tools, only: basis_set
@@ -403,8 +404,9 @@ contains
     !==============================================================================
     call measure_time(print_total=1, log_unit=IW)
 
-    ! Prepare orthogonalization matrix (S^-1/2)
-    call matrix_invsqrt(smat, qmat, nbf)
+    ! Prepare orthogonalization matrix (S^-1/2), reusing the
+    ! copy cached during the initial guess when available
+    call get_qmat_cached(infos, smat, qmat, nbf)
 
     ! Compute Nuclear-Nuclear energy
 !    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
@@ -706,19 +708,22 @@ contains
       !----------------------------------------------------------------------------
       ! Print iteration information
       if (infos%control%pfon) then
-        write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,fmt="(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       elseif (infos%control%converger_type == scf_bfgs) then
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(rms_grad), fmt_real14(rms_dp), vshift, &
               trim(conv_res%active_converger_name)
       elseif(use_trah) then
 !              write(IW, "(10x, '')")
       else
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name)
       end if
       call flush(IW)
@@ -1646,5 +1651,30 @@ contains
 
      deallocate(WS, T, wrk)
    end subroutine rohf_fix
+
+  !> @brief Format a value for a 17-char SCF iteration table column.
+  !> @detail Uses the usual fixed-point form while the value fits the column
+  !>         and falls back to scientific notation (same width) otherwise, so
+  !>         pathological values print as numbers instead of '*****'.
+  function fmt_real17(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=17) :: str
+    if (val == val .and. abs(val) < 1.0e5_dp) then
+      write(str, '(f17.10)') val
+    else
+      write(str, '(es17.8e3)') val
+    end if
+  end function fmt_real17
+
+  !> @brief Same as fmt_real17 for the 14-char error/gradient columns.
+  function fmt_real14(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=14) :: str
+    if (val == val .and. abs(val) < 1.0e4_dp) then
+      write(str, '(f14.8)') val
+    else
+      write(str, '(es14.5e3)') val
+    end if
+  end function fmt_real14
 end module scf
 

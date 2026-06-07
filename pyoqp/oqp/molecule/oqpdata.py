@@ -57,12 +57,25 @@ OQP_CONFIG_SCHEMA = {
         'd4': {'type': bool, 'default': 'False'},
     },
     'guess': {
-        'type': {'type': string, 'default': 'sap'},
+        'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
         'file2': {'type': str, 'default': ''},
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
         'swapmo': {'type': string, 'default': ''},
+    },
+    # "symmetry": {
+    'symmetry': {
+        'enabled': {'type': string, 'default': 'false'},
+        'point_group': {'type': string, 'default': 'auto'},
+        'subgroup': {'type': string, 'default': 'auto'},
+        'label_mo': {'type': bool, 'default': 'True'},
+        'label_states': {'type': bool, 'default': 'True'},
+        'label_modes': {'type': bool, 'default': 'True'},
+        'use_integral_symmetry': {'type': string, 'default': 'False'},
+        'use_response_symmetry': {'type': bool, 'default': 'False'},
+        'tolerance': {'type': float, 'default': '1.0e-5'},
+        'strict': {'type': bool, 'default': 'False'},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
@@ -829,7 +842,7 @@ class OQPData:
 
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
-        pruned_list = ['SG1', ]
+        pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
         if pruned != "":
             pruned = pruned.upper()
             if pruned in pruned_list:

@@ -134,4 +134,132 @@ contains
     end function trace_MG
   end subroutine fockx_selftest
 
+!###############################################################################
+
+  subroutine fockx_os_selftest_C(c_handle) bind(C, name="fockx_os_selftest")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call fockx_os_selftest(inf)
+  end subroutine fockx_os_selftest_C
+
+!> @brief Validate the open-shell two-density derivative-Fock contraction
+!>   (fock_deriv_contract_os) against an exact finite-difference reference.
+!>
+!>   For a frozen probe M and frozen spin densities Pa, Pb the analytic quantity
+!>     g_x = sum_uv M_uv ( J^x_uv[Pa+Pb] - c_x K^x_uv[Pa] ) = d/dx Tr[M . G^a]
+!>   where  G^a = J[Pa+Pb] - c_x K[Pa]  is the spin-alpha open-shell Fock that
+!>   scf_addons::fock_jk assembles for scftype>=2 (column 1 of the 2-column
+!>   build).  The reference is a central finite difference of Tr[M . G^a] over
+!>   each nuclear coordinate at frozen densities -> truncation-limited (O(h^2)),
+!>   no SCF iteration.  Requires an open-shell (UHF/ROHF) reference.
+!>   Results in /tmp/fockx_os_selftest.out.
+  subroutine fockx_os_selftest(infos)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, WITH_ABORT
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B
+    use mathlib, only: unpack_matrix, pack_matrix
+    use scf_addons, only: fock_jk
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:)
+    real(kind=dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
+    real(kind=dp), allocatable :: dpack(:,:), fpack(:,:)
+    real(kind=dp), allocatable :: gx_an(:,:), gx_fd(:,:)
+    real(kind=dp) :: hfscale, h, trp, trm, err
+    integer :: nbf, nbf2, natom, k, a, u
+
+    if (infos%control%scftype < 2) then
+      call show_message('fockx_os_selftest requires an open-shell (UHF/ROHF) '// &
+        'reference; scftype<2 detected.', WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = size(basis%atoms%xyz, 2)
+
+    hfscale = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf), source=0.0_dp)
+    call unpack_matrix(dmat_a, pa)
+    call unpack_matrix(dmat_b, pb)
+    ptot = pa + pb
+
+    allocate(gx_an(3,natom), gx_fd(3,natom), source=0.0_dp)
+
+    ! analytic: g_x = sum_uv Pa_uv ( J^x[Pa+Pb] - c_x K^x[Pa] )_uv = d/dx Tr[Pa G^a]
+    call fock_deriv_contract_os(infos, basis, ptot, pa, pa, hfscale, gx_an)
+
+    ! finite-difference reference: central diff of Tr[Pa . G^a] at frozen densities
+    allocate(dpack(nbf2,2), fpack(nbf2,2))
+    call pack_matrix(pa, dpack(:,1))
+    call pack_matrix(pb, dpack(:,2))
+    h = 1.0e-4_dp
+    do k = 1, natom
+      do a = 1, 3
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        fpack = 0.0_dp
+        call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
+        trp = trace_MG(pa, fpack(:,1), nbf)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) - 2*h
+        fpack = 0.0_dp
+        call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
+        trm = trace_MG(pa, fpack(:,1), nbf)
+        basis%atoms%xyz(a,k) = basis%atoms%xyz(a,k) + h
+        gx_fd(a,k) = (trp - trm)/(2*h)
+      end do
+    end do
+
+    err = maxval(abs(gx_an - gx_fd))
+
+    open(newunit=u, file='/tmp/fockx_os_selftest.out', status='replace', action='write')
+    write(u,'(a,i0)')     'scftype                       = ', infos%control%scftype
+    write(u,'(a,es12.4)') 'open-shell F^x max|an - FD|   = ', err
+    write(u,'(a)') 'analytic    gx(:,1):'
+    write(u,'(3es16.8)') gx_an(:,1)
+    write(u,'(a)') 'finite-diff gx(:,1):'
+    write(u,'(3es16.8)') gx_fd(:,1)
+    write(u,'(a,3f12.6)') 'ratio fd/an (atom1) = ', gx_fd(:,1)/gx_an(:,1)
+    if (err < 1.0e-6_dp) then
+      write(u,'(a)') 'FOCKX_OS_SELFTEST PASS'
+    else
+      write(u,'(a)') 'FOCKX_OS_SELFTEST FAIL'
+    end if
+    close(u)
+
+    deallocate(pa, pb, ptot, dpack, fpack, gx_an, gx_fd)
+  contains
+    pure function trace_MG(m, gp, n) result(tr)
+      real(kind=dp), intent(in) :: m(:,:), gp(:)
+      integer, intent(in) :: n
+      real(kind=dp) :: tr
+      integer :: ii, jj, ij
+      tr = 0.0_dp
+      ij = 0
+      do ii = 1, n
+        do jj = 1, ii
+          ij = ij + 1
+          if (ii == jj) then
+            tr = tr + m(ii,ii)*gp(ij)
+          else
+            tr = tr + (m(ii,jj) + m(jj,ii))*gp(ij)
+          end if
+        end do
+      end do
+    end function trace_MG
+  end subroutine fockx_os_selftest
+
 end module fock_deriv_selftest_mod

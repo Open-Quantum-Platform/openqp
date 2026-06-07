@@ -194,8 +194,14 @@ class BasisData:
         self.mol.data["ecp_rex"] = ffi.cast("int*", ffi.from_buffer(r_expo_array))
 
         coord_array = np.array(self.ecp["coord"], dtype=np.float64)
-        self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ang"], dtype=np.float64)))
-        self.mol.data["ecp_zn"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ecp_electron"], dtype=np.int32)))
+        # Keep the numpy arrays alive in named variables until append_ecp has
+        # consumed them: ffi.from_buffer does not hold a reference, so passing
+        # a temporary leaves mol.data with a dangling pointer (garbage
+        # ecp_zn_num -> garbage nuclear repulsion for large systems).
+        ecp_am_array = np.array(self.ecp["ang"], dtype=np.float64)
+        ecp_zn_array = np.array(self.ecp["ecp_electron"], dtype=np.int32)
+        self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(ecp_am_array))
+        self.mol.data["ecp_zn"] = ffi.cast("int*", ffi.from_buffer(ecp_zn_array))
         self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
 
         oqp.append_ecp(self.mol)

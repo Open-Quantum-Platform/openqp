@@ -19,6 +19,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B = OQP_prefix // "VEC_MO_B"
   character(len=*), parameter, public :: OQP_Hcore = OQP_prefix // "Hcore"
   character(len=*), parameter, public :: OQP_SM = OQP_prefix // "SM"
+  character(len=*), parameter, public :: OQP_QMAT = OQP_prefix // "QMAT"
   character(len=*), parameter, public :: OQP_TM = OQP_prefix // "TM"
   character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
   character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
@@ -57,6 +58,16 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
 
+  ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
+  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
+  character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
+  character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
+  character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
+  character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
+  character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
+
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_FOCK_A_comment = "Alpha-spin triangle Fock matrix"
@@ -67,6 +78,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B_comment = "Coefficients of beta molecular orbitals"
   character(len=*), parameter, public :: OQP_Hcore_comment = "triangle core Hamiltonian matrix"
   character(len=*), parameter, public :: OQP_SM_comment = "triangle Overlap matrix"
+  character(len=*), parameter, public :: OQP_QMAT_comment = "canonical orthogonalizer Q = S^(-1/2), full (nbf x nbf)"
   character(len=*), parameter, public :: OQP_TM_comment = "triangle Kinetic-Energy matrix"
   character(len=*), parameter, public :: OQP_WAO_comment = "??? WAO ???"
   character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
