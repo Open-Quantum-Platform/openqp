@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from oqp.library.libscipy import StateSpecificOpt
+from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
 from oqp.library.native_engine import NativeEngine
 from oqp.utils.file_utils import dump_log
 
@@ -88,3 +88,26 @@ class NativeTSOpt(_NativeRunner, StateSpecificOpt):
 
     def __init__(self, mol):
         super().__init__(mol)
+
+
+class NativeMECIOpt(_NativeRunner, MECIOpt):
+    """MECI search: minimize the penalty/UBP objective with the native engine.
+
+    Reuses ``MECIOpt.one_step`` (which returns the penalty objective and its
+    gradient) and ``MECIOpt.check_convergence`` (which adds the energy-gap
+    criterion) verbatim -- only the step determination is native.
+    """
+
+    mode = "min"
+
+    def __init__(self, mol):
+        MECIOpt.__init__(self, mol)
+
+
+class NativeMECPOpt(_NativeRunner, MECPOpt):
+    """MECP search: minimize the gap-penalty objective with the native engine."""
+
+    mode = "min"
+
+    def __init__(self, mol):
+        MECPOpt.__init__(self, mol)

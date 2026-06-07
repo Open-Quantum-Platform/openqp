@@ -184,12 +184,20 @@ class TestDispatchAndValidation(unittest.TestCase):
         self.assertEqual(report.errors, [],
                          "native/optimize should validate clean")
 
+        # meci is supported on native; irc is not.
         report2 = ic.CheckReport()
-        cfg2 = {"input": {"runtype": "meci", "method": "tdhf"},
-                "optimize": {"lib": "native", "istate": 1, "jstate": 2}}
+        cfg2 = {"input": {"runtype": "irc", "method": "hf"},
+                "optimize": {"lib": "native", "istate": 0}}
         ic._check_optimize(cfg2, report2)
         msgs = " ".join(d.message for d in report2.diagnostics)
         self.assertIn("native optimizer currently supports", msgs)
+
+        report3 = ic.CheckReport()
+        cfg3 = {"input": {"runtype": "meci", "method": "tdhf"},
+                "optimize": {"lib": "native", "istate": 1, "jstate": 2}}
+        ic._check_optimize(cfg3, report3)
+        lib_errs = [d for d in report3.errors if d.path == "optimize.lib"]
+        self.assertEqual(lib_errs, [], "native/meci should be allowed")
 
 
 class TestNativeExample(unittest.TestCase):
