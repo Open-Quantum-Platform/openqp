@@ -151,6 +151,27 @@ For OpenMP and MPI run:
 mpirun -np number_of_mpi openqp any_example_file.inp
 ```
 
+##### Setting the OpenMP thread count
+
+The number of OpenMP threads (per process / MPI rank) can be set directly from
+the input file or the command line, instead of relying on `OMP_NUM_THREADS`:
+
+```ini
+[input]
+omp_threads=16        # OpenMP threads per process / MPI rank
+```
+
+```bash
+openqp any_example_file.inp --omp 16
+```
+
+Precedence (highest first): `--omp` → input `omp_threads` → `OMP_NUM_THREADS` →
+built-in default. The value is applied before the OpenMP runtime initializes, and
+is honored on the programmatic `Runner(input_dict=...)` path as well. If OpenQP
+was built without OpenMP (`-DENABLE_OPENMP=OFF`), the request is ignored with a
+warning and the run is serial. MPI rank count remains launcher-controlled
+(`mpirun -np ...`); `--nompi` disables MPI.
+
 #### Performance and threading
 
 OpenQP parallelizes the two-electron integral / Fock build with OpenMP. A few

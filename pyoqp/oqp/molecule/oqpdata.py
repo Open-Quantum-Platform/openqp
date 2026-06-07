@@ -58,6 +58,11 @@ OQP_CONFIG_SCHEMA = {
         # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
         # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
         'soc_2e': {'type': int, 'default': '1'},
+        # OpenMP threads per process / MPI rank. 0 = leave OMP_NUM_THREADS / the
+        # built-in default untouched. Applied before the OpenMP runtime loads
+        # (see pyoqp._apply_omp_threads_from_input); a build without OpenMP
+        # ignores it with a warning.
+        'omp_threads': {'type': int, 'default': '0'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
