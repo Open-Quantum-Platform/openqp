@@ -714,9 +714,29 @@ contains
         ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
         ! and is left to the existing ROHF handling.
         if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
-          call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
-          if (scf_type == scf_uhf .and. nelec_b /= 0) &
-            call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+          if (do_mom) then
+            ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
+            ! state-specific occupation TRAH converged to (TRAH itself preserves
+            ! the occupied space by rotation, so the energy/density built above are
+            ! already on the target). Use the TRAH-converged MOs as the MOM
+            ! reference so the canonical MOs -- and the density rebuilt from them --
+            ! keep the targeted occupied space.
+            mo_a_prev = mo_a; mo_e_a_prev = mo_energy_a
+            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            call apply_mom(infos, mo_a_prev, mo_e_a_prev, mo_a, mo_energy_a, &
+                           smat_full, nelec_a, "Alpha", work1, work2)
+            if (scf_type == scf_uhf .and. nelec_b /= 0) then
+              mo_b_prev = mo_b; mo_e_b_prev = mo_energy_b
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+              call apply_mom(infos, mo_b_prev, mo_e_b_prev, mo_b, mo_energy_b, &
+                             smat_full, nelec_b, "Beta", work1, work2)
+            end if
+            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+          else
+            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            if (scf_type == scf_uhf .and. nelec_b /= 0) &
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+          end if
         end if
       end if
 
