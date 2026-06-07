@@ -62,6 +62,7 @@ _P_TRIV = 8
 _P_TRIV_THR = 9
 _P_HOPPED = 10
 _P_TARGET = 11
+_P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _NPARAMS = 16
 
 
@@ -211,13 +212,17 @@ class NAMD:
         params[_P_TDC] = float(self.tdc_scheme)
         params[_P_TRIV] = float(self.trivial)
         params[_P_TRIV_THR] = self.trivial_thresh
+        params[_P_NSTATE] = float(n)
         mol.data["OQP::namd_params"] = params
 
-        # time-derivative couplings from the phase-corrected state overlap,
-        # passed to the Fortran hop as a flat row-major (n x n) matrix.
+        # state overlap + time-derivative couplings (FD or NPI), passed to the
+        # Fortran hop as flat row-major (n x n) matrices; absolute state
+        # energies via namd_eabs. (Same-spin MRSF path.)
         s = np.array(mol.data["OQP::td_states_overlap"]).reshape((n, n))
         tdc = self._compute_tdc(s)
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
+        mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
+        mol.data["OQP::namd_eabs"] = np.array(mol.data["OQP::td_energies"]).reshape(-1)[:n].copy()
 
         oqp.mrsf_namd_hop(mol)
 

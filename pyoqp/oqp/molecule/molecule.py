@@ -75,7 +75,7 @@ class Molecule:
             'OQP::dc_matrix', 'OQP::nac_matrix',
             'OQP::hamiltonian_qmmm', 'OQP::mm_potential', 'OQP::charge_operator', 'OQP::partial_charges',
             'OQP::namd_coef', 'OQP::namd_velocity', 'OQP::namd_params', 'OQP::namd_results',
-            'OQP::namd_tdc',
+            'OQP::namd_tdc', 'OQP::namd_eabs', 'OQP::namd_stas',
             'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
             'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
             'OQP::soc_eval',

@@ -455,17 +455,21 @@ contains
     real(kind=dp), allocatable :: mass_au(:)
 
     ! tagarray records
-    real(kind=dp), contiguous, pointer :: stas(:,:), omega(:), coef(:), velf(:), &
+    real(kind=dp), contiguous, pointer :: stas_in(:), eabs_in(:), coef(:), velf(:), &
                                           params(:), results(:), tdc_in(:)
     real(kind=dp), contiguous, pointer :: mass(:)
+    real(kind=dp), allocatable :: stas2(:,:)
 
     ! 1 atomic mass unit (Dalton) in electron masses
     real(kind=dp), parameter :: AMU_TO_AU = 1822.888486209_dp
 
     character(len=*), parameter :: subroutine_name = "namd_hop"
+    ! NAMD state (energies/overlap/couplings) is supplied entirely through the
+    ! namd_* tags, so the same kernel serves same-spin MRSF (n = tddft%nstate)
+    ! and spin-adiabatic SOC NAMD (n = ns + 3*nt).
     character(len=*), parameter :: tags_req(*) = (/ character(len=80) :: &
-        OQP_td_states_overlap, OQP_td_energies, OQP_namd_coef, &
-        OQP_namd_velocity, OQP_namd_params, OQP_namd_tdc /)
+        OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_tdc, &
+        OQP_namd_eabs, OQP_namd_stas /)
     character(len=*), parameter :: tags_out(*) = (/ character(len=80) :: &
         OQP_namd_results /)
 
@@ -473,17 +477,20 @@ contains
 
     open(unit=iw, file=infos%log_filename, position="append")
 
-    n   = int(infos%tddft%nstate)
     mass => infos%atoms%mass
     nat = size(mass)
 
     call data_has_tags(infos%dat, tags_req, module_name, subroutine_name, with_abort)
-    call tagarray_get_data(infos%dat, OQP_td_states_overlap, stas)
-    call tagarray_get_data(infos%dat, OQP_td_energies, omega)
     call tagarray_get_data(infos%dat, OQP_namd_coef, coef)
     call tagarray_get_data(infos%dat, OQP_namd_velocity, velf)
     call tagarray_get_data(infos%dat, OQP_namd_params, params)
     call tagarray_get_data(infos%dat, OQP_namd_tdc, tdc_in)
+    call tagarray_get_data(infos%dat, OQP_namd_eabs, eabs_in)
+    call tagarray_get_data(infos%dat, OQP_namd_stas, stas_in)
+
+    ! number of states: from params (slot 13); fall back to tddft%nstate
+    n = nint(params(13))
+    if (n <= 0) n = int(infos%tddft%nstate)
 
     ! (re)allocate the results record
     call infos%dat%remove_records(tags_out)
@@ -499,29 +506,35 @@ contains
     active      = nint(params(5))
     decoherence = nint(params(6))
     edc_c       = params(7)
-    ! params(8) = tdc scheme (0 finite-diff, 1 NPI) -- NPI pending
+    ! params(8) = tdc scheme (0 finite-diff, 1 NPI), handled in the Python driver
     trivial_en  = nint(params(9))
     triv_thr    = params(10)
     dt_au       = dt_fs*FS_TO_AU
     hsub        = dt_au/real(nsub, dp)
 
-    allocate(tdc(n,n), cmhp(n,n), cr(n), ci(n), eabs(n), vel(3,nat), mass_au(nat))
+    allocate(tdc(n,n), cmhp(n,n), cr(n), ci(n), eabs(n), vel(3,nat), mass_au(nat), &
+             stas2(n,n))
     mass_au = mass*AMU_TO_AU        ! infos%atoms%mass is in amu; integrate in a.u.
     do i = 1, n
       cr(i) = coef(2*i-1)
       ci(i) = coef(2*i)
     end do
-    eabs = omega(1:n)                      ! excitation energies; ref cancels
+    eabs = eabs_in(1:n)                     ! absolute state energies (Hartree)
     do a = 1, nat
       vel(1,a) = velf(3*a-2)
       vel(2,a) = velf(3*a-1)
       vel(3,a) = velf(3*a)
     end do
+    do i = 1, n
+      do a = 1, n
+        stas2(i,a) = stas_in((i-1)*n + a)   ! state overlap, flat row-major
+      end do
+    end do
     cmhp = 0.0_dp
 
     ! 1) follow diabatic character across trivial/unavoided crossings
     swapped = .false.
-    if (trivial_en == 1) call namd_trivial_crossing(stas, triv_thr, active, swapped)
+    if (trivial_en == 1) call namd_trivial_crossing(stas2, triv_thr, active, swapped)
 
     ! 2) time-derivative couplings: supplied by the Python driver as a flat
     !    row-major (n x n) matrix (finite difference or norm-preserving
@@ -532,7 +545,7 @@ contains
         tdc(i,a) = tdc_in((i-1)*n + a)
       end do
     end do
-    if (all(abs(tdc) < 1.0e-30_dp)) call namd_state_tdc(stas, dt_au, tdc)
+    if (all(abs(tdc) < 1.0e-30_dp)) call namd_state_tdc(stas2, dt_au, tdc)
 
     ! 3) propagate amplitudes over electronic sub-steps; accumulate hop flux
     do isub = 1, nsub
@@ -572,7 +585,7 @@ contains
     results(n*n+4) = ekin
     results(n*n+5) = merge(1.0_dp, 0.0_dp, swapped)
 
-    deallocate(tdc, cmhp, cr, ci, eabs, vel, mass_au)
+    deallocate(tdc, cmhp, cr, ci, eabs, vel, mass_au, stas2)
     close(iw)
   end subroutine namd_hop
 

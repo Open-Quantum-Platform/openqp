@@ -77,6 +77,8 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_params   = OQP_prefix // "namd_params"
   character(len=*), parameter, public :: OQP_namd_results  = OQP_prefix // "namd_results"
   character(len=*), parameter, public :: OQP_namd_tdc      = OQP_prefix // "namd_tdc"
+  character(len=*), parameter, public :: OQP_namd_eabs     = OQP_prefix // "namd_eabs"
+  character(len=*), parameter, public :: OQP_namd_stas     = OQP_prefix // "namd_stas"
 
   ! MRSF spin-orbit coupling (from upstream SOC merge)
   character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
@@ -139,6 +141,8 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_namd_params_comment = OQP_prefix // "NAMD packed scalar parameters/state"
   character(len=*), parameter, public :: OQP_namd_results_comment = OQP_prefix // "NAMD per-step diagnostics (hop prob + flags)"
   character(len=*), parameter, public :: OQP_namd_tdc_comment = OQP_prefix // "NAMD time-derivative coupling matrix (nstate x nstate)"
+  character(len=*), parameter, public :: OQP_namd_eabs_comment = OQP_prefix // "NAMD absolute state energies (Hartree)"
+  character(len=*), parameter, public :: OQP_namd_stas_comment = OQP_prefix // "NAMD state overlap matrix (flat n*n) for trivial-crossing"
   character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
   character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
   character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
@@ -157,7 +161,7 @@ module oqp_tagarray_driver
     OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
     OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
     OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &
-    OQP_namd_tdc /)
+    OQP_namd_tdc, OQP_namd_eabs, OQP_namd_stas /)
 
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
