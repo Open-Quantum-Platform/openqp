@@ -53,6 +53,7 @@ class Runner:
         # Define the mapping of run types to their respective functions
         self.run_func = {
             'energy': compute_energy,
+            'ekt': compute_energy,
             'grad': compute_grad,
             'nac': compute_nac,
             'nacme': compute_nacme,
@@ -92,6 +93,7 @@ class Runner:
         self.mol.start_time = start_time
 
         dump_log(self.mol, title='', section='start')
+        dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
 
     def run(self, test_mod=False):
         """

@@ -1,0 +1,40 @@
+# OpenQP symmetry support autopilot plan
+
+Scope: metadata/label support only. Do not enable integral or response-space reductions by default. Preserve C1 behavior and GAMESS NOSYM=1 compatibility. Keep GPU/METC/libintx work out of this branch.
+
+Current gates:
+- [x] Parser/checker coverage for symmetry metadata flags.
+- [x] Metadata persistence tests.
+- [x] Backend-free one-electron block/projector tests.
+- [x] Cleanly separate the symmetry work from any GPU branch context.
+- [x] Run focused pytest for `tests/test_symmetry_parser_checker.py`, `tests/test_symmetry_metadata.py`, and `tests/test_symmetry_one_electron_blocks.py`.
+- [x] Remove or document any blocker under `/Volumes/External_Storage/Hermes-Agent/openqp-symmetry-autopilot/`.
+
+Detection/labeling gates (increment 2):
+- [x] Geometry-based Schoenflies point-group detection (`symmetry_detect.py`): atom/linear/cubic/axial trees, covered by `tests/test_symmetry_point_group.py` (Kh, Coov/Dooh, C1/Ci/Cs/C2/C2h/C2v, D2h..D6h, D2d/D3d/D3h/D4h, Td/Oh, noisy-geometry tolerance).
+- [x] Largest abelian (D2h-family) subgroup resolution with standard orientation and per-operation atom permutations, verified op-by-op.
+- [x] Character tables for the eight D2h-family groups (Mulliken labels).
+- [x] Symmetry-adapted transform (SALC) builder for Cartesian s/p/d shells with irrep labels; feeds the existing one-electron block diagnostics (`tests/test_symmetry_salc_mo_labels.py`).
+- [x] MO irrep labeling via <m|S O|m> characters with 'mixed' fallback.
+- [x] Molecule wiring: `initialize_symmetry_metadata` runs detection when enabled/auto (non-fatal, metadata-only), resolves 'auto' requests, honors `strict` mismatch as an error. Reductions remain hard-off.
+
+Run-output labeling gates (increment 3):
+- [x] Input-frame operation matrices (`matrix_input_frame = R^T O R`) in the detection payload — MO data lives in input coordinates, not the standard orientation.
+- [x] General orthogonal-operation AO representation: dense s/p/d shell blocks with Cartesian-d normalization ratios; rep property T(M1 M2)=T(M1)T(M2) and d-shell metric preservation tested.
+- [x] `Molecule.label_molecular_orbitals()`: unpacks triangular `OQP::SM`, reads shells from `get_basis()` (centers/angs), labels `VEC_MO_A` (+`_B` for uhf/rohf), stores under `symmetry_metadata['mo_labels']`; skips gracefully on f-shells/non-Cartesian/shape mismatch; never fatal.
+- [x] Hook in `SinglePoint.reference()` after converged SCF (no-op unless symmetry enabled). Covered by `tests/test_symmetry_mo_label_wiring.py`, incl. frame-invariance under random input rotation.
+
+Real-backend validation gate:
+- [x] `tests/smoke_symmetry_real_backend.py` (run with a built-oqp venv): grafts branch modules onto an installed oqp, runs real RHF and MRSF-BHHLYP/6-31G* water in a diagonal input orientation. Validates get_basis layout, triangular OQP::SM, VEC_MO orientation, td_bvec_mo layout, d shells, and input-frame conjugation on real data. Results: occupied [a1 a1 b2 a1 b1], ground state 1A1; MRSF singlets [1A1, 1B1, 1A2] with SOMO reference [b1, a1]; character deviations ~1e-16. PASSED 2026-06-07.
+
+Remaining (future increments):
+- [x] Label normal modes in run outputs (`assign_mode_irreps` + `Molecule.label_normal_modes`, hooked before `save_freqs`; labels land in hess.json via symmetry_metadata).
+- [x] SCF ground-state term symbol (product of occupied MO irreps; RHF/UHF/ROHF, e.g. 1A1/2B1) in mo_labels payload and log.
+- [x] Excited-state irrep labels for tda/rpa/sf/mrsf (`assign_state_irreps`): transition character <X, U X V^T>/<X,X> from td_bvec_mo (Fortran layout: occupied index fastest, verified in tdhf_lib.F90 iatogen / tdhf_mrsf_lib.F90 mrsfxvec); sf/mrsf total symmetry includes the SOMO reference product; terms in state_labels payload and log.
+- [x] Print MO labels to the .log file alongside orbital energies (rank-0 only, best-effort).
+- [x] Cartesian f/g shells (10f/15g) in all labeling paths: general multinomial shell blocks in OpenQP's canonical component order (verified against bf_names in source/constants.F90), double-factorial normalization ratios; rep property + Gaussian-metric preservation tested. d order XX..YZ confirmed against the backend.
+- [x] Pure spherical-harmonic shells (5d/7f/9g, ISPHER) in the SALC builder, labeling, and reduction-map paths. Convention ESTABLISHED rather than waited for: CCA/libint order (m = -l..+l), real solid harmonics built from the closed-form monomial expansion (Helgaker eq. 6.4.47), metric-orthonormalized against the Gaussian intra-shell overlap. Verified: B S B^T = 1 to 6e-16 (d/f/g), textbook d forms (xy, yz, 2z2-x2-y2, xz, x2-y2), exact rotation rep property, and sign-diagonality (which makes the whole SALC/petite machinery work unchanged). Shell specs now carry a 'pure' flag; the labeling path auto-detects a spherical basis by dimension and records spherical_order_assumed='cca_m_ascending' in the metadata until the feat/ispher-basis-option runtime path exists to validate against.
+- [ ] Integral-side symmetry reductions behind `use_integral_symmetry` (off by default until production-ready).
+- [ ] Response-side reductions behind `use_response_symmetry`.
+
+Next increment rule: take exactly one unchecked item, run RED/GREEN or focused verification, then stop with a compact final report.

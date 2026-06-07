@@ -56,14 +56,6 @@ OQP_CONFIG_SCHEMA = {
         'system2': {'type': str, 'default': ''},
         'd4': {'type': bool, 'default': 'False'},
     },
-    'dftb': {
-        'executable': {'type': str, 'default': 'dftb+'},
-        'sk_path': {'type': str, 'default': ''},
-        'scc': {'type': bool, 'default': 'True'},
-        'max_scc_iterations': {'type': int, 'default': '100'},
-        'timeout': {'type': int, 'default': '300'},
-        'keep_workdir': {'type': bool, 'default': 'False'},
-    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -71,6 +63,19 @@ OQP_CONFIG_SCHEMA = {
         'save_mol': {'type': bool, 'default': 'False'},
         'continue_geom': {'type': bool, 'default': 'False'},
         'swapmo': {'type': string, 'default': ''},
+    },
+    # "symmetry": {
+    'symmetry': {
+        'enabled': {'type': string, 'default': 'false'},
+        'point_group': {'type': string, 'default': 'auto'},
+        'subgroup': {'type': string, 'default': 'auto'},
+        'label_mo': {'type': bool, 'default': 'True'},
+        'label_states': {'type': bool, 'default': 'True'},
+        'label_modes': {'type': bool, 'default': 'True'},
+        'use_integral_symmetry': {'type': string, 'default': 'False'},
+        'use_response_symmetry': {'type': bool, 'default': 'False'},
+        'tolerance': {'type': float, 'default': '1.0e-5'},
+        'strict': {'type': bool, 'default': 'False'},
     },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
@@ -103,6 +108,7 @@ OQP_CONFIG_SCHEMA = {
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
+        'stability': {'type': bool, 'default': 'True'},
         'soscf_reset_mod': {'type': int, 'default': '0'},
         'soscf_mode': {'type': int, 'default': '0'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
@@ -141,6 +147,7 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
         'tlf': {'type': int, 'default': '2'},
@@ -153,8 +160,12 @@ OQP_CONFIG_SCHEMA = {
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type': string, 'default': '-1'},
-        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES (legacy), 2: MINRES, 3: AUTO
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+    },
+    'ekt': {
+        'ip': {'type': bool, 'default': 'True'},
+        'ea': {'type': bool, 'default': 'False'},
     },
     'properties': {
         'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
@@ -190,12 +201,6 @@ OQP_CONFIG_SCHEMA = {
         'pen_incre': {'type': float, 'default': '1.0'},
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
-    },
-    'dlfind': {
-        'printl': {'type': int, 'default': '2'},
-        'icoord': {'type': int, 'default': '3'},
-        'iopt': {'type': int, 'default': '3'},
-        'ims': {'type': int, 'default': '0'},
     },
     'geometric': {
         'coordsys': {'type': str, 'default': 'tric'},
@@ -256,7 +261,7 @@ class OQPData:
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf')
-    _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf')
+    _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
     _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
@@ -328,6 +333,7 @@ class OQPData:
         "tdhf": {
             "type": "set_tdhf_type",
             "nstate": "set_tdhf_nstate",
+            "target": "set_tdhf_target",
             "multiplicity": "set_tdhf_multiplicity",
             "maxit": "set_tdhf_maxit",
             "maxit_zv": "set_tdhf_maxit_zv",
@@ -775,9 +781,15 @@ class OQPData:
 
     def set_tdhf_z_solver(self, z_solver):
         """Set z-vector solver type:
-           0: CG (Conjugate Gradient) only
-           1: GMRES (Generalized Minimal Residual)
+           0: CG (Conjugate Gradient, default) - for symmetric positive-definite (A+B)
+           1: GMRES (Generalized Minimal Residual) - legacy explicit fallback
+           2: MINRES (Minimal Residual) - symmetric, robust when (A+B) is indefinite
+           3: AUTO - try CG, fall back to MINRES then GMRES if a solver fails
         """
+        if z_solver not in (0, 1, 2, 3):
+            raise ValueError(
+                f"z_solver must be 0 (CG), 1 (GMRES), 2 (MINRES), or 3 (AUTO); got {z_solver}"
+            )
         self._data.tddft.z_solver = z_solver
 
     def set_conf_threshold(self, conf_threshold):
@@ -827,7 +839,7 @@ class OQPData:
 
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
-        pruned_list = ['SG1', ]
+        pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
         if pruned != "":
             pruned = pruned.upper()
             if pruned in pruned_list:

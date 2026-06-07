@@ -10,7 +10,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "PyOpenQP"
+name = "OpenQP"
 version = "0.1.0"
 description = "Python bindings for the Open Quantum Platform (Fortran core + Python wrapper)"
 authors = [{ name = "Mohsen Mazaherifar", email = "moh.mazaheri@gmail.com" }]
@@ -21,9 +21,7 @@ license = { text = "GPLv3" }
 dependencies = [
   "numpy>=1.20.0",
   "scipy>=1.10.0",
-  "libdlfind>=0.0.3",
   "geometric>=1.0",
-  "pyscf>=2.3.0",
   "cffi>=1.16.0",
 #  "mpi4py>=4.0.0",
   "basis_set_exchange",
@@ -41,8 +39,11 @@ wheel.packages = ["pyoqp/oqp"]
 [tool.scikit-build.cmake.define]
 USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
-LINALG_LIB_INT64 = "OFF"
+LINALG_LIB_INT64 = "ON"
 CMAKE_INSTALL_PREFIX = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 #[tool.cibuildwheel]
 #before-all = "yum install -y openblas-devel gcc-gfortran"

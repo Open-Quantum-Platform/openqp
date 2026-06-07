@@ -9,6 +9,7 @@ method=tdhf
 runtype=energy
 
 [guess]
+type=huckel
 save_mol=False
 continue_geom=False
 

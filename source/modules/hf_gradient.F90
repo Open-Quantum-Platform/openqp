@@ -42,6 +42,8 @@ module hf_gradient_mod
   private
 
   public hf_gradient
+  public grd2_rhf_compute_data_t
+  public grd2_uhf_compute_data_t
 
 !###############################################################################
 

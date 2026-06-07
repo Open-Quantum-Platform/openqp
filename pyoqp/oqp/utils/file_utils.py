@@ -42,6 +42,26 @@ def try_basis(basis, path=None, fallback='6-31g'):
     raise FileNotFoundError(f"Basis `{basis}` is not available")
 
 
+def try_data_file(name):
+    """Resolve a data file shipped under share/basis_sets (installed) or the
+    source basis_sets/ tree (development)."""
+
+    try:
+        root = os.environ["OPENQP_ROOT"]
+    except KeyError:
+        root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+
+    for candidate in (
+        name,
+        os.path.join(root, "share", "basis_sets", name),
+        os.path.join(root, "basis_sets", name),
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+
+    raise FileNotFoundError(f"Data file `{name}` is not available")
+
+
 def what_is_time():
     # This function return current time
 
@@ -59,7 +79,12 @@ def how_long(start, end):
         int(((walltime % 86400) % 3600) % 60))
     return walltime
 
+
+def _to_yes_no(value):
+    return 'yes' if bool(value) else 'no'
 @mpi_dump
+
+
 def dump_log(mol, title=None, section=None, info=None, must_print=False):
     # function to write information to main log
     logfile = mol.log
@@ -171,6 +196,38 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP charge:                       %s
     
 """ % (natom, charge)
+
+
+    if section == 'symmetry':
+        metadata = mol.symmetry_metadata if isinstance(getattr(mol, 'symmetry_metadata', {}), dict) else {}
+        symmetry_status = metadata.get('status', 'disabled')
+        loginfo += """
+   PyOQP symmetry status:                      %s
+   PyOQP symmetry requested point group:       %s
+   PyOQP symmetry requested subgroup:          %s
+   PyOQP symmetry detected point group:        %s
+   PyOQP symmetry detected subgroup:           %s
+   PyOQP symmetry label MO:                   %s
+   PyOQP symmetry label states:               %s
+   PyOQP symmetry label modes:                %s
+   PyOQP symmetry use integral symmetry:      %s
+   PyOQP symmetry use response symmetry:      %s
+   PyOQP symmetry strict:                     %s
+   PyOQP symmetry tolerance:                  %s
+""" % (
+            symmetry_status,
+            metadata.get('requested_point_group', metadata.get('point_group', 'auto')),
+            metadata.get('requested_subgroup', metadata.get('subgroup', 'auto')),
+            metadata.get('detected_point_group', metadata.get('point_group', 'c1')),
+            metadata.get('detected_subgroup', metadata.get('subgroup', 'c1')),
+            _to_yes_no(metadata.get('label_mo', True)),
+            _to_yes_no(metadata.get('label_states', True)),
+            _to_yes_no(metadata.get('label_modes', True)),
+            _to_yes_no(metadata.get('use_integral_symmetry', False)),
+            _to_yes_no(metadata.get('use_response_symmetry', False)),
+            _to_yes_no(metadata.get('strict', False)),
+            metadata.get('tolerance', 1.0e-5),
+        )
 
     if section in ['scf']:
         loginfo += """
@@ -357,26 +414,6 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
         )
 
-    if section == 'dlf-ci':
-        loginfo += """
-   PyOQP follow state:                 %14s %14s
-   PyOQP meci search algorithm:        dl-find/ci
-   PyOQP energy shift:                 %14.6f %14.6f %s
-   PyOQP energy gap:                   %14.6f %14.6f %s
-   PyOQP rmsd step:                    %14.6f %14.6f %s
-   PyOQP max step:                     %14.6f %14.6f %s
-   PyOQP rmsd grad:                    %14.6f %14.6f %s
-   PyOQP max grad:                     %14.6f %14.6f %s
-
-""" % (
-            info['istate'], info['jstate'],
-            info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
-            info['gap'], info['energy_gap'], info['gap'] <= info['energy_gap'],
-            info['rmsd_step'], info['target_rmsd_step'], info['rmsd_step'] <= info['target_rmsd_step'],
-            info['max_step'], info['target_max_step'], info['max_step'] <= info['target_max_step'],
-            info['rmsd_grad'], info['target_rmsd_grad'], info['rmsd_grad'] <= info['target_rmsd_grad'],
-            info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
-        )
     if section == 'mep':
         loginfo += """
    PyOQP MEP follow state:             %14s
@@ -387,22 +424,6 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP MEP energy shift:             %14.6f
    
 """ % (info['istate'], info['itr'], info['status'], info['radius'], info['energy'], info['de'])
-
-    if section == 'dlf':
-        icoord = mol.config['dlfind']['icoord']
-        iopt = mol.config['dlfind']['iopt']
-        ims = mol.config['dlfind']['ims']
-
-        loginfo += """
-   PyOQP dl-find coordinates           %3s %14s
-   PyOQP dl-find method                %3s %14s
-   PyOQP dl-find multistate            %3s %14s
-        
-""" % (
-            icoord, DL_FIND_PARAMS['icoord'][icoord],
-            iopt, DL_FIND_PARAMS['iopt'][iopt],
-            ims, DL_FIND_PARAMS['ims'][ims],
-        )
 
     if section == 'num_nacv':
         ndim, dx, restart, jobs, nproc, threads = info
@@ -485,8 +506,39 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
                   f' from rank {rank:<3} with {threads:<3} threads on node {host}\n'
 
     if section == 'freq':
-        for n, f in enumerate(info):
-            loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
+        ir = np.asarray(getattr(mol, 'infrared_intensities', []), dtype=float)
+        raman = np.asarray(getattr(mol, 'raman_activities', []), dtype=float)
+        if ir.size == len(info) and raman.size == len(info):
+            loginfo += '   Mode       Frequency(cm-1)      IR(km/mol)        Raman(activity)\n'
+            for n, f in enumerate(info):
+                loginfo += f'   {n + 1:4d} {f:20.2f} {ir[n]:16.6f} {raman[n]:20.6f}\n'
+        else:
+            for n, f in enumerate(info):
+                loginfo += f'   PyOQP freq {n + 1}:  {f:12.2f}\n'
+
+    if section == 'freq_modes':
+        atoms, freqs, modes = info
+        atoms = np.asarray(atoms, dtype=int)
+        freqs = np.asarray(freqs, dtype=float)
+        modes = np.asarray(modes, dtype=float)
+        natom = len(atoms)
+        loginfo += """
+   Normal mode eigenvectors (Cartesian, mass-unweighted)
+   Frequencies -- values are in cm^-1; X/Y/Z columns are normal-mode components.
+"""
+        for start in range(0, len(freqs), 1):
+            stop = min(start + 1, len(freqs))
+            block = range(start, stop)
+            loginfo += '\n                 ' + ''.join(f'{mode_index + 1:>12d}' for mode_index in block) + '\n'
+            loginfo += '   Frequencies --' + ''.join(f'{freqs[mode_index]:12.4f}' for mode_index in block) + '\n'
+            loginfo += '     Atom AN      ' + ''.join(f'{axis:>12s}' for _mode_index in block for axis in ('X', 'Y', 'Z')) + '\n'
+            for atom_index, atomic_number in enumerate(atoms):
+                symbol = ELEMENTS_NAME[atomic_number] if 0 <= atomic_number < len(ELEMENTS_NAME) else str(atomic_number)
+                row = f'   {atom_index + 1:6d} {atomic_number:2d} {symbol:>2s}'
+                for mode_index in block:
+                    vec = modes[mode_index].reshape((natom, 3))[atom_index]
+                    row += ''.join(f'{component:12.8f}' for component in vec)
+                loginfo += row + '\n'
 
     if section == 'thermo':
         temp = info['temp']
@@ -826,6 +878,7 @@ def dump_data(mol, data, title=None, fpath='.'):
 def write_xyz(atoms, coord, info):
     # coord in Bohr
     coord = coord.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     natom = len(coord)
     xyz = '%s\nGeom %s\n' % (natom, ' '.join([str(x) for x in info]))
     for n, line in enumerate(coord):
@@ -844,6 +897,7 @@ def write_xyz(atoms, coord, info):
 def write_grad(atoms, grad):
     # grad in Hartree/Bohr
     grad = grad.reshape((-1, 3))
+    atoms = np.asarray(atoms).reshape(-1)
     xyz = ''
     for n, line in enumerate(grad):
         a = atoms[n]
@@ -882,33 +936,3 @@ def write_config(config):
         input_file += '\n'
 
     return input_file, input_dict
-
-
-DL_FIND_PARAMS = {
-    'icoord': {
-        0: 'cartesian',
-        1: 'internal-1',
-        2: 'internal-2',
-        3: 'internal-3',
-        4: 'internal-4',
-        10: 'cartesian/ci',
-        11: 'internal-1/ci',
-        22: 'internal-2/ci',
-        33: 'internal-3/ci',
-        44: 'internal-4/ci',
-    },
-    'iopt': {
-        0: 'steepest',
-        1: 'cg/auto',
-        2: 'cg/10',
-        3: 'l-bfgs',
-        9: 'p-rfo/ts',
-    },
-    'ims': {
-        0: 'single',
-        1: 'penalty/ci',
-        2: 'projection/ci',
-        3: 'lagrange-newton/ci',
-    }
-
-}

@@ -1,6 +1,10 @@
 module tdhf_sf_lib
 
+    use, intrinsic :: ieee_arithmetic
+    use precision, only: dp
     use oqp_linalg
+
+    real(kind=dp), parameter :: SF_DAVIDSON_DENOMINATOR_FLOOR = 1.0e-8_dp
 
 contains
 
@@ -73,24 +77,31 @@ contains
     integer, intent(in) :: ndsr
 
     integer :: ii, ist, xvec_dim
-    real(kind=dp) :: sign, val1, val2
+    real(kind=dp) :: val1
 
     xvec_dim = ubound(xm, 1)
 
     do ist = 1, ndsr
       do ii = 1, xvec_dim
         val1 = eigv(ist)-xm(ii)
-        val2 = abs(val1)
-        if( val2<1.0D-12 )then
-          val1 = 1.0D-05
-        else if( val2<1.0D-05 )then
-          sign = val2/val1
-          val1 = sign*1.0D-05
+        if (.not. sf_davidson_safe_denominator(val1)) then
+          val1 = merge(SF_DAVIDSON_DENOMINATOR_FLOOR, -SF_DAVIDSON_DENOMINATOR_FLOOR, val1 >= 0.0_dp)
         end if
         q(ii,ist) = q(ii,ist)/val1
+        if (.not. ieee_is_finite(q(ii,ist))) q(ii,ist) = 0.0_dp
       end do
     end do
   end subroutine sfqvec
+
+  logical function sf_davidson_safe_denominator(denom)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: denom
+
+    sf_davidson_safe_denominator = ieee_is_finite(denom) .and. abs(denom) >= SF_DAVIDSON_DENOMINATOR_FLOOR
+  end function sf_davidson_safe_denominator
 
   subroutine sfesum(eiga,eigb,pmo,z,noca,nocb,ivec)
     use precision, only: dp

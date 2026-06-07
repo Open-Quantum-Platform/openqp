@@ -11,153 +11,188 @@ module huckel
 
 contains
 
- subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis)
+!> @brief Compute an extended Huckel initial guess in the input basis set
+!
+!> @details The guess is obtained in three steps:
+!>   1. run an extended Huckel calculation in a minimal (MINI) basis set,
+!>   2. project the occupied (and a few virtual) Huckel MOs onto the
+!>      canonical orbitals of the input basis,
+!>   3. orthonormalize the result.
+!
+!> @param[in]     ovl           overlap matrix of the input basis, packed
+!> @param[in,out] orbitals      guess orbitals on exit, (nbf x nbf)
+!> @param[in]     infos         OQP run information
+!> @param[in]     basis         input basis set
+!> @param[in]     huckel_basis  minimal basis set used for the Huckel step
+!> @param[in]     modified      use the energy-weighted Wolfsberg-Helmholz
+!>                              formula (default: .false.)
+!> @param[out]    mo_energy     optional, approximate orbital energies of the
+!>                              guess: the Huckel eigenvalues for the first
+!>                              nproj (projected) orbitals, zero for the rest
+ subroutine huckel_guess(ovl, orbitals, infos, basis, huckel_basis, modified, mo_energy)
 
    use constants, only: tol_int
    use types,     only: information
    use messages,  only: show_message, WITH_ABORT
-   use mathlib, only: matrix_invsqrt
+   use qmat_cache, only: get_qmat_cached
    use basis_tools, only: basis_set
    use int1, only: basis_overlap
    use guess, only: corresponding_orbital_projection
 
    implicit none
 
-   type(information), intent(in) :: infos
+   type(information), intent(inout) :: infos
    type(basis_set), intent(in) :: basis, huckel_basis
+   logical, intent(in), optional :: modified
+   real(kind=dp), intent(out), optional :: mo_energy(:)
 
    real(kind=dp) :: ovl(*), orbitals(*)
-   integer :: nat, i, ok, l0, l0co, nbf, nbf2, nbf_co, nact, ndoc, nproj
+   integer :: nat, i, ok, l0, l0co, nbf, nbf_co, nact, ndoc, nproj
+   logical :: use_modified
 
-   real(kind=dp), allocatable :: scr(:)
    real(kind=dp), allocatable :: q(:)
    real(kind=dp), allocatable :: vec(:,:)
    real(kind=dp), allocatable :: sco(:,:)
+   real(kind=dp), allocatable :: heig(:)
 
    nbf = basis%nbf
-   nbf2 = nbf*(nbf+1)/2
    nat = infos%mol_prop%natom
 
 !  Number of orbitals in MINI basis used in Huckel
    nbf_co = huckel_basis%nbf
 
-   allocate(scr(nbf), &
-            q(nbf*nbf), &
-            vec(nbf_co,nbf_co),     &
-            sco(nbf_co,nbf),     &
+   allocate(q(nbf*nbf), &
+            vec(nbf_co,nbf_co), &
+            sco(nbf_co,nbf), &
             stat=ok)
    if (ok/=0) call show_message('Cannot allocate memory', WITH_ABORT)
 
-!  Get overlap between the minimal basis set and the input basis
+!  Step 1: overlap between the minimal (Huckel) basis set and the
+!  input basis set, S_co(i_mini, j_input). It connects the two spaces
+!  and drives the corresponding-orbital projection below.
    call basis_overlap(sco, basis, huckel_basis, tol=log(10.0d0)*tol_int)
 
+!  Apply the basis function normalization factors of both basis sets
    do i = 1, nbf
      sco(:,i) = sco(:,i)*basis%bfnrm(i) * huckel_basis%bfnrm
    end do
 
-!  Determine which orbitals should be projected
+!  Step 2: decide how many orbitals to take over from the Huckel
+!  calculation: ndoc doubly occupied + nact singly occupied (ROHF/UHF)
+   ndoc = 0
+   nact = 0
    if (infos%control%scftype == 1) then
      ndoc = infos%mol_prop%nelec/2
-     nact = 0
    else if (infos%control%scftype >= 2) then
      ndoc = infos%mol_prop%nelec_b
      nact = infos%mol_prop%nelec_a-infos%mol_prop%nelec_b
    end if
 
-!  Extended Huckel calculation in mini basis set
-   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int)
+   use_modified = .false.
+   if (present(modified)) use_modified = modified
 
-!  Do at most 5 virtuals from the huckel
+!  Step 3: extended Huckel calculation in the minimal basis set;
+!  returns the Huckel MOs (vec) and their orbital energies (heig)
+   allocate(heig(nbf_co), source=0.0_dp)
+   call huckel_calc(huckel_basis, vec, l0co, nat, infos%atoms%zn, tol_int, use_modified, heig)
+
+!  Project all occupied orbitals plus at most 5 Huckel virtuals;
+!  higher Huckel virtuals in a minimal basis carry no useful structure
    nproj = min(l0co,ndoc+nact+5)
 
-!  Get canonical orbitals in input basis space
-   call matrix_invsqrt(ovl, q, nbf, qrnk=l0)
+!  The first nproj guess orbitals correspond to the Huckel MOs
+!  in order; export their energies as approximate MO energies
+   if (present(mo_energy)) then
+     mo_energy = 0.0_dp
+     mo_energy(1:min(nproj, size(mo_energy))) = heig(1:min(nproj, size(mo_energy)))
+   end if
+
+!  Step 4: canonical orthonormal orbitals Q = S^(-1/2) of the input
+!  basis (cached for reuse by the SCF setup); they serve both as the
+!  starting set to be rotated and as the orthogonalizer. l0 <= nbf is
+!  the number of linearly independent combinations.
+   call get_qmat_cached(infos, ovl, q, nbf, qrnk=l0)
    orbitals(1:nbf*nbf) = q(1:nbf*nbf)
 
-!  Project minimal basis set guess onto the input canonical orbitals,
+!  Step 5: rotate the canonical orbitals so that the first nproj of
+!  them have maximum overlap with the Huckel MOs (King-Stanton
+!  corresponding orbital transformation)
    call corresponding_orbital_projection(vec, sco, orbitals, ndoc, nact, nproj, nbf, nbf_co, l0)
 
-   deallocate(vec, sco)
-
+!  Step 6: re-orthonormalize: the first nproj orbitals are kept (QR),
+!  the remaining ones are rebuilt as their orthogonal complement
    call orthogonalize_orbitals(q, ovl, orbitals, nproj, l0, nbf, nbf)
 
  end subroutine huckel_guess
 
 !> @brief   Extended Huckel calculation in a Huzinaga minimal basis set
- subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int)
+!
+!> @param[in]  basis     minimal (MINI) basis set
+!> @param[out] vec       Huckel MOs in the (Cartesian) minimal basis
+!> @param[out] l0co      number of linearly independent spherical-harmonic
+!>                       basis functions
+!> @param[in]  nat       number of atoms
+!> @param[in]  zan       nuclear charges
+!> @param[in]  tol_int   integral tolerance (powers of 10)
+!> @param[in]  modified  use the energy-weighted Wolfsberg-Helmholz formula
+ subroutine huckel_calc(basis, vec, l0co, nat, zan, tol_int, modified, energies)
     use eigen, only: diag_symm_full
-    use mathlib, only: unpack_matrix
+    use mathlib, only: unpack_matrix, orthogonal_transform_sym
     use messages, only: show_message, WITH_ABORT
     use basis_tools, only: basis_set
-    use atomic_structure_m, only: atomic_structure
-    use huckel_lut, only: lneg => huckel_lneg
     use guess, only: mksphar
     use int1, only: overlap
-    use mathlib, only: orthogonal_transform_sym
-!
-    implicit none
-!
-    type(basis_set), intent(in) :: basis
-    real(kind=dp) :: vec(:,:), zan(:)
-    integer :: l0co, nat, tol_int
 
-    real(kind=dp), parameter :: BITSY=0.05D+00
-    real(kind=dp), parameter :: FUDGE = 1.75d+00/2.0d0
-!
-    real(kind=dp) :: eneg(18)
-    integer :: l1co, l2co, l3co, &
-               ncore, nval, i, iat, ish, kat, kt, &
-               ierr, n, nucz, atype, i0, irow, j0, j, ival
-    integer :: ndval(4)
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(out) :: vec(:,:)
+    integer, intent(out) :: l0co
+    integer, intent(in) :: nat, tol_int
+    real(kind=dp), intent(in) :: zan(:)
+    logical, intent(in) :: modified
+    real(kind=dp), intent(out), optional :: energies(:)
+
+!   Scale-down factor for core/core and core/valence overlaps
+    real(kind=dp), parameter :: BITSY = 0.05d+00
+!   Wolfsberg-Helmholz constant
+    real(kind=dp), parameter :: WH_K = 1.75d+00
+
+    real(kind=dp) :: delta, kij, hsum
+    integer :: l1co, l2co, i, j, ierr
     logical :: notsp
 
-
-    real(kind=dp), allocatable :: s2(:,:), h2(:,:), wrk2(:,:)
+    real(kind=dp), allocatable :: h2(:,:)
     real(kind=dp), allocatable :: eig(:), h(:), s(:)
-    real(kind=dp), allocatable :: TSH(:), Q(:,:), SCR(:,:)
+    real(kind=dp), allocatable :: tsh(:), q(:,:)
     integer, allocatable :: llim(:), iulim(:)
     logical, allocatable :: core(:)
 
     l1co = basis%nbf
     l2co = (l1co*l1co+l1co)/2
-    l3co = l1co*l1co
 
-    ncore = 0
-    nval = 0
-
-    allocate(s2(l1co,l1co), &
-             h2(l1co,l1co), &
+    allocate(h2(l1co,l1co), &
              eig(l1co), &
              h(l2co), &
              s(l2co), &
-             tsh(l3co), &
+             tsh(l1co*l1co), &
              q(l1co,l1co), &
-             scr(l1co,8), &
-             wrk2(l1co,l1co), &
              source=0.0d0)
     allocate(llim(nat), iulim(nat), source=0)
-    allocate(core(l1co))
+    allocate(core(l1co), source=.false.)
 
 !   set lower and upper basis functions on each atom,
 !   counting is done in terms of spherical harmonics.
+    call get_atom_ao_limits(basis, llim, iulim)
 
-    iat = 1
-    llim(1) = 1
-    do ish = 1, basis%nshell
-      kat = basis%origin(ish)
-      if (kat /= iat) then
-        llim(kat)  = iulim(iat)+1
-        iulim(kat) = iulim(iat)
-        iat = kat
-      end if
-      kt = basis%am(ish)
-      iulim(kat) = iulim(kat) + 2*kt+1
-    end do
-
-!   Compute the minimal basis set's overlap matrix
+!   Compute the minimal basis set's overlap matrix (packed storage)
     call overlap(s, basis, log(10.0d0)*tol_int)
 
-!   transform the overlap matrix to spherical harmonic form.
+!   Transform the overlap matrix to spherical harmonic form: the
+!   Huckel parameter tables count orbitals in spherical harmonics
+!   (5d/7f), while the basis may be Cartesian (6d/10f). tsh is the
+!   Cartesian -> spherical transformation; l0co <= l1co is the number
+!   of spherical-harmonic functions; notsp = any d/f shells present.
     call mksphar(tsh,l1co,l0co,notsp, basis)
 
     if (notsp) then
@@ -165,7 +200,9 @@ contains
       s(1:l2co) = h(1:l2co)
     end if
 
-!   obtain canonical orthonormal MOs -Q- for the minimal basis set.
+!   obtain canonical orthonormal MOs -Q- for the minimal basis set:
+!   diagonalize S and scale the eigenvectors by 1/sqrt(eigenvalue),
+!   so that Q^T S Q = 1 (used to orthonormalize the Huckel MOs below)
     call unpack_matrix(s, q)
     call diag_symm_full(1,l0co,q,l1co,eig,ierr)
 
@@ -177,7 +214,133 @@ contains
 !   a copy of the overlap -S- in spherical harmonic space.
     call unpack_matrix(s, h2)
 
-    do n = 1, nat
+!   set the diagonal to atomic core/valence orbital energies
+    call set_diagonal_energies(h2, core, llim, iulim, zan)
+
+!   Generate the off-diagonal of the extended Huckel operator using the
+!   Wolfsberg-Helmholz formula:
+!     H_ij = 1/2 * K_ij * (H_ii + H_jj) * S_ij
+!   Standard:  K_ij = K = 1.75
+!   Modified (weighted), cf. Ammeter et al., J. Am. Chem. Soc. 100, 3686
+!   (1978) and Psi4's MODHUCKEL guess:
+!     K_ij = K + d**2 + d**4*(1-K),  d = (H_ii - H_jj)/(H_ii + H_jj)
+!   The energy-dependent K_ij reduces overbinding for orbitals of very
+!   different energies and yields a sharper guess than constant-K GWH.
+!
+!   In view of the very large core orbital energies, all core/core and
+!   core/valence overlaps are first scaled down by BITSY, to reduce the
+!   amount of mixing of these types.
+!
+!   Note on the choice of BITSY: alternatives were benchmarked on a
+!   10-molecule HF/cc-pVDZ set (H2O, NH3, H2S, PH3, SO2, PCl3, SiCl4,
+!   CS2, HCl, ClF), counting SCF iterations to 1.0e-8 convergence:
+!     - flat BITSY in {0.0, 0.01, 0.05, 0.1, 0.2}: identical within
+!       +/-1 iteration everywhere except SiCl4 (29 -> 21 for 0.2);
+!     - energy-dependent damping, 2*sqrt(|Hii*Hjj|)/(|Hii|+|Hjj|):
+!       no gain on average, catastrophic for SiCl4 (73 iterations);
+!     - weaker core/core than core/valence damping: worse (SiCl4: 43).
+!   The guess is largely insensitive to BITSY, so the long-standing
+!   default of 0.05 is kept.
+    do i = 2, l0co
+      do j = 1, i-1
+        if (core(i).or.core(j)) h2(j,i) = BITSY*h2(j,i)
+        hsum = h2(i,i) + h2(j,j)
+        kij = WH_K
+        if (modified .and. abs(hsum) > tiny(1.0d0)) then
+          delta = (h2(i,i) - h2(j,j)) / hsum
+          kij = WH_K + delta*delta + delta**4*(1.0d0 - WH_K)
+        end if
+        h2(j,i) = 0.5d0*kij*h2(j,i)*hsum
+      end do
+    end do
+
+    call diag_symm_full(1,l0co,h2,l1co,eig,ierr)
+    if (ierr /= 0) call show_message('Huckel MBS diagonalization failure', WITH_ABORT)
+
+!   export the Huckel orbital energies (ascending); the caller maps
+!   them onto the corresponding projected guess orbitals
+    if (present(energies)) then
+      energies = 0.0_dp
+      energies(1:min(l0co, size(energies))) = eig(1:min(l0co, size(energies)))
+    end if
+
+!   orthonormalize the Huckel MOs in the metric of the overlap matrix
+    call orthogonalize_orbitals(q,s,h2,l0co,l0co,l1co,l1co)
+
+!   backtransform from spherical harmonics to the Cartesian minimal
+!   basis, in which the inter-basis overlap sco is expressed
+    if (notsp) then
+       call dgemm('N', 'N', l1co, l0co, l0co,&
+                   1.0d0, tsh, l1co, &
+                          h2,  l1co, &
+                   0.0d0, vec, l1co)
+    else
+       vec = h2
+    end if
+
+ end subroutine huckel_calc
+
+!> @brief First and last spherical-harmonic basis function of each atom
+!
+!> @note Assumes the shells of one atom are contiguous
+!
+!> @param[in]  basis  basis set
+!> @param[out] llim   index of the first basis function on each atom
+!> @param[out] iulim  index of the last basis function on each atom
+ subroutine get_atom_ao_limits(basis, llim, iulim)
+    use basis_tools, only: basis_set
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    integer, intent(out) :: llim(:), iulim(:)
+
+    integer :: iat, kat, ish
+
+    llim = 0
+    iulim = 0
+    iat = 1
+    llim(1) = 1
+    do ish = 1, basis%nshell
+      kat = basis%origin(ish)
+      if (kat /= iat) then
+        llim(kat)  = iulim(iat)+1
+        iulim(kat) = iulim(iat)
+        iat = kat
+      end if
+      iulim(kat) = iulim(kat) + 2*basis%am(ish)+1
+    end do
+
+ end subroutine get_atom_ao_limits
+
+!> @brief Put atomic orbital energies on the diagonal of the Huckel operator
+!
+!> @details For every (non-dummy) atom, the core and valence orbital
+!>          energies from the Huckel lookup tables are placed on the
+!>          diagonal of `h2`; basis functions describing core orbitals
+!>          are flagged in `core`.
+!
+!> @param[in,out] h2     Huckel operator, diagonal is set on exit
+!> @param[out]    core   .true. for rows corresponding to core orbitals
+!> @param[in]     llim   index of the first basis function on each atom
+!> @param[in]     iulim  index of the last basis function on each atom
+!> @param[in]     zan    nuclear charges
+ subroutine set_diagonal_energies(h2, core, llim, iulim, zan)
+    use messages, only: show_message, WITH_ABORT
+    use huckel_lut, only: lneg => huckel_lneg
+    implicit none
+
+    real(kind=dp), intent(inout) :: h2(:,:)
+    logical, intent(out) :: core(:)
+    integer, intent(in) :: llim(:), iulim(:)
+    real(kind=dp), intent(in) :: zan(:)
+
+    real(kind=dp) :: eneg(18)
+    integer :: ncore, nval, ndval(4), atype
+    integer :: n, nucz, i, j, i0, j0, irow, ival
+
+    core = .false.
+
+    do n = 1, size(llim)
       nucz = int(zan(n))
 !     skip dummy atoms
       if (nucz == 0) cycle
@@ -200,7 +363,6 @@ contains
         do i = 1, ival
           irow = i0+i
           h2(irow,irow) = eneg(lneg(ncore+j0+i,atype))
-          core(irow) = .false.
         end do
         i0 = i0+ival
         j0 = j0+ival
@@ -210,55 +372,19 @@ contains
         call show_message('Huckel: confusion with MINI basis set', WITH_ABORT)
       end if
     end do
-!
-!   In view of the very large core orbital energies,
-!   scale down all core/core and core/valence overlaps,
-!   to reduce the amount of mixing of these types.
-!   Because of the large range of parameters, one could
-!   consider making BITSY a function of the two diagonal
-!   elements of H, or different for C/C versus C/V overlaps.
-!
-    do i = 2, l0co
-      do j = 1, i-1
-        if (core(i).or.core(j)) h2(j,i) = bitsy*h2(j,i)
-      end do
-    end do
 
-!   generate the off-diagonal of the extended Huckel operator
-    do i = 2, l0co
-       do j=1,i-1
-          h2(j,i) = FUDGE*h2(j,i)*(h2(i,i)+h2(j,j))
-       end do
-    end do
-
-    call diag_symm_full(1,l0co,h2,l1co,eig,ierr)
-    if (ierr /= 0) call show_message('Huckel MBS diagonalization failure', WITH_ABORT)
-
-!   orthonormalize appropriately.
-    call orthogonalize_orbitals(q,s,h2,l0co,l0co,l1co,l1co)
-
-!   backtransform to the Cartesian MBS.
-    if (notsp) then
-       call dgemm('N', 'N', l1co, l0co, l0co,&
-                   1.0d0, tsh, l1co, &
-                          h2,  l1co, &
-                   0.0d0, vec, l1co)
-    else
-       vec = h2
-    end if
-
- end subroutine huckel_calc
+ end subroutine set_diagonal_energies
 
 !> @brief Orthogonalize orbitals
 !> @param[in]     q     matrix of 'canonical orbitals', (ndim x l0)
-!> @param[in]     s     symmetrix overlap matrix (nbf x nbf), packed
+!> @param[in]     s     symmetric overlap matrix (nbf x nbf), packed
 !> @param[in,out] v     orbitals to transform, (ndim x l0)
 !> @param[in]     n     defines, how many orbitals from V space to use
 !> @param[in]     l0    dimension of the 'canonical orbitals' space
 !> @param[in]     nbf    dimension of the AO basis, nbf >= l0 >= n
 !> @param[in]     ndim  leading dimension of q and v
 !
-!> @details Orbital will be computed in three stesp:
+!> @details Orbital will be computed in three steps:
 !>   1. compute V = Q^T * S * V
 !>   2. orthogonalize first `n` vectors from resulting 'V' space
 !>   3. back-transform V = Q*V
@@ -275,9 +401,15 @@ contains
     real(kind=dp) :: wrksize(1)
     integer :: lwork, info
 
+    allocate(u(nbf,nbf), tmp(nbf,nbf))
+
+    ! query both routines so that dormqr can also run blocked
+    ! (dormqr with side='r' requires lwork >= nbf as a minimum)
     call dgeqrf(l0, n, v, ndim, u, wrksize, -1, info)
-    lwork = max(int(wrksize(1)), l0)
-    allocate(u(nbf,nbf), tmp(nbf,nbf), wrk(lwork))
+    lwork = max(int(wrksize(1)), nbf)
+    call dormqr('r', 'n', nbf, l0, n, u, ndim, tmp, v, nbf, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
+    allocate(wrk(lwork))
 
     ! 1. Compute Q^T * S * V, store in U
     call unpack_matrix(s, u)
@@ -292,7 +424,7 @@ contains
 
     ! 2. Orthogonalize orbitals in U
     call dgeqrf(l0, n, u, ndim, tmp, wrk, lwork, info)
-    ! The matrix of orthogonal orbitals U is now stored as a product of elementary reflextors
+    ! The matrix of orthogonal orbitals U is now stored as a product of elementary reflectors
 
     ! 3. Transform V = Q*U
     v(:,:l0) = q(:,:l0)
@@ -311,6 +443,7 @@ contains
 !>    @param[out] ncore    the number of core _orbitals_
 !>    @param[out] nval     the number of valence _shells_
 !>    @param[out] ndval    tells how many functions are in each valence shell
+!>    @param[out] atype    row of the `huckel_lneg` lookup table to use
 !
 !>    @note `ncore` and `ndval` count d and f orbitals as containing 6 and 10 functions, respectively.
  subroutine huckel_get(nucz, eneg, ncore, nval, ndval, atype)
@@ -323,7 +456,6 @@ contains
     integer, intent(in) :: nucz
     real(kind=dp), intent(out) :: eneg(18)
     integer, intent(out) :: ncore, nval, ndval(4), atype
-
 
     select case (nucz)
     case (:0)
@@ -345,10 +477,7 @@ contains
     case (72:86) ; atype=3
     case (87:88) ; atype=4
     case (89:90) ; atype=5
-    case (91:103); atype=6
-    case default
-      call show_message("(A,I5)", " Error!  This atom has nuclear charge ", NUCZ)
-      call show_message(" Huckel parameters are unavailable past element Lr", WITH_ABORT)
+    case (91:)   ; atype=6
     end select
 
  end subroutine huckel_get
