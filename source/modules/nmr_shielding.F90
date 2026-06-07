@@ -117,6 +117,30 @@ contains
         &(RHF / pure-DFT) references only', with_abort)
     end if
 
+    ! Not-implemented classes must abort instead of silently producing wrong
+    ! shieldings:
+    !  - CAM/range-separated hybrids: the coupled magnetic response and the
+    !    two-electron derivative use the global exchange fraction only; the
+    !    range-separation attenuation (alpha/beta/mu) is not wired in.
+    !  - meta-GGAs: the tau channel of the XC response is not implemented.
+    !  - ECP: no effective-core magnetic-derivative term is implemented.
+    if (infos%control%hamilton == 20) then
+      if (infos%dft%cam_flag) then
+        call show_message('NMR shielding with range-separated (CAM) functionals &
+          &is not implemented', with_abort)
+      end if
+      if (infos%functional%needtau) then
+        call show_message('NMR shielding with meta-GGA (tau-dependent) functionals &
+          &is not implemented', with_abort)
+      end if
+    end if
+    if (allocated(infos%basis%ecp_zn_num)) then
+      if (any(infos%basis%ecp_zn_num /= 0)) then
+        call show_message('NMR shielding with ECP basis sets is not implemented', &
+          with_abort)
+      end if
+    end if
+
     ! Confirm the SCF density is present (used by later stages)
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
     call check_status(status, module_name, subroutine_name, OQP_DM_A)
@@ -372,6 +396,7 @@ contains
     use tdhf_lib, only: int2_td_data_t, mntoia
     use types, only: information
     use basis_tools, only: basis_set
+    use messages, only: show_message
     implicit none
     type(information), target, intent(inout) :: infos
     type(basis_set), intent(in) :: basis
@@ -389,6 +414,7 @@ contains
     real(kind=8), allocatable, target :: pa(:,:,:)
     real(kind=8), allocatable :: av(:,:), bb(:,:), dd(:), gx(:), rprev(:), gao(:,:)
     integer :: lvir, t, i, a, k, it
+    logical :: conv
 
     lvir = nocc*nvir
     allocate(pa(nbf,nbf,1), av(nbf,nbf), gao(nbf,nbf), &
@@ -424,6 +450,7 @@ contains
       kdat = int2_td_data_t(d2=pa, int_apb=.false., int_amb=.true., &
                             tamm_dancoff=.false., scale_exchange=scale_exch)
       do t = 1, 3
+        conv = .false.
         do it = 1, maxit
           rprev = rcoup(:,t)
           call magnetic_pb_density(mo, pa, av, nbf, nocc, rcoup(:,t))
@@ -431,8 +458,15 @@ contains
           gao = half*kdat%amb(:,:,1,1)
           call mntoia(gao, gx, mo, mo, nocc, nocc)
           rcoup(:,t) = (bb(:,t) - kappa*gx)/dd
-          if (maxval(abs(rcoup(:,t)-rprev)) < tol) exit
+          if (maxval(abs(rcoup(:,t)-rprev)) < tol) then
+            conv = .true.
+            exit
+          end if
         end do
+        if (.not. conv) then
+          call show_message('WARNING: NMR coupled magnetic response (CPHF) did &
+            &not converge within the iteration limit; shieldings may be inaccurate')
+        end if
       end do
     end if
 

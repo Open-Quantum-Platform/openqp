@@ -112,7 +112,7 @@ contains
     integer :: nbf, nbf2, nat, nocc, nmo, nvir, nocc_b
     integer :: i, j, m, c, t, s, ok, iat
     integer(4) :: status
-    logical :: is_dft, open_shell
+    logical :: is_dft, open_shell, iw_open
     real(kind=dp) :: tol, scale_exch
 
     real(kind=dp), allocatable :: h10p(:,:), s10p(:,:)            ! packed (nbf2,3)
@@ -143,6 +143,11 @@ contains
     nat = ubound(basis%atoms%zn,1)
     tol = log(10.0d0)*tol_int
 
+    ! Connect the log unit early so guard aborts and CPHF warnings land in the
+    ! log instead of an orphan fort.* file.
+    inquire(unit=iw, opened=iw_open)
+    if (.not. iw_open) open(unit=iw, file=infos%log_filename, position="append")
+
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
     call check_status(status, module_name, subroutine_name, OQP_DM_A)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a, status)
@@ -171,6 +176,31 @@ contains
     is_dft = infos%control%hamilton == 20
     scale_exch = 1.0d0
     if (is_dft) scale_exch = infos%dft%HFscale
+
+    ! Not-implemented classes must abort instead of silently producing wrong
+    ! shieldings:
+    !  - CAM/range-separated hybrids: the coupled magnetic response and the
+    !    GIAO two-electron derivative use the global exchange fraction only;
+    !    the range-separation attenuation (alpha/beta/mu) is not wired in.
+    !  - meta-GGAs: the tau channel of the London-XC (vxc_giao) term is not
+    !    implemented (mod_dft_gridint_giao evaluates LDA/GGA ingredients only).
+    !  - ECP: no effective-core magnetic-derivative term is implemented.
+    if (is_dft) then
+      if (infos%dft%cam_flag) then
+        call show_message('GIAO NMR shielding with range-separated (CAM) &
+          &functionals is not implemented', with_abort)
+      end if
+      if (infos%functional%needtau) then
+        call show_message('GIAO NMR shielding with meta-GGA (tau-dependent) &
+          &functionals is not implemented', with_abort)
+      end if
+    end if
+    if (allocated(infos%basis%ecp_zn_num)) then
+      if (any(infos%basis%ecp_zn_num /= 0)) then
+        call show_message('GIAO NMR shielding with ECP basis sets is not &
+          &implemented', with_abort)
+      end if
+    end if
 
     allocate(coords(3,nat), zq(nat))
     do iat = 1, nat
@@ -320,7 +350,8 @@ contains
     end do
 
     ! --- Emit parseable records ---
-    open(unit=iw, file=infos%log_filename, position="append")
+    inquire(unit=iw, opened=iw_open)
+    if (.not. iw_open) open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/,A)') 'GIAO_SHIELDING_DEBUG_BEGIN native-giao shielding (ppm)'
     write(iw,'(A,1X,I0)') 'GIAO_SHIELDING_DEBUG_NATOM', nat
     write(iw,'(A,1X,F10.6)') 'GIAO_SHIELDING_DEBUG_CX', scale_exch
@@ -460,6 +491,7 @@ contains
     use tdhf_lib, only: int2_td_data_t, mntoia
     use types, only: information
     use basis_tools, only: basis_set
+    use messages, only: show_message
     real(kind=dp), intent(in) :: mo(:,:), h1mo(:,:,:), s1mo(:,:,:), e(:)
     integer, intent(in) :: nocc, nmo
     real(kind=dp), intent(in) :: scale_exch
@@ -520,6 +552,10 @@ contains
         diff = maxval(abs(mo1x - prev))
         if (diff < tol) exit
       end do
+      if (diff >= tol) then
+        call show_message('WARNING: GIAO coupled magnetic response (CPHF) did &
+          &not converge within the iteration limit; shieldings may be inaccurate')
+      end if
       mo1(:,:,x) = mo1x
     end do
 

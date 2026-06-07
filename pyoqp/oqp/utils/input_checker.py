@@ -620,6 +620,27 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 value=f"{nmr_gauge} with scf.type={scf_type}",
                 action="Use nmr_gauge=giao for open-shell (UHF/ROHF) NMR shielding.",
             )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        # Pre-flight mirror of the Fortran guards (the runtime also aborts):
+        # the NMR response implements global hybrids only. Name-based, so it
+        # cannot be exhaustive; unknown functionals are caught at runtime.
+        if functional.startswith(("cam-", "dtcam-", "lc-", "lrc-", "wb97", "hse")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with range-separated (CAM/LC) functionals is not implemented.",
+                value=functional,
+                action="Use HF, a pure functional, or a global hybrid (e.g. pbe0, b3lyp, bhhlyp).",
+            )
+        elif functional.startswith(("m06", "m08", "m11", "mn12", "mn15", "tpss",
+                                    "scan", "rscan", "r2scan", "b97m", "revm06")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with meta-GGA (tau-dependent) functionals is not implemented.",
+                value=functional,
+                action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
+            )
     if td_prop:
         report.add(
             "WARNING",
