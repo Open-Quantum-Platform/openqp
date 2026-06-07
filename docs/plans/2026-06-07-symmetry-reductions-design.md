@@ -97,7 +97,24 @@ Validation gates (each vs the C1 reference, same build):
 - A deliberately desymmetrized geometry (1e-3 distortion) must fall back
   to C1 automatically via detection tolerance.
 
-## 4. Phase II: one-electron integrals and gradients
+## 4. Phase II: one-electron integrals and gradients [GRADIENTS VALIDATED 2026-06-07]
+
+Implemented: petite filter + q4 weight in grd2_driver_gen (skeleton 2e
+gradient), final-gradient projection onto the totally symmetric component
+in pyoqp (exact for 1-dim irreps; all abelian irreps are 1-dim, so TD
+state gradients qualify). Validated at machine precision (<= 6.1e-14
+Ha/bohr vs C1): water/ethylene RHF, water BHHLYP, water MRSF S1.
+
+Two robustness fixes from validation: (1) reorientation now ITERATES
+detection until the current geometry's detection returns the identity
+frame -- a single rotate-then-redetect can land in a different but
+equivalent degenerate frame (e.g. the three C2 axes of d2h ethylene),
+leaving maps and geometry inconsistent (this produced a variationally
+impossible SCF that the stability stage then masked); (2) staging now
+verifies T S T^T = S against the real overlap for every operation and
+falls back to C1 on any deviation (defense-in-depth). One-electron
+gradient parts are not reduced (cheap); they are covered by the final
+projection.
 
 - One-electron matrices: cheap already; symmetrize for consistency
   (Hcore from unique atom pairs is optional, low value).

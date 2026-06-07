@@ -33,6 +33,8 @@ module int2_compute
   public int2_rhf_data_t
   public int2_urohf_data_t
   public ints_exchange
+  public petite_quartet_weight
+  public load_petite_shell_map
 
 !###############################################################################
 
@@ -300,6 +302,50 @@ contains
     this%petite = this%sym_nops > 1
 
   end subroutine int2_compute_t_enable_petite
+
+!###############################################################################
+
+!> @brief Load the petite-list shell map written by pyoqp, if enabled.
+!> @detail nops = 0 when the reduction is disabled or the map is stale.
+  subroutine load_petite_shell_map(infos, nshell, map, nops)
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nshell
+    integer(8), contiguous, pointer, intent(out) :: map(:)
+    integer, intent(out) :: nops
+
+    integer(8), contiguous, pointer :: petite_flag(:)
+    integer(4) :: status
+
+    map => null()
+    nops = 0
+
+    call tagarray_get_data(infos%dat, OQP_sym_petite, petite_flag, status=status)
+    if (status /= TA_OK) return
+    if (petite_flag(1) == 0) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, map, status=status)
+    if (status /= TA_OK) then
+      map => null()
+      return
+    end if
+    if (mod(size(map), nshell) /= 0) then
+      map => null()
+      return
+    end if
+
+    nops = int(size(map)/nshell)
+    if (nops < 2) then
+      map => null()
+      nops = 0
+    end if
+
+  end subroutine load_petite_shell_map
 
 !###############################################################################
 

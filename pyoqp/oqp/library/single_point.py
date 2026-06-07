@@ -697,6 +697,11 @@ class Gradient(Calculator):
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
 
+        # Petite-list runs produce a skeleton two-electron gradient; project
+        # onto the totally symmetric component (exact for 1-dim irreps; all
+        # abelian irreps are 1-dim). No-op unless the reduction is active.
+        grads = self.mol.symmetrize_gradient(grads)
+
         self.mol.grads = grads
 
         return grads

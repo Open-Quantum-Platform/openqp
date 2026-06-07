@@ -238,6 +238,20 @@ class Molecule:
         smat[cols, rows] = packed
         return shells, smat, nbf, None
 
+    def _overlap_square(self, nbf):
+        """Square symmetric overlap from OQP::SM, or None if unavailable."""
+        try:
+            packed = np.asarray(self.data['OQP::SM'], dtype=float).ravel()
+            if packed.size != nbf * (nbf + 1) // 2:
+                return None
+            smat = np.zeros((nbf, nbf))
+            rows, cols = np.tril_indices(nbf)
+            smat[rows, cols] = packed
+            smat[cols, rows] = packed
+            return smat
+        except Exception:
+            return None
+
     def _mo_coefficients(self, tag, nbf):
         """AO x MO coefficient matrix from a Fortran column-stored tag."""
         # Fortran stores MOs column-wise; the C-order view has MOs as rows,
@@ -354,21 +368,44 @@ class Molecule:
         if not detection:
             return False
 
+        # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
+        # NEB, ...) must not have the frame rotated under them; the petite
+        # reduction is restricted to single-point runtypes for now.
+        runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
+        if runtype not in ('energy', 'grad', 'prop', 'properties'):
+            meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
+            return False
+
         try:
             from oqp.library.symmetry_detect import attach_detection_metadata
 
-            # Reorient: design decision recorded in
-            # docs/plans/2026-06-07-symmetry-reductions-design.md.
-            origin = np.asarray(detection['origin'], dtype=float)
-            rotation = np.asarray(detection['orientation'], dtype=float)
-            coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
-            standard = (coords - origin) @ rotation.T
-            self.update_system(standard.ravel())
-
-            # Re-detect in the standard frame so the stored operations are
-            # exactly sign-diagonal for the staged maps.
+            # Reorient (design decision recorded in
+            # docs/plans/2026-06-07-symmetry-reductions-design.md).
+            #
+            # Detection of a rotated geometry may legitimately pick a
+            # different but equivalent standard frame (degenerate axis
+            # choices, e.g. the three C2 axes of d2h), so a single
+            # rotate-then-redetect is NOT guaranteed to converge. Iterate
+            # until detection of the current geometry returns the identity
+            # frame -- only then are the stored operations valid as-is.
             atoms = np.asarray(self.get_atoms(), dtype=float).ravel()
-            attach_detection_metadata(meta, atoms, standard)
+            coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+            converged = False
+            for _ in range(4):
+                attach_detection_metadata(meta, atoms, coords)
+                detection = meta['detection']
+                origin = np.asarray(detection['origin'], dtype=float)
+                rotation = np.asarray(detection['orientation'], dtype=float)
+                if (np.max(np.abs(rotation - np.eye(3))) < 1.0e-12
+                        and np.max(np.abs(origin)) < 1.0e-10):
+                    converged = True
+                    break
+                coords = (coords - origin) @ rotation.T
+                self.update_system(coords.ravel())
+            if not converged:
+                meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
+                return False
+
             meta['integral_symmetry'] = {'status': 'reoriented'}
             return True
         except Exception as exc:
@@ -402,6 +439,26 @@ class Molecule:
             if maps['n_ao'] != int(basis['nbf']):
                 meta['integral_symmetry'] = {'status': 'skipped_basis_mismatch'}
                 return False
+
+            # Defense-in-depth: the maps must leave the real overlap matrix
+            # invariant (T S T^T = S); any frame/staging inconsistency shows
+            # up here and falls back to C1.
+            smat = self._overlap_square(int(basis['nbf']))
+            if smat is not None:
+                identity = np.arange(maps['n_ao'])
+                for iop in range(maps['n_operations']):
+                    transform = np.zeros((maps['n_ao'], maps['n_ao']))
+                    transform[np.array(maps['ao_target'][iop]), identity] = \
+                        np.array(maps['ao_sign'][iop], dtype=float)
+                    deviation = float(np.max(np.abs(
+                        transform @ smat @ transform.T - smat)))
+                    if deviation > 1.0e-6:
+                        meta['integral_symmetry'] = {
+                            'status': 'skipped_overlap_invariance',
+                            'operation': maps['operation_names'][iop],
+                            'deviation': deviation,
+                        }
+                        return False
 
             # 1-based flat maps for the Fortran consumers (op-major,
             # shell/AO index fastest -- see load_petite_list /
@@ -559,6 +616,38 @@ class Molecule:
                 fout.write('\n'.join(lines))
         except Exception:
             pass
+
+    def symmetrize_gradient(self, grads):
+        """Project gradients onto the totally symmetric component.
+
+        Valid in the standard orientation when the petite reduction is
+        active: g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}. Exact for the
+        skeleton two-electron gradient and a noise-cleaner for the rest.
+        """
+        meta = self.symmetry_metadata
+        if not meta or meta.get('integral_symmetry', {}).get('status') != 'active':
+            return grads
+        detection = meta.get('detection')
+        if not detection:
+            return grads
+
+        try:
+            operations = detection['operations']
+            arr = np.asarray(grads, dtype=float)
+            shape = arr.shape
+            natom = len(operations[0]['permutation'])
+            flat = arr.reshape(-1, natom, 3)
+            result = np.zeros_like(flat)
+            for op in operations:
+                matrix = np.asarray(op['matrix'], dtype=float)
+                permutation = list(op['permutation'])
+                # g_{perm(a)} = M g_a  =>  contribution (M^T g)[perm[a]]
+                result += np.einsum('kj,sak->saj', matrix, flat[:, permutation, :])
+            result /= len(operations)
+            meta.setdefault('integral_symmetry', {})['gradient_symmetrized'] = True
+            return result.reshape(shape)
+        except Exception:
+            return grads
 
     def label_normal_modes(self):
         """Assign abelian irrep labels to normal modes (metadata only, non-fatal).

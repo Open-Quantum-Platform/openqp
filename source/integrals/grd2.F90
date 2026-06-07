@@ -144,6 +144,7 @@ contains
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
+    use int2_compute, only: petite_quartet_weight, load_petite_shell_map
     use oqp_tagarray_driver
     use parallel, only: par_env_t
 
@@ -167,6 +168,8 @@ contains
     integer :: numint, i, ij, skip1, skip2, mpi_ij
     integer :: iok, j, k, l, kl
     integer :: maxnbf, maxl
+    integer :: q4, sym_nops
+    integer(8), contiguous, pointer :: sym_map(:)
 
     real(kind=dp) :: rtol, dtol
 
@@ -219,6 +222,10 @@ contains
     skip2 = 0
     numint = 0
 
+!   Optional symmetry petite list (valid: the gradient is linear in the
+!   quartets and the SCF density is totally symmetric).
+    call load_petite_shell_map(infos, basis%nshell, sym_map, sym_nops)
+
 !   Check maximum angular momentum
     if (basis%mxam>BAS_MXANG) then
       call show_message('gradient integrals programmed up to '&
@@ -233,7 +240,7 @@ contains
 
 !$omp parallel &
 !$omp   private ( &
-!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij) &
+!$omp   gdat, dab, i, j, k, l, ij, maxl, kl, gmax, dabmax, iok, mpi_ij, q4) &
 !$omp   reduction(+:skip1, skip2, numint, de)
 
      allocate(dab(maxnbf**4))
@@ -286,6 +293,15 @@ contains
                cycle
             end if
 
+!           Petite list: keep only the orbit representative; the skeleton
+!           gradient is symmetrized (projected) afterwards in pyoqp.
+            if (sym_nops > 1) then
+              q4 = petite_quartet_weight(sym_map, sym_nops, basis%nshell, i, j, k, l)
+              if (q4 == 0) cycle
+            else
+              q4 = 1
+            end if
+
 !           Evaluate derivative integral, and add to the gradient
             numint = numint+1
 
@@ -295,7 +311,7 @@ contains
               call grd2_rys_compute(gdat, ppairs, dab, dabmax)
             end if
 
-            de(:,gdat%at) = de(:,gdat%at) + gdat%fd
+            de(:,gdat%at) = de(:,gdat%at) + real(q4, dp)*gdat%fd
 
           end do
         end do
