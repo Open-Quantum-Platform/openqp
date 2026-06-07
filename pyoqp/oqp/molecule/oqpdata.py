@@ -310,6 +310,7 @@ OQP_CONFIG_SCHEMA = {
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
         'seed': {'type': int, 'default': '1'},
         'restart': {'type': bool, 'default': 'False'},
+        'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},

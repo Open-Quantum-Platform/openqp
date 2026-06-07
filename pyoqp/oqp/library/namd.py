@@ -563,3 +563,129 @@ class NAMD_QMMM(NAMD):
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
                    f'hop={hopped}  pop={np.array2string(pops, precision=4)}'),
         )
+
+
+HA_TO_WAVENUM = 219474.6313708
+
+
+class NAMD_SOC(NAMD):
+    """SOC-NAMD (intersystem crossing) on the SHARC spin-adiabatic representation.
+
+    soc_mrsf builds and diagonalises H = diag(E_MCH) + H_SOC, giving the
+    spin-adiabatic energies (OQP::soc_eval, cm^-1 relative to the lowest
+    excitation) and eigenvectors U (OQP::soc_evec_*).  Surface hopping is done
+    on these spin-adiabatic states.
+
+    This first version implements SOC-BOMD: propagation of the nuclei on the
+    active spin-adiabatic surface using the dominant-MCH-component gradient (the
+    pure singlet/triplet MRSF gradient of the largest |U|^2 component -- the
+    standard weak/moderate-SOC approximation).  The spin-adiabatic FSSH hopping
+    layer (electronic propagation with U-phase tracking + the block-diagonal MCH
+    state overlap) builds on the generalised mrsf_namd_hop kernel and is added
+    next.
+    """
+
+    def __init__(self, mol):
+        # set up nuclear/velocity state via the base class, then override the
+        # electronic state space to the spin-adiabatic dimension.
+        super().__init__(mol)
+        self.nstate_mrsf = int(mol.config['tdhf']['nstate'])      # per multiplicity (ns = nt)
+        self.ns = self.nstate_mrsf
+        self.nt = self.nstate_mrsf
+        self.nstate_soc = self.ns + 3 * self.nt
+        # active spin-adiabatic state (1-based); [md] active is reused
+        self.active = int(mol.config['md']['active'])
+        # electronic amplitudes over the spin-adiabatic states
+        self.coef = np.zeros(self.nstate_soc, dtype=complex)
+        self.coef[self.active - 1] = 1.0 + 0.0j
+        self.e_ref = 0.0
+        self.e0 = 0.0
+
+    # ------------------------------------------------------------------ #
+    def _electronic_soc(self):
+        """SCF + singlet MRSF + triplet MRSF + soc_mrsf; returns (eval_ha, U)."""
+        mol = self.mol
+        sp = SinglePoint(mol)
+        ref = sp.reference()
+        self.e_ref = float(ref[0])
+
+        mol.data.set_tdhf_multiplicity(1)
+        sing = sp.excitation(ref)
+        mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
+
+        mol.data.set_tdhf_multiplicity(3)
+        trip = sp.excitation(ref)
+        mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
+
+        oqp.soc_mrsf(mol)
+
+        eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)           # cm^-1 rel e0
+        u = (np.array(mol.data['OQP::soc_evec_re'])
+             + 1j * np.array(mol.data['OQP::soc_evec_im'])).reshape(self.nstate_soc, self.nstate_soc)
+        # lowest MCH excitation (Hartree) that soc_eval is referenced to
+        self.e0 = float(min(np.array(sing[1:]).min() - self.e_ref,
+                            np.array(trip[1:]).min() - self.e_ref)) if len(sing) > 1 else 0.0
+        eval_ha = eval_wn / HA_TO_WAVENUM                                   # Hartree rel e0
+        return eval_ha, u
+
+    def _dominant_component(self, u, active):
+        """Largest |U|^2 MCH component of the active spin-adiabatic state.
+        Returns (multiplicity, state_index_1based, weight)."""
+        col = np.abs(u[:, active - 1]) ** 2
+        k = int(np.argmax(col))
+        if k < self.ns:
+            return 1, k + 1, col[k]                       # singlet S(k)
+        kk = k - self.ns
+        return 3, kk // 3 + 1, col[k]                     # triplet T(kk//3), Ms = kk%3
+
+    def _soc_gradient(self, u, active):
+        """Dominant-MCH-component gradient (Hartree/bohr) + that pure state's
+        absolute energy (Hartree)."""
+        mol = self.mol
+        mult, state, w = self._dominant_component(u, active)
+        mol.data.set_tdhf_multiplicity(mult)
+        e = SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
+        mol.config['properties']['grad'] = [state]
+        Gradient(mol).gradient()
+        g = np.array(mol.grads[state]).reshape((self.natom, 3))
+        e_pure = float(e[state])                           # absolute (Hartree)
+        return g, e_pure, mult, state, w
+
+    # ------------------------------------------------------------------ #
+    def run(self):
+        mol = self.mol
+        dump_log(mol, title='PyOQP: SOC-NAMD (spin-adiabatic, dominant-component gradient)')
+
+        r = mol.get_system().reshape((self.natom, 3))
+
+        eval_ha, u = self._electronic_soc()
+        grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+        accel = -grad / self.mass[:, None]
+        self._log_soc(0, eval_ha, e_pure, mult, state, w)
+
+        for istep in range(1, self.nstep + 1):
+            r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
+            mol.update_system(r.reshape(-1))
+
+            eval_ha, u = self._electronic_soc()
+            grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+            accel_new = -grad / self.mass[:, None]
+            self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
+
+            accel = accel_new
+            self._log_soc(istep, eval_ha, e_pure, mult, state, w)
+
+        dump_log(mol, title='PyOQP: SOC-NAMD trajectory complete')
+
+    def _log_soc(self, istep, eval_ha, e_pure, mult, state, w):
+        ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+        e_adiab_abs = self.e_ref + self.e0 + float(eval_ha[self.active - 1])
+        dump_log(
+            self.mol,
+            title=(f'SOC-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+                   f'active={self.active}  E_tot={ekin+e_pure:.8f}  '
+                   f'E_pure={e_pure:.8f}  E_adiab={e_adiab_abs:.8f}  E_kin={ekin:.8f}  '
+                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})'),
+        )

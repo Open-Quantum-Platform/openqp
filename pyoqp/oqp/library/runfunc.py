@@ -31,6 +31,9 @@ def compute_namd(mol):
     if mol.config['input'].get('qmmm_flag'):
         from oqp.library.namd import NAMD_QMMM
         NAMD_QMMM(mol).run()
+    elif mol.config['md'].get('soc'):
+        from oqp.library.namd import NAMD_SOC
+        NAMD_SOC(mol).run()
     else:
         NAMD(mol).run()
 
