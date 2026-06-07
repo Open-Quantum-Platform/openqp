@@ -1167,29 +1167,42 @@ subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
     real(kind=dp) :: p(3), q(3)
     logical :: last
     integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
-    integer :: mk, ml, ao_k, ao_l, nbf_k, nbf_l
+    integer :: mk, ml, ao_k, ao_l
     real(kind=dp) :: dabmax
-    real(kind=dp), allocatable :: den_kl(:)
 
     call soc2e_set_shells(gdat)
 
-    nbf_k = gdat%nbf(3)
-    nbf_l = gdat%nbf(4)
-    ao_k  = gdat%ao_offset(3) - 1
-    ao_l  = gdat%ao_offset(4) - 1
-
-    allocate(den_kl(nbf_k * nbf_l))
-    do mk = 1, nbf_k
-      do ml = 1, nbf_l
-        den_kl((mk-1)*nbf_l+ml) = den(ao_l+ml, ao_k+mk)
+    ! Density screening bound.  It must cover ALL density blocks contracted
+    ! in compute_soc2e_ao: the Coulomb term uses D(K,L), while the exchange
+    ! terms use the cross blocks D(I,L), D(J,L), D(I,K), D(J,K).  Screening
+    ! on the ket block alone silently drops the exchange contributions
+    ! whenever D(K,L) ~ 0 although the cross blocks are finite (e.g. the
+    ! s-p blocks of a spherical atom are exactly zero), which under-screens
+    ! the SOC (C atom 3P spacing 22.3 instead of 16.4 cm-1).
+    dabmax = 0.0_dp
+    do mk = 1, gdat%nbf(3)
+      ao_k = gdat%ao_offset(3) - 1 + mk
+      do ml = 1, gdat%nbf(4)
+        dabmax = max(dabmax, abs(den(gdat%ao_offset(4)-1+ml, ao_k)))
+      end do
+      do ml = 1, gdat%nbf(1)
+        dabmax = max(dabmax, abs(den(gdat%ao_offset(1)-1+ml, ao_k)))
+      end do
+      do ml = 1, gdat%nbf(2)
+        dabmax = max(dabmax, abs(den(gdat%ao_offset(2)-1+ml, ao_k)))
       end do
     end do
-    dabmax = maxval(abs(den_kl))
+    do mk = 1, gdat%nbf(4)
+      ao_l = gdat%ao_offset(4) - 1 + mk
+      do ml = 1, gdat%nbf(1)
+        dabmax = max(dabmax, abs(den(gdat%ao_offset(1)-1+ml, ao_l)))
+      end do
+      do ml = 1, gdat%nbf(2)
+        dabmax = max(dabmax, abs(den(gdat%ao_offset(2)-1+ml, ao_l)))
+      end do
+    end do
 
-    if (dabmax * gmax < 5.0d-11) then
-      deallocate(den_kl)
-      return
-    end if
+    if (dabmax * gmax < 5.0d-11) return
 
     id1 = maxval(gdat%id(1:2))
     id2 = minval(gdat%id(1:2))
@@ -1269,8 +1282,6 @@ subroutine soc2e_rys_compute(gdat, ppairs, gmax, den, wao)
 
       end do
     end do
-
-    deallocate(den_kl)
 
 end subroutine soc2e_rys_compute
 
