@@ -1,4 +1,4 @@
-"""Builtin intrinsic reaction coordinate (IRC) for OpenQP.
+"""OQP intrinsic reaction coordinate (IRC) for OpenQP.
 
 Backend-agnostic (NumPy only) Gonzalez--Schlegel mass-weighted steepest-descent
 reaction path (Gonzalez & Schlegel, J. Phys. Chem. 94, 5523 (1990)).

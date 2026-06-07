@@ -14,15 +14,15 @@ type=rhf
 multiplicity=1
 
 [optimize]
-lib=builtin
+lib=oqp
 istate=0
 maxit=10
 
 [neb]
-product=HCN_RHF-DFT_NEB_BUILTIN_product.xyz
+product=HCN_RHF-DFT_NEB_OQP_product.xyz
 nimage=7
 
-[builtin]
+[oqp]
 spring=0.1
 climb=true
 fmax=5e-3

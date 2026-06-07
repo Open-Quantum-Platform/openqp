@@ -1,4 +1,4 @@
-"""Coordinate systems for the builtin OpenQP geometry optimizer.
+"""Coordinate systems for the oqp OpenQP geometry optimizer.
 
 This module is intentionally backend-agnostic: it depends only on NumPy and can
 be unit-tested without the compiled OQP electronic-structure core.  It provides
@@ -13,7 +13,7 @@ be unit-tested without the compiled OQP electronic-structure core.  It provides
   back-transformation diverges.
 
 Both classes share the same small interface consumed by
-``builtin_engine.BuiltinEngine``::
+``oqp_engine.OQPEngine``::
 
     coords.q(x)                 -> internal/Cartesian coordinate vector
     coords.b_matrix(x)          -> dq/dx        (n_q, 3N)

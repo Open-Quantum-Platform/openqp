@@ -165,7 +165,7 @@ OQP_CONFIG_SCHEMA = {
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'builtin'},
+        'lib': {'type': str, 'default': 'oqp'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},
@@ -201,7 +201,7 @@ OQP_CONFIG_SCHEMA = {
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
     },
-    'builtin': {
+    'oqp': {
         'coordsys': {'type': str, 'default': 'tric'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},

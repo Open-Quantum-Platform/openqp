@@ -1,6 +1,6 @@
-"""Tests for the builtin geometry optimizer (coordinates, engine, wiring).
+"""Tests for the oqp geometry optimizer (coordinates, engine, wiring).
 
-The numerical core (builtin_coords, builtin_engine) is pure NumPy/SciPy and is
+The numerical core (oqp_coords, oqp_engine) is pure NumPy/SciPy and is
 tested directly.  The dispatcher/validator wiring is checked with lightweight
 stubs so the compiled OQP backend is not required, mirroring
 ``test_geometric_optimizer.py``.
@@ -26,20 +26,20 @@ def _load(name, path):
     return module
 
 
-def _load_builtin_modules():
-    """Load builtin_coords and builtin_engine without the oqp backend."""
+def _load_oqp_modules():
+    """Load oqp_coords and oqp_engine without the oqp backend."""
     for pkg in ("oqp", "oqp.library"):
         m = sys.modules.get(pkg) or types.ModuleType(pkg)
         m.__path__ = []
         sys.modules[pkg] = m
-    nc = _load("oqp.library.builtin_coords", LIB / "builtin_coords.py")
-    ne = _load("oqp.library.builtin_engine", LIB / "builtin_engine.py")
-    nb = _load("oqp.library.builtin_neb", LIB / "builtin_neb.py")
-    ni = _load("oqp.library.builtin_irc", LIB / "builtin_irc.py")
+    nc = _load("oqp.library.oqp_coords", LIB / "oqp_coords.py")
+    ne = _load("oqp.library.oqp_engine", LIB / "oqp_engine.py")
+    nb = _load("oqp.library.oqp_neb", LIB / "oqp_neb.py")
+    ni = _load("oqp.library.oqp_irc", LIB / "oqp_irc.py")
     return nc, ne, nb, ni
 
 
-NC, NE, NB, NI = _load_builtin_modules()
+NC, NE, NB, NI = _load_oqp_modules()
 NEB = NB.NEB
 IRC = NI.IRC
 
@@ -178,7 +178,7 @@ class TestTRICandDLC(unittest.TestCase):
         x0 = np.array([[0, 0, 0], [2.3, 0, 0], [1.0, 1.6, 0.0]], float) \
             + rng.normal(scale=0.1, size=(3, 3))
         for cs in ("ric", "dlc", "tric"):
-            eng = NE.BuiltinEngine([6, 6, 6], x0.copy(), mode="min",
+            eng = NE.OQPEngine([6, 6, 6], x0.copy(), mode="min",
                                    maxiter=100, coordsys=cs)
 
             def stop():
@@ -209,10 +209,10 @@ def _morse(pairs, r_e=2.0, De=0.15, a=1.0):
     return eg
 
 
-class TestBuiltinEngineConverges(unittest.TestCase):
+class TestOQPEngineConverges(unittest.TestCase):
     def _optimize(self, atoms, x0, pairs, gtol=1e-4, maxiter=100):
         eg = _morse(pairs)
-        eng = NE.BuiltinEngine(atoms, x0, mode="min", maxiter=maxiter)
+        eng = NE.OQPEngine(atoms, x0, mode="min", maxiter=maxiter)
 
         def stop():
             _, g = eg(eng.x)
@@ -259,7 +259,7 @@ class TestBuiltinEngineConverges(unittest.TestCase):
 
 # --------------------------------------------------------------------------- #
 class TestDispatchAndValidation(unittest.TestCase):
-    def test_input_checker_accepts_builtin(self):
+    def test_input_checker_accepts_oqp(self):
         # input_checker only needs a tiny mpi_utils stub.
         utils = sys.modules.setdefault("oqp.utils",
                                        types.ModuleType("oqp.utils"))
@@ -269,31 +269,31 @@ class TestDispatchAndValidation(unittest.TestCase):
         sys.modules["oqp.utils.mpi_utils"] = mpi
         ic = _load("oqp.utils.input_checker",
                    ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py")
-        self.assertIn("builtin", ic.OPT_LIBS)
+        self.assertIn("oqp", ic.OPT_LIBS)
 
         report = ic.CheckReport()
         cfg = {"input": {"runtype": "optimize", "method": "hf"},
-               "optimize": {"lib": "builtin", "istate": 0}}
+               "optimize": {"lib": "oqp", "istate": 0}}
         ic._check_optimize(cfg, report)
         self.assertEqual(report.errors, [],
-                         "builtin/optimize should validate clean")
+                         "oqp/optimize should validate clean")
 
-        # mep/meci are supported on builtin; a non-optimization runtype is not.
+        # mep/meci are supported on oqp; a non-optimization runtype is not.
         report2 = ic.CheckReport()
         cfg2 = {"input": {"runtype": "energy", "method": "hf"},
-                "optimize": {"lib": "builtin", "istate": 0}}
+                "optimize": {"lib": "oqp", "istate": 0}}
         ic._check_optimize(cfg2, report2)
         msgs = " ".join(d.message for d in report2.diagnostics)
-        self.assertIn("builtin optimizer currently supports", msgs)
+        self.assertIn("oqp optimizer currently supports", msgs)
 
         for rt, extra in (("mep", {}), ("meci", {"jstate": 2})):
             rep = ic.CheckReport()
             cfg3 = {"input": {"runtype": rt,
                               "method": "tdhf" if rt == "meci" else "hf"},
-                    "optimize": {"lib": "builtin", "istate": 1, **extra}}
+                    "optimize": {"lib": "oqp", "istate": 1, **extra}}
             ic._check_optimize(cfg3, rep)
             lib_errs = [d for d in rep.errors if d.path == "optimize.lib"]
-            self.assertEqual(lib_errs, [], f"builtin/{rt} should be allowed")
+            self.assertEqual(lib_errs, [], f"oqp/{rt} should be allowed")
 
     def test_tci_validation(self):
         utils = sys.modules.setdefault("oqp.utils",
@@ -306,10 +306,10 @@ class TestDispatchAndValidation(unittest.TestCase):
                    ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py")
         self.assertIn("tci", ic.SUPPORTED_RUNTYPES)
 
-        # valid: builtin, tdhf, strictly increasing states
+        # valid: oqp, tdhf, strictly increasing states
         ok = ic.CheckReport()
         ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
-                            "optimize": {"lib": "builtin", "istate": 1,
+                            "optimize": {"lib": "oqp", "istate": 1,
                                          "jstate": 2, "kstate": 3}}, ok)
         self.assertEqual([d for d in ok.errors if d.path in
                           ("optimize.lib", "optimize.kstate")], [])
@@ -317,20 +317,20 @@ class TestDispatchAndValidation(unittest.TestCase):
         # invalid ordering
         bad = ic.CheckReport()
         ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
-                            "optimize": {"lib": "builtin", "istate": 1,
+                            "optimize": {"lib": "oqp", "istate": 1,
                                          "jstate": 2, "kstate": 2}}, bad)
         self.assertTrue(any(d.path == "optimize.kstate" for d in bad.errors))
 
-        # tci only on builtin
+        # tci only on oqp
         geo = ic.CheckReport()
         ic._check_optimize({"input": {"runtype": "tci", "method": "tdhf"},
                             "optimize": {"lib": "geometric", "istate": 1,
                                          "jstate": 2, "kstate": 3}}, geo)
-        self.assertTrue(any("only through the builtin" in d.message
+        self.assertTrue(any("only through the oqp" in d.message
                             for d in geo.errors))
 
 
-class TestBuiltinNEB(unittest.TestCase):
+class TestOQPNEB(unittest.TestCase):
     """Analytic CI-NEB on a 1-atom double well: V=(x^2-a^2)^2 + y^2 + z^2.
 
     Minima at (+/-a,0,0); saddle at (0,0,0) with E=a^4.  The climbing image
@@ -375,7 +375,7 @@ class TestBuiltinNEB(unittest.TestCase):
         self.assertLessEqual(moved, 0.2 + 1e-9)
 
 
-class TestBuiltinIRC(unittest.TestCase):
+class TestOQPIRC(unittest.TestCase):
     """Gonzalez-Schlegel IRC on V=(x^2-1)^2 + y^2 + z^2 (1 atom).
 
     Saddle at the origin (imaginary mode along x); IRC forward/backward must
@@ -405,7 +405,7 @@ class TestBuiltinIRC(unittest.TestCase):
                                 for i in range(len(es) - 2)))
 
 
-class TestBuiltinMEP(unittest.TestCase):
+class TestOQPMEP(unittest.TestCase):
     """MEP = steepest descent from a non-stationary point to a minimum.
 
     Same V=(x^2-1)^2+y^2+z^2; starting on the slope, the path must descend
@@ -433,12 +433,12 @@ class TestBuiltinMEP(unittest.TestCase):
                             for i in range(len(es) - 2)))
 
 
-class TestBuiltinExample(unittest.TestCase):
+class TestOQPExample(unittest.TestCase):
     def test_example_exists_and_capped(self):
-        path = EXAMPLES_OPT / "H2O_RHF-DFT_OPTIMIZE_BUILTIN.inp"
-        self.assertTrue(path.exists(), "builtin example input missing")
+        path = EXAMPLES_OPT / "H2O_RHF-DFT_OPTIMIZE_OQP.inp"
+        self.assertTrue(path.exists(), "oqp example input missing")
         text = path.read_text()
-        self.assertIn("lib=builtin", text)
+        self.assertIn("lib=oqp", text)
         # honor the repo example maxit cap
         for line in text.splitlines():
             if line.strip().startswith("maxit"):

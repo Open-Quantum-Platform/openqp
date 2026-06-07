@@ -14,10 +14,10 @@ type=rhf
 multiplicity=1
 
 [optimize]
-lib=builtin
+lib=oqp
 istate=0
 maxit=10
 
-[builtin]
+[oqp]
 coordsys=tric
 trust=0.2

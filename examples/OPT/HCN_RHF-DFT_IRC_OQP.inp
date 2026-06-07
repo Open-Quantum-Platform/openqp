@@ -18,10 +18,10 @@ type=analytical
 state=0
 
 [optimize]
-lib=builtin
+lib=oqp
 istate=0
 maxit=10
 
-[builtin]
+[oqp]
 irc_step=0.15
 irc_direction=forward

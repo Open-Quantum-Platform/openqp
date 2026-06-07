@@ -1,4 +1,4 @@
-"""Builtin nudged elastic band (NEB) for OpenQP.
+"""OQP nudged elastic band (NEB) for OpenQP.
 
 Backend-agnostic (NumPy only) chain-of-states reaction-path optimizer.  The band
 of images is optimized in Cartesian coordinates with:

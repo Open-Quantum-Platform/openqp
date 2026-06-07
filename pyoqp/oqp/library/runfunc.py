@@ -16,9 +16,9 @@ from oqp.library.libgeometric import (
     GeometricOpt,
     GeometricTSOpt,
 )
-from oqp.library.libbuiltin import (
-    BuiltinOpt, BuiltinTSOpt, BuiltinMECIOpt, BuiltinMECPOpt, BuiltinTCIOpt,
-    BuiltinNEBOpt, BuiltinIRCOpt, BuiltinMEPOpt,
+from oqp.library.liboqp import (
+    OQPOpt, OQPTSOpt, OQPMECIOpt, OQPMECPOpt, OQPTCIOpt,
+    OQPNEBOpt, OQPIRCOpt, OQPMEPOpt,
 )
 
 
@@ -203,15 +203,15 @@ def get_optimizer(mol):
             'irc': GeometricIRCOpt,
             'neb': GeometricNEBOpt,
         },
-        'builtin': {
-            'optimize': BuiltinOpt,
-            'meci': BuiltinMECIOpt,
-            'mecp': BuiltinMECPOpt,
-            'mep': BuiltinMEPOpt,
-            'ts': BuiltinTSOpt,
-            'tci': BuiltinTCIOpt,
-            'irc': BuiltinIRCOpt,
-            'neb': BuiltinNEBOpt,
+        'oqp': {
+            'optimize': OQPOpt,
+            'meci': OQPMECIOpt,
+            'mecp': OQPMECPOpt,
+            'mep': OQPMEPOpt,
+            'ts': OQPTSOpt,
+            'tci': OQPTCIOpt,
+            'irc': OQPIRCOpt,
+            'neb': OQPNEBOpt,
         },
     }
 

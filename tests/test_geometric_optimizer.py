@@ -84,12 +84,12 @@ def install_runfunc_stubs():
     setattr(libgeometric, "GeometricNEBOpt", GeometricNEBOpt)
     sys.modules["oqp.library.libgeometric"] = libgeometric
 
-    # runfunc also imports the builtin optimizer backend; stub it too.
-    libbuiltin = types.ModuleType("oqp.library.libbuiltin")
-    for _cls in ("BuiltinOpt", "BuiltinTSOpt", "BuiltinMECIOpt", "BuiltinMECPOpt",
-                 "BuiltinTCIOpt", "BuiltinNEBOpt", "BuiltinIRCOpt", "BuiltinMEPOpt"):
-        setattr(libbuiltin, _cls, type(_cls, (), {}))
-    sys.modules["oqp.library.libbuiltin"] = libbuiltin
+    # runfunc also imports the oqp optimizer backend; stub it too.
+    liboqp = types.ModuleType("oqp.library.liboqp")
+    for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
+                 "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
+        setattr(liboqp, _cls, type(_cls, (), {}))
+    sys.modules["oqp.library.liboqp"] = liboqp
 
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
@@ -380,10 +380,10 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_optimize_lib_default_is_builtin(self):
+    def test_optimize_lib_default_is_oqp(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
-        self.assertIn("'lib': {'type': str, 'default': 'builtin'}", text)
+        self.assertIn("'lib': {'type': str, 'default': 'oqp'}", text)
 
     def test_geometric_ts_uses_initial_hessian_by_default(self):
         text = (ROOT / "pyoqp/oqp/library/libgeometric.py").read_text()

@@ -1,18 +1,18 @@
-"""Builtin geometry optimizer backend for OpenQP.
+"""OQP geometry optimizer backend for OpenQP.
 
 A NumPy/SciPy-only alternative to the external ``geomeTRIC`` driver.  The
 electronic-structure work, convergence test and logging are reused verbatim from
 :class:`oqp.library.libscipy.StateSpecificOpt`; this module only supplies the
-step-determination loop through :class:`oqp.library.builtin_engine.BuiltinEngine`
+step-determination loop through :class:`oqp.library.oqp_engine.OQPEngine`
 (redundant internal coordinates + restricted-step RFO / P-RFO with model-Hessian
 BFGS/Bofill updates).
 
-Selected with ``[optimize] lib=builtin``.  Supported runtypes:
+Selected with ``[optimize] lib=oqp``.  Supported runtypes:
 
-* ``optimize`` -> :class:`BuiltinOpt`   (state-specific minimum)
-* ``ts``       -> :class:`BuiltinTSOpt` (transition state, eigenvector following)
+* ``optimize`` -> :class:`OQPOpt`   (state-specific minimum)
+* ``ts``       -> :class:`OQPTSOpt` (transition state, eigenvector following)
 
-Options are read from the ``[builtin]`` input section (see
+Options are read from the ``[oqp]`` input section (see
 ``oqp.molecule.oqpdata``).
 """
 
@@ -23,21 +23,21 @@ import numpy as np
 import os
 
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
-from oqp.library.builtin_engine import BuiltinEngine
-from oqp.library.builtin_neb import NEB
+from oqp.library.oqp_engine import OQPEngine
+from oqp.library.oqp_neb import NEB
 from oqp.library.neb_utils import _read_xyz
 from oqp.utils.file_utils import dump_log, dump_data
 
 ANGSTROM_TO_BOHR = 1.0 / 0.52917721092
 
 
-class _BuiltinRunner:
-    """Mixin that drives a PyOQP ``one_step`` objective with BuiltinEngine."""
+class _OQPRunner:
+    """Mixin that drives a PyOQP ``one_step`` objective with OQPEngine."""
 
     mode = "min"
 
-    def _builtin_config(self):
-        cfg = self.mol.config.get("builtin", {})
+    def _oqp_config(self):
+        cfg = self.mol.config.get("oqp", {})
         return {
             "coordsys": cfg.get("coordsys", "auto"),
             "trust": float(cfg.get("trust", 0.2)),
@@ -46,24 +46,24 @@ class _BuiltinRunner:
         }
 
     def optimize(self):
-        opts = self._builtin_config()
+        opts = self._oqp_config()
         atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
         x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
 
-        engine = BuiltinEngine(
+        engine = OQPEngine(
             atoms, x0,
             mode=self.mode,
             trust=opts["trust"],
             trust_max=opts["trust_max"],
             follow_mode=opts["follow_mode"],
             coordsys=opts["coordsys"],
-            # BuiltinEngine's own loop is a backstop; the OQP convergence test
+            # OQPEngine's own loop is a backstop; the OQP convergence test
             # (which raises StopIteration at maxit) governs termination.
             maxiter=self.maxit,
         )
         dump_log(
             self.mol,
-            title="PyOQP: Builtin optimizer [mode=%s, coordsys=%s, trust=%.3f]"
+            title="PyOQP: OQP optimizer [mode=%s, coordsys=%s, trust=%.3f]"
             % (self.mode, engine.coordsys, opts["trust"]),
         )
 
@@ -78,7 +78,7 @@ class _BuiltinRunner:
             pass
 
 
-class BuiltinOpt(_BuiltinRunner, StateSpecificOpt):
+class OQPOpt(_OQPRunner, StateSpecificOpt):
     """State-specific minimum via redundant internals + restricted-step RFO."""
 
     mode = "min"
@@ -87,7 +87,7 @@ class BuiltinOpt(_BuiltinRunner, StateSpecificOpt):
         super().__init__(mol)
 
 
-class BuiltinTSOpt(_BuiltinRunner, StateSpecificOpt):
+class OQPTSOpt(_OQPRunner, StateSpecificOpt):
     """Transition-state search via partitioned RFO (eigenvector following)."""
 
     mode = "ts"
@@ -96,12 +96,12 @@ class BuiltinTSOpt(_BuiltinRunner, StateSpecificOpt):
         super().__init__(mol)
 
 
-class BuiltinMECIOpt(_BuiltinRunner, MECIOpt):
-    """MECI search: minimize the penalty/UBP objective with the builtin engine.
+class OQPMECIOpt(_OQPRunner, MECIOpt):
+    """MECI search: minimize the penalty/UBP objective with the oqp engine.
 
     Reuses ``MECIOpt.one_step`` (which returns the penalty objective and its
     gradient) and ``MECIOpt.check_convergence`` (which adds the energy-gap
-    criterion) verbatim -- only the step determination is builtin.
+    criterion) verbatim -- only the step determination is oqp.
     """
 
     mode = "min"
@@ -110,8 +110,8 @@ class BuiltinMECIOpt(_BuiltinRunner, MECIOpt):
         MECIOpt.__init__(self, mol)
 
 
-class BuiltinMECPOpt(_BuiltinRunner, MECPOpt):
-    """MECP search: minimize the gap-penalty objective with the builtin engine."""
+class OQPMECPOpt(_OQPRunner, MECPOpt):
+    """MECP search: minimize the gap-penalty objective with the oqp engine."""
 
     mode = "min"
 
@@ -119,7 +119,7 @@ class BuiltinMECPOpt(_BuiltinRunner, MECPOpt):
         MECPOpt.__init__(self, mol)
 
 
-class BuiltinTCIOpt(_BuiltinRunner, MECIOpt):
+class OQPTCIOpt(_OQPRunner, MECIOpt):
     r"""Three-state conical intersection (TCI) search by adaptive penalty.
 
     Generalizes the Levine-Martinez two-state penalty to three states
@@ -230,20 +230,20 @@ class BuiltinTCIOpt(_BuiltinRunner, MECIOpt):
         return f, df
 
 
-class BuiltinNEBOpt(StateSpecificOpt):
-    """Nudged elastic band reaction path via the builtin FIRE band optimizer.
+class OQPNEBOpt(StateSpecificOpt):
+    """Nudged elastic band reaction path via the oqp FIRE band optimizer.
 
     Reactant is the ``[input] system`` geometry; product is read from the
     ``[neb] product`` XYZ endpoint.  Images are linearly interpolated and the
     interior images optimized with improved-tangent NEB + optional climbing
-    image (see :mod:`oqp.library.builtin_neb`).  Energies/gradients per image use
+    image (see :mod:`oqp.library.oqp_neb`).  Energies/gradients per image use
     the state-specific (``istate``) surface via the reused OQP machinery.
     """
 
     def __init__(self, mol):
         StateSpecificOpt.__init__(self, mol)
         neb_cfg = mol.config.get("neb", {})
-        nat_cfg = mol.config.get("builtin", {})
+        nat_cfg = mol.config.get("oqp", {})
         self.nimage = int(neb_cfg.get("nimage", 5))
         self.product = neb_cfg.get("product", "")
         self.k_spring = float(nat_cfg.get("spring", 0.05))
@@ -282,9 +282,9 @@ class BuiltinNEBOpt(StateSpecificOpt):
         return float(energies[self.istate]), grads[self.istate].reshape(-1)
 
     def _relax_endpoint(self, x0, label):
-        """Minimize an endpoint to a nearby minimum with the builtin engine."""
+        """Minimize an endpoint to a nearby minimum with the oqp engine."""
         atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
-        engine = BuiltinEngine(atoms, x0, mode="min", maxiter=self.maxit)
+        engine = OQPEngine(atoms, x0, mode="min", maxiter=self.maxit)
         last = {"g": None}
 
         def eg(x):
@@ -303,7 +303,7 @@ class BuiltinNEBOpt(StateSpecificOpt):
         return engine.x
 
     def optimize(self):
-        dump_log(self.mol, title="PyOQP: Builtin NEB [%d images, climbing=%s, k=%.3f, opt_ends=%s]"
+        dump_log(self.mol, title="PyOQP: OQP NEB [%d images, climbing=%s, k=%.3f, opt_ends=%s]"
                  % (self.nimage, self.climbing, self.k_spring, self.opt_ends))
 
         # Endpoints: reactant from the molecule (Bohr), product from XYZ (Ang).
@@ -352,18 +352,18 @@ class BuiltinNEBOpt(StateSpecificOpt):
         self.neb_result = result
 
 
-class BuiltinIRCOpt(StateSpecificOpt):
-    """Intrinsic reaction coordinate by the builtin Gonzalez-Schlegel IRC.
+class OQPIRCOpt(StateSpecificOpt):
+    """Intrinsic reaction coordinate by the oqp Gonzalez-Schlegel IRC.
 
     Computes the Hessian at the starting transition state, takes the
     imaginary-frequency mode as the initial (mass-weighted) direction, and
     traces the mass-weighted steepest-descent path forward or backward (see
-    :mod:`oqp.library.builtin_irc`).
+    :mod:`oqp.library.oqp_irc`).
     """
 
     def __init__(self, mol):
         StateSpecificOpt.__init__(self, mol)
-        nat_cfg = mol.config.get("builtin", {})
+        nat_cfg = mol.config.get("oqp", {})
         geo_cfg = mol.config.get("geometric", {})
         self.irc_step = float(nat_cfg.get("irc_step", 0.10))
         direction = nat_cfg.get("irc_direction",
@@ -382,9 +382,9 @@ class BuiltinIRCOpt(StateSpecificOpt):
 
     def optimize(self):
         from oqp.library.single_point import Hessian
-        from oqp.library.builtin_irc import IRC, imaginary_mode
+        from oqp.library.oqp_irc import IRC, imaginary_mode
 
-        dump_log(self.mol, title="PyOQP: Builtin IRC [direction=%s, step=%.3f]"
+        dump_log(self.mol, title="PyOQP: OQP IRC [direction=%s, step=%.3f]"
                  % ("backward" if self.irc_sign < 0 else "forward", self.irc_step))
 
         # Hessian at the transition state -> imaginary mode.  The Hessian class
@@ -426,11 +426,11 @@ class BuiltinIRCOpt(StateSpecificOpt):
         self.irc_result = result
 
 
-class BuiltinMEPOpt(StateSpecificOpt):
+class OQPMEPOpt(StateSpecificOpt):
     """Minimum energy path: mass-weighted steepest descent from the start point.
 
     Reuses the Gonzalez-Schlegel constrained-hypersphere integrator
-    (:mod:`oqp.library.builtin_irc`) but, unlike IRC, begins at an arbitrary
+    (:mod:`oqp.library.oqp_irc`) but, unlike IRC, begins at an arbitrary
     (non-stationary) geometry along the steepest-descent direction
     ``-g`` instead of a transition-state imaginary mode, tracing the path down
     to the nearest minimum.  Matches the semantics of the mass-weighted
@@ -439,7 +439,7 @@ class BuiltinMEPOpt(StateSpecificOpt):
 
     def __init__(self, mol):
         StateSpecificOpt.__init__(self, mol)
-        nat_cfg = mol.config.get("builtin", {})
+        nat_cfg = mol.config.get("oqp", {})
         self.mep_step = float(nat_cfg.get("mep_step",
                                           nat_cfg.get("irc_step", 0.10)))
 
@@ -454,9 +454,9 @@ class BuiltinMEPOpt(StateSpecificOpt):
         return float(energies[self.istate]), grads[self.istate].reshape(-1)
 
     def optimize(self):
-        from oqp.library.builtin_irc import IRC
+        from oqp.library.oqp_irc import IRC
 
-        dump_log(self.mol, title="PyOQP: Builtin MEP [step=%.3f]" % self.mep_step)
+        dump_log(self.mol, title="PyOQP: OQP MEP [step=%.3f]" % self.mep_step)
 
         x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
         mass = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
