@@ -223,8 +223,8 @@ class Molecule:
             return None, None, 0, 'skipped_no_basis'
         nbf = int(basis['nbf'])
         shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
-        if any(l > 2 for _, l in shells):
-            return None, None, 0, 'skipped_unsupported_shells_beyond_d'
+        if any(l > 4 for _, l in shells):
+            return None, None, 0, 'skipped_unsupported_shells_beyond_g'
         if sum(_cartesian_shell_size(l) for _, l in shells) != nbf:
             return None, None, 0, 'skipped_non_cartesian_basis'
 

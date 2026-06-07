@@ -159,34 +159,47 @@ def update_one_electron_block_diagnostics(
     return metadata
 
 
+# Cartesian monomial exponents (a, b, c) per shell component in OpenQP's
+# canonical AO order (see bf_names in source/constants.F90):
+# d: XX YY ZZ XY XZ YZ ; f: XXX YYY ZZZ XXY XXZ YYX YYZ ZZX ZZY XYZ ;
+# g: XXXX YYYY ZZZZ XXXY XXXZ YYYX YYYZ ZZZX ZZZY XXYY XXZZ YYZZ XXYZ YYXZ ZZXY
+_CART_MONOMIALS: dict[int, list[tuple[int, int, int]]] = {
+    0: [(0, 0, 0)],
+    1: [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
+    2: [(2, 0, 0), (0, 2, 0), (0, 0, 2), (1, 1, 0), (1, 0, 1), (0, 1, 1)],
+    3: [(3, 0, 0), (0, 3, 0), (0, 0, 3), (2, 1, 0), (2, 0, 1),
+        (1, 2, 0), (0, 2, 1), (1, 0, 2), (0, 1, 2), (1, 1, 1)],
+    4: [(4, 0, 0), (0, 4, 0), (0, 0, 4), (3, 1, 0), (3, 0, 1),
+        (1, 3, 0), (0, 3, 1), (1, 0, 3), (0, 1, 3), (2, 2, 0),
+        (2, 0, 2), (0, 2, 2), (2, 1, 1), (1, 2, 1), (1, 1, 2)],
+}
+
+
+def _double_factorial(n: int) -> int:
+    result = 1
+    while n > 1:
+        result *= n
+        n -= 2
+    return result
+
+
 def _cartesian_shell_size(l: int) -> int:
     """Return Cartesian basis-function count for a shell with angular momentum l."""
 
     if l < 0:
         raise ValueError("angular momentum must be non-negative")
-    if l == 0:
-        return 1
-    if l == 1:
-        return 3
-    if l == 2:
-        return 6
-    raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+    if l not in _CART_MONOMIALS:
+        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
+    return len(_CART_MONOMIALS[l])
 
 
 def _component_signs(l: int, signs: tuple[int, int, int]) -> list[int]:
-    """Per-component characters of a Cartesian shell under diag(sx, sy, sz).
+    """Per-component characters of a Cartesian shell under diag(sx, sy, sz)."""
 
-    Cartesian d components are ordered xx, yy, zz, xy, xz, yz.
-    """
-
+    if l not in _CART_MONOMIALS:
+        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
     sx, sy, sz = signs
-    if l == 0:
-        return [1]
-    if l == 1:
-        return [sx, sy, sz]
-    if l == 2:
-        return [1, 1, 1, sx * sy, sx * sz, sy * sz]
-    raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+    return [(sx ** a) * (sy ** b) * (sz ** c) for a, b, c in _CART_MONOMIALS[l]]
 
 
 def _normalize_shells(shells: Iterable[Any]) -> list[tuple[int, int]]:
@@ -317,34 +330,67 @@ def build_symmetry_adapted_transform(
     return u, labels
 
 
-# Relative normalization of Cartesian d components (xx, yy, zz, xy, xz, yz):
-# the cross monomials carry sqrt(3) relative to the squares.
-_D_COMPONENT_NORMS = np.array([1.0, 1.0, 1.0, np.sqrt(3.0), np.sqrt(3.0), np.sqrt(3.0)])
-_D_PAIRS = [(0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2)]
+def _monomial_norms(l: int) -> np.ndarray:
+    """Relative norms of normalized Cartesian components within one shell.
+
+    A normalized Cartesian Gaussian x^a y^b z^c carries
+    1/sqrt((2a-1)!!(2b-1)!!(2c-1)!!) relative to the pure-power component
+    (e.g. xy carries sqrt(3) relative to xx).
+    """
+
+    return np.array([
+        1.0 / np.sqrt(
+            _double_factorial(2 * a - 1)
+            * _double_factorial(2 * b - 1)
+            * _double_factorial(2 * c - 1)
+        )
+        for a, b, c in _CART_MONOMIALS[l]
+    ])
 
 
 def _shell_block(l: int, op_matrix: np.ndarray) -> np.ndarray:
     """Representation of an orthogonal 3x3 operation on one Cartesian shell.
 
     Acts on coefficient columns: c' = block @ c. For sign-diagonal operations
-    this reduces to the diagonal of component signs.
+    this reduces to the diagonal of component signs. Supports s/p/d/f/g in
+    OpenQP's canonical component order.
     """
 
+    if l not in _CART_MONOMIALS:
+        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
     if l == 0:
         return np.ones((1, 1))
     if l == 1:
         return op_matrix.copy()
-    if l == 2:
-        mono = np.zeros((6, 6))
-        for col, (a, b) in enumerate(_D_PAIRS):
-            for row, (cc, dd) in enumerate(_D_PAIRS):
-                value = op_matrix[cc, a] * op_matrix[dd, b]
-                if cc != dd:
-                    value += op_matrix[dd, a] * op_matrix[cc, b]
-                mono[row, col] = value
-        # Rescale to normalized Cartesian components.
-        return mono * (_D_COMPONENT_NORMS[None, :] / _D_COMPONENT_NORMS[:, None])
-    raise ValueError("only s/p/d Cartesian shells are supported in this metadata-only scaffold")
+
+    monomials = _CART_MONOMIALS[l]
+    index = {mono: k for k, mono in enumerate(monomials)}
+    size = len(monomials)
+
+    # Transformed monomial: x^a y^b z^c evaluated at O^T r is the product of
+    # linear forms (sum_j O_{j,axis} r_j)^power; expand multinomially.
+    mono_rep = np.zeros((size, size))
+    for col, powers in enumerate(monomials):
+        poly = {(0, 0, 0): 1.0}
+        for axis, power in enumerate(powers):
+            for _ in range(power):
+                expanded: dict[tuple[int, int, int], float] = {}
+                for exps, coeff in poly.items():
+                    for j in range(3):
+                        factor = float(op_matrix[j, axis])
+                        if factor == 0.0:
+                            continue
+                        new = list(exps)
+                        new[j] += 1
+                        key = tuple(new)
+                        expanded[key] = expanded.get(key, 0.0) + coeff * factor
+                poly = expanded
+        for exps, coeff in poly.items():
+            mono_rep[index[exps], col] = coeff
+
+    # Rescale to normalized Cartesian components.
+    norms = _monomial_norms(l)
+    return mono_rep * (norms[None, :] / norms[:, None])
 
 
 def _ao_operator_matrix(

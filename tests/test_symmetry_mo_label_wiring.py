@@ -47,14 +47,46 @@ class TestShellBlockRepresentation(unittest.TestCase):
             "pyoqp/oqp/library/symmetry.py",
         )
 
-    def test_p_and_d_blocks_form_a_representation(self):
+    def test_p_through_g_blocks_form_a_representation(self):
         m1 = random_rotation(1)
         m2 = random_rotation(2)
-        for l in (1, 2):
+        for l in (1, 2, 3, 4):
             b12 = self.symmetry._shell_block(l, m1 @ m2)
             b1 = self.symmetry._shell_block(l, m1)
             b2 = self.symmetry._shell_block(l, m2)
-            self.assertLess(float(np.max(np.abs(b12 - b1 @ b2))), 1.0e-12)
+            self.assertLess(float(np.max(np.abs(b12 - b1 @ b2))), 1.0e-11)
+
+    def test_f_and_g_blocks_reduce_to_component_signs(self):
+        for l in (3, 4):
+            for signs in [(-1, -1, 1), (1, -1, -1), (-1, -1, -1)]:
+                block = self.symmetry._shell_block(l, np.diag(signs).astype(float))
+                expected = np.diag(self.symmetry._component_signs(l, signs)).astype(float)
+                self.assertTrue(np.allclose(block, expected), f"l={l}, signs={signs}")
+
+    def test_f_and_g_blocks_preserve_shell_overlap_metric(self):
+        # <x^a y^b z^c | x^a' y^b' z^c'> over a Gaussian is the product of
+        # 1D moments (p-1)!! for even p (zero for odd), normalized.
+        def metric(l):
+            monos = self.symmetry._CART_MONOMIALS[l]
+            norms = self.symmetry._monomial_norms(l)
+            df = self.symmetry._double_factorial
+            size = len(monos)
+            s = np.zeros((size, size))
+            for i, (a, b, c) in enumerate(monos):
+                for j, (d, e, f) in enumerate(monos):
+                    if (a + d) % 2 or (b + e) % 2 or (c + f) % 2:
+                        continue
+                    s[i, j] = (
+                        df(a + d - 1) * df(b + e - 1) * df(c + f - 1)
+                    ) * norms[i] * norms[j]
+            return s
+
+        for l in (2, 3, 4):
+            m = random_rotation(5 + l)
+            block = self.symmetry._shell_block(l, m)
+            s = metric(l)
+            deviation = np.max(np.abs(block.T @ s @ block - s))
+            self.assertLess(float(deviation), 1.0e-11, f"l={l}")
 
     def test_d_block_preserves_shell_overlap_metric(self):
         # Normalized Cartesian d functions are not mutually orthogonal
@@ -71,6 +103,41 @@ class TestShellBlockRepresentation(unittest.TestCase):
         block = self.symmetry._shell_block(2, np.diag(signs).astype(float))
         expected = np.diag(self.symmetry._component_signs(2, signs)).astype(float)
         self.assertTrue(np.allclose(block, expected))
+
+
+class TestFShellLabeling(unittest.TestCase):
+    """End-to-end SALC + MO labeling with an f shell present."""
+
+    def test_water_with_f_shell_labels_cleanly(self):
+        symmetry = load_module(
+            "openqp_symmetry_fshell_under_test",
+            "pyoqp/oqp/library/symmetry.py",
+        )
+        detect = load_module(
+            "openqp_symmetry_detect_fshell_under_test",
+            "pyoqp/oqp/library/symmetry_detect.py",
+        )
+        detection = detect.detect_point_group(
+            WATER_CHARGES, WATER_COORDS, tolerance=1.0e-6
+        )
+        shells = [(0, 0), (0, 3), (1, 0), (2, 0)]  # O: s+f, H: s each
+        n_ao = 1 + 10 + 1 + 1
+
+        u, labels = symmetry.build_symmetry_adapted_transform(
+            shells, detection["operations"], detection["character_table"]
+        )
+        self.assertEqual(u.shape, (n_ao, n_ao))
+        deviation = np.max(np.abs(u.T @ u - np.eye(n_ao)))
+        self.assertLess(float(deviation), 1.0e-12)
+        self.assertTrue(set(labels) <= {"a1", "a2", "b1", "b2"})
+
+        result = symmetry.assign_mo_irreps(
+            u, np.eye(n_ao), shells,
+            detection["operations"], detection["character_table"],
+            matrix_key="matrix_input_frame",
+        )
+        self.assertEqual(result["labels"], labels)
+        self.assertLess(result["max_deviation"], 1.0e-10)
 
 
 class TestRotatedFrameLabeling(unittest.TestCase):
@@ -285,24 +352,24 @@ class TestMoleculeMoLabelWiring(unittest.TestCase):
         for label in set(expected):
             self.assertIn(label, content)
 
-    def test_f_shells_are_skipped_gracefully(self):
+    def test_h_shells_are_skipped_gracefully(self):
         mol, _ = self._build_molecule("rhf")
 
-        class _FData(dict):
+        class _HData(dict):
             def get_basis(self):
                 return {
                     "centers": np.array([0]),
-                    "angs": np.array([3]),
-                    "nbf": 10,
+                    "angs": np.array([5]),
+                    "nbf": 21,
                 }
 
-        data = _FData()
-        data["OQP::SM"] = np.zeros(55)
+        data = _HData()
+        data["OQP::SM"] = np.zeros(21 * 22 // 2)
         mol.data = data
         mol.label_molecular_orbitals()
         self.assertEqual(
             mol.symmetry_metadata["mo_labels"]["status"],
-            "skipped_unsupported_shells_beyond_d",
+            "skipped_unsupported_shells_beyond_g",
         )
 
 
