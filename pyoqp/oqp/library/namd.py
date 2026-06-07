@@ -576,13 +576,13 @@ class NAMD_SOC(NAMD):
     excitation) and eigenvectors U (OQP::soc_evec_*).  Surface hopping is done
     on these spin-adiabatic states.
 
-    This first version implements SOC-BOMD: propagation of the nuclei on the
-    active spin-adiabatic surface using the dominant-MCH-component gradient (the
-    pure singlet/triplet MRSF gradient of the largest |U|^2 component -- the
-    standard weak/moderate-SOC approximation).  The spin-adiabatic FSSH hopping
-    layer (electronic propagation with U-phase tracking + the block-diagonal MCH
-    state overlap) builds on the generalised mrsf_namd_hop kernel and is added
-    next.
+    Nuclei propagate on the active spin-adiabatic surface using the SHARC
+    weighted-MCH diagonal gradient (sum_i |U_i,a|^2 grad E_i^MCH, triplet Ms
+    sublevels sharing one gradient), which is correct through an S/T crossing
+    where SOC mixes states strongly.  The spin-adiabatic FSSH hopping layer uses
+    the local-diabatization propagator with substep energy integration and
+    U-phase tracking (block-Procrustes within degenerate Ms groups) on the
+    block-diagonal MCH state overlap.
     """
 
     def __init__(self, mol):
@@ -600,6 +600,11 @@ class NAMD_SOC(NAMD):
         self.coef[self.active - 1] = 1.0 + 0.0j
         self.e_ref = 0.0
         self.e0 = 0.0
+        # weight threshold for the SHARC weighted-MCH diagonal gradient
+        try:
+            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
+        except Exception:
+            self.grad_wthr = 0.05
 
     # ------------------------------------------------------------------ #
     def _electronic_soc(self, with_overlap=False):
@@ -716,15 +721,29 @@ class NAMD_SOC(NAMD):
         Hop probabilities (SHARC) attribute the active-state population loss to
         the states it flowed into through P.
         """
-        from scipy.linalg import sqrtm
+        from scipy.linalg import sqrtm, logm, expm
         n = self.nstate_soc
         a = self.active - 1
         dt = self.dt
+        nsub = max(1, self.substep)
 
         tu = t @ np.linalg.inv(sqrtm(t.conj().T @ t))       # nearest unitary
-        d1 = np.exp(-1j * eval_prev * dt / 2.0)
-        d2 = np.exp(-1j * eval_cur * dt / 2.0)
-        p = (d2[:, None]) * tu.conj().T * (d1[None, :])     # propagator c(t+dt)=P c(t)
+        # substep local diabatization: split the basis rotation into nsub equal
+        # fractional rotations (tu^{1/nsub}) and integrate the energy phase with
+        # linearly interpolated diagonal energies.  The net full-step propagator
+        # p is accumulated and used for the SHARC flux hop probabilities.
+        # Reduces exactly to the single-step LD propagator when nsub = 1.
+        kgen = logm(tu)                                     # skew-Hermitian generator
+        rsub_dag = expm(-kgen / nsub)                       # (tu^{1/nsub})^dagger
+        dtau = dt / nsub
+        p = np.eye(n, dtype=complex)
+        for s in range(nsub):
+            ea = eval_prev + (eval_cur - eval_prev) * (s / nsub)
+            eb = eval_prev + (eval_cur - eval_prev) * ((s + 1) / nsub)
+            d1 = np.exp(-1j * ea * dtau / 2.0)
+            d2 = np.exp(-1j * eb * dtau / 2.0)
+            psub = (d2[:, None]) * rsub_dag * (d1[None, :])
+            p = psub @ p                                   # propagator c(t+dt)=P c(t)
 
         c_old = self.coef.copy()
         c_new = p @ c_old
@@ -797,18 +816,55 @@ class NAMD_SOC(NAMD):
         kk = k - self.ns
         return 3, kk // 3 + 1, col[k]                     # triplet T(kk//3), Ms = kk%3
 
-    def _soc_gradient(self, u, active):
-        """Dominant-MCH-component gradient (Hartree/bohr) + that pure state's
-        absolute energy (Hartree)."""
+    def _soc_gradient(self, u, active, eval_ha):
+        """Weighted-MCH (SHARC-diagonal) gradient of the active spin-adiabatic
+        state:
+
+            dE_diag,a/dR  ~  sum_i |U_i,a|^2  dE_i^MCH/dR
+
+        neglecting the off-diagonal NAC terms and the (slowly varying) SOC
+        derivative -- the standard SHARC diagonal-gradient approximation.  Only
+        MCH components with weight above grad_wthr contribute, and the three
+        triplet Ms sublevels of a spatial triplet share a single gradient (their
+        weights are summed).  This is exact in the weak-mixing limit (one MCH
+        component dominates) and, unlike the dominant-component approximation,
+        gives the correct averaged force through an S/T crossing where SOC mixes
+        states ~50/50.
+
+        Returns (grad[natom,3] Hartree/bohr, E_diag absolute Hartree,
+        dom_mult, dom_state, dom_weight) where the dominant labels are for
+        logging only."""
         mol = self.mol
-        mult, state, w = self._dominant_component(u, active)
-        mol.data.set_tdhf_multiplicity(mult)
-        e = SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
-        mol.config['properties']['grad'] = [state]
-        Gradient(mol).gradient()
-        g = np.array(mol.grads[state]).reshape((self.natom, 3))
-        e_pure = float(e[state])                           # absolute (Hartree)
-        return g, e_pure, mult, state, w
+        col = np.abs(u[:, active - 1]) ** 2
+
+        # collapse to unique MCH spatial states, summing triplet Ms weights
+        wmap = {}
+        for k in range(self.nstate_soc):
+            if col[k] < self.grad_wthr:
+                continue
+            if k < self.ns:
+                key = (1, k + 1)                          # singlet S(k+1)
+            else:
+                key = (3, (k - self.ns) // 3 + 1)         # triplet T(.), any Ms
+            wmap[key] = wmap.get(key, 0.0) + col[k]
+
+        if not wmap:                                      # safety: fall back to dominant
+            kdom = int(np.argmax(col))
+            key = (1, kdom + 1) if kdom < self.ns else (3, (kdom - self.ns) // 3 + 1)
+            wmap[key] = float(col[kdom])
+
+        wtot = sum(wmap.values())
+        g = np.zeros((self.natom, 3))
+        for (mult, state), w in wmap.items():
+            mol.data.set_tdhf_multiplicity(mult)
+            SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
+            mol.config['properties']['grad'] = [state]
+            Gradient(mol).gradient()
+            g += (w / wtot) * np.array(mol.grads[state]).reshape((self.natom, 3))
+
+        dom_mult, dom_state, dom_w = self._dominant_component(u, active)
+        e_diag = self.e_ref + self.e0 + float(eval_ha[active - 1])   # absolute (Hartree)
+        return g, e_diag, dom_mult, dom_state, dom_w
 
     # ------------------------------------------------------------------ #
     def run(self):
@@ -819,7 +875,7 @@ class NAMD_SOC(NAMD):
 
         # initial electronic structure + active-surface force
         eval_ha, u = self._electronic_soc(with_overlap=False)
-        grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+        grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
         accel = -grad / self.mass[:, None]
         self._ulog = u
         self._store_prev(r, u, eval_ha)
@@ -837,15 +893,15 @@ class NAMD_SOC(NAMD):
             s_mch = self._mch_overlap()
             u, t = self._phase_track(u, self.prev_u, s_mch, eval_ha)
 
-            # active-surface force (dominant MCH component) + velocity update
-            grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+            # active-surface force (weighted-MCH diagonal gradient) + vel update
+            grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
             accel_new = -grad / self.mass[:, None]
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
 
             # local-diabatization propagation + fewest-switches hop
             hopped = self._propagate_and_hop(self.prev_eval, eval_ha, t)
             if hopped:
-                grad, e_pure, mult, state, w = self._soc_gradient(u, self.active)
+                grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
                 accel_new = -grad / self.mass[:, None]
 
             accel = accel_new

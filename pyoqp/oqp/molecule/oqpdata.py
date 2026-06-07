@@ -311,6 +311,7 @@ OQP_CONFIG_SCHEMA = {
         'seed': {'type': int, 'default': '1'},
         'restart': {'type': bool, 'default': 'False'},
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
+        'grad_wthr': {'type': float, 'default': '0.05'},    # SOC weighted-MCH gradient weight threshold
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},
