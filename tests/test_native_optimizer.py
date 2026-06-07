@@ -34,10 +34,12 @@ def _load_native_modules():
         sys.modules[pkg] = m
     nc = _load("oqp.library.native_coords", LIB / "native_coords.py")
     ne = _load("oqp.library.native_engine", LIB / "native_engine.py")
-    return nc, ne
+    nb = _load("oqp.library.native_neb", LIB / "native_neb.py")
+    return nc, ne, nb
 
 
-NC, NE = _load_native_modules()
+NC, NE, NB = _load_native_modules()
+NEB = NB.NEB
 
 
 # --------------------------------------------------------------------------- #
@@ -232,6 +234,51 @@ class TestDispatchAndValidation(unittest.TestCase):
                                          "jstate": 2, "kstate": 3}}, geo)
         self.assertTrue(any("only through the native" in d.message
                             for d in geo.errors))
+
+
+class TestNativeNEB(unittest.TestCase):
+    """Analytic CI-NEB on a 1-atom double well: V=(x^2-a^2)^2 + y^2 + z^2.
+
+    Minima at (+/-a,0,0); saddle at (0,0,0) with E=a^4.  The climbing image
+    must land on the saddle and the bowed initial path must straighten.
+    """
+
+    def test_climbing_image_finds_saddle(self):
+        a = 1.5
+
+        def eg(xf):
+            x, y, z = xf
+            E = (x * x - a * a) ** 2 + y * y + z * z
+            g = np.array([2 * (x * x - a * a) * 2 * x, 2 * y, 2 * z])
+            return E, g
+
+        M = 9
+        react = np.array([-a, 0, 0.0])
+        prod = np.array([a, 0, 0.0])
+        images = [react + (i / (M - 1)) * (prod - react)
+                  + np.array([0, 0.6 * np.sin(np.pi * i / (M - 1)), 0])
+                  for i in range(M)]
+        neb = NEB(images, k_spring=0.5, climbing=True, climb_fmax=0.1)
+        res = neb.run(eg, fmax_tol=1e-3, maxiter=800, dt=0.05, dt_max=0.2)
+        self.assertTrue(res["converged"])
+        top = int(np.argmax(res["energies"]))
+        self.assertLess(abs(neb.images[top][0]), 0.1)          # saddle at x=0
+        self.assertLess(abs(res["energies"][top] - a ** 4), 0.05)  # E = a^4
+        # bowed-out y-displacement relaxed back toward zero
+        ymax = max(abs(im.reshape(3)[1]) for im in neb.images)
+        self.assertLess(ymax, 0.05)
+
+    def test_maxmove_caps_step(self):
+        # A huge force must not move an image more than maxmove in one step.
+        def eg(xf):
+            return float(xf @ xf), 100.0 * xf  # enormous gradient
+        images = [np.array([0., 0, 0]), np.array([1., 0, 0]),
+                  np.array([2., 0, 0])]
+        neb = NEB(images, k_spring=0.1, climbing=False)
+        x_before = neb.images[1].copy()
+        neb.run(eg, fmax_tol=0.0, maxiter=1, dt=0.5, maxmove=0.2)
+        moved = np.linalg.norm(neb.images[1] - x_before)
+        self.assertLessEqual(moved, 0.2 + 1e-9)
 
 
 class TestNativeExample(unittest.TestCase):

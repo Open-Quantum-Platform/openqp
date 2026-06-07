@@ -871,14 +871,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [optimize] lib=geometric for runtype=ts/irc.",
         )
 
-    if runtype == "neb" and lib != "geometric":
+    if runtype == "neb" and lib not in {"geometric", "native"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is currently wired only through geomeTRIC.",
+            "NEB is wired through geomeTRIC and the native optimizer.",
             value=lib,
-            expected="geometric",
-            action="Set [optimize] lib=geometric for runtype=neb.",
+            expected="geometric or native",
+            action="Set [optimize] lib=geometric or lib=native for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -891,14 +891,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
-    if lib == "native" and runtype not in {"optimize", "ts", "meci", "mecp", "tci"}:
+    if lib == "native" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "The native optimizer currently supports optimize, ts, meci, mecp, and tci.",
+            "The native optimizer currently supports optimize, ts, meci, mecp, tci, and neb.",
             value=f"{lib}/{runtype}",
-            expected="optimize, ts, meci, mecp, or tci",
-            action="Use [optimize] lib=geometric for IRC/NEB, or set runtype=optimize/ts/meci/mecp/tci.",
+            expected="optimize, ts, meci, mecp, tci, or neb",
+            action="Use [optimize] lib=geometric for IRC, or set a supported native runtype.",
         )
 
     if runtype == "tci":

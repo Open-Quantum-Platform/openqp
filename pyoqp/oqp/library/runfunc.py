@@ -18,6 +18,7 @@ from oqp.library.libgeometric import (
 )
 from oqp.library.libnative import (
     NativeOpt, NativeTSOpt, NativeMECIOpt, NativeMECPOpt, NativeTCIOpt,
+    NativeNEBOpt,
 )
 
 
@@ -210,7 +211,7 @@ def get_optimizer(mol):
             'ts': NativeTSOpt,
             'tci': NativeTCIOpt,
             'irc': None,
-            'neb': None,
+            'neb': NativeNEBOpt,
         },
     }
 

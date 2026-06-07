@@ -206,6 +206,9 @@ OQP_CONFIG_SCHEMA = {
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
         'follow': {'type': int, 'default': '0'},
+        'spring': {'type': float, 'default': '0.05'},
+        'climb': {'type': bool, 'default': 'True'},
+        'fmax': {'type': float, 'default': '2e-3'},
     },
     'neb': {
         'product': {'type': str, 'default': ''},

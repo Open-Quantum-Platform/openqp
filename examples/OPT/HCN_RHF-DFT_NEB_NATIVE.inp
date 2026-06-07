@@ -1,0 +1,28 @@
+[input]
+system=
+   C   0.0000000000   0.0000000000   0.0000000000
+   N   0.0000000000   0.0000000000   1.1500000000
+   H  -1.0600000000   0.0000000000  -0.0100000000
+charge=0
+functional=bhhlyp
+basis=6-31g*
+runtype=neb
+method=hf
+
+[scf]
+type=rhf
+multiplicity=1
+
+[optimize]
+lib=native
+istate=0
+maxit=10
+
+[neb]
+product=HCN_RHF-DFT_NEB_NATIVE_product.xyz
+nimage=7
+
+[native]
+spring=0.1
+climb=true
+fmax=5e-3

@@ -20,9 +20,15 @@ from __future__ import annotations
 
 import numpy as np
 
+import os
+
 from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
 from oqp.library.native_engine import NativeEngine
+from oqp.library.native_neb import NEB
+from oqp.library.neb_utils import _read_xyz
 from oqp.utils.file_utils import dump_log, dump_data
+
+ANGSTROM_TO_BOHR = 1.0 / 0.52917721092
 
 
 class _NativeRunner:
@@ -222,3 +228,90 @@ class NativeTCIOpt(_NativeRunner, MECIOpt):
             fpath=self.mol.log_path,
         )
         return f, df
+
+
+class NativeNEBOpt(StateSpecificOpt):
+    """Nudged elastic band reaction path via the native FIRE band optimizer.
+
+    Reactant is the ``[input] system`` geometry; product is read from the
+    ``[neb] product`` XYZ endpoint.  Images are linearly interpolated and the
+    interior images optimized with improved-tangent NEB + optional climbing
+    image (see :mod:`oqp.library.native_neb`).  Energies/gradients per image use
+    the state-specific (``istate``) surface via the reused OQP machinery.
+    """
+
+    def __init__(self, mol):
+        StateSpecificOpt.__init__(self, mol)
+        neb_cfg = mol.config.get("neb", {})
+        nat_cfg = mol.config.get("native", {})
+        self.nimage = int(neb_cfg.get("nimage", 5))
+        self.product = neb_cfg.get("product", "")
+        self.k_spring = float(nat_cfg.get("spring", 0.05))
+        self.climbing = bool(nat_cfg.get("climb", True))
+        self.neb_fmax = float(nat_cfg.get("fmax", 2.0e-3))
+
+    def _resolve_product(self):
+        if os.path.isabs(self.product):
+            return self.product
+        candidates = [self.product]
+        input_file = getattr(self.mol, "input_file", "")
+        if input_file:
+            candidates.append(os.path.join(os.path.dirname(input_file), self.product))
+        for c in candidates:
+            if os.path.exists(os.path.abspath(c)):
+                return os.path.abspath(c)
+        return os.path.abspath(candidates[-1])
+
+    def _energy_gradient(self, coords):
+        # Fresh state-specific energy+gradient for one image (Hartree, H/Bohr).
+        self.mol.update_system(coords)
+        energies = self.sp.energy(do_init_scf=True)
+        self.grad.grads = [self.istate]
+        grads = self.grad.gradient()
+        self.mol.energies = energies
+        self.mol.grads = grads
+        energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
+        return float(energies[self.istate]), grads[self.istate].reshape(-1)
+
+    def optimize(self):
+        dump_log(self.mol, title="PyOQP: Native NEB [%d images, climbing=%s, k=%.3f]"
+                 % (self.nimage, self.climbing, self.k_spring))
+
+        # Endpoints: reactant from the molecule (Bohr), product from XYZ (Ang).
+        reactant = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        prod_img = _read_xyz(self._resolve_product())
+        product = np.asarray(prod_img.coordinates_angstrom, dtype=float).reshape(-1) \
+            * ANGSTROM_TO_BOHR
+        if product.shape != reactant.shape:
+            raise ValueError("NEB product endpoint atom count must match the reactant")
+
+        # Linear interpolation of all images (Bohr).
+        fractions = np.linspace(0.0, 1.0, self.nimage)
+        images = [reactant + f * (product - reactant) for f in fractions]
+
+        neb = NEB(images, k_spring=self.k_spring, climbing=self.climbing)
+
+        def log_iter(it, fmax, energies):
+            rel = np.array(energies) - energies[0]
+            self.metrics["itr"] = it + 1
+            self.metrics["max_grad"] = fmax
+            dump_log(self.mol,
+                     title="NEB Iteration %d  fmax=%.3e  Emax(rel)=%.6f"
+                     % (it + 1, fmax, float(np.max(rel))))
+
+        result = neb.run(self._energy_gradient, fmax_tol=self.neb_fmax,
+                         maxiter=self.maxit, on_iteration=log_iter)
+
+        # Report and dump the final path.
+        e0 = result["energies"][0]
+        for idx, (img, en) in enumerate(zip(neb.images, result["energies"])):
+            dump_data(self.mol,
+                      (idx, self.atoms, img.reshape(-1, 3), en, en - e0),
+                      title="NEB", fpath=self.mol.log_path)
+        if result["converged"]:
+            dump_log(self.mol, title="PyOQP: NEB Has Converged (fmax=%.3e in %d iters)"
+                     % (result["fmax"], result["iters"]))
+        else:
+            dump_log(self.mol, title="PyOQP: NEB Reached Max Iterations (fmax=%.3e)"
+                     % result["fmax"])
+        self.neb_result = result
