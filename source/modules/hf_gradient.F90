@@ -359,7 +359,7 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, cfij, daik, dajk, nrmij, nrmijk
+    real(kind=dp) :: coulfact, xcfact, df1, nrmij, nrmijk
     logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
@@ -378,29 +378,23 @@ contains
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
-!   d2a is symmetric, so the innermost (l) accesses are written with l1 as the
-!   first index to run contiguously down a column; loop-invariant density
-!   elements and normalization factors are hoisted out of the inner loops.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
-        cfij = coulfact*this%d2a(i1,j1)
         nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
-          daik = this%d2a(i1,k1)
-          dajk = this%d2a(j1,k1)
           nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = cfij*this%d2a(l1,k1)
+            df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
             if (do_exchange) then
-              df1 = df1 - xcfact*( daik*this%d2a(l1,j1) &
-                                 + this%d2a(l1,i1)*dajk )
+              df1 = df1 - xcfact*( this%d2a(i1,k1)*this%d2a(j1,l1) &
+                                 + this%d2a(i1,l1)*this%d2a(j1,k1) )
             end if
             dabmax = max(dabmax, abs(df1))
             ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
@@ -429,8 +423,7 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1, cfij, nrmij, nrmijk
-    real(kind=dp) :: daik, dajk, dbik, dbjk
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, nrmij, nrmijk
     logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
@@ -449,34 +442,25 @@ contains
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
-!   d2a/d2b are symmetric, so the innermost (l) accesses are written with l1
-!   as the first index to run contiguously down a column; loop-invariant
-!   density elements and normalization factors are hoisted out of the inner
-!   loops.
     do i = 1, nbf(1)
       i1 = loc(1) + i
 
       do j = 1, nbf(2)
         j1 = loc(2) + j
-        cfij = coulfact*this%d2a(i1,j1)
         nrmij = basis%bfnrm(i1)*basis%bfnrm(j1)
 
         do k = 1, nbf(3)
           k1 = loc(3) + k
-          daik = this%d2a(i1,k1)
-          dajk = this%d2a(j1,k1)
-          dbik = this%d2b(i1,k1)
-          dbjk = this%d2b(j1,k1)
           nrmijk = nrmij*basis%bfnrm(k1)
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = cfij*this%d2a(l1,k1)
+            df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
             if (do_exchange) then
-              dq1 = daik*this%d2a(l1,j1) &
-                  + this%d2a(l1,i1)*dajk &
-                  + dbik*this%d2b(l1,j1) &
-                  + this%d2b(l1,i1)*dbjk
+              dq1 = this%d2a(i1,k1)*this%d2a(j1,l1) &
+                  + this%d2a(i1,l1)*this%d2a(j1,k1) &
+                  + this%d2b(i1,k1)*this%d2b(j1,l1) &
+                  + this%d2b(i1,l1)*this%d2b(j1,k1)
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
