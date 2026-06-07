@@ -1126,6 +1126,7 @@ contains
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
     use io_constants, only: iw
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
@@ -1203,6 +1204,14 @@ contains
           end if
         end do
       end do
+      ! Every ECP centre must have been matched to an atom: an unmapped centre
+      ! would stay fixed while its atom is displaced, silently corrupting the
+      ! semi-numerical response. Abort loudly instead.
+      if (count(iecp_atom > 0) /= nec) then
+        call show_message('hf_hessian (ROHF): could not map every ECP centre '// &
+          'to an atom (coordinate mismatch > 1e-6 bohr); analytic Hessian '// &
+          'would be wrong - use [hess] type=numerical for this system.', WITH_ABORT)
+      end if
     end if
 
     ! derivative integrals (normalized into the bfnrm/MO convention)
