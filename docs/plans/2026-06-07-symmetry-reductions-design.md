@@ -172,28 +172,43 @@ fails to converge).
 
 ## 6b. Measured performance (2026-06-07, 8 threads, gcc-15/OpenMP, M-series Mac)
 
-Idealized D2h acenes, stability stage disabled (it dominates both sides
-identically), tests/smoke_petite_benchmark.py:
+Idealized D2h/D6h systems (exact symmetry to 1e-12 in the inputs), TRAH
+stability stage disabled (it dominates both sides identically and is not
+reduced), tests/smoke_petite_benchmark.py. dE is vs a C1 run of the same
+geometry; at default SCF convergence (1e-6 density) iteration noise is
+~1e-9.
 
-  system        basis     method   t_C1     t_petite  speedup   |dE|
-  benzene       6-31G*    RHF       0.5 s    0.2 s     2.4x     2e-12
-  benzene       6-31G*    BHHLYP    0.6 s    0.3 s     2.2x     2e-12
-  naphthalene   6-31G*    RHF       1.9 s    0.9 s     2.1x     1e-11
-  naphthalene   6-31G*    BHHLYP    3.1 s    1.1 s     2.7x     6e-12
-  anthracene    6-31G*    RHF       4.4 s    1.8 s     2.4x     1e-11
-  anthracene    6-31G*    BHHLYP    7.6 s    2.7 s     2.8x     4e-11
-  naphthalene   cc-pVTZ   RHF     124.5 s   36.6 s     3.4x     1e-09
+Abelian tier (use_integral_symmetry=true; machine-exact by construction):
 
-The Fock-only reduction bound is |G| = 8; whole-run numbers are diluted
-by diagonalization/DIIS/guess and the per-quartet petite test, and
-improve with kernel cost (cc-pVTZ f functions: 3.4x). With the TRAH
-stability verification included, whole-run speedups drop to ~1.2x --
-that stage is unreduced and dominates large runs.
+  system        group(used)  basis    method   t_C1     t_sym   speedup  |dE|
+  benzene       D6h(d2h,8)   6-31G*   RHF       0.5 s    0.2 s   2.4x    2e-12
+  benzene       D6h(d2h,8)   6-31G*   BHHLYP    0.6 s    0.3 s   2.2x    2e-12
+  naphthalene   D2h(d2h,8)   6-31G*   RHF       1.9 s    0.9 s   2.1x    1e-11
+  naphthalene   D2h(d2h,8)   6-31G*   BHHLYP    3.1 s    1.1 s   2.7x    6e-12
+  anthracene    D2h(d2h,8)   6-31G*   RHF       4.4 s    1.8 s   2.4x    1e-11
+  anthracene    D2h(d2h,8)   6-31G*   BHHLYP    7.6 s    2.7 s   2.8x    4e-11
+  naphthalene   D2h(d2h,8)   cc-pVTZ  RHF     124.5 s   36.6 s   3.4x    1e-09
+  benzene       D6h(d2h,8)   cc-pVTZ  RHF      21.7 s    6.8 s   3.2x    5e-09
 
-A frame-determinism fix came out of this benchmark: the abelian frame
-choice now prefers candidates closest to the identity, since degenerate
-axis assignments (e.g. naphthalene's three D2h axes) otherwise let the
-reorientation iteration ping-pong between equivalent frames and bail.
+Full-group tier (use_integral_symmetry=full; ~1e-7 systematic residual,
+experimental):
+
+  system        group(used)   basis    method   t_C1     t_sym   speedup  |dE|
+  benzene       D6h(D6h,24)   6-31G*   RHF       0.7 s    0.5 s   1.4x    5e-09
+  benzene       D6h(D6h,24)   6-31G*   BHHLYP    0.6 s    0.3 s   1.8x    5e-09
+  benzene       D6h(D6h,24)   cc-pVTZ  RHF      21.6 s    3.6 s   6.1x    2e-07
+
+Notes:
+- The Fock-only bound is |G|; whole-run numbers are diluted by
+  diagonalization/DIIS/guess and the per-quartet petite test, and improve
+  with integral-kernel cost (cc-pVTZ f functions).
+- With the TRAH stability verification included, whole-run speedups drop
+  to ~1.2x (naphthalene cc-pVTZ: 580 s -> 486 s) -- that stage is
+  unreduced and dominates large runs; a natural future target.
+- A frame-determinism fix came out of this benchmark: the abelian frame
+  choice prefers candidates closest to the identity, since degenerate
+  axis assignments (e.g. naphthalene's three D2h axes) otherwise let the
+  reorientation iteration ping-pong between equivalent frames and bail.
 
 ## 6c. Non-abelian full-group tier (2026-06-07)
 
