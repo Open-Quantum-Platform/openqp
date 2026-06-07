@@ -298,15 +298,14 @@ class NAMD_QMMM(NAMD):
         self._app = app
         self._u = u
 
+        from oqp.library.qmmm_md import _resolve_cutoff
+
         q = mol.config['qmmm']
         pdb_file = q['pdb_file']
         ff_files = [s for s in str(q['forcefield_files']).replace(',', ' ').split() if s]
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
-        cutoff = str(q['cutoff']).strip()
-        if cutoff not in ('NoCutoff', 'nocutoff', 'none', ''):
-            raise NotImplementedError(
-                f"NAMD-QMMM currently supports cutoff=NoCutoff only (got '{cutoff}'); "
-                "periodic embedding is Phase 3.")
+        self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
+        self.periodic = self.cutoff is not app.NoCutoff
         embedding = str(q['embedding']).strip()
 
         self.pdb = app.PDBFile(pdb_file)
@@ -317,7 +316,7 @@ class NAMD_QMMM(NAMD):
             forcefield=self.forcefield,
             qm_atoms=self.qm_atoms,
             mol=mol,
-            Cutoff=app.NoCutoff,
+            Cutoff=self.cutoff,
             Embedding=embedding,
         )
         self.mm = self.driver.mm_systems
@@ -349,6 +348,12 @@ class NAMD_QMMM(NAMD):
         pos_q = (self.r_all * BOHR_TO_NM) * u.nanometer
         self.driver.positions = pos_q
         self.mm["sim0"].context.setPositions(pos_q)
+        # periodic contexts used by the Ewald QM-QM correction (electrostatic_potential)
+        if self.periodic:
+            for key in ("simew", "simor"):
+                sim = self.mm.get(key)
+                if sim is not None:
+                    sim.context.setPositions(pos_q)
         # QM Molecule coords (bohr) from the pdb-indexed positions
         self.mol.update_system(self.r_all[self.qm_atoms].reshape(-1))
 
