@@ -1126,6 +1126,7 @@ contains
     use scf_addons, only: fock_jk
     use cphf_mod, only: cphf_solve_rohf, rohf_pack_trial, rohf_unpack_trial
     use io_constants, only: iw
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
