@@ -85,7 +85,11 @@ class Runner:
             self.mol.load_config(input_file)
 
         # check input values set default omp_num_threads
-        check_input_values(self.mol.config)
+        _input_file = getattr(self.mol, "input_file", None)
+        check_input_values(
+            self.mol.config,
+            input_dir=os.path.dirname(os.path.abspath(_input_file)) if _input_file else None,
+        )
 
         # Reload mol if possible
         self.reload()

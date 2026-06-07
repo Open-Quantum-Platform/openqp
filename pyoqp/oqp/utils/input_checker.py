@@ -680,7 +680,8 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
         )
 
 
-def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
+def _check_runtype(config: dict[str, Any], report: CheckReport,
+                   input_dir: str | None = None) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
@@ -756,7 +757,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         _check_optimize(config, report)
 
     if runtype == "neb":
-        _check_neb(config, report)
+        _check_neb(config, report, input_dir)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
@@ -926,7 +927,8 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             )
 
 
-def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+def _check_neb(config: dict[str, Any], report: CheckReport,
+               input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
     product = _get(config, "neb", "product", "")
@@ -960,14 +962,21 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             expected="XYZ filename",
             action="Set [neb] product to a product-endpoint XYZ file.",
         )
-    elif not os.path.exists(os.path.abspath(str(product))):
-        report.add(
-            "ERROR",
-            "neb.product",
-            "NEB product endpoint file does not exist.",
-            value=product,
-            action="Fix the product path or place the XYZ file in the working directory.",
-        )
+    else:
+        # The product endpoint may be given relative to the input file (where it
+        # is normally stored beside the .inp), not just the current directory.
+        candidates = [os.path.abspath(str(product))]
+        if input_dir and not os.path.isabs(str(product)):
+            candidates.append(os.path.abspath(os.path.join(input_dir, str(product))))
+        if not any(os.path.exists(c) for c in candidates):
+            report.add(
+                "ERROR",
+                "neb.product",
+                "NEB product endpoint file does not exist.",
+                value=product,
+                action="Fix the product path, or place the XYZ file beside the input "
+                       "file or in the working directory.",
+            )
 
     if nimage < 3:
         report.add(
@@ -1295,8 +1304,14 @@ def check_input_values(
     *,
     raise_error: bool = True,
     emit: bool = True,
+    input_dir: str | None = None,
 ) -> CheckReport:
-    """Validate an already parsed OpenQP config and return a diagnostic report."""
+    """Validate an already parsed OpenQP config and return a diagnostic report.
+
+    ``input_dir`` is the directory of the input file, used to resolve paths
+    (e.g. the NEB product endpoint) that are stored relative to the input file
+    rather than the current working directory.
+    """
 
     report = CheckReport()
     method = _as_lower(_get(config, "input", "method", "hf"))
@@ -1319,7 +1334,7 @@ def check_input_values(
     _check_tdhf(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
-    _check_runtype(config, report)
+    _check_runtype(config, report, input_dir)
 
     if _get(config, "input", "d4", False) and not _get(config, "input", "functional", ""):
         report.add(

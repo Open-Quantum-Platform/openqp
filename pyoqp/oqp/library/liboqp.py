@@ -26,6 +26,7 @@ from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
 from oqp.library.oqp_engine import OQPEngine
 from oqp.library.oqp_neb import NEB
 from oqp.library.neb_utils import _read_xyz
+from oqp.periodic_table import SYMBOL_MAP
 from oqp.utils.file_utils import dump_log, dump_data
 
 ANGSTROM_TO_BOHR = 1.0 / 0.52917721092
@@ -309,10 +310,24 @@ class OQPNEBOpt(StateSpecificOpt):
         # Endpoints: reactant from the molecule (Bohr), product from XYZ (Ang).
         reactant = np.asarray(self.pre_coord, dtype=float).reshape(-1)
         prod_img = _read_xyz(self._resolve_product())
+
+        # The product must describe the SAME atoms in the SAME order as the
+        # reactant -- matching atom count alone would silently interpolate a path
+        # between mismatched atoms (e.g. HCN vs CNH) and corrupt the energies.
+        reactant_z = [int(z) for z in np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)]
+        try:
+            product_z = [int(SYMBOL_MAP[s]) for s in prod_img.symbols]
+        except KeyError as exc:
+            raise ValueError(
+                "NEB product endpoint has an unrecognized element symbol: %s" % exc)
+        if product_z != reactant_z:
+            raise ValueError(
+                "NEB product endpoint atoms must match the reactant in element "
+                "and order (got %d product atoms vs %d reactant atoms)"
+                % (len(product_z), len(reactant_z)))
+
         product = np.asarray(prod_img.coordinates_angstrom, dtype=float).reshape(-1) \
             * ANGSTROM_TO_BOHR
-        if product.shape != reactant.shape:
-            raise ValueError("NEB product endpoint atom count must match the reactant")
 
         if self.opt_ends:
             reactant = self._relax_endpoint(reactant, "reactant")

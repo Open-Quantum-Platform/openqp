@@ -295,6 +295,30 @@ class TestDispatchAndValidation(unittest.TestCase):
             lib_errs = [d for d in rep.errors if d.path == "optimize.lib"]
             self.assertEqual(lib_errs, [], f"oqp/{rt} should be allowed")
 
+    def test_neb_product_resolves_relative_to_input_dir(self):
+        utils = sys.modules.setdefault("oqp.utils",
+                                       types.ModuleType("oqp.utils"))
+        utils.__path__ = []
+        mpi = types.ModuleType("oqp.utils.mpi_utils")
+        mpi.MPIManager = type("MPIManager", (), {})
+        sys.modules["oqp.utils.mpi_utils"] = mpi
+        ic = _load("oqp.utils.input_checker",
+                   ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py")
+        ex_dir = str(ROOT / "examples" / "OPT")
+        cfg = {"input": {"runtype": "neb", "method": "hf"},
+               "optimize": {"istate": 0, "lib": "oqp"},
+               "neb": {"product": "HCN_RHF-DFT_NEB_OQP_product.xyz", "nimage": 7}}
+
+        # Without input_dir the product (stored beside the .inp) is not found...
+        no_dir = ic.CheckReport()
+        ic._check_neb(cfg, no_dir)
+        self.assertTrue(any(d.path == "neb.product" for d in no_dir.errors))
+
+        # ...but it resolves when the input directory is supplied.
+        with_dir = ic.CheckReport()
+        ic._check_neb(cfg, with_dir, input_dir=ex_dir)
+        self.assertEqual([d for d in with_dir.errors if d.path == "neb.product"], [])
+
     def test_tci_validation(self):
         utils = sys.modules.setdefault("oqp.utils",
                                        types.ModuleType("oqp.utils"))
