@@ -28,6 +28,11 @@ def compute_energy(mol):
     # compute properties
     compute_scf_prop(mol)
 
+    # re-save mol data so property results (e.g. OQP::nmr_shielding) reach the
+    # JSON; the save inside SinglePoint.energy() runs before properties exist
+    if mol.config['guess']['save_mol']:
+        mol.save_data()
+
 
 def compute_scf_prop(mol):
     # compute HF/DFT properties
