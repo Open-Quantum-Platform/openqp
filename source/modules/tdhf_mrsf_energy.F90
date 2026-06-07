@@ -82,7 +82,7 @@ contains
       get_transition_density, get_transitions, &
       get_transition_dipole, print_results, get_spin_square
     use tdhf_mrsf_lib, only: &
-      mrinivec, mrsfcbc,umrsfcbc, mrsfmntoia,umrsfmntoia, mrsfesum, &
+      mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density, get_jacobi, umrsfssqu
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
@@ -135,7 +135,7 @@ contains
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
     logical :: roref = .false.
-    logical :: uhfref= .false.
+    logical :: uhfref = .false.
     logical :: debug_mode
 
     type(int2_compute_t) :: int2_driver
@@ -147,7 +147,7 @@ contains
     logical :: dft = .false.
     integer :: scf_type, mol_mult
 
-    logical :: umrsf, umrsf_jac 
+    logical :: umrsf
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -169,9 +169,9 @@ contains
   !
     if (umrsf) then
       call print_module_info('UMRSF_TDHF_Energy','Computing Energy of UMRSF-TDDFT')
-    else 
+    else
       call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
-    endif
+    end if
 
   ! Load basis set
     basis => infos%basis
@@ -188,7 +188,6 @@ contains
     target_state = infos%tddft%target_state
     maxvec = infos%tddft%maxvec
     cnvtol = infos%tddft%cnvtol
-!   infos%tddft%debug_mode = .True.
     debug_mode = infos%tddft%debug_mode
 
     mol_mult = infos%mol_prop%mult
@@ -198,15 +197,15 @@ contains
     else
       if (mol_mult/=3) call show_message('MRSF-TDDFT are available for ROHF ref.&
           &with ONLY triplet multiplicity(mult=3)',with_abort)
-    endif
+    end if
     scf_type = infos%control%scftype
     if (.not. umrsf .and. scf_type==3) roref = .true.
-    
+
     if (umrsf .and. scf_type/=2) then
       call show_message('U-MRSF requires UHF reference (SCFTYPE=2).',with_abort)
     else if (umrsf) then
       uhfref = .true.
-    endif
+    end if
 
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
@@ -265,7 +264,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
-    
+
 
   ! Allocate temporary matrices for diagonalization
     allocate (fa(nbf,nbf), &
@@ -303,26 +302,26 @@ contains
 
     mo_energy_work_a = mo_energy_a
     mo_energy_work_b = mo_energy_b
-  ! MO rotations (Jacobi) 
+  ! MO rotations (Jacobi)
     if (umrsf) then
       call unpack_matrix(smat, smat_full, nbf, 'U')
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 0)
       call get_jacobi(infos, mo_a, mo_energy_a, mo_b, mo_energy_b, smat_full, nocca, wrk1, wrk2, 1)
-    endif
+    end if
 
     ta => td_t(:,1)
     tb => td_t(:,2)
 
     if (mrst==1 .or. mrst==3 ) then
-        if (umrsf) then
-          allocate(mrsf_density(nvec,11,nbf,nbf), &
-             source=0.0_dp, &
-             stat=ok)
-        else
+      if (umrsf) then
+        allocate(mrsf_density(nvec,11,nbf,nbf), &
+                 source=0.0_dp, &
+                 stat=ok)
+      else
         allocate(mrsf_density(nvec,7,nbf,nbf), &
-               source=0.0_dp, &
-               stat=ok)
-        endif
+                 source=0.0_dp, &
+                 stat=ok)
+      end if
     else if( mrst==5  )then
 
       allocate(fmrq1(nbf,nbf,nvec), &
@@ -438,11 +437,11 @@ contains
 
   ! Construct TD trial vector
     if (mrst==1 .or. mrst==3) then
-     if (.not. umrsf) then
-      call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
-     else
-      call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
-     endif
+      if (.not. umrsf) then
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
+      else
+        call mrinivec(infos, mo_energy_work_a, mo_energy_work_b, bvec_mo, xm, nvec)
+      end if
 
     else if (mrst==5) then
       call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
@@ -474,11 +473,11 @@ contains
         if (mrst==1 .or. mrst==3) then
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
-          if (umrsf) then 
-              call umrsfcbc(infos, mo_a, mo_b, wrk1,mrsf_density(iv,:,:,:))
+          if (umrsf) then
+            call umrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
           else
-              call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
-          endif
+            call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(iv,:,:,:))
+          end if
 
         else if (mrst==5) then
 
@@ -491,22 +490,23 @@ contains
 
       if (mrst==1 .or. mrst==3) then
 
-        if (umrsf ) then
+        if (umrsf) then
           int2_udata_st = int2_umrsf_data_t( &
             d3 = mrsf_density(:iv,:,:,:), &
             tamm_dancoff = tamm_dancoff, &
             scale_exchange = scale_exch, &
             scale_coulomb = scale_exch)
-          call int2_driver%run( &
-           int2_udata_st, &
-           cam = dft.and.infos%dft%cam_flag, &
-           alpha = infos%tddft%cam_alpha, &
-           alpha_coulomb = infos%tddft%cam_alpha, &
-           beta = infos%tddft%cam_beta, &
-           beta_coulomb = infos%tddft%cam_beta, &
-           mu = infos%tddft%cam_mu)
 
-         fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
+          call int2_driver%run( &
+            int2_udata_st, &
+            cam = dft.and.infos%dft%cam_flag, &
+            alpha = infos%tddft%cam_alpha, &
+            alpha_coulomb = infos%tddft%cam_alpha, &
+            beta = infos%tddft%cam_beta, &
+            beta_coulomb = infos%tddft%cam_beta, &
+            mu = infos%tddft%cam_mu)
+
+          fmrst2 => int2_udata_st%f3(:,:,:,:,1) ! ado2v, ado1v, adco1, adco2, ao21v, aco12, agdlr
 
         else
           int2_data_st = int2_mrsf_data_t( &
@@ -589,10 +589,10 @@ contains
 
           ! Product (A-B)*X
           if (umrsf) then
-              call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+            call umrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
           else
-              call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
-          endif
+            call mrsfmntoia(infos, fmrst2(iv,:,:,:), amo, mo_a, mo_b, ivec)
+          end if
 
           call iatogen(bvec_mo(:,ivec), wrk1, nocca, noccb)
 
@@ -696,18 +696,16 @@ contains
           end do
         end if
 
-! U-version (working)
         if (umrsf) then
           do ist = 1, nstates
-            call umrsfssqu(squared_S(ist),mo_a,mo_b, smat, wrk1,scr3,nbf,nbf2, &
-                xvec_dim,ist,nbf,bvec_mo,nocca,noccb, &
-                .true., .false.)
-          enddo 
-        else 
+            call umrsfssqu(squared_S(ist), mo_a, mo_b, smat, wrk1, scr3, nbf, nbf2, &
+                           xvec_dim, ist, nbf, bvec_mo, nocca, noccb, &
+                           .true., .false.)
+          end do
+        else
           squared_S(:) = 0.0_dp
-        endif
-!
-      call get_mrsf_transitions(trans, nocca, noccb, nbf)
+        end if
+        call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
       case(3)
@@ -722,13 +720,13 @@ contains
         end if
         if (umrsf) then
           do ist = 1, nstates
-            call umrsfssqu(squared_S(ist),mo_a,mo_b, smat, wrk1,scr3,nbf,nbf2, &
-                xvec_dim,ist,nbf,bvec_mo,nocca,noccb, &
-                .false., .true.)
-          enddo 
-        else 
+            call umrsfssqu(squared_S(ist), mo_a, mo_b, smat, wrk1, scr3, nbf, nbf2, &
+                           xvec_dim, ist, nbf, bvec_mo, nocca, noccb, &
+                           .false., .true.)
+          end do
+        else
           squared_S(:) = 2.0_dp
-        endif
+        end if
         call get_mrsf_transitions(trans, nocca, noccb, nbf)
         write(*,'(/,2x,35("="),/,2x,&
             &"Spin-adapted spin-flip excitations",/,2x,35("="))')
