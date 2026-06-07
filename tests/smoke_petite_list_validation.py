@@ -65,6 +65,11 @@ def benzene_system():
 # Benzene: D6h molecule, d2h petite subgroup (|G|=8) -- the canonical win.
 CASES['benzene_rhf_d2h'] = ('d2h', 'multiplicity=1\ntype=rhf', None)
 
+# DFT cases exercise the XC grid reduction (Phase III).
+CASES['water_dft_c2v'] = ('c2v', 'multiplicity=1\ntype=rhf', CASES['water_rhf_c2v'][2])
+CASES['benzene_dft_d2h'] = ('d2h', 'multiplicity=1\ntype=rhf', None)
+DFT_CASES = {'water_dft_c2v', 'benzene_dft_d2h'}
+
 INPUT_TEMPLATE = """\
 [input]
 system=
@@ -83,6 +88,28 @@ type=huckel
 [symmetry]
 {symmetry}
 """
+
+
+def standardize_orientation(system):
+    """Rotate an [input] system block to the symmetry standard orientation."""
+    import numpy as np
+    from oqp.library.symmetry_detect import detect_point_group
+
+    charges, coords = [], []
+    for line in system.splitlines():
+        parts = line.split()
+        charges.append(float(parts[0]))
+        coords.append([float(x) for x in parts[1:4]])
+    charges = np.array(charges)
+    coords = np.array(coords)
+    detection = detect_point_group(charges, coords, tolerance=1.0e-6)
+    rotation = np.array(detection['orientation'])
+    origin = np.array(detection['origin'])
+    standard = (coords - origin) @ rotation.T
+    return '\n'.join(
+        f'   {int(q)} {x:15.9f} {y:15.9f} {z:15.9f}'
+        for q, (x, y, z) in zip(charges, standard)
+    )
 
 
 def run_case(workdir, name, content):
@@ -107,9 +134,17 @@ def main():
     for name, (subgroup, scf, system) in CASES.items():
         if system is None:
             system = benzene_system()
-        ref_input = INPUT_TEMPLATE.format(system=system, scf=scf,
-                                          symmetry='enabled=false')
-        sym_input = INPUT_TEMPLATE.format(
+        template = INPUT_TEMPLATE
+        if name in DFT_CASES:
+            template = template.replace('method=hf',
+                                        'functional=bhhlyp\nmethod=hf')
+            # XC quadrature error is orientation-dependent (~1e-6 for
+            # default grids), so the C1 reference must be computed in the
+            # same standard orientation the petite run reorients to.
+            system = standardize_orientation(system)
+        ref_input = template.format(system=system, scf=scf,
+                                    symmetry='enabled=false')
+        sym_input = template.format(
             system=system, scf=scf,
             symmetry='enabled=true\nuse_integral_symmetry=true')
 

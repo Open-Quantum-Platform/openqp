@@ -106,7 +106,16 @@ Validation gates (each vs the C1 reference, same build):
   symmetric-group projection of forces also cleans numerical noise.
   Gate: analytic vs numerical gradient on c2v/d2h cases with the flag on.
 
-## 5. Phase III: XC grid reduction (ties into PR #182)
+## 5. Phase III: XC grid reduction (ties into PR #182) [VALIDATED 2026-06-07]
+
+Implemented: xc_options_t%symAtomWeight (set only by the SCF dftexcor
+path -- response/gradient consumers never see it), slice skip + orbit
+weighting in both run_xc slice loops, skeleton-XC symmetrization in
+calc_dft_xc, per-atom orbit weights staged as OQP::sym_atom_weight.
+Validated (BHHLYP/6-31G*): water c2v 4.3e-14, benzene d2h 7.0e-12 Ha vs
+orientation-matched C1. Note: XC quadrature error is orientation
+dependent (~1e-6 for default grids), so C1 references must be computed
+in the standard orientation -- the validation script does this.
 
 `dftlib` builds atom-centered grids (`dft_molgrid.F90`). With symmetry:
 process only symmetry-unique atoms' slices and multiply their quadrature

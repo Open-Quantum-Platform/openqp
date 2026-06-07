@@ -412,6 +412,19 @@ class Molecule:
                 (np.asarray(maps['ao_target'], dtype=np.int64) + 1).ravel()
             self.data['OQP::sym_ao_sign'] = \
                 np.asarray(maps['ao_sign'], dtype=np.float64).ravel()
+            # Per-atom orbit weights for the XC grid reduction: orbit size
+            # for the unique (lowest-index) atom of each orbit, zero for
+            # its images.
+            permutations = np.array(
+                [op['permutation'] for op in detection['operations']], dtype=int)
+            representative = permutations.min(axis=0)
+            natom = permutations.shape[1]
+            atom_weight = np.zeros(natom)
+            for atom in range(natom):
+                if representative[atom] == atom:
+                    atom_weight[atom] = float(np.count_nonzero(representative == atom))
+            self.data['OQP::sym_atom_weight'] = atom_weight
+
             self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
 
             meta['reduction_maps'] = maps

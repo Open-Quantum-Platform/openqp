@@ -1334,6 +1334,8 @@ contains
     use dft, only: dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
     implicit none
 
     type(basis_set), intent(in) :: basis
@@ -1341,6 +1343,10 @@ contains
     real(kind=dp), intent(inout) :: mo_a(:,:)
     real(kind=dp), intent(inout) :: mo_b(:,:)
     real(kind=dp), intent(out) :: pfxc(:,:)
+    real(kind=dp), contiguous, pointer :: sym_atom_weight(:)
+    integer(8), contiguous, pointer :: sym_petite_flag(:)
+    integer(4) :: sym_status
+    logical :: sym_active
     real(kind=dp), intent(out) :: eexc
     real(kind=dp), intent(out) :: totele
     real(kind=dp), intent(out) :: totkin
@@ -1358,8 +1364,39 @@ contains
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
 
+    ! Symmetry XC reduction: integrate only unique atoms' grid slices
+    ! (orbit-weighted) and symmetrize the resulting skeleton XC matrix.
+    ! Gated by the same petite flag as the two-electron reduction, so the
+    ! stability-stage fail-safe applies here as well.
+    sym_active = .false.
+    sym_atom_weight => null()
+    call tagarray_get_data(infos%dat, OQP_sym_petite, sym_petite_flag, status=sym_status)
+    if (sym_status == TA_OK) then
+      if (sym_petite_flag(1) /= 0) then
+        call tagarray_get_data(infos%dat, OQP_sym_atom_weight, sym_atom_weight, &
+                               status=sym_status)
+        sym_active = sym_status == TA_OK
+        if (sym_active) sym_active = size(sym_atom_weight) == infos%mol_prop%natom
+      end if
+    end if
+
     ! Calculate exchange-correlation based on SCF type
-    if (scf_type == scf_rhf) then
+    if (sym_active) then
+      if (scf_type == scf_rhf) then
+        call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      else if (scf_type == scf_uhf) then
+        call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      else if (scf_type == scf_rohf) then
+        mo_b = mo_a
+        call dftexcor(basis, molgrid, 2, pfxc(:,1), pfxc(:,2), mo_a, mo_b, &
+                      nbf, nbf_tri, eexc, totele, totkin, infos, sym_atom_weight)
+      end if
+      ! The reduced-grid XC matrix is a skeleton: project onto the totally
+      ! symmetric component (the XC energy/electron count are already exact).
+      call symmetrize_skeleton_fock(infos, nbf, pfxc)
+    else if (scf_type == scf_rhf) then
       ! Restricted calculation - same matrix for alpha and beta
       call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
                     nbf, nbf_tri, eexc, totele, totkin, infos)
