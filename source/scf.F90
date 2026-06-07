@@ -124,6 +124,9 @@ contains
     integer :: diis_reset        ! Frequency of DIIS reset
     integer :: maxdiis           ! Maximum number of DIIS vectors
     real(kind=dp) :: diis_error  ! DIIS error matrix norm
+    real(kind=dp) :: stall_best  ! best DIIS error seen (orchestration: stall detection)
+    integer       :: stall_count ! iters since the last meaningful DIIS-error drop
+    logical       :: stalled_exit ! converger bailed out stalled (escalate, not converged)
     character(len=6), dimension(5) :: diis_name          ! Names of DIIS methods
     real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! DIIS error threshold for C-DIIS
     real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! DIIS error threshold for E-DIIS
@@ -479,6 +482,9 @@ contains
     ! DIIS options
     maxdiis = infos%control%maxdiis
     diis_error = 2.0_dp
+    stall_best = huge(1.0_dp)
+    stall_count = 0
+    stalled_exit = .false.
     diis_name = [character(len=6) :: "none", "c-DIIS", "e-DIIS", "a-DIIS", "v-DIIS"]
     diis_reset = infos%control%diis_reset_mod
 
@@ -778,6 +784,33 @@ contains
       call flush(IW)
 
       !----------------------------------------------------------------------------
+      ! Orchestration: detect converger stagnation and hand off early
+      !----------------------------------------------------------------------------
+      ! A converger that stops reducing its error for many iterations while still
+      ! above the threshold is stuck near its noise floor (e.g. C-DIIS oscillating
+      ! at ~1e-8 from integral/grid noise). Rather than spin to maxit, bail out so
+      ! the escalation ladder (DIIS -> SOSCF -> TRAH) hands the residual gradient
+      ! to a higher-order method. Skipped for TRAH (the last-resort solver) and
+      ! while a level shift / pFON anneal is still ramping the error artificially.
+      if (.not. use_trah .and. vshift == 0.0_dp .and. .not. do_pfon) then
+        if (diis_error < 0.5_dp * stall_best) then
+          stall_best  = diis_error
+          stall_count = 0
+        else
+          stall_count = stall_count + 1
+        end if
+        if (stall_count >= 12 .and. iter >= 20 .and. &
+            diis_error > infos%control%conv) then
+          write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
+               &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
+               diis_error, stall_count
+          infos%mol_energy%SCF_converged = .false.
+          stalled_exit = .true.
+          exit
+        end if
+      end if
+
+      !----------------------------------------------------------------------------
       ! Update VDIIS Parameters (if using VDIIS)
       !----------------------------------------------------------------------------
       if ((infos%control%diis_type == 5) .and. &
@@ -951,7 +984,10 @@ contains
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
-    if (iter > maxit) then
+    if (stalled_exit) then
+      write(IW,"(3x,64('-')/10x,'SCF stalled before convergence; escalating to a higher-order solver.')")
+      infos%mol_energy%SCF_converged = .false.
+    else if (iter > maxit) then
       write(IW,"(3x,64('-')/10x,'SCF did not converge. Restarting SCF with the TRAH method.')")
       infos%mol_energy%SCF_converged = .false.
     else
