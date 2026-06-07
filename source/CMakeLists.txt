@@ -15,6 +15,8 @@ set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CM
 add_library(oqp ${SOURCES})
 add_dependencies(oqp libxc libtagarray libecpint libopentrustregion)
 target_link_libraries(oqp xcf03 xc tagarray_f tagarray ecpint Faddeeva ${OTR_LIB_NAME})
+# dlsym() in mathlib/blas_thread_ctl.c
+target_link_libraries(oqp ${CMAKE_DL_LIBS})
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()

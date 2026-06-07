@@ -44,12 +44,31 @@ def install_minimal_oqp_stubs():
 
 
 class TestAnalyticalHessianBasisLGate(unittest.TestCase):
+    # sys.modules keys mutated by install_minimal_oqp_stubs()/load_module();
+    # snapshot and restore them so the basis_set_exchange stub (which only knows a
+    # couple of basis names) does not leak into later tests that use real bases.
+    _STUB_KEYS = (
+        "oqp",
+        "oqp.utils",
+        "oqp.utils.mpi_utils",
+        "basis_set_exchange",
+        "input_checker_hessian_l_gate_under_test",
+    )
+
     def setUp(self):
+        self._saved_modules = {k: sys.modules.get(k) for k in self._STUB_KEYS}
         install_minimal_oqp_stubs()
         self.input_checker = load_module(
             "input_checker_hessian_l_gate_under_test",
             "pyoqp/oqp/utils/input_checker.py",
         )
+
+    def tearDown(self):
+        for key, value in self._saved_modules.items():
+            if value is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = value
 
     def test_analytical_hessian_rejects_g_or_higher_basis_functions(self):
         config = {

@@ -433,9 +433,12 @@ contains
 
     integer :: i, n
 
-!$omp parallel do private(i,n)
+!$omp parallel do private(i)
     do i = 1, ld
-      a(:,i) = a(:,i)*p(i)*p(1:i)
+      ! Scale the full column: a(j,i) *= p(i)*p(j), j = 1..ld.  (The previous
+      ! p(1:i) section was non-conforming Fortran; it only worked by accident
+      ! at -O2 and aborts under -fcheck=bounds.)
+      a(1:ld,i) = a(1:ld,i)*p(i)*p(1:ld)
     end do
 !$omp end parallel do
 
@@ -567,7 +570,7 @@ contains
 !> @param[out]   aov    AO values
 !> @author Vladimir Mironov
   subroutine compAOv(basis, ptxyz, naos, &
-                     aov)
+                     aov, shells)
 
     use precision, only: fp
     implicit none
@@ -577,6 +580,9 @@ contains
     real(kind=fp), intent(in) :: ptxyz(3)
     integer, intent(OUT) :: naos
     real(KIND=fp), contiguous, intent(OUT) :: aov(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     real(KIND=fp) :: &
       vexp, vexp1, vexp2, dum
@@ -585,11 +591,22 @@ contains
       ishell, imomfct, ix, iy, iz, ityp
     real(kind=fp) :: dr1(0:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         offset => basis%ao_offset(ishell), &
@@ -659,7 +676,7 @@ contains
 !> @param[out]   aogz   AO gradient, Z component
 !> @author Vladimir Mironov
   subroutine compAOvg(basis, ptxyz, naos, &
-                      aov, aogx, aogy, aogz)
+                      aov, aogx, aogy, aogz, shells)
 
     use precision, only: fp
     implicit none
@@ -671,6 +688,9 @@ contains
 
     real(KIND=fp), contiguous, intent(OUT) :: aov(:)
     real(KIND=fp), contiguous, intent(OUT) :: aogx(:), aogy(:), aogz(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     integer :: &
       ishell, loci, &!, iatm, mini, maxi, loci0, & !ifct
@@ -687,13 +707,24 @@ contains
       k2, imomfct
     real(kind=fp) :: dr1(-1:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(:-1,:) = 0
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
 
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         maxi => basis%naos(ishell), &
@@ -814,7 +845,7 @@ contains
 !> @author Vladimir Mironov
   subroutine compAOvgg(basis, ptxyz, naos, &
                        aov, aogx, aogy, aogz, &
-                       aog2xx, aog2yy, aog2zz, aog2xy, aog2yz, aog2xz)
+                       aog2xx, aog2yy, aog2zz, aog2xy, aog2yz, aog2xz, shells)
 
     use precision, only: fp
     implicit none
@@ -829,6 +860,9 @@ contains
     real(KIND=fp), contiguous, intent(OUT) :: &
       aog2xx(:), aog2yy(:), aog2zz(:), &
       aog2xy(:), aog2yz(:), aog2xz(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     integer :: &
       ishell, loci, &!, iatm, mini, maxi, loci0, & !ifct
@@ -852,13 +886,24 @@ contains
       k2, imomfct
     real(kind=fp) :: dr1(-2:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(:-1,:) = 0
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
 
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         maxi => basis%naos(ishell), &

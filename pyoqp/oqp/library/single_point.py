@@ -382,6 +382,14 @@ class SinglePoint(Calculator):
     def reference(self, do_init_scf=True):
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
+        # Experimental petite-list reduction (no-op unless
+        # [symmetry] use_integral_symmetry is enabled): reorient before the
+        # guess/basis stage; stage the maps once the basis exists.
+        symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
+                           self.mol.symmetry_metadata.get('use_integral_symmetry'))
+        if symmetry_on:
+            self.mol.reorient_for_integral_symmetry()
+
         if self.init_scf != 'no' and do_init_scf:
             # do initial scf iteration to help convergence
             self._init_convergence()
@@ -389,6 +397,9 @@ class SinglePoint(Calculator):
             self._prep_guess()
 
         self.swapmo()
+
+        if symmetry_on:
+            self.mol.stage_integral_symmetry_maps()
 
         scf_flag = self._run_scf()
 
@@ -405,6 +416,10 @@ class SinglePoint(Calculator):
 
         energy = [self.mol.mol_energy.energy]
         self.mol.energies = energy
+
+        # Metadata-only MO irrep labels (no-op unless symmetry is enabled).
+        if getattr(self.mol, 'symmetry_metadata', None):
+            self.mol.label_molecular_orbitals()
 
         return energy
 
@@ -472,6 +487,15 @@ class SinglePoint(Calculator):
             # downstream quantities such as range-separated excited gradients).
             snapshot = self._snapshot_scf_state()
             dump_log(self.mol, title='PyOQP: Verifying SCF stability (TRAH)', section='input')
+
+            # Stability-following explores symmetry-breaking rotations whose
+            # densities are not totally symmetric, so the petite-list
+            # reduction must be off during (and after, if a broken-symmetry
+            # solution is kept) this stage.
+            petite_staged = self._petite_is_staged()
+            if petite_staged:
+                self._set_petite_enabled(False)
+
             data.set_scf_converger_type('trah')
             data.set_trah_stability(True)
             data.set_sd_scf(False)
@@ -481,6 +505,10 @@ class SinglePoint(Calculator):
 
             if trah_ok and e_post < e_pre - 1.0e-7:
                 # The converged point was unstable: keep the lower solution.
+                # The kept density may be symmetry-broken: petite stays off.
+                if petite_staged:
+                    self.mol.symmetry_metadata['integral_symmetry']['status'] = \
+                        'disabled_symmetry_broken_scf'
                 dump_log(self.mol,
                          title='PyOQP: SCF point was unstable; relaxed to a lower '
                                'solution (dE = %.3e Hartree)' % (e_post - e_pre),
@@ -494,6 +522,9 @@ class SinglePoint(Calculator):
                         setattr(self.mol.mol_energy, attr, value)
                     except Exception:
                         pass
+                # Symmetric solution kept: the petite reduction is valid again.
+                if petite_staged:
+                    self._set_petite_enabled(True)
                 if not trah_ok:
                     # Re-run the primary converger (warm-started) so mol_energy
                     # is consistent with the restored orbitals.
@@ -513,6 +544,21 @@ class SinglePoint(Calculator):
         'OQP::VEC_MO_A', 'OQP::E_MO_A', 'OQP::DM_A', 'OQP::FOCK_A',
         'OQP::VEC_MO_B', 'OQP::E_MO_B', 'OQP::DM_B', 'OQP::FOCK_B',
     )
+
+    def _petite_is_staged(self):
+        """True when the petite-list reduction maps are staged and active."""
+        meta = getattr(self.mol, 'symmetry_metadata', None)
+        if not meta:
+            return False
+        return meta.get('integral_symmetry', {}).get('status') == 'active'
+
+    def _set_petite_enabled(self, enabled):
+        import numpy as np
+        try:
+            self.mol.data['OQP::sym_petite_enable'] = \
+                np.array([1 if enabled else 0], dtype=np.int64)
+        except Exception:
+            pass
 
     def _snapshot_scf_state(self):
         """Deep-copy the tags that define the current converged SCF solution."""
@@ -555,6 +601,12 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
+        # Response-space symmetry blocking (no-op unless
+        # [symmetry] use_response_symmetry is enabled).
+        if getattr(self.mol, 'symmetry_metadata', None) and \
+                self.mol.symmetry_metadata.get('use_response_symmetry'):
+            self.mol.stage_response_symmetry()
+
         self.tddft()
         energies = ref_energy + [ex + ref_energy[0] for ex in self.mol.data['OQP::td_energies']]
 
@@ -570,6 +622,10 @@ class SinglePoint(Calculator):
                 exit()
 
         self.mol.energies = energies
+
+        # Metadata-only state irrep labels (no-op unless symmetry enabled).
+        if getattr(self.mol, 'symmetry_metadata', None):
+            self.mol.label_excited_states()
 
         return energies
 
@@ -646,6 +702,11 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+
+        # Petite-list runs produce a skeleton two-electron gradient; project
+        # onto the totally symmetric component (exact for 1-dim irreps; all
+        # abelian irreps are 1-dim). No-op unless the reduction is active.
+        grads = self.mol.symmetrize_gradient(grads)
 
         self.mol.grads = grads
 
@@ -777,6 +838,10 @@ class Hessian(Calculator):
                 self.mol.modes = modes
                 self.mol.inertia = inertia
                 self._compute_vibrational_intensities(modes)
+
+                # Metadata-only mode irrep labels (no-op unless symmetry enabled).
+                if getattr(self.mol, 'symmetry_metadata', None):
+                    self.mol.label_normal_modes()
 
                 self.mol.save_freqs(self.state)
                 dump_data(self.mol, (self.mol, freqs, modes), title='FREQ', fpath=self.mol.log_path)
@@ -944,12 +1009,24 @@ class Hessian(Calculator):
             raise RuntimeError('Native oqp.hf_hessian did not store OQP::hf_hessian.') from exc
 
         hessian = self.mol.set_hessian_result(raw_hessian)
+
+        # The native electronic Hessian excludes the empirical dftd4 dispersion
+        # term.  The numerical Hessian includes it implicitly (each displaced
+        # gradient is dispersion-corrected), so add d2 E_disp / dR2 here to keep
+        # the analytic path consistent with the numerical one.
+        disp_hessian = self._dispersion_hessian()
+        d4_added = np.ndim(disp_hessian) != 0
+        if d4_added:
+            hessian = hessian + disp_hessian
+            self.mol.hessian = hessian
+
         metadata = dict(getattr(self.mol, 'hessian_metadata', {}) or {})
         metadata.update({
             'backend': 'native_openqp',
             'native_openqp_kernel': True,
             'native_openqp_cphf_solver_exercised': True,
             'native_openqp_final_assembly': True,
+            'native_openqp_d4_dispersion': d4_added,
             'no_external_hessian_backend': True,
             'no_numerical_fallback': True,
             'shape': list(hessian.shape),
@@ -974,6 +1051,49 @@ class Hessian(Calculator):
         raise NotImplementedError(
             f'{label} analytic Hessian is not implemented yet; no numerical fallback will be used.'
         )
+
+    def _dispersion_hessian(self):
+        """D4 dispersion contribution to the analytic Hessian, or 0.0 if disabled.
+
+        dftd4 exposes the dispersion energy and gradient (not a Hessian), so we
+        central-difference its analytic gradient with the same step the numerical
+        Hessian uses.  dftd4 gradients are cheap (~ms), so the 6N evaluations add
+        negligible cost.  Coordinates are in Bohr and the result is in
+        Hartree/Bohr**2, matching the native electronic Hessian, with the same
+        atom-major (x, y, z) ordering used throughout.
+        """
+        if not self.mol.config.get('input', {}).get('d4', False):
+            return 0.0
+
+        try:
+            from dftd4.interface import DampingParam, DispersionModel
+        except Exception as exc:  # pragma: no cover - exercised only without dftd4
+            raise RuntimeError(
+                'hess.type=analytical with input.d4=true requires the dftd4 package; '
+                'install dftd4 or use hess.type=numerical.'
+            ) from exc
+
+        functional = self.mol.config['input']['functional'].lower() or 'hf'
+        func_for_d4 = 'bhlyp' if functional in ('bhhlyp',) else functional
+        param = DampingParam(method=func_for_d4)
+
+        atoms = self.mol.get_atoms()
+        dx = self.mol.config['hess']['dx']
+        flat = np.asarray(self.mol.get_system(), dtype=float).reshape(-1)
+        ncoord = flat.size
+
+        def disp_grad(coord_flat):
+            model = DispersionModel(atoms, coord_flat.reshape((-1, 3)))
+            res = model.get_dispersion(param, grad=True)
+            return np.asarray(res['gradient'], dtype=float).reshape(-1)
+
+        hess = np.zeros((ncoord, ncoord))
+        for i in range(ncoord):
+            cp = flat.copy(); cp[i] += dx
+            cm = flat.copy(); cm[i] -= dx
+            hess[i, :] = (disp_grad(cp) - disp_grad(cm)) / (2.0 * dx)
+        # symmetrize (the FD asymmetry is O(dx**2))
+        return 0.5 * (hess + hess.T)
 
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'

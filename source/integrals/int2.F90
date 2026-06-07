@@ -33,16 +33,25 @@ module int2_compute
   public int2_rhf_data_t
   public int2_urohf_data_t
   public ints_exchange
+  public petite_quartet_weight
+  public load_petite_shell_map
 
 !###############################################################################
 
   type eri_data_t
     logical :: attenuated_ints = .false.
+    logical :: rys_only = .false.
     integer :: ids(4)
     integer :: flips(4)
     integer :: am(4)
     integer :: nbf(4)
     real(kind=dp) :: mu2 = 1.0d99
+    ! Petite-list orbit weight (q4); 1 unless symmetry reduction is active.
+    real(kind=dp) :: weight = 1.0d0
+    ! Weighted screening thresholds: needed by the non-abelian full-group
+    ! tier (orbit members have unequal magnitudes); the abelian tier keeps
+    ! the C1-identical unweighted cutoff for exact cancellation.
+    logical :: weighted_cutoff = .false.
     real(kind=dp), pointer :: pints(:,:,:,:)
     type(libint_t), allocatable :: erieval(:)
     type(int2_rys_data_t), allocatable :: gdat
@@ -135,7 +144,19 @@ module int2_compute
     type(int2_pair_storage) :: ppairs
 
     logical :: attenuated = .false.
+    !> Force the native Rys path for all L>2 quartets, bypassing libint even
+    !> when it is compiled in.  Consumers whose validated reference data was
+    !> produced with the Rys kernels (e.g. the NMR magnetic response) set this.
+    logical :: rys_only = .false.
     real(kind=dp) :: mu = 1.0d99
+
+    ! Symmetry petite list (loaded from tagarray when pyoqp enables
+    ! use_integral_symmetry). The shell map is 1-based, stored flat with
+    ! shell index fastest: map(shell, op) = sym_shell_map((op-1)*nshell+shell).
+    logical :: petite = .false.
+    logical :: sym_full = .false.
+    integer :: sym_nops = 0
+    integer(8), contiguous, pointer :: sym_shell_map(:) => null()
 
     type(par_env_t) :: pe
   contains
@@ -143,6 +164,7 @@ module int2_compute
     private
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure, public, pass :: init => int2_compute_t_init
+    procedure, public, pass :: enable_petite => int2_compute_t_enable_petite
     procedure, public, pass :: set_screening => int2_compute_t_set_screening
     procedure, public, pass :: clean => int2_compute_t_clean
     procedure, public, pass :: run => int2_run
@@ -243,14 +265,170 @@ contains
     call this%ppairs%alloc(basis, this%cutoffs)
     call this%ppairs%compute(basis, this%cutoffs)
 
+    ! Note: the petite-list reduction is NOT loaded here. It is only valid
+    ! for totally symmetric densities (SCF Fock), so the SCF caller opts in
+    ! explicitly via enable_petite(); response/CPHF builders must not.
+    this%petite = .false.
+    this%sym_nops = 0
+    this%sym_shell_map => null()
+
   end subroutine int2_compute_t_init
+
+!###############################################################################
+
+!> @brief Opt into the symmetry petite-list reduction (skeleton Fock).
+!> @detail Loads the shell map written by pyoqp when use_integral_symmetry
+!>   is enabled. Only valid when the contracted density is totally
+!>   symmetric and the caller symmetrizes the resulting skeleton matrix.
+  subroutine int2_compute_t_enable_petite(this, infos)
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    class(int2_compute_t), intent(inout) :: this
+    type(information), target, intent(inout) :: infos
+
+    integer(8), contiguous, pointer :: petite_flag(:)
+    integer(4) :: status
+
+    call tagarray_get_data(infos%dat, OQP_sym_petite, petite_flag, status=status)
+    if (status /= TA_OK) return
+    if (petite_flag(1) == 0) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, this%sym_shell_map, status=status)
+    if (status /= TA_OK) then
+      this%sym_shell_map => null()
+      return
+    end if
+    if (mod(size(this%sym_shell_map), this%basis%nshell) /= 0) then
+      ! Stale map from a different basis: ignore (fail-safe to C1).
+      this%sym_shell_map => null()
+      return
+    end if
+
+    this%sym_nops = int(size(this%sym_shell_map)/this%basis%nshell)
+    this%petite = this%sym_nops > 1
+
+    block
+      real(kind=dp), contiguous, pointer :: blocks(:)
+      call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
+      this%sym_full = status == TA_OK
+    end block
+
+  end subroutine int2_compute_t_enable_petite
+
+!###############################################################################
+
+!> @brief Load the petite-list shell map written by pyoqp, if enabled.
+!> @detail nops = 0 when the reduction is disabled or the map is stale.
+  subroutine load_petite_shell_map(infos, nshell, map, nops)
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: nshell
+    integer(8), contiguous, pointer, intent(out) :: map(:)
+    integer, intent(out) :: nops
+
+    integer(8), contiguous, pointer :: petite_flag(:)
+    integer(4) :: status
+
+    map => null()
+    nops = 0
+
+    call tagarray_get_data(infos%dat, OQP_sym_petite, petite_flag, status=status)
+    if (status /= TA_OK) return
+    if (petite_flag(1) == 0) return
+
+    call tagarray_get_data(infos%dat, OQP_sym_shell_map, map, status=status)
+    if (status /= TA_OK) then
+      map => null()
+      return
+    end if
+    if (mod(size(map), nshell) /= 0) then
+      map => null()
+      return
+    end if
+
+    nops = int(size(map)/nshell)
+    if (nops < 2) then
+      map => null()
+      nops = 0
+    end if
+
+  end subroutine load_petite_shell_map
+
+!###############################################################################
+
+!> @brief Petite-list weight of a canonical shell quartet.
+!> @detail Returns 0 if (i,j,k,l) is not the lexicographically largest
+!>   member of its orbit under the abelian group (the caller skips it),
+!>   otherwise the orbit size |G|/|stabilizer|. The quartet must be in
+!>   canonical order (i>=j, (i,j)>=(k,l), k>=l), which the int2_twoei
+!>   loop guarantees.
+  integer function petite_quartet_weight(map, nops, nshell, i, j, k, l) result(q4)
+    implicit none
+    integer(8), intent(in) :: map(:)
+    integer, intent(in) :: nops, nshell, i, j, k, l
+
+    integer :: iop, nstab, t, base
+    integer :: pi, pj, pk, pl, a1, a2, b1, b2
+
+    nstab = 0
+    do iop = 1, nops
+      base = (iop-1)*nshell
+      pi = int(map(base + i))
+      pj = int(map(base + j))
+      pk = int(map(base + k))
+      pl = int(map(base + l))
+
+      a1 = max(pi, pj); a2 = min(pi, pj)
+      b1 = max(pk, pl); b2 = min(pk, pl)
+      if (a1 < b1 .or. (a1 == b1 .and. a2 < b2)) then
+        t = a1; a1 = b1; b1 = t
+        t = a2; a2 = b2; b2 = t
+      end if
+
+      if (a1 /= i) then
+        if (a1 > i) then
+          q4 = 0
+          return
+        end if
+      else if (a2 /= j) then
+        if (a2 > j) then
+          q4 = 0
+          return
+        end if
+      else if (b1 /= k) then
+        if (b1 > k) then
+          q4 = 0
+          return
+        end if
+      else if (b2 /= l) then
+        if (b2 > l) then
+          q4 = 0
+          return
+        end if
+      else
+        nstab = nstab + 1
+      end if
+    end do
+
+    q4 = nops / nstab
+
+  end function petite_quartet_weight
 
 !###############################################################################
 
   subroutine int2_compute_t_set_screening(this)
     implicit none
     class(int2_compute_t), intent(inout) :: this
-    call ints_exchange(this%basis, this%schwarz_ints_regular)
+    call ints_exchange(this%basis, this%schwarz_ints_regular, rys_only=this%rys_only)
   end subroutine int2_compute_t_set_screening
 
 !###############################################################################
@@ -361,6 +539,7 @@ contains
     integer, allocatable :: pair_i(:), pair_j(:)
     integer :: lmax
     integer :: nint
+    integer :: q4
     real(kind=dp) :: test
 
     integer :: nshell
@@ -392,7 +571,8 @@ contains
       if (this%attenuated) then
         if (.not.allocated(this%schwarz_ints_attenuated)) then
           allocate(this%schwarz_ints_attenuated, mold=this%schwarz_ints_regular)
-          call ints_exchange(this%basis, this%schwarz_ints_attenuated, this%mu**2)
+          call ints_exchange(this%basis, this%schwarz_ints_attenuated, this%mu**2, &
+                             rys_only=this%rys_only)
         end if
         this%schwarz_ints => this%schwarz_ints_attenuated
       else
@@ -412,7 +592,7 @@ contains
 
 !$omp parallel &
 !$omp   private( &
-!$omp   i, j, k, l, ij_pair, jork, &
+!$omp   i, j, k, l, ij_pair, jork, q4, &
 !$omp   tim0, tim1, tim2, tim3, tim4, ithread,   &
 !$omp   test, &
 !$omp   int2_storage, &
@@ -447,6 +627,7 @@ contains
     allocate(eri_data%gdat)
 
     eri_data%attenuated_ints = this%attenuated
+    eri_data%rys_only = this%rys_only
     eri_data%mu2 = this%mu**2
 
     if (libint2_active) then
@@ -476,6 +657,11 @@ contains
 
         if (this%schwarz) then
           test = int2_consumer%screen_ij(this%schwarz_ints, i, j)
+          ! With the petite list active the surviving representative carries
+          ! up to |G| weight, so the pair-level skip must be conservative by
+          ! the same factor (orbit members of non-abelian operations live in
+          ! different shell pairs with different bounds).
+          if (this%petite .and. this%sym_full) test = test*real(this%sym_nops, dp)
           if (test < this%cutoffs%integral_cutoff) then
             nschwz = nschwz + i*(i-1)/2+j
             cycle
@@ -490,13 +676,31 @@ contains
           do l = 1, jork
 
 !$          if (oflag) tim1 = omp_get_wtime()
+            ! Petite list: keep only the orbit representative, weighted by
+            ! the orbit size; the skeleton Fock is symmetrized afterwards.
+            if (this%petite) then
+              q4 = petite_quartet_weight(this%sym_shell_map, this%sym_nops, &
+                                         nshell, i, j, k, l)
+              if (q4 == 0) cycle
+              eri_data%weight = real(q4, dp)
+              eri_data%weighted_cutoff = this%sym_full
+            else
+              eri_data%weight = 1.0d0
+              eri_data%weighted_cutoff = .false.
+            end if
+
             if (this%schwarz) then
               test = int2_consumer%screen_ijkl(this%schwarz_ints, i, j, k, l)
+              ! Screen the weighted contribution: non-abelian orbit members
+              ! have unequal element magnitudes, so the unweighted threshold
+              ! would leak a systematic cutoff-level error into the skeleton.
+              if (eri_data%weighted_cutoff) test = test*eri_data%weight
               if (test < this%cutoffs%integral_cutoff) then
                 nschwz = nschwz+1
                 cycle
               end if
             end if
+
             thr_nshq = thr_nshq + 1
 !$          if (oflag) tim2 = tim2 + omp_get_wtime() - tim1
 
@@ -717,7 +921,8 @@ contains
     eri_data%nbf = (eri_data%am+1)*(eri_data%am+2)/2
 
     rotspd = max_am <= 2
-    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints
+    libint = .not.rotspd.and.libint2_active.and..not.eri_data%attenuated_ints &
+             .and..not.eri_data%rys_only
     rys = .not.rotspd.and..not.libint
 
     if (rotspd) then
@@ -1065,7 +1270,7 @@ contains
 
 !###############################################################################
 
-  subroutine ints_exchange(basis, schwarz_ints, mu2)
+  subroutine ints_exchange(basis, schwarz_ints, mu2, rys_only)
     use int2e_rotaxis, only: genr22
     use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
     use int2e_libint, only: libint_compute_eri, libint_print_eri
@@ -1080,6 +1285,7 @@ contains
     type(basis_set), intent(in) :: basis
     real(kind=dp), intent(inout) :: schwarz_ints(:,:)
     real(kind=dp), optional, intent(in) :: mu2
+    logical, optional, intent(in) :: rys_only
 
     real(kind=dp), parameter :: &
       ic_exchng  = 1.0d-15, &
@@ -1096,7 +1302,7 @@ contains
     integer :: am(4), max_am
     integer :: ok
     logical :: rotspd, libint, zero_shq, rys
-    logical :: attenuated
+    logical :: attenuated, rys_only_
     real(kind=dp) :: vmax
     real(kind=dp), allocatable, target :: ints(:)
     real(kind=dp), pointer :: pints(:,:,:,:)
@@ -1106,6 +1312,8 @@ contains
     type(int2_pair_storage) :: ppairs
 
     attenuated = present(mu2)
+    rys_only_ = .false.
+    if (present(rys_only)) rys_only_ = rys_only
 
     lmax = maxval(basis%am)
     if (lmax < 0 .or. lmax > 6) call show_message("Basis set agular momentum exceeds max. supported", WITH_ABORT)
@@ -1131,7 +1339,7 @@ contains
         max_am = maxval(am)
 
         rotspd = max_am <= 2
-        libint = .not.rotspd.and.libint2_active.and..not.attenuated
+        libint = .not.rotspd.and.libint2_active.and..not.attenuated.and..not.rys_only_
         rys = .not.rotspd.and..not.libint
         if (rotspd) then
           if (attenuated) then
@@ -1234,9 +1442,18 @@ jc:   do j = 1, maxj
 
           do l = 1, maxl
 
+            ! Element cutoff on the weighted magnitude: the stored value
+            ! carries the orbit weight, so the effective threshold matches
+            ! the C1 path even when non-abelian orbit members have unequal
+            ! element magnitudes.
             val = eri_data%pints(l,k,j,i)
-
-            if (abs(val)<cutoff) cycle
+            if (eri_data%weighted_cutoff) then
+              if (abs(val)*eri_data%weight < cutoff) cycle
+            else
+              ! Abelian tier: C1-identical element set (exact cancellation).
+              if (abs(val) < cutoff) cycle
+            end if
+            val = val*eri_data%weight
             nint = nint + 1
 
             i1 = i+loci
