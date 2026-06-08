@@ -37,6 +37,9 @@ contains
     use printing, only: print_module_info
     use tdhf_mrsf_energy_mod, only: tdhf_mrsf_energy
     use tdhf_mrsf_z_vector_mod, only: tdhf_mrsf_z_vector
+    use dft, only: dft_initialize
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_addons, only: calc_fock, scf_energy_t
 
     implicit none
 
@@ -45,7 +48,7 @@ contains
     logical, intent(in) :: electron_affinity
 
     type(basis_set), pointer :: basis
-    integer :: nbf, nbf2, nroot, ok, i
+    integer :: nbf, nbf2, nroot, ok, i, nfocks, nschwz
     integer :: nactive
     integer, allocatable :: dom_mo_idx(:), dom_no_idx(:)
     ! EKT natural-orbital deflation threshold, matching GAMESS EKT-MRSF
@@ -53,16 +56,19 @@ contains
     real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
     real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
     real(kind=dp), allocatable :: dens_pack(:), fock_pack(:)
+    type(dft_grid_t), target :: ea_molgrid
+    type(scf_energy_t) :: ea_energy
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
     real(kind=dp), allocatable :: density_alpha_mo(:,:), density_beta_mo(:,:)
     real(kind=dp), allocatable :: density_ip_mo(:,:), density_ea_mo(:,:)
     real(kind=dp), allocatable :: smat(:)
     real(kind=dp), allocatable :: density_mo(:,:), fock_mo(:,:), lagrangian_mo(:,:)
+    real(kind=dp), allocatable :: ea_density_ao(:,:), ea_fock_ao(:,:), saved_fock_ao(:,:)
     real(kind=dp), allocatable :: ekt_metric(:,:), ekt_operator(:,:)
     real(kind=dp), allocatable :: eig(:)
     real(kind=dp), allocatable :: orbitals(:,:), strengths(:), metric_norms(:)
     real(kind=dp), allocatable :: dom_mo_coeff(:), dom_no_coeff(:), dom_no_occ(:)
-    real(kind=dp), contiguous, pointer :: fock_a(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
     real(kind=dp), contiguous, pointer :: density_store(:,:), lagrangian_store(:,:)
     real(kind=dp), contiguous, pointer :: fock_store(:,:), orbital_store(:,:), eig_store(:), strength_store(:)
     character(len=*), parameter :: tags_required(7) = (/ character(len=80) :: &
@@ -89,6 +95,12 @@ contains
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
     nroot = max(1, min(infos%tddft%nstate, nbf))
+    select case (infos%control%scftype)
+    case (1)
+      nfocks = 1
+    case default
+      nfocks = 2
+    end select
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -99,6 +111,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
 
     allocate(dens_pack(nbf2), fock_pack(nbf2), &
+             ea_density_ao(nbf2,nfocks), ea_fock_ao(nbf2,nfocks), saved_fock_ao(nbf2,nfocks), &
              density_alpha_ao(nbf2), density_beta_ao(nbf2), &
              density_alpha_mo(nbf,nbf), density_beta_mo(nbf,nbf), &
              density_ip_mo(nbf,nbf), density_ea_mo(nbf,nbf), &
@@ -178,12 +191,43 @@ contains
     end block
 
     if (electron_affinity) then
-      ! EKT-EA: (F - W) * x = (I - P) * x * lambda
-      density_mo = density_ea_mo
+      ! EKT-EA: (F - W) * x = (I - P) * x * lambda.
+      ! GAMESS rebuilds the Fock matrix for EA from the relaxed MRSF density
+      ! (sfgrad.src:3269-3280, BUILDFOCK(..., MRDEA)) before forming F-W.
+      ! Reproduce that path here instead of using the reference SCF Fock.
+      ! GAMESS MRDEA uses the spin-averaged relaxed MRSF density
+      ! P = 1/2*(Da+Db) for the EA complement metric, not beta alone.
+      density_mo = 0.5_dp*(density_ip_mo + density_ea_mo)
       ekt_metric = -density_mo
       do i = 1, nbf
         ekt_metric(i,i) = ekt_metric(i,i) + 1.0_dp
       end do
+
+      ! GAMESS MRDEA builds a closed-shell Fock from the spin-summed
+      ! relaxed density: LDVAL = AO(Pavg), DSCAL(2), BUILDFOCK; internally
+      ! its DFT path halves that total density for alpha=beta.
+      ea_density_ao(:,1) = 0.5_dp*(density_alpha_ao + density_beta_ao)
+      if (nfocks > 1) ea_density_ao(:,2) = ea_density_ao(:,1)
+      saved_fock_ao(:,1) = fock_a
+      if (nfocks > 1) then
+        call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+        saved_fock_ao(:,2) = fock_b
+      end if
+
+      nschwz = 0
+      if (infos%control%hamilton >= 20) call dft_initialize(infos, basis, ea_molgrid)
+      call calc_fock(basis, infos, ea_molgrid, ea_fock_ao, ea_energy, &
+                     mo_a_in=mo_a, dens_in=ea_density_ao, nschwz=nschwz)
+
+      ! calc_fock updates the stored SCF Fock/energy as a side effect; restore
+      ! them because this EA-specific relaxed-density Fock is only an EKT
+      ! operator ingredient, not a new SCF reference.
+      fock_a = saved_fock_ao(:,1)
+      if (nfocks > 1) fock_b = saved_fock_ao(:,2)
+
+      call orthogonal_transform_sym(nbf, nbf, ea_fock_ao(:,1), mo_a, nbf, fock_pack)
+      call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
+      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator (GAMESS MRDEA path); nschwz=",I0)') nschwz
       ekt_operator = fock_mo - lagrangian_mo
     else
       ! EKT: W * x = P * x * lambda.  Metric is the spin-summed relaxed
@@ -440,7 +484,7 @@ contains
     real(kind=dp), allocatable :: dsym(:,:), nocc(:), uno(:,:), ukeep(:,:)
     integer, allocatable :: kept_idx(:)
     real(kind=dp), allocatable :: d_no(:,:), w_no(:,:), tmp(:,:)
-    real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:)
+    real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:), d_times_x(:)
     real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str, coeff_abs, best_abs
     integer :: i, j, m, ierr, ok, nout, best_idx
 
@@ -520,9 +564,12 @@ contains
       if (xnorm > 1.0e-14_dp) xvec(:,j) = xvec(:,j)/sqrt(xnorm)
     end do
 
-    ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X,
-    !     pole strength = X^T D_NO X  (<= 1 for physical NOs)
-    allocate(cdys(nbf,m), source=0.0_dp, stat=ok)
+    ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X.
+    !     Metric norms are X^T D_NO X after normalization (=1 for retained
+    !     physical roots).  EKT pole strengths follow the GAMESS/Pomogaev
+    !     definition X^T D_NO^2 X; weak Dyson roots therefore retain small
+    !     strengths instead of being forced to 1 by metric normalization.
+    allocate(cdys(nbf,m), d_times_x(m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     cdys = matmul(ukeep, xvec)
 
@@ -544,7 +591,8 @@ contains
         str = str + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
       end do
       metric_norms(j) = str
-      strengths(j) = str
+      d_times_x = matmul(d_no, xvec(:,j))
+      strengths(j) = dot_product(d_times_x, d_times_x)
 
       best_abs = -1.0_dp
       best_idx = 0
@@ -574,7 +622,7 @@ contains
       end if
     end do
 
-    deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys)
+    deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys, d_times_x)
   end subroutine solve_ekt_no_deflation
 
   pure logical function ekt_is_spurious(ebe_ev, metric_norm, pole_strength) result(flag)
