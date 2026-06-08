@@ -36,7 +36,20 @@ jobs:
             cmake -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc-${{ matrix.version }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.version }} -DCMAKE_Fortran_COMPILER=gfortran-${{ matrix.version }} -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=${{ matrix.MPI }}
          - name: Compile & Install
            run: |
-            ninja -C ${{ env.BUILD_DIR }} install
+            # External dependencies (libxc, nlopt, libint, ...) are fetched at build
+            # time via ExternalProject and the upstream hosts intermittently return
+            # HTTP 504. A failed download leaves no stamp file, so re-running ninja
+            # retries only the failed download (already-fetched deps stay cached).
+            n=0
+            until ninja -C ${{ env.BUILD_DIR }} install; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
          - name: Install pyoqp
            run: |
             cd pyoqp && pip install .
