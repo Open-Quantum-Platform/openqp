@@ -10,7 +10,16 @@ endif()
 # set flags for build types
 if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
     set(CMAKE_Fortran_FLAGS_DEBUG "-g -Wall -Wextra -fcheck=all -fbacktrace")
-    set(CMAKE_Fortran_FLAGS_RELEASE "-O2 -march=native")
+    # -march=native can break when the driver auto-detects a microarchitecture
+    # level (e.g. x86-64-v3) that an older backend does not accept as a valid
+    # -march value. Probe the flag and fall back to a plain -O2 if it fails.
+    include(CheckFortranCompilerFlag)
+    check_fortran_compiler_flag("-march=native" OTR_HAVE_MARCH_NATIVE)
+    if(OTR_HAVE_MARCH_NATIVE)
+        set(CMAKE_Fortran_FLAGS_RELEASE "-O2 -march=native")
+    else()
+        set(CMAKE_Fortran_FLAGS_RELEASE "-O2")
+    endif()
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
     set(CMAKE_Fortran_FLAGS "-fpscomp logicals")
     set(CMAKE_Fortran_FLAGS_DEBUG "-g -warn all -traceback")
