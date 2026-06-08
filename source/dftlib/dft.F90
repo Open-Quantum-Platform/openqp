@@ -818,9 +818,13 @@ contains
         end if
       end if
 
-!     Set up Bragg-Slater radii for atoms
+!     Set up Bragg-Slater radii for atoms.  rad_grid_type: 0=mhl, 1=mk3,
+!     2=ta, 3=becke.  The Treutler-Ahlrichs grid (2) is defined with the
+!     Treutler-Ahlrichs Bragg-Slater radii; selecting only becke (3) here left
+!     rad_type='ta' on Gill radii (a TA-quadrature/Gill-radii hybrid), so
+!     include 2 as well.
       select case(infos%dft%rad_grid_type)
-      case (3)
+      case (2, 3)
         bstype = BRSL_TYPE_TA
       case default
         bstype = BRSL_TYPE_GILL
