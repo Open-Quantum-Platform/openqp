@@ -430,6 +430,23 @@ class NAMD_QMMM(NAMD):
             np.add.at(r, cj,  inv[cj][:, None] * dr)
         v += (r - r_unc) / dt
 
+    def _thermalize_initial(self):
+        """Rescale the full-system velocities to init_temp using the CONSTRAINED
+        degrees of freedom (3N - n_constraints - 3 COM).  Called after the
+        initial RATTLE has projected out the rigid-water internal velocities,
+        which otherwise leaves the system below the target temperature.  Uniform
+        scaling preserves both the RATTLE projection and zero COM momentum."""
+        ncon = len(self._ci) if self._has_constraints else 0
+        ndof = 3 * self.natom_all - ncon - 3
+        if ndof <= 0:
+            return
+        ke = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        if ke <= 0:
+            return
+        t_cur = 2.0 * ke / (ndof * KB_HARTREE)
+        if t_cur > 0:
+            self.v_all *= np.sqrt(self.init_temp / t_cur)
+
     def _rattle(self, r, v, tol=1.0e-9, maxit=500):
         """Project velocities onto the constraint manifold (RATTLE): make the
         relative velocity along each constrained bond zero.  v modified in place."""
@@ -597,6 +614,7 @@ class NAMD_QMMM(NAMD):
         f_all, epot = self._total_force(potmm0)
         accel = f_all / self.m_all[:, None]
         self._rattle(self.r_all, self.v_all)          # project initial MM velocities onto constraints
+        self._thermalize_initial()                    # rescale to init_temp on the constrained DOF
         self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
         self.prev_data = copy.deepcopy(mol.get_data())
         self._log_qmmm(0, epot)
@@ -683,7 +701,7 @@ class NAMD_SOC(NAMD):
         self.e0 = 0.0
         # weight threshold for the SHARC weighted-MCH diagonal gradient
         try:
-            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
+            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.001))
         except Exception:
             self.grad_wthr = 0.05
         # optional: choose the initial active state by MCH spin character
@@ -1109,7 +1127,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.e_ref = 0.0
         self.e0 = 0.0
         try:
-            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
+            self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.001))
         except Exception:
             self.grad_wthr = 0.05
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
@@ -1238,6 +1256,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
         accel = f_all / self.m_all[:, None]
         self._rattle(self.r_all, self.v_all)          # project initial MM velocities onto constraints
+        self._thermalize_initial()                    # rescale to init_temp on the constrained DOF
         self._ulog = u
         r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
         NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
