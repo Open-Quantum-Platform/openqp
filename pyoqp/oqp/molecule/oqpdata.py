@@ -611,7 +611,7 @@ class OQPData:
                 1: BFGS/SOSCF
                 2: TRAH
         """
-        if converger_type == "diis":
+        if converger_type in ("diis", "auto", "ml"):   # auto/ml resolved by the SCF manager (_run_scf); default DIIS here
             self._data.control.converger_type = 0
         elif converger_type == "soscf":
             self._data.control.converger_type = 1
