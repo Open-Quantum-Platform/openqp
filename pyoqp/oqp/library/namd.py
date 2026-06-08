@@ -96,9 +96,14 @@ class NAMD:
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
         self.rng = np.random.default_rng(self.seed)
 
-        # electronic amplitudes (complex), one per excited state
+        # electronic amplitudes (complex), one per excited state. For SOC-NAMD
+        # the active index runs over the larger spin-adiabatic manifold and the
+        # subclass overwrites coef; guard the base indexing against that.
         self.coef = np.zeros(self.nstate, dtype=complex)
-        self.coef[self.active - 1] = 1.0 + 0.0j
+        if 1 <= self.active <= self.nstate:
+            self.coef[self.active - 1] = 1.0 + 0.0j
+        else:
+            self.coef[0] = 1.0 + 0.0j
 
         # velocities (natom, 3) in atomic units
         self.vel = self._init_velocities()

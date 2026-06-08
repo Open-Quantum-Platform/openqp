@@ -1111,7 +1111,22 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             )
         nstate = int(_get(config, "tdhf", "nstate", 1))
         active = int(_get(config, "md", "active", 1))
-        if active < 1 or active > nstate:
+        soc_val = _get(config, "md", "soc", False)
+        soc = (soc_val is True) or (str(soc_val).lower() in ("true", "1", "on", "yes"))
+        if soc:
+            # SOC-NAMD hops on the spin-adiabatic manifold: ns singlets +
+            # 3*nt triplet Ms sublevels (ns = nt = tdhf.nstate).
+            amax = nstate + 3 * nstate
+            if active < 1 or active > amax:
+                report.add(
+                    "ERROR",
+                    "md.active",
+                    "Initial active state must be a valid spin-adiabatic state.",
+                    value=active,
+                    expected=f"1 <= md.active <= ns+3*nt ({amax}) for SOC-NAMD",
+                    action="Set [md] active within the spin-adiabatic manifold (4*nstate states), or raise [tdhf] nstate.",
+                )
+        elif active < 1 or active > nstate:
             report.add(
                 "ERROR",
                 "md.active",
