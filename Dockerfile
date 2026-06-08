@@ -1,14 +1,20 @@
-# Use a base Linux image with Python support
-FROM ubuntu:20.04
+# Use a base Linux image with Python support.
+# ubuntu:24.04 (noble) ships gcc-14, matching the CI gcc-build matrix, so the
+# image and CI compile with the same toolchain (avoids skew like the old
+# focal/gcc-9 rejecting flags that gcc-14 accepts).
+FROM ubuntu:24.04
 
 # Set timezone to Asia/Seoul to avoid timezone prompt
 ENV DEBIAN_FRONTEND=noninteractive
+# Ubuntu 24.04 marks the system Python as externally managed (PEP 668); allow
+# the image's pip installs into the system environment.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 RUN ln -fs /usr/share/zoneinfo/Asia/Seoul /etc/localtime && \
     echo "Asia/Seoul" > /etc/timezone
 
 # Install dependencies, including LAPACK and BLAS, with --fix-missing
 RUN apt-get update && apt-get install -y --fix-missing \
-    gcc g++ gfortran cmake ninja-build \
+    gcc-14 g++-14 gfortran-14 cmake ninja-build \
     openmpi-bin libopenmpi-dev \
     python3-pip wget git \
     libblas-dev liblapack-dev \
@@ -28,7 +34,7 @@ ENV PATH="/opt/cmake/bin:$PATH"
 # checked out the branch/PR being tested, so do not clone main again here.
 COPY . /opt/openqp
 WORKDIR /opt/openqp
-RUN cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
+RUN cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_Fortran_COMPILER=gfortran-14 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
 RUN ninja -C build install
 RUN cd pyoqp && pip3 install .
 
