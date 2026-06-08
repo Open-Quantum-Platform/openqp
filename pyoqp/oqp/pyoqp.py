@@ -230,6 +230,31 @@ class Runner:
 
         # Set up banner
         oqp.oqp_banner(self.mol)
+        # Log the running OpenQP version + git HEAD commit so every output records
+        # which build produced it (works for source/editable installs; falls back to
+        # the package version when no git tree is reachable).
+        try:
+            import subprocess as _sp
+            _ver = getattr(oqp, "__version__", "")
+            _commit = ""
+            for _d in (os.environ.get("OPENQP_ROOT"),
+                       os.path.dirname(os.path.abspath(oqp.__file__))):
+                if not _d:
+                    continue
+                _r = _sp.run(["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=2)
+                if _r.returncode == 0 and _r.stdout.strip():
+                    _commit = _r.stdout.strip()
+                    _dirty = _sp.run(["git", "-C", _d, "status", "--porcelain"],
+                                     capture_output=True, text=True, timeout=2)
+                    if _dirty.stdout.strip():
+                        _commit += "+dirty"
+                    break
+            _bv = "OpenQP" + (" v%s" % _ver if _ver else "") + \
+                  ((" (git %s)" % _commit) if _commit else " (git commit unknown)")
+            dump_log(self.mol, section='', title='PyOQP build: %s' % _bv)
+        except Exception:
+            pass
 
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]

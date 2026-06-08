@@ -199,8 +199,34 @@ class SinglePoint(Calculator):
 
     def _prep_guess(self):
         oqp.library.set_basis(self.mol)
+        self._log_basis_harmonics()
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
+
+    def _log_basis_harmonics(self):
+        """Log whether d/f shells are Cartesian (6D/10F) or spherical (5D/7F), so
+        the basis convention is visible in the output (6-31G* is Cartesian/6D;
+        def2-/cc- sets are spherical/5D)."""
+        try:
+            from oqp.library.symmetry import (_cartesian_shell_size,
+                                              _spherical_shell_size)
+            basis = self.mol.data.get_basis()
+            if not basis:
+                return
+            nbf = int(basis['nbf'])
+            angs = [int(l) for l in basis['angs']]
+            if not any(l >= 2 for l in angs):
+                kind = 'spherical == Cartesian (s,p shells only)'
+            elif nbf == sum(_cartesian_shell_size(l) for l in angs):
+                kind = 'Cartesian (6D / 10F)'
+            elif nbf == sum(_spherical_shell_size(l) for l in angs):
+                kind = 'spherical harmonic (5D / 7F)'
+            else:
+                kind = 'unrecognized layout'
+            dump_log(self.mol, section='',
+                     title='PyOQP: basis angular functions = %s  [nbf = %d]' % (kind, nbf))
+        except Exception:
+            pass
 
     def _project_basis(self):
         oqp.library.project_basis(self.mol)
