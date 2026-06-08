@@ -588,6 +588,21 @@ contains
       !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
+      ! Incremental-Fock refresh. The incremental build forms F = F_old + G[dD] and
+      ! screens the two-electron contributions on the *shrinking* dD; as dD -> 0 the
+      ! int2e_cutoff drops proportionally more terms, so F_old drifts (~1e-8) and the
+      ! DIIS error plateaus at that noise floor (it cannot reach conv). Periodically,
+      ! and every iteration once in the tight tail, rebuild the FULL Fock by zeroing
+      ! the incremental history -- this clears the accumulated drift (so DIIS converges
+      ! cleanly, matching a from-scratch build) while keeping incremental's per-cycle
+      ! savings during the global descent.
+      if (infos%control%scf_incremental /= 0 .and. iter > 1) then
+        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp) then
+          fold = 0.0_dp
+          dold = 0.0_dp
+        end if
+      end if
+
       call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
 
       !----------------------------------------------------------------------------
