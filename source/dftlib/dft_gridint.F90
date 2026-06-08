@@ -1442,12 +1442,15 @@ contains
     integer, intent(in) :: nPts
 
     integer :: i, j
-    real(kind=fp) :: f
+    real(kind=fp), allocatable :: w(:)
+
+    allocate(w(size(bfGrad,1)))
 
     do i = 1, nPts
-        f = fGrad(i)*2.0_fp
+!       Scaled orbital values are shared by the three Cartesian directions
+        w = moV(:,i)*(fGrad(i)*2.0_fp)
         do j = 1, 3
-          bfGrad(:,j) = bfGrad(:,j) + aoG1(:,i,j)*moV(:,i)*f
+          bfGrad(:,j) = bfGrad(:,j) + aoG1(:,i,j)*w
         end do
     end do
 
@@ -1468,19 +1471,25 @@ contains
     real(kind=fp), contiguous, intent(in) :: aoG1(:,:,:), aoG2(:,:,:)
     integer, intent(in) :: npts
 
-    integer :: i, jt, j1, j2
+    integer :: i, j1
     real(kind=fp) :: f(3)
+    real(kind=fp), allocatable :: s(:), t(:)
+
+    allocate(s(size(bfGrad,1)), t(size(bfGrad,1)))
 
     do i = 1, nPts
       f = fGrad(i,:)*2.0_fp
+
+!     s = sum_j2 f(j2)*moG1(:,i,j2) is shared by the three output directions;
+!     contracting aoG2/moG1 with f first halves the number of full-vector
+!     passes compared to the straightforward 3x3 (j1,j2) loop.
+      s = f(1)*moG1(:,i,1) + f(2)*moG1(:,i,2) + f(3)*moG1(:,i,3)
+
       do j1 = 1, 3 ! X__ Y__ Z__
-          do j2 = 1, 3 ! X__ Y__ Z__
-              jt = SQ_TO_TR(j1,j2)
-              bfGrad(:,j1) = bfGrad(:,j1) + f(j2)* &
-                  (  aoG2(:,i,jt)  *  moV(:,i) &
-                   + aoG1(:,i,j1)  * moG1(:,i,j2) &
-                  )
-          end do
+          t = f(1)*aoG2(:,i,SQ_TO_TR(j1,1)) &
+            + f(2)*aoG2(:,i,SQ_TO_TR(j1,2)) &
+            + f(3)*aoG2(:,i,SQ_TO_TR(j1,3))
+          bfGrad(:,j1) = bfGrad(:,j1) + t*moV(:,i) + aoG1(:,i,j1)*s
       end do
     end do
 
@@ -1500,16 +1509,20 @@ contains
     real(kind=fp), contiguous, intent(in) :: aoG2(:,:,:)
     integer, intent(in) :: npts
 
-    integer :: i, j1, j2, jt
-    real(kind=fp) :: f
+    integer :: i, j1
+    real(kind=fp), allocatable :: w(:,:)
+
+    allocate(w(size(bfGrad,1),3))
 
     do i = 1, npts
-        f = fgrad(i)
+!       Pre-scale the orbital gradients once per point; the three scaled
+!       vectors are then reused by all three output directions.
+        w = moG1(:,i,:)*fgrad(i)
         do j1 = 1, 3 ! x__ y__ z__
-            do j2 = 1, 3 ! x__ y__ z__
-                jt = sq_to_tr(j1,j2)
-                bfgrad(:,j1) = bfgrad(:,j1) + f*aoG2(:,i,jt)*moG1(:,i,j2)
-            end do
+            bfgrad(:,j1) = bfgrad(:,j1) &
+                         + aoG2(:,i,sq_to_tr(j1,1))*w(:,1) &
+                         + aoG2(:,i,sq_to_tr(j1,2))*w(:,2) &
+                         + aoG2(:,i,sq_to_tr(j1,3))*w(:,3)
         end do
     end do
 

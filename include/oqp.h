@@ -134,6 +134,8 @@ struct control_parameters {
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
+    int64_t   scal_rel;
+    int64_t   soc_2e;  
     int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   verbose;
@@ -174,6 +176,8 @@ struct electron_shell {
 
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
+int oqp_have_openmp(void);
+void oqp_omp_set_num_threads(int n);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
         int32_t *type_id, int32_t *ndims, int64_t *dims, void **v);
 int64_t oqp_alloc(struct oqp_handle_t *c_handle, char *code,
@@ -249,7 +253,8 @@ void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
+void soc_mrsf(struct oqp_handle_t *inf);
+void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);
 void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
 void nmr_giao_shielding(struct oqp_handle_t *inf);
-

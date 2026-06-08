@@ -134,6 +134,55 @@ For OpenMP and MPI run:
 mpirun -np number_of_mpi openqp any_example_file.inp
 ```
 
+##### Setting the OpenMP thread count
+
+The number of OpenMP threads (per process / MPI rank) can be set directly from
+the input file or the command line, instead of relying on `OMP_NUM_THREADS`:
+
+```ini
+[input]
+omp_threads=16        # OpenMP threads per process / MPI rank
+```
+
+```bash
+openqp any_example_file.inp --omp 16
+```
+
+Precedence (highest first): `--omp` → input `omp_threads` → `OMP_NUM_THREADS` →
+built-in default. The value is applied before the OpenMP runtime initializes, and
+is honored on the programmatic `Runner(input_dict=...)` path as well. If OpenQP
+was built without OpenMP (`-DENABLE_OPENMP=OFF`), the request is ignored with a
+warning and the run is serial. MPI rank count remains launcher-controlled
+(`mpirun -np ...`); `--nompi` disables MPI.
+
+#### Performance and threading
+
+OpenQP parallelizes the two-electron integral / Fock build with OpenMP. A few
+defaults and knobs keep it efficient:
+
+- **Sequential BLAS inside the integral build (automatic).** A threaded BLAS
+  keeps its own worker pool that would oversubscribe the cores against the
+  OpenMP integral threads. OpenQP forces BLAS to a single thread for the
+  duration of the integral build (via the BLAS library's own runtime setter, so
+  it cannot be re-introduced by a stray `OPENBLAS_NUM_THREADS`/`MKL_NUM_THREADS`)
+  and restores full BLAS threading afterward for diagonalization and other
+  BLAS-heavy phases. The frontend also sets conservative `*_NUM_THREADS=1` and
+  `OMP_STACKSIZE` defaults (via `setdefault`, so an explicit environment wins).
+  Measured ~1.5x faster at 24-28 threads on a dedicated node; near-ideal scaling
+  to the performance-core count.
+
+- **Low-memory Fock accumulator (automatic for large, sparse systems).** The
+  Fock build normally keeps one Fock copy per thread
+  (`fockdim x nfocks x nthreads`); for large bases on many cores this can reach
+  several GB. OpenQP can instead accumulate into a single shared Fock with atomic
+  updates (~`Nthreads`x less memory). It auto-engages only when the replicated
+  buffers would exceed a cap **and** the density is sparse (so atomic contention
+  is negligible). Controls:
+  - `OQP_FOCK_MEM_MB` — replicated-memory cap in MB before switching (default `4096`).
+  - `OQP_FOCK_SPARSITY` — significant shell-pair fraction below which the density
+    is considered sparse (default `0.5`).
+  - `OQP_FOCK_ATOMIC=1`/`0` — force the shared-atomic / replicated mode regardless.
+
 ### Detailed Documentation
 
 For more in-depth information, visit:
