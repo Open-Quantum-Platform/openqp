@@ -77,6 +77,15 @@ class NAMD:
         self.nstep = int(md['nstep'])
         self.dt_fs = float(md['dt'])
         self.dt = self.dt_fs * FS_TO_AU
+        # adaptive (variable) timestep: shrink dt when the fastest atom would
+        # move more than dx_max in one step (resolves stiff/hot modes without a
+        # globally small dt). dt_max is the configured dt; clamped to dt_min.
+        self.dt_max = self.dt
+        _da = md.get('dt_adaptive', False)
+        self.dt_adaptive = (_da is True) or (str(_da).lower() in ('true', '1', 'on', 'yes'))
+        self.dt_min = float(md.get('dt_min', 0.05)) * FS_TO_AU
+        self.dx_max = float(md.get('dx_max', 0.02))
+        self._t_fs = 0.0                            # cumulative time (fs) for variable-dt logging
         self.active = int(md['active'])            # 1-based excited-state index
         self.nstate = int(cfg['tdhf']['nstate'])
         self.substep = int(md['substep'])
@@ -139,6 +148,17 @@ class NAMD:
         p = (self.mass[:, None] * v).sum(axis=0)        # total momentum
         v = v - p / self.mass.sum()
         return v
+
+    def _adaptive_dt(self, vel, accel):
+        """Return the timestep for this step (atomic units). If dt_adaptive,
+        shrink dt so the largest predicted atomic displacement
+        |v*dt + 1/2 a*dt^2| stays below dx_max; clamp to [dt_min, dt_max]."""
+        if not getattr(self, 'dt_adaptive', False):
+            return self.dt_max
+        disp = np.abs(vel * self.dt_max + 0.5 * accel * self.dt_max ** 2)
+        dmax = float(disp.max()) if disp.size else 0.0
+        dt = self.dt_max * (self.dx_max / dmax) if dmax > self.dx_max else self.dt_max
+        return float(max(self.dt_min, min(self.dt_max, dt)))
 
     # ------------------------------------------------------------------ #
     # electronic structure for one geometry
@@ -297,7 +317,7 @@ class NAMD:
         pops = np.abs(self.coef) ** 2
         dump_log(
             mol,
-            title=(f'NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+            title=(f'NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
                    f'hop={hopped}  pop={np.array2string(pops, precision=4)}'),
@@ -621,6 +641,7 @@ class NAMD_QMMM(NAMD):
 
         for istep in range(1, self.nstep + 1):
             # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
+            # (fixed dt: the same-spin path uses the Fortran hop kernel with dt_fs)
             r_old = self.r_all.copy()
             self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
             self._shake(r_old, self.r_all, self.v_all, self.dt)
@@ -657,7 +678,7 @@ class NAMD_QMMM(NAMD):
         pops = np.abs(self.coef) ** 2
         dump_log(
             self.mol,
-            title=(f'QMMM-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+            title=(f'QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
                    f'hop={hopped}  pop={np.array2string(pops, precision=4)}'),
@@ -1032,7 +1053,9 @@ class NAMD_SOC(NAMD):
         self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
 
         for istep in range(1, self.nstep + 1):
-            # velocity-Verlet position update
+            # adaptive timestep + velocity-Verlet position update
+            self.dt = self._adaptive_dt(self.vel, accel)
+            self._t_fs += self.dt / FS_TO_AU
             r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
             mol.update_system(r.reshape(-1))
 
@@ -1087,7 +1110,7 @@ class NAMD_SOC(NAMD):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+            title=(f'SOC-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+e_pure:.8f}  '
                    f'E_pure={e_pure:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
                    f'dom=({self._mch_label(mult, state)},w={w:.3f})  '
@@ -1274,7 +1297,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
 
         for istep in range(1, self.nstep + 1):
-            # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
+            # adaptive timestep + velocity-Verlet position update + SHAKE
+            self.dt = self._adaptive_dt(self.v_all, accel)
+            self._t_fs += self.dt / FS_TO_AU
             r_old = self.r_all.copy()
             self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
             self._shake(r_old, self.r_all, self.v_all, self.dt)
@@ -1321,7 +1346,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         pop_t = float(pmch[self.ns:].sum())
         dump_log(
             self.mol,
-            title=(f'SOC-QMMM-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
+            title=(f'SOC-QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
                    f'dom=({NAMD_SOC._mch_label(mult, state)},w={w:.3f})  '

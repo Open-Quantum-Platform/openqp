@@ -314,6 +314,9 @@ OQP_CONFIG_SCHEMA = {
         'grad_wthr': {'type': float, 'default': '0.001'},   # SOC weighted-MCH gradient weight threshold (small -> continuous force)
         'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
         'econs': {'type': bool, 'default': 'False'},        # temporary: per-step velocity rescale to conserve E_tot (band-aid for diagonal-gradient drift)
+        'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
+        'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
+        'dx_max': {'type': float, 'default': '0.02'},       # bohr, max per-step atomic displacement (adaptive dt criterion)
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},
