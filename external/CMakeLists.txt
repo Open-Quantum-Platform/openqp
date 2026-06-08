@@ -180,17 +180,16 @@ elseif(DEFINED BLA_VENDOR)
 endif()
 
 # Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
-# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE), so on an AVX-512 build host it emits
-# AVX-512 into level_shifted_davidson which SIGILLs (exit 132) on AVX2-only compute
-# nodes -- only OTR routines crash, since main OpenQP uses no -march.
-# On x86_64 rewrite to a portable AVX2 baseline so the binary runs on any AVX2+ node;
-# on non-x86 (e.g. aarch64) those flags are invalid, so just strip them and let the
-# compiler use its default tuning.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
-  set(_OTR_ARCH_SED "s/-march=native/-march=x86-64-v3/g; s/-xHost/-axCORE-AVX2 -mno-avx512f/g")
-else()
-  set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
-endif()
+# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE). Two problems with leaving it:
+#   * -march=native on an AVX-512 build host emits AVX-512 into level_shifted_davidson,
+#     which SIGILLs (exit 132) on AVX2-only compute nodes (the original bug report);
+#   * a newer gfortran driver resolves -march=native to a microarch *level* name
+#     (e.g. x86-64-v3) that an OLDER backend rejects -- "bad value ('x86-64-v3') for
+#     '-march=' switch" -- breaking the Docker build.
+# Strip the host-tuning flags entirely so OTR builds with a generic -O2: portable
+# across toolchains (old/new gfortran, x86, aarch64) and free of the SIGILL. OTR is a
+# small solver, so losing -march tuning is negligible; main OpenQP uses no -march.
+set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
 ExternalProject_Add(libopentrustregion
     PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
     URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v2.0.0.tar.gz
