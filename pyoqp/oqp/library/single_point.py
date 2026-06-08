@@ -197,16 +197,21 @@ class SinglePoint(Calculator):
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
 
-    def _prep_guess(self):
+    def _prep_guess(self, basis_context=''):
         oqp.library.set_basis(self.mol)
-        self._log_basis_harmonics()
+        self._log_basis_harmonics(context=basis_context)
         oqp.library.ints_1e(self.mol)
         oqp.library.guess(self.mol)
 
-    def _log_basis_harmonics(self):
+    def _log_basis_harmonics(self, context=''):
         """Log whether d/f shells are Cartesian (6D/10F) or spherical (5D/7F), so
         the basis convention is visible in the output (6-31G* is Cartesian/6D;
-        def2-/cc- sets are spherical/5D)."""
+        def2-/cc- sets are spherical/5D).
+
+        ``context`` labels the basis being reported (e.g. 'initial-SCF' vs
+        'production') when an init_scf phase runs in a different basis, so the
+        line never silently records the temporary initial basis as the final
+        one."""
         try:
             from oqp.library.symmetry import (_cartesian_shell_size,
                                               _spherical_shell_size)
@@ -223,8 +228,9 @@ class SinglePoint(Calculator):
                 kind = 'spherical harmonic (5D / 7F)'
             else:
                 kind = 'unrecognized layout'
+            label = ('%s basis' % context) if context else 'basis'
             dump_log(self.mol, section='',
-                     title='PyOQP: basis angular functions = %s  [nbf = %d]' % (kind, nbf))
+                     title='PyOQP: %s angular functions = %s  [nbf = %d]' % (label, kind, nbf))
         except Exception:
             pass
 
@@ -241,6 +247,13 @@ class SinglePoint(Calculator):
         else:
             init_basis = self.init_basis
             init_library = self.init_library
+
+        # When the init-SCF phase runs in a *different* basis, the production
+        # basis is restored further below; label the init-phase log line and
+        # re-log the final basis so the convention/nbf reported is the one
+        # actually used for the production SCF (not the temporary initial basis).
+        init_basis_distinct = (self.init_basis not in ('none', '')
+                               and self.init_basis != target_basis)
 
         init_converger = self.mol.config['scf']['init_converger']
         target_converger = self.mol.config['scf']['converger_type']
@@ -286,7 +299,7 @@ class SinglePoint(Calculator):
             raise ValueError(f'Unknown initial scf method {self.init_scf}')
 
         dump_log(self.mol, title='PyOQP: Initial SCF steps', section='scf')
-        self._prep_guess()
+        self._prep_guess(basis_context=('initial-SCF' if init_basis_distinct else ''))
         if self.mol.config['guess']['type'] != 'json':
             init_calc(self.mol)
         # save initially converge orbitals
@@ -302,6 +315,8 @@ class SinglePoint(Calculator):
             self.mol.config['input']['basis'] = target_basis
             self.mol.config['input']['library'] = target_library
             oqp.library.set_basis(self.mol)
+            if init_basis_distinct:
+                self._log_basis_harmonics(context='production')
 
         # set parameters back to normal scf
         self.mol.config['input']['basis'] = target_basis
