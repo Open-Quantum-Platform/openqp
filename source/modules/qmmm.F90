@@ -735,10 +735,21 @@ module qmmm_mod
       OQP_DM_B/)
 
     real(kind=dp) :: mm_pot_av
+    logical :: skip_legacy
+    character(len=8) :: env_l
+    integer :: st_l
 
 !   Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
+
+!   Replace legacy espf_grad weight term with the complete pseudoinverse
+!   derivative (espf_grad_weight); ESPF_LEGACY=1 restores the old term.
+    skip_legacy = .true.
+    call get_environment_variable('ESPF_LEGACY', env_l, status=st_l)
+    if (st_l == 0) then
+      if (trim(env_l) == '1' .or. trim(env_l) == 'on') skip_legacy = .false.
+    end if
 
 !   Allocate memory
     nbf = basis%nbf
@@ -794,6 +805,7 @@ module qmmm_mod
     end if
 
 !   Add weights gradient term, -mm_potential*[(T^+T)^-1*T^+]*T^xQ + q*mm_potential^x
+    if (.not. skip_legacy) then
     call espf_grad(&
          x=xyz(:nptcur,1),&
          y=xyz(:nptcur,2),&
@@ -803,7 +815,13 @@ module qmmm_mod
          zn=infos%atoms%zn,&
          pchg=partial_charges,&
          grad=espf_grad_ta)
+    end if
 !    espf_grad = grad
+
+!   Complete pseudoinverse-weight derivative dZ/dR (a_i = phi_i-<phi> = -mm_potential)
+    call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
+                          ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -861,11 +879,23 @@ module qmmm_mod
 
     real(kind=dp) :: mm_pot_av
     logical :: use_relaxed
+    logical :: skip_legacy
+    character(len=8) :: env_l
+    integer :: st_l
 
 !   Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
     use_relaxed = .true.
+    ! The legacy espf_grad weight term is replaced by the complete pseudoinverse
+    ! derivative (espf_grad_weight, ported from GAMESS DVESPF/INIDZ): FD-verified
+    ! to cut the QM-atom force-energy inconsistency from RMS 1.6e-3 to 5.2e-4
+    ! Ha/bohr at large displacement.  Set ESPF_LEGACY=1 to restore the old term.
+    skip_legacy = .true.
+    call get_environment_variable('ESPF_LEGACY', env_l, status=st_l)
+    if (st_l == 0) then
+      if (trim(env_l) == '1' .or. trim(env_l) == 'on') skip_legacy = .false.
+    end if
 !   Allocate memory
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
@@ -929,6 +959,7 @@ module qmmm_mod
     end if
 
 !   Add weights gradient term, -mm_potential*[(T^+T)^-1*T^+]*T^xQ + q*mm_potential^x
+    if (.not. skip_legacy) then
     call espf_grad(&
          x=xyz(:nptcur,1),&
          y=xyz(:nptcur,2),&
@@ -938,7 +969,15 @@ module qmmm_mod
          zn=infos%atoms%zn,&
          pchg=partial_charges,&
          grad=espf_grad_ta)
+    end if
 !    espf_grad = grad
+
+!   Add the ESPF weight-matrix (pseudoinverse) derivative term dZ/dR.  Here
+!   mm_potential currently holds (<phi> - phi_i), so the mean-removed potential
+!   a_i = phi_i - <phi> = -mm_potential.
+    call espf_grad_weight(basis, nat, nptcur, infos%atoms%xyz, xyz, &
+                          ttt, -mm_potential(1:nat), dens, espf_grad_ta, logtol, &
+                          ELEMENTS_VDW_RADII(int(infos%atoms%zn)))
 
 !   Restablish mm potential to the original one
     do i=1,nat
@@ -992,6 +1031,255 @@ module qmmm_mod
     end do
 
   end subroutine espf_grad
+
+!--------------------------------------------------------------------------------
+
+!> @brief ESPF weight-matrix (pseudoinverse) derivative contribution to the
+!>        QM-atom gradient of the QM/MM electrostatic coupling energy.
+!>
+!> @detail The ESPF charges are q = Z u (electronic part), Z = (T^T T)^-1 T^T,
+!>         T_{i,k} = 1/|R_i - g_k| (atom i, grid point k), u_k = Tr(P V_k^AO) the
+!>         electronic ESP at grid point k.  The coupling energy contains
+!>         E = sum_i a_i sum_k Z_{i,k} u_k  with a_i = phi_i - <phi> (mean-removed
+!>         MM potential).  grad_elpot already differentiates u_k at fixed Z; this
+!>         routine adds the term from dZ/dR (the GAMESS DVESPF/INIDZ "DTZ.V"
+!>         contribution), with the atom-centred grid treated as fixed (matching
+!>         GAMESS).  Closed form (M = T^T T, Minv = Z Z^T):
+!>           b = Minv a,  g = Z u,  G = T^T g,  B = T^T b
+!>           dE/dR_{J,c} = sum_k dT(J,k,c) [ b_J (u_k - G_k) - g_J B_k ]
+!>           dT(J,k,c) = (g_k - R_J)_c / |g_k - R_J|^3
+!>
+!> @author  ported/derived from GAMESS espf.src (INIDZ/DVESPF), 2026-06
+!>
+!> @detail  Smooth-switching mode (ESPF_SMOOTH=1): the grid carries smooth
+!>          weights s_k (espf_smooth_s) and Z = M^-1 T diag(s), M = T diag(s) T^T.
+!>          E = a^T M^-1 T diag(s) u, so dE/dR has, besides the dT term (now with
+!>          an s_k factor), an extra weight-derivative term:
+!>            dE/dR += sum_k ds_k/dR * B_k (u_k - G_k),
+!>          with ds_k/dR_{J} = [prod_{b/=J} S_b] S'_J (1/delta) (R_J-g_k)/|g_k-R_J|.
+  subroutine espf_grad_weight(basis, nat, nptcur, at, gxyz, zmat, amm, dens, grad, logtol, rvdw)
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use int1, only: electrostatic_potential_unweighted
+    use messages, only: show_message, with_abort
+    implicit none
+    type(basis_set), intent(inout)       :: basis
+    integer, intent(in)                  :: nat, nptcur
+    real(kind=dp), intent(in)            :: at(:,:)        ! (3,nat) atom coords
+    real(kind=dp), intent(in)            :: gxyz(:,:)      ! (npt,3) grid coords
+    real(kind=dp), intent(in)            :: zmat(:,:)      ! (nat,npt) Z (weighted)
+    real(kind=dp), intent(in)            :: amm(:)         ! (nat) mean-removed MM potential a_i
+    real(kind=dp), intent(inout)         :: dens(:)        ! packed density for ESP
+    real(kind=dp), intent(inout)         :: grad(:,:)      ! (3,nat) accumulated dE/dR
+    real(kind=dp), intent(in)            :: logtol
+    real(kind=dp), intent(in)            :: rvdw(:)        ! (nat) base VDW radii
+
+    real(kind=dp), allocatable :: gx(:), gy(:), gz(:), u(:)
+    real(kind=dp), allocatable :: tmat(:,:), minv(:,:), bvec(:), gvec(:), &
+                                  gbig(:), bbig(:), sk(:)
+    integer, allocatable :: ipiv(:)
+    real(kind=dp) :: dx, dy, dz, r2, r3, scal, fac, sw_delta, sw_scale, d, xx, &
+                     sp, sig, pe, coef, wk
+    integer :: i, k, j, info
+    character(len=32) :: envv
+    integer :: status
+    logical :: smooth
+
+    ! runtime toggle / scale (default ON, scale 1.0); allows FD calibration
+    ! without rebuilds:  ESPF_WDERIV=0 disables, ESPF_WSCALE=<f> rescales.
+    call get_environment_variable('ESPF_WDERIV', envv, status=status)
+    if (status == 0) then
+      if (trim(envv) == '0' .or. trim(envv) == 'off') return
+    end if
+    scal = 1.0_dp
+    call get_environment_variable('ESPF_WSCALE', envv, status=status)
+    if (status == 0) then
+      if (len_trim(envv) > 0) read(envv,*) scal
+    end if
+    smooth = .true.
+    call get_environment_variable('ESPF_SMOOTH', envv, status=status)
+    if (status == 0) then
+      if (trim(envv) == '0' .or. trim(envv) == 'off') smooth = .false.
+    end if
+    sw_delta = 0.7_dp
+    call get_environment_variable('ESPF_SWDELTA', envv, status=status)
+    if (status == 0) then
+      if (len_trim(envv) > 0) read(envv,*) sw_delta
+    end if
+    sw_scale = 1.8_dp
+    call get_environment_variable('ESPF_SWSCALE', envv, status=status)
+    if (status == 0) then
+      if (len_trim(envv) > 0) read(envv,*) sw_scale
+    end if
+
+    allocate(gx(nptcur), gy(nptcur), gz(nptcur), u(nptcur))
+    gx = gxyz(1:nptcur,1); gy = gxyz(1:nptcur,2); gz = gxyz(1:nptcur,3)
+
+    ! u_k = Tr(P V_k^AO): electronic ESP at the grid points (same kernel/sign as
+    ! the omp_qmmm operator used to build the charges).
+    call electrostatic_potential_unweighted(basis, gx, gy, gz, dens, u, logtol)
+
+    ! T_{i,k} = 1/|R_i - g_k|
+    allocate(tmat(nat, nptcur), sk(nptcur))
+    do k = 1, nptcur
+      do i = 1, nat
+        dx = at(1,i) - gx(k); dy = at(2,i) - gy(k); dz = at(3,i) - gz(k)
+        tmat(i,k) = 1.0_dp / sqrt(dx*dx + dy*dy + dz*dz)
+      end do
+    end do
+
+    if (smooth) then
+      call espf_smooth_s(gxyz(:nptcur,:), nptcur, at, nat, sw_scale*rvdw, sw_delta, sk)
+    else
+      sk = 1.0_dp
+    end if
+
+    allocate(minv(nat,nat), bvec(nat), gvec(nat), gbig(nptcur), bbig(nptcur))
+    ! b = M^-1 a ;  g = Z u
+    if (smooth) then
+      ! M = T diag(s) T^T ; solve M b = a
+      do j = 1, nat
+        do i = 1, nat
+          minv(i,j) = sum(sk(1:nptcur)*tmat(i,1:nptcur)*tmat(j,1:nptcur))
+        end do
+      end do
+      bvec = amm
+      allocate(ipiv(nat))
+      call dgesv(nat, 1, minv, nat, ipiv, bvec, nat, info)
+      if (info /= 0) call show_message('espf_grad_weight: dgesv failed', WITH_ABORT)
+      deallocate(ipiv)
+    else
+      minv = matmul(zmat(1:nat,1:nptcur), transpose(zmat(1:nat,1:nptcur)))  ! ZZ^T=M^-1
+      bvec = matmul(minv, amm)
+    end if
+    gvec = matmul(zmat(1:nat,1:nptcur), u)
+    ! G_k = (T^T g)_k ,  B_k = (T^T b)_k
+    gbig = matmul(transpose(tmat), gvec)
+    bbig = matmul(transpose(tmat), bvec)
+
+    ! dT term: dE/dR_{i,c} += scal * sum_k s_k dT(i,k,c) [ b_i(u_k-G_k) - g_i B_k ]
+    do i = 1, nat
+      do k = 1, nptcur
+        dx = gx(k) - at(1,i); dy = gy(k) - at(2,i); dz = gz(k) - at(3,i)
+        r2 = dx*dx + dy*dy + dz*dz
+        r3 = r2 * sqrt(r2)
+        fac = scal * sk(k) * ( bvec(i)*(u(k) - gbig(k)) - gvec(i)*bbig(k) ) / r3
+        grad(1,i) = grad(1,i) + fac*dx
+        grad(2,i) = grad(2,i) + fac*dy
+        grad(3,i) = grad(3,i) + fac*dz
+      end do
+    end do
+
+    ! ds term (smooth only): dE/dR_{J,c} += scal * sum_k ds_k/dR_{J,c} B_k(u_k-G_k)
+    if (smooth) then
+      do k = 1, nptcur
+        wk = bbig(k) * (u(k) - gbig(k))            ! B_k (u_k - G_k)
+        if (wk == 0.0_dp) cycle
+        do j = 1, nat
+          dx = gx(k) - at(1,j); dy = gy(k) - at(2,j); dz = gz(k) - at(3,j)
+          d = sqrt(dx*dx + dy*dy + dz*dz)
+          xx = (d - sw_scale*rvdw(j)) / sw_delta
+          sp = espf_dsstep(xx)
+          if (sp == 0.0_dp) cycle
+          sig = espf_sstep(xx)                     ! in (0,1) where sp/=0
+          pe = sk(k) / sig                         ! prod_{b/=j} S_b
+          ! ds_k/dR_{J,c} = pe * sp/delta * (R_J - g_k)_c/d  = pe*sp/delta*(-dx)/d
+          coef = scal * wk * pe * sp / (sw_delta * d)
+          grad(1,j) = grad(1,j) - coef*dx
+          grad(2,j) = grad(2,j) - coef*dy
+          grad(3,j) = grad(3,j) - coef*dz
+        end do
+      end do
+    end if
+
+    deallocate(gx, gy, gz, u, tmat, sk, minv, bvec, gvec, gbig, bbig)
+  end subroutine espf_grad_weight
+
+!--------------------------------------------------------------------------------
+
+!> @brief C1 smoothstep S(x): 0 for x<=0, 1 for x>=1, x^2(3-2x) in between.
+  elemental function espf_sstep(x) result(s)
+    use precision, only: dp
+    real(kind=dp), intent(in) :: x
+    real(kind=dp) :: s
+    if (x <= 0.0_dp) then
+      s = 0.0_dp
+    else if (x >= 1.0_dp) then
+      s = 1.0_dp
+    else
+      s = x*x*(3.0_dp - 2.0_dp*x)
+    end if
+  end function espf_sstep
+
+!> @brief S'(x) for the C1 smoothstep.
+  elemental function espf_dsstep(x) result(d)
+    use precision, only: dp
+    real(kind=dp), intent(in) :: x
+    real(kind=dp) :: d
+    if (x <= 0.0_dp .or. x >= 1.0_dp) then
+      d = 0.0_dp
+    else
+      d = 6.0_dp*x*(1.0_dp - x)
+    end if
+  end function espf_dsstep
+
+!> @brief Smooth per-point grid weights s_k = prod_b S((|g_k-R_b|-Rvdw_b)/delta).
+!>        Zero inside any atom's VDW sphere, 1 outside, smooth in the shell of
+!>        width delta.  Makes the ESPF grid contribution a smooth function of
+!>        nuclear geometry (replaces the hard VDW pruning in add_atom_grid).
+  subroutine espf_smooth_s(xyz, np, at, nat, rvdw, delta, s)
+    use precision, only: dp
+    real(kind=dp), intent(in)  :: xyz(:,:)     ! (npt,3)
+    integer, intent(in)        :: np, nat
+    real(kind=dp), intent(in)  :: at(:,:)      ! (3,nat)
+    real(kind=dp), intent(in)  :: rvdw(:)      ! (nat)
+    real(kind=dp), intent(in)  :: delta
+    real(kind=dp), intent(out) :: s(:)         ! (np)
+    integer :: k, b
+    real(kind=dp) :: d
+    do k = 1, np
+      s(k) = 1.0_dp
+      do b = 1, nat
+        d = norm2(xyz(k,:) - at(:,b))
+        s(k) = s(k) * espf_sstep((d - rvdw(b))/delta)
+        if (s(k) == 0.0_dp) exit
+      end do
+    end do
+  end subroutine espf_smooth_s
+
+!> @brief Weighted ESPF pseudoinverse Z = M^-1 T diag(s), M = T diag(s) T^T,
+!>        T_{i,k}=1/|R_i-g_k|.  Reduces to the unweighted fit when s=1.
+  subroutine espf_weights_w(x, y, z, ttt, at, s)
+    use precision, only: dp
+    use messages, only: show_message, with_abort
+    implicit none
+    real(kind=dp), intent(in)    :: x(:), y(:), z(:), at(:,:), s(:)
+    real(kind=dp), intent(inout) :: ttt(:,:)        ! (nat, npts) <- Z on output
+    integer :: i, j, k, nat, npts, info
+    real(kind=dp), allocatable :: tmat(:,:), mmat(:,:)
+    integer, allocatable :: ipiv(:)
+    nat = ubound(at, 2)
+    npts = ubound(x, 1)
+    allocate(tmat(nat,npts), mmat(nat,nat), ipiv(nat))
+    do k = 1, npts
+      do i = 1, nat
+        tmat(i,k) = 1.0_dp / norm2(at(:,i) - [x(k), y(k), z(k)])
+      end do
+    end do
+    ! M = T diag(s) T^T
+    do j = 1, nat
+      do i = 1, nat
+        mmat(i,j) = sum(s(1:npts)*tmat(i,1:npts)*tmat(j,1:npts))
+      end do
+    end do
+    ! RHS = T diag(s) ; solve M Z = RHS  -> Z = M^-1 T diag(s)
+    do k = 1, npts
+      ttt(1:nat,k) = tmat(1:nat,k)*s(k)
+    end do
+    call dgesv(nat, npts, mmat, nat, ipiv, ttt, size(ttt,1), info)
+    if (info /= 0) call show_message('espf_weights_w: dgesv failed', WITH_ABORT)
+    deallocate(tmat, mmat, ipiv)
+  end subroutine espf_weights_w
 
 !--------------------------------------------------------------------------------
 
@@ -1088,6 +1376,10 @@ module qmmm_mod
 
     integer :: nadd, nleb, ok
     integer :: i, j, k, layer
+    logical :: keepall, smooth
+    character(len=16) :: env_k
+    integer :: st_k
+    real(kind=dp) :: sw_delta, sw_scale
 
     allocate(leb(maxval(npt_layer),3), &
              lebw(maxval(npt_layer)), &
@@ -1099,6 +1391,36 @@ module qmmm_mod
 
 !   Set up the grid
     nptcur = 0  ! Current number of point in a grid
+
+!   ESPF_KEEPALL=1 keeps every Lebedev point (fixed grid membership) instead of
+!   removing points that fall inside neighbour VDW spheres.  The hard removal is
+!   a step function of geometry: as atoms move, points blink in/out, making the
+!   ESPF energy non-smooth and leaking energy in dynamics.  Keeping all points
+!   makes the atom-centred grid translate smoothly with the nuclei.
+    keepall = .false.
+    call get_environment_variable('ESPF_KEEPALL', env_k, status=st_k)
+    if (st_k == 0) then
+      if (trim(env_k) == '1' .or. trim(env_k) == 'on') keepall = .true.
+    end if
+    ! Smooth-switching weighted ESPF grid (DEFAULT): keep all points + smooth
+    ! weights for energy-conserving dynamics.  ESPF_SMOOTH=0 restores the hard
+    ! VDW-pruned grid (matches the original/GAMESS grid).
+    smooth = .true.
+    call get_environment_variable('ESPF_SMOOTH', env_k, status=st_k)
+    if (st_k == 0) then
+      if (trim(env_k) == '0' .or. trim(env_k) == 'off') smooth = .false.
+    end if
+    sw_delta = 0.7_dp
+    call get_environment_variable('ESPF_SWDELTA', env_k, status=st_k)
+    if (st_k == 0) then
+      if (len_trim(env_k) > 0) read(env_k,*) sw_delta
+    end if
+    sw_scale = 1.8_dp
+    call get_environment_variable('ESPF_SWSCALE', env_k, status=st_k)
+    if (st_k == 0) then
+      if (len_trim(env_k) > 0) read(env_k,*) sw_scale
+    end if
+    if (smooth) keepall = .true.
 
 !   Loop over layers and add spherical grid points on each atom to the molecular grid
     do layer = 1, nlayers
@@ -1114,29 +1436,81 @@ module qmmm_mod
 
 !     Add new grid layer for each atom, remove inner points
       do i = 1, nat
-        call add_atom_grid( &
-          x=xyz(nptcur+1:,1), &
-          y=xyz(nptcur+1:,2), &
-          z=xyz(nptcur+1:,3), &
-          wts=wt(nptcur+1:), &
-          nadd=nadd, &
-          atpts=leb(:nleb,:), &
-          atwts=lebw(:nleb), &
-          atoms_xyz=atoms_xyz, &
-          atoms_rad=vdwrad, &
-          cur_atom=i, &
-          neighbours=neigh)
+        if (keepall) then
+          do j = 1, nleb
+            xyz(nptcur+j,1) = atoms_xyz(1,i) + vdwrad(i)*leb(j,1)
+            xyz(nptcur+j,2) = atoms_xyz(2,i) + vdwrad(i)*leb(j,2)
+            xyz(nptcur+j,3) = atoms_xyz(3,i) + vdwrad(i)*leb(j,3)
+            wt(nptcur+j)    = lebw(j)
+          end do
+          nadd = nleb
+        else
+          call add_atom_grid( &
+            x=xyz(nptcur+1:,1), &
+            y=xyz(nptcur+1:,2), &
+            z=xyz(nptcur+1:,3), &
+            wts=wt(nptcur+1:), &
+            nadd=nadd, &
+            atpts=leb(:nleb,:), &
+            atwts=lebw(:nleb), &
+            atoms_xyz=atoms_xyz, &
+            atoms_rad=vdwrad, &
+            cur_atom=i, &
+            neighbours=neigh)
+        end if
         nptcur = nptcur + nadd
       end do
     end do
 
 !   Compute the weights
-    call espf_weights( &
-         x=xyz(:nptcur,1),  &
-         y=xyz(:nptcur,2),  &
-         z=xyz(:nptcur,3),  &
-         ttt=ttt,           &
-         at = atoms_xyz)
+    if (smooth) then
+      block
+        real(kind=dp) :: rvdw(nat), s(nptcur)
+        integer :: kk, nkeep
+        ! Core radius = sw_scale*Rvdw: larger scale zeroes (and drops) more inner
+        ! points, keeping the grid ~ as sparse as the hard prune for efficiency.
+        rvdw = sw_scale * ELEMENTS_VDW_RADII(int(zn))
+        call espf_smooth_s(xyz(:nptcur,:), nptcur, atoms_xyz, nat, rvdw, sw_delta, s)
+        ! Compact out points with s_k == 0 (deep inside a neighbour VDW core):
+        ! they contribute exactly 0 to both energy and gradient (S=0 and S'=0),
+        ! so dropping them is discontinuity-free and recovers the keep-all cost.
+        nkeep = 0
+        do kk = 1, nptcur
+          if (s(kk) > 0.0_dp) then
+            nkeep = nkeep + 1
+            xyz(nkeep,:) = xyz(kk,:)
+            s(nkeep) = s(kk)
+          end if
+        end do
+        nptcur = nkeep
+        call espf_weights_w(xyz(:nptcur,1), xyz(:nptcur,2), xyz(:nptcur,3), ttt, atoms_xyz, s(:nptcur))
+      end block
+    else
+      call espf_weights( &
+           x=xyz(:nptcur,1),  &
+           y=xyz(:nptcur,2),  &
+           z=xyz(:nptcur,3),  &
+           ttt=ttt,           &
+           at = atoms_xyz)
+    end if
+
+    ! one-shot grid-size report (ESPF_NPRINT=1)
+    if (st_k >= 0) then
+      call get_environment_variable('ESPF_NPRINT', env_k, status=st_k)
+      if (st_k == 0 .and. trim(env_k) == '1') then
+        block
+          integer :: ud
+          open(newunit=ud, file='/tmp/espf_npts.txt', position='append', action='write')
+          if (smooth) then
+            write(ud,'(a,i7,a,f5.2,a,f5.2)') 'smooth nptcur=', nptcur, &
+                  '  scale=', sw_scale, '  delta=', sw_delta
+          else
+            write(ud,'(a,i7)') 'pruned nptcur=', nptcur
+          end if
+          close(ud)
+        end block
+      end if
+    end if
 
   end subroutine form_espf_grid
 

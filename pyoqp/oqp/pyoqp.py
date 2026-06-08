@@ -69,8 +69,8 @@ def _set_threading_defaults():
         "MKL_NUM_THREADS": "1",
         "BLIS_NUM_THREADS": "1",
         "VECLIB_MAXIMUM_THREADS": "1",
-        "OMP_STACKSIZE": "256M",
-        "GOMP_STACKSIZE": "256M",
+        "OMP_STACKSIZE": "512M",
+        "GOMP_STACKSIZE": "512M",
     }
     if sys.platform == "darwin":
         # macOS default: use the PERFORMANCE-core count, not all logical cores.
