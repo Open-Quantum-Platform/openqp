@@ -179,17 +179,24 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
+# Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
+# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE), so on an AVX-512 build host it emits
+# AVX-512 into level_shifted_davidson which SIGILLs (exit 132) on AVX2-only compute
+# nodes -- only OTR routines crash, since main OpenQP uses no -march.
+# On x86_64 rewrite to a portable AVX2 baseline so the binary runs on any AVX2+ node;
+# on non-x86 (e.g. aarch64) those flags are invalid, so just strip them and let the
+# compiler use its default tuning.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
+  set(_OTR_ARCH_SED "s/-march=native/-march=x86-64-v3/g; s/-xHost/-axCORE-AVX2 -mno-avx512f/g")
+else()
+  set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
+endif()
 ExternalProject_Add(libopentrustregion
     PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
     URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v2.0.0.tar.gz
-    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c 
+    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c
     UPDATE_COMMAND ""
-    # Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
-    # own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE), so on an AVX-512 build host it emits
-    # AVX-512 into level_shifted_davidson which SIGILLs (exit 132) on AVX2-only compute
-    # nodes -- only OTR routines crash, since main OpenQP uses no -march. Rewrite to a
-    # portable AVX2 baseline so the binary runs on any AVX2+ node.
-    PATCH_COMMAND /usr/bin/perl -0pi -e "s/-march=native/-march=x86-64-v3/g; s/-xHost/-axCORE-AVX2 -mno-avx512f/g" <SOURCE_DIR>/CMakeLists.txt
+    PATCH_COMMAND /usr/bin/perl -0pi -e "${_OTR_ARCH_SED}" <SOURCE_DIR>/CMakeLists.txt
     CMAKE_ARGS ${OTR_CMAKE_ARGS}
     BINARY_DIR ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}
     #    INSTALL_DIR ${CMAKE_BINARY_DIR}/external/install/opentrustregion

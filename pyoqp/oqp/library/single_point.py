@@ -497,11 +497,17 @@ class SinglePoint(Calculator):
         with a single coherent robustness ladder:
 
           1. **Primary converger** (``scf.converger_type``, default DIIS) —
-             fast, gets most cases.
-          2. **Escalation** — if the primary converger does not converge,
-             switch to ``scf.alternative_scf`` (default TRAH, a globally
-             convergent trust-region method), warm-started from the current
-             orbitals.
+             fast, gets most cases. ``auto``/``ml`` let the SCF manager pick it.
+          2. **Escalation ladder** — if the primary converger does not converge,
+             walk a chain of progressively more robust (and costlier) methods,
+             each warm-started from the previous orbitals. The default chain is
+             ``SOSCF`` (cheap second-order, fixes most DIIS stalls) → then
+             ``scf.alternative_scf`` (default TRAH, a globally convergent
+             trust-region method). Set ``scf.escalation`` to a comma-separated
+             list (e.g. ``soscf,trah``) to override the chain explicitly;
+             ``scf.alternative_scf`` (back-compat) sets only the final method.
+             The primary converger is dropped from the chain and duplicates are
+             removed while preserving order.
           3. **Stability safeguard** (``scf.stability``, default on) — seed a
              stability-following TRAH pass from the converged orbitals.  At a
              genuine minimum this is a ~0-iteration no-op; when the converged

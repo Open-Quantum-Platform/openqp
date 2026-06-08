@@ -126,6 +126,7 @@ OQP_CONFIG_SCHEMA = {
         'stability': {'type': bool, 'default': 'True'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
+        'escalation': {'type': string, 'default': ''},
         'verbose': {'type': int, 'default': '1'},
         'trh_stab': {'type': bool,  'default': 'False'},
         'trh_ls': {'type': bool,  'default': 'False'},
