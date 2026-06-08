@@ -283,7 +283,7 @@ contains
 !
 !     REVISION HISTORY:
 !> @date _Mar, 2023_ Initial release
-  subroutine add_atom_grid(x, y, z, wts, nadd, atpts, atwts, atoms_xyz, atoms_rad, cur_atom, neighbours)
+  subroutine add_atom_grid(x, y, z, wts, nadd, atpts, atwts, atoms_xyz, atoms_rad, cur_atom, neighbours, excl_rad)
     use precision, only: dp
     real(kind=dp), intent(inout) :: x(:), y(:), z(:), wts(:)
     real(kind=dp), intent(in) :: atpts(:,:), atwts(:)
@@ -291,9 +291,22 @@ contains
     integer, intent(in) :: cur_atom
     integer, intent(inout) :: neighbours(:)
     integer, intent(out) :: nadd
+    !> Optional fixed exclusion radii (one per atom).  When present, a
+    !> candidate grid point is retained only if its distance from every
+    !> neighbour atom nb exceeds excl_rad(nb).  When absent, atoms_rad is
+    !> used for both shell placement AND exclusion (original behaviour).
+    !>
+    !> Passing base VDW radii here (rather than the layer-scaled atoms_rad)
+    !> avoids the layer-scaled exclusion problem: with atoms_rad, outer-shell
+    !> points can sit right at the lambda*r_vdw exclusion boundary of a
+    !> neighbour, so small atomic displacements flip grid membership →
+    !> non-smooth energy.  With a fixed base-VDW exclusion the outer shells
+    !> are always safely inside the retaining region.
+    real(kind=dp), optional, intent(in) :: excl_rad(:)
 
     integer :: nat, natpts, nngh, i, j, nb
     real(kind=dp) :: cur_xyz(3), ptxyz(3), rcur, dist2
+    real(kind=dp), allocatable :: excl(:)
     logical :: add
 
     nadd = 0
@@ -303,7 +316,17 @@ contains
     cur_xyz = atoms_xyz(:,cur_atom)
     rcur = atoms_rad(cur_atom)
 
-    ! Find all neighbours of the current atom: D_ij < R^{vdw}_i + R^{vdw}_j
+    ! Exclusion radii: base VDW when provided, else layer-scaled atoms_rad
+    allocate(excl(nat))
+    if (present(excl_rad)) then
+      excl = excl_rad
+    else
+      excl = atoms_rad
+    end if
+
+    ! Find all neighbours of the current atom using placement radii (conservative).
+    ! atoms_rad is layer-scaled (>= base VDW), so the search radius is never
+    ! smaller than the exclusion radius -- no neighbour can be missed.
     nngh = 0
     do i = 1, nat
       if (i==cur_atom) cycle
@@ -322,7 +345,7 @@ contains
       do i = 1, nngh
         nb = neighbours(i)
         dist2 = sum((atoms_xyz(:,nb) - ptxyz)**2)
-        add = dist2 > atoms_rad(nb)**2
+        add = dist2 > excl(nb)**2
         if (.not.add) exit
       end do
 

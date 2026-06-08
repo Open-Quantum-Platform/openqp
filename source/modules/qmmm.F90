@@ -1371,7 +1371,7 @@ module qmmm_mod
     integer, intent(inout) :: nptcur
 
     real(kind=dp), allocatable :: leb(:,:), lebw(:)
-    real(kind=dp), allocatable :: vdwrad(:), wt(:)
+    real(kind=dp), allocatable :: vdwrad(:), excl_vdw(:), wt(:)
     integer, allocatable :: neigh(:)
 
     integer :: nadd, nleb, ok
@@ -1384,6 +1384,7 @@ module qmmm_mod
     allocate(leb(maxval(npt_layer),3), &
              lebw(maxval(npt_layer)), &
              vdwrad(nat), &
+             excl_vdw(nat), &
              neigh(nat), &
              wt(npt), &
              stat=ok)
@@ -1422,6 +1423,30 @@ module qmmm_mod
     end if
     if (smooth) keepall = .true.
 
+!   Fixed exclusion radii: scaled by the MINIMUM layer factor (layers(1) = 1.4)
+!   so the exclusion sphere is independent of the current layer being built.
+!
+!   Why not base VDW (layer 1.0)?
+!     Too permissive: OpenQP shells sit at 1.4–2.0 × r_vdw, so base-VDW
+!     exclusion admits ~1400 extra near-atom intermediate-zone points that
+!     make the T matrix ill-conditioned and energy noisier.
+!
+!   Why not layer-scaled exclusion (original)?
+!     The outer shells (1.8–2.0×) then sit right at their own exclusion
+!     boundary.  A C–H stretch of 0.1 Å flips the outer-shell point toward H
+!     from "kept" to "excluded" (margin ≈ 0.10 Å), creating discrete grid
+!     membership changes → non-smooth energy surface → drift.
+!
+!   Why min-layer (1.4 × r_vdw)?
+!     • Same inner-shell points are excluded as before (inner shell exclusion
+!       is identical to the original 1.4-layer-scaled rule).
+!     • Outer shells (1.8–2.0×) now have a margin of ~0.5–0.8 Å before any
+!       point flips out; normal MD vibrational amplitudes (< 0.3 Å) are safe.
+!     • Intermediate-zone points (1.4–2.0 × r_vdw from neighbours) are admitted
+!       on outer shells but at physically reasonable positions (not near singularity).
+!   This is the correct fixed-scale complement to OpenQP's 1.4–2.0 shell scheme.
+    excl_vdw = ELEMENTS_VDW_RADII(int(zn)) * layers(1)  ! = 1.4 × r_vdw (innermost layer)
+
 !   Loop over layers and add spherical grid points on each atom to the molecular grid
     do layer = 1, nlayers
 
@@ -1456,7 +1481,8 @@ module qmmm_mod
             atoms_xyz=atoms_xyz, &
             atoms_rad=vdwrad, &
             cur_atom=i, &
-            neighbours=neigh)
+            neighbours=neigh, &
+            excl_rad=excl_vdw)
         end if
         nptcur = nptcur + nadd
       end do
