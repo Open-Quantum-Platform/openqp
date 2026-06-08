@@ -617,6 +617,35 @@ class NAMD_SOC(NAMD):
             self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
         except Exception:
             self.grad_wthr = 0.05
+        # optional: choose the initial active state by MCH spin character
+        # (e.g. 'S1') instead of a fixed spin-adiabatic index -- robust when the
+        # spin-adiabatic ordering is ambiguous at the start (S/T near-degeneracy)
+        self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
+
+    # ------------------------------------------------------------------ #
+    def _resolve_initial_active(self, u):
+        """If [md] init_state names an MCH state (S0/S1/.../T1/T2/...), set the
+        active spin-adiabatic state to the adiabat with the largest character of
+        that MCH state at t=0 (summing the three Ms sublevels for a triplet).
+        Otherwise keep the configured integer active index."""
+        label = self.init_state
+        if not label:
+            return
+        mult = 1 if label[0].upper() == 'S' else 3
+        n = int(label[1:])
+        if mult == 1:
+            mch_idx = [n]                                  # singlet root: S0=0, S1=1, ...
+        else:
+            base = self.ns + (n - 1) * 3
+            mch_idx = [base, base + 1, base + 2]           # triplet Ms sublevels
+        char = (np.abs(u[mch_idx, :]) ** 2).sum(axis=0)    # character per adiabat
+        a = int(np.argmax(char))
+        self.active = a + 1
+        self.coef = np.zeros(self.nstate_soc, dtype=complex)
+        self.coef[a] = 1.0 + 0.0j
+        dump_log(self.mol, title=(
+            f'SOC-NAMD: initial active set to adiabat {self.active} by {label} '
+            f'character ({char[a]*100:.1f}% {label})'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc(self, with_overlap=False):
@@ -905,6 +934,7 @@ class NAMD_SOC(NAMD):
 
         # initial electronic structure + active-surface force
         eval_ha, u = self._electronic_soc(with_overlap=False)
+        self._resolve_initial_active(u)
         grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
         accel = -grad / self.mass[:, None]
         self._ulog = u
@@ -1013,6 +1043,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             self.grad_wthr = float(mol.config['md'].get('grad_wthr', 0.05))
         except Exception:
             self.grad_wthr = 0.05
+        self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
 
     # ------------------------------------------------------------------ #
     def _electronic_soc_qmmm(self, with_overlap):
@@ -1133,6 +1164,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
 
         self._sync_positions()
         eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
+        NAMD_SOC._resolve_initial_active(self, u)
         g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
         f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
         accel = f_all / self.m_all[:, None]

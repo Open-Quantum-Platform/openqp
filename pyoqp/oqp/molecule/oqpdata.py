@@ -312,6 +312,7 @@ OQP_CONFIG_SCHEMA = {
         'restart': {'type': bool, 'default': 'False'},
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
         'grad_wthr': {'type': float, 'default': '0.05'},    # SOC weighted-MCH gradient weight threshold
+        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},
