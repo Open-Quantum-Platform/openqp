@@ -382,6 +382,71 @@ class NAMD_QMMM(NAMD):
         self._sync_positions()
         # QM-region masses for the hop (already set by super from mol.get_mass())
         self.qm_mass = self.mass.copy()
+        # rigid-water (SHAKE/RATTLE) constraints for the MM region
+        self._build_constraints()
+
+    # ------------------------------------------------------------------ #
+    def _build_constraints(self):
+        """Collect the MM rigid-water bond/angle constraints (O-H, O-H, H-H per
+        TIP3P water) from an OpenMM rigidWater system, as (i, j, d_bohr).  QM
+        atoms are never constrained (they move under the QM forces).  Enables a
+        normal MD timestep (~0.5-1 fs) despite the stiff O-H stretch."""
+        u = self._u
+        qm = set(int(i) for i in self.qm_atoms)
+        ref = self.forcefield.createSystem(
+            self.pdb.topology, nonbondedMethod=self.cutoff,
+            constraints=None, rigidWater=True)
+        ci, cj, cd = [], [], []
+        for k in range(ref.getNumConstraints()):
+            p1, p2, dist = ref.getConstraintParameters(k)
+            if p1 in qm or p2 in qm:
+                continue
+            ci.append(p1); cj.append(p2)
+            cd.append(dist.value_in_unit(u.nanometer) * NM_TO_BOHR)
+        self._ci = np.array(ci, dtype=int)
+        self._cj = np.array(cj, dtype=int)
+        self._cd2 = np.array(cd) ** 2
+        self._inv_m = 1.0 / self.m_all
+        self._has_constraints = len(ci) > 0
+
+    def _shake(self, r_old, r, v, dt, tol=1.0e-9, maxit=500):
+        """Constrain bond lengths after the position update (SHAKE), and apply
+        the implied velocity correction.  r is modified in place; v gets
+        += (r_constrained - r_unconstrained)/dt."""
+        if not self._has_constraints:
+            return
+        ci, cj, d2, inv = self._ci, self._cj, self._cd2, self._inv_m
+        r_unc = r.copy()
+        rij0 = r_old[ci] - r_old[cj]
+        for _ in range(maxit):
+            rij = r[ci] - r[cj]
+            diff = np.einsum('ij,ij->i', rij, rij) - d2
+            if np.max(np.abs(diff)) < tol:
+                break
+            denom = 2.0 * np.einsum('ij,ij->i', rij, rij0) * (inv[ci] + inv[cj])
+            g = diff / denom
+            dr = g[:, None] * rij0
+            np.add.at(r, ci, -inv[ci][:, None] * dr)
+            np.add.at(r, cj,  inv[cj][:, None] * dr)
+        v += (r - r_unc) / dt
+
+    def _rattle(self, r, v, tol=1.0e-9, maxit=500):
+        """Project velocities onto the constraint manifold (RATTLE): make the
+        relative velocity along each constrained bond zero.  v modified in place."""
+        if not self._has_constraints:
+            return
+        ci, cj, inv = self._ci, self._cj, self._inv_m
+        rij = r[ci] - r[cj]
+        rr = np.einsum('ij,ij->i', rij, rij)
+        for _ in range(maxit):
+            vij = v[ci] - v[cj]
+            rv = np.einsum('ij,ij->i', rij, vij)
+            if np.max(np.abs(rv)) < tol:
+                break
+            k = rv / (rr * (inv[ci] + inv[cj]))
+            dv = k[:, None] * rij
+            np.add.at(v, ci, -inv[ci][:, None] * dv)
+            np.add.at(v, cj,  inv[cj][:, None] * dv)
 
     # ------------------------------------------------------------------ #
     def _sync_positions(self):
@@ -531,13 +596,16 @@ class NAMD_QMMM(NAMD):
         potmm0, _ = self._electronic_qmmm(with_overlap=False)
         f_all, epot = self._total_force(potmm0)
         accel = f_all / self.m_all[:, None]
+        self._rattle(self.r_all, self.v_all)          # project initial MM velocities onto constraints
         self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
         self.prev_data = copy.deepcopy(mol.get_data())
         self._log_qmmm(0, epot)
 
         for istep in range(1, self.nstep + 1):
-            # velocity-Verlet position update (all atoms)
+            # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
+            r_old = self.r_all.copy()
             self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
+            self._shake(r_old, self.r_all, self.v_all, self.dt)
             self._sync_positions()
 
             # embedded electronic structure at the new geometry
@@ -545,8 +613,9 @@ class NAMD_QMMM(NAMD):
             f_all, epot = self._total_force(potmm)
             accel_new = f_all / self.m_all[:, None]
 
-            # velocity-Verlet velocity update (all atoms)
+            # velocity-Verlet velocity update (all atoms) + RATTLE (rigid MM water)
             self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt
+            self._rattle(self.r_all, self.v_all)
 
             # couplings + QM-only FSSH hop
             self._state_overlap()
@@ -1168,14 +1237,17 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
         f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
         accel = f_all / self.m_all[:, None]
+        self._rattle(self.r_all, self.v_all)          # project initial MM velocities onto constraints
         self._ulog = u
         r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
         NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
         self._log_soc_qmmm(0, epot, mult, state, w, False)
 
         for istep in range(1, self.nstep + 1):
-            # velocity-Verlet position update (all atoms)
+            # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
+            r_old = self.r_all.copy()
             self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
+            self._shake(r_old, self.r_all, self.v_all, self.dt)
             self._sync_positions()
 
             # embedded spin-adiabatic electronic structure (+ MO overlap)
@@ -1188,6 +1260,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
             accel_new = f_all / self.m_all[:, None]
             self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt
+            self._rattle(self.r_all, self.v_all)
 
             # local-diabatization propagation + spin-adiabatic hop (QM velocities only)
             self.vel = self.v_all[self.qm_atoms].copy()
