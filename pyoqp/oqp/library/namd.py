@@ -811,15 +811,58 @@ class NAMD_SOC(NAMD):
             lower = upper
         return hopped
 
+    def _mch_target(self, k):
+        """Map an MCH (diabatic) basis index k to its (multiplicity, MRSF grad
+        target).  The singlet block (k < ns) is 0-based INCLUDING the ground
+        state, matching the MRSF energy/grad convention td_energies[0]=S0,
+        td_energies[1]=S1 (so target = k).  The triplet block is 1-based
+        (T1=target 1, ...); the three Ms sublevels share one target.
+
+        NOTE: target 0 is the ground state S0, whose gradient is NOT available
+        through MRSF's excited-state z-vector path; callers that build gradients
+        must skip it (see _excited_wmap)."""
+        if k < self.ns:
+            return 1, k                                   # singlet S(k): S0=0, S1=1, ...
+        return 3, (k - self.ns) // 3 + 1                  # triplet T(.): 1-based
+
+    def _excited_wmap(self, col):
+        """Build the {(mult,target): weight} map of MCH components contributing
+        to the active spin-adiabatic state's gradient, keeping only components
+        above grad_wthr and EXCLUDING the ground state S0 (target 0, no MRSF
+        excited-state gradient).  Weights are left unnormalised (caller divides
+        by their sum).  Returns (wmap, s0_weight) where s0_weight is the total
+        ground-state character dropped (for diagnostics / relaxation detection).
+        If no excited component clears the threshold, falls back to the single
+        largest excited component so a force is always defined."""
+        wmap = {}
+        s0_w = 0.0
+        for k in range(self.nstate_soc):
+            mult, target = self._mch_target(k)
+            if mult == 1 and target == 0:                 # ground state S0: no gradient
+                s0_w += col[k]
+                continue
+            if col[k] < self.grad_wthr:
+                continue
+            wmap[(mult, target)] = wmap.get((mult, target), 0.0) + col[k]
+        if not wmap:                                      # all excited weight below threshold
+            kbest, best = -1, -1.0
+            for k in range(self.nstate_soc):
+                mult, target = self._mch_target(k)
+                if mult == 1 and target == 0:
+                    continue
+                if col[k] > best:
+                    kbest, best = k, col[k]
+            if kbest >= 0:
+                wmap[self._mch_target(kbest)] = float(best)
+        return wmap, s0_w
+
     def _dominant_component(self, u, active):
         """Largest |U|^2 MCH component of the active spin-adiabatic state.
-        Returns (multiplicity, state_index_1based, weight)."""
+        Returns (multiplicity, MRSF grad target, weight)."""
         col = np.abs(u[:, active - 1]) ** 2
         k = int(np.argmax(col))
-        if k < self.ns:
-            return 1, k + 1, col[k]                       # singlet S(k)
-        kk = k - self.ns
-        return 3, kk // 3 + 1, col[k]                     # triplet T(kk//3), Ms = kk%3
+        mult, target = self._mch_target(k)
+        return mult, target, col[k]
 
     def _soc_gradient(self, u, active, eval_ha):
         """Weighted-MCH (SHARC-diagonal) gradient of the active spin-adiabatic
@@ -842,22 +885,14 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         col = np.abs(u[:, active - 1]) ** 2
 
-        # collapse to unique MCH spatial states, summing triplet Ms weights
-        wmap = {}
-        for k in range(self.nstate_soc):
-            if col[k] < self.grad_wthr:
-                continue
-            if k < self.ns:
-                key = (1, k + 1)                          # singlet S(k+1)
-            else:
-                key = (3, (k - self.ns) // 3 + 1)         # triplet T(.), any Ms
-            wmap[key] = wmap.get(key, 0.0) + col[k]
-
-        if not wmap:                                      # safety: fall back to dominant
-            kdom = int(np.argmax(col))
-            key = (1, kdom + 1) if kdom < self.ns else (3, (kdom - self.ns) // 3 + 1)
-            wmap[key] = float(col[kdom])
-
+        # collapse to unique MCH spatial states (summing triplet Ms weights),
+        # excluding the ground state S0 (no MRSF excited-state gradient)
+        wmap, _s0w = self._excited_wmap(col)
+        if _s0w > 0.5:
+            dump_log(mol, title=(
+                f'PyOQP WARNING: SOC-NAMD active state is {_s0w*100:.0f}% ground '
+                'state (S0); MRSF has no S0 excited-gradient, force from excited '
+                'components only -- energy conservation degrades on S0 relaxation.'))
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
@@ -1041,18 +1076,13 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         mol = self.mol
         col = np.abs(u[:, active - 1]) ** 2
 
-        wmap = {}
-        for k in range(self.nstate_soc):
-            if col[k] < self.grad_wthr:
-                continue
-            key = (1, k + 1) if k < self.ns else (3, (k - self.ns) // 3 + 1)
-            wmap[key] = wmap.get(key, 0.0) + col[k]
-
+        wmap, _s0w = NAMD_SOC._excited_wmap(self, col)    # excited components, S0 excluded
+        if _s0w > 0.5:
+            dump_log(mol, title=(
+                f'PyOQP WARNING: SOC-NAMD-QMMM active state is {_s0w*100:.0f}% '
+                'ground state (S0); force from excited components only.'))
         dom_mult, dom_state, dom_w = NAMD_SOC._dominant_component(self, u, active)
         dom_key = (dom_mult, dom_state)
-        if not wmap:                                          # safety: dominant only
-            wmap[dom_key] = float(col.max())
-
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         pchg_dom = None
