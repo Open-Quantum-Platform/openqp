@@ -6,9 +6,9 @@ def predict(f):
         return "ediis"
     else:
         if f.get("charge",0) <= 1:
-            if f.get("open_shell",0) <= 0.5:
+            if f.get("is_uhf",0) <= 0.5:
                 if f.get("is_dft",0) <= 0.5:
-                    return "soscf"
+                    return "cdiis"
                 else:
                     return "cdiis"
             else:

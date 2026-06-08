@@ -444,6 +444,7 @@ class SinglePoint(Calculator):
         except (TypeError, ValueError):
             charge = 0
         return dict(is_dft=len(func) > 0, open_shell=(scft in ('uhf', 'rohf') or mult > 1),
+                    is_rohf=(scft == 'rohf'), is_uhf=(scft == 'uhf'),
                     transition_metal=tm, natom=natom, mult=mult, charge=charge)
 
     def _select_converger(self, mode, stability):
