@@ -36,6 +36,7 @@ module basis_tools
       g_offset, &  !< Locations of the first Gaussian in shells
       origin, &    !< Tells which atom the shell is centered on
       am, &        !< Array of shell angular momentum
+      harmonic, &  !< Per-shell flag: 1 = pure spherical-harmonic, 0 = Cartesian
       ncontr, &    !< Array of contraction degrees
       ao_offset, & !< Indices of shells in the total AO basis
       naos,   &         !< Array of shell's AO numbers
@@ -227,6 +228,7 @@ contains
     allocate (basis%g_offset(num_shell), source=0)
     allocate (basis%origin(num_shell), source=0)
     allocate (basis%am(num_shell), source=0)
+    allocate (basis%harmonic(num_shell), source=0)
     allocate (basis%ncontr(num_shell), source=0)
     allocate (basis%ao_offset(num_shell), source=0)
     allocate (basis%naos(num_shell), source=0)
@@ -254,6 +256,7 @@ contains
     deallocate (basis%g_offset)
     deallocate (basis%origin)
     deallocate (basis%am)
+    deallocate (basis%harmonic)
     deallocate (basis%ncontr)
     deallocate (basis%ao_offset)
     deallocate (basis%naos)
@@ -502,6 +505,7 @@ contains
       write (LU, '(*(I8))') basis%g_offset(i) &
         , basis%origin(i) &
         , basis%am(i) &
+        , basis%harmonic(i) &
         , basis%ncontr(i) &
         , basis%ao_offset(i) &
         , basis%naos(i)
@@ -532,6 +536,7 @@ contains
       read (LU, '(*(I8))') basis%g_offset(i) &
         , basis%origin(i) &
         , basis%am(i) &
+        , basis%harmonic(i) &
         , basis%ncontr(i) &
         , basis%ao_offset(i) &
         , basis%naos(i)
@@ -1324,6 +1329,7 @@ contains
       if (.not. allocated(basis%g_offset)) allocate(basis%g_offset(basis%nshell))
       if (.not. allocated(basis%origin)) allocate(basis%origin(basis%nshell))
       if (.not. allocated(basis%am)) allocate(basis%am(basis%nshell))
+      if (.not. allocated(basis%harmonic)) allocate(basis%harmonic(basis%nshell), source=0)
       if (.not. allocated(basis%ncontr)) allocate(basis%ncontr(basis%nshell))
       if (.not. allocated(basis%ao_offset)) allocate(basis%ao_offset(basis%nshell))
       if (.not. allocated(basis%naos)) allocate(basis%naos(basis%nshell))
@@ -1343,6 +1349,8 @@ contains
     call pe%bcast(basis%origin, basis%nshell)
 
     call pe%bcast(basis%am, basis%nshell)
+
+    call pe%bcast(basis%harmonic, basis%nshell)
 
     call pe%bcast(basis%ncontr, basis%nshell)
 

@@ -63,6 +63,13 @@ class BasisData:
         for shell in basis['elements'][element_key]['electron_shells']:
             ang_ii = 0
 
+            # BSE tags the harmonic type per shell: 'gto_spherical' |
+            # 'gto_cartesian' | 'gto' (s/p, where Cartesian == spherical).
+            # Auto-select the AO convention the basis was published with,
+            # e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical (5d).
+            shell_ft = shell.get('function_type', 'gto')
+            shell_harmonic = 1 if shell_ft.endswith('spherical') else 0
+
             for coefficients in shell['coefficients']:
                 shell['angular_momentum']
                 if len(shell['angular_momentum']) > 1:
@@ -78,6 +85,7 @@ class BasisData:
                     "id": self.shell_num,
                     "element_id": el_index + 1,
                     "angular_momentum": ang_mom,
+                    "harmonic": shell_harmonic,
                     "exponents": [float(x) for i, x in enumerate(shell['exponents']) if i in nonzero_indices],
                     "coefficients": list(map(float, [coefficients[i] for i in nonzero_indices]))
                 }
@@ -238,6 +246,7 @@ class BasisData:
             self.mol.data["id"] = int(shell["id"])
             self.mol.data["element_id"] = int(shell["element_id"])
             self.mol.data["ang_mom"] = shell["angular_momentum"]
+            self.mol.data["harmonic"] = int(shell.get("harmonic", 0))
 
             n_expo_array = np.array([len(shell["exponents"])], dtype=np.int32)
             self.mol.data["num_expo"] = ffi.cast("int*", ffi.from_buffer(n_expo_array))
