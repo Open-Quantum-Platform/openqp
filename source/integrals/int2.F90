@@ -963,11 +963,12 @@ contains
     end if
 
     ! Cartesian -> pure spherical (c2s) reduction for harmonic-flagged shells.
-    ! At this point pints is unit-normalized Cartesian and, for the rotation
-    ! (rotspd) and Rys paths, aliases eri_data%ints, so we transform in place
-    ! and re-point pints. The libint path stores into its own buffer and is
-    ! handled separately (TODO) once that backend is exercised for spherical.
-    if (HARMONIC_ACTIVE .and. (rotspd .or. rys)) then
+    ! At this point pints is unit-normalized Cartesian for all three backends.
+    ! For rotation (rotspd) and Rys it aliases eri_data%ints; for libint it
+    ! points into the libint target buffer, so we first copy the Cartesian
+    ! block into eri_data%ints. In all cases we then transform in place and
+    ! re-point pints at the (smaller) spherical block.
+    if (HARMONIC_ACTIVE .and. (rotspd .or. rys .or. libint)) then
       do s_ = 1, 4
         fp_ = 5 - s_                       ! pints storage dim s_ <-> flipped position fp_
         orig_ = eri_data%flips(fp_)        ! original shell index at that position
@@ -976,6 +977,11 @@ contains
         nbf_s(s_)  = eri_data%nbf(fp_)
       end do
       if (any(pure_s == 1 .and. am_s >= 2)) then
+        if (libint) then
+          ! Stage the libint Cartesian block into eri_data%ints (matching
+          ! column-major storage order) before the in-place transform.
+          eri_data%ints(1:product(nbf_s)) = reshape(eri_data%pints, [product(nbf_s)])
+        end if
         call cart2sph_eri(eri_data%ints, am_s, pure_s, nbf_s, nbf_out_s)
         do s_ = 1, 4
           eri_data%nbf(5 - s_) = nbf_out_s(s_)

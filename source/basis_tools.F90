@@ -378,7 +378,14 @@ contains
       maxi = basis%naos(i)
       n = basis%ao_offset(i)
       ang = basis%am(i)
-      basis%bfnrm(n:n+maxi-1) = shells_pnrm2(1:maxi,ang)
+      if (basis%harmonic(i) == 1) then
+        ! Pure spherical components are already unit-normalized by the
+        ! Cartesian->spherical transform (which folds in shells_pnrm2), so
+        ! bas_norm_matrix must not rescale them again.
+        basis%bfnrm(n:n+maxi-1) = 1.0_dp
+      else
+        basis%bfnrm(n:n+maxi-1) = shells_pnrm2(1:maxi,ang)
+      end if
     end do
 
   end subroutine

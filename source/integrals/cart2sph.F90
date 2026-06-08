@@ -28,6 +28,7 @@ module cart2sph
 
   public :: c2s_ncomp
   public :: cart2sph_eri
+  public :: cart2sph_mat
   public :: c2s_selftest
 
   ! l=2 (D): Cart(6) -> Sph(5); column i = Cartesian coeffs of spherical i (m=-l..+l)
@@ -172,6 +173,75 @@ contains
     ints(1:k) = src(1:k)
     deallocate(src)
   end subroutine cart2sph_eri
+
+  !> @brief Transform a 1e shell-pair block (unit-normalized Cartesian) to
+  !>        pure spherical for any harmonic-flagged shell.
+  !>
+  !> @details The block is laid out with the "fast" shell varying quickest,
+  !>          i.e. blk(nn), nn over (slow outer, fast inner) -- the order
+  !>          consumed by update_triang_matrix/update_rectangular_matrix
+  !>          (fast = shj, slow = shi). On exit blk(1:n_out) holds the
+  !>          spherical block in the same fast/slow layout and n_fast_out/
+  !>          n_slow_out give its extents.
+  subroutine cart2sph_mat(blk, l_fast, pure_fast, l_slow, pure_slow, n_fast_out, n_slow_out)
+    use constants, only: shells_pnrm2
+    real(dp), intent(inout) :: blk(:)
+    integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow
+    integer, intent(out), optional :: n_fast_out, n_slow_out
+
+    integer :: ncf, ncs, nsf, nss, k, ic, ir
+    real(dp), allocatable :: b(:,:), src(:), dst(:)
+
+    ncf = NUM_CART_BF(l_fast)
+    ncs = NUM_CART_BF(l_slow)
+    nsf = c2s_ncomp(l_fast, pure_fast)
+    nss = c2s_ncomp(l_slow, pure_slow)
+    if (present(n_fast_out)) n_fast_out = nsf
+    if (present(n_slow_out)) n_slow_out = nss
+
+    if (nsf == ncf .and. nss == ncs) return   ! nothing pure -> Cartesian block
+
+    allocate(src(ncf*ncs))
+    src(1:ncf*ncs) = blk(1:ncf*ncs)
+
+    ! 1e blocks arrive in the pure-power Cartesian normalization (the
+    ! shells_pnrm2 per-component factors are applied later by bas_norm_matrix
+    ! for Cartesian shells). B is defined for unit-normalized Cartesians, so
+    ! for each index we transform, first fold in shells_pnrm2 along that index;
+    ! the resulting spherical components are unit-normalized (set_bfnorms then
+    ! uses bfnrm = 1 for them). Non-pure indices are left pure-power untouched.
+
+    ! Contract the fast index (storage layout (ncf, ncs), fast contiguous).
+    if (pure_fast == 1 .and. l_fast >= 2) then
+      do ir = 1, ncs
+        do ic = 1, ncf
+          src((ir-1)*ncf + ic) = src((ir-1)*ncf + ic) * shells_pnrm2(ic, l_fast)
+        end do
+      end do
+      call c2s_get(l_fast, b)
+      allocate(dst(nsf*ncs))
+      call contract_index(src, 1, ncf, ncs, b, nsf, dst)
+      call move_alloc(dst, src)
+      deallocate(b)
+    end if
+    ! Contract the slow index ((nsf, ncs, 1); the slow index is the outer one).
+    if (pure_slow == 1 .and. l_slow >= 2) then
+      do ir = 1, ncs
+        do ic = 1, nsf
+          src((ir-1)*nsf + ic) = src((ir-1)*nsf + ic) * shells_pnrm2(ir, l_slow)
+        end do
+      end do
+      call c2s_get(l_slow, b)
+      allocate(dst(nsf*nss))
+      call contract_index(src, nsf, ncs, 1, b, nss, dst)
+      call move_alloc(dst, src)
+      deallocate(b)
+    end if
+
+    k = nsf*nss
+    blk(1:k) = src(1:k)
+    deallocate(src)
+  end subroutine cart2sph_mat
 
   !> @brief Self-test: rebuild the intra-shell metric S of unit-normalized
   !>        Cartesian Gaussians from the canonical exponents and verify
