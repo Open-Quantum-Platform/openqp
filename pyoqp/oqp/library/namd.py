@@ -813,48 +813,37 @@ class NAMD_SOC(NAMD):
 
     def _mch_target(self, k):
         """Map an MCH (diabatic) basis index k to its (multiplicity, MRSF grad
-        target).  The singlet block (k < ns) is 0-based INCLUDING the ground
-        state, matching the MRSF energy/grad convention td_energies[0]=S0,
-        td_energies[1]=S1 (so target = k).  The triplet block is 1-based
-        (T1=target 1, ...); the three Ms sublevels share one target.
-
-        NOTE: target 0 is the ground state S0, whose gradient is NOT available
-        through MRSF's excited-state z-vector path; callers that build gradients
-        must skip it (see _excited_wmap)."""
+        target).  MRSF roots are 1-based with the LOWEST root being the ground
+        state: root 1 = S0, root 2 = S1, ...  (S0 is the lowest eigenvalue of
+        the MRSF orbital-Hessian response, so it has a normal MRSF gradient.)
+        Hence the singlet block index k maps to target k+1 (k=0->S0, k=1->S1).
+        The triplet block is also 1-based per multiplicity (T1=target 1, ...);
+        the three Ms sublevels of a spatial triplet share one target."""
         if k < self.ns:
-            return 1, k                                   # singlet S(k): S0=0, S1=1, ...
-        return 3, (k - self.ns) // 3 + 1                  # triplet T(.): 1-based
+            return 1, k + 1                               # singlet root: S0=1, S1=2, ...
+        return 3, (k - self.ns) // 3 + 1                  # triplet root: T1=1, T2=2, ...
 
-    def _excited_wmap(self, col):
-        """Build the {(mult,target): weight} map of MCH components contributing
-        to the active spin-adiabatic state's gradient, keeping only components
-        above grad_wthr and EXCLUDING the ground state S0 (target 0, no MRSF
-        excited-state gradient).  Weights are left unnormalised (caller divides
-        by their sum).  Returns (wmap, s0_weight) where s0_weight is the total
-        ground-state character dropped (for diagnostics / relaxation detection).
-        If no excited component clears the threshold, falls back to the single
-        largest excited component so a force is always defined."""
+    @staticmethod
+    def _mch_label(mult, target):
+        """Human-readable MCH state name for a (mult, MRSF target): singlet
+        target t -> S(t-1) (so target 1 = S0), triplet target t -> T(t)."""
+        return f'S{target - 1}' if mult == 1 else f'T{target}'
+
+    def _build_wmap(self, col):
+        """{(mult,target): weight} map of MCH components contributing to the
+        active spin-adiabatic state's gradient, keeping components above
+        grad_wthr; triplet Ms sublevels share a target (weights summed).
+        Falls back to the dominant component if none clear the threshold."""
         wmap = {}
-        s0_w = 0.0
         for k in range(self.nstate_soc):
-            mult, target = self._mch_target(k)
-            if mult == 1 and target == 0:                 # ground state S0: no gradient
-                s0_w += col[k]
-                continue
             if col[k] < self.grad_wthr:
                 continue
-            wmap[(mult, target)] = wmap.get((mult, target), 0.0) + col[k]
-        if not wmap:                                      # all excited weight below threshold
-            kbest, best = -1, -1.0
-            for k in range(self.nstate_soc):
-                mult, target = self._mch_target(k)
-                if mult == 1 and target == 0:
-                    continue
-                if col[k] > best:
-                    kbest, best = k, col[k]
-            if kbest >= 0:
-                wmap[self._mch_target(kbest)] = float(best)
-        return wmap, s0_w
+            key = self._mch_target(k)
+            wmap[key] = wmap.get(key, 0.0) + col[k]
+        if not wmap:
+            kdom = int(np.argmax(col))
+            wmap[self._mch_target(kdom)] = float(col[kdom])
+        return wmap
 
     def _dominant_component(self, u, active):
         """Largest |U|^2 MCH component of the active spin-adiabatic state.
@@ -885,14 +874,8 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         col = np.abs(u[:, active - 1]) ** 2
 
-        # collapse to unique MCH spatial states (summing triplet Ms weights),
-        # excluding the ground state S0 (no MRSF excited-state gradient)
-        wmap, _s0w = self._excited_wmap(col)
-        if _s0w > 0.5:
-            dump_log(mol, title=(
-                f'PyOQP WARNING: SOC-NAMD active state is {_s0w*100:.0f}% ground '
-                'state (S0); MRSF has no S0 excited-gradient, force from excited '
-                'components only -- energy conservation degrades on S0 relaxation.'))
+        # collapse to unique MCH spatial states (summing triplet Ms weights)
+        wmap = self._build_wmap(col)
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
@@ -975,7 +958,7 @@ class NAMD_SOC(NAMD):
             title=(f'SOC-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+e_pure:.8f}  '
                    f'E_pure={e_pure:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
-                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})  '
+                   f'dom=({self._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
 
@@ -1076,11 +1059,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         mol = self.mol
         col = np.abs(u[:, active - 1]) ** 2
 
-        wmap, _s0w = NAMD_SOC._excited_wmap(self, col)    # excited components, S0 excluded
-        if _s0w > 0.5:
-            dump_log(mol, title=(
-                f'PyOQP WARNING: SOC-NAMD-QMMM active state is {_s0w*100:.0f}% '
-                'ground state (S0); force from excited components only.'))
+        wmap = NAMD_SOC._build_wmap(self, col)
         dom_mult, dom_state, dom_w = NAMD_SOC._dominant_component(self, u, active)
         dom_key = (dom_mult, dom_state)
         wtot = sum(wmap.values())
@@ -1184,6 +1163,6 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             title=(f'SOC-QMMM-NAMD step {istep:6d}  t={istep*self.dt_fs:9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
-                   f'dom=({"S" if mult==1 else "T"}{state},w={w:.3f})  '
+                   f'dom=({NAMD_SOC._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
