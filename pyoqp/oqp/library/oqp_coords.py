@@ -466,9 +466,13 @@ def _build_tric(atoms, x, bond_factor=1.3):
         return None
 
     bonds, neighbours, fragments = _covalent_graph(atoms, x, bond_factor)
-    # Augment the bonded internals to span 3N-6 (keep the original fragments for
-    # the translation/rotation coordinates below).
-    aug_bonds, aug_neighbours = _augment_internals(atoms, x, bonds, neighbours, natom)
+    # Augment the bonded internals towards 3N-6, but only with WITHIN-fragment
+    # contacts: the inter-fragment degrees of freedom are supplied by the
+    # per-fragment translation/rotation coordinates appended below, so bridging
+    # fragments here would add artificial intermolecular bonds and couple their
+    # motion.  (The original fragments are kept for those externals.)
+    aug_bonds, aug_neighbours = _augment_internals(
+        atoms, x, bonds, neighbours, natom, fragments=fragments)
     primitives = _make_internals(aug_bonds, aug_neighbours, x)
 
     for frag in fragments:
@@ -617,7 +621,7 @@ def _make_internals(bonds, neighbours, x):
     return primitives
 
 
-def _augment_internals(atoms, x, bonds, neighbours, natom):
+def _augment_internals(atoms, x, bonds, neighbours, natom, fragments=None):
     """Add auxiliary bonds (+ the angles/torsions they enable) until the bonded
     internal set spans the 3N-6 internal degrees of freedom.
 
@@ -628,6 +632,20 @@ def _augment_internals(atoms, x, bonds, neighbours, natom):
     B), which converges slowly. We add the closest non-bonded contacts first --
     just enough to complete the space -- and let the redundant-internal G-inverse
     absorb the extra coordinates. Returns the (extended) bonds and neighbour map.
+
+    ``fragments`` (TRIC): when supplied, only *within-fragment* contacts are
+    considered. Inter-fragment degrees of freedom are already carried by the
+    per-fragment translation/rotation coordinates, so bridging separate
+    fragments here would inject artificial intermolecular bonds/angles and
+    couple otherwise independent fragment motion. When omitted (the redundant-
+    internal path, which first merges everything into one connected graph),
+    every pair is a candidate as before.
+
+    The loop also stops as soon as a batch fails to raise the rank: an exactly
+    collinear molecule/chain has missing bend/torsion modes that no extra
+    distance row can restore (its rank can never reach 3N-6), so this avoids
+    walking every remaining pair and diagonalizing ever-larger G matrices --
+    such degenerate inputs fall back to Cartesians quickly, as before.
     """
     atoms = np.asarray(atoms, dtype=int).reshape(-1)
     x = np.asarray(x, dtype=float).reshape(-1, 3)
@@ -639,26 +657,34 @@ def _augment_internals(atoms, x, bonds, neighbours, natom):
         _, r = coords._g_inverse(coords.b_matrix(x))
         return r
 
-    deficit = target - _rank(bonds, neighbours)
-    if deficit <= 0:
+    rank = _rank(bonds, neighbours)
+    if target - rank <= 0:
         return bonds, neighbours
+
+    fragof = None
+    if fragments is not None:
+        fragof = {a: fi for fi, frag in enumerate(fragments) for a in frag}
 
     have = {(min(a, b), max(a, b)) for (a, b) in bonds}
     cand = sorted((np.linalg.norm(x[a] - x[b]) / (radii[a] + radii[b]), a, b)
                   for a in range(natom) for b in range(a + 1, natom)
-                  if (a, b) not in have)                      # closest contacts first
+                  if (a, b) not in have                       # closest contacts first
+                  and (fragof is None or fragof[a] == fragof[b]))  # intra-fragment only
 
     bonds = list(bonds)
     neighbours = {k: set(v) for k, v in neighbours.items()}
     idx = 0
-    while deficit > 0 and idx < len(cand):
-        batch = max(deficit, 4)                               # add ~deficit at a time
+    while target - rank > 0 and idx < len(cand):
+        batch = max(target - rank, 4)                         # add ~deficit at a time
         for _, a, b in cand[idx:idx + batch]:
             bonds.append((a, b))
             neighbours[a].add(b)
             neighbours[b].add(a)
         idx += batch
-        deficit = target - _rank(bonds, neighbours)
+        new_rank = _rank(bonds, neighbours)
+        if new_rank <= rank:                                  # batch added no mode -> stop
+            break
+        rank = new_rank
     return bonds, neighbours
 
 
