@@ -15,6 +15,8 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - Vibrational frequencies, thermochemistry, and native **IR and Raman intensities**
 - **NMR chemical shieldings** with CGO and GIAO (London-orbital) gauge treatments
 - MRSF-TDDFT **nonadiabatic couplings** (NACME) for dynamics workflows
+- **Spin-orbit couplings (SOC)** between MRSF-TDDFT states from one- and two-electron contributions ([Relativistic MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036))
+- **Implicit solvation**: energy-only ddPCM continuum solvent via the ddX library
 
 **Geometry & reaction paths**
 - Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB
@@ -31,7 +33,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
-- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
+- **Scalar-relativistic (X2C) framework** extending the relativistic MRSF-TDDFT treatment
 
 ### Quickstart
 
