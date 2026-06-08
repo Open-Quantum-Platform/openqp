@@ -894,6 +894,8 @@ contains
     use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_rys, only: int2_rys_compute, rys_print_eri
     use iso_c_binding, only: c_f_pointer
+    use constants, only: HARMONIC_ACTIVE
+    use cart2sph, only: cart2sph_eri
     implicit none
     type(basis_set), intent(in) :: basis
     type(int2_pair_storage), intent(in) :: ppairs
@@ -902,6 +904,7 @@ contains
     logical, intent(out) :: zero_shq
     logical :: rotspd, libint, rys
     integer :: nbf(4)
+    integer :: s_, fp_, orig_, am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
     logical, parameter :: dbg_output = .false.
 !    logical, parameter :: dbg_output = .true.
     integer :: max_am
@@ -957,6 +960,29 @@ contains
       eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
       call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
 
+    end if
+
+    ! Cartesian -> pure spherical (c2s) reduction for harmonic-flagged shells.
+    ! At this point pints is unit-normalized Cartesian and, for the rotation
+    ! (rotspd) and Rys paths, aliases eri_data%ints, so we transform in place
+    ! and re-point pints. The libint path stores into its own buffer and is
+    ! handled separately (TODO) once that backend is exercised for spherical.
+    if (HARMONIC_ACTIVE .and. (rotspd .or. rys)) then
+      do s_ = 1, 4
+        fp_ = 5 - s_                       ! pints storage dim s_ <-> flipped position fp_
+        orig_ = eri_data%flips(fp_)        ! original shell index at that position
+        am_s(s_)   = eri_data%am(orig_)
+        pure_s(s_) = basis%harmonic(eri_data%ids(orig_))
+        nbf_s(s_)  = eri_data%nbf(fp_)
+      end do
+      if (any(pure_s == 1 .and. am_s >= 2)) then
+        call cart2sph_eri(eri_data%ints, am_s, pure_s, nbf_s, nbf_out_s)
+        do s_ = 1, 4
+          eri_data%nbf(5 - s_) = nbf_out_s(s_)
+        end do
+        eri_data%pints(1:eri_data%nbf(4), 1:eri_data%nbf(3), &
+                       1:eri_data%nbf(2), 1:eri_data%nbf(1)) => eri_data%ints
+      end if
     end if
 
     if (dbg_output) then
