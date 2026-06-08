@@ -423,6 +423,73 @@ class SinglePoint(Calculator):
 
         return energy
 
+    def _scf_features(self):
+        """Cheap per-system features for the SCF manager."""
+        cfg = self.mol.config
+        func = (cfg.get('input', {}).get('functional', '') or '').strip()
+        scft = str(cfg.get('scf', {}).get('type', 'rhf')).lower()
+        try:
+            mult = int(cfg.get('scf', {}).get('multiplicity', 1))
+        except (TypeError, ValueError):
+            mult = 1
+        try:
+            z = self.mol.get_atoms()
+            tm = bool(((z >= 21) & (z <= 30)).any() or ((z >= 39) & (z <= 48)).any()
+                      or ((z >= 57) & (z <= 80)).any())
+            natom = int(len(z))
+        except Exception:
+            tm, natom = False, 0
+        try:
+            charge = int(cfg.get('input', {}).get('charge', 0))
+        except (TypeError, ValueError):
+            charge = 0
+        return dict(is_dft=len(func) > 0, open_shell=(scft in ('uhf', 'rohf') or mult > 1),
+                    is_rohf=(scft == 'rohf'), is_uhf=(scft == 'uhf'),
+                    transition_metal=tm, natom=natom, mult=mult, charge=charge)
+
+    def _select_converger(self, mode, stability):
+        """SCF manager (converger_type=auto|ml): choose the primary converger from
+        cheap system features, calibrated on the SCF-convergence database.
+
+        Data summary (OpenQP, 58 cells): C-DIIS is the best primary (wins 52/58, mean
+        ~21 Fock builds vs A-DIIS 39, E-DIIS 53); the hard class is open-shell
+        transition-metal systems (esp. DFT), where C-DIIS can stall/find a wrong basin
+        -> keep C-DIIS but enable the TRAH stability safeguard. The reactive escalation
+        ladder (DIIS->SOSCF->TRAH) remains the safety net for all classes.
+
+        mode='ml' uses a trained, distilled model if shipped in pyoqp; otherwise it
+        transparently falls back to these rules.
+        """
+        f = self._scf_features()
+        used = 'rules'
+        primary = 'diis'   # C-DIIS: best default
+
+        if mode == 'ml':
+            try:
+                from oqp.library.scf_selector_model import predict as _ml_predict  # distilled, optional
+                primary = _ml_predict(f)
+                used = 'ML-model'
+            except Exception:
+                used = 'ML(no model -> rules)'
+
+        # ROHF/UHF stability is the priority: ROKS is the MRSF-TDDFT reference, so an
+        # open-shell SCF that lands on a non-lowest (unstable) solution corrupts the
+        # excited-state calculation. Enable the stability safeguard for open-shell
+        # references (especially DFT/ROKS and transition-metal), where it matters most.
+        hard = f['open_shell'] and (f['transition_metal'] or f['is_dft'])
+        if used != 'ML-model' and hard:
+            stability = True
+
+        dump_log(self.mol, section='',
+                 title='PyOQP SCF manager [%s]: %s%s%s%s -> primary=%s%s' % (
+                     used,
+                     'open-shell ' if f['open_shell'] else 'closed-shell ',
+                     'TM ' if f['transition_metal'] else '',
+                     'DFT' if f['is_dft'] else 'HF',
+                     ' natom=%d' % f['natom'],
+                     primary, ' +stability' if (stability and hard) else ''))
+        return primary, stability
+
     def _run_scf(self):
         """Unified robust SCF driver.
 
@@ -430,11 +497,17 @@ class SinglePoint(Calculator):
         with a single coherent robustness ladder:
 
           1. **Primary converger** (``scf.converger_type``, default DIIS) —
-             fast, gets most cases.
-          2. **Escalation** — if the primary converger does not converge,
-             switch to ``scf.alternative_scf`` (default TRAH, a globally
-             convergent trust-region method), warm-started from the current
-             orbitals.
+             fast, gets most cases. ``auto``/``ml`` let the SCF manager pick it.
+          2. **Escalation ladder** — if the primary converger does not converge,
+             walk a chain of progressively more robust (and costlier) methods,
+             each warm-started from the previous orbitals. The default chain is
+             ``SOSCF`` (cheap second-order, fixes most DIIS stalls) → then
+             ``scf.alternative_scf`` (default TRAH, a globally convergent
+             trust-region method). Set ``scf.escalation`` to a comma-separated
+             list (e.g. ``soscf,trah``) to override the chain explicitly;
+             ``scf.alternative_scf`` (back-compat) sets only the final method.
+             The primary converger is dropped from the chain and duplicates are
+             removed while preserving order.
           3. **Stability safeguard** (``scf.stability``, default on) — seed a
              stability-following TRAH pass from the converged orbitals.  At a
              genuine minimum this is a ~0-iteration no-op; when the converged
@@ -455,6 +528,10 @@ class SinglePoint(Calculator):
         stability = getattr(self, 'stability', scf_config.get('stability', False))
         trah_stab_default = scf_config.get('trh_stab', False)
 
+        # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
+        if str(primary).lower() in ('auto', 'ml'):
+            primary, stability = self._select_converger(str(primary).lower(), stability)
+
         # --- Stage 1: primary converger ---
         data.set_scf_converger_type(primary)
         self.scf()
@@ -463,11 +540,28 @@ class SinglePoint(Calculator):
             dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
 
         # --- Stage 2: escalate the converger on non-convergence ---
-        if not converged and fallback and fallback != primary:
+        # Escalation ladder of progressively more robust (and costlier) methods.
+        # Default: SOSCF (cheap second-order, fixes most DIIS stalls) BEFORE TRAH
+        # (globally convergent trust region). 'scf.escalation' overrides the
+        # comma-separated chain; 'scf.alternative_scf' (back-compat) sets the
+        # final method. Each stage warm-starts from the previous orbitals.
+        escalation = scf_config.get('escalation', None)
+        if escalation:
+            chain = [c.strip().lower() for c in str(escalation).split(',') if c.strip()]
+        else:
+            chain = ['soscf']
+            if fallback:
+                chain.append(fallback)
+        # Drop the primary and de-duplicate while preserving order.
+        _seen = set()
+        chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
+        for conv in chain:
+            if converged:
+                break
             dump_log(self.mol,
-                     title='PyOQP: SCF not converged with %s; escalating to %s' % (primary, fallback),
+                     title='PyOQP: SCF not converged; escalating to %s' % conv,
                      section='input')
-            data.set_scf_converger_type(fallback)
+            data.set_scf_converger_type(conv)
             data.set_sd_scf(False)
             self.scf()
             converged = self.mol.mol_energy.SCF_converged
