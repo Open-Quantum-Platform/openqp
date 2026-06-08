@@ -983,6 +983,13 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
     embedding plumbing from NAMD_QMMM.
     """
 
+    # borrow the small SOC helpers so they resolve via self inside the borrowed
+    # NAMD_SOC methods (this class inherits NAMD_QMMM, not NAMD_SOC)
+    _mch_target = NAMD_SOC._mch_target
+    _mch_label = staticmethod(NAMD_SOC._mch_label)
+    _build_wmap = NAMD_SOC._build_wmap
+    _dominant_component = NAMD_SOC._dominant_component
+
     def __init__(self, mol):
         super().__init__(mol)                                  # NAMD_QMMM: OpenMM + QM masses + v_all
         # spin-adiabatic electronic state space (ns singlets + 3 nt triplet Ms)
