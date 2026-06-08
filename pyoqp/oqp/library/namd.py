@@ -411,7 +411,12 @@ class NAMD_QMMM(NAMD):
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         mol.data["OQP::POTMM"] = potmm
-        mol.data["OQP::POTQM"] = potqm if potqm is not None else np.zeros((nat, nat))
+        # Zero POTQM: POTMM (PME) already captures the periodic MM embedding and
+        # has the QM self-image removed; the residual QM-QM periodic image term
+        # is negligible for solvation-size boxes, and the OpenMM correction was
+        # buggy (over-corrected E by ~5 Ha, force-inconsistent -- verified by
+        # finite difference). See pme_fd_diag.py.
+        mol.data["OQP::POTQM"] = np.zeros((nat, nat))
         oqp.espf_op_corr(mol)
         espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
         hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
@@ -502,8 +507,10 @@ class NAMD_QMMM(NAMD):
         # physically correct but small for large boxes -- NOT the dominant
         # source of the remaining periodic force-energy drift, which is the PME
         # embedding consistency term, still under development)
-        if self.periodic:
-            f_all = f_all + self._potqm_force(pchg, sign=1.0)
+        # No POTQM force: the QM-QM periodic image self-interaction is neglected
+        # (POTQM zeroed in the embedded SCF; see _electronic_qmmm). Adding the
+        # _potqm_force here without the matching energy term would reintroduce a
+        # force-energy inconsistency.
         # remove net (COM) force
         f_all -= f_all.mean(axis=0)
 
@@ -1021,7 +1028,12 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         nat = mol.data["natom"]
         nbf = mol.data.get_basis()["nbf"]
         mol.data["OQP::POTMM"] = potmm
-        mol.data["OQP::POTQM"] = potqm if potqm is not None else np.zeros((nat, nat))
+        # Zero POTQM: POTMM (PME) already captures the periodic MM embedding and
+        # has the QM self-image removed; the residual QM-QM periodic image term
+        # is negligible for solvation-size boxes, and the OpenMM correction was
+        # buggy (over-corrected E by ~5 Ha, force-inconsistent -- verified by
+        # finite difference). See pme_fd_diag.py.
+        mol.data["OQP::POTQM"] = np.zeros((nat, nat))
         oqp.espf_op_corr(mol)
         espf = unpack_lower_tri_multi(mol.data["OQP::ESPF_CORR"], nbf, nat)
         hcore = unpack_lower_tri_single(mol.get_hcore(), nbf)
@@ -1102,8 +1114,10 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         f_all = gmm.copy()
         for k, i in enumerate(self.qm_atoms):
             f_all[i] = f_all[i] - g_qm[k]
-        if self.periodic:
-            f_all = f_all + self._potqm_force(pchg, sign=1.0)
+        # No POTQM force: the QM-QM periodic image self-interaction is neglected
+        # (POTQM zeroed in the embedded SCF; see _electronic_qmmm). Adding the
+        # _potqm_force here without the matching energy term would reintroduce a
+        # force-energy inconsistency.
         f_all -= f_all.mean(axis=0)
 
         eqm = float(e_diag)
