@@ -708,6 +708,8 @@ class NAMD_SOC(NAMD):
         # (e.g. 'S1') instead of a fixed spin-adiabatic index -- robust when the
         # spin-adiabatic ordering is ambiguous at the start (S/T near-degeneracy)
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
+        _ev = mol.config['md'].get('econs', False)
+        self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
@@ -1027,6 +1029,7 @@ class NAMD_SOC(NAMD):
         self._ulog = u
         self._store_prev(r, u, eval_ha)
         self._log_soc(0, e_pure, mult, state, w, False)
+        self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
 
         for istep in range(1, self.nstep + 1):
             # velocity-Verlet position update
@@ -1052,6 +1055,11 @@ class NAMD_SOC(NAMD):
                 accel_new = -grad / self.mass[:, None]
 
             accel = accel_new
+            if self.econs:                                 # temporary E_tot-conservation rescale
+                ke = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+                ket = self._e_ref_tot - e_pure
+                if ke > 0 and ket > 0:
+                    self.vel *= np.sqrt(ket / ke)
             self._ulog = u
             self._store_prev(r, u, eval_ha)
             self._log_soc(istep, e_pure, mult, state, w, hopped)
@@ -1131,6 +1139,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         except Exception:
             self.grad_wthr = 0.05
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
+        _ev = mol.config['md'].get('econs', False)
+        self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc_qmmm(self, with_overlap):
@@ -1261,6 +1271,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
         NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
         self._log_soc_qmmm(0, epot, mult, state, w, False)
+        self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
 
         for istep in range(1, self.nstep + 1):
             # velocity-Verlet position update (all atoms) + SHAKE (rigid MM water)
@@ -1291,6 +1302,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 accel_new = f_all / self.m_all[:, None]
 
             accel = accel_new
+            if self.econs:                                 # temporary E_tot-conservation rescale
+                ke = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                ket = self._e_ref_tot - epot
+                if ke > 0 and ket > 0:
+                    self.v_all *= np.sqrt(ket / ke)
             self._ulog = u
             NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
             self._log_soc_qmmm(istep, epot, mult, state, w, hopped)
