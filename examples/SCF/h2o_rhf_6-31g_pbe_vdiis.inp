@@ -23,7 +23,7 @@ multiplicity=1
 maxit=30
 maxdiis=7
 diis_type=vdiis
-vdiis_cdiis_switch=0.3
+cdiis_switch=0.3
 vdiis_vshift_switch=0.003
 conv=1.0e-6
 

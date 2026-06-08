@@ -15,6 +15,8 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - Vibrational frequencies, thermochemistry, and native **IR and Raman intensities**
 - **NMR chemical shieldings** with CGO and GIAO (London-orbital) gauge treatments
 - MRSF-TDDFT **nonadiabatic couplings** (NACME) for dynamics workflows
+- **Spin-orbit couplings (SOC)** between MRSF-TDDFT states from one- and two-electron contributions ([Relativistic MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036))
+- **Implicit solvation**: energy-only ddPCM continuum solvent via the ddX library
 
 **Geometry & reaction paths**
 - Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB
@@ -31,7 +33,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
-- **Spin-Orbit Coupling** by [**Relativistic** MRSF-TDDFT](https://doi.org/10.1021/acs.jctc.2c01036)
+- **Scalar-relativistic (X2C) framework** extending the relativistic MRSF-TDDFT treatment
 
 ### Quickstart
 
@@ -63,14 +65,30 @@ This is the recommended source install path. It builds and installs the OpenQP P
 or 
 #### Detailed Compile
 
-##### macOS with Homebrew GCC and native BLAS
+Two representative configurations are shown below; both build the native library and install the Python package. See **Common options** for the remaining build switches.
 
-On macOS, use the Homebrew GCC toolchain for C/C++/Fortran and the native Accelerate BLAS/LAPACK provider. Replace `gcc-15`, `g++-15`, and `gfortran-15` with the installed Homebrew GCC version if needed.
+##### Linux (GCC + OpenMP)
 
 ```bash
 cd openqp
 cmake -B build -G Ninja \
-  -DUSE_LIBINT=OFF \
+  -DCMAKE_C_COMPILER=gcc \
+  -DCMAKE_CXX_COMPILER=g++ \
+  -DCMAKE_Fortran_COMPILER=gfortran \
+  -DCMAKE_INSTALL_PREFIX=. \
+  -DENABLE_OPENMP=ON
+ninja -C build install
+cd pyoqp
+pip install .
+```
+
+##### macOS (Homebrew GCC + Accelerate BLAS)
+
+Use the Homebrew GCC toolchain and the native Accelerate BLAS/LAPACK provider (32-bit integer interface). Adjust the `-15` suffix to your installed Homebrew GCC.
+
+```bash
+cd openqp
+cmake -B build -G Ninja \
   -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-15 \
   -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-15 \
   -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
@@ -83,53 +101,18 @@ cd pyoqp
 pip install .
 ```
 
-##### OpenMP Support
+##### Common options
 
-```bash
-cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=gfortran -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON
-ninja -C build install
-cd pyoqp
-pip install .
-```
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-DENABLE_MPI=ON` | OFF | Build with MPI; pair with an MPI Fortran wrapper, e.g. `-DCMAKE_Fortran_COMPILER=mpif90`. |
+| `-DENABLE_OPENMP=ON` | ON | OpenMP threading. |
+| `-DUSE_LIBINT=ON` | OFF | Use `libint` for ERIs instead of the built-in Rys-quadrature engine. |
+| `-DLINALG_LIB=<vendor>` | auto | BLAS/LAPACK provider (`auto`, `MKL`, `OpenBLAS`, `netlib`, …). |
+| `-DLINALG_LIB_INT64=OFF` | ON | Use the 32-bit-integer BLAS/LAPACK interface (required for macOS Accelerate). |
+| `-DENABLE_OPENTRAH=OFF` | ON | Skip the external OpenTrustRegion (OpenTRAH) solver; the TRAH SCF converger then uses the built-in native implementation only. |
 
-##### OpenMP and MPI Support
-
-```bash
-cd openqp
-cmake -B build -G Ninja -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
-ninja -C build install
-cd pyoqp
-pip install .
-```
-
-##### OpenMP and MPI Support using make
-
-```bash
-cd openqp
-cmake -B build -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ -DCMAKE_Fortran_COMPILER=mpif90 -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=ON
-make -C build install
-cd pyoqp
-pip install .
-```
-
-- Use `-DUSE_LIBINT=ON` to replace the default ERI based on Rys Quadrature with `libint`.
-- The Linux/manual examples above use ILP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=ON`, the default). The macOS example uses native Accelerate BLAS/LAPACK with `-DLINALG_LIB_INT64=OFF`.
-
-#### Environmental Settings
-
-```bash
-export OPENQP_ROOT=/path/to/openqp                           # Path to the Root of openqp
-export OMP_NUM_THREADS=4                                     # The number of cores to be used for OpenMP runs
-export LD_LIBRARY_PATH=$OPENQP_ROOT/lib:$LD_LIBRARY_PATH
-```
-
-**Special Environmental Settings for MKL Math Library:**
-
-```bash
-export MKL_INTERFACE_LAYER="@_MKL_INTERFACE_LAYER@"
-export MKL_THREADING_LAYER=SEQUENTIAL
-```
+To build without Ninja, drop `-G Ninja` and replace `ninja` with `make`.
 
 #### Test
 

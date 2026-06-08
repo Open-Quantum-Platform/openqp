@@ -20,7 +20,7 @@ METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
-SCF_CONVERGERS = {"diis", "soscf", "trah"}
+SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
 PCM_BACKENDS = {"ddx", "pcmsolver"}
@@ -782,6 +782,22 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             expected=", ".join(sorted(SCF_CONVERGERS)),
             action="Choose diis, soscf, or trah.",
         )
+
+    # scf.escalation: optional comma-separated ladder overriding the default
+    # DIIS -> SOSCF -> TRAH chain. Each stage must be a concrete converger
+    # (not the 'auto'/'ml' manager modes).
+    escalation = _as_lower(_get(config, "scf", "escalation", ""))
+    escalation_stages = {"diis", "soscf", "trah"}
+    for stage in (s.strip() for s in escalation.split(",") if s.strip()):
+        if stage not in escalation_stages:
+            report.add(
+                "ERROR",
+                "scf.escalation",
+                "Unknown SCF escalation stage.",
+                value=stage,
+                expected=", ".join(sorted(escalation_stages)),
+                action="List concrete convergers, e.g. soscf,trah.",
+            )
 
     if init_scf not in INIT_SCF_TYPES:
         report.add(

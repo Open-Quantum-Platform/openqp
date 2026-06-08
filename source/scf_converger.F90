@@ -417,7 +417,7 @@ module scf_converger
   implicit none
 
   private
-  ! -- SOSCF variant selector (driven by infos%control%soscf_mode) --
+  ! -- SOSCF variant selector (always SOSCF_VARIANT_ORIGINAL) --
   integer, parameter, public :: SOSCF_VARIANT_ORIGINAL    = 0
   integer, parameter, public :: SOSCF_VARIANT_STABLE_ONLY = 1
   integer, parameter, public :: SOSCF_VARIANT_QUAD_LS     = 2

@@ -14,7 +14,9 @@ setup(
     long_description_content_type="text/markdown",
     url="",
     install_requires=[
-        'numpy>=1.20.0',
+        # numpy>=2.2 exposes an ffi.from_buffer dangling-pointer bug (zeroed
+        # nuclear repulsion on SCF reload); cap until from_buffer lifetimes fixed.
+        'numpy>=1.20.0,<2.2',
         'scipy>=1.10.0',
         'geometric>=1.0',
         # 'dftd4>=3.5.0',
