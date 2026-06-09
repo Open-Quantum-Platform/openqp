@@ -1336,6 +1336,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             self._rattle(self.r_all, self.v_all)
 
             # local-diabatization propagation + spin-adiabatic hop (QM velocities only)
+            active_old = self.active                           # save for ESPF correction below
+            epot_old = epot                                    # total E_pot before hop
             self.vel = self.v_all[self.qm_atoms].copy()
             hopped = NAMD_SOC._propagate_and_hop(self, self.prev_eval, eval_ha, t)
             self.v_all[self.qm_atoms] = self.vel
@@ -1343,6 +1345,18 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
                 f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
                 accel_new = f_all / self.m_all[:, None]
+                # Correct velocity rescaling for ESPF energy change at hop.
+                # _propagate_and_hop accounts for ΔE_QM only (eval_ha gap). When the
+                # ESPF density switches at an ISC hop the ESPF electrostatic energy
+                # also changes by ΔE_ESPF = (epot_new - epot_old) - ΔE_QM. Apply an
+                # additional isotropic rescaling to all atoms so total energy is
+                # conserved. For ESPF_ROHF=1, charges are state-independent → 0.
+                de_espf = ((epot_old - epot) +
+                           (eval_ha[self.active - 1] - eval_ha[active_old - 1]))
+                if abs(de_espf) > 1e-10:
+                    ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                    if ekin_all > 0:
+                        self.v_all *= np.sqrt(max(0.0, 1.0 + de_espf / ekin_all))
 
             accel = accel_new
             if self.econs:                                 # temporary E_tot-conservation rescale
