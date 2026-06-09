@@ -133,26 +133,23 @@ GROUND-STATE GRADIENT — DONE AND VALIDATED:
   PBE/cc-pVDZ = pyscf to ~1e-4 (grid) and OpenQP own finite difference to
   the FD noise floor.
 
-IN PROGRESS / NOT VALIDATED — excited-state gradients:
-- `modules/fock_deriv.F90` — response 2e derivative-Fock probes wired to the
-  Cartesian-effective machinery (closed + open shell). Compiles, gated.
-- `dftlib/dft_gridint_tdxc_grad.F90` — expected to auto-follow like
-  dft_gridint_grad (bfnrm-fold + naos accumulation on the hooked AO arrays),
-  UNVERIFIED.
-- `modules/tdhf_gradient.F90`, `tdhf_mrsf_gradient.F90`, `tdhf_sf_gradient.F90`.
-
-STATUS: a full spherical MRSF gradient (CH2O/BHHLYP/cc-pVDZ, hcore guess)
-RUNS but FAILS finite-difference validation: analytic dE/dz_C = -1.376 vs
-FD ~ -0.06 (state-1 energy, h=0.005 A). The 1.4-2.3 Ha/bohr analytic force
-is unphysically large near equilibrium. NEXT STEPS to debug:
-  1. Cartesian control: rebuild gate-off and FD the same gradient to decide
-     whether this is a spherical-wiring bug or a pre-existing/setup issue
-     (the cartesian analytic z-force is also large, +2.257; its FD was not
-     cleanly extracted).
-  2. If spherical-specific: isolate the component by toggling pieces — the
-     relaxed/Z-vector density (build_cart in the tdhf_*_gradient assembly),
-     the transition-density path in dft_gridint_tdxc_grad, and the fock_deriv
-     probe contributions — against per-term finite differences.
+EXCITED-STATE GRADIENTS — DONE (TDA validated; SF/MRSF symmetry-checked):
+- Root cause: each of tdhf_gradient / tdhf_sf_gradient / tdhf_mrsf_gradient
+  carries its OWN grd2 compute type whose get_density builds the response
+  2-particle density on shell offsets, contracted with Cartesian derivative
+  ERIs. None were hooked -> the spherical response gradient was wrong (broke
+  dE/dx=0 for a planar molecule).
+- Fix: build_cart on each type's densities (relaxed p, ground d, transition
+  X+Y/X-Y for TDA; alpha/beta d,p + 7 spin-pair-coupling densities for MRSF;
+  alpha/beta d,p + transition v for SF) and branch get_density. fock_deriv
+  probes likewise. dft_gridint_tdxc_grad auto-follows (verified by the planar
+  symmetry test).
+- Validation: water TDA-HF (CIS)/cc-pVDZ state-1 gradient matches pyscf
+  TDA nuc_grad to ~1e-5 with dE/dx=0 restored; planar CH2O MRSF/BHHLYP
+  gradient has dE/dx=0.000000 for every atom.
+- NOTE: a clean MRSF finite-difference is blocked by triplet-ROHF SCF
+  multiple-solution instability (the reference jumps between SCF solutions
+  across displaced geometries), not a gradient bug.
 
 PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
 - `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
