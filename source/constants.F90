@@ -1,6 +1,7 @@
 module constants
 
    use precision, only: dp
+   use, intrinsic :: iso_c_binding, only: c_bool
 
    implicit none
 
@@ -24,10 +25,10 @@ module constants
    integer, parameter :: NUM_CART_BF(0:BAS_MXANG) = [((i+1)*(i+2)/2, i = 0, BAS_MXANG)]
    !< number of pure spherical-harmonic bf for each shell kind (2l+1)
    integer, parameter :: NUM_SPH_BF(0:BAS_MXANG)  = [(2*i+1, i = 0, BAS_MXANG)]
-   !< Master gate for the spherical (5d/7f/9g) AO dimension. Keep .false.
-   !< until the Cartesian->spherical (c2s) integral hooks are in place;
-   !< with this .false., num_ao() == NUM_CART_BF and behavior is unchanged.
-   logical, parameter :: HARMONIC_ACTIVE = .false.
+   !< Runtime gate for the spherical (5d/7f/9g) AO dimension. Python sets
+   !< this from [input] ispher before basis construction; with this .false.,
+   !< num_ao() == NUM_CART_BF and behavior is Cartesian-only.
+   logical :: HARMONIC_ACTIVE = .true.
    !< powers of X,Y,Z in Cartesian Gaussian basis functions
    integer, parameter :: &
     CART_X(BAS_MXCART,0:BAS_MXANG) = reshape([ &
@@ -158,7 +159,12 @@ module constants
   !>          HARMONIC_ACTIVE gate is on, in which case it returns 2l+1.
   !>          While HARMONIC_ACTIVE is .false. this is identical to
   !>          NUM_CART_BF(l) for every shell, so the dimension is unchanged.
-  elemental integer function num_ao(l, harmonic) result(n)
+  subroutine set_harmonic_active(flag) bind(C, name="oqp_set_harmonic_active")
+    logical(c_bool), value, intent(in) :: flag
+    HARMONIC_ACTIVE = logical(flag)
+  end subroutine set_harmonic_active
+
+  integer function num_ao(l, harmonic) result(n)
     integer, intent(in) :: l, harmonic
     if (HARMONIC_ACTIVE .and. harmonic == 1) then
       n = NUM_SPH_BF(l)

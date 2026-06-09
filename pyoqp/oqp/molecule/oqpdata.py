@@ -54,6 +54,7 @@ OQP_CONFIG_SCHEMA = {
         'runtype': {'type': string, 'default': 'energy'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
+        'ispher': {'type': bool, 'default': 'True'},
         'd4': {'type': bool, 'default': 'False'},
     },
     'guess': {
@@ -894,6 +895,7 @@ class OQPData:
         Apply the data from the OQP config
         The latter has to be read from the input file
         """
+        lib.oqp_set_harmonic_active(bool(config['input'].get('ispher', True)))
         for section in config:
             self.parse_section(config, section)
 

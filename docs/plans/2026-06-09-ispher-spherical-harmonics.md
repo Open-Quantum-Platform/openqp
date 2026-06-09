@@ -2,12 +2,12 @@
 
 Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA/SF/MRSF
 excited state) IMPLEMENTED AND VALIDATED. Hessian / EKT / ECP-labels pending.
-Gate: `constants::HARMONIC_ACTIVE` (compile-time, default `.false.`). With the
-gate off, `num_ao() == NUM_CART_BF` everywhere and every code path is
-byte-identical to the Cartesian-only behavior.
+Gate: `[input] ispher` (runtime, default `true`) sets
+`constants::HARMONIC_ACTIVE` before basis construction. With `ispher=false`,
+`num_ao() == NUM_CART_BF` everywhere and every code path is Cartesian-only.
 
 Branch: `feat/molecular-symmetry`. ~20 commits 4e3629d4..HEAD implement this.
-Last validated state: gate `.false.`, build green, tree clean.
+Last validated state before §7 work: gate `.false.`, build green, tree clean.
 
 ## 0. RESUME HERE — build, gate, and validation recipe
 
@@ -31,8 +31,9 @@ Note: the OpenTrustRegion ExternalProject only inherits a BLAS hint via
 configure. (One local fix to external/CMakeLists.txt forwards BLAS to OTR for
 the OpenBLAS case; it is NOT committed.)
 
-Toggle the gate (then rebuild): set `HARMONIC_ACTIVE = .true./.false.` in
-`source/constants.F90`. ALWAYS revert to `.false.` before committing.
+Toggle the gate at runtime: set `[input] ispher=true/false` (default true).
+Python calls `oqp_set_harmonic_active` before basis construction, so no rebuild
+is needed to compare spherical vs Cartesian behavior.
 
 Run a calculation (makeshift OPENQP_ROOT):
 ```
@@ -227,8 +228,7 @@ the molecular-symmetry feature (off by default, indexes by `naos`).
 
 ## 7. Flipping the gate on by default
 
-Only after 6a lands and finite-difference-validates. At that point
-`HARMONIC_ACTIVE` can default `.true.` (or, better, be promoted to a runtime
-input keyword `ispher` with the BSE default per basis and an explicit
-override), and the auto-selection makes cc-pVDZ/def2/6-311G** correct by
-default while 6-31G* stays Cartesian.
+IN PROGRESS: `HARMONIC_ACTIVE` has been promoted to runtime `[input] ispher`,
+default `true`, with `ispher=false` as the Cartesian override. The auto-
+selection makes cc-pVDZ/def2/6-311G** spherical by default while 6-31G* stays
+Cartesian because its BSE shells are Cartesian.
