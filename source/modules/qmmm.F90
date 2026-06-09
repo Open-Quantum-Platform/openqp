@@ -1361,6 +1361,7 @@ module qmmm_mod
     use precision, only: dp
     use lebedev, only: lebedev_get_grid
     use elements, only: ELEMENTS_VDW_RADII
+    use physical_constants, only: ANGSTROM_TO_BOHR
     use messages, only: show_message, with_abort
     implicit none
 
@@ -1375,16 +1376,47 @@ module qmmm_mod
     integer, allocatable :: neigh(:)
 
     integer :: nadd, nleb, ok
-    integer :: i, j, k, layer
-    logical :: keepall, smooth
+    integer :: i, j, k, layer, iz
+    logical :: keepall, smooth, gamess_mode
     character(len=16) :: env_k
     integer :: st_k
-    real(kind=dp) :: sw_delta, sw_scale
+    real(kind=dp) :: sw_delta, sw_scale, rmax_i, vdwenv_i, prec1_bohr
+    real(kind=dp), allocatable :: gamess_vdw(:)
 
-    allocate(leb(maxval(npt_layer),3), &
-             lebw(maxval(npt_layer)), &
+    !> GAMESS ESPF VDW radii (Å, from LEBGRD in espf.src, Emsley 1991 + Bondi 1964).
+    !> Zero entries fall back to OpenQP's ELEMENTS_VDW_RADII at runtime.
+    real(kind=dp), parameter :: gamess_rvdw_ang(104) = [ &
+      1.20_dp, 1.22_dp,                                                & ! H, He
+      0.00_dp, 0.00_dp,                                                & ! Li, Be
+      2.08_dp, 1.85_dp, 1.54_dp, 1.50_dp, 1.35_dp, 1.60_dp,          & ! B-Ne
+      2.31_dp, 0.00_dp, 2.05_dp, 2.00_dp, 1.90_dp, 1.85_dp,          & ! Na-S
+      1.81_dp, 1.91_dp,                                                & ! Cl, Ar
+      2.31_dp,                                                         & ! K
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Ca-Fe
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp,          & ! Co-Ge
+      2.00_dp, 2.00_dp, 1.95_dp, 1.98_dp,                             & ! As, Se, Br, Kr
+      2.44_dp,                                                         & ! Rb
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Sr-Ru
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp,          & ! Rh-Sn
+      2.20_dp, 2.20_dp, 2.15_dp, 0.00_dp,                             & ! Sb, Te, I, Xe
+      2.62_dp,                                                         & ! Cs
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Ba-Nd
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Pm-Yb
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Lu-Re
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Os-Pb
+      2.40_dp, 0.00_dp, 0.00_dp, 0.00_dp,                             & ! Bi, Po, At, Rn
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Fr-Am
+      0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, 0.00_dp, & ! Cm-Rf
+      0.00_dp, 0.00_dp, 0.00_dp                                        & ! Db, Sg, Bh (pad to 104)
+    ]
+
+    ! npt may be larger than npt_layer total when GAMESS mode adds 146/shell;
+    ! use max(npt, nat*nlayers*146) in the caller, or just pad npt there.
+    allocate(leb(max(maxval(npt_layer),146),3), &
+             lebw(max(maxval(npt_layer),146)), &
              vdwrad(nat), &
              excl_vdw(nat), &
+             gamess_vdw(nat), &
              neigh(nat), &
              wt(npt), &
              stat=ok)
@@ -1423,6 +1455,30 @@ module qmmm_mod
     end if
     if (smooth) keepall = .true.
 
+!   GAMESS-identical mode: ESPF_GAMESS=1 reproduces GAMESS LEBGRD exactly
+!   (RVDW table from Emsley 1991/Bondi 1964, NANG=146 Lebedev per shell,
+!    linear shell placement RINC=IS*(4r-r-0.1)/NRAD, fixed r+0.1 Å exclusion).
+    gamess_mode = .false.
+    call get_environment_variable('ESPF_GAMESS', env_k, status=st_k)
+    if (st_k == 0) then
+      if (trim(env_k) == '1' .or. trim(env_k) == 'on') gamess_mode = .true.
+    end if
+    prec1_bohr = 0.1_dp * ANGSTROM_TO_BOHR  ! GAMESS PREC1 = 0.1 Å
+    ! Build GAMESS VDW radius array in bohr; fall back to OpenQP for unknown elements
+    do i = 1, nat
+      iz = int(zn(i))
+      if (iz >= 1 .and. iz <= size(gamess_rvdw_ang) .and. gamess_rvdw_ang(iz) > 0.0_dp) then
+        gamess_vdw(i) = gamess_rvdw_ang(iz) * ANGSTROM_TO_BOHR
+      else
+        gamess_vdw(i) = ELEMENTS_VDW_RADII(iz)
+      end if
+    end do
+    ! GAMESS mode forces hard pruning (no smooth, no keepall)
+    if (gamess_mode) then
+      smooth  = .false.
+      keepall = .false.
+    end if
+
 !   Fixed exclusion radii: scaled by the MINIMUM layer factor (layers(1) = 1.4)
 !   so the exclusion sphere is independent of the current layer being built.
 !
@@ -1445,22 +1501,50 @@ module qmmm_mod
 !     • Intermediate-zone points (1.4–2.0 × r_vdw from neighbours) are admitted
 !       on outer shells but at physically reasonable positions (not near singularity).
 !   This is the correct fixed-scale complement to OpenQP's 1.4–2.0 shell scheme.
-    excl_vdw = ELEMENTS_VDW_RADII(int(zn)) * layers(1)  ! = 1.4 × r_vdw (innermost layer)
+    if (gamess_mode) then
+      excl_vdw = gamess_vdw + prec1_bohr        ! GAMESS: r_vdw + 0.1 Å (fixed, Emsley radii)
+    else
+      excl_vdw = ELEMENTS_VDW_RADII(int(zn)) * layers(1)  ! = 1.4 × r_vdw (innermost layer)
+    end if
 
 !   Loop over layers and add spherical grid points on each atom to the molecular grid
     do layer = 1, nlayers
 
 !     Get the atomic radii on which to place new grid layer
-      vdwrad = ELEMENTS_VDW_RADII(int(zn))*layers(layer)
+      if (gamess_mode) then
+        ! GAMESS shell radius: IS*(RMAX-VDWEnv)/NRAD where RMAX=4*r_vdw, VDWEnv=r_vdw+0.1 Å
+        ! => layer*(nlayers*gamess_vdw - gamess_vdw - prec1)/nlayers
+        do i = 1, nat
+          vdwrad(i) = real(layer,dp) * (real(nlayers,dp)*gamess_vdw(i) - gamess_vdw(i) - prec1_bohr) &
+                    / real(nlayers,dp)
+        end do
+      else
+        vdwrad = ELEMENTS_VDW_RADII(int(zn))*layers(layer)
+      end if
 
 !     Get grid
-      nleb = npt_layer(layer)
-      leb = 0
-      lebw = 0
-      call lebedev_get_grid(nleb, leb, lebw, typ_layer(layer))
+      if (gamess_mode) then
+        nleb = 146
+        leb = 0; lebw = 0
+        call lebedev_get_grid(nleb, leb, lebw, 0)   ! type 0 = standard Lebedev, NANG=146
+      else
+        nleb = npt_layer(layer)
+        leb = 0
+        lebw = 0
+        call lebedev_get_grid(nleb, leb, lebw, typ_layer(layer))
+      end if
 
 !     Add new grid layer for each atom, remove inner points
       do i = 1, nat
+        ! GAMESS: atom IA is included in its own exclusion loop, so IS=1 shell
+        ! (radius < r_vdw+0.1) is always fully self-excluded.  add_atom_grid skips
+        ! self (cur_atom), so mimic GAMESS by skipping this layer when the shell
+        ! radius is within the atom's own exclusion sphere.
+        if (gamess_mode .and. vdwrad(i) <= excl_vdw(i)) then
+          nadd = 0
+          nptcur = nptcur + nadd
+          cycle
+        end if
         if (keepall) then
           do j = 1, nleb
             xyz(nptcur+j,1) = atoms_xyz(1,i) + vdwrad(i)*leb(j,1)
@@ -1527,7 +1611,9 @@ module qmmm_mod
         block
           integer :: ud
           open(newunit=ud, file='/tmp/espf_npts.txt', position='append', action='write')
-          if (smooth) then
+          if (gamess_mode) then
+            write(ud,'(a,i7)') 'GAMESS nptcur=', nptcur
+          else if (smooth) then
             write(ud,'(a,i7,a,f5.2,a,f5.2)') 'smooth nptcur=', nptcur, &
                   '  scale=', sw_scale, '  delta=', sw_delta
           else
