@@ -309,12 +309,11 @@ contains
     write(iw,'(2x,"--------------------------------------")')
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = EA roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = EA roots)")')
     else
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = IP roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = IP roots)")')
     end if
-    call print_dyson_orbitals(orbitals, eig, strengths, nbf, min(nroot, nactive), &
-                              hartree_to_ev)
+    call print_dyson_orbitals(basis, mo_a, orbitals, eig, strengths, nbf, min(nroot, nactive))
     call flush(iw)
 
     call measure_time(print_total=1, log_unit=iw)
@@ -322,33 +321,55 @@ contains
 
   end subroutine tdhf_mrsf_ekt
 
-  !> @brief Print Dyson orbitals to the log in root blocks
-  !> @detail Each block of up to 5 roots shows the root index, the electron
-  !>         binding energy eBE = -eig (eV), and the Dyson pole strength,
-  !>         followed by the MO-basis Dyson orbital coefficients of each root.
-  subroutine print_dyson_orbitals(dyson_mo, eig, strengths, nbf, nroot, h2ev)
+  !> @brief Print Dyson orbitals in a GAMESS-like block.
+  !> @detail The EKT solver returns Dyson-orbital coefficients in the OpenQP
+  !>         MO basis.  For direct log-level comparison with GAMESS, transform
+  !>         them back to the AO basis and print five roots per block with
+  !>         ENERGY and STRENGTH header rows followed by AO basis-function
+  !>         labels and coefficients.  This routine is output-only: it does not
+  !>         change eigenvalues, strengths, root selection, or stored MO-basis
+  !>         Dyson orbitals.
+  subroutine print_dyson_orbitals(basis, mo_a, dyson_mo, eig, strengths, nbf, nroot)
     use precision, only: dp
     use io_constants, only: iw
+    use basis_tools, only: basis_set
 
     implicit none
 
+    type(basis_set), intent(in) :: basis
     integer, intent(in) :: nbf, nroot
-    real(kind=dp), intent(in) :: dyson_mo(nbf,*), eig(*), strengths(*)
-    real(kind=dp), intent(in) :: h2ev
+    real(kind=dp), intent(in) :: mo_a(nbf,nbf), dyson_mo(nbf,*), eig(*), strengths(*)
 
     integer, parameter :: mxlen = 5
-    integer :: i, j, i0, i1
+    integer :: i, j, k, i0, i1
+    real(kind=dp), allocatable :: dyson_ao(:,:)
+
+    allocate(dyson_ao(nbf,nroot), source=0.0_dp)
+    do i = 1, nroot
+      do k = 1, nbf
+        do j = 1, nbf
+          dyson_ao(j,i) = dyson_ao(j,i) + mo_a(j,k)*dyson_mo(k,i)
+        end do
+      end do
+    end do
+
+    write(iw,'(/,10x,46("-"))')
+    write(iw,'(12x,"EKT DYSON ORBITALS, ENERGIES AND NORMS")')
+    write(iw,'(12x,"OpenQP AO-basis coefficients; GAMESS-style layout")')
+    write(iw,'(10x,46("-"))')
 
     do i0 = 1, nroot, mxlen
       i1 = min(nroot, i0+mxlen-1)
-      write(iw,'(/,2x,"root",7x,*(i7,4x))') (i, i=i0, i1)
-      write(iw,'(2x,"eBE (eV)",3x,*(f11.4))') (-eig(i)*h2ev, i=i0, i1)
-      write(iw,'(2x,"strength",3x,*(f11.6))') (strengths(i), i=i0, i1)
-      write(iw,*)
+      write(iw,'(/,18x,5(5x,i6))') (i, i=i0, i1)
+      write(iw,'(5x,"ENERGY",3x,5f11.6)') (eig(i), i=i0, i1)
+      write(iw,'(5x,"STRENGTH",1x,5f11.6)') (strengths(i), i=i0, i1)
+      write(iw,'(18x,5(5x,a6))') ("A", i=i0, i1)
       do j = 1, nbf
-        write(iw,'(2x,i5,4x,*(f11.6))') j, (dyson_mo(j,i), i=i0, i1)
+        write(iw,'(i5,2x,a8,5f11.6)') j, basis%bf_label(j), (dyson_ao(j,i), i=i0, i1)
       end do
     end do
+
+    deallocate(dyson_ao)
 
   end subroutine print_dyson_orbitals
 
