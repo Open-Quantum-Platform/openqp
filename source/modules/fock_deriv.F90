@@ -22,7 +22,8 @@ module fock_deriv_mod
 
   use precision, only: dp
   use grd2, only: grd2_driver, grd2_compute_data_t
-  use basis_tools, only: basis_set
+  use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+  use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
 
   implicit none
@@ -33,6 +34,11 @@ module fock_deriv_mod
   type, extends(grd2_compute_data_t) :: grd2_fockprobe_data_t
     real(kind=dp), pointer :: pmat(:,:) => null()   !< density P (nbf,nbf), full
     real(kind=dp), pointer :: mmat(:,:) => null()   !< probe  M (nbf,nbf), full (symmetric)
+    ! Cartesian-effective (bfnrm-folded) copies + Cartesian offsets, used under
+    ! HARMONIC_ACTIVE so the spherical probe/density contract with Cartesian
+    ! derivative ERIs (set by prepare_cart).
+    real(kind=dp), allocatable :: pmat_cart(:,:), mmat_cart(:,:)
+    integer, allocatable :: cart_off(:)
     integer :: nbf = 0
   contains
     procedure :: init => grd2_fockprobe_init
@@ -54,6 +60,8 @@ module fock_deriv_mod
     real(kind=dp), pointer :: pcoul(:,:) => null()  !< Coulomb density (total = Pa+Pb)
     real(kind=dp), pointer :: pexch(:,:) => null()  !< exchange density (one spin)
     real(kind=dp), pointer :: mmat(:,:) => null()   !< probe M (nbf,nbf), full (symmetric)
+    real(kind=dp), allocatable :: pcoul_cart(:,:), pexch_cart(:,:), mmat_cart(:,:)
+    integer, allocatable :: cart_off(:)
     integer :: nbf = 0
   contains
     procedure :: init => grd2_fockprobe_os_init
@@ -87,6 +95,9 @@ contains
 
     type(grd2_fockprobe_data_t) :: gcomp
 
+    integer, allocatable :: off_dummy(:)
+    integer :: ncart
+
     gcomp%pmat => pmat
     gcomp%mmat => mmat
     gcomp%nbf = basis%nbf
@@ -94,9 +105,31 @@ contains
     gcomp%hfscale = hfscale
     gcomp%hfscale2 = hfscale
 
+    if (HARMONIC_ACTIVE) then
+      call fockprobe_cart(basis, pmat, gcomp%pmat_cart, gcomp%cart_off, ncart)
+      call fockprobe_cart(basis, mmat, gcomp%mmat_cart, off_dummy, ncart)
+    end if
+
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
   end subroutine fock_deriv_contract
+
+!###############################################################################
+
+!> @brief Cartesian-effective (bfnrm-folded) copy of a full AO matrix +
+!>   Cartesian per-shell offsets, for contraction with Cartesian derivative
+!>   ERIs under HARMONIC_ACTIVE.
+  subroutine fockprobe_cart(basis, m, m_cart, cart_off, nbf_cart)
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: m(:,:)
+    real(kind=dp), allocatable, intent(out) :: m_cart(:,:)
+    integer, allocatable, intent(out) :: cart_off(:)
+    integer, intent(out) :: nbf_cart
+    real(kind=dp), allocatable :: tmp(:,:)
+    tmp = m
+    call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+    call build_cart_density(basis, tmp, m_cart, cart_off, nbf_cart)
+  end subroutine fockprobe_cart
 
 !###############################################################################
 
@@ -134,17 +167,28 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, bfn
     integer :: i, j, k, l, i1, j1, k1, l1
     integer :: loc(4), nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: pmat(:,:), mmat(:,:)
+    logical :: usecart
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
 
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      pmat => this%pmat_cart;  mmat => this%mmat_cart
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      pmat => this%pmat;  mmat => this%mmat
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
+
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-    nbf = basis%naos(id)
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
     do i = 1, nbf(1)
@@ -157,18 +201,20 @@ contains
             l1 = loc(4) + l
             ! Coulomb: symmetrized over the (ij)<->(kl) permutation the driver
             ! exploits: 2 c (M_ij P_kl + M_kl P_ij) (reduces to 4 c P_ij P_kl at M=P).
-            df1 = 0.5_dp*coulfact*( this%mmat(i1,j1)*this%pmat(k1,l1) &
-                                  + this%mmat(k1,l1)*this%pmat(i1,j1) )
+            df1 = 0.5_dp*coulfact*( mmat(i1,j1)*pmat(k1,l1) &
+                                  + mmat(k1,l1)*pmat(i1,j1) )
             if (xcfact/=0.0_dp) then
               ! Exchange: symmetrized 4-term (reduces to x(P_ik P_jl+P_il P_jk) at M=P).
-              dq1 = 0.5_dp*( this%mmat(i1,k1)*this%pmat(j1,l1) &
-                          + this%mmat(i1,l1)*this%pmat(j1,k1) &
-                          + this%pmat(i1,k1)*this%mmat(j1,l1) &
-                          + this%pmat(i1,l1)*this%mmat(j1,k1) )
+              dq1 = 0.5_dp*( mmat(i1,k1)*pmat(j1,l1) &
+                          + mmat(i1,l1)*pmat(j1,k1) &
+                          + pmat(i1,k1)*mmat(j1,l1) &
+                          + pmat(i1,l1)*mmat(j1,k1) )
               df1 = df1 - xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*bfn
           end do
         end do
       end do
@@ -199,6 +245,9 @@ contains
 
     type(grd2_fockprobe_os_data_t) :: gcomp
 
+    integer, allocatable :: off_dummy(:)
+    integer :: ncart
+
     gcomp%pcoul => pcoul
     gcomp%pexch => pexch
     gcomp%mmat => mmat
@@ -206,6 +255,12 @@ contains
     gcomp%coulscale = 1.0_dp
     gcomp%hfscale = hfscale
     gcomp%hfscale2 = hfscale
+
+    if (HARMONIC_ACTIVE) then
+      call fockprobe_cart(basis, pcoul, gcomp%pcoul_cart, gcomp%cart_off, ncart)
+      call fockprobe_cart(basis, pexch, gcomp%pexch_cart, off_dummy, ncart)
+      call fockprobe_cart(basis, mmat,  gcomp%mmat_cart,  off_dummy, ncart)
+    end if
 
     gx = 0.0_dp
     call grd2_driver(infos, basis, gx, gcomp)
@@ -247,17 +302,28 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: ccoef, xcoef, df1, dq1
+    real(kind=dp) :: ccoef, xcoef, df1, dq1, bfn
     integer :: i, j, k, l, i1, j1, k1, l1
     integer :: loc(4), nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: mmat(:,:), pcoul(:,:), pexch(:,:)
+    logical :: usecart
 
     ccoef = 4*this%coulscale     ! 2x the closed-shell Coulomb -> full Tr[M J^x[pcoul]]
     xcoef = 2*this%hfscale       ! 4x the closed-shell exchange -> full c_x Tr[M K^x[pexch]]
 
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      mmat => this%mmat_cart;  pcoul => this%pcoul_cart;  pexch => this%pexch_cart
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      mmat => this%mmat;  pcoul => this%pcoul;  pexch => this%pexch
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
+
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-    nbf = basis%naos(id)
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
     do i = 1, nbf(1)
@@ -269,18 +335,20 @@ contains
           do l = 1, nbf(4)
             l1 = loc(4) + l
             ! Coulomb: M against the TOTAL density (symmetrized over (ij)<->(kl)).
-            df1 = ccoef*( this%mmat(i1,j1)*this%pcoul(k1,l1) &
-                        + this%mmat(k1,l1)*this%pcoul(i1,j1) )
+            df1 = ccoef*( mmat(i1,j1)*pcoul(k1,l1) &
+                        + mmat(k1,l1)*pcoul(i1,j1) )
             if (xcoef/=0.0_dp) then
               ! Exchange: M against the SPIN density (4-term symmetrized).
-              dq1 = this%mmat(i1,k1)*this%pexch(j1,l1) &
-                  + this%mmat(i1,l1)*this%pexch(j1,k1) &
-                  + this%pexch(i1,k1)*this%mmat(j1,l1) &
-                  + this%pexch(i1,l1)*this%mmat(j1,k1)
+              dq1 = mmat(i1,k1)*pexch(j1,l1) &
+                  + mmat(i1,l1)*pexch(j1,k1) &
+                  + pexch(i1,k1)*mmat(j1,l1) &
+                  + pexch(i1,l1)*mmat(j1,k1)
               df1 = df1 - xcoef*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*bfn
           end do
         end do
       end do
