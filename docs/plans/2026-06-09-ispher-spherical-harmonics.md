@@ -1,7 +1,10 @@
 # Pure spherical-harmonic (ISPHER) basis support
 
-Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA/SF/MRSF
-excited state) IMPLEMENTED AND VALIDATED. Hessian / EKT / ECP-labels pending.
+Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA and
+planar-symmetry SF/MRSF checks) IMPLEMENTED. Direct MRSF finite-difference
+validation found a remaining mismatch (see §6a). EKT smoke passes; ECP and
+analytic Hessian have explicit spherical guards until their spherical kernels
+are implemented.
 Gate: `[input] ispher` (runtime, default `true`) sets
 `constants::HARMONIC_ACTIVE` before basis construction. With `ispher=false`,
 `num_ao() == NUM_CART_BF` everywhere and every code path is Cartesian-only.
@@ -190,7 +193,7 @@ GROUND-STATE GRADIENT — DONE AND VALIDATED:
   PBE/cc-pVDZ = pyscf to ~1e-4 (grid) and OpenQP own finite difference to
   the FD noise floor.
 
-EXCITED-STATE GRADIENTS — DONE (TDA validated; SF/MRSF symmetry-checked):
+EXCITED-STATE GRADIENTS — PARTIAL (TDA validated; SF/MRSF needs FD fix):
 - Root cause: each of tdhf_gradient / tdhf_sf_gradient / tdhf_mrsf_gradient
   carries its OWN grd2 compute type whose get_density builds the response
   2-particle density on shell offsets, contracted with Cartesian derivative
@@ -204,20 +207,30 @@ EXCITED-STATE GRADIENTS — DONE (TDA validated; SF/MRSF symmetry-checked):
 - Validation: water TDA-HF (CIS)/cc-pVDZ state-1 gradient matches pyscf
   TDA nuc_grad to ~1e-5 with dE/dx=0 restored; planar CH2O MRSF/BHHLYP
   gradient has dE/dx=0.000000 for every atom.
-- NOTE: a clean MRSF finite-difference is blocked by triplet-ROHF SCF
-  multiple-solution instability (the reference jumps between SCF solutions
-  across displaced geometries), not a gradient bug.
+- New direct check (2026-06-09): CH2O/MRSF-BHHLYP/cc-pVDZ `ispher=true`,
+  target state 3, central FD of the high-precision state-3 energy for O-z
+  displacement `h=1e-3 Ang` gives `-0.004349043 Ha/Bohr`, while the analytic
+  gradient reports `+0.014762226 Ha/Bohr`. This means the MRSF gradient is not
+  yet FD-validated; do not claim it generally correct until the MRSF response
+  density/target-state convention is fixed. The earlier ROHF multiple-solution
+  instability remains a separate caveat, but it is not sufficient to explain
+  this stable one-coordinate mismatch.
 
-PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
+GUARDED/PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
 - `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
   `modules/tdhf_hessian.F90`, `modules/tdhf_sf_hessian.F90`,
   `modules/hess1_selftest.F90`.
+- `hf_hessian` and the Python analytic-Hessian driver now reject spherical AO
+  dimensions with a clear message; use `[input] ispher=false` or numerical
+  Hessian until spherical Hessian kernels are implemented.
 
-PENDING — other:
+GUARDED/VALIDATED — other:
 - `ecp.F90` — `map_canonical` AO labeling assumes Cartesian; ECP basis sets
-  with spherical shells need a spherical label map.
-- `modules/tdhf_mrsf_ekt.F90` — EKT works in MO/full-matrix space; expected
-  to auto-follow but untested with spherical.
+  with spherical shells need a spherical label map. Spherical ECP now aborts
+  clearly with `set [input] ispher=false`; the Cartesian override was smoke-
+  tested on HBr/aug-cc-pVDZ-PP.
+- `modules/tdhf_mrsf_ekt.F90` — EKT works in MO/full-matrix space and was
+  smoke-tested with H2O/MRSF-EKT-IP/cc-pVDZ `ispher=true` (24 spherical AOs).
 
 NOT IN THIS BRANCH (handle when merged): SOC integrals and PCM/DDX solvent
 have no source here (separate branches / external project).

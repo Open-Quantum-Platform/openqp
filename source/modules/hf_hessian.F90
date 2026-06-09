@@ -42,6 +42,7 @@ contains
     use cphf_mod, only: cphf_solve
     use io_constants, only: iw
     use messages, only: show_message, WITH_ABORT
+    use constants, only: HARMONIC_ACTIVE
 
     implicit none
 
@@ -69,6 +70,11 @@ contains
     ! grd2_driver (fock_deriv_contract response) and fock_jk (cphf) all run the
     ! long-range Coulomb + short-range erfc-exchange two-pass split when
     ! infos%dft%cam_flag is set.
+
+    basis => infos%basis
+    if (HARMONIC_ACTIVE .and. any(basis%harmonic == 1)) then
+      call show_message('Analytic HF/DFT Hessian with spherical-harmonic AO dimensions is not implemented yet; set [input] ispher=false or use [hess] type=numerical.', WITH_ABORT)
+    end if
 
     ! Open-shell (UHF/ROHF) dispatch.  The body below is the closed-shell
     ! (RHF/RKS) kernel: it reads only the alpha density/MOs (OQP_DM_A, mo_a, eps)

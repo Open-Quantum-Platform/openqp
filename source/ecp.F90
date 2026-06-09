@@ -12,6 +12,8 @@ module ecp_tool
     use libecp_result, only : ecp_result
     use basis_tools, only: basis_set
     use precision, only: dp
+    use constants, only: HARMONIC_ACTIVE
+    use messages, only: show_message, WITH_ABORT
 
     implicit none
 
@@ -22,6 +24,13 @@ module ecp_tool
     public ecp_deriv_ints
 
 contains
+    subroutine guard_spherical_ecp(basis)
+        type(basis_set), intent(in) :: basis
+        if (HARMONIC_ACTIVE .and. any(basis%harmonic == 1)) then
+            call show_message('ECP integrals with spherical-harmonic AO dimensions are not implemented yet; set [input] ispher=false for ECP basis sets.', WITH_ABORT)
+        end if
+    end subroutine guard_spherical_ecp
+
     !> @brief Add ECP one-electron contribution to the AO-core Hamiltonian (packed).
     !> @detail Computes scalar ECP integrals with libecpint (deriv order 0),
     !>         remaps them into OpenQP AO ordering via @ref transform_matrix,
@@ -45,6 +54,7 @@ contains
         if (.not.(basis%ecp_params%is_ecp)) then
             return
         end if
+        call guard_spherical_ecp(basis)
         driv_order = 0
 
         call set_integrator(integrator, basis, coord, driv_order)
@@ -107,6 +117,7 @@ contains
         if (.not.(basis%ecp_params%is_ecp)) then
             return
         end if
+        call guard_spherical_ecp(basis)
 
         driv_order = 1
 
@@ -202,6 +213,7 @@ contains
         if (.not.(basis%ecp_params%is_ecp)) then
             return
         end if
+        call guard_spherical_ecp(basis)
 
         driv_order = 1
         nbf = basis%nbf
@@ -282,6 +294,7 @@ contains
         if (.not.(basis%ecp_params%is_ecp)) then
             return
         end if
+        call guard_spherical_ecp(basis)
 
         driv_order = 2
         nbf = basis%nbf
