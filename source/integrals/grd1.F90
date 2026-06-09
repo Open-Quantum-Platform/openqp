@@ -6,7 +6,8 @@ module grd1
    use atomic_structure_m, only: atomic_structure
 
    use basis_tools, only: basis_set, &
-       bas_norm_matrix, bas_denorm_matrix
+       bas_norm_matrix, bas_denorm_matrix, build_cart_density
+   use constants, only: HARMONIC_ACTIVE
 
    use mod_1e_primitives, only: &
        comp_coulomb_der1, comp_coulomb_helfeyder1, comp_kinetic_der1, &
@@ -216,6 +217,33 @@ contains
 !   REVISION HISTORY:
 !> @date _Sep, 2018_ Initial release
 !>
+!> @brief Unpack + bfnrm-fold a packed density and, under HARMONIC_ACTIVE,
+!>        expand it to the Cartesian-effective density the derivative kernels
+!>        contract. Returns the (possibly Cartesian-sized) full density and
+!>        the matching per-shell AO offsets. With the gate off this is the
+!>        former inline unpack/bas_norm and off = basis%ao_offset.
+ SUBROUTINE prepare_grad_density(basis, denab, dens, off)
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: denab(:)
+    real(kind=dp), allocatable, intent(out) :: dens(:,:)
+    integer, allocatable, intent(out) :: off(:)
+    real(kind=dp), allocatable :: dcart(:,:)
+    integer, allocatable :: cart_off(:)
+    integer :: nbf_cart
+
+    allocate(dens(basis%nbf, basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+    call bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+    if (HARMONIC_ACTIVE) then
+      call build_cart_density(basis, dens, dcart, cart_off, nbf_cart)
+      call move_alloc(dcart, dens)
+      call move_alloc(cart_off, off)
+    else
+      allocate(off(basis%nshell))
+      off = basis%ao_offset(1:basis%nshell)
+    end if
+ END SUBROUTINE
+
 !> @param[in,out]   denab   density matrix in packed format, remains unchanged on return
  SUBROUTINE grad_ee_overlap(basis, denab, de, logtol)
 
@@ -236,6 +264,7 @@ contains
     LOGICAL :: norm
 
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
 
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
@@ -249,13 +278,7 @@ contains
     allocate(de_priv, mold=de)
     de_priv = 0.0d0
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   Initialize parallel
 !$omp parallel &
@@ -284,7 +307,7 @@ contains
             CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
             IF (cntp%numpairs==0) CYCLE
 
-            CALL comp_overlap_der1(cntp, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), de_atom)
+            CALL comp_overlap_der1(cntp, dens(off(ii):, off(jj):), de_atom)
         END DO
 
         ! Update gradient
@@ -325,6 +348,7 @@ contains
 
     REAL(kind=dp) :: de_atom(3)
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
 
     REAL(kind=dp) :: tol
     LOGICAL :: out, dbg, norm
@@ -343,13 +367,7 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   temporary storage for 1e gradient
     ALLOCATE(de_priv, mold=de)
@@ -381,7 +399,7 @@ contains
             CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
             IF (cntp%numpairs==0) CYCLE
 
-            CALL comp_kinetic_der1(cntp, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), de_atom)
+            CALL comp_kinetic_der1(cntp, dens(off(ii):, off(jj):), de_atom)
 
         END DO
 
@@ -871,6 +889,7 @@ contains
 
     REAL(kind=dp) :: de1(3)
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
 
     REAL(kind=dp) :: dernuc(3), tol
     LOGICAL :: out, dbg, norm
@@ -893,13 +912,7 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   temporary storage for 1e gradient
     ALLOCATE(de_priv, mold=de)
@@ -934,7 +947,7 @@ contains
 
 !           Nuclear attraction derivative
             DO ic = 1, nat
-                CALL comp_coulomb_der1(cntp, coord(:,ic), -zq(ic), dens(basis%ao_offset(ii):, basis%ao_offset(jj):), dernuc)
+                CALL comp_coulomb_der1(cntp, coord(:,ic), -zq(ic), dens(off(ii):, off(jj):), dernuc)
                 de1 = de1 + 2*dernuc(1:3)
             END DO
 !           End of primitive loops
@@ -1002,6 +1015,7 @@ contains
     TYPE(shpair_t) :: cntp
 
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
 
     dbg = .false.
     out = .false.
@@ -1018,13 +1032,7 @@ contains
 
     !IF (dbg) write(iw,'(A,5I10)') "OMP 1E GRD (EXTERNAL CHARGES)", basis%nshell, natfmo, nps, nchmat, nqmmatm
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   temporary storage for 1e gradient
     ALLOCATE(de_priv, mold=de)
@@ -1064,7 +1072,7 @@ contains
 !                IF ( doscr &
 !                    .AND. (znuc**2 < scrthr**2 * sum((cxyz-shi%r)**2)) ) CYCLE
 
-                CALL comp_coulomb_der1(cntp, cxyz, znuc, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), dernuc)
+                CALL comp_coulomb_der1(cntp, cxyz, znuc, dens(off(ii):, off(jj):), dernuc)
 
                 ! Ewald screening
                 IF (present(alpha)) THEN
@@ -1133,6 +1141,7 @@ contains
     TYPE(shpair_t) :: cntp
 
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
     INTEGER :: nat
 
     dbg = .false.
@@ -1148,13 +1157,7 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   temporary storage for 1e gradient
     ALLOCATE(de_priv, mold=de)
@@ -1189,7 +1192,7 @@ contains
 !           Hellmann-Feynman term
 atoms:      DO ic = 1, nat
 
-                CALL comp_coulomb_helfeyder1(cntp, coord(:,ic), -zq(ic), dens(basis%ao_offset(ii):, basis%ao_offset(jj):), dernuc)
+                CALL comp_coulomb_helfeyder1(cntp, coord(:,ic), -zq(ic), dens(off(ii):, off(jj):), dernuc)
 
                 de_priv(:,ic) = de_priv(:,ic) + dernuc(:3)
 

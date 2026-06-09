@@ -30,6 +30,8 @@ module cart2sph
   public :: cart2sph_eri
   public :: cart2sph_mat
   public :: cart2sph_vec
+  public :: c2s_expand_block
+  public :: c2s_expansion_matrix
   public :: c2s_selftest
 
   ! l=2 (D): Cart(6) -> Sph(5); column i = Cartesian coeffs of spherical i (m=-l..+l)
@@ -257,6 +259,67 @@ contains
     blk(1:k) = src(1:k)
     deallocate(src)
   end subroutine cart2sph_mat
+
+  !> @brief Per-shell density-expansion matrix B'(l) = B(l) * shells_pnrm2,
+  !>        shape (NUM_CART_BF(l), 2l+1). Maps a unit-spherical index back to
+  !>        the pure-power Cartesian index for contraction with derivative
+  !>        integrals: D_cart = B'_i D_sph B'_j^T (see c2s_expand_block).
+  subroutine c2s_expansion_matrix(l, bp)
+    use constants, only: shells_pnrm2
+    integer, intent(in) :: l
+    real(dp), allocatable, intent(out) :: bp(:,:)
+    integer :: nc, ns, c, s
+    call c2s_get(l, bp)             ! bp = B(l), shape (nc, ns)
+    nc = NUM_CART_BF(l)
+    ns = NUM_SPH_BF(l)
+    do s = 1, ns
+      do c = 1, nc
+        bp(c, s) = bp(c, s) * shells_pnrm2(c, l)
+      end do
+    end do
+  end subroutine c2s_expansion_matrix
+
+  !> @brief Expand a spherical density block to the pure-power Cartesian
+  !>        ("effective") density used by the gradient/Hessian kernels:
+  !>        D_cart = B'_i D_sph B'_j^T. Pure shells (l>=2) use B'; otherwise
+  !>        the index passes through unchanged (Cartesian == spherical).
+  !> @param[in]  dsph   (nsph_i, nsph_j) spherical density block (bfnrm-folded)
+  !> @param[out] dcart  (ncart_i, ncart_j) Cartesian-effective density block
+  subroutine c2s_expand_block(dsph, dcart, l_i, pure_i, l_j, pure_j)
+    real(dp), intent(in) :: dsph(:,:)
+    real(dp), intent(out) :: dcart(:,:)
+    integer, intent(in) :: l_i, pure_i, l_j, pure_j
+    real(dp), allocatable :: bi(:,:), bj(:,:), tmp(:,:)
+    integer :: nci, ncj, nsi, nsj
+    logical :: pi, pj
+
+    nci = NUM_CART_BF(l_i); nsi = c2s_ncomp(l_i, pure_i)
+    ncj = NUM_CART_BF(l_j); nsj = c2s_ncomp(l_j, pure_j)
+    pi = (pure_i == 1 .and. l_i >= 2)
+    pj = (pure_j == 1 .and. l_j >= 2)
+
+    if (.not. pi .and. .not. pj) then
+      dcart(1:nci, 1:ncj) = dsph(1:nsi, 1:nsj)
+      return
+    end if
+
+    ! Expand the i (row) index: tmp(nci, nsj) = B'_i (nci,nsi) . dsph (nsi,nsj)
+    allocate(tmp(nci, nsj))
+    if (pi) then
+      call c2s_expansion_matrix(l_i, bi)
+      tmp = matmul(bi, dsph(1:nsi, 1:nsj))
+    else
+      tmp = dsph(1:nci, 1:nsj)
+    end if
+    ! Expand the j (col) index: dcart(nci, ncj) = tmp (nci,nsj) . B'_j^T (nsj,ncj)
+    if (pj) then
+      call c2s_expansion_matrix(l_j, bj)
+      dcart(1:nci, 1:ncj) = matmul(tmp, transpose(bj))
+    else
+      dcart(1:nci, 1:ncj) = tmp(1:nci, 1:ncj)
+    end if
+    deallocate(tmp)
+  end subroutine c2s_expand_block
 
   !> @brief Transform a 1-index AO vector (e.g. grid AO values or one
   !>        derivative component) from pure-power Cartesian to pure spherical.

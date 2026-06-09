@@ -87,6 +87,7 @@ module basis_tools
   public basis_set
   public bas_norm_matrix
   public bas_denorm_matrix
+  public build_cart_density
 
   interface bas_norm_matrix
       module procedure bas_norm_matrix_tr
@@ -391,6 +392,50 @@ contains
     end do
 
   end subroutine
+
+!--------------------------------------------------------------------------------
+
+!>  @brief Build the Cartesian-effective density used by gradient/Hessian
+!>         kernels from a spherical (bfnrm-folded) density matrix.
+!>  @details The analytic-derivative kernels iterate Cartesian shell blocks
+!>           and contract them with the AO density. When pure spherical
+!>           shells are active the density is spherical-dimensioned, so we
+!>           expand it block by block to the Cartesian "effective" density
+!>           D_cart = B'_i D_sph B'_j^T (B' = c2s * shells_pnrm2), and return
+!>           Cartesian per-shell offsets to index it. With HARMONIC_ACTIVE
+!>           off (or a fully Cartesian basis) this is a plain copy.
+  subroutine build_cart_density(basis, dsph, dcart, cart_off, nbf_cart)
+    use cart2sph, only: c2s_expand_block
+    class(basis_set), intent(in) :: basis
+    real(dp), intent(in) :: dsph(:,:)
+    real(dp), allocatable, intent(out) :: dcart(:,:)
+    integer, allocatable, intent(out) :: cart_off(:)
+    integer, intent(out) :: nbf_cart
+
+    integer :: ish, jsh, oi, oj, nci, ncj, nsi, nsj, soi, soj
+
+    allocate(cart_off(basis%nshell))
+    nbf_cart = 0
+    do ish = 1, basis%nshell
+      cart_off(ish) = nbf_cart + 1
+      nbf_cart = nbf_cart + NUM_CART_BF(basis%am(ish))
+    end do
+
+    allocate(dcart(nbf_cart, nbf_cart), source=0.0d0)
+    do ish = 1, basis%nshell
+      oi = cart_off(ish); nci = NUM_CART_BF(basis%am(ish))
+      soi = basis%ao_offset(ish); nsi = basis%naos(ish)
+      do jsh = 1, basis%nshell
+        oj = cart_off(jsh); ncj = NUM_CART_BF(basis%am(jsh))
+        soj = basis%ao_offset(jsh); nsj = basis%naos(jsh)
+        call c2s_expand_block( &
+              dsph(soi:soi+nsi-1, soj:soj+nsj-1), &
+              dcart(oi:oi+nci-1, oj:oj+ncj-1), &
+              basis%am(ish), basis%harmonic(ish), &
+              basis%am(jsh), basis%harmonic(jsh))
+      end do
+    end do
+  end subroutine build_cart_density
 
 !--------------------------------------------------------------------------------
 
