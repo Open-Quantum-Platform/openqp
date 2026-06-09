@@ -133,12 +133,26 @@ GROUND-STATE GRADIENT — DONE AND VALIDATED:
   PBE/cc-pVDZ = pyscf to ~1e-4 (grid) and OpenQP own finite difference to
   the FD noise floor.
 
-PENDING — excited-state gradients (same Cartesian-effective machinery on
-the relaxed/transition/Z-vector densities + the TD XC kernel gradient):
-- `modules/fock_deriv.F90` (response Fock derivative probes — build_cart on
-  the probe densities), `dftlib/dft_gridint_tdxc_grad.F90`,
-  `modules/tdhf_gradient.F90`, `modules/tdhf_mrsf_gradient.F90`,
-  `modules/tdhf_sf_gradient.F90`.
+IN PROGRESS / NOT VALIDATED — excited-state gradients:
+- `modules/fock_deriv.F90` — response 2e derivative-Fock probes wired to the
+  Cartesian-effective machinery (closed + open shell). Compiles, gated.
+- `dftlib/dft_gridint_tdxc_grad.F90` — expected to auto-follow like
+  dft_gridint_grad (bfnrm-fold + naos accumulation on the hooked AO arrays),
+  UNVERIFIED.
+- `modules/tdhf_gradient.F90`, `tdhf_mrsf_gradient.F90`, `tdhf_sf_gradient.F90`.
+
+STATUS: a full spherical MRSF gradient (CH2O/BHHLYP/cc-pVDZ, hcore guess)
+RUNS but FAILS finite-difference validation: analytic dE/dz_C = -1.376 vs
+FD ~ -0.06 (state-1 energy, h=0.005 A). The 1.4-2.3 Ha/bohr analytic force
+is unphysically large near equilibrium. NEXT STEPS to debug:
+  1. Cartesian control: rebuild gate-off and FD the same gradient to decide
+     whether this is a spherical-wiring bug or a pre-existing/setup issue
+     (the cartesian analytic z-force is also large, +2.257; its FD was not
+     cleanly extracted).
+  2. If spherical-specific: isolate the component by toggling pieces — the
+     relaxed/Z-vector density (build_cart in the tdhf_*_gradient assembly),
+     the transition-density path in dft_gridint_tdxc_grad, and the fock_deriv
+     probe contributions — against per-term finite differences.
 
 PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
 - `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
