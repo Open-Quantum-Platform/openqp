@@ -744,6 +744,8 @@ class NAMD_SOC(NAMD):
         self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
         _du = mol.config['md'].get('soc_du_dt_corr', False)
         self.soc_du_dt_corr = (_du is True) or (str(_du).lower() in ('true', '1', 'on', 'yes'))
+        _tdcg = mol.config['md'].get('soc_tdc_grad_corr', False)
+        self.soc_tdc_grad_corr = (_tdcg is True) or (str(_tdcg).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
@@ -1060,6 +1062,43 @@ class NAMD_SOC(NAMD):
         self._du_dt_corr_norm = float(np.linalg.norm(g_corr))
         return g_corr
 
+    def _tdc_gradient_correction(self, u, active, s_mch, vel):
+        """Approximate the off-diagonal MCH derivative-Hamiltonian force term.
+
+        The exact SHARC diagonal gradient contains MCH NAC vectors through
+
+            G_ij = (E_j - E_i) d_ij,  i != j.
+
+        We already have overlap-derived time-derivative couplings for the TDSE,
+        tau_ij = d_ij dot v.  This correction uses the minimum-norm projection
+        d_ij ~= tau_ij * v / |v|^2, giving an approximate vector correction
+        without additional QM calls.  The SOC derivative term is still omitted.
+        """
+        if not getattr(self, 'soc_tdc_grad_corr', False):
+            return np.zeros((self.natom, 3))
+        if s_mch is None:
+            return np.zeros((self.natom, 3))
+
+        v = np.array(vel, dtype=float).reshape((self.natom, 3))
+        v2 = float(np.sum(v * v))
+        if v2 < 1.0e-30:
+            return np.zeros((self.natom, 3))
+
+        a = active - 1
+        tau = self._compute_tdc(np.array(s_mch, dtype=float).reshape((self.nstate_soc, self.nstate_soc)))
+        e_mch = self._mch_energies_abs()
+        coeff = 0.0
+        for i in range(self.nstate_soc):
+            for j in range(self.nstate_soc):
+                if i == j:
+                    continue
+                coeff += np.real(
+                    u[i, a].conj() * u[j, a] * (e_mch[j] - e_mch[i]) * tau[i, j]
+                )
+        g_corr = coeff * v / v2
+        self._tdc_grad_corr_norm = float(np.linalg.norm(g_corr))
+        return g_corr
+
     def _soc_gradient(self, u, active, eval_ha):
         """Weighted-MCH (SHARC-diagonal) gradient of the active spin-adiabatic
         state:
@@ -1092,6 +1131,8 @@ class NAMD_SOC(NAMD):
             Gradient(mol).gradient()
             g += (w / wtot) * np.array(mol.grads[state]).reshape((self.natom, 3))
         g += self._du_dt_gradient_correction(u, active, eval_ha, self.vel)
+        g += self._tdc_gradient_correction(
+            u, active, getattr(self, '_last_s_mch', None), self.vel)
 
         dom_mult, dom_state, dom_w = self._dominant_component(u, active)
         e_diag = self.e_ref + self.e0 + float(eval_ha[active - 1])   # absolute (Hartree)
@@ -1126,6 +1167,7 @@ class NAMD_SOC(NAMD):
 
             # spin-adiabatic overlap: MCH overlap -> Procrustes-align U -> T
             s_mch = self._mch_overlap()
+            self._last_s_mch = s_mch
             u, t = self._phase_track(u, self.prev_u, s_mch, eval_ha)
 
             # active-surface force (weighted-MCH diagonal gradient) + vel update
@@ -1404,6 +1446,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
         _du = mol.config['md'].get('soc_du_dt_corr', False)
         self.soc_du_dt_corr = (_du is True) or (str(_du).lower() in ('true', '1', 'on', 'yes'))
+        _tdcg = mol.config['md'].get('soc_tdc_grad_corr', False)
+        self.soc_tdc_grad_corr = (_tdcg is True) or (str(_tdcg).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc_qmmm(self, with_overlap):
@@ -1497,6 +1541,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
         g += NAMD_SOC._du_dt_gradient_correction(
             self, u, active, eval_ha, self.v_all[self.qm_atoms])
+        g += NAMD_SOC._tdc_gradient_correction(
+            self, u, active, getattr(self, '_last_s_mch', None), self.v_all[self.qm_atoms])
 
         if pchg_dom is None:                                  # dominant below threshold: take last
             pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
@@ -1559,6 +1605,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             # embedded spin-adiabatic electronic structure (+ MO overlap)
             eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=True)
             s_mch = NAMD_SOC._mch_overlap(self)
+            self._last_s_mch = s_mch
             u, t = NAMD_SOC._phase_track(u, self.prev_u, s_mch, eval_ha)
 
             # active-surface force (weighted-MCH diagonal gradient + ESPF) + vel update
