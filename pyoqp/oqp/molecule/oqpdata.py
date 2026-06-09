@@ -706,16 +706,11 @@ class OQPData:
         """
         Select the TRAH implementation.
         Valid values:
-          auto   : native for ground-state SCF energy (validated, incl. broken
-                   symmetry); OTR for paths that need canonical orbitals
-                   (gradients, geometry, Hessian, excited-state/MRSF, couplings).
-                   Resolved in apply_config once runtype/method are known.
-          otr    : external OpenTrustRegion library
+          auto   : native Fortran trust-region augmented-Hessian solver
           native : native Fortran trust-region augmented-Hessian solver
+          otr    : external OpenTrustRegion library
         """
-        # 'auto' is tentatively OTR here; apply_config() resolves it to native
-        # for ground-state energy runs once the full config is available.
-        impl_map = {"otr": 0, "native": 1, "auto": 0}
+        impl_map = {"otr": 0, "native": 1, "auto": 1}
         if not isinstance(trh_impl, str):
             raise TypeError("trh_impl must be a string")
         self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
@@ -943,19 +938,11 @@ class OQPData:
 
         molecule = self._data
 
-        # Resolve 'auto' TRAH implementation now that runtype/method are known.
-        # Native TRAH is validated for ground-state SCF energy (all SCF types,
-        # incl. broken symmetry) but converges open-shell references to a
-        # different (non-canonical) stationary point than OTR, which corrupts
-        # analytic gradients and MRSF/SF excited states. So default to native
-        # only for single-point ground-state energy; use OTR everywhere a
-        # canonical reference is required. Explicit trh_impl=native/otr wins.
+        # Native TRAH is the default implementation. Explicit trh_impl=otr still
+        # selects the external OpenTrustRegion implementation when it is compiled.
         trh_choice = str(config.get('scf', {}).get('trh_impl', 'auto')).strip().lower()
         if trh_choice == 'auto':
-            runtype = str(config.get('input', {}).get('runtype', 'energy')).strip().lower()
-            method = str(config.get('input', {}).get('method', 'hf')).strip().lower()
-            native_ok = (runtype == 'energy') and (method == 'hf')
-            molecule.control.trh_impl = 1 if native_ok else 0
+            molecule.control.trh_impl = 1
         natom = molecule.mol_prop.natom
         charge = molecule.mol_prop.charge
         nelec = sum(int(molecule.qn[i]) for i in range(natom)) - charge
