@@ -300,7 +300,7 @@ OQP_CONFIG_SCHEMA = {
         'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off
+        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
         'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
         'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
         'trivial_thresh': {'type': float, 'default': '0.5'},
