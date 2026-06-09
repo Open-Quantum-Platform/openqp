@@ -121,15 +121,24 @@ DONE / auto-correct (validated):
   density, auto-follow.
 - `modules/population_analysis.F90` — fixed (naos, not NUM_CART_BF).
 
-PENDING — gradients (Cartesian-effective density / compAOvgg):
-- `integrals/grd1.F90` — DONE (foundation).
-- `modules/hf_gradient.F90` — 2e gradient `get_density` (use d2a_cart +
-  Cartesian offsets; the 2-particle density factorizes so the formula is
-  unchanged). RHF + UHF + the `modules/fock_deriv.F90` probes.
-- `dftlib/dft_gridint_grad.F90`, `dftlib/dft_gridint_tdxc_grad.F90` — XC
-  gradient: hook `compAOvgg` (nDer=2) like compAOvg.
-- `modules/tdhf_gradient.F90`, `modules/tdhf_mrsf_gradient.F90`,
-  `modules/tdhf_sf_gradient.F90` — excited-state gradients.
+GROUND-STATE GRADIENT — DONE AND VALIDATED:
+- `integrals/grd1.F90` — 1e gradient (prepare_grad_density, Cartesian-
+  effective density + Cartesian offsets).
+- `modules/hf_gradient.F90` — 2e gradient (d2a_cart/d2b_cart via build_cart;
+  get_density branches on HARMONIC_ACTIVE; the 2-particle density factorizes
+  so df1 is unchanged). RHF + UHF.
+- `basis_tools.F90::compAOvgg` — grid 2nd derivatives (c2s on all 10 AO
+  vectors); `dftlib/dft_gridint_grad.F90` auto-follows.
+- Validation: water RHF/cc-pVDZ analytic gradient = pyscf to ~1e-8;
+  PBE/cc-pVDZ = pyscf to ~1e-4 (grid) and OpenQP own finite difference to
+  the FD noise floor.
+
+PENDING — excited-state gradients (same Cartesian-effective machinery on
+the relaxed/transition/Z-vector densities + the TD XC kernel gradient):
+- `modules/fock_deriv.F90` (response Fock derivative probes — build_cart on
+  the probe densities), `dftlib/dft_gridint_tdxc_grad.F90`,
+  `modules/tdhf_gradient.F90`, `modules/tdhf_mrsf_gradient.F90`,
+  `modules/tdhf_sf_gradient.F90`.
 
 PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
 - `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
