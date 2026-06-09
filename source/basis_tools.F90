@@ -1114,6 +1114,55 @@ contains
               dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
 
+          ! For pure spherical shells, evaluate the full Cartesian value +
+          ! 1st + 2nd derivative vectors, then reduce each to spherical
+          ! (c2s is r-independent, so it commutes with all derivatives).
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            block
+              integer, parameter :: NV = 10
+              real(kind=fp) :: cb(NUM_CART_BF(am), NV), sb(NUM_SPH_BF(am))
+              integer :: ns
+              do ityp = 1, NUM_CART_BF(am)
+                ix = cart_x(ityp,am); iy = cart_y(ityp,am); iz = cart_z(ityp,am)
+                x = dr1(ix, 1); y = dr1(iy, 2); z = dr1(iz, 3)
+                xp = dr1(ix+1, 1); yp = dr1(iy+1, 2); zp = dr1(iz+1, 3)
+                xm = ix*dr1(ix-1, 1); ym = iy*dr1(iy-1, 2); zm = iz*dr1(iz-1, 3)
+                xpp = dr1(ix+2, 1); ypp = dr1(iy+2, 2); zpp = dr1(iz+2, 3)
+                xmm = ix*(ix-1)*dr1(ix-2, 1); ymm = iy*(iy-1)*dr1(iy-2, 2)
+                zmm = iz*(iz-1)*dr1(iz-2, 3)
+                dx = -vexp2*xp + vexp1*xm
+                dy = -vexp2*yp + vexp1*ym
+                dz = -vexp2*zp + vexp1*zm
+                dxx = vexp3*xpp - vexp2*(2*ix+1)*x + vexp1*xmm
+                dyy = vexp3*ypp - vexp2*(2*iy+1)*y + vexp1*ymm
+                dzz = vexp3*zpp - vexp2*(2*iz+1)*z + vexp1*zmm
+                dxy = vexp3*xp*yp - vexp2*(xp*ym+xm*yp) + vexp1*xm*ym
+                dyz = vexp3*yp*zp - vexp2*(yp*zm+ym*zp) + vexp1*ym*zm
+                dxz = vexp3*xp*zp - vexp2*(xp*zm+xm*zp) + vexp1*xm*zm
+                cb(ityp,1)  = vexp1*x*y*z
+                cb(ityp,2)  = dx*y*z
+                cb(ityp,3)  = x*dy*z
+                cb(ityp,4)  = x*y*dz
+                cb(ityp,5)  = dxx*y*z
+                cb(ityp,6)  = x*dyy*z
+                cb(ityp,7)  = x*y*dzz
+                cb(ityp,8)  = dxy*z
+                cb(ityp,9)  = dyz*x
+                cb(ityp,10) = dxz*y
+              end do
+              ns = NUM_SPH_BF(am)
+              call cart2sph_vec(cb(:,1),  sb, am); aov   (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,2),  sb, am); aogx  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,3),  sb, am); aogy  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,4),  sb, am); aogz  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,5),  sb, am); aog2xx(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,6),  sb, am); aog2yy(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,7),  sb, am); aog2zz(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,8),  sb, am); aog2xy(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,9),  sb, am); aog2yz(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,10), sb, am); aog2xz(offset:offset+ns-1) = sb
+            end block
+          else
           do ityp = 1, maxi
             ix = cart_x(ityp,am)
             iy = cart_y(ityp,am)
@@ -1171,6 +1220,7 @@ contains
             aog2xz(loci+ityp) = dxz*y
 
           end do
+          end if
         end select
 
       end associate
