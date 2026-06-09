@@ -1,9 +1,65 @@
 # Pure spherical-harmonic (ISPHER) basis support
 
-Status: ENERGY PATH IMPLEMENTED AND VALIDATED. Gradients/Hessian pending.
+Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA/SF/MRSF
+excited state) IMPLEMENTED AND VALIDATED. Hessian / EKT / ECP-labels pending.
 Gate: `constants::HARMONIC_ACTIVE` (compile-time, default `.false.`). With the
 gate off, `num_ao() == NUM_CART_BF` everywhere and every code path is
 byte-identical to the Cartesian-only behavior.
+
+Branch: `feat/molecular-symmetry`. ~20 commits 4e3629d4..HEAD implement this.
+Last validated state: gate `.false.`, build green, tree clean.
+
+## 0. RESUME HERE — build, gate, and validation recipe
+
+The mechanics that took effort to work out; reuse them to continue.
+
+Build (macOS, gfortran-15, ILP64 OpenBLAS):
+```
+wt=/Users/cheolhochoi/clone/openqp-symmetry
+ob=/Users/cheolhochoi/clone/perf_int/openblas64        # prebuilt ILP64 OpenBLAS
+cmake -S "$wt" -B "$wt/build" -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_Fortran_COMPILER=/opt/homebrew/bin/gfortran-15 \
+  -DENABLE_OPENMP=ON -DENABLE_PYTHON=ON -DENABLE_MPI=OFF \
+  -DUSE_LIBINT=OFF -DLINALG_LIB=OpenBLAS -DLINALG_LIB_INT64=ON \
+  -DCMAKE_PREFIX_PATH="$ob" -DCMAKE_LIBRARY_PATH="$ob/lib" \
+  -DBLAS_LIBRARIES="$ob/lib/libopenblas64.dylib" \
+  -DLAPACK_LIBRARIES="$ob/lib/libopenblas64.dylib"
+cmake --build "$wt/build" -j4
+```
+Note: the OpenTrustRegion ExternalProject only inherits a BLAS hint via
+`-DBLA_VENDOR` or the NetLib path; the explicit BLAS_LIBRARIES above lets it
+configure. (One local fix to external/CMakeLists.txt forwards BLAS to OTR for
+the OpenBLAS case; it is NOT committed.)
+
+Toggle the gate (then rebuild): set `HARMONIC_ACTIVE = .true./.false.` in
+`source/constants.F90`. ALWAYS revert to `.false.` before committing.
+
+Run a calculation (makeshift OPENQP_ROOT):
+```
+mkdir -p /tmp/oqp_root/include /tmp/oqp_root/lib /tmp/oqp_root/share
+ln -sf "$wt/include/oqp.h"               /tmp/oqp_root/include/oqp.h
+ln -sf "$wt/build/source/liboqp.dylib"   /tmp/oqp_root/lib/liboqp.dylib
+ln -sfn "$wt/basis_sets"                 /tmp/oqp_root/share/basis_sets
+export OPENQP_ROOT=/tmp/oqp_root PYTHONPATH="$wt/pyoqp"
+export DYLD_LIBRARY_PATH="$wt/build/source:$ob/lib:/Users/cheolhochoi/clone/perf_int/OpenBLAS/exports:/opt/homebrew/opt/gcc/lib/gcc/current"
+python3 -m oqp.pyoqp input.inp        # writes input.log / input.json
+```
+Reference: `pyscf` 2.13 is installed; use `cart=False` for spherical. Example
+inputs live in `/tmp/oqp_validate/` (cc-pVDZ water/CH2O for HF/DFT/CIS/MRSF).
+
+Validation snapshot (gate on, vs pyscf cart=False):
+- RHF/cc-pVDZ water energy: -76.0266525950 (1e-10); gradient ~1e-8.
+- PBE/cc-pVDZ energy 5e-6, gradient grid-level + own FD.
+- RO-BHHLYP MRSF reference 8e-7; MRSF energy runs/converges.
+- TDA-HF (CIS) state-1 gradient ~1e-5, dE/dx=0 restored; exc 9.0034 eV.
+- planar CH2O MRSF gradient: dE/dx = 0.000000 all atoms (symmetry check).
+- nbf reduced (cc-pVDZ water 24 vs 25 Cartesian).
+
+Gotcha: MRSF finite-difference is unreliable because the triplet-ROHF
+reference SCF has multiple solutions and jumps between them across displaced
+geometries (seen as ROHF energy -117.9 vs -114.3). This is a reference-SCF
+stability issue, NOT a gradient bug. Use closed-shell TDA/CIS vs pyscf, or
+the planar-symmetry (dE/dx=0) test, to validate the response gradient.
 
 ## 1. What this delivers
 
