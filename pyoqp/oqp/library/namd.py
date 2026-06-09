@@ -535,11 +535,22 @@ class NAMD_QMMM(NAMD):
 
     def _qm_gradient(self):
         """Embedded active-state gradient (Hartree/bohr) incl. ESPF force."""
+        import os
         mol = self.mol
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
-        oqp.grad_esp_qmmm_excited(mol)
+        # ESPF_ROHF=1: use the ROHF reference density for ESPF charges and
+        # gradient, matching GAMESS which always fits ESPF from the SCF (ROHF)
+        # density regardless of the target excited state.  Combined with
+        # ESPF_GAMESS=1 this reproduces GAMESS QM/MM energy conservation for
+        # direct validation.  Default (ESPF_ROHF unset): physically correct
+        # S1 relaxed density via grad_esp_qmmm_excited.
+        if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
+            oqp.form_esp_charges(mol)   # partial_charges from ROHF density
+            oqp.grad_esp_qmmm(mol)      # ESPF gradient from ROHF density
+        else:
+            oqp.grad_esp_qmmm_excited(mol)
         g = g + np.array(mol.data["OQP::ESPF_GRAD"]).reshape(-1, 3)
         return g
 

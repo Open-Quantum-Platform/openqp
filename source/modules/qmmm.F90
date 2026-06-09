@@ -104,6 +104,21 @@ module qmmm_mod
     urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
     use_relaxed = .true.
 
+    ! ESPF_ROHF=1: use the ROHF reference density for ESPF charge fitting instead
+    ! of the S1 relaxed density.  This matches GAMESS's ESPF implementation, which
+    ! always fits charges from the ROHF reference (not the response density).  With
+    ! the hard-pruned GAMESS grid (ESPF_GAMESS=1), the ROHF density has smaller
+    ! ESPF fitting residuals at the grid boundary, so the force discontinuity when
+    ! points blink in/out is much smaller -- reproducing GAMESS-level conservation.
+    block
+      character(len=8) :: env_r
+      integer :: st_r
+      call get_environment_variable('ESPF_ROHF', env_r, status=st_r)
+      if (st_r == 0) then
+        if (trim(env_r) == '1' .or. trim(env_r) == 'on') use_relaxed = .false.
+      end if
+    end block
+
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
 
     allocate(tmp(nbf2), stat=ok)
@@ -122,9 +137,7 @@ module qmmm_mod
       tmp = tmp + td_p(:,1) + td_p(:,2)
       write(iw,'(4x,a,i4)') 'Using RELAXED excited-state density for ESPF charges, state ', istate
     else
-      call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
-      tmp = tmp + td_abxc
-      write(iw,'(4x,a,i4)') 'Using UNRELAXED excited-state density for ESPF charges, state ', istate
+      write(iw,'(4x,a,i4)') 'Using ROHF reference density for ESPF charges (ESPF_ROHF), state ', istate
     end if
 
     npt = nat * (132 + 152 + 192 + 350)
@@ -887,6 +900,18 @@ module qmmm_mod
     basis => infos%basis
     basis%atoms => infos%atoms
     use_relaxed = .true.
+    ! ESPF_ROHF=1: use ROHF reference density in the ESPF gradient.  The ROHF
+    ! density has smaller ESP fitting residuals at grid-boundary points; when the
+    ! GAMESS hard-pruned grid (ESPF_GAMESS=1) removes those points the force
+    ! discontinuity is therefore much smaller, reproducing GAMESS energy conservation.
+    block
+      character(len=8) :: env_r2
+      integer :: st_r2
+      call get_environment_variable('ESPF_ROHF', env_r2, status=st_r2)
+      if (st_r2 == 0) then
+        if (trim(env_r2) == '1' .or. trim(env_r2) == 'on') use_relaxed = .false.
+      end if
+    end block
     ! The legacy espf_grad weight term is replaced by the complete pseudoinverse
     ! derivative (espf_grad_weight, ported from GAMESS DVESPF/INIDZ): FD-verified
     ! to cut the QM-atom force-energy inconsistency from RMS 1.6e-3 to 5.2e-4
@@ -931,13 +956,16 @@ module qmmm_mod
     dens = dmat_a
     if (infos%control%scftype>=2) dens =  dens + dmat_b
     if (use_relaxed) then
+      ! Default: S1 relaxed density = ROHF + td_p (orbital-relaxation correction)
       call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
       dens = dens + td_p(:,1) + td_p(:,2)
     else
-      call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
-      dens = dens + td_abxc
+      ! ESPF_ROHF=1: stop at the ROHF reference density -- do NOT add td_abxc.
+      ! This mirrors GAMESS, which always uses the ROHF density for ESPF fitting
+      ! (not the response/relaxed density).
+      continue
     end if
-   
+
 ! Compute integrals and form ESP operators
 !   Compute the corrected mm potential
     mm_pot_av = sum(mm_potential)/nat
