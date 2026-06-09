@@ -547,7 +547,7 @@ contains
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
 #ifdef OQP_HAVE_OPENTRAH
-      if (infos%control%trh_impl == 1) then
+      if (infos%control%trh_impl == 0) then
         write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
               &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
       else
@@ -739,7 +739,7 @@ contains
         ! canonical MOs and orbital energies (same density/energy at the stationary
         ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
         ! and is left to the existing ROHF handling.
-        if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
+        if (infos%control%trh_impl == 0 .and. scf_type /= scf_rohf) then
           if (do_mom) then
             ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
             ! state-specific occupation TRAH converged to (TRAH itself preserves
@@ -1508,18 +1508,18 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
 #ifdef OQP_HAVE_OPENTRAH
-          if (infos%control%trh_impl == 1) then
-            ! native Fortran trust-region augmented-Hessian solver (opt-in: trh_impl=native)
+          if (infos%control%trh_impl == 0) then
+            ! native Fortran trust-region augmented-Hessian solver (default: trh_impl=native)
             call trah_native_run(infos, mol_grid, sc, res, energy)
           else
-            ! external OpenTrustRegion library (default; validated for gradients/MRSF)
+            ! external OpenTrustRegion library
             call init_trah_solver(infos, mol_grid, sc , energy)
             call run_trah_solver(res)
           end if
 #else
           ! OpenTRAH not compiled (-DENABLE_OPENTRAH=OFF): use the native solver for
           ! every trh_impl (the external gradient/MRSF reference paths are unavailable).
-          if (infos%control%trh_impl /= 1) &
+          if (infos%control%trh_impl == 1) &
             write(IW,'(5X,A)') 'NOTE: OpenTRAH (OpenTrustRegion) is not compiled; using native TRAH.'
           call trah_native_run(infos, mol_grid, sc, res, energy)
 #endif

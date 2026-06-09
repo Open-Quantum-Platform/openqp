@@ -527,15 +527,41 @@ class SinglePoint(Calculator):
         fallback = getattr(self, 'alternative_scf', scf_config.get('alternative_scf', 'trah'))
         stability = getattr(self, 'stability', scf_config.get('stability', False))
         trah_stab_default = scf_config.get('trh_stab', False)
+        trh_impl = str(scf_config.get('trh_impl', 'auto')).strip().lower()
+
+        def run_stage(conv):
+            """Run one SCF stage.
+
+            For trh_impl=auto, let the SCF manager try native TRAH first and
+            fall back to external OpenTrustRegion only if the native pass does
+            not converge. Explicit trh_impl=native/otr still selects only that
+            implementation.
+            """
+            data.set_scf_converger_type(conv)
+            if str(conv).lower() != 'trah' or trh_impl != 'auto':
+                self.scf()
+                return self.mol.mol_energy.SCF_converged
+
+            data.set_trah_impl('native')
+            self.scf()
+            converged_stage = self.mol.mol_energy.SCF_converged
+            if converged_stage:
+                return True
+
+            dump_log(self.mol,
+                     title='PyOQP: Native TRAH not converged; trying OpenTRAH',
+                     section='input')
+            data.set_trah_impl('otr')
+            data.set_sd_scf(False)
+            self.scf()
+            return self.mol.mol_energy.SCF_converged
 
         # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
         if str(primary).lower() in ('auto', 'ml'):
             primary, stability = self._select_converger(str(primary).lower(), stability)
 
         # --- Stage 1: primary converger ---
-        data.set_scf_converger_type(primary)
-        self.scf()
-        converged = self.mol.mol_energy.SCF_converged
+        converged = run_stage(primary)
         if converged:
             dump_log(self.mol, title='PyOQP: SCF converged with %s' % primary, section='')
 
@@ -561,10 +587,8 @@ class SinglePoint(Calculator):
             dump_log(self.mol,
                      title='PyOQP: SCF not converged; escalating to %s' % conv,
                      section='input')
-            data.set_scf_converger_type(conv)
             data.set_sd_scf(False)
-            self.scf()
-            converged = self.mol.mol_energy.SCF_converged
+            converged = run_stage(conv)
 
         # --- Stage 3: stability safeguard ---
         # Applied to ground-state targets (method='hf'), where a non-lowest SCF
@@ -593,8 +617,7 @@ class SinglePoint(Calculator):
             data.set_scf_converger_type('trah')
             data.set_trah_stability(True)
             data.set_sd_scf(False)
-            self.scf()
-            trah_ok = self.mol.mol_energy.SCF_converged
+            trah_ok = run_stage('trah')
             e_post = self.mol.mol_energy.energy
 
             if trah_ok and e_post < e_pre - 1.0e-7:

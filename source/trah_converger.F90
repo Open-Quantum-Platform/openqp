@@ -1,7 +1,7 @@
 !> @brief Trust-region augmented-Hessian (TRAH) SCF solver.
 !> @detail Method: Helmich-Paris, J. Chem. Phys. 154, 164104 (2021); the
 !>         augmented-Hessian/level-shift lineage traces to Bacskay, Chem. Phys.
-!>         61, 385 (1981). Selected by control%trh_impl = 1. Reuses the physics callbacks
+!>         61, 385 (1981). Selected by control%trh_impl = 0. Reuses the physics callbacks
 !>         already provided by the trah_converger (calc_g_h, calc_h_op, rotate_orbs)
 !>         plus calc_fock/get_ab_initio_density/compute_energy -- only the
 !>         optimization shell is implemented here.
