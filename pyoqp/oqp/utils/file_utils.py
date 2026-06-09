@@ -103,9 +103,8 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     scf_conv = mol.config['scf']['conv']
     scf_incre = mol.config['scf']['incremental']
     diis_type = mol.config['scf']['diis_type']
-    vdiis_cdiis_switch = mol.config['scf']['vdiis_cdiis_switch']
+    cdiis_switch = mol.config['scf']['cdiis_switch']
     vdiis_vshift_switch = mol.config['scf']['vdiis_vshift_switch']
-    vshift_cdiis_switch = mol.config['scf']['vshift_cdiis_switch']
     vshift = mol.config['scf']['vshift']
 
     td_type = mol.config['tdhf']['type']
@@ -241,17 +240,15 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP scf convergence:              %s
    PyOQP scf incremental:              %s
    PyOQP diis type:                    %s
-   PyOQP vdiis/cdiis switch:           %s
+   PyOQP cdiis switch:                 %s
    PyOQP vdiis/vshift switch:          %s
-   PyOQP cdiis/vshift_switch           %s
    PyOQP vshift:                       %s
-   
+
 """ % (
             method, functional, basis, scftypes[scf_type], scf_maxit, scf_forced_attempt, scf_mult, scf_conv, scf_incre,
             diis_type,
-            vdiis_cdiis_switch,
+            cdiis_switch,
             vdiis_vshift_switch,
-            vshift_cdiis_switch,
             vshift
         )
 

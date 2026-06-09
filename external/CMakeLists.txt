@@ -144,6 +144,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
 endif()
+if(ENABLE_OPENTRAH)
 set(otr_integer_flags "")
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
     set(otr_integer_flags "-fdefault-integer-8")
@@ -167,6 +168,7 @@ set(OTR_CMAKE_ARGS
         -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+        -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
 )
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
     list(APPEND OTR_CMAKE_ARGS
@@ -182,13 +184,23 @@ elseif(DEFINED BLA_VENDOR)
     list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
 endif()
 
+# Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
+# own CMakeLists (CMAKE_Fortran_FLAGS_RELEASE). Two problems with leaving it:
+#   * -march=native on an AVX-512 build host emits AVX-512 into level_shifted_davidson,
+#     which SIGILLs (exit 132) on AVX2-only compute nodes (the original bug report);
+#   * a newer gfortran driver resolves -march=native to a microarch *level* name
+#     (e.g. x86-64-v3) that an OLDER backend rejects -- "bad value ('x86-64-v3') for
+#     '-march=' switch" -- breaking the Docker build.
+# Strip the host-tuning flags entirely so OTR builds with a generic -O2: portable
+# across toolchains (old/new gfortran, x86, aarch64) and free of the SIGILL. OTR is a
+# small solver, so losing -march tuning is negligible; main OpenQP uses no -march.
+set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
 ExternalProject_Add(libopentrustregion
     PREFIX ${CMAKE_SOURCE_DIR}/external/opentrustregion
     URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v2.0.0.tar.gz
-    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c 
+    URL_HASH SHA256=682201cc9cc850a892d132e5e5fc11f6d87f8cd843fdbad88dafbf7277407f1c
     UPDATE_COMMAND ""
-    PATCH_COMMAND
-    UPDATE_COMMAND ""
+    PATCH_COMMAND /usr/bin/perl -0pi -e "${_OTR_ARCH_SED}" <SOURCE_DIR>/CMakeLists.txt
     CMAKE_ARGS ${OTR_CMAKE_ARGS}
     BINARY_DIR ${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}
     #    INSTALL_DIR ${CMAKE_BINARY_DIR}/external/install/opentrustregion
@@ -197,6 +209,7 @@ ExternalProject_Add(libopentrustregion
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   add_dependencies(libopentrustregion LAPACK)
 endif()
+endif() # ENABLE_OPENTRAH
 
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
 if(ENABLE_Formatter)
@@ -238,6 +251,96 @@ if(ENABLE_Formatter)
                    )
 endif()
 
+
+
+# ---------------------------------------------------------------------------
+# ddX continuum-solvation backend (optional, ENABLE_DDX).
+#
+# ddX is LGPL-3.0 and stays an external, dynamically-linked dependency: its
+# source is never vendored into OpenQP. When no prebuilt DDX_ROOT is supplied we
+# build ddX v0.8.0 here, as ILP64, so its BLAS integer width matches OpenQP's
+# mandatory 64-bit-integer BLAS:
+#   * -fdefault-integer-8 (same as OpenTrustRegion above), and
+#   * a small C-bridge patch (cmake/patches/ddx-v0.8.0-ilp64.patch) that keeps
+#     ddX's int32 C ABI while letting the core be int64.
+# A stock LP64 ddX would export an unsuffixed dgemm_ that collides with OpenQP's
+# ILP64 dgemm_ on Linux's flat symbol namespace.
+# ---------------------------------------------------------------------------
+if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
+    set(DDX_PREFIX  ${CMAKE_BINARY_DIR}/external/ddx CACHE INTERNAL "DDX_PREFIX")
+    set(DDX_INSTALL ${CMAKE_BINARY_DIR}/external/install/ddx CACHE INTERNAL "DDX_INSTALL")
+    set(DDX_INCLUDE_DIR ${DDX_INSTALL}/include CACHE INTERNAL "DDX_INCLUDE_DIR")
+    set(DDX_LIBRARY
+        ${DDX_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}ddx${CMAKE_SHARED_LIBRARY_SUFFIX}
+        CACHE INTERNAL "DDX_LIBRARY")
+
+    # Match OpenTrustRegion's ILP64 Fortran flags.
+    set(ddx_integer_flags "")
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        set(ddx_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        set(ddx_integer_flags "-i8")
+    endif()
+    set(ddx_fortran_flags "${CMAKE_Fortran_FLAGS} ${ddx_integer_flags}")
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
+        set(ddx_fortran_flags "${ddx_fortran_flags} -fallow-argument-mismatch")
+    endif()
+
+    set(DDX_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${DDX_INSTALL}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DTESTS=OFF
+        -DEXAMPLES=OFF
+        -DWARNING_FLAGS=OFF
+        -DBLA_SIZEOF_INTEGER=${BLA_SIZEOF_INTEGER}
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+        -DCMAKE_Fortran_FLAGS=${ddx_fortran_flags}
+        -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+    )
+    # Forward CMAKE_PREFIX_PATH only when set, so a non-standard ILP64 OpenBLAS
+    # location reaches the ddX subbuild. An empty -D would override the
+    # environment CMAKE_PREFIX_PATH the ExternalProject otherwise inherits.
+    if(CMAKE_PREFIX_PATH)
+        list(APPEND DDX_CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH})
+    endif()
+    # Forward the same BLAS/LAPACK choice OpenQP resolved (findLinearAlgebra()).
+    if(_LINALG_LIB_TYPE STREQUAL NetLib)
+        list(APPEND DDX_CMAKE_ARGS
+            -DBLAS_LIBRARIES=${LIBBLAS}
+            -DLAPACK_LIBRARIES=${LIBLAPACK})
+    elseif(DEFINED BLA_VENDOR)
+        list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+    endif()
+
+    ExternalProject_Add(ddx
+        PREFIX ${DDX_PREFIX}
+        URL https://github.com/ddsolvation/ddX/archive/refs/tags/v0.8.0.tar.gz
+        URL_HASH SHA256=6f6d08c7699dd69d4b12dd0b1f8c519f5f3f84a3d23cc526dd1a4a60914969d6
+        TLS_VERIFY TRUE
+        PATCH_COMMAND patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/ddx-v0.8.0-ilp64.patch
+        BINARY_DIR ${DDX_PREFIX}/build-${CMAKE_Fortran_COMPILER_ID}
+        STAMP_DIR  ${DDX_PREFIX}/stamp-${CMAKE_Fortran_COMPILER_ID}
+        BUILD_BYPRODUCTS ${DDX_LIBRARY}
+        UPDATE_COMMAND ""
+        CMAKE_ARGS ${DDX_CMAKE_ARGS}
+    )
+    if(_LINALG_LIB_TYPE STREQUAL NetLib)
+        add_dependencies(ddx LAPACK)
+    endif()
+
+    # Imported target consumed by oqp and the smoke tests (see add_dependencies
+    # on the `ddx` ExternalProject at each consumer). The include dir must exist
+    # at configure time for INTERFACE_INCLUDE_DIRECTORIES.
+    file(MAKE_DIRECTORY ${DDX_INCLUDE_DIR})
+    add_library(DDX::ddx UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(DDX::ddx PROPERTIES
+        IMPORTED_LOCATION ${DDX_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
+    message(STATUS "ddX will be built ILP64 from source: ${DDX_LIBRARY}")
+endif()
 
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)

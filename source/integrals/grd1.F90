@@ -15,8 +15,7 @@ module grd1
        comp_overlap_der2, comp_kinetic_der2, comp_coulomb_der2_braC, &
        comp_overlap_der1_block, comp_kinetic_der1_block, &
        comp_coulomb_der1_block, comp_coulomb_helfeyder1_block, &
-       comp_ewaldlr_der1, comp_ewaldlr_helfeyder1, &
-       density_ordered
+       comp_ewaldlr_der1
 
    use mod_shell_tools, only: shell_t, shpair_t
    use mathlib, only: unpack_matrix
@@ -48,12 +47,31 @@ contains
 
 !-------------------------------------------------------------------------------
 
+!> @brief Unpack a symmetric matrix from packed storage and fold in the basis
+!>        normalization factors. Shared helper for all 1e gradient/Hessian
+!>        contractions in this module.
+!> @param[in] basis  basis set (for nbf and bfnrm)
+!> @param[in] denab  packed symmetric matrix (density-like), unchanged
+!> @return    square matrix with dens(i,j) = denab_{ij} * bfnrm(i) * bfnrm(j)
+  function normalized_density(basis, denab) result(dens)
+    implicit none
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: denab(:)
+    real(kind=dp), allocatable :: dens(:,:)
+
+    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
+    call unpack_matrix(denab, dens)
+    call bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+  end function normalized_density
+
+!-------------------------------------------------------------------------------
+
 !> @brief Compute "energy weighted density matrix"
 !> @note This quantity is actually the Lagrangian matrix,
 !   backtransformed into the AO basis.
   subroutine eijden(eps, nbf, infos)
     use oqp_tagarray_driver
-    use mathlib, only: orthogonal_transform_sym
+    use mathlib, only: orthogonal_transform_sym, orb_to_dens
     use messages, only: show_message, with_abort
 
     implicit none
@@ -62,9 +80,9 @@ contains
 
     type(information), intent(inout) :: infos
     integer :: nbf
-    integer :: i, j, ij, ne, ok
+    integer :: i, ij, ne, ok
     real(kind=dp) :: eps(:)
-    real(kind=dp), allocatable :: c(:,:), scr(:),tempd(:)
+    real(kind=dp), allocatable :: c(:,:), tempd(:)
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -76,7 +94,7 @@ contains
       OQP_FOCK_A, OQP_DM_A, OQP_FOCK_B, OQP_DM_B /)
 
     if (infos%control%scftype>1) then
-       allocate(c(nbf,nbf), scr(8*nbf), tempd(nbf*(nbf+1)/2), stat=ok)
+       allocate(c(nbf,nbf), tempd(nbf*(nbf+1)/2), stat=ok)
     end if
 
     ne = infos%mol_prop%nelec/2
@@ -89,15 +107,8 @@ contains
       call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
       call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-       ij = 0
-       do i = 1, nbf
-          do j = 1, i
-             ij = ij+1
-             eps(ij) = -2*sum(mo_energy_a(1:ne)&
-                             *mo_a(i,1:ne)&
-                             *mo_a(j,1:ne))
-          end do
-       end do
+!     W = -2 * C_occ * diag(eps_occ) * C_occ^T, evaluated with BLAS (dsyr2k)
+      call orb_to_dens(eps, mo_a, -2*mo_energy_a(1:ne), ne, nbf, nbf)
 
 !   U/ROHF case
     case (2:)
@@ -182,34 +193,6 @@ contains
 
 !-------------------------------------------------------------------------------
 
-!> @brief Print energy gradient vector, without `atoms`
-  subroutine print_grd(zn, de)
-    implicit none
-    real(kind=dp) :: zn(:), de(:,:)
-    real(kind=dp) :: gmax, grms
-    integer :: i, j
-
-    write(iw, fmt="(&
-              &/25X,23('=')&
-              &/25X,'Gradient (Hartree/Bohr)'&
-              &/25X,23('=')&
-              &/8X,'ATOM     ZNUC',9X,'dE/dX',10X,'dE/dY',10X,'dE/dZ'&
-              &/6X,62('-'))")
-
-    do i = 1, ubound(de,2)
-       write(iw,'(7x,i4,5x,f4.1,3x,3f15.9)') i, zn(i), (de(j,i),j=1,3)
-    end do
-
-!   Compute Maximum and RMS Gradient
-    call grad_max_rms(ubound(de,2),de,gmax,grms)
-    write(iw,fmt="(/10X,'Maximum Gradient =',F10.7,4X,&
-          &'RMS Gradient =',F10.7/)") gmax, grms
-
-  end subroutine
-
-
-!-------------------------------------------------------------------------------
-
 !> @brief Compute overlap energy derivative contribution to gradient
 !
 !> @author Vladimir Mironov
@@ -260,8 +243,6 @@ contains
     REAL(kind=dp) :: tol
 
     REAL(kind=dp) :: de_atom(3)
-
-    LOGICAL :: norm
 
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
     INTEGER, ALLOCATABLE :: off(:)
@@ -351,15 +332,9 @@ contains
     INTEGER, ALLOCATABLE :: off(:)
 
     REAL(kind=dp) :: tol
-    LOGICAL :: out, dbg, norm
 
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
-
-    dbg = .false.
-    out = .false.
-
-    IF (dbg) WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
 
     if (present(logtol)) then
         tol = logtol
@@ -433,7 +408,6 @@ contains
 
     INTEGER :: ii, jj, a, b, ai, bi
     REAL(kind=dp) :: tol, de2(3,3)
-    LOGICAL :: norm
     REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
@@ -444,10 +418,7 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+    dens = normalized_density(basis, denab)
 
     allocate(hess_priv, mold=hess)
     hess_priv = 0.0d0
@@ -500,7 +471,6 @@ contains
 
     INTEGER :: ii, jj, a, b, ai
     REAL(kind=dp) :: tol, de2(3,3)
-    LOGICAL :: norm
     REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
@@ -511,10 +481,7 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+    dens = normalized_density(basis, denab)
 
     allocate(hess_priv, mold=hess)
     hess_priv = 0.0d0
@@ -581,7 +548,6 @@ contains
     REAL(kind=dp) :: p_AA(3,3), p_AC(3,3), p_BB(3,3), p_BC(3,3)
     REAL(kind=dp) :: bAB(3,3), blocks(3,3,9)
     INTEGER :: atP(9), atQ(9)
-    LOGICAL :: norm
     REAL(kind=dp), ALLOCATABLE :: hess_priv(:,:), dens(:,:)
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cab, cba
@@ -594,10 +560,7 @@ contains
 
     nat = ubound(coord, 2)
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-    IF (norm) CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+    dens = normalized_density(basis, denab)
 
     allocate(hess_priv, mold=hess)
     hess_priv = 0.0d0
@@ -892,17 +855,11 @@ contains
     INTEGER, ALLOCATABLE :: off(:)
 
     REAL(kind=dp) :: dernuc(3), tol
-    LOGICAL :: out, dbg, norm
 
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
 
     INTEGER :: nat
-
-    dbg = .false.
-    out = .false.
-
-    IF (dbg) WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
 
     nat = ubound(de, 2)
 
@@ -952,13 +909,6 @@ contains
             END DO
 !           End of primitive loops
 
-#ifdef DEBUG
-            IF (dbg) THEN
-               WRITE(iw,'(1X,"TVDER: SHELLS II,JJ=",2I5)') ii,jj
-               CALL print_grd(zq, de)
-            END IF
-#endif
-
         END DO
 
         de_priv(:,shi%atid) = de_priv(:,shi%atid) + de1(:)
@@ -970,11 +920,6 @@ contains
 
     de = de + de_priv
     DEALLOCATE(de_priv)
-
-    IF (out) THEN
-       WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
-       CALL print_grd(zq,de)
-    END IF
 
  END SUBROUTINE
 
@@ -1009,7 +954,6 @@ contains
     REAL(kind=dp) :: de1(3), de2(3)
 
     REAL(kind=dp) :: dernuc(3), cxyz(3)
-    LOGICAL :: out, dbg, norm
 
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
@@ -1017,20 +961,11 @@ contains
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
     INTEGER, ALLOCATABLE :: off(:)
 
-    dbg = .false.
-    out = .false.
-
-    IF (dbg) WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
-
     if (present(logtol)) then
         tol = logtol
     else
         tol = tol_default
     end if
-
-    norm = .true.
-
-    !IF (dbg) write(iw,'(A,5I10)') "OMP 1E GRD (EXTERNAL CHARGES)", basis%nshell, natfmo, nps, nchmat, nqmmatm
 
     call prepare_grad_density(basis, denab, dens, off)
 
@@ -1099,11 +1034,6 @@ contains
     de = de + de_priv
     DEALLOCATE(de_priv)
 
-!    IF (out) THEN
-!      WRITE(iw,'(/10X,38(1H-)/10X,"GRADIENT INCLUDING AO DERIVATIVE TERMS"/10X,38(1H-))')
-!      CALL print_grd(zq,de)
-!    END IF
-
  END SUBROUTINE
 
 !-------------------------------------------------------------------------------
@@ -1135,7 +1065,6 @@ contains
     REAL(kind=dp), optional :: logtol
 
     REAL(kind=dp) :: dernuc(3), tol
-    LOGICAL :: out, dbg, norm
 
     TYPE(shell_t) :: shi, shj
     TYPE(shpair_t) :: cntp
@@ -1143,11 +1072,6 @@ contains
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
     INTEGER, ALLOCATABLE :: off(:)
     INTEGER :: nat
-
-    dbg = .false.
-    out = .false.
-
-    IF (dbg) WRITE(iw,'(/10X,22("-")/10X,"HELLMANN-FEYNMAN FORCE"/10X,22("-"))')
 
     nat = ubound(de, 2)
 
@@ -1198,13 +1122,6 @@ atoms:      DO ic = 1, nat
 
             END DO atoms
 
-#ifdef DEBUG
-            IF (dbg) THEN
-               WRITE(iw,'(1X,"HELFEY: SHELLS II,JJ=",2I5)') ii,jj
-               CALL print_grd(zq,de_priv)
-            END IF
-#endif
-
         END DO
     END DO
 !$omp end do
@@ -1212,11 +1129,6 @@ atoms:      DO ic = 1, nat
 !$omp end parallel
 
     de(:,1:nat) = de(:,1:nat) + de_priv(:3,1:nat)
-
-    IF (out) THEN
-       WRITE(iw,'(/10X,22(1H-)/10X,"HELLMANN-FEYNMAN FORCE"/10X,22(1H-))')
-       CALL print_grd(zq,de)
-    END IF
 
     DEALLOCATE(de_priv)
 
@@ -1235,7 +1147,6 @@ atoms:      DO ic = 1, nat
 
     do k = 2, ubound(atoms%zn, 1)
         do l = 1, k-1
-            if (k==l) cycle
             pkl = atoms%xyz(:,k)-atoms%xyz(:,l)
             rkl3 = norm2(pkl)**3
             de1 = -(atoms%zn(k)-ecp_el(k))*(atoms%zn(l)-ecp_el(l))*pkl/rkl3

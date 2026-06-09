@@ -105,14 +105,20 @@ contains
         integer :: natm, f_expo_len
         natm = info%mol_prop%natom
 
+        ! No ECP for this element: do NOT read the C/Python ecp_zn buffer (it is
+        ! empty/short for non-ECP systems, so reading natm ints reads out of
+        ! bounds -> garbage ecp_zn_num -> zeroed nuclear repulsion, nondeterm-
+        ! inistically). No ECP means no core electrons are removed, so ecp_zn=0.
+        if (info%elshell%element_id .EQ. 0) then
+            ecp_head%element_id = info%elshell%element_id
+            allocate(ecp_head%ecp_zn(natm))
+            ecp_head%ecp_zn = 0
+            return
+        end if
+
         call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
         allocate(ecp_head%ecp_zn(natm))
         ecp_head%ecp_zn = ecp_zn_ptr
-
-        if (info%elshell%element_id .EQ. 0) then
-            ecp_head%element_id = info%elshell%element_id
-            return
-        end if
         call c_f_pointer(info%elshell%num_expo, n_expo_ptr, [info%elshell%element_id])
 
         allocate(ecp_head%n_exponents(info%elshell%element_id))

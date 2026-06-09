@@ -1,0 +1,28 @@
+# UMRSF-TDDFT/BHHLYP/6-31G* Geom. Opt. of water S1 State 
+[input]
+system=
+ 8     0.000000000000   0.000000000000   0.000000000000
+ 1     0.772597940000   0.555677850000   0.000000000000
+ 1    -0.773127700000   0.555677850000   0.000000000000
+runtype=soc
+method=tdhf
+functional=bhhlyp
+basis=6-31G(2df,p)
+
+[guess]
+save_mol=true
+
+[scf]
+type=rohf
+multiplicity=3
+converger_type=diis
+maxit=200
+
+[dftgrid]
+rad_npts=90
+ang_npts=302
+
+[tdhf]
+type=mrsf
+nstate=12
+multiplicity=3

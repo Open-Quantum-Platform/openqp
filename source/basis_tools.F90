@@ -490,9 +490,12 @@ contains
 
     integer :: i, n
 
-!$omp parallel do private(i,n)
+!$omp parallel do private(i)
     do i = 1, ld
-      a(:,i) = a(:,i)*p(i)*p(1:i)
+      ! Scale the full column: a(j,i) *= p(i)*p(j), j = 1..ld.  (The previous
+      ! p(1:i) section was non-conforming Fortran; it only worked by accident
+      ! at -O2 and aborts under -fcheck=bounds.)
+      a(1:ld,i) = a(1:ld,i)*p(i)*p(1:ld)
     end do
 !$omp end parallel do
 

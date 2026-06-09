@@ -23,6 +23,11 @@ module int1
         comp_ewaldlr_int1_prim, &
         comp_kin_ovl_int1_prim, &
         comp_lz_int1_prim, &
+        comp_amom_int1_prim, &
+        comp_giao_overlap_deriv_prim, &
+        comp_giao_h10_core_prim, &
+        comp_nmr_dia_int1_prim, &
+        comp_pso_int1_prim, &
         MAX_EL_MOM, &
         comp_mult_int1_prim, &
         comp_allmult_int1_prim, &
@@ -48,7 +53,16 @@ module int1
     private
     public omp_hst
     public multipole_integrals
+    public angular_momentum_integrals
+    public giao_overlap_derivative
+    public giao_h10_core
+    public nmr_dia_shielding
+    public giao_a11part_corr
+    public giao_a01gp_contract
+    public pso_integrals
     public electrostatic_potential
+    public electrostatic_potential_unweighted
+    public external_charge_potential
     public basis_overlap
     public overlap
 
@@ -281,6 +295,444 @@ contains
 
 !-------------------------------------------------------------------------------
 
+!> @brief Compute the three angular-momentum 1e integral matrices about a
+!>        gauge origin `o`, in packed (lower-triangular) storage.
+!> @details The orbital angular momentum operator is anti-Hermitian, so in a
+!>  real AO basis the matrices A_x, A_y, A_z returned here are antisymmetric
+!>  (A_qp = -A_pq, zero diagonal). Only the unique lower triangle is stored;
+!>  the caller is responsible for applying the antisymmetry when expanding to a
+!>  full square matrix. The physical angular momentum is L = -i * A.
+!
+!> @param[in]       basis   basis set (without sp-shells)
+!> @param[in,out]   ints    packed integrals, dimension (nbf2, 3) for x,y,z
+!> @param[in]       o       gauge origin
+!> @param[in]       debug   optional flag for debug printout
+!> @param[in]       logtol  optional screening tolerance
+ subroutine angular_momentum_integrals(basis, ints, o, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), intent(in) :: o(:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Lx', 'Ly', 'Lz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for angular momentum integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0
+
+    call amom_ints(ints, o, basis, tol)
+
+!   Normalize 1-e integrals
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'Angular momentum integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute the GIAO/London AO overlap magnetic derivative S10.
+!> @details Returns the real coefficient of the imaginary first magnetic-field
+!>  derivative of the overlap matrix for the three Cartesian magnetic-field
+!>  components.  This is a native one-electron GIAO building block and remains
+!>  disconnected from production NMR shielding until h10, two-electron derivative
+!>  contractions, and GIAO CPHF/CPKS terms are implemented and benchmarked.
+ subroutine giao_overlap_derivative(basis, ints, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Sx', 'Sy', 'Sz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for GIAO overlap derivative integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call giao_overlap_deriv_ints(ints, basis, tol)
+
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'GIAO overlap derivative integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute the one-electron part of the RHF GIAO h10 magnetic derivative.
+!> @details Returns packed lower-triangular real coefficients of the imaginary
+!>  first-order GIAO core-Hamiltonian derivative for x/y/z magnetic-field
+!>  components.  This routine intentionally contains only h10 one-electron
+!>  kinetic+nuclear-attraction terms; it does not include the GIAO two-electron
+!>  Fock derivative, CPHF/CPKS response, shielding assembly, or GIAO ungating.
+ subroutine giao_h10_core(basis, coord, zq, ints, debug, logtol)
+
+    use io_constants, only: iw
+    use precision, only: dp
+    use basis_tools, only: basis_set
+    use printing, only: print_sym_labeled
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    real(real64), contiguous, intent(inout) :: ints(:,:)
+    real(real64), optional, intent(in) :: logtol
+    logical, optional, intent(in) :: debug
+
+    character(len=*), parameter :: labels(3) = ['Hx', 'Hy', 'Hz']
+    real(real64) :: tol
+    logical :: dbug
+    integer :: nbf, i
+
+    if (ubound(ints,2) < 3) then
+      call show_message('Insufficient space for GIAO h10 core derivative integrals', with_abort)
+    end if
+
+    dbug = .false.
+    if (present(debug)) dbug = debug
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call giao_h10_core_ints(ints, basis, coord, zq, size(zq), tol)
+
+    do i = 1, 3
+      call bas_norm_matrix(ints(:,i), basis%bfnrm, nbf)
+    end do
+
+    if (dbug) then
+       do i = 1, 3
+         write(iw,*) 'GIAO h10 core derivative integrals ('//trim(labels(i))//'), lower triangle'
+         call print_sym_labeled(ints(:,i),nbf,basis)
+       end do
+    end if
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Density-contracted NMR diamagnetic shielding integrals, all nuclei.
+!> @details Returns g_ab(N) = sum_{mu,nu} D_{mu,nu} <mu|(r-o)_a (r-c_N)_b/|r-c_N|^3|nu>
+!>  for every nucleus N. The caller assembles the diamagnetic shielding tensor as
+!>    sigma^dia_{ts}(N) = (alpha^2/2) [ delta_ts (g_xx+g_yy+g_zz) - g_{s,t} ].
+!> @param[in]   basis    basis set
+!> @param[in]   denab    total density matrix, packed (lower triangle)
+!> @param[in]   o        gauge origin
+!> @param[in]   coords   nuclear coordinates (3, nat)
+!> @param[in]   nat      number of nuclei
+!> @param[out]  gdia     contracted integrals (3, 3, nat)
+!> @param[in]   logtol   optional screening tolerance
+ subroutine nmr_dia_shielding(basis, denab, o, coords, nat, gdia, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), intent(in) :: o(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: gdia(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:)
+    real(real64) :: tol
+    integer :: ii, jj, ic, nbf
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    gdia = 0.0d0
+
+    call cntp%alloc(basis)
+
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      do jj = 1, basis%nshell
+        call shj%fetch_by_id(basis, jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        do ic = 1, nat
+          call comp_nmr_dia_int1_prim(cntp, coords(:,ic), o, &
+                 dens(basis%ao_offset(ii):, basis%ao_offset(jj):), gdia(:,:,ic))
+        end do
+      end do
+    end do
+
+    deallocate(dens)
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute PSO (paramagnetic spin-orbit) integral matrices for one nucleus.
+!> @details Returns the three matrices A_a = [(r-c) x grad]_a/|r-c|^3 as FULL
+!>  (nbf x nbf) antisymmetric matrices; the physical PSO operator is -i*A.
+!>  The raw field+ket-derivative product acquires a small spurious symmetric
+!>  component for nuclei not centered on a basis function. Since the exact PSO
+!>  operator is anti-Hermitian (its real representation is antisymmetric with a
+!>  zero diagonal), the full block is assembled and the symmetric part is removed
+!>  via A = (M - M^T)/2, which is exact and discards only the spurious error.
+!> @param[in]   basis    basis set
+!> @param[in]   c        nucleus coordinates
+!> @param[inout] ints    full integrals, dimension (nbf, nbf, 3), antisymmetric
+!> @param[in]   logtol   optional screening tolerance
+!> @brief GIAO a11part London correction, density-contracted.
+!> @details The GIAO diamagnetic a11part integral satisfies (verified vs libcint)
+!>   <mu|giao_a11part_{a,b}|nu> = <mu|cg_a11part(O=0)_{a,b}|nu>
+!>                              + 0.5 * <mu|(r-R_N)_a/|r-R_N|^3|nu> * R_nu,b
+!>  where R_nu is the KET shell center.  This routine returns the density-
+!>  contracted correction tensor
+!>   corr_{a,b}(N) = 0.5 * sum_{mu,nu} <mu|(r-R_N)_a/|r-R_N|^3|nu> * R_nu,b * D_{mu,nu}
+!>  using the validated Hellmann-Feynman field integral (comp_coulomb_helfeyder1)
+!>  on the density whose columns are pre-scaled by the ket-shell-center component.
+!>  The caller adds this (trace-corrected) to the CGO diamagnetic at gauge origin
+!>  0 (nmr_dia_shielding with o=0) to form the full GIAO a11part contribution.
+ subroutine giao_a11part_corr(basis, denab, coords, nat, corr, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+    use mod_1e_primitives, only: comp_coulomb_helfeyder1
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: corr(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:), densb(:,:), aoc(:,:)
+    real(real64) :: tol, der(3)
+    integer :: ii, jj, ic, nbf, b, ish, ao, k
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), densb(nbf,nbf), aoc(nbf,3), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    ! AO -> shell center map
+    do ish = 1, basis%nshell
+      do k = 1, basis%naos(ish)
+        ao = basis%ao_offset(ish) + k - 1
+        aoc(ao,1:3) = basis%shell_centers(ish,1:3)
+      end do
+    end do
+
+    corr = 0.0d0
+    call cntp%alloc(basis)
+
+    do b = 1, 3
+      ! scale ket (column) by its shell-center b-component
+      do ao = 1, nbf
+        densb(:,ao) = dens(:,ao)*aoc(ao,b)
+      end do
+      do ii = 1, basis%nshell
+        call shi%fetch_by_id(basis, ii)
+        do jj = 1, basis%nshell
+          call shj%fetch_by_id(basis, jj)
+          call cntp%shell_pair(basis, shi, shj, tol)
+          if (cntp%numpairs==0) cycle
+          do ic = 1, nat
+            der = 0.0d0
+            call comp_coulomb_helfeyder1(cntp, coords(:,ic), 1.0d0, &
+                   densb(basis%ao_offset(ii):, basis%ao_offset(jj):), der)
+            corr(1:3,b,ic) = corr(1:3,b,ic) + 0.5d0*der(1:3)
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(dens, densb, aoc)
+
+ end subroutine
+
+!> @brief GIAO a01gp gauge-correction, density-contracted (9 comp -> 3x3).
+!> @details Returns e2_{a,col}(N) = sum_{mu,nu} <mu|a01gp_{a,col}|nu> D_{mu,nu}
+!>  for each nucleus N, with a01gp the GIAO derivative of the PSO operator
+!>  (comp_giao_a01gp_prim).  cvec = R_bra - R_ket per shell pair.  The caller
+!>  adds this (NOT trace-corrected, per the standard diamagnetic decomposition) to the trace-corrected
+!>  a11part contribution.
+ subroutine giao_a01gp_contract(basis, denab, coords, nat, e2, logtol)
+    use precision, only: dp
+    use mathlib, only: unpack_matrix
+    use mod_1e_primitives, only: comp_giao_a01gp_prim
+
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), contiguous, intent(in) :: coords(:,:)
+    integer, intent(in) :: nat
+    real(real64), intent(out) :: e2(3,3,nat)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64), allocatable :: dens(:,:)
+    real(real64) :: tol, cvec(3), blk(blocksize,9)
+    integer :: ii, jj, ic, nbf, a, col, i, j, ij, oi, oj
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    allocate(dens(nbf,nbf), source=0.0d0)
+    call unpack_matrix(denab, dens, nbf, 'U')
+    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+
+    e2 = 0.0d0
+    call cntp%alloc(basis)
+
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      oi = basis%ao_offset(ii)
+      do jj = 1, basis%nshell
+        call shj%fetch_by_id(basis, jj)
+        oj = basis%ao_offset(jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        cvec = basis%shell_centers(ii,1:3) - basis%shell_centers(jj,1:3)
+        do ic = 1, nat
+          blk = 0.0d0
+          call comp_giao_a01gp_prim(cntp, coords(:,ic), cvec, blk)
+          ! contract: e2(a,col) += sum_ij den(bra,ket) * blk(ij, (a-1)*3+col)
+          ij = 0
+          do i = 1, cntp%inao
+            do j = 1, cntp%jnao
+              ij = ij + 1
+              do a = 1, 3
+                do col = 1, 3
+                  e2(a,col,ic) = e2(a,col,ic) &
+                    + dens(oi+i-1, oj+j-1) * blk(ij,(a-1)*3+col)
+                end do
+              end do
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(dens)
+
+ end subroutine
+
+ subroutine pso_integrals(basis, c, ints, logtol)
+    use precision, only: dp
+    type(basis_set), intent(in) :: basis
+    real(real64), intent(in) :: c(:)
+    real(real64), contiguous, intent(inout) :: ints(:,:,:)
+    real(real64), optional, intent(in) :: logtol
+
+    real(real64) :: tol
+    integer :: ii, jj, m, nbf, p, q
+    type(shell_t) :: shi, shj
+    type(shpair_t) :: cntp
+    real(real64), dimension(blocksize,3) :: blk
+    real(real64) :: aij
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+    nbf = basis%nbf
+
+    ints = 0.0d0
+    call cntp%alloc(basis)
+
+!   Assemble the full (both-triangle) matrix M_a[bra,ket] for all shell pairs.
+    do ii = 1, basis%nshell
+      call shi%fetch_by_id(basis, ii)
+      do jj = 1, basis%nshell
+        call shj%fetch_by_id(basis, jj)
+        call cntp%shell_pair(basis, shi, shj, tol)
+        if (cntp%numpairs==0) cycle
+        blk = 0.0d0
+        call comp_pso_int1_prim(cntp, c, blk)
+        do m = 1, 3
+          ! blk is ordered (bra=shi outer, ket=shj inner); update_rectangular_matrix
+          ! then writes ints(ket_global, bra_global) = <bra|A|ket>.
+          call update_rectangular_matrix(shi, shj, blk(:,m), ints(:,:,m))
+        end do
+      end do
+    end do
+
+!   Normalize, then antisymmetrize A = (M - M^T)/2 (exact for the PSO operator).
+    do m = 1, 3
+      call bas_norm_matrix(ints(:,:,m), basis%bfnrm, nbf)
+    end do
+    ! update_rectangular_matrix stored ints(a,b) = <b|A|a>; antisymmetrise into
+    ! the <bra|A|ket> convention used by the paramagnetic assembly.
+    do m = 1, 3
+      do p = 1, nbf
+        do q = 1, p
+          aij = 0.5d0*(ints(q,p,m) - ints(p,q,m))
+          ints(p,q,m) =  aij
+          ints(q,p,m) = -aij
+        end do
+      end do
+    end do
+
+ end subroutine
+
+!-------------------------------------------------------------------------------
+
 !> @brief Compute electronic contribution to electrostatic potential on a grid
 !
 !> @author   Vladimir Mironov
@@ -319,6 +771,92 @@ contains
 
  end subroutine
 
+!-------------------------------------------------------------------------------
+
+!> @brief Compute unweighted electronic electrostatic potential on arbitrary points.
+!
+!> @details This is the safe public wrapper around the internal `int1_el_pot`
+!> kernel. Unlike `electrostatic_potential`, this routine does not multiply by
+!> quadrature weights. ddX expects `phi_cav` to be the unweighted electric
+!> potential at cavity points, so this is the intended OpenQP entry point for
+!> building ddX primal RHS data from an AO density.
+!>
+!> @param[inout] basis basis with SP-shells separated
+!> @param[in]    x     x coordinates of evaluation points, in Bohr
+!> @param[in]    y     y coordinates of evaluation points, in Bohr
+!> @param[in]    z     z coordinates of evaluation points, in Bohr
+!> @param[inout] d     packed AO density matrix; restored to input normalization
+!> @param[out]   pot   unweighted electronic potential on points
+!> @param[in]    logtol optional 1-e exponential prefactor tolerance
+!>
+ subroutine electrostatic_potential_unweighted(basis, x, y, z, d, pot, logtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(in)             :: basis
+    real(real64), contiguous, intent(in)    :: x(:), y(:), z(:)
+    real(real64), contiguous, intent(inout) :: d(:)
+    real(real64), contiguous, intent(out)   :: pot(:)
+    real(real64), optional, intent(in)      :: logtol
+    real(real64) :: tol
+    real(real64), allocatable :: invnrm(:)
+
+    call bas_norm_matrix(d, basis%bfnrm, basis%nbf)
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    pot = 0.0_real64
+    call int1_el_pot(basis, x, y, z, d, pot, tol)
+
+    ! Restore the input normalization of d. Use a local inverse of the basis
+    ! norms rather than bas_denorm_matrix, which would transiently mutate
+    ! basis%bfnrm and so force an intent(inout) basis on this otherwise
+    ! read-only routine (it is called from the intent(in) SCF Fock build).
+    invnrm = 1.0_real64 / basis%bfnrm
+    call bas_norm_matrix(d, invnrm, basis%nbf)
+
+ end subroutine electrostatic_potential_unweighted
+
+!-------------------------------------------------------------------------------
+
+!> @brief Compute packed one-electron Coulomb potential from external point charges.
+!
+!> @details This is the normalized public wrapper around the internal
+!> `int1_coul_ext_chg` kernel. It is intended for environment/solvent reaction
+!> fields such as ddX apparent charges: given point charges q_k at coordinates
+!> r_k, return the packed AO matrix sum_k q_k <mu|1/|r-r_k||nu>.
+!>
+!> @param[in]     basis  basis with SP-shells separated
+!> @param[out]    v      packed normalized AO potential matrix
+!> @param[in]     x      x coordinates of point charges, in Bohr
+!> @param[in]     y      y coordinates of point charges, in Bohr
+!> @param[in]     z      z coordinates of point charges, in Bohr
+!> @param[in]     chg    point charges
+!> @param[in]     logtol optional 1-e exponential prefactor tolerance
+!> @param[in]     chgtol optional charge screening threshold
+!>
+ subroutine external_charge_potential(basis, v, x, y, z, chg, logtol, chgtol)
+
+    use precision, only: dp
+    implicit none
+    type(basis_set), intent(in)              :: basis
+    real(real64), contiguous, intent(out)    :: v(:)
+    real(real64), contiguous, intent(in)     :: x(:), y(:), z(:), chg(:)
+    real(real64), optional, intent(in)       :: logtol, chgtol
+    real(real64) :: tol, qtol
+
+    tol = log(10.0_dp)*20
+    if (present(logtol)) tol = logtol
+
+    qtol = 1.0d-12
+    if (present(chgtol)) qtol = chgtol
+
+    v = 0.0_real64
+    call int1_coul_ext_chg(v, basis, size(chg), x, y, z, chg, tol, qtol)
+    call bas_norm_matrix(v, basis%bfnrm, basis%nbf)
+
+ end subroutine external_charge_potential
 
 !-------------------------------------------------------------------------------
 
@@ -1304,6 +1842,224 @@ contains
     end do
 
  end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute angular momentum integrals about gauge origin `o`
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE amom_ints(ints, o, basis, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    real(real64), contiguous, intent(in) :: o(:)
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+
+        CALL shi%fetch_by_id(basis,ii)
+
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+
+            CALL shj%fetch_by_id(basis,jj)
+
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+
+            blk = 0.0
+
+            CALL int1_amom(cntp, o, blk)
+
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of angular momentum 1e integrals
+!> @param[in]       cntp        shell pair data
+!> @param[in]       o           gauge origin
+!> @param[inout]    blk         block of 1e angular momentum integrals (:,1:3)
+!> @author   Generated for NMR shielding (CGO)
+!
+ SUBROUTINE int1_amom(cntp, o, blk)
+!dir$ attributes inline :: int1_amom
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(in) :: o(:)
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+!dir$ assume_aligned blk : 64
+
+    do ig = 1, cntp%numpairs
+        call comp_amom_int1_prim(cntp, ig, o, blk)
+    end do
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute GIAO/London overlap magnetic derivative integrals.
+ SUBROUTINE giao_overlap_deriv_ints(ints, basis, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis,ii)
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+            CALL shj%fetch_by_id(basis,jj)
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            blk = 0.0d0
+            CALL int1_giao_overlap_deriv(cntp, blk)
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of GIAO/London overlap derivative integrals.
+ SUBROUTINE int1_giao_overlap_deriv(cntp, blk)
+!dir$ attributes inline :: int1_giao_overlap_deriv
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+!dir$ assume_aligned blk : 64
+
+    do ig = 1, cntp%numpairs
+        call comp_giao_overlap_deriv_prim(cntp, ig, blk)
+    end do
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute one-electron GIAO h10 core derivative integrals.
+ SUBROUTINE giao_h10_core_ints(ints, basis, coord, zq, nat, tol)
+
+    REAL(REAL64), CONTIGUOUS,  INTENT(INOUT)  :: ints(:,:)
+    TYPE(basis_set), INTENT(IN)     :: basis
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    REAL(REAL64),   INTENT(IN)     :: tol
+
+    INTEGER :: ii, jj, m
+    REAL(REAL64), DIMENSION(BLOCKSIZE,3) :: blk
+!dir$ attributes align : 64 :: blk
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+!$omp parallel &
+!$omp   private( &
+!$omp       ii, jj, m, &
+!$omp       blk, &
+!$omp       shi, shj, cntp &
+!$omp   )
+
+    CALL cntp%alloc(basis)
+
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis,ii)
+!$omp do schedule(dynamic)
+        DO jj = 1, ii
+            CALL shj%fetch_by_id(basis,jj)
+            CALL cntp%shell_pair(basis,shi, shj, tol)
+            IF (cntp%numpairs==0) CYCLE
+            blk = 0.0d0
+            CALL int1_giao_h10_core(cntp, coord, zq, nat, blk)
+            do m = 1, 3
+              CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
+            end do
+        END DO
+!$omp end do nowait
+    END DO
+!$omp end parallel
+ END SUBROUTINE
+
+!--------------------------------------------------------------------------------
+
+!> @brief Compute contracted block of one-electron GIAO h10 derivative integrals.
+!> @details Matches the one-electron libcint convention
+!>  h10_onee = -0.5*int1e_giao_irjxp - int1e_ignuc(asym) - int1e_igkin;
+!>  the two-electron GIAO magnetic Fock derivative is intentionally absent here.
+ SUBROUTINE int1_giao_h10_core(cntp, coord, zq, nat, blk)
+!dir$ attributes inline :: int1_giao_h10_core
+    type(shpair_t), intent(in) :: cntp
+    real(real64), contiguous, intent(in) :: coord(:,:), zq(:)
+    integer, intent(in) :: nat
+    real(real64), contiguous, intent(inout) :: blk(:,:)
+
+    integer :: ig
+    real(real64), dimension(BLOCKSIZE,3) :: amom_blk
+!dir$ assume_aligned blk : 64
+!dir$ assume_aligned amom_blk : 64
+
+    amom_blk = 0.0_real64
+    do ig = 1, cntp%numpairs
+        call comp_giao_h10_core_prim(cntp, ig, coord, zq, nat, blk)
+        call comp_amom_int1_prim(cntp, ig, cntp%rj, amom_blk)
+    end do
+    ! libcint/the reference int1e_giao_irjxp is the negative transpose of the
+    ! angular-momentum block returned by comp_amom_int1_prim for the current
+    ! (bra=shi, ket=shj) shell-pair convention.  The packed lower-triangle
+    ! h10 contribution is therefore -0.5*irjxp = +0.5*amom_blk.
+    blk = blk + 0.5_real64*amom_blk
+
+ end subroutine
+
+!--------------------------------------------------------------------------------
+
+
+!--------------------------------------------------------------------------------
+
 
 !--------------------------------------------------------------------------------
 

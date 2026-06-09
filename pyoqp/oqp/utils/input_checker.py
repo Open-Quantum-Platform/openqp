@@ -12,33 +12,44 @@ from oqp.utils.mpi_utils import MPIManager
 
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
-    "meci", "mecp", "mep", "ts", "irc", "neb", "prop", "data", "ekt",
+    "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt", "soc",
 }
-NOT_AVAILABLE_RUNTYPES = {"soc", "md"}
+NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
 METHODS = {"hf", "tdhf"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
-SCF_CONVERGERS = {"diis", "soscf", "trah"}
+SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
 DIIS_TYPES = {"none", "cdiis", "ediis", "adiis", "vdiis"}
-OPT_LIBS = {"scipy", "geometric"}
+PCM_BACKENDS = {"ddx", "pcmsolver"}
+PCM_MODES = {"reference_scf", "reference_scf_plus_post_state", "post_state_correction"}
+PCM_MODELS = {"ddcosmo", "ddpcm", "ddlpb", "iefpcm", "cpcm"}
+PCM_BACKEND_MODELS = {
+    "ddx": {"ddcosmo", "ddpcm", "ddlpb"},
+    "pcmsolver": {"iefpcm", "cpcm"},
+}
+OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"penalty", "ubp", "hybrid"}
-SCF_PROPS = {"el_mom", "mulliken"}
+SCF_PROPS = {"el_mom", "mulliken", "nmr"}
+NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
-    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, prop, or data. soc and md are recognized but not implemented yet.",
-    "input.method": "Use method=hf for HF/DFT or method=tdhf for TDHF/TDDFT/SF/MRSF.",
+    "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, or method=dftb for the optional external DFTB+ backend.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
     "tdhf.type": "Use rpa or tda for ordinary TDHF/TDDFT, sf or mrsf for spin-flip, umrsf only with UHF, and legacy mrsf_ekt_ip/mrsf_ekt_ea only with energy runtype. EKT analysis must use [input] runtype=ekt with [tdhf] type=mrsf and [ekt] IP, EA, or both.",
     "tdhf.nstate": "nstate must cover the highest excited-state index requested anywhere else in the input.",
     "guess.type": "Use huckel or modhuckel (weighted Wolfsberg-Helmholz) for native extended-Huckel guesses, hcore for the bare core Hamiltonian, sap for the native superposition-of-atomic-potentials guess, minao for projected minimal-basis densities, json with a JSON restart file, or auto for JSON-if-present otherwise Huckel.",
-    "optimize.lib": "geometric is the default optimizer backend and supports state-specific optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
+    "pcm.enabled": "PCM input is reserved for the planned energy-only solvent backend. Initial scope is RHF/ROHF reference_scf single-point energy; gradients and state-specific MRSF PCM are out of scope.",
+    "pcm.backend": "Use backend=ddx for the preferred active ddCOSMO/ddPCM library candidate, or backend=pcmsolver for the classic PCM API candidate.",
+    "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
+    "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
 }
 
@@ -566,6 +577,130 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
                 )
 
 
+def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
+    pcm = config.get("pcm", {})
+    if not pcm:
+        return
+
+    enabled = bool(_get(config, "pcm", "enabled", False))
+    backend = _as_lower(_get(config, "pcm", "backend", "ddx"))
+    mode = _as_lower(_get(config, "pcm", "mode", "reference_scf"))
+    model = _as_lower(_get(config, "pcm", "model", "ddpcm"))
+    epsilon = _get(config, "pcm", "epsilon", 78.3553)
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+
+    if backend not in PCM_BACKENDS:
+        report.add(
+            "ERROR",
+            "pcm.backend",
+            "Unknown PCM backend.",
+            value=backend,
+            expected=", ".join(sorted(PCM_BACKENDS)),
+            action="Choose ddx or pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
+        )
+
+    if mode not in PCM_MODES:
+        report.add(
+            "ERROR",
+            "pcm.mode",
+            "Unknown PCM coupling mode.",
+            value=mode,
+            expected=", ".join(sorted(PCM_MODES)),
+            action="Use reference_scf for the first MRSF-compatible solvent mode.",
+            wiki=WIKI_HELP["pcm.mode"],
+        )
+    elif mode != "reference_scf":
+        report.add(
+            "ERROR",
+            "pcm.mode",
+            "Only reference_scf PCM is in the first implementation scope.",
+            value=mode,
+            expected="reference_scf",
+            action="Do not request post-state or nonequilibrium PCM modes until those separate runtime paths are implemented and validated.",
+            wiki=WIKI_HELP["pcm.mode"],
+        )
+
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+
+    if model not in PCM_MODELS:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            "Unknown PCM model.",
+            value=model,
+            expected=", ".join(sorted(PCM_MODELS)),
+            action="Use ddpcm/ddcosmo with backend=ddx or iefpcm/cpcm with backend=pcmsolver.",
+        )
+
+    if backend in PCM_BACKEND_MODELS and model in PCM_MODELS and model not in PCM_BACKEND_MODELS[backend]:
+        report.add(
+            "ERROR",
+            "pcm.model",
+            f"PCM model {model} is not supported by backend {backend}.",
+            value=model,
+            expected=", ".join(sorted(PCM_BACKEND_MODELS[backend])),
+            action="Use a ddCOSMO/ddPCM/ddLPB model with backend=ddx, or an IEFPCM/CPCM model with backend=pcmsolver.",
+            wiki=WIKI_HELP["pcm.backend"],
+        )
+
+    try:
+        epsilon_value = float(epsilon)
+    except (TypeError, ValueError):
+        report.add(
+            "ERROR",
+            "pcm.epsilon",
+            "PCM dielectric constant must be numeric and greater than 1.",
+            value=epsilon,
+            action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+        )
+    else:
+        if epsilon_value <= 1.0:
+            report.add(
+                "ERROR",
+                "pcm.epsilon",
+                "PCM dielectric constant must be greater than 1.",
+                value=epsilon,
+                action="Use a physical solvent dielectric, e.g. 78.3553 for water.",
+            )
+
+    if enabled:
+        if scf_type not in {"rhf", "rohf"}:
+            report.add(
+                "ERROR",
+                "scf.type",
+                "PCM first scope supports RHF/ROHF reference SCF only.",
+                value=scf_type,
+                expected="rhf or rohf",
+                action="Use RHF for closed-shell singlets or ROHF for the high-spin MRSF reference; UHF PCM is a separate future validation target.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
+
+        # The reference_scf RHF/ROHF energy path is implemented for the ddX
+        # backend only. The pcmsolver backend remains a planned candidate.
+        if backend != "ddx":
+            report.add(
+                "ERROR",
+                "pcm.backend",
+                "Only the ddx PCM backend has an implemented runtime energy path.",
+                value=backend,
+                expected="ddx",
+                action="Use backend=ddx; the pcmsolver runtime coupling is not implemented yet.",
+                wiki=WIKI_HELP["pcm.backend"],
+            )
+
+        if runtype != "energy":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "The first PCM implementation is scoped to single-point energies only.",
+                value=runtype,
+                expected="energy",
+                action="Use runtype=energy; gradients/optimizations require a separate analytic-gradient implementation.",
+                wiki=WIKI_HELP["pcm.enabled"],
+            )
+
+
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     multiplicity = _get(config, "scf", "multiplicity", 1)
@@ -647,6 +782,22 @@ def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
             expected=", ".join(sorted(SCF_CONVERGERS)),
             action="Choose diis, soscf, or trah.",
         )
+
+    # scf.escalation: optional comma-separated ladder overriding the default
+    # DIIS -> SOSCF -> TRAH chain. Each stage must be a concrete converger
+    # (not the 'auto'/'ml' manager modes).
+    escalation = _as_lower(_get(config, "scf", "escalation", ""))
+    escalation_stages = {"diis", "soscf", "trah"}
+    for stage in (s.strip() for s in escalation.split(",") if s.strip()):
+        if stage not in escalation_stages:
+            report.add(
+                "ERROR",
+                "scf.escalation",
+                "Unknown SCF escalation stage.",
+                value=stage,
+                expected=", ".join(sorted(escalation_stages)),
+                action="List concrete convergers, e.g. soscf,trah.",
+            )
 
     if init_scf not in INIT_SCF_TYPES:
         report.add(
@@ -737,7 +888,7 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         report.add(
             "ERROR",
             "scf.type",
-            "UMRSF requires a UHF reference.",
+            "UMRSF-TDDFT requires a UHF reference.",
             value=scf_type,
             expected="uhf",
             action="Set [scf] type=uhf.",
@@ -771,6 +922,8 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     grad_states = _as_list(_get(config, "properties", "grad", []))
     td_prop = _get(config, "properties", "td_prop", False)
     scf_prop = [_as_lower(item) for item in _as_list(_get(config, "properties", "scf_prop", []))]
+    nmr_gauge = _as_lower(_get(config, "properties", "nmr_gauge", "cgo"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
 
     for prop in scf_prop:
         if prop not in SCF_PROPS:
@@ -783,6 +936,46 @@ def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
                 action="Remove the keyword or confirm that downstream code can ignore it.",
             )
 
+    if "nmr" in scf_prop:
+        if nmr_gauge not in NMR_GAUGES:
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "Unknown NMR shielding gauge formulation.",
+                value=nmr_gauge,
+                expected=", ".join(sorted(NMR_GAUGES)),
+                action="Use nmr_gauge=giao (gauge-origin independent; RHF/UHF/ROHF) "
+                       "or nmr_gauge=cgo (common gauge origin; closed-shell RHF).",
+            )
+        elif nmr_gauge == "cgo" and scf_type in ("uhf", "rohf"):
+            report.add(
+                "ERROR",
+                "properties.nmr_gauge",
+                "CGO NMR shielding supports closed-shell RHF references only.",
+                value=f"{nmr_gauge} with scf.type={scf_type}",
+                action="Use nmr_gauge=giao for open-shell (UHF/ROHF) NMR shielding.",
+            )
+        functional = _as_lower(_get(config, "input", "functional", ""))
+        # Pre-flight mirror of the Fortran guards (the runtime also aborts):
+        # the NMR response implements global hybrids only. Name-based, so it
+        # cannot be exhaustive; unknown functionals are caught at runtime.
+        if functional.startswith(("cam-", "dtcam-", "lc-", "lrc-", "wb97", "hse")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with range-separated (CAM/LC) functionals is not implemented.",
+                value=functional,
+                action="Use HF, a pure functional, or a global hybrid (e.g. pbe0, b3lyp, bhhlyp).",
+            )
+        elif functional.startswith(("m06", "m08", "m11", "mn12", "mn15", "tpss",
+                                    "scan", "rscan", "r2scan", "b97m", "revm06")):
+            report.add(
+                "ERROR",
+                "input.functional",
+                "NMR shielding with meta-GGA (tau-dependent) functionals is not implemented.",
+                value=functional,
+                action="Use HF, an LDA/GGA functional, or a global hybrid GGA (e.g. pbe0, b3lyp).",
+            )
     if td_prop:
         report.add(
             "WARNING",
@@ -841,6 +1034,10 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     if runtype in {"meci", "mecp"}:
         requested.append(_get(config, "optimize", "istate", 0))
         requested.append(_get(config, "optimize", "jstate", 0))
+    if runtype == "tci":
+        requested.append(_get(config, "optimize", "istate", 0))
+        requested.append(_get(config, "optimize", "jstate", 0))
+        requested.append(_get(config, "optimize", "kstate", 0))
     if runtype == "hess":
         requested.append(_get(config, "hess", "state", 0))
     if runtype in {"nac", "bp", "nacme"}:
@@ -861,7 +1058,8 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
         )
 
 
-def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
+def _check_runtype(config: dict[str, Any], report: CheckReport,
+                   input_dir: str | None = None) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
@@ -914,6 +1112,25 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
             )
         return
 
+    # UMRSF-TDDFT only implements the energy path. Every other runtype
+    # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
+    # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
+    # which exist for UMRSF yet. Reject them here at the single choke point
+    # so validation fails early instead of dying at runtime.
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if method == "tdhf" and td_type == "umrsf" and runtype != "energy":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "UMRSF-TDDFT only supports runtype=energy; "
+            "gradients, Hessians, and Z-vectors are not implemented.",
+            value=f"{td_type}/{runtype}",
+            expected="energy",
+            action="Use runtype=energy for UMRSF-TDDFT until UMRSF-TDDFT gradients/Z-vectors are implemented.",
+            wiki=WIKI_HELP["tdhf.type"],
+        )
+        return
+
     if runtype == "grad":
         if method == "hf":
             if _max_state(_as_list(_get(config, "properties", "grad", []))) > 0:
@@ -937,13 +1154,16 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
         _check_optimize(config, report)
 
     if runtype == "neb":
-        _check_neb(config, report)
+        _check_neb(config, report, input_dir)
 
     if runtype in {"nac", "bp"}:
         _check_nac(config, report)
 
     if runtype == "nacme":
         _check_nacme(config, report)
+
+    if runtype == "soc":       
+        _check_soc(config, report)
 
     if runtype == "hess":
         _check_hess(config, report)
@@ -952,10 +1172,11 @@ def _check_runtype(config: dict[str, Any], report: CheckReport) -> None:
 def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
     method = _as_lower(_get(config, "input", "method", "hf"))
-    lib = _as_lower(_get(config, "optimize", "lib", "geometric"))
+    lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
     optimizer = _as_lower(_get(config, "optimize", "optimizer", "bfgs"))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
+    kstate = _get(config, "optimize", "kstate", 0)
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
@@ -1051,14 +1272,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [optimize] lib=geometric for runtype=ts/irc.",
         )
 
-    if runtype == "neb" and lib != "geometric":
+    if runtype == "neb" and lib not in {"geometric", "oqp"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is currently wired only through geomeTRIC.",
+            "NEB is wired through geomeTRIC and the oqp optimizer.",
             value=lib,
-            expected="geometric",
-            action="Set [optimize] lib=geometric for runtype=neb.",
+            expected="geometric or oqp",
+            action="Set [optimize] lib=geometric or lib=oqp for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -1071,8 +1292,43 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use [input] runtype=optimize/meci/mecp/ts/irc/neb or choose scipy for this runtype.",
         )
 
+    if lib == "oqp" and runtype not in {"optimize", "ts", "meci", "mecp", "tci", "neb", "irc", "mep"}:
+        report.add(
+            "ERROR",
+            "optimize.lib",
+            "The oqp optimizer currently supports optimize, ts, meci, mecp, tci, neb, irc, and mep.",
+            value=f"{lib}/{runtype}",
+            expected="optimize, ts, meci, mecp, tci, neb, irc, or mep",
+            action="Choose a supported oqp runtype.",
+        )
 
-def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
+    if runtype == "tci":
+        if method != "tdhf":
+            report.add(
+                "ERROR", "input.method",
+                "Three-state CI (tci) optimization requires method=tdhf.",
+                value=method, expected="tdhf",
+                action="Set [input] method=tdhf and configure [tdhf].",
+            )
+        if not (istate < jstate < kstate):
+            report.add(
+                "ERROR", "optimize.kstate",
+                "TCI requires istate < jstate < kstate.",
+                value=f"{istate}/{jstate}/{kstate}",
+                expected="istate < jstate < kstate",
+                action="Set three increasing state indices (e.g. 1/2/3).",
+            )
+        if lib != "oqp":
+            report.add(
+                "ERROR", "optimize.lib",
+                "Three-state CI (tci) is currently wired only through the oqp optimizer.",
+                value=lib, expected="oqp",
+                action="Set [optimize] lib=oqp for runtype=tci.",
+            )
+
+
+def _check_neb(config: dict[str, Any], report: CheckReport,
+               input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
     product = _get(config, "neb", "product", "")
@@ -1106,14 +1362,21 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             expected="XYZ filename",
             action="Set [neb] product to a product-endpoint XYZ file.",
         )
-    elif not os.path.exists(os.path.abspath(str(product))):
-        report.add(
-            "ERROR",
-            "neb.product",
-            "NEB product endpoint file does not exist.",
-            value=product,
-            action="Fix the product path or place the XYZ file in the working directory.",
-        )
+    else:
+        # The product endpoint may be given relative to the input file (where it
+        # is normally stored beside the .inp), not just the current directory.
+        candidates = [os.path.abspath(str(product))]
+        if input_dir and not os.path.isabs(str(product)):
+            candidates.append(os.path.abspath(os.path.join(input_dir, str(product))))
+        if not any(os.path.exists(c) for c in candidates):
+            report.add(
+                "ERROR",
+                "neb.product",
+                "NEB product endpoint file does not exist.",
+                value=product,
+                action="Fix the product path, or place the XYZ file beside the input "
+                       "file or in the working directory.",
+            )
 
     if nimage < 3:
         report.add(
@@ -1123,6 +1386,147 @@ def _check_neb(config: dict[str, Any], report: CheckReport) -> None:
             value=nimage,
             expected=">= 3",
             action="Set [neb] nimage=3 or larger.",
+        )
+
+
+def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
+    runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
+    icoord = _get(config, "dlfind", "icoord", 3)
+    iopt = _get(config, "dlfind", "iopt", 3)
+    ims = _get(config, "dlfind", "ims", 0)
+
+    if runtype == "optimize":
+        if icoord not in DLFIND_SINGLE_ICOORD:
+            report.add(
+                "ERROR",
+                "dlfind.icoord",
+                "Single-state DL-FIND optimization only supports icoord 0-4.",
+                value=icoord,
+                action="Use icoord in 0,1,2,3,4.",
+            )
+        if iopt not in DLFIND_MIN_IOPT:
+            report.add(
+                "ERROR",
+                "dlfind.iopt",
+                "Single-state DL-FIND optimization only supports iopt 0-3.",
+                value=iopt,
+                action="Use iopt in 0,1,2,3.",
+            )
+        if ims != 0:
+            report.add(
+                "ERROR",
+                "dlfind.ims",
+                "Single-state optimization requires ims=0.",
+                value=ims,
+                action="Set ims=0.",
+                wiki=WIKI_HELP["dlfind.ims"],
+            )
+
+    if runtype == "meci":
+        if iopt not in DLFIND_MIN_IOPT:
+            report.add(
+                "ERROR",
+                "dlfind.iopt",
+                "DL-FIND MECI only supports iopt 0-3.",
+                value=iopt,
+                action="Use iopt in 0,1,2,3.",
+            )
+        if ims not in DLFIND_MECI_IMS:
+            report.add(
+                "ERROR",
+                "dlfind.ims",
+                "DL-FIND MECI requires ims=1, 2, or 3.",
+                value=ims,
+                action="Set ims to a MECI mode.",
+                wiki=WIKI_HELP["dlfind.ims"],
+            )
+        if ims == 3 and icoord not in DLFIND_LN_ICOORD:
+            report.add(
+                "ERROR",
+                "dlfind.icoord",
+                "Lagrange-Newton MECI requires icoord 10-14.",
+                value=icoord,
+                action="Use icoord 10-14 with ims=3.",
+            )
+        if ims in {1, 2} and icoord not in DLFIND_SINGLE_ICOORD:
+            report.add(
+                "ERROR",
+                "dlfind.icoord",
+                "Penalty/gradient-projection MECI requires icoord 0-4.",
+                value=icoord,
+                action="Use icoord 0-4 with ims=1 or ims=2.",
+            )
+
+    if runtype == "ts":
+        if iopt not in DLFIND_TS_IOPT:
+            report.add(
+                "ERROR",
+                "dlfind.iopt",
+                "Transition-state DL-FIND uses P-RFO (iopt=9).",
+                value=iopt,
+                action="Set [dlfind] iopt=9 for runtype=ts.",
+            )
+        if ims != 0:
+            report.add(
+                "ERROR",
+                "dlfind.ims",
+                "Transition-state search is not a MECI mode and requires ims=0.",
+                value=ims,
+                action="Set [dlfind] ims=0 for runtype=ts.",
+            )
+        if icoord not in DLFIND_SINGLE_ICOORD:
+            report.add(
+                "ERROR",
+                "dlfind.icoord",
+                "Transition-state DL-FIND search expects icoord 0-4.",
+                value=icoord,
+                action="Use icoord 0-4 for TS optimization.",
+            )
+
+def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    scf_mult = _get(config, "scf", "multiplicity", 1)
+
+    if method != "tdhf":
+        report.add(
+            "ERROR",
+            "input.method",
+            "SOC requires method=tdhf.",
+            value=method,
+            expected="tdhf",
+            action="Set [input] method=tdhf.",
+        )
+
+    if td_type != "mrsf":
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "SOC requires tdhf.type=mrsf.",
+            value=td_type,
+            expected="mrsf",
+            action="Set [tdhf] type=mrsf.",
+        )
+
+    if scf_type != "rohf":
+        report.add(
+            "ERROR",
+            "scf.type",
+            "SOC requires an ROHF reference.",
+            value=scf_type,
+            expected="rohf",
+            action="Set [scf] type=rohf.",
+        )
+
+    if scf_mult != 3:
+        report.add(
+            "ERROR",
+            "scf.multiplicity",
+            "SOC requires a triplet ROHF reference (multiplicity=3).",
+            value=scf_mult,
+            expected="3",
+            action="Set [scf] multiplicity=3.",
         )
 
 
@@ -1161,7 +1565,7 @@ def analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]:
         if td_type == "mrsf":
             return "unsupported_tdhf_type", "MRSF-TDDFT analytic Hessian is not implemented; use type=numerical until the MRSF gradient/Z-vector finite-difference baseline is validated."
         if td_type == "umrsf":
-            return "unsupported_tdhf_type", "UMRSF analytic Hessian is not implemented; use type=numerical until UMRSF gradients/Z-vectors are implemented and finite-difference validated."
+            return "unsupported_tdhf_type", "UMRSF-TDDFT analytic Hessian is not implemented; use type=numerical until UMRSF-TDDFT gradients/Z-vectors are implemented and finite-difference validated."
         if td_type == "sf":
             return "unsupported_tdhf_type", "SF-TDDFT analytic Hessian is not implemented; use type=numerical until the SF gradient/Z-vector finite-difference baseline is validated."
         if td_type in {"tda", "rpa"}:
@@ -1441,8 +1845,14 @@ def check_input_values(
     *,
     raise_error: bool = True,
     emit: bool = True,
+    input_dir: str | None = None,
 ) -> CheckReport:
-    """Validate an already parsed OpenQP config and return a diagnostic report."""
+    """Validate an already parsed OpenQP config and return a diagnostic report.
+
+    ``input_dir`` is the directory of the input file, used to resolve paths
+    (e.g. the NEB product endpoint) that are stored relative to the input file
+    rather than the current working directory.
+    """
 
     report = CheckReport()
     method = _as_lower(_get(config, "input", "method", "hf"))
@@ -1461,12 +1871,13 @@ def check_input_values(
     _check_system(config, report)
     _check_basis(config, report)
     _check_guess(config, report)
+    _check_pcm(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
-    _check_runtype(config, report)
+    _check_runtype(config, report, input_dir)
 
     if _get(config, "input", "d4", False) and not _get(config, "input", "functional", ""):
         report.add(

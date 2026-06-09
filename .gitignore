@@ -5,6 +5,8 @@
 *.i
 *.a
 *.x
+*.pyc
+__pycache__/
 *.sw?
 *.un~
 *.log
@@ -25,9 +27,10 @@ lib64/*
 share/*
 examples/data_*
 build/
-build_*/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+build_*/
 openqp_test_tmp_*
 tools/_grad_validation_scratch/
 tools/_stress_scratch/

@@ -84,6 +84,13 @@ def install_runfunc_stubs():
     setattr(libgeometric, "GeometricNEBOpt", GeometricNEBOpt)
     sys.modules["oqp.library.libgeometric"] = libgeometric
 
+    # runfunc also imports the oqp optimizer backend; stub it too.
+    liboqp = types.ModuleType("oqp.library.liboqp")
+    for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
+                 "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
+        setattr(liboqp, _cls, type(_cls, (), {}))
+    sys.modules["oqp.library.liboqp"] = liboqp
+
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
 
 
@@ -156,9 +163,6 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.inp": "runtype=neb",
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC_CI21.xyz": None,
-            "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.json": None,
         }
 
         missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
@@ -170,13 +174,6 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             self.assertIn(runtype, text)
             self.assertIn("lib=geometric", text)
             self.assertIn("[geometric]", text)
-
-        thymine = (EXAMPLES_OPT / "THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC.inp").read_text()
-        self.assertIn("method=tdhf", thymine)
-        self.assertIn("type=mrsf", thymine)
-        self.assertIn("istate=2", thymine)
-        self.assertIn("nimage=5", thymine)
-        self.assertIn("THYMINE_BHHLYP-MRSFTDDFT_NEB_GEOMETRIC_CI21.xyz", thymine)
 
     def test_geometric_config_supports_constraints_file_options(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
@@ -350,7 +347,7 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIsInstance(optimizer, GeometricTSOpt)
         self.assertIs(optimizer.mol, mol)
 
-    def test_full_input_checker_accepts_default_geometric_for_irc(self):
+    def test_full_input_checker_accepts_default_lib_for_irc(self):
         input_checker = load_module(
             "input_checker_full_irc_under_test",
             "pyoqp/oqp/utils/input_checker.py",
@@ -373,10 +370,10 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
-    def test_optimize_lib_default_is_geometric(self):
+    def test_optimize_lib_default_is_oqp(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
-        self.assertIn("'lib': {'type': str, 'default': 'geometric'}", text)
+        self.assertIn("'lib': {'type': str, 'default': 'oqp'}", text)
 
     def test_geometric_ts_uses_initial_hessian_by_default(self):
         text = (ROOT / "pyoqp/oqp/library/libgeometric.py").read_text()

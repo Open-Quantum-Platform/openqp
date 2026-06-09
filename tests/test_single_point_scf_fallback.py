@@ -144,7 +144,9 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.energy(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
-        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis", "diis"])
+        # Default escalation ladder: primary DIIS -> SOSCF (recovers here) -> ...,
+        # then the primary converger is restored (in _run_scf and again in energy()).
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis", "diis"])
         self.assertEqual(calc.mol.data.sd_scf_flags, [False])
 
     def test_energy_restores_primary_converger_after_failed_recovery(self):
@@ -160,7 +162,10 @@ class TestSinglePointScfFallback(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             calc.energy(do_init_scf=False)
 
-        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis", "diis"])
+        # Full default ladder is walked (DIIS -> SOSCF -> TRAH) before giving up,
+        # then the primary converger is restored.
+        self.assertEqual(
+            calc.mol.data.convergers, ["diis", "soscf", "trah", "diis", "diis"])
 
     def test_reference_restores_primary_converger_for_matching_gradient(self):
         calc = self.make_calculator()
@@ -168,7 +173,29 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.reference(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_escalation_override_replaces_default_ladder(self):
+        # scf.escalation overrides the default DIIS->SOSCF->TRAH chain with an
+        # explicit comma-separated list (here: straight to TRAH, the old behavior).
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["escalation"] = "trah"
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-3.0])
         self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis"])
+
+    def test_escalation_override_multi_stage_chain(self):
+        # An explicit multi-stage chain is honored in order; the primary (diis)
+        # is dropped from it. SOSCF recovers on the second SCF call.
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["escalation"] = "diis,soscf,trah"
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
 
     def test_stability_noop_restores_pre_trah_energy_metadata(self):
         calc = self.make_calculator()

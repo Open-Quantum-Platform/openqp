@@ -33,6 +33,8 @@ contains
     use strings, only: Cstring, fstring
     use physical_constants, only: BOHR_TO_ANGSTROM
     use printing, only: print_module_info
+    use dk_scalar_mod, only: dk_scalar
+
 
     implicit none
 
@@ -42,7 +44,7 @@ contains
     type(basis_set), pointer :: basis
 
     real(kind=dp) :: tol
-    integer :: i, nbf, nat, nbf2
+    integer :: i, nbf, nat, nbf2, dk
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -55,6 +57,7 @@ contains
     logical dbg
     dbg = .false.
 
+    dk = infos%control%scal_rel
 !   Files open:
 !   LOG: Read and Write: Main output file
     open(unit=iw,  file=infos%log_filename, position="append")
@@ -102,6 +105,8 @@ contains
     tol = log(10.0d0)*tol_int
     call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num, hcore, smat, tmat,&
             logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
+
+    if (dk.gt.0) call dk_scalar(infos)
 
     if (dbg) then
         write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')
