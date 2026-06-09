@@ -9,7 +9,9 @@ module basis_tools
   use iso_fortran_env, only: real64
   use precision, only: dp
   use atomic_structure_m, only: atomic_structure
-  use constants, only: BAS_MXANG, ANGULAR_LABEL, NUM_CART_BF, cart_X, cart_Y, cart_Z
+  use constants, only: BAS_MXANG, ANGULAR_LABEL, NUM_CART_BF, NUM_SPH_BF, &
+                       cart_X, cart_Y, cart_Z, HARMONIC_ACTIVE
+  use cart2sph, only: cart2sph_vec
   use io_constants, only: IW
   use parallel, only: par_env_t
 
@@ -658,16 +660,30 @@ contains
             dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
           loci = offset-1
-          do ityp = 1, maxi
-            ix = cart_x(ityp,am)
-            iy = cart_y(ityp,am)
-            iz = cart_z(ityp,am)
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            ! Evaluate the full Cartesian AO vector, then reduce to spherical.
+            block
+              real(kind=fp) :: cbuf(NUM_CART_BF(am)), sbuf(NUM_SPH_BF(am))
+              do ityp = 1, NUM_CART_BF(am)
+                cbuf(ityp) = vexp1*dr1(cart_x(ityp,am), 1) &
+                                  *dr1(cart_y(ityp,am), 2) &
+                                  *dr1(cart_z(ityp,am), 3)
+              end do
+              call cart2sph_vec(cbuf, sbuf, am)
+              aov(offset:offset+NUM_SPH_BF(am)-1) = sbuf
+            end block
+          else
+            do ityp = 1, maxi
+              ix = cart_x(ityp,am)
+              iy = cart_y(ityp,am)
+              iz = cart_z(ityp,am)
 
-!           Compute AO value at a grid point
-            aov(loci+ityp) = vexp1*dr1(ix, 1) &
-                                  *dr1(iy, 2) &
-                                  *dr1(iz, 3)
-          end do
+!             Compute AO value at a grid point
+              aov(loci+ityp) = vexp1*dr1(ix, 1) &
+                                    *dr1(iy, 2) &
+                                    *dr1(iz, 3)
+            end do
+          end if
         end select
       end associate
 
@@ -800,6 +816,32 @@ contains
           do i = 2, am+1
               dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            ! Build the full Cartesian value + gradient vectors, then reduce
+            ! each to spherical (c2s is r-independent, so it commutes with d/dr).
+            block
+              real(kind=fp) :: cv(NUM_CART_BF(am)), cx(NUM_CART_BF(am))
+              real(kind=fp) :: cy(NUM_CART_BF(am)), cz(NUM_CART_BF(am))
+              real(kind=fp) :: sv(NUM_SPH_BF(am)), sx(NUM_SPH_BF(am))
+              real(kind=fp) :: sy(NUM_SPH_BF(am)), sz(NUM_SPH_BF(am))
+              integer :: ns
+              do ityp = 1, NUM_CART_BF(am)
+                ix = cart_x(ityp,am); iy = cart_y(ityp,am); iz = cart_z(ityp,am)
+                x = dr1(ix, 1); y = dr1(iy, 2); z = dr1(iz, 3)
+                xm = ix*dr1(ix-1, 1); ym = iy*dr1(iy-1, 2); zm = iz*dr1(iz-1, 3)
+                xp = dr1(ix+1, 1)*vexp2; yp = dr1(iy+1, 2)*vexp2; zp = dr1(iz+1, 3)*vexp2
+                cv(ityp) = vexp1*x*y*z
+                cx(ityp) = (-xp+vexp1*xm)*y*z
+                cy(ityp) = (-yp+vexp1*ym)*x*z
+                cz(ityp) = (-zp+vexp1*zm)*x*y
+              end do
+              ns = NUM_SPH_BF(am)
+              call cart2sph_vec(cv, sv, am); aov (offset:offset+ns-1) = sv
+              call cart2sph_vec(cx, sx, am); aogx(offset:offset+ns-1) = sx
+              call cart2sph_vec(cy, sy, am); aogy(offset:offset+ns-1) = sy
+              call cart2sph_vec(cz, sz, am); aogz(offset:offset+ns-1) = sz
+            end block
+          else
           do ityp = 1, maxi
             ix = cart_x(ityp,am)
             iy = cart_y(ityp,am)
@@ -829,6 +871,7 @@ contains
             aogy(loci+ityp) = (-yp+vexp1*ym)*x*z
             aogz(loci+ityp) = (-zp+vexp1*zm)*x*y
           end do
+          end if
         end select
 
       end associate

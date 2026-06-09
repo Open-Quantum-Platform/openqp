@@ -29,6 +29,7 @@ module cart2sph
   public :: c2s_ncomp
   public :: cart2sph_eri
   public :: cart2sph_mat
+  public :: cart2sph_vec
   public :: c2s_selftest
 
   ! l=2 (D): Cart(6) -> Sph(5); column i = Cartesian coeffs of spherical i (m=-l..+l)
@@ -256,6 +257,37 @@ contains
     blk(1:k) = src(1:k)
     deallocate(src)
   end subroutine cart2sph_mat
+
+  !> @brief Transform a 1-index AO vector (e.g. grid AO values or one
+  !>        derivative component) from pure-power Cartesian to pure spherical.
+  !> @details sph(s) = sum_c B(c,s) * shells_pnrm2(c,l) * cart(c). The pnrm
+  !>          fold makes the spherical components unit-normalized (downstream
+  !>          bfnrm = 1 for them, matching set_bfnorms). For l < 2 this is a
+  !>          straight copy. cart has NUM_CART_BF(l) entries, sph has 2l+1.
+  subroutine cart2sph_vec(cart, sph, l)
+    use constants, only: shells_pnrm2
+    real(dp), intent(in) :: cart(:)
+    real(dp), intent(out) :: sph(:)
+    integer, intent(in) :: l
+    real(dp), allocatable :: b(:,:)
+    integer :: nc, ns, c, s
+    real(dp) :: acc
+    nc = NUM_CART_BF(l)
+    if (l < 2) then
+      sph(1:nc) = cart(1:nc)
+      return
+    end if
+    ns = NUM_SPH_BF(l)
+    call c2s_get(l, b)
+    do s = 1, ns
+      acc = 0.0_dp
+      do c = 1, nc
+        acc = acc + b(c, s) * shells_pnrm2(c, l) * cart(c)
+      end do
+      sph(s) = acc
+    end do
+    deallocate(b)
+  end subroutine cart2sph_vec
 
   !> @brief Same-shell (iandj) variant: the block is a packed lower triangle
   !>        blk((i-1)i/2 + j), j<=i. Unpack to a full symmetric Cartesian
