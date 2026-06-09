@@ -1,0 +1,6 @@
+.git
+build
+_build
+**/__pycache__
+*.pyc
+openqp_test_tmp*
