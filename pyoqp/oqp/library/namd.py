@@ -742,6 +742,8 @@ class NAMD_SOC(NAMD):
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
         _ev = mol.config['md'].get('econs', False)
         self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
+        _du = mol.config['md'].get('soc_du_dt_corr', False)
+        self.soc_du_dt_corr = (_du is True) or (str(_du).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
@@ -786,12 +788,14 @@ class NAMD_SOC(NAMD):
 
         mol.data.set_tdhf_multiplicity(1)
         sing = sp.excitation(ref)
+        self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
         trip = sp.excitation(ref)
+        self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
@@ -986,6 +990,20 @@ class NAMD_SOC(NAMD):
         target t -> S(t-1) (so target 1 = S0), triplet target t -> T(t)."""
         return f'S{target - 1}' if mult == 1 else f'T{target}'
 
+    def _mch_energies_abs(self):
+        """Absolute MCH energies expanded over singlet + triplet Ms sublevels."""
+        e = []
+        for target in range(1, self.ns + 1):
+            e.append(float(self.sing_energies[target]))
+        for target in range(1, self.nt + 1):
+            e.extend([float(self.trip_energies[target])] * 3)
+        return np.array(e)
+
+    def _mch_hamiltonian_from_u(self, u, eval_ha):
+        """MCH-basis Hamiltonian, relative to the common e0 shift, in Hartree."""
+        h = u @ np.diag(eval_ha) @ u.conj().T
+        return 0.5 * (h + h.conj().T)
+
     def _build_wmap(self, col):
         """{(mult,target): weight} map of MCH components contributing to the
         active spin-adiabatic state's gradient, keeping components above
@@ -1009,6 +1027,38 @@ class NAMD_SOC(NAMD):
         k = int(np.argmax(col))
         mult, target = self._mch_target(k)
         return mult, target, col[k]
+
+    def _du_dt_gradient_correction(self, u, active, eval_ha, vel):
+        """Option 2: projected finite-difference dU/dt correction to dE/dR.
+
+        The phase-tracked active-column derivative gives dU/dt along the actual
+        nuclear displacement.  The minimum-norm spatial projection is
+        dU/dR ~= dU/dt * v / |v|^2, yielding a gradient correction in
+        Hartree/bohr with the same shape as the QM gradient.
+        """
+        if not getattr(self, 'soc_du_dt_corr', False):
+            return np.zeros((self.natom, 3))
+        if not hasattr(self, 'prev_u') or self.prev_u is None or self.dt <= 0:
+            return np.zeros((self.natom, 3))
+
+        v = np.array(vel, dtype=float).reshape((self.natom, 3))
+        v2 = float(np.sum(v * v))
+        if v2 < 1.0e-30:
+            return np.zeros((self.natom, 3))
+
+        a = active - 1
+        du_dt = (u - self.prev_u) / self.dt
+        coeff = 0.0
+        for i in range(self.nstate_soc):
+            for j in range(self.nstate_soc):
+                if i == j:
+                    continue
+                coeff += 2.0 * np.real(
+                    u[i, a].conj() * u[j, a] * (eval_ha[j] - eval_ha[i]) * du_dt[i, a]
+                )
+        g_corr = coeff * v / v2
+        self._du_dt_corr_norm = float(np.linalg.norm(g_corr))
+        return g_corr
 
     def _soc_gradient(self, u, active, eval_ha):
         """Weighted-MCH (SHARC-diagonal) gradient of the active spin-adiabatic
@@ -1041,6 +1091,7 @@ class NAMD_SOC(NAMD):
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
             g += (w / wtot) * np.array(mol.grads[state]).reshape((self.natom, 3))
+        g += self._du_dt_gradient_correction(u, active, eval_ha, self.vel)
 
         dom_mult, dom_state, dom_w = self._dominant_component(u, active)
         e_diag = self.e_ref + self.e0 + float(eval_ha[active - 1])   # absolute (Hartree)
@@ -1129,6 +1180,180 @@ class NAMD_SOC(NAMD):
         )
 
 
+class NAMD_SOC_MCH(NAMD_SOC):
+    """SOC-NAMD in the MCH (spin-pure) basis.
+
+    The active state is a single MCH basis function (singlet root or one
+    triplet Ms component), so the nuclear force is the exact MCH root gradient.
+    Electronic amplitudes are propagated by the SOC Hamiltonian in that MCH
+    basis instead of the spin-adiabatic local-diabatization propagator.
+    """
+
+    def __init__(self, mol):
+        super().__init__(mol)
+        self.coef = np.zeros(self.nstate_soc, dtype=complex)
+        self.coef[self.active - 1] = 1.0 + 0.0j
+
+    def _resolve_initial_mch_active(self):
+        label = self.init_state
+        if not label:
+            return
+        mult = 1 if label[0].upper() == 'S' else 3
+        target = int(label[1:])
+        if mult == 1:
+            active = target + 1                         # S0 -> MCH basis 1
+        else:
+            active = self.ns + (target - 1) * 3 + 1      # choose Ms=-1 member
+        if not (1 <= active <= self.nstate_soc):
+            raise ValueError(f"[md] init_state='{label}' is outside the SOC MCH basis")
+        self.active = active
+        self.coef[:] = 0.0
+        self.coef[self.active - 1] = 1.0 + 0.0j
+        dump_log(self.mol, title=f'SOC-MCH-NAMD: initial active set to MCH state {self._mch_active_label(self.active)}')
+
+    def _mch_active_label(self, active):
+        k = active - 1
+        mult, state = self._mch_target(k)
+        if mult == 1:
+            return self._mch_label(mult, state)
+        ms = (k - self.ns) % 3 - 1
+        return f'{self._mch_label(mult, state)}(ms={ms:+d})'
+
+    def _mch_exact_gradient(self, active):
+        mol = self.mol
+        mult, state = self._mch_target(active - 1)
+        mol.data.set_tdhf_multiplicity(mult)
+        SinglePoint(mol).excitation([self.e_ref])
+        mol.config['properties']['grad'] = [state]
+        Gradient(mol).gradient()
+        g = np.array(mol.grads[state]).reshape((self.natom, 3))
+        e = self._mch_energies_abs()[active - 1]
+        return g, e, mult, state
+
+    def _mch_propagate_and_hop(self, h_mch, e_mch):
+        from scipy.linalg import expm
+        n = self.nstate_soc
+        a = self.active - 1
+        dt = self.dt
+
+        c_old = self.coef.copy()
+        p = expm(-1j * h_mch * dt)
+        c_new = p @ c_old
+        nrm = np.linalg.norm(c_new)
+        if nrm > 0:
+            c_new /= nrm
+
+        rho_a = abs(c_old[a]) ** 2
+        cmhp = np.zeros(n)
+        if rho_a > 1.0e-30:
+            for j in range(n):
+                if j == a:
+                    continue
+                # TDSE in a.u.: c_dot = -i H c. Positive loss of active
+                # population through channel a->j becomes a hop probability.
+                loss = 2.0 * np.real(1j * c_old[a].conj() * h_mch[a, j] * c_old[j])
+                cmhp[j] = max(0.0, dt * loss / rho_a)
+
+        if self.decoherence == 1:
+            ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+            if ekin > 0:
+                p_others = 0.0
+                for k in range(n):
+                    if k == a:
+                        continue
+                    gap = abs(e_mch[k] - e_mch[a])
+                    if gap < 1e-12:
+                        p_others += abs(c_new[k]) ** 2
+                        continue
+                    tau = (1.0 / gap) * (1.0 + self.edc_c / ekin)
+                    c_new[k] *= np.exp(-dt / tau)
+                    p_others += abs(c_new[k]) ** 2
+                pa = abs(c_new[a]) ** 2
+                if pa > 1e-30:
+                    c_new[a] *= np.sqrt(max(0.0, 1.0 - p_others) / pa)
+        self.coef = c_new
+
+        rand = float(self.rng.random())
+        hopped = False
+        lower = 0.0
+        for j in range(n):
+            if j == a:
+                continue
+            upper = lower + cmhp[j]
+            if lower < rand < upper:
+                de = e_mch[a] - e_mch[j]
+                ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+                if de < 0.0 and ekin < abs(de):
+                    break
+                if abs(de) > self.thrshe:
+                    break
+                scale = np.sqrt(max(0.0, 1.0 + de / ekin)) if ekin > 0 else 1.0
+                self.vel = scale * self.vel
+                self.active = j + 1
+                hopped = True
+                break
+            lower = upper
+        return hopped
+
+    def run(self):
+        mol = self.mol
+        dump_log(mol, title='PyOQP: SOC-NAMD (ISC, MCH-basis FSSH)')
+
+        r = mol.get_system().reshape((self.natom, 3))
+        eval_ha, u = self._electronic_soc(with_overlap=False)
+        self._resolve_initial_mch_active()
+        h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+        e_mch = self._mch_energies_abs()
+        grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
+        accel = -grad / self.mass[:, None]
+        self._store_prev(r, u, eval_ha)
+        self._log_mch(0, e_pure, mult, state, False)
+        self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
+
+        for istep in range(1, self.nstep + 1):
+            self.dt = self._adaptive_dt(self.vel, accel)
+            self._t_fs += self.dt / FS_TO_AU
+            r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
+            mol.update_system(r.reshape(-1))
+
+            eval_ha, u = self._electronic_soc(with_overlap=False)
+            h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+            e_mch = self._mch_energies_abs()
+            grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
+            accel_new = -grad / self.mass[:, None]
+            self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
+
+            hopped = self._mch_propagate_and_hop(h_mch, e_mch)
+            if hopped:
+                grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
+                accel_new = -grad / self.mass[:, None]
+
+            accel = accel_new
+            if self.econs:
+                ke = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+                ket = self._e_ref_tot - e_pure
+                if ke > 0 and ket > 0:
+                    self.vel *= np.sqrt(ket / ke)
+            self._store_prev(r, u, eval_ha)
+            self._log_mch(istep, e_pure, mult, state, hopped)
+
+        dump_log(mol, title='PyOQP: SOC-MCH-NAMD trajectory complete')
+
+    def _log_mch(self, istep, e_pure, mult, state, hopped):
+        ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+        pmch = np.abs(self.coef) ** 2
+        pop_s = float(pmch[:self.ns].sum())
+        pop_t = float(pmch[self.ns:].sum())
+        dump_log(
+            self.mol,
+            title=(f'SOC-MCH-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+                   f'active={self.active}:{self._mch_active_label(self.active)}  '
+                   f'E_tot={ekin+e_pure:.8f}  E_pure={e_pure:.8f}  '
+                   f'E_kin={ekin:.8f}  hop={hopped}  '
+                   f'grad={self._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
+        )
+
+
 class NAMD_SOC_QMMM(NAMD_QMMM):
     """SOC-NAMD (intersystem crossing) with electrostatic ESPF QM/MM embedding.
 
@@ -1155,6 +1380,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
     _mch_label = staticmethod(NAMD_SOC._mch_label)
     _build_wmap = NAMD_SOC._build_wmap
     _dominant_component = NAMD_SOC._dominant_component
+    _mch_energies_abs = NAMD_SOC._mch_energies_abs
+    _mch_hamiltonian_from_u = NAMD_SOC._mch_hamiltonian_from_u
 
     def __init__(self, mol):
         super().__init__(mol)                                  # NAMD_QMMM: OpenMM + QM masses + v_all
@@ -1175,6 +1402,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
         _ev = mol.config['md'].get('econs', False)
         self.econs = (_ev is True) or (str(_ev).lower() in ('true', '1', 'on', 'yes'))
+        _du = mol.config['md'].get('soc_du_dt_corr', False)
+        self.soc_du_dt_corr = (_du is True) or (str(_du).lower() in ('true', '1', 'on', 'yes'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc_qmmm(self, with_overlap):
@@ -1211,12 +1440,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
 
         mol.data.set_tdhf_multiplicity(1)
         sing = sp.excitation(ref)
+        self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
         trip = sp.excitation(ref)
+        self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
@@ -1264,6 +1495,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             g += (w / wtot) * gi
             if (mult, state) == dom_key:
                 pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
+        g += NAMD_SOC._du_dt_gradient_correction(
+            self, u, active, eval_ha, self.v_all[self.qm_atoms])
 
         if pchg_dom is None:                                  # dominant below threshold: take last
             pchg_dom = np.array(mol.data["OQP::partial_charges"]).copy()
@@ -1383,4 +1616,113 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  hop={hopped}  '
                    f'dom=({NAMD_SOC._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
+        )
+
+
+class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
+    """QM/MM SOC-NAMD in the MCH basis with exact active-root QM gradient."""
+
+    _resolve_initial_mch_active = NAMD_SOC_MCH._resolve_initial_mch_active
+    _mch_active_label = NAMD_SOC_MCH._mch_active_label
+    _mch_propagate_and_hop = NAMD_SOC_MCH._mch_propagate_and_hop
+    _log_mch = NAMD_SOC_MCH._log_mch
+
+    def __init__(self, mol):
+        super().__init__(mol)
+        self.coef = np.zeros(self.nstate_soc, dtype=complex)
+        self.coef[self.active - 1] = 1.0 + 0.0j
+
+    def _mch_exact_gradient_qmmm(self, active):
+        mol = self.mol
+        mult, state = self._mch_target(active - 1)
+        mol.data.set_tdhf_multiplicity(mult)
+        SinglePoint(mol).excitation([self.e_ref])
+        mol.config['properties']['grad'] = [state]
+        Gradient(mol).gradient()
+        g = np.array(mol.grads[state]).reshape((self.natom, 3))
+        if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
+            oqp.form_esp_charges(mol)
+            oqp.grad_esp_qmmm(mol)
+        else:
+            oqp.grad_esp_qmmm_excited(mol)
+        g = g + np.array(mol.data["OQP::ESPF_GRAD"]).reshape((self.natom, 3))
+        pchg = np.array(mol.data["OQP::partial_charges"]).copy()
+        e = self._mch_energies_abs()[active - 1]
+        return g, e, mult, state, pchg
+
+    def run(self):
+        mol = self.mol
+        dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, MCH-basis FSSH + ESPF embedding)')
+
+        self._sync_positions()
+        eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
+        self._resolve_initial_mch_active()
+        h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+        e_mch = self._mch_energies_abs()
+        g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
+        f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)
+        accel = f_all / self.m_all[:, None]
+        self._rattle(self.r_all, self.v_all)
+        self._thermalize_initial()
+        r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+        NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
+        self._log_mch_qmmm(0, epot, mult, state, False)
+        self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
+
+        for istep in range(1, self.nstep + 1):
+            self.dt = self._adaptive_dt(self.v_all, accel)
+            self._t_fs += self.dt / FS_TO_AU
+            r_old = self.r_all.copy()
+            self.r_all = self.r_all + self.v_all * self.dt + 0.5 * accel * self.dt ** 2
+            self._shake(r_old, self.r_all, self.v_all, self.dt)
+            self._sync_positions()
+
+            eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
+            h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+            e_mch = self._mch_energies_abs()
+            g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
+            f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)
+            accel_new = f_all / self.m_all[:, None]
+            self.v_all = self.v_all + 0.5 * (accel + accel_new) * self.dt
+            self._rattle(self.r_all, self.v_all)
+
+            active_old = self.active
+            epot_old = epot
+            self.vel = self.v_all[self.qm_atoms].copy()
+            hopped = self._mch_propagate_and_hop(h_mch, e_mch)
+            self.v_all[self.qm_atoms] = self.vel
+            if hopped:
+                g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
+                f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)
+                accel_new = f_all / self.m_all[:, None]
+                de_espf = ((epot_old - epot) +
+                           (e_mch[self.active - 1] - e_mch[active_old - 1]))
+                if abs(de_espf) > 1e-10:
+                    ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                    if ekin_all > 0:
+                        self.v_all *= np.sqrt(max(0.0, 1.0 + de_espf / ekin_all))
+
+            accel = accel_new
+            if self.econs:
+                ke = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                ket = self._e_ref_tot - epot
+                if ke > 0 and ket > 0:
+                    self.v_all *= np.sqrt(ket / ke)
+            NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
+            self._log_mch_qmmm(istep, epot, mult, state, hopped)
+
+        dump_log(mol, title='PyOQP: SOC-MCH-QMMM-NAMD trajectory complete')
+
+    def _log_mch_qmmm(self, istep, epot, mult, state, hopped):
+        ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        pmch = np.abs(self.coef) ** 2
+        pop_s = float(pmch[:self.ns].sum())
+        pop_t = float(pmch[self.ns:].sum())
+        dump_log(
+            self.mol,
+            title=(f'SOC-MCH-QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
+                   f'active={self.active}:{self._mch_active_label(self.active)}  '
+                   f'E_tot={ekin+epot:.8f}  E_pot={epot:.8f}  '
+                   f'E_kin={ekin:.8f}  hop={hopped}  '
+                   f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )

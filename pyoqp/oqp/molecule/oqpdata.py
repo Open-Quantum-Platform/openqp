@@ -309,6 +309,8 @@ OQP_CONFIG_SCHEMA = {
         'seed': {'type': int, 'default': '1'},
         'restart': {'type': bool, 'default': 'False'},
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
+        'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)
+        'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction
         'grad_wthr': {'type': float, 'default': '0.001'},   # SOC weighted-MCH gradient weight threshold (small -> continuous force)
         'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
         'econs': {'type': bool, 'default': 'False'},        # temporary: per-step velocity rescale to conserve E_tot (band-aid for diagonal-gradient drift)

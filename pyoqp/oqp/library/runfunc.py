@@ -30,15 +30,26 @@ def compute_namd(mol):
     # Gas-phase or QM/MM (electrostatic ESPF embedding + OpenMM MM region).
     qmmm = mol.config['input'].get('qmmm_flag')
     soc = mol.config['md'].get('soc')
+    soc_basis = str(mol.config['md'].get('soc_basis', 'adiabatic')).lower()
+    if soc and soc_basis not in ('adiabatic', 'mch'):
+        raise ValueError("[md] soc_basis must be 'adiabatic' or 'mch'")
     if qmmm and soc:
-        from oqp.library.namd import NAMD_SOC_QMMM
-        NAMD_SOC_QMMM(mol).run()
+        if soc_basis == 'mch':
+            from oqp.library.namd import NAMD_SOC_MCH_QMMM
+            NAMD_SOC_MCH_QMMM(mol).run()
+        else:
+            from oqp.library.namd import NAMD_SOC_QMMM
+            NAMD_SOC_QMMM(mol).run()
     elif qmmm:
         from oqp.library.namd import NAMD_QMMM
         NAMD_QMMM(mol).run()
     elif soc:
-        from oqp.library.namd import NAMD_SOC
-        NAMD_SOC(mol).run()
+        if soc_basis == 'mch':
+            from oqp.library.namd import NAMD_SOC_MCH
+            NAMD_SOC_MCH(mol).run()
+        else:
+            from oqp.library.namd import NAMD_SOC
+            NAMD_SOC(mol).run()
     else:
         NAMD(mol).run()
 
