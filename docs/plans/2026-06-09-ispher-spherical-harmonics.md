@@ -1,10 +1,8 @@
 # Pure spherical-harmonic (ISPHER) basis support
 
-Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA and
-planar-symmetry SF/MRSF checks) IMPLEMENTED. Direct MRSF finite-difference
-validation found a remaining mismatch (see §6a). EKT smoke passes; ECP and
-analytic Hessian have explicit spherical guards until their spherical kernels
-are implemented.
+Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA, SF, and
+focused MRSF checks) IMPLEMENTED. EKT smoke passes; ECP and analytic Hessian
+have explicit spherical guards until their spherical kernels are implemented.
 Gate: `[input] ispher` (runtime, default `true`) sets
 `constants::HARMONIC_ACTIVE` before basis construction. With `ispher=false`,
 `num_ao() == NUM_CART_BF` everywhere and every code path is Cartesian-only.
@@ -29,10 +27,10 @@ cmake -S "$wt" -B "$wt/build" -DCMAKE_BUILD_TYPE=Release \
   -DLAPACK_LIBRARIES="$ob/lib/libopenblas64.dylib"
 cmake --build "$wt/build" -j4
 ```
-Note: the OpenTrustRegion ExternalProject only inherits a BLAS hint via
-`-DBLA_VENDOR` or the NetLib path; the explicit BLAS_LIBRARIES above lets it
-configure. (One local fix to external/CMakeLists.txt forwards BLAS to OTR for
-the OpenBLAS case; it is NOT committed.)
+Note: the OpenTrustRegion ExternalProject only inherited a BLAS hint via
+`-DBLA_VENDOR` or the NetLib path. This branch now forwards explicit
+`BLAS_LIBRARIES`/`LAPACK_LIBRARIES` to OTR so the OpenBLAS configuration above
+works.
 
 Toggle the gate at runtime: set `[input] ispher=true/false` (default true).
 Python calls `oqp_set_harmonic_active` before basis construction, so no rebuild
@@ -193,7 +191,7 @@ GROUND-STATE GRADIENT — DONE AND VALIDATED:
   PBE/cc-pVDZ = pyscf to ~1e-4 (grid) and OpenQP own finite difference to
   the FD noise floor.
 
-EXCITED-STATE GRADIENTS — PARTIAL (TDA validated; SF/MRSF needs FD fix):
+EXCITED-STATE GRADIENTS — PARTIAL (TDA/SF validated; MRSF focused checks pass):
 - Root cause: each of tdhf_gradient / tdhf_sf_gradient / tdhf_mrsf_gradient
   carries its OWN grd2 compute type whose get_density builds the response
   2-particle density on shell offsets, contracted with Cartesian derivative
@@ -207,14 +205,36 @@ EXCITED-STATE GRADIENTS — PARTIAL (TDA validated; SF/MRSF needs FD fix):
 - Validation: water TDA-HF (CIS)/cc-pVDZ state-1 gradient matches pyscf
   TDA nuc_grad to ~1e-5 with dE/dx=0 restored; planar CH2O MRSF/BHHLYP
   gradient has dE/dx=0.000000 for every atom.
-- New direct check (2026-06-09): CH2O/MRSF-BHHLYP/cc-pVDZ `ispher=true`,
-  target state 3, central FD of the high-precision state-3 energy for O-z
-  displacement `h=1e-3 Ang` gives `-0.004349043 Ha/Bohr`, while the analytic
-  gradient reports `+0.014762226 Ha/Bohr`. This means the MRSF gradient is not
-  yet FD-validated; do not claim it generally correct until the MRSF response
-  density/target-state convention is fixed. The earlier ROHF multiple-solution
-  instability remains a separate caveat, but it is not sufficient to explain
-  this stable one-coordinate mismatch.
+- MRSF Cartesian baseline (2026-06-09): H2O/MRSF-HF/6-31G `ispher=false`,
+  state 3, central FD of O-z with `h=1e-3 Ang` gives
+  `-0.159089164 Ha/Bohr`; analytic reports `-0.159088970 Ha/Bohr`
+  (`1.9e-7` difference). H2O/MRSF-BHHLYP/6-31G* `ispher=false` gives
+  `7.5e-5` difference, consistent with the DFT/grid floor.
+- MRSF spherical checks (2026-06-09): H2O/MRSF-HF/cc-pVDZ `ispher=true`,
+  state 3, central FD of O-z with `h=1e-3 Ang` gives
+  `-0.123737560 Ha/Bohr`; analytic reports `-0.123737500 Ha/Bohr`
+  (`6.0e-8` difference). H2O/MRSF-BHHLYP/cc-pVDZ `ispher=true` gives
+  `1.0e-4` difference on the default SG1 grid. Increasing to an unpruned
+  `rad_npts=150`, `ang_npts=590`, `grid_ao_pruned=false` grid improves the
+  BHHLYP difference to `5.1e-6`; a heavier `250/974` grid gives `4.6e-6`.
+- MRSF f-shell checks (2026-06-09): H2O/MRSF-HF/cc-pVTZ `ispher=true`
+  reports spherical AO type `5d/7f/9g` and gives O-z FD
+  `-0.089715672 Ha/Bohr` vs analytic `-0.089715340 Ha/Bohr`
+  (`3.3e-7` difference). H2O/MRSF-BHHLYP/cc-pVTZ with the unpruned `150/590`
+  grid gives O-z FD `-0.115002670 Ha/Bohr` vs analytic
+  `-0.115003790 Ha/Bohr` (`1.1e-6` difference).
+- MRSF g-shell check (2026-06-09): H2O/MRSF-HF/cc-pVQZ `ispher=true`
+  reports spherical AO type `5d/7f/9g` and gives O-z FD
+  `-0.074139315 Ha/Bohr` vs analytic `-0.074138590 Ha/Bohr`
+  (`7.2e-7` difference).
+- Stress diagnostic: CH2O/MRSF-BHHLYP/cc-pVDZ `ispher=true`, target state 3,
+  central FD of the state-3 energy for O-z displacement `h=1e-3 Ang` gives
+  `-0.004349043 Ha/Bohr`, while the analytic gradient reports
+  `+0.014762226 Ha/Bohr`. The same displaced-input harness is not a clean
+  spherical-only regression because its `ispher=false` comparison also fails
+  badly (`+5.600337987 Ha/Bohr` FD vs `+0.65990379 Ha/Bohr` analytic). Keep this
+  CH2O case as a root/reference-state tracking diagnostic, not as the gate for
+  spherical MRSF support.
 
 GUARDED/PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
 - `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,

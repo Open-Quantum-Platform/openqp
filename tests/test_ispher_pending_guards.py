@@ -22,3 +22,10 @@ def test_ekt_uses_full_matrix_space_no_ispher_guard():
     text = (ROOT / "source/modules/tdhf_mrsf_ekt.F90").read_text()
     assert "OQP_mrsf_ekt_density_mo" in text
     assert "HARMONIC_ACTIVE" not in text
+
+
+def test_mrsf_gradient_spherical_path_is_not_guarded():
+    text = (ROOT / "source/modules/tdhf_mrsf_gradient.F90").read_text()
+    assert "grd2_mrsf_build_cart" in text
+    assert "call gcomp%build_cart(basis)" in text
+    assert "MRSF-TDDFT gradients with spherical-harmonic AO dimensions" not in text
