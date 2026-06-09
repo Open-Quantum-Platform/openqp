@@ -1,8 +1,9 @@
 # Pure spherical-harmonic (ISPHER) basis support
 
-Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA, SF, and
-focused MRSF checks) IMPLEMENTED. EKT smoke passes; ECP and analytic Hessian
-have explicit spherical guards until their spherical kernels are implemented.
+Status: ENERGY PATH + ANALYTIC GRADIENTS (HF/DFT ground state, TDA, SF,
+focused MRSF checks, and ECP energy/gradient matrix handoff) IMPLEMENTED.
+EKT smoke passes. Ground-state HF/DFT analytic Hessian is open for spherical AO
+dimensions; excited-state analytic Hessians remain unavailable scaffolds.
 Gate: `[input] ispher` (runtime, default `true`) sets
 `constants::HARMONIC_ACTIVE` before basis construction. With `ispher=false`,
 `num_ao() == NUM_CART_BF` everywhere and every code path is Cartesian-only.
@@ -87,6 +88,8 @@ all work; gradients do not yet.
   - `cart2sph_eri`   — 4-index ERI shell-quartet block (full, unit-normalized in).
   - `cart2sph_mat`   — 2-index 1e block; folds `shells_pnrm2` (pure-power in);
                        `iandj` flag for same-shell lower-triangle packing.
+  - `cart2sph_mat_unit` — 2-index 1e block that is already unit-normalized
+                          Cartesian in; used by libecpint ECP matrices.
   - `cart2sph_vec`   — 1-index AO value/derivative vector on the grid.
 
 ## 3. Normalization contract (important)
@@ -178,6 +181,12 @@ DONE / auto-correct (validated):
   `modules/get_states_overlap.F90` — use hooked integrals + full-matrix
   density, auto-follow.
 - `modules/population_analysis.F90` — fixed (naos, not NUM_CART_BF).
+- `ecp.F90` — ECP value, first-derivative, derivative-integral handoff, and
+  second-derivative skeleton matrices now remap libecpint's Cartesian AO order
+  to OpenQP Cartesian order, then reduce shell blocks with `cart2sph_mat_unit`
+  into the active AO dimensions. Validation: HBr/HF/cc-pVDZ-PP `ispher=true`
+  analytic H-z gradient `-0.000167279 Ha/Bohr` vs central FD
+  `-0.000167617 Ha/Bohr` (`3.4e-7` difference).
 
 GROUND-STATE GRADIENT — DONE AND VALIDATED:
 - `integrals/grd1.F90` — 1e gradient (prepare_grad_density, Cartesian-
@@ -236,24 +245,32 @@ EXCITED-STATE GRADIENTS — PARTIAL (TDA/SF validated; MRSF focused checks pass)
   CH2O case as a root/reference-state tracking diagnostic, not as the gate for
   spherical MRSF support.
 
-GUARDED/PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
-- `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
-  `modules/tdhf_hessian.F90`, `modules/tdhf_sf_hessian.F90`,
-  `modules/hess1_selftest.F90`.
-- `hf_hessian` and the Python analytic-Hessian driver now reject spherical AO
-  dimensions with a clear message; use `[input] ispher=false` or numerical
-  Hessian until spherical Hessian kernels are implemented.
+GROUND-STATE HESSIAN — DONE FOR HF/DFT KERNEL PATH:
+- `integrals/grd1.F90` now reduces first-derivative shell blocks (`dS/dR`,
+  `dT/dR`, `dV/dR`) with the 1e c2s transform before they enter the native
+  CPHF RHS, and uses Cartesian-effective densities for the fixed-density 1e
+  second-derivative skeleton.
+- `modules/hf_hessian.F90` now calls `build_cart` before 2e Hessian skeleton
+  contractions and the ROHF semi-numerical response-gradient contractions.
+- Validation (2026-06-09): H2O/RHF/cc-pVDZ `ispher=true`, analytic Hessian vs
+  numerical Hessian gives max difference `6.1e-5 Ha/Bohr^2`, RMS `2.6e-5`,
+  and exact analytic symmetry for the 9 x 9 matrix.
+- Still unavailable: `tdhf_hessian.F90`, `tdhf_sf_hessian.F90`, and MRSF
+  analytic Hessian remain guarded/scaffolded; use numerical Hessian there.
 
-GUARDED/VALIDATED — other:
-- `ecp.F90` — `map_canonical` AO labeling assumes Cartesian; ECP basis sets
-  with spherical shells need a spherical label map. Spherical ECP now aborts
-  clearly with `set [input] ispher=false`; the Cartesian override was smoke-
-  tested on HBr/aug-cc-pVDZ-PP.
+VALIDATED — other:
+- `ecp.F90` — spherical ECP no longer aborts. libecpint still returns Cartesian
+  shell matrices, so OpenQP performs a Cartesian label remap followed by a
+  unit-normalized block c2s reduction before energy/gradient/Hessian skeleton
+  contraction.
 - `modules/tdhf_mrsf_ekt.F90` — EKT works in MO/full-matrix space and was
-  smoke-tested with H2O/MRSF-EKT-IP/cc-pVDZ `ispher=true` (24 spherical AOs).
+  smoke-tested with H2O/MRSF-EKT-IP and EKT-EA/cc-pVDZ `ispher=true`
+  (24 spherical AOs), reaching the `MRSF_EKT_IP` and `MRSF_EKT_EA` modules.
 
-NOT IN THIS BRANCH (handle when merged): SOC integrals and PCM/DDX solvent
-have no source here (separate branches / external project).
+MERGED FROM MAIN (2026-06-09): SOC integrals and energy-only ddX PCM solvent
+source are now present after syncing `origin/main`. PCM scope remains the main
+branch runtime scope: reference-SCF single-point energies only; PCM gradients,
+PCM Hessians, and state-specific/MRSF-PCM response coupling remain out of scope.
 
 BENIGN: `dftlib/dft_fuzzycell.F90` `num_cart_bf` is a grid-buffer upper
 bound (Cartesian >= spherical); `scf_addons.F90` skeleton symmetrization is

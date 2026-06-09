@@ -29,6 +29,7 @@ module cart2sph
   public :: c2s_ncomp
   public :: cart2sph_eri
   public :: cart2sph_mat
+  public :: cart2sph_mat_unit
   public :: cart2sph_vec
   public :: c2s_expand_block
   public :: c2s_expansion_matrix
@@ -259,6 +260,48 @@ contains
     blk(1:k) = src(1:k)
     deallocate(src)
   end subroutine cart2sph_mat
+
+  !> @brief Transform a rectangular 1e shell-pair block that is already in the
+  !>        unit-normalized Cartesian convention.
+  !> @details This is used by backends such as libecpint that return normalized
+  !>          Cartesian matrices directly. Unlike cart2sph_mat, this does not
+  !>          fold in shells_pnrm2 before applying the c2s coefficients.
+  subroutine cart2sph_mat_unit(blk, l_fast, pure_fast, l_slow, pure_slow)
+    real(dp), intent(inout) :: blk(:)
+    integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow
+
+    integer :: ncf, ncs, nsf, nss, k
+    real(dp), allocatable :: b(:,:), src(:), dst(:)
+
+    ncf = NUM_CART_BF(l_fast)
+    ncs = NUM_CART_BF(l_slow)
+    nsf = c2s_ncomp(l_fast, pure_fast)
+    nss = c2s_ncomp(l_slow, pure_slow)
+    if (nsf == ncf .and. nss == ncs) return
+
+    allocate(src(ncf*ncs))
+    src(1:ncf*ncs) = blk(1:ncf*ncs)
+
+    if (pure_fast == 1 .and. l_fast >= 2) then
+      call c2s_get(l_fast, b)
+      allocate(dst(nsf*ncs))
+      call contract_index(src, 1, ncf, ncs, b, nsf, dst)
+      call move_alloc(dst, src)
+      deallocate(b)
+    end if
+
+    if (pure_slow == 1 .and. l_slow >= 2) then
+      call c2s_get(l_slow, b)
+      allocate(dst(nsf*nss))
+      call contract_index(src, nsf, ncs, 1, b, nss, dst)
+      call move_alloc(dst, src)
+      deallocate(b)
+    end if
+
+    k = nsf*nss
+    blk(1:k) = src(1:k)
+    deallocate(src)
+  end subroutine cart2sph_mat_unit
 
   !> @brief Per-shell density-expansion matrix B'(l) = B(l) * shells_pnrm2,
   !>        shape (NUM_CART_BF(l), 2l+1). Maps a unit-spherical index back to

@@ -1107,11 +1107,6 @@ class Hessian(Calculator):
     def analytical_ground_state_hess(self):
         """Run the native OpenQP HF/DFT analytic Hessian kernel and return its stored matrix."""
 
-        if self._spherical_ao_active():
-            raise NotImplementedError(
-                'Analytic HF/DFT Hessian with spherical-harmonic AO dimensions is not implemented yet; '
-                'set [input] ispher=false or use [hess] type=numerical.'
-            )
         native_hess_func = self.native_hess_func['hf']
         if native_hess_func is None:
             raise NotImplementedError('Native OpenQP analytic Hessian entry point oqp.hf_hessian is not available.')
