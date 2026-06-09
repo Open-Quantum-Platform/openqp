@@ -454,7 +454,7 @@ contains
             CALL int1_kin_ovl(cntp, dokinetic, sblk, tblk)
 
             IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             CALL update_triang_matrix(shi, shj, sblk, s)
 
         END DO
@@ -529,8 +529,8 @@ contains
             CALL int1_kin_ovl(cntp, dokinetic, sblk, tblk)
 
             IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) THEN
-                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
-                CALL cart2sph_mat(tblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                CALL cart2sph_mat(tblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             END IF
             CALL update_triang_matrix(shi, shj, sblk, s)
             CALL update_triang_matrix(shi, shj, tblk, t)
@@ -593,7 +593,7 @@ contains
 
             do m = 1, mult_all_bs(mxmom)
               IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -655,7 +655,7 @@ contains
 
             do m = 1, mult_bs(mom)
               IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -714,7 +714,7 @@ contains
             zblk = 0.0
             CALL int1_lz(cntp, zblk)
             IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                CALL cart2sph_mat(zblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                CALL cart2sph_mat(zblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             CALL update_triang_matrix(shi, shj, zblk, z)
 
         END DO
@@ -780,7 +780,7 @@ contains
             call int1_coul(cntp, coord, zq, nat, 0.0d0, vblk)
 
             if (HARMONIC_ACTIVE .and. (shi%harmonic==1 .or. shj%harmonic==1)) &
-                call cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
+                call cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             call update_triang_matrix(shi, shj, vblk, h)
 
         end do

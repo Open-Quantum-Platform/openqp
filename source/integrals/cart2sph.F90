@@ -183,13 +183,16 @@ contains
   !>          (fast = shj, slow = shi). On exit blk(1:n_out) holds the
   !>          spherical block in the same fast/slow layout and n_fast_out/
   !>          n_slow_out give its extents.
-  subroutine cart2sph_mat(blk, l_fast, pure_fast, l_slow, pure_slow, n_fast_out, n_slow_out)
+  subroutine cart2sph_mat(blk, l_fast, pure_fast, l_slow, pure_slow, n_fast_out, n_slow_out, iandj)
     use constants, only: shells_pnrm2
     real(dp), intent(inout) :: blk(:)
     integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow
     integer, intent(out), optional :: n_fast_out, n_slow_out
+    logical, intent(in), optional :: iandj   !< .true. for a same-shell block,
+                                             !< stored as a lower triangle (fast<=slow)
 
     integer :: ncf, ncs, nsf, nss, k, ic, ir
+    logical :: tri
     real(dp), allocatable :: b(:,:), src(:), dst(:)
 
     ncf = NUM_CART_BF(l_fast)
@@ -200,6 +203,17 @@ contains
     if (present(n_slow_out)) n_slow_out = nss
 
     if (nsf == ncf .and. nss == ncs) return   ! nothing pure -> Cartesian block
+
+    tri = .false.
+    if (present(iandj)) tri = iandj
+
+    ! Same-shell blocks (update_triang_matrix iandj path) are stored as a lower
+    ! triangle blk((i-1)i/2 + j), j<=i, symmetric. Unpack to a full Cartesian
+    ! block, transform as a rectangle, then repack to the spherical triangle.
+    if (tri) then
+      call cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss)
+      return
+    end if
 
     allocate(src(ncf*ncs))
     src(1:ncf*ncs) = blk(1:ncf*ncs)
@@ -242,6 +256,37 @@ contains
     blk(1:k) = src(1:k)
     deallocate(src)
   end subroutine cart2sph_mat
+
+  !> @brief Same-shell (iandj) variant: the block is a packed lower triangle
+  !>        blk((i-1)i/2 + j), j<=i. Unpack to a full symmetric Cartesian
+  !>        block, transform as a rectangle, repack to the spherical triangle.
+  subroutine cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss)
+    real(dp), intent(inout) :: blk(:)
+    integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss
+    real(dp), allocatable :: full(:)
+    integer :: i, j, nn
+
+    allocate(full(ncf*ncs))
+    do i = 1, ncs            ! slow index (shi)
+      do j = 1, ncf          ! fast index (shj)
+        if (j <= i) then
+          nn = i*(i-1)/2 + j
+        else
+          nn = j*(j-1)/2 + i  ! symmetric counterpart
+        end if
+        full((i-1)*ncf + j) = blk(nn)
+      end do
+    end do
+
+    call cart2sph_mat(full, l_fast, pure_fast, l_slow, pure_slow)
+
+    do i = 1, nss
+      do j = 1, i
+        blk(i*(i-1)/2 + j) = full((i-1)*nsf + j)
+      end do
+    end do
+    deallocate(full)
+  end subroutine cart2sph_tri
 
   !> @brief Self-test: rebuild the intra-shell metric S of unit-normalized
   !>        Cartesian Gaussians from the canonical exponents and verify
