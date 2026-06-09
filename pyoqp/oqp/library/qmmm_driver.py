@@ -80,6 +80,21 @@ def read_xyz(filepath):
     return symbols, np.array(coords)
 
 
+def _periodic_nonbonded_cutoff(topology, cutoff_method):
+    """Return a safe OpenMM nonbonded cutoff for the current periodic box."""
+    if cutoff_method is app.NoCutoff:
+        return 1.0 * unit.nanometer
+    vectors = topology.getPeriodicBoxVectors()
+    if vectors is None:
+        return 1.0 * unit.nanometer
+    lengths = []
+    for vec in vectors:
+        xyz = vec.value_in_unit(unit.nanometer)
+        lengths.append(float(np.linalg.norm(xyz)))
+    min_len = min(lengths)
+    return min(1.0, 0.4 * min_len) * unit.nanometer
+
+
 class OpenQpQMMM:
     """
     Low-level QM/MM driver using OpenMM (MM) + OpenQP (QM).
@@ -350,8 +365,11 @@ class OpenQpQMMM:
         forcefield=self.forcefield
         qm_atoms =self.qm_atoms
         Cutoff=self.Cutoff
+        nb_cutoff = _periodic_nonbonded_cutoff(topology, Cutoff)
 
-        system=forcefield.createSystem(topology,nonbondedMethod=Cutoff,constraints=None,rigidWater=False)
+        system=forcefield.createSystem(
+            topology, nonbondedMethod=Cutoff, nonbondedCutoff=nb_cutoff,
+            constraints=None, rigidWater=False)
         nonbonded = next(f for f in system.getForces() if isinstance(f, mm.NonbondedForce))
 
         for i in range(nonbonded.getNumExceptions()):
@@ -428,7 +446,9 @@ class OpenQpQMMM:
               if not isinstance(f, mm.CMMotionRemover): exit(f"Force not found")
 
         if Cutoff is not app.NoCutoff:
-           sysew=forcefield.createSystem(topology,nonbondedMethod=app.Ewald,constraints=None,rigidWater=False)
+           sysew=forcefield.createSystem(
+               topology, nonbondedMethod=app.Ewald, nonbondedCutoff=nb_cutoff,
+               constraints=None, rigidWater=False)
            intew=mm.LangevinMiddleIntegrator(300*unit.kelvin, 1/unit.picosecond, 0.001*unit.picoseconds)
            simew=app.Simulation(topology, sysew, intew)
            simew.context.setPositions(positions)
