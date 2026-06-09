@@ -94,7 +94,10 @@ contains
     basis => infos%basis
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
-    nroot = max(1, min(infos%tddft%nstate, nbf))
+    ! Print/store all retained EKT Dyson roots available after the natural-
+    ! orbital deflation, matching the GAMESS behavior.  The TDDFT NSTATE input
+    ! still controls the parent MRSF calculation; it is not an EKT print cap.
+    nroot = nbf
     select case (infos%control%scftype)
     case (1)
       nfocks = 1
@@ -360,10 +363,10 @@ contains
 
     do i0 = 1, nroot, mxlen
       i1 = min(nroot, i0+mxlen-1)
-      write(iw,'(/,18x,5(5x,i6))') (i, i=i0, i1)
+      write(iw,'(/,14x,5i11)') (i, i=i0, i1)
       write(iw,'(5x,"ENERGY",3x,5f11.6)') (eig(i), i=i0, i1)
       write(iw,'(5x,"STRENGTH",1x,5f11.6)') (strengths(i), i=i0, i1)
-      write(iw,'(18x,5(5x,a6))') ("A", i=i0, i1)
+      write(iw,'(14x,5(10x,a1))') ("A", i=i0, i1)
       do j = 1, nbf
         write(iw,'(i5,2x,a8,5f11.6)') j, basis%bf_label(j), (dyson_ao(j,i), i=i0, i1)
       end do
