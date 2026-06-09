@@ -1306,6 +1306,7 @@ class Molecule:
             mdw = MoldenWriter(fout)
             mdw.write_atoms(nat, self.elem, self.xyz, angstrom=False)
             mdw.write_basis(nat, basis)
+            mdw.write_spherical_markers(basis)
 
             if self.config['scf']['type'] == 'rhf':
                 # alpha only
