@@ -105,6 +105,50 @@ implement and validate them as one unit.
 - MOLDEN spherical sign/normalization: order + [5D7F9G] markers are emitted
   and dimensions are correct; verify component signs against a MOLDEN viewer.
 
+## 6c. Complete integral-consumer inventory
+
+Sweep of every file that indexes per-shell AO blocks (`%ao_offset`/`%naos`)
+or evaluates AOs (`aoval`), classified by status.
+
+DONE / auto-correct (validated):
+- `integrals/int1.F90`, `integrals/int2.F90` — 1e/2e integrals (hooked).
+- `basis_tools.F90` (compAOv/compAOvg), `dftlib/dft_gridint.F90` — grid.
+- `tdhf_lib.F90`, `tdhf_mrsf_lib.F90` — TDDFT/MRSF response: index by
+  `naos`, so they auto-follow; MRSF energy validated.
+- `guess.F90`, `modules/guess_minao.F90` — guesses (`naos`; huckel validated).
+- `modules/electric_moments.F90`, `modules/get_basis_overlap.F90`,
+  `modules/get_states_overlap.F90` — use hooked integrals + full-matrix
+  density, auto-follow.
+- `modules/population_analysis.F90` — fixed (naos, not NUM_CART_BF).
+
+PENDING — gradients (Cartesian-effective density / compAOvgg):
+- `integrals/grd1.F90` — DONE (foundation).
+- `modules/hf_gradient.F90` — 2e gradient `get_density` (use d2a_cart +
+  Cartesian offsets; the 2-particle density factorizes so the formula is
+  unchanged). RHF + UHF + the `modules/fock_deriv.F90` probes.
+- `dftlib/dft_gridint_grad.F90`, `dftlib/dft_gridint_tdxc_grad.F90` — XC
+  gradient: hook `compAOvgg` (nDer=2) like compAOvg.
+- `modules/tdhf_gradient.F90`, `modules/tdhf_mrsf_gradient.F90`,
+  `modules/tdhf_sf_gradient.F90` — excited-state gradients.
+
+PENDING — Hessian (2nd derivatives, der2 + compAOvgg):
+- `integrals/grd1.F90` hess_* subroutines, `modules/hf_hessian.F90`,
+  `modules/tdhf_hessian.F90`, `modules/tdhf_sf_hessian.F90`,
+  `modules/hess1_selftest.F90`.
+
+PENDING — other:
+- `ecp.F90` — `map_canonical` AO labeling assumes Cartesian; ECP basis sets
+  with spherical shells need a spherical label map.
+- `modules/tdhf_mrsf_ekt.F90` — EKT works in MO/full-matrix space; expected
+  to auto-follow but untested with spherical.
+
+NOT IN THIS BRANCH (handle when merged): SOC integrals and PCM/DDX solvent
+have no source here (separate branches / external project).
+
+BENIGN: `dftlib/dft_fuzzycell.F90` `num_cart_bf` is a grid-buffer upper
+bound (Cartesian >= spherical); `scf_addons.F90` skeleton symmetrization is
+the molecular-symmetry feature (off by default, indexes by `naos`).
+
 ## 7. Flipping the gate on by default
 
 Only after 6a lands and finite-difference-validates. At that point
