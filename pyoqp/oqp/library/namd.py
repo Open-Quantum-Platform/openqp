@@ -1252,7 +1252,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
             gi = np.array(mol.grads[state]).reshape((self.natom, 3))
-            oqp.grad_esp_qmmm_excited(mol)
+            # ESPF_ROHF=1: use ROHF reference density for ESPF gradient across
+            # all SOC MCH components, matching GAMESS behaviour and ensuring
+            # the ESPF energy is constant across state hops.
+            if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
+                oqp.form_esp_charges(mol)
+                oqp.grad_esp_qmmm(mol)
+            else:
+                oqp.grad_esp_qmmm_excited(mol)
             gi = gi + np.array(mol.data["OQP::ESPF_GRAD"]).reshape((self.natom, 3))
             g += (w / wtot) * gi
             if (mult, state) == dom_key:
