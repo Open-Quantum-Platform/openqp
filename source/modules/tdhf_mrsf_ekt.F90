@@ -510,7 +510,14 @@ contains
     real(kind=dp), allocatable :: d_no(:,:), w_no(:,:), tmp(:,:)
     real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:), d_times_x(:)
     real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str, coeff_abs, best_abs
-    integer :: i, j, m, ierr, ok, nout, best_idx
+    integer :: i, j, m, ierr, ok, nout, best_idx, out_idx, n_skipped
+    ! EKT eigenvalue print/retention threshold.  GAMESS skips near-zero EKT
+    ! eigenvalues (|eps| <= thresh) when transferring solved EKT roots to its
+    ! output (sfgrad.src:3411, thresh = 1.0d-2 Ha); mirror that here so the
+    ! printed/stored Dyson ladder aligns with GAMESS without a one-root shift.
+    ! Kept separate from the NO occupation tolerance (ekt_occ_tol) which only
+    ! governs natural-orbital deflation.
+    real(kind=dp), parameter :: ekt_eig_tol = 1.0e-2_dp
 
     ! (1) symmetrize the metric
     allocate(dsym(nbf,nbf), nocc(nbf), uno(nbf,nbf), source=0.0_dp, stat=ok)
@@ -537,7 +544,6 @@ contains
       end if
     end do
     if (m == 0) call show_message('EKT: no NOs above occupation tolerance', WITH_ABORT)
-    nkeep = m
 
     allocate(ukeep(nbf,m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
@@ -560,6 +566,8 @@ contains
     write(iw,'(2x,"occ_tol = ",es10.2,"   retained NOs = ",i0," / ",i0)') occ_tol, m, nbf
     write(iw,'(2x,"discarded trace = ",f12.6,"   retained occ range = [",f10.6,",",f10.6,"]")') &
           tr_disc, occ_min, occ_max
+    write(iw,'(2x,"eig_tol = ",es10.2," Ha   (skip EKT roots with |eps| <= eig_tol; GAMESS sfgrad.src)")') &
+          ekt_eig_tol
     write(iw,'(2x,"-------------------------------------",/)')
 
     ! (5) project D and W into the retained NO space
@@ -597,7 +605,6 @@ contains
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     cdys = matmul(ukeep, xvec)
 
-    nout = min(nroot, m)
     eig = 0.0_dp
     dyson_mo = 0.0_dp
     strengths = 0.0_dp
@@ -607,16 +614,28 @@ contains
     dom_mo_coeff = 0.0_dp
     dom_no_coeff = 0.0_dp
     dom_no_occ = 0.0_dp
-    do j = 1, nout
-      eig(j) = eps(j)
-      dyson_mo(:,j) = cdys(:,j)
+    ! Transfer solved EKT roots to the output arrays, skipping near-zero EKT
+    ! eigenvalues the GAMESS way (|eps| <= ekt_eig_tol).  The source eigenpair
+    ! index is j (xvec/cdys/eps); out_idx is a separate compressed counter into
+    ! the output arrays so the printed/stored ladder matches GAMESS.
+    out_idx = 0
+    n_skipped = 0
+    do j = 1, m
+      if (abs(eps(j)) <= ekt_eig_tol) then
+        n_skipped = n_skipped + 1
+        cycle
+      end if
+      out_idx = out_idx + 1
+      if (out_idx > nroot) exit
+      eig(out_idx) = eps(j)
+      dyson_mo(:,out_idx) = cdys(:,j)
       str = 0.0_dp
       do i = 1, m
         str = str + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
       end do
-      metric_norms(j) = str
+      metric_norms(out_idx) = str
       d_times_x = matmul(d_no, xvec(:,j))
-      strengths(j) = dot_product(d_times_x, d_times_x)
+      strengths(out_idx) = dot_product(d_times_x, d_times_x)
 
       best_abs = -1.0_dp
       best_idx = 0
@@ -627,8 +646,8 @@ contains
           best_idx = i
         end if
       end do
-      dom_mo_idx(j) = best_idx
-      if (best_idx > 0) dom_mo_coeff(j) = cdys(best_idx,j)
+      dom_mo_idx(out_idx) = best_idx
+      if (best_idx > 0) dom_mo_coeff(out_idx) = cdys(best_idx,j)
 
       best_abs = -1.0_dp
       best_idx = 0
@@ -640,11 +659,19 @@ contains
         end if
       end do
       if (best_idx > 0) then
-        dom_no_idx(j) = kept_idx(best_idx)
-        dom_no_coeff(j) = xvec(best_idx,j)
-        dom_no_occ(j) = nocc(kept_idx(best_idx))
+        dom_no_idx(out_idx) = kept_idx(best_idx)
+        dom_no_coeff(out_idx) = xvec(best_idx,j)
+        dom_no_occ(out_idx) = nocc(kept_idx(best_idx))
       end if
     end do
+    nout = min(out_idx, nroot)
+    ! The caller uses nkeep as nactive when printing rows/Dyson orbitals, so it
+    ! must reflect the number of stored output roots (nout), not the retained
+    ! NO-space dimension (m); otherwise a zero row is printed for skipped roots.
+    nkeep = nout
+    write(iw,'(2x,"EKT eigenvalue filter: skipped ",i0," near-zero root(s) ", &
+         &"(|eps| <= ",es10.2," Ha); stored ",i0," / ",i0," roots")') &
+          n_skipped, ekt_eig_tol, nout, nroot
 
     deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys, d_times_x)
   end subroutine solve_ekt_no_deflation
