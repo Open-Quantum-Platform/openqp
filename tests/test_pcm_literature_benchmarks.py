@@ -232,12 +232,11 @@ def _make_pcm_diagnostics_test(bench):
             )
         if _ddpcm_nonconvergence(log):
             self.skipTest(
-                "KNOWN BLOCKER: ddX ddPCM solve does not converge for the QM "
-                f"'{bench['id']}' cavity with the committed defaults (FMM on, "
-                "small molecule). Verified ddX-enabled run; raising maxiter does "
-                "not help, disabling FMM converges but yields physically wrong "
-                "e_pcm. This skip auto-activates once the "
-                "convergence/convention blockers are resolved."
+                "ddX ddPCM solve did not converge for this diagnostic row under "
+                f"the current build/protocol ({bench['id']}). Verified reference "
+                "gates still fail in the separate reference test if the same run "
+                "cannot produce an e_pcm, so this diagnostic skip must not be "
+                "reported as a passing scientific reference."
             )
         # #5 SCF convergence; #2 finite nonzero e_pcm; #4 total moved off vacuum.
         self.assertEqual(proc.returncode, 0, log)
@@ -272,7 +271,11 @@ def _make_pcm_diagnostics_test(bench):
             )
         # ddX esolv reported by the diag block must match the printed e_pcm.
         self.assertAlmostEqual(diag["e_pcm"], e_pcm, places=6, msg=log)
-        self.assertEqual(diag.get("psi_source"), "total_qm_atom_multipoles_l2", log)
+        self.assertEqual(
+            diag.get("psi_source"),
+            "full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak",
+            log,
+        )
         self.assertLess(abs(diag["source_charge_sum"]), 1.0, log)
         self.assertLess(abs(diag["q_cav_sum"]), 1.0, log)
         self.assertGreater(abs(diag["q_cav_absnorm"]), 0.0, log)
@@ -298,8 +301,9 @@ def _make_pcm_diagnostics_test(bench):
 
 def _make_pcm_reference_test(bench):
     """Tier-2: the real scientific pass/fail gate -- match e_pcm to a verified
-    literature_value or trusted_reference_regression. Skips while pending so the
-    gate never gives false confidence and no fabricated number is compared.
+    reference_value (Born/ddX + f(eps)*PySCF ddCOSMO, literature, or an explicit
+    regression target). Skips while pending so the gate never gives false
+    confidence and no fabricated number is compared.
     """
 
     def test(self):
@@ -308,8 +312,9 @@ def _make_pcm_reference_test(bench):
             self.skipTest(
                 f"benchmark '{bench['id']}' has no verified reference yet "
                 f"(category={bench.get('category')!r}, status={bench.get('status')!r}); "
-                "populate tests/data/pcm_literature_benchmarks.json (literature_value, or a "
-                "pyddx trusted_reference_regression under the identical protocol)."
+                "populate tests/data/pcm_literature_benchmarks.json (Born/ddX + "
+                "f(eps)*PySCF ddCOSMO, literature_value, or an explicit trusted "
+                "regression under the identical protocol)."
             )
         proc, log = _run(_input_text(bench, pcm_on=True))
         if _ddx_unavailable(log):

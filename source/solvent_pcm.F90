@@ -11,18 +11,53 @@
 !> so a PCM-enabled run on a non-ddX build aborts here with a clear message
 !> rather than silently producing a vacuum result.
 !>
+!> SOURCE CONSISTENCY (ddX forward Phi vs adjoint Psi):
+!>   * Phi (forward solve RHS): the EXACT total solute potential phi_cav at the
+!>     cavity points, built from the full AO density (electrostatic_potential_
+!>     unweighted) plus the analytic nuclear term.
+!>   * Psi (adjoint solve source): a FULL-DENSITY source. Atom-centered real
+!>     solid-harmonic multipoles M_lm are accumulated for l = 0..PCM_PSI_LMAX
+!>     (=8) from the full AO density by numerical quadrature over a dedicated
+!>     source-projection molecular grid that reproduces the reference
+!>     ddCOSMO/ddPCM density partition: per-atom (PARENT-ATOM) point
+!>     assignment with Becke-original (3-iteration) fuzzy-cell weights and
+!>     Treutler-Ahlrichs sqrt(R_i/R_j) atomic-size shifting over the Becke
+!>     Bragg-Slater table (H = 0.35 A), WITH the literature outside-sphere
+!>     leak continuation q*rsph^(2l+1)/r^(l+1) for r>rsph
+!>     (build_full_density_multipoles / pcm_grid_update). The moments are in
+!>     the exact ddX harmonic convention (solvent_pcm_harmonics), then mapped
+!>     to psi by the ddX rule psi(lm,isph)=4*pi/((2l+1) rsph^l) M_lm(isph)
+!>     using the production cavity radii (oqp_ddx_pcm_radii). The production
+!>     q_cav is the ddX adjoint charge from oqp_ddx_pcm_solve_psi(psi,
+!>     phi_cav): both the forward RHS and the adjoint source are full-density
+!>     quantities. This is recorded by "PCM diag pcm_source_mode=full_density_
+!>     multipoles_lmax8_exact_phi" and "PCM diag psi_source=full_density_grid_
+!>     multipoles_lmax8_becke3_treutler_parent_atom_leak".
+!>   * NOTE: the per-sphere moments are partition-defined integrals
+!>     (Becke-original/Treutler cells), the same convention the reference
+!>     ddPCM implementations project on their per-atom Becke grids; the two
+!>     codes agree in the fine-grid limit, with only quadrature-mesh
+!>     differences remaining (it is NOT claimed to be bit-identical to
+!>     PySCF's grid-projected psi).
+!>   * The legacy l<=2 atom-centered Mulliken multipole solve (Phi AND Psi from
+!>     the l<=2 source) is still run as a DIAGNOSTIC only, to report the
+!>     source-vs-exact phi residual and the q_cav shift between the old l<=2 psi
+!>     and the new full-density psi (PCM diag q_cav_*_vs_*_rms).
+!>
 !> PROVISIONAL CONVENTIONS (not yet validated against a trusted PCM reference):
 !>   * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| + phi_elec
 !>   * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
 !>     directly as the external-charge vector for external_charge_potential.
-!>   * E_pcm: the ddX solvation energy is reported as the PCM energy term.
+!>   * E_pcm: -0.5 * dot_product(phi_cav, q_cav) for the current diagnostic path;
+!>     the ddX esolv value is reported separately.
 !> The single canonical runtime path and these conventions are pinned by
 !> tests/test_pcm_canonical_runtime_path.py.
 module solvent_pcm
 
   use precision, only: dp
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
-  use iso_c_binding, only: c_int, c_double, c_char, c_null_char
+  use iso_c_binding, only: c_int, c_double, c_char, c_null_char, &
+       c_int64_t, c_bool
   use types, only: information
   use basis_tools, only: basis_set
   use messages, only: show_message, with_abort
@@ -32,11 +67,22 @@ module solvent_pcm
   use oqp_tagarray_driver, only: OQP_SM, data_has_tags, tagarray_get_data
   use int1, only: electrostatic_potential_unweighted, external_charge_potential, &
        multipole_integrals
+  use mod_dft_molgrid, only: dft_grid_t
+  use mod_dft_gridint, only: xc_engine_t, xc_consumer_t, xc_options_t, run_grid_aos
+  use mod_dft_partfunc, only: PTYPE_BECKE3
+  use dft, only: dft_initialize
+  use solvent_pcm_harmonics, only: pcm_ylmscale, accumulate_point_multipole, &
+       accumulate_point_multipole_leak
 
   implicit none
   private
 
   public :: add_pcm_reaction_field
+
+  ! Maximum angular momentum of the full-density adjoint source Psi. The ddX
+  ! model is built with lmax = 8 (solvent_ddx_adapter.c::build_pcm_model), so
+  ! nbasis = (PCM_PSI_LMAX+1)^2 = 81 must match ddx_get_n_basis().
+  integer, parameter :: PCM_PSI_LMAX = 8
 
   ! Maximum Lebedev cavity points per atom (must match n_lebedev used when the
   ! ddX model is built in build_pcm_model(); used only to size the receive
@@ -47,6 +93,31 @@ module solvent_pcm
   ! Finite-difference diagnostics below derive this sign/scale.  It is kept as
   ! an explicit constant so the Fock convention is guarded by runtime evidence.
   real(dp), parameter :: PCM_QCAV_TO_FOCK_SCALE = -0.5_dp
+
+  ! Grid consumer for the PCM full-density-Psi production path. It integrates
+  ! the electronic density on a dedicated Becke-original/Treutler-shifted
+  ! molecular grid, assigns each weighted point to its PARENT atom (the atom
+  ! whose atomic grid generated the slice, xce%currAtom), and accumulates the
+  ! corresponding negative electronic charge into ddX-convention real-solid-
+  ! harmonic multipoles through PCM_PSI_LMAX. Nuclear monopoles are added by
+  ! the driver after the grid loop. This reproduces the reference
+  ! ddCOSMO/ddPCM source projection (per-atom Becke-partitioned moments) up
+  ! to quadrature-mesh differences.
+  type, extends(xc_consumer_t) :: pcm_psi_grid_consumer_t
+    integer :: lmax = 0
+    integer :: nbasis = 0
+    integer :: natom = 0
+    real(dp), pointer :: xyz(:,:) => null()
+    real(dp), allocatable :: vscales(:)
+    real(dp), allocatable :: radii(:)
+    real(dp), allocatable :: multipoles(:,:,:)
+  contains
+    procedure :: parallel_start => pcm_grid_parallel_start
+    procedure :: parallel_stop  => pcm_grid_parallel_stop
+    procedure :: update         => pcm_grid_update
+    procedure :: postUpdate     => pcm_grid_post_update
+    procedure :: clean          => pcm_grid_clean
+  end type pcm_psi_grid_consumer_t
 
   interface
     integer(c_int) function oqp_ddx_pcm_cavity(natom, xyz_bohr, charges, &
@@ -117,6 +188,34 @@ module solvent_pcm
       character(kind=c_char), intent(out) :: message(*)
       integer(c_int), value :: message_len
     end function oqp_ddx_pcm_solve_multipole_source_with_phi
+
+    integer(c_int) function oqp_ddx_pcm_radii(natom, charges, radii_bohr_out, &
+        message, message_len) bind(C, name="oqp_ddx_pcm_radii")
+      import :: c_int, c_double, c_char
+      integer(c_int), value :: natom
+      real(c_double), intent(in) :: charges(*)
+      real(c_double), intent(out) :: radii_bohr_out(*)
+      character(kind=c_char), intent(out) :: message(*)
+      integer(c_int), value :: message_len
+    end function oqp_ddx_pcm_radii
+
+    integer(c_int) function oqp_ddx_pcm_solve_psi(natom, xyz_bohr, charges, &
+        eps, ncav, nbasis, psi, phi_cav, q_cav_out, esolv_out, message, &
+        message_len) bind(C, name="oqp_ddx_pcm_solve_psi")
+      import :: c_int, c_double, c_char
+      integer(c_int), value :: natom
+      real(c_double), intent(in) :: xyz_bohr(*)
+      real(c_double), intent(in) :: charges(*)
+      real(c_double), value :: eps
+      integer(c_int), value :: ncav
+      integer(c_int), value :: nbasis
+      real(c_double), intent(in) :: psi(*)
+      real(c_double), intent(in) :: phi_cav(*)
+      real(c_double), intent(out) :: q_cav_out(*)
+      real(c_double), intent(out) :: esolv_out
+      character(kind=c_char), intent(out) :: message(*)
+      integer(c_int), value :: message_len
+    end function oqp_ddx_pcm_solve_psi
   end interface
 
 contains
@@ -137,20 +236,23 @@ contains
     real(dp),          intent(inout) :: f(:,:)
     real(dp),          intent(out)   :: e_pcm
 
-    integer(c_int) :: natom, ncav, max_cav, nmultipoles
+    integer(c_int) :: natom, ncav, max_cav, nmultipoles, nbasis
     integer :: nbf_tri, ii, iat, icav, rc, ndelta
-    real(dp) :: eps, esolv, phin, dx, dy, dz, r
+    real(dp) :: eps, f_epsilon, esolv, esolv_source, esolv_l2, phin, dx, dy, dz, r
     real(dp) :: half_tr_dv, q_cav_sum, q_cav_absnorm, phi_cav_sum, phi_cav_min, phi_cav_max
     real(dp) :: source_charge_sum, phi_source_delta_rms, phi_source_delta_max
+    real(dp) :: q_cav_shift_rms, q_cav_full_vs_l2_rms, psi_full_norm, mult_full_norm
     real(dp) :: fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr
     integer :: fd_fock_samples
     real(dp), allocatable :: xyz(:,:), charges(:)
     real(dp), allocatable :: cav_xyz(:), cx(:), cy(:), cz(:)
-    real(dp), allocatable :: phi_elec(:), phi_cav(:), phi_source(:), q_cav(:)
+    real(dp), allocatable :: phi_elec(:), phi_cav(:), phi_source(:), q_cav(:), q_cav_source(:)
+    real(dp), allocatable :: q_cav_l2(:)
     real(dp), allocatable :: dtot(:), vpcm(:)
     real(dp), allocatable :: ao_pop(:), atom_pop(:), source_charges(:)
     real(dp), allocatable :: ao_dip(:,:), atom_dip(:,:), ao_quad(:,:), atom_quad(:,:)
     real(dp), allocatable :: source_multipoles(:,:)
+    real(dp), allocatable :: multipoles_full(:,:), psi_full(:,:), radii(:)
     real(dp), contiguous, pointer :: smat(:)
     character(kind=c_char) :: cmsg(256)
     character(len=256) :: fmsg
@@ -160,6 +262,13 @@ contains
 
     natom = int(infos%mol_prop%natom, c_int)
     eps = infos%control%pcm_epsilon
+    ! ddPCM dielectric scaling factor f(eps) = (eps-1)/eps. ddX folds the bulk
+    ! of the dielectric response into its R_eps operator but, unlike PySCF's
+    ! ddPCM (ddpcm.py _get_vind: epcm = 0.5*f_eps*<psi,Xvec>), its pcm_energy =
+    ! 0.5*<xs,psi> carries NO explicit f(eps). The two ddPCM energies therefore
+    ! differ by exactly this factor at a matched source, so OpenQP must apply it
+    ! to both the reported energy and the Fock operator to match the reference.
+    f_epsilon = (eps - 1.0_dp) / eps
     nbf_tri = size(d, 1)
 
     allocate(xyz(3, natom), charges(natom))
@@ -210,10 +319,12 @@ contains
       phi_cav(icav) = phin + phi_elec(icav)
     end do
 
-    ! ---- Phase 3: consistent QM source -> ddX q_cav ------------------------
-    ! Build one per-atom real-solid-harmonic source through quadrupoles, then feed exactly
-    ! that same multipole array to ddX for both phi and psi.  The atom-centered
-    ! moments use a Mulliken row partition of the AO density.
+    ! ---- Phase 3: QM source -> ddX q_cav -----------------------------------
+    ! The PRODUCTION adjoint source Psi is FULL-DENSITY (3c): atom-centered real
+    ! solid-harmonic multipoles for l = 0..PCM_PSI_LMAX accumulated from the AO
+    ! density by parent-atom Becke-partitioned grid quadrature, in the exact ddX harmonic
+    ! convention, mapped to psi by the ddX rule. The l<=2 Mulliken-multipole
+    ! source (3a/3b) is retained ONLY as a diagnostic baseline.
     allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
              ao_dip(3, basis%nbf), atom_dip(3, natom), &
              ao_quad(6, basis%nbf), atom_quad(6, natom), source=0.0_dp)
@@ -230,36 +341,98 @@ contains
     allocate(source_multipoles(nmultipoles, natom), source=0.0_dp)
     call pack_ddx_l2_multipoles(source_charges, atom_dip, atom_quad, source_multipoles)
 
-    allocate(phi_source(ncav), q_cav(ncav))
+    allocate(phi_source(ncav), q_cav(ncav), q_cav_source(ncav), q_cav_l2(ncav))
+
+    ! (3a) DIAGNOSTIC -- legacy all-multipole solve: both Phi and Psi from the
+    ! l<=2 atom-centered source. Exposes phi_source (source-vs-exact phi
+    ! residual) and q_cav_source. Does not feed the Fock matrix or e_pcm.
     rc = oqp_ddx_pcm_solve_multipole_source(natom, xyz, charges, &
-         nmultipoles, source_multipoles, eps, ncav, phi_source, q_cav, esolv, &
+         nmultipoles, source_multipoles, eps, ncav, phi_source, q_cav_source, &
+         esolv_source, cmsg, int(size(cmsg), c_int))
+    if (rc /= 0) then
+      call c_message_to_fortran(cmsg, fmsg)
+      call show_message('PCM (ddX) diagnostic source solve failed: '//trim(fmsg), with_abort)
+    end if
+
+    ! (3b) DIAGNOSTIC -- previous production path: exact phi_cav + l<=2 multipole
+    ! Psi. Kept so the q_cav shift from upgrading to full-density Psi can be
+    ! measured (q_cav_full_vs_l2_rms below).
+    rc = oqp_ddx_pcm_solve_multipole_source_with_phi(natom, xyz, charges, &
+         nmultipoles, source_multipoles, eps, ncav, phi_cav, q_cav_l2, esolv_l2, &
          cmsg, int(size(cmsg), c_int))
     if (rc /= 0) then
       call c_message_to_fortran(cmsg, fmsg)
-      call show_message('PCM (ddX) solve failed: '//trim(fmsg), with_abort)
+      call show_message('PCM (ddX) l2-psi diagnostic solve failed: '//trim(fmsg), with_abort)
+    end if
+
+    ! (3c) PRODUCTION solve -- full-density Psi (l = 0..PCM_PSI_LMAX) from the AO
+    ! density + the EXACT total cavity potential phi_cav (Phase 2). Both the
+    ! forward RHS and the adjoint source are full-density. q_cav is the
+    ! cavity-projected adjoint charge (ddx_get_xi) from this solve and is what
+    ! drives the Fock matrix and e_pcm.
+    nbasis = int((PCM_PSI_LMAX+1)**2, c_int)
+    allocate(multipoles_full(nbasis, natom), psi_full(nbasis, natom), radii(natom))
+    ! Query the production ddX cavity radii FIRST: the full-density Psi must use
+    ! each sphere's rsph for the outside-sphere "leak" continuation (the QM
+    ! density tail beyond the small vdW sphere), exactly as PySCF's
+    ! cache_fake_multipoles does with (r_vdw/r)^(2l+1).
+    rc = oqp_ddx_pcm_radii(natom, charges, radii, cmsg, int(size(cmsg), c_int))
+    if (rc /= 0) then
+      call c_message_to_fortran(cmsg, fmsg)
+      call show_message('PCM (ddX) radii query failed: '//trim(fmsg), with_abort)
+    end if
+    call build_full_density_multipoles(basis, infos, dtot, charges, radii, xyz, &
+                                       int(natom), PCM_PSI_LMAX, multipoles_full, &
+                                       mult_full_norm)
+    call multipoles_to_psi(multipoles_full, radii, PCM_PSI_LMAX, psi_full)
+    psi_full_norm = sqrt(sum(psi_full*psi_full))
+
+    rc = oqp_ddx_pcm_solve_psi(natom, xyz, charges, eps, ncav, nbasis, &
+         psi_full, phi_cav, q_cav, esolv, cmsg, int(size(cmsg), c_int))
+    if (rc /= 0) then
+      call c_message_to_fortran(cmsg, fmsg)
+      call show_message('PCM (ddX) full-density psi solve failed: '//trim(fmsg), with_abort)
     end if
 
     ! ---- Phase 4: V_pcm AO matrix, add to Fock blocks, report E_pcm --------
     allocate(vpcm(nbf_tri))
     call external_charge_potential(basis, vpcm, cx, cy, cz, q_cav)
-    call pcm_fock_scale_fd_diagnostic(natom, xyz, charges, eps, ncav, &
-         nmultipoles, source_multipoles, phi_source, q_cav, &
+    ! FD-validate dE/dphi = -0.5*q_cav about the EXACT phi_cav baseline using the
+    ! SAME full-density psi as the production solve, so the perturbed re-solves
+    ! match the production forward/adjoint source.
+    call pcm_fock_scale_fd_diagnostic(natom, xyz, charges, eps, ncav, nbasis, &
+         psi_full, phi_cav, q_cav, &
          fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr, &
          fd_fock_samples)
-    vpcm(:) = PCM_QCAV_TO_FOCK_SCALE * vpcm(:)
+    ! Fock reaction-field operator. The variational PCM free energy
+    !   E_pcm = -0.5 * f_eps * <phi_cav(D), q_cav(D)>
+    ! is quadratic in D (both phi_cav and q_cav are linear in D for the
+    ! symmetric ddPCM response), so its derivative dE/dD = -f_eps * ext(q_cav):
+    ! the explicit factor of 1/2 cancels against the two equal D-dependent terms
+    ! (cf. PySCF ddpcm.py vpcm = 0.5*f_eps*vmat, where vmat already carries both
+    ! the source- and field-side contributions). The full coupling is therefore
+    ! 2*PCM_QCAV_TO_FOCK_SCALE*f_eps = -f_eps, NOT the bare -0.5 explicit-phi
+    ! factor that pcm_fock_scale_fd_diagnostic verifies for dE/dphi.
+    vpcm(:) = 2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon * vpcm(:)
     do ii = 1, nfocks
       f(:, ii) = f(:, ii) + vpcm(:)
     end do
 
     ! PCM reaction-field (solvation) energy. The apparent surface charges q_cav
-    ! (from the consistent multipole-source ddX solve) are contracted with the
+    ! (from the full-density-Psi exact-phi ddX solve) are contracted with the
     ! EXACT total solute potential at the cavity points (phi_cav = nuclear +
-    ! electronic), not with ddX's truncated multipole esolv. This recovers an
-    ! independent ddPCM reaction-field energy to <0.5 kcal/mol for H2O and NH3
-    ! (validated by tests/test_pcm_literature_benchmarks.py). The -0.5 factor is the
-    ! linear-response polarization factor, consistent with the finite-difference
-    ! relation dE/dphi = -0.5*q_cav verified by pcm_fock_scale_fd_diagnostic.
-    e_pcm = PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
+    ! electronic). The -0.5 factor is the linear-response polarization factor,
+    ! consistent with the finite-difference relation dE/dphi = -0.5*q_cav
+    ! verified by pcm_fock_scale_fd_diagnostic.
+    !
+    ! FOCK DERIVATIVE HONESTY: V_pcm = -0.5 * external_charge_potential(q_cav) is
+    ! the apparent-surface-charge (ASC) operator; the -0.5 scale is FD-validated
+    ! only against dE/dphi (the explicit phi-dependence), NOT against the full
+    ! variational dE/dD. Because the full-density Psi now depends on D, a rigorous
+    ! variational Fock would also carry a dPsi/dD term and the canonical ASC
+    ! prefactor (1 vs 1/2) question; those are NOT derived here. This path is
+    ! therefore labelled fock_mode=asc_qcav_potential_phi_fd_only (see below).
+    e_pcm = f_epsilon * PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
 
     ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --
     ! Exposes, in Fortran, the quantities needed to validate the QM SCF PCM
@@ -277,6 +450,13 @@ contains
     phi_cav_min = minval(phi_cav)
     phi_cav_max = maxval(phi_cav)
     source_charge_sum = sum(source_charges)
+    ! RMS shift in the surface charge from the full-density exact-phi production
+    ! solve relative to the legacy all-multipole (l<=2 Phi and Psi) solve.
+    q_cav_shift_rms = sqrt(sum((q_cav - q_cav_source)**2) / real(ncav, dp))
+    ! RMS shift from upgrading the adjoint source from l<=2 multipole Psi to the
+    ! full-density Psi, both with the EXACT phi_cav: the quantitative measure of
+    ! what the full-density Psi buys over the previous production path.
+    q_cav_full_vs_l2_rms = sqrt(sum((q_cav - q_cav_l2)**2) / real(ncav, dp))
     phi_source_delta_rms = 0.0_dp
     phi_source_delta_max = 0.0_dp
     ndelta = 0
@@ -296,11 +476,16 @@ contains
       phi_source_delta_max = huge(1.0_dp)
     end if
     write(iw,'(1x,"PCM diag e_pcm=",ES22.14)') e_pcm
-    write(iw,'(1x,"PCM diag esolv_multipole=",ES22.14)') esolv
+    write(iw,'(1x,"PCM diag esolv_full_density_psi=",ES22.14)') esolv
+    write(iw,'(1x,"PCM diag esolv_l2_psi_exact_phi=",ES22.14)') esolv_l2
+    write(iw,'(1x,"PCM diag esolv_source_multipole=",ES22.14)') esolv_source
     write(iw,'(1x,"PCM diag half_tr_dv=",ES22.14)') half_tr_dv
     write(iw,'(1x,"PCM diag q_cav_sum=",ES22.14)') q_cav_sum
     write(iw,'(1x,"PCM diag q_cav_absnorm=",ES22.14)') q_cav_absnorm
     write(iw,'(1x,"PCM diag fock_q_scale=",ES22.14)') PCM_QCAV_TO_FOCK_SCALE
+    write(iw,'(1x,"PCM diag f_epsilon=",ES22.14)') f_epsilon
+    write(iw,'(1x,"PCM diag fock_q_coupling=",ES22.14)') &
+         2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon
     write(iw,'(1x,"PCM diag fd_fock_scale_mean=",ES22.14)') fd_fock_scale_mean
     write(iw,'(1x,"PCM diag fd_fock_scale_rms=",ES22.14)') fd_fock_scale_rms
     write(iw,'(1x,"PCM diag fd_fock_scale_maxerr=",ES22.14)') fd_fock_scale_maxerr
@@ -312,7 +497,27 @@ contains
     write(iw,'(1x,"PCM diag phi_cav_min=",ES22.14)') phi_cav_min
     write(iw,'(1x,"PCM diag phi_cav_max=",ES22.14)') phi_cav_max
     write(iw,'(1x,"PCM diag ncav=",I0)') int(ncav)
-    write(iw,'(1x,"PCM diag psi_source=total_qm_atom_multipoles_l2")')
+    write(iw,'(1x,"PCM diag q_cav_source_vs_exact_rms=",ES22.14)') q_cav_shift_rms
+    write(iw,'(1x,"PCM diag q_cav_full_vs_l2_rms=",ES22.14)') q_cav_full_vs_l2_rms
+    write(iw,'(1x,"PCM diag multipoles_full_norm=",ES22.14)') mult_full_norm
+    write(iw,'(1x,"PCM diag psi_full_norm=",ES22.14)') psi_full_norm
+    block
+      integer :: ldiag, mdiag, lmdiag
+      real(dp) :: lnorm
+      do ldiag = 0, PCM_PSI_LMAX
+        lnorm = 0.0_dp
+        do mdiag = -ldiag, ldiag
+          lmdiag = ldiag*ldiag + ldiag + 1 + mdiag
+          lnorm = lnorm + sum(multipoles_full(lmdiag,:)**2)
+        end do
+        write(iw,'(1x,"PCM diag mult_l",I0,"_norm=",ES22.14)') ldiag, sqrt(lnorm)
+      end do
+      write(iw,'(1x,"PCM diag atom_q0=",10ES16.8)') &
+           multipoles_full(1,:) * sqrt(4.0_dp*acos(-1.0_dp))
+    end block
+    write(iw,'(1x,"PCM diag pcm_source_mode=full_density_multipoles_lmax8_exact_phi")')
+    write(iw,'(1x,"PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak")')
+    write(iw,'(1x,"PCM diag fock_mode=ddpcm_feps_full_variational_coupling")')
 
   end subroutine add_pcm_reaction_field
 
@@ -418,12 +623,232 @@ contains
     end do
   end subroutine pack_ddx_l2_multipoles
 
+
+  subroutine build_full_density_multipoles(basis, infos, density_packed, charges, &
+       radii, xyz, natom, lmax, multipoles, mult_norm)
+    type(basis_set), intent(in) :: basis
+    type(information), intent(inout) :: infos
+    real(dp), intent(in) :: density_packed(:)
+    real(dp), intent(in), target :: charges(:), xyz(:,:)
+    real(dp), intent(in) :: radii(:)
+    integer, intent(in) :: natom, lmax
+    real(dp), intent(out) :: multipoles(:,:)
+    real(dp), intent(out) :: mult_norm
+
+    type(basis_set) :: basis_work
+    type(dft_grid_t), target :: molgrid
+    type(xc_options_t) :: xc_opts
+    type(pcm_psi_grid_consumer_t) :: dat
+    real(dp), allocatable, target :: density_full(:,:)
+    integer :: nbf, i, j, idx, maxl, nang
+    real(dp) :: sqrt4pi
+    character(kind=c_char) :: saved_xcname(20)
+    integer(c_int64_t) :: saved_partfun, saved_bfc_algo, saved_nrad, &
+         saved_nang, saved_radtype
+    logical(c_bool) :: saved_pruned
+
+    nbf = basis%nbf
+    if (size(multipoles,1) /= (lmax+1)**2 .or. size(multipoles,2) /= natom) then
+      call show_message('PCM full-density Psi multipole buffer has wrong shape', with_abort)
+    end if
+
+    allocate(density_full(nbf, nbf), source=0.0_dp)
+    do i = 1, nbf
+      do j = 1, nbf
+        idx = packed_index(i, j)
+        density_full(i,j) = density_packed(idx) * basis%bfnrm(i) * basis%bfnrm(j)
+      end do
+    end do
+
+    basis_work = basis
+    ! HF/reference-SCF inputs can leave infos%dft%xc_functional_name unset/garbage.
+    ! dft_set_options still inspects the C-string even when need_functional=.false.,
+    ! so follow the existing SAP-grid pattern: temporarily blank the name while
+    ! constructing the quadrature grid, then restore it.
+    saved_xcname = infos%dft%xc_functional_name
+    infos%dft%xc_functional_name = c_null_char
+    ! The PCM source-projection grid is PINNED to the reference ddCOSMO/ddPCM
+    ! density-partition convention, independent of any user XC-grid settings:
+    !   * Becke's ORIGINAL fuzzy-cell partition (3 softening iterations,
+    !     JCP 88, 2547 (1988)) -- PTYPE_BECKE3,
+    !   * Treutler-Ahlrichs atomic-size surface shifting chi = sqrt(R_i/R_j)
+    !     (JCP 102, 346 (1995)) over the Becke Bragg-Slater table (H = 0.35 A)
+    !     -- dft_bfc_algo = 2,
+    !   * unpruned 240x302 atomic grids on the standard (MHL) radial map.
+    ! Together with the parent-atom point assignment in pcm_grid_update this
+    ! makes the per-sphere source moments converge to the SAME partitioned
+    ! integrals as the reference ddPCM implementations (e.g. PySCF's
+    ! ddcosmo.make_psi_vmat on its Becke-partitioned atomic grids); the grid
+    ! mesh itself only controls quadrature accuracy, not the partition limit.
+    saved_partfun = infos%dft%dft_partfun
+    saved_bfc_algo = infos%dft%dft_bfc_algo
+    saved_nrad = infos%dft%grid_rad_size
+    saved_nang = infos%dft%grid_ang_size
+    saved_radtype = infos%dft%rad_grid_type
+    saved_pruned = infos%dft%grid_pruned
+    infos%dft%dft_partfun = int(PTYPE_BECKE3, c_int64_t)
+    infos%dft%dft_bfc_algo = 2_c_int64_t
+    infos%dft%grid_rad_size = 240_c_int64_t
+    infos%dft%grid_ang_size = 302_c_int64_t
+    infos%dft%rad_grid_type = 0_c_int64_t
+    infos%dft%grid_pruned = .false._c_bool
+    call dft_initialize(infos, basis_work, molgrid, verbose=.false., need_functional=.false.)
+    infos%dft%dft_partfun = saved_partfun
+    infos%dft%dft_bfc_algo = saved_bfc_algo
+    infos%dft%grid_rad_size = saved_nrad
+    infos%dft%grid_ang_size = saved_nang
+    infos%dft%rad_grid_type = saved_radtype
+    infos%dft%grid_pruned = saved_pruned
+    infos%dft%xc_functional_name = saved_xcname
+
+    dat%lmax = lmax
+    dat%nbasis = (lmax+1)**2
+    dat%natom = natom
+    dat%xyz => xyz
+    allocate(dat%vscales(dat%nbasis))
+    call pcm_ylmscale(lmax, dat%vscales)
+    allocate(dat%radii(natom))
+    dat%radii(:) = radii(1:natom)
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    maxl = maxval(basis_work%am)
+    nang = maxl + 2
+    xc_opts%isGGA = .false.
+    xc_opts%needTau = .false.
+    xc_opts%hasBeta = .false.
+    xc_opts%isWFVecs = .false.
+    xc_opts%numAOs = nbf
+    xc_opts%maxPts = molgrid%maxSlicePts
+    xc_opts%limPts = molgrid%maxNRadTimesNAng
+    xc_opts%numAtoms = natom
+    xc_opts%maxAngMom = nang
+    xc_opts%nDer = 0
+    xc_opts%numOccAlpha = infos%mol_prop%nelec_A
+    xc_opts%numOccBeta = infos%mol_prop%nelec_B
+    xc_opts%wfAlpha => density_full
+    xc_opts%molGrid => molgrid
+    ! No density-based weight screening for the source projection: the Becke
+    ! partition has small but nonzero tail weights on every atom's grid, and
+    ! the per-sphere moments should integrate them like the reference does.
+    xc_opts%dft_threshold = 0.0_dp
+    xc_opts%ao_threshold = infos%dft%grid_ao_threshold
+    ! Keep AO pruning enabled using the normal DFT threshold; the consumer uses
+    ! xce%compMOs/compRho so both pruned and unpruned paths are handled by the engine.
+    xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
+    if (infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_dp
+
+    call run_grid_aos(xc_opts, dat, basis_work)
+
+    multipoles(:,:) = dat%multipoles(:,:,1)
+    ! Add nuclear point charges exactly at their own atom centers. For c=0 only
+    ! the l=0 real harmonic contributes: q * Y_00 = q/sqrt(4*pi).
+    sqrt4pi = sqrt(4.0_dp * acos(-1.0_dp))
+    do i = 1, natom
+      multipoles(1,i) = multipoles(1,i) + charges(i) / sqrt4pi
+    end do
+    mult_norm = sqrt(sum(multipoles*multipoles))
+
+    call dat%clean()
+  end subroutine build_full_density_multipoles
+
+  subroutine multipoles_to_psi(multipoles, radii, lmax, psi)
+    real(dp), intent(in) :: multipoles(:,:), radii(:)
+    integer, intent(in) :: lmax
+    real(dp), intent(out) :: psi(:,:)
+
+    integer :: iat, l, m, lm
+    real(dp) :: pi4, denom
+
+    pi4 = 4.0_dp * acos(-1.0_dp)
+    psi(:,:) = 0.0_dp
+    do iat = 1, size(multipoles,2)
+      do l = 0, lmax
+        denom = real(2*l + 1, dp) * radii(iat)**l
+        do m = -l, l
+          lm = l*l + l + 1 + m
+          psi(lm,iat) = pi4 * multipoles(lm,iat) / denom
+        end do
+      end do
+    end do
+  end subroutine multipoles_to_psi
+
+  subroutine pcm_grid_parallel_start(self, xce, nthreads)
+    class(pcm_psi_grid_consumer_t), target, intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer, intent(in) :: nthreads
+    if (allocated(self%multipoles)) deallocate(self%multipoles)
+    allocate(self%multipoles(self%nbasis, self%natom, nthreads), source=0.0_dp)
+  end subroutine pcm_grid_parallel_start
+
+  subroutine pcm_grid_parallel_stop(self)
+    class(pcm_psi_grid_consumer_t), intent(inout) :: self
+    if (allocated(self%multipoles)) then
+      if (size(self%multipoles,3) > 1) then
+        self%multipoles(:,:,1) = sum(self%multipoles, dim=3)
+      end if
+      call self%pe%allreduce(self%multipoles(:,:,1), size(self%multipoles(:,:,1)))
+    end if
+  end subroutine pcm_grid_parallel_stop
+
+  subroutine pcm_grid_update(self, xce, mythread)
+    class(pcm_psi_grid_consumer_t), intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer :: mythread
+
+    real(dp), allocatable :: rho(:,:)
+    real(dp) :: qpt, c(3)
+    integer :: ipt, iown
+
+    ! PARENT-ATOM partition, exactly the reference ddCOSMO/ddPCM source
+    ! projection (PySCF ddcosmo.make_psi_vmat): every point of the current
+    ! slice belongs to the atom whose atomic grid generated it
+    ! (xce%currAtom); the fuzzy-cell share of the molecular density at that
+    ! point is already carried by the Becke-original/Treutler-shifted
+    ! partition weight inside xce%wts (see build_full_density_multipoles).
+    ! The multipole about the owning sphere uses the outside-sphere leak
+    ! continuation (q*rsph^(2l+1)/r^(l+1) for r>rsph), exactly as PySCF's
+    ! cache_fake_multipoles caps points beyond the vdW sphere, which keeps
+    ! the QM density tail from blowing up the bare interior moment q*r^l.
+    iown = xce%currAtom
+    if (iown < 1 .or. iown > self%natom) then
+      call show_message('PCM psi grid consumer: slice parent atom not set', &
+                        with_abort)
+    end if
+
+    call xce%compMOs()
+    allocate(rho(2, xce%numPts), source=0.0_dp)
+    call xce%compRho(rho)
+
+    do ipt = 1, xce%numPts
+      qpt = -sum(rho(:,ipt)) * xce%wts(ipt)
+      if (qpt == 0.0_dp) cycle
+      c(:) = xce%xyzw(ipt,1:3) - self%xyz(:,iown)
+      call accumulate_point_multipole_leak(c, qpt, self%lmax, self%vscales, &
+                                           self%radii(iown), &
+                                           self%multipoles(:,iown,mythread))
+    end do
+  end subroutine pcm_grid_update
+
+  subroutine pcm_grid_post_update(self, xce, mythread)
+    class(pcm_psi_grid_consumer_t), intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer :: mythread
+    ! No per-slice postprocessing needed; update accumulates directly.
+  end subroutine pcm_grid_post_update
+
+  subroutine pcm_grid_clean(self)
+    class(pcm_psi_grid_consumer_t), intent(inout) :: self
+    if (allocated(self%vscales)) deallocate(self%vscales)
+    if (allocated(self%radii)) deallocate(self%radii)
+    if (allocated(self%multipoles)) deallocate(self%multipoles)
+    nullify(self%xyz)
+  end subroutine pcm_grid_clean
+
   subroutine pcm_fock_scale_fd_diagnostic(natom, xyz, charges, eps, ncav, &
-       nmultipoles, source_multipoles, phi_source, q_cav, scale_mean, &
-       scale_rms, maxerr, nsample)
-    integer(c_int),  intent(in) :: natom, ncav, nmultipoles
+       nbasis, psi, phi_cav, q_cav, scale_mean, scale_rms, maxerr, nsample)
+    integer(c_int),  intent(in) :: natom, ncav, nbasis
     real(dp),        intent(in) :: xyz(:,:), charges(:), eps
-    real(dp),        intent(in) :: source_multipoles(:,:), phi_source(:), q_cav(:)
+    real(dp),        intent(in) :: psi(:,:), phi_cav(:), q_cav(:)
     real(dp),        intent(out) :: scale_mean, scale_rms, maxerr
     integer,         intent(out) :: nsample
 
@@ -461,23 +886,21 @@ contains
     do slot = 1, PCM_FD_MAX_SAMPLES
       icav = sample_idx(slot)
       if (icav <= 0) cycle
-      phi_plus(:) = phi_source(:)
-      phi_minus(:) = phi_source(:)
+      phi_plus(:) = phi_cav(:)
+      phi_minus(:) = phi_cav(:)
       phi_plus(icav) = phi_plus(icav) + h
       phi_minus(icav) = phi_minus(icav) - h
-      rc = oqp_ddx_pcm_solve_multipole_source_with_phi(natom, xyz, charges, &
-           nmultipoles, source_multipoles, eps, ncav, phi_plus, q_tmp, eplus, &
-           cmsg, int(size(cmsg), c_int))
+      rc = oqp_ddx_pcm_solve_psi(natom, xyz, charges, eps, ncav, nbasis, &
+           psi, phi_plus, q_tmp, eplus, cmsg, int(size(cmsg), c_int))
       if (rc /= 0) then
         call c_message_to_fortran(cmsg, fmsg)
-        call show_message('PCM (ddX) phi+ FD solve failed: '//trim(fmsg), with_abort)
+        call show_message('PCM (ddX) full-psi phi+ FD solve failed: '//trim(fmsg), with_abort)
       end if
-      rc = oqp_ddx_pcm_solve_multipole_source_with_phi(natom, xyz, charges, &
-           nmultipoles, source_multipoles, eps, ncav, phi_minus, q_tmp, eminus, &
-           cmsg, int(size(cmsg), c_int))
+      rc = oqp_ddx_pcm_solve_psi(natom, xyz, charges, eps, ncav, nbasis, &
+           psi, phi_minus, q_tmp, eminus, cmsg, int(size(cmsg), c_int))
       if (rc /= 0) then
         call c_message_to_fortran(cmsg, fmsg)
-        call show_message('PCM (ddX) phi- FD solve failed: '//trim(fmsg), with_abort)
+        call show_message('PCM (ddX) full-psi phi- FD solve failed: '//trim(fmsg), with_abort)
       end if
       fd = (eplus - eminus) / (2.0_dp * h)
       scale = fd / q_cav(icav)

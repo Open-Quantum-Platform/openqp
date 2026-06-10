@@ -95,13 +95,23 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
   const double epsilon = 78.3553;
   const double kappa = 0.0;
   const double eta = 0.1;
-  const double shift = 0.0;
+  /* Switching-region shift se = -1: the regularization lives INSIDE the
+   * sphere, t in (1-eta, 1), which is the ORIGINAL ddCOSMO/ddPCM switching
+   * (Lipparini et al., JCTC 9, 3637 (2013)) and the convention implemented
+   * by reference ddPCM codes (e.g. PySCF solvent.ddcosmo.regularize_xt).
+   * ddX's se=0 (centered) default would change U_i(s), the exposed cavity
+   * points, and the reaction-field energy at the ~0.1 kcal/mol level. */
+  const double shift = -1.0;
   const int lmax = 8;
   const int n_lebedev = 302;
   const int incore = 0;
   const int maxiter = 100;
   const int jacobi_n_diis = 20;
-  const int enable_fmm = 1;
+  /* Dense operator application: the reference ddPCM implementations solve
+   * the small QM-solute systems densely; the FMM acceleration (multipole
+   * lmax 7 < model lmax 8) introduces a systematic truncation in the
+   * reaction field that is visible (>0.1 kcal/mol) at QM accuracy. */
+  const int enable_fmm = 0;
   const int fmm_multipole_lmax = 7;
   const int fmm_local_lmax = 6;
   const int n_proc = 1;
@@ -178,7 +188,7 @@ int oqp_ddx_run_point_charge_smoke(oqp_ddx_smoke_result_t* result,
   s_norm = sqrt(s_norm);
   xi_norm = sqrt(xi_norm);
 
-  const double reference_energy = -0.00017974013712832552;
+  const double reference_energy = -0.0001925784514955;
   if (fabs(energy - reference_energy) > 1.0e-6) {
     set_message(message, message_len, "Unexpected ddX energy");
     goto cleanup;
@@ -277,13 +287,23 @@ int oqp_ddx_run_explicit_pcm_smoke(oqp_ddx_smoke_result_t* result,
   const double epsilon = 78.3553;
   const double kappa = 0.0;
   const double eta = 0.1;
-  const double shift = 0.0;
+  /* Switching-region shift se = -1: the regularization lives INSIDE the
+   * sphere, t in (1-eta, 1), which is the ORIGINAL ddCOSMO/ddPCM switching
+   * (Lipparini et al., JCTC 9, 3637 (2013)) and the convention implemented
+   * by reference ddPCM codes (e.g. PySCF solvent.ddcosmo.regularize_xt).
+   * ddX's se=0 (centered) default would change U_i(s), the exposed cavity
+   * points, and the reaction-field energy at the ~0.1 kcal/mol level. */
+  const double shift = -1.0;
   const int lmax = 8;
   const int n_lebedev = 302;
   const int incore = 0;
   const int maxiter = 100;
   const int jacobi_n_diis = 20;
-  const int enable_fmm = 1;
+  /* Dense operator application: the reference ddPCM implementations solve
+   * the small QM-solute systems densely; the FMM acceleration (multipole
+   * lmax 7 < model lmax 8) introduces a systematic truncation in the
+   * reaction field that is visible (>0.1 kcal/mol) at QM accuracy. */
+  const int enable_fmm = 0;
   const int fmm_multipole_lmax = 7;
   const int fmm_local_lmax = 6;
   const int n_proc = 1;
@@ -487,13 +507,23 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
   const double epsilon = 78.3553;
   const double kappa = 0.0;
   const double eta = 0.1;
-  const double shift = 0.0;
+  /* Switching-region shift se = -1: the regularization lives INSIDE the
+   * sphere, t in (1-eta, 1), which is the ORIGINAL ddCOSMO/ddPCM switching
+   * (Lipparini et al., JCTC 9, 3637 (2013)) and the convention implemented
+   * by reference ddPCM codes (e.g. PySCF solvent.ddcosmo.regularize_xt).
+   * ddX's se=0 (centered) default would change U_i(s), the exposed cavity
+   * points, and the reaction-field energy at the ~0.1 kcal/mol level. */
+  const double shift = -1.0;
   const int lmax = 8;
   const int n_lebedev = 302;
   const int incore = 0;
   const int maxiter = 100;
   const int jacobi_n_diis = 20;
-  const int enable_fmm = 1;
+  /* Dense operator application: the reference ddPCM implementations solve
+   * the small QM-solute systems densely; the FMM acceleration (multipole
+   * lmax 7 < model lmax 8) introduces a systematic truncation in the
+   * reaction field that is visible (>0.1 kcal/mol) at QM accuracy. */
+  const int enable_fmm = 0;
   const int fmm_multipole_lmax = 7;
   const int fmm_local_lmax = 6;
   const int n_proc = 1;
@@ -702,13 +732,23 @@ static void* build_pcm_model(int natom, const double* xyz_bohr,
   const int enable_forces = 1;
   const double kappa = 0.0;
   const double eta = 0.1;
-  const double shift = 0.0;
+  /* Switching-region shift se = -1: the regularization lives INSIDE the
+   * sphere, t in (1-eta, 1), which is the ORIGINAL ddCOSMO/ddPCM switching
+   * (Lipparini et al., JCTC 9, 3637 (2013)) and the convention implemented
+   * by reference ddPCM codes (e.g. PySCF solvent.ddcosmo.regularize_xt).
+   * ddX's se=0 (centered) default would change U_i(s), the exposed cavity
+   * points, and the reaction-field energy at the ~0.1 kcal/mol level. */
+  const double shift = -1.0;
   const int lmax = 8;
   const int n_lebedev = 302;
   const int incore = 0;
   const int maxiter = 100;
   const int jacobi_n_diis = 20;
-  const int enable_fmm = 1;
+  /* Dense operator application: the reference ddPCM implementations solve
+   * the small QM-solute systems densely; the FMM acceleration (multipole
+   * lmax 7 < model lmax 8) introduces a systematic truncation in the
+   * reaction field that is visible (>0.1 kcal/mol) at QM accuracy. */
+  const int enable_fmm = 0;
   const int fmm_multipole_lmax = 7;
   const int fmm_local_lmax = 6;
   const int n_proc = 1;
@@ -1191,6 +1231,165 @@ cleanup:
   if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
   free(solute_multipoles);
   free(psi);
+  free(phi_cav_copy);
+  free(xi);
+  return status;
+#endif
+}
+
+/*
+ * Return the per-sphere ddPCM cavity radii (Bohr) that build_pcm_model() uses,
+ * so the OpenQP caller can apply the ddX multipole_psi scaling
+ *   psi(lm,isph) = 4*pi/((2l+1) * rsph(isph)^l) * M_lm(isph)
+ * itself when it builds a full-density Psi from the AO density. Keeping the
+ * radius table on the C side guarantees the caller's psi uses the SAME rsph as
+ * the model built by oqp_ddx_pcm_solve_psi below.
+ */
+int oqp_ddx_pcm_radii(int natom, const double* charges, double* radii_bohr_out,
+                      char* message, int message_len) {
+#ifndef OQP_ENABLE_DDX
+  (void)natom;
+  (void)charges;
+  (void)radii_bohr_out;
+  set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
+  return 2;
+#else
+  if (natom <= 0 || charges == NULL || radii_bohr_out == NULL) {
+    set_message(message, message_len, "Invalid arguments to oqp_ddx_pcm_radii");
+    return 1;
+  }
+  const double bohr_per_angstrom = 1.0 / 0.5291772109;
+  for (int i = 0; i < natom; ++i) {
+    const int z = (int)(charges[i] + 0.5);
+    radii_bohr_out[i] = vdw_radius_angstrom(z) * bohr_per_angstrom;
+  }
+  set_message(message, message_len, "ddX PCM radii returned");
+  return 0;
+#endif
+}
+
+/*
+ * Production PCM solve driven by a CALLER-BUILT adjoint source psi and the
+ * exact total cavity potential phi_cav.
+ *
+ * Unlike oqp_ddx_pcm_solve_multipole_source[_with_phi], this entry point does
+ * NOT derive psi from a multipole source: psi is supplied directly by the
+ * caller (column-major (nbasis, nsph), nbasis = (lmax+1)^2). It rebuilds the
+ * deterministic ddX model, VERIFIES that the caller's nbasis/ncav/nsph match
+ * the model, then runs the full ddPCM forward/adjoint lifecycle
+ * (setup/guess/solve/guess_adjoint/solve_adjoint) and returns the
+ * cavity-projected adjoint charge q_cav (ddx_get_xi) and the ddX solvation
+ * energy esolv (ddx_pcm_energy).
+ *
+ * This is the seam used by the full-density-Psi OpenQP path: the caller builds
+ * psi from the actual AO density (all l up to lmax) and the exact phi_cav, so
+ * both the forward RHS and the adjoint source are full-density quantities.
+ */
+int oqp_ddx_pcm_solve_psi(int natom, const double* xyz_bohr,
+                          const double* charges, double epsilon, int ncav,
+                          int nbasis, const double* psi, const double* phi_cav,
+                          double* q_cav_out, double* esolv_out, char* message,
+                          int message_len) {
+  if (esolv_out != NULL) {
+    *esolv_out = 0.0;
+  }
+#ifndef OQP_ENABLE_DDX
+  (void)natom;
+  (void)xyz_bohr;
+  (void)charges;
+  (void)epsilon;
+  (void)ncav;
+  (void)nbasis;
+  (void)psi;
+  (void)phi_cav;
+  (void)q_cav_out;
+  set_message(message, message_len, "OpenQP was built without OQP_ENABLE_DDX");
+  return 2;
+#else
+  if (natom <= 0 || xyz_bohr == NULL || charges == NULL || ncav <= 0 ||
+      nbasis <= 0 || psi == NULL || phi_cav == NULL || q_cav_out == NULL) {
+    set_message(message, message_len, "Invalid arguments to oqp_ddx_pcm_solve_psi");
+    return 1;
+  }
+
+  int status = 1;
+  void* error = NULL;
+  void* model = NULL;
+  void* state = NULL;
+  double* psi_copy = NULL;
+  double* phi_cav_copy = NULL;
+  double* xi = NULL;
+
+  error = ddx_allocate_error();
+  if (error == NULL) {
+    set_message(message, message_len, "Failed to allocate ddX error object");
+    return 1;
+  }
+
+  model = build_pcm_model(natom, xyz_bohr, charges, epsilon, error, message,
+                          message_len);
+  if (model == NULL) goto cleanup;
+
+  const int nsph = natom;
+  const int model_nbasis = ddx_get_n_basis(model);
+  const int model_ncav = ddx_get_n_cav(model);
+  if (model_nbasis <= 0 || model_ncav <= 0) {
+    set_message(message, message_len, "Invalid ddX dimensions in pcm_solve_psi");
+    goto cleanup;
+  }
+  if (model_nbasis != nbasis) {
+    set_message(message, message_len,
+                "ddX nbasis disagrees with caller-built psi leading dimension");
+    goto cleanup;
+  }
+  if (model_ncav != ncav) {
+    set_message(message, message_len,
+                "ddX cavity size disagrees with caller phi_cav length");
+    goto cleanup;
+  }
+
+  psi_copy = (double*)calloc((size_t)nbasis * (size_t)nsph, sizeof(double));
+  phi_cav_copy = (double*)calloc((size_t)ncav, sizeof(double));
+  xi = (double*)calloc((size_t)ncav, sizeof(double));
+  if (!psi_copy || !phi_cav_copy || !xi) {
+    set_message(message, message_len, "Allocation failure in oqp_ddx_pcm_solve_psi");
+    goto cleanup;
+  }
+  memcpy(psi_copy, psi, (size_t)nbasis * (size_t)nsph * sizeof(double));
+  memcpy(phi_cav_copy, phi_cav, (size_t)ncav * sizeof(double));
+
+  state = ddx_allocate_state(model, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  const double tol = 1.0e-9;
+  ddx_pcm_setup(model, state, ncav, nbasis, nsph, psi_copy, phi_cav_copy, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  const double energy = ddx_pcm_energy(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_guess_adjoint(model, state, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_pcm_solve_adjoint(model, state, tol, error);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+  ddx_get_xi(state, model, ncav, xi);
+  if (check_ddx_error(error, message, message_len)) goto cleanup;
+
+  for (int i = 0; i < ncav; ++i) {
+    q_cav_out[i] = xi[i];
+  }
+  if (esolv_out != NULL) {
+    *esolv_out = energy;
+  }
+  set_message(message, message_len, "ddX PCM caller-psi solve complete");
+  status = 0;
+
+cleanup:
+  if (state != NULL && error != NULL) ddx_deallocate_state(state, error);
+  if (model != NULL && error != NULL) ddx_deallocate_model(model, error);
+  free(psi_copy);
   free(phi_cav_copy);
   free(xi);
   return status;
