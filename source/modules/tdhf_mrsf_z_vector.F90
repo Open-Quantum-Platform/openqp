@@ -1207,7 +1207,8 @@ contains
 
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc, mrsfxvec, mrsfsp, mrsfrowcal, &
-      mrsfqrorhs, mrsfqropcal, mrsfqrowcal
+      mrsfqrorhs, mrsfqropcal, mrsfqrowcal, &
+      mrsf_interstate_tden
     use oqp_linalg
     use printing, only: print_module_info
     use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
@@ -2263,18 +2264,13 @@ contains
      ! spin pair ov-ov, co-co, co-ov coupling
         call mrsfsp(hxa, hxb, mo_a, mo_a, wrk3, fmrst2(1,:,:,:), nocca, noccb)
 
-     !  Unrelaxed difference density matries T_ij and T_ab
+     !  Unrelaxed difference density matrices T_ij and T_ab
      !  Ta(i+,j+):= -X(i+,a-)*X(j+,a-) for singlet and triplet
-        call dgemm('n', 't', nocca, nocca, nvirb, &
-                  -1.0_dp, bvec_mo_d, nocca, &
-                           bvec_mo_d, nocca, &
-                   0.0_dp, tij, nocca)
-
      !  Tb(a-,b-):= X(i+,a-)*X(i+,b-) for singlet and triplet
-        call dgemm('t', 'n', nvirb, nvirb, nocca, &
-                   1.0_dp, bvec_mo_d, nocca, &
-                           bvec_mo_d, nocca, &
-                   0.0_dp, tab, nvirb)
+     !  (diagonal I=J case of the interstate routine, which the NAC
+     !   code calls with I/=J)
+        call mrsf_interstate_tden(infos, bvec_mo, target_state, target_state, &
+                                  tij, tab)
 
         call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
                      Tij, Tab, Fa, Fb, nocca, noccb)
