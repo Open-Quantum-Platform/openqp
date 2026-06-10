@@ -55,7 +55,7 @@ contains
     ! (thresh = 1.0d-2, sfgrad.src:3298).
     real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
     real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
-    real(kind=dp), allocatable :: dens_pack(:), fock_pack(:)
+    real(kind=dp), allocatable :: fock_pack(:)
     type(dft_grid_t), target :: ea_molgrid
     type(scf_energy_t) :: ea_energy
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
@@ -113,7 +113,7 @@ contains
     call tagarray_get_data(infos%dat, OQP_td_p, td_p)
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
 
-    allocate(dens_pack(nbf2), fock_pack(nbf2), &
+    allocate(fock_pack(nbf2), &
              ea_density_ao(nbf2,nfocks), ea_fock_ao(nbf2,nfocks), saved_fock_ao(nbf2,nfocks), &
              density_alpha_ao(nbf2), density_beta_ao(nbf2), &
              density_alpha_mo(nbf,nbf), density_beta_mo(nbf,nbf), &
@@ -230,7 +230,7 @@ contains
 
       call orthogonal_transform_sym(nbf, nbf, ea_fock_ao(:,1), mo_a, nbf, fock_pack)
       call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
-      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator (GAMESS MRDEA path); nschwz=",I0)') nschwz
+      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator (GAMESS MRDEA path)")')
       ekt_operator = fock_mo - lagrangian_mo
     else
       ! EKT: W * x = P * x * lambda.  Metric is the spin-summed relaxed
@@ -288,21 +288,22 @@ contains
     strength_store = strengths
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT electron affinities")')
+      write(iw,'(/,2x,"MRSF-EKT electron affinities (Dyson roots)")')
     else
-      write(iw,'(/,2x,"MRSF-EKT ionization potentials (Dyson eBEs)")')
+      write(iw,'(/,2x,"MRSF-EKT ionization potentials (Dyson roots)")')
     end if
+    write(iw,'(2x,"Rows index EKT Dyson roots/orbitals, not TDDFT excited states.")')
     ! eig holds the EKT eigenvalues epsilon of  W C = D C epsilon.  The
     ! electron binding energy (IP) of a detachment is -epsilon; print both
     ! the eigenvalue and the eBE in hartree and eV with the Dyson pole
     ! strength (norm of the Dyson vector, <= 1 for a physical root).
-    write(iw,'(2x,"state",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"metric",7x,"strength")')
+    write(iw,'(2x,"dyson",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"metric",7x,"strength")')
     do i = 1, min(nroot, nactive)
       write(iw,'(2x,I5,2x,F14.6,2x,F14.6,2x,F12.4,2x,F12.6,2x,F12.6)') &
             i, eig(i), -eig(i), -eig(i)*hartree_to_ev, metric_norms(i), strengths(i)
     end do
-    write(iw,'(/,2x,"--- EKT root-character diagnostics ---")')
-    write(iw,'(2x,"state",2x,"dom_mo",2x,"mo_coeff",2x,"dom_no",2x,"no_coeff",2x,"no_occ",2x,"character",2x,"spurious")')
+    write(iw,'(/,2x,"--- EKT Dyson-root character diagnostics ---")')
+    write(iw,'(2x,"dyson",2x,"dom_mo",2x,"mo_coeff",2x,"dom_no",2x,"no_coeff",2x,"no_occ",2x,"character",2x,"spurious")')
     do i = 1, min(nroot, nactive)
       write(iw,'(2x,I5,2x,I6,2x,F10.6,2x,I6,2x,F10.6,2x,F10.6,2x,A12,2x,L1)') &
             i, dom_mo_idx(i), dom_mo_coeff(i), dom_no_idx(i), dom_no_coeff(i), &
