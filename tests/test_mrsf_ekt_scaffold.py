@@ -193,6 +193,14 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues", fortran)
         self.assertIn("call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues", fortran)
 
+    def test_structured_mrsf_ekt_json_trims_unused_root_slots(self):
+        molecule = read("pyoqp/oqp/molecule/molecule.py")
+
+        self.assertIn("trailing all-zero scratch slots", molecule)
+        self.assertIn("active = (np.abs(eigenvalues) > ekt_slot_tol)", molecule)
+        self.assertIn("orbitals = orbitals[active, :]", molecule)
+        self.assertIn("orbitals = orbitals[:, active]", molecule)
+
     def test_run_tests_checks_structured_mrsf_ekt_values(self):
         molecule = read("pyoqp/oqp/molecule/molecule.py")
 
@@ -207,7 +215,7 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("isinstance(data_1, dict)", molecule)
         self.assertIn("arr_1.shape != arr_2.shape", molecule)
         self.assertIn("np.max(np.abs(arr_1 - arr_2))", molecule)
-        self.assertIn("key == 'orbitals_mo'", molecule)
+        self.assertIn("key in ('orbitals_mo', 'dyson_orbitals_mo')", molecule)
 
 
 if __name__ == "__main__":
