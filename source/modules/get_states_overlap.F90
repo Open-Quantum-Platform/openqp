@@ -206,6 +206,11 @@ contains
              s_ia(noca,nvirb), &
              source=0.0_dp)
 
+    ! the summation loops below accumulate into s_st; define it here so that
+    ! repeated in-process calls (the OQP::td_states_overlap record persists
+    ! between invocations) do not accumulate onto the previous result
+    s_st = 0.0_dp
+
 !   get S_ij, S_ab, S_ia
     call mrsf_tlf(infos, s_mo, s_ij, s_ab, s_ia, ndtlf)
 
