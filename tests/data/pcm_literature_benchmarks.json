@@ -7,8 +7,9 @@
     "lmax": 8,
     "n_lebedev": 302,
     "eta": 0.1,
-    "fmm": true,
-    "radii": "bondi_builtin_provisional"
+    "fmm": false,
+    "radii": "bondi_builtin_provisional",
+    "operator": "dense_no_fmm"
   },
   "trusted_reference_regressions": [
     {
@@ -17,10 +18,10 @@
       "tier": "tier1_ddx_adapter_coupling",
       "description": "ddPCM electrostatic solvation energy of a fixed 12-site point-charge model (no QM SCF). Validates the OpenQP<->ddX adapter numerics (model build -> solve -> esolv) only.",
       "quantity": "ddx_esolv_point_charge_model_hartree",
-      "reference_value": -0.00017974013712832552,
+      "reference_value": -0.0001925784514955,
       "tolerance": 1e-06,
       "generated_by": "ddX (ddx_ddrun) via oqp_ddx_run_point_charge_smoke",
-      "source": "source/solvent_ddx_adapter.c::oqp_ddx_run_point_charge_smoke (value asserted in-source within 1e-6 at line ~181); printed as 'energy=<float>' by tests/ddx_adapter_smoke.c",
+      "source": "source/solvent_ddx_adapter.c::oqp_ddx_run_point_charge_smoke (dense ddPCM, se=-1; value asserted in-source within 1e-6 at line ~191); printed as energy=<float> by tests/ddx_adapter_smoke.c",
       "doi_or_url": "n/a (ddX-generated regression; ddX project: https://github.com/ddsolvation/ddX)",
       "protocol": {
         "model": "ddpcm",
@@ -28,9 +29,7 @@
         "lmax": 8,
         "n_lebedev": 302,
         "eta": 0.1,
-        "fmm": true,
-        "fmm_multipole_lmax": 7,
-        "fmm_local_lmax": 6,
+        "fmm": false,
         "nsph": 12,
         "charges": [
           -0.04192,
@@ -61,17 +60,19 @@
           2.99956
         ],
         "psi": "nuclear/point monopoles only (charges / sqrt(4*pi))",
-        "geometry": "explicit Angstrom coordinates in source/solvent_ddx_adapter.c"
+        "geometry": "explicit Angstrom coordinates in source/solvent_ddx_adapter.c",
+        "shift": -1
       },
       "execution": "Fortran/C CTest 'oqp_ddx_adapter_smoke' (requires cmake -DENABLE_DDX=ON -DDDX_ROOT=...)",
       "parse_regex": "energy=(-?\\d+\\.\\d+)",
       "status": "verified",
       "empirical_verification": {
         "ddx_version": "0.8.0 (ddsolvation/ddX)",
-        "observed_energy": -0.000178922635976,
-        "abs_diff_to_reference": 8.18e-07,
+        "observed_energy": -0.0001925784514955,
+        "explicit_lifecycle_energy": -0.0001925784514477,
+        "abs_diff_to_reference": 0.0,
         "within_tolerance": true,
-        "note": "Verified via real ddX build through oqp_ddx_adapter_smoke; the ~8e-7 difference from the pinned value is ddX-version sensitivity, still inside 1e-6. FD check: |dE/dphi0-(-0.5 q_cav0)|~9.5e-11 vs |dE/dphi0-q_cav0|~9.7e-5, confirming chg=-0.5*q_cav."
+        "note": "Verified via real ddX build through oqp_ddx_adapter_smoke after the intentional dense/no-FMM and se=-1 protocol alignment. Full ddx_ddrun lifecycle and explicit setup/solve lifecycle agree to ~4.8e-14. FD check: |dE/dphi0-(-0.5 q_cav0)|~6.6e-09 vs |dE/dphi0-q_cav0|~9.1e-05, confirming chg=-0.5*q_cav."
       },
       "validates": "ddX model allocation, electrostatics, forward/adjoint solve, and esolv numerics through the OpenQP-owned C adapter",
       "does_not_validate": "QM SCF coupling -- electronic contribution to psi, q_cav sign/scale into the Fock operator, phi_cav-from-density convention, and e_pcm vs 0.5*Tr[D.V] bookkeeping all remain open and require the Tier-2 QM benchmarks below"
