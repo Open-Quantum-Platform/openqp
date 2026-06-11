@@ -72,8 +72,13 @@ def test_property_integral_consumers_transform_spherical_blocks():
     assert "dens(off(ii):, off(jj):), alpha, dernuc" in grd1
 
 
-def test_giao_nmr_true_spherical_path_is_guarded():
+def test_giao_nmr_true_spherical_path_is_not_guarded():
     text = (ROOT / "source/modules/nmr_giao_shielding.F90").read_text()
+    int1 = (ROOT / "source/integrals/int1.F90").read_text()
 
-    assert "HARMONIC_ACTIVE .and. any(basis%harmonic == 1)" in text
-    assert "GIAO NMR shielding with pure spherical AO dimensions" in text
+    assert "HARMONIC_ACTIVE .and. any(basis%harmonic == 1)" not in text
+    assert "GIAO NMR shielding with pure spherical AO dimensions" not in text
+    assert "giao_h10_core" in text
+    assert "giao_overlap_derivative" in text
+    assert "giao_h10_twoe_matrix" in text
+    assert "CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic" in int1

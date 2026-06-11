@@ -76,13 +76,7 @@ class BasisData:
                     ang_mom = shell['angular_momentum'][ang_ii]
                 else:
                     ang_mom = shell['angular_momentum'][0]
-                if shell_is_spherical and ang_mom > 4 and self.mol.config["input"].get("ispher", True):
-                    raise ValueError(
-                        "input.ispher=True only supports pure spherical shells through g "
-                        f"(angular_momentum <= 4); basis '{basis_name}' requests l={ang_mom}. "
-                        "Use input.ispher=False or a basis without h/i spherical shells."
-                    )
-                shell_harmonic = 1 if shell_is_spherical and ang_mom <= 4 else 0
+                shell_harmonic = 1 if shell_is_spherical else 0
 
                 self.shell_num += 1
 

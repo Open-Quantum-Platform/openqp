@@ -3,11 +3,12 @@ module int2e_rotaxis
   use basis_tools, only: basis_set
   use boys_lut, only: fgrid, xgrid, rxinc, rfinc, rmr, tmax
   use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
-  use constants, only: pi
+  use constants, only: HARMONIC_ACTIVE, pi
   implicit none
 
   private
   public genr22
+  public genr22_reduce_pure
 
   real(dp), parameter :: acy_threshold = 1.0e-10_dp
   real(dp), parameter :: sqrt3 = sqrt(3.0_dp)
@@ -296,6 +297,29 @@ contains
     call r30s1d(jtype, grotspd, p)
 
   end subroutine genr22
+
+  subroutine genr22_reduce_pure(basis, shell_ids, flips, grotspd, nbf)
+    use cart2sph, only: cart2sph_eri
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: shell_ids(4), flips(4)
+    real(kind=dp), intent(inout) :: grotspd(:)
+    integer, intent(inout) :: nbf(4)
+
+    integer :: ids(4), am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
+
+    if (.not. HARMONIC_ACTIVE) return
+
+    ids = shell_ids(flips)
+    am_s = basis%am(ids([4,3,2,1]))
+    pure_s = basis%harmonic(ids([4,3,2,1]))
+    if (.not. any(pure_s == 1 .and. am_s >= 2)) return
+
+    nbf_s = nbf([4,3,2,1])
+    call cart2sph_eri(grotspd, am_s, pure_s, nbf_s, nbf_out_s)
+    nbf = nbf_out_s([4,3,2,1])
+  end subroutine genr22_reduce_pure
 
   subroutine intclean(rdat,jtype)
     implicit none

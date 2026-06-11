@@ -1,7 +1,7 @@
 module int2e_rys
     use precision, only: dp
     use basis_tools, only: basis_set
-    use constants, only: bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z
+    use constants, only: HARMONIC_ACTIVE, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z
 
     integer, parameter :: MAXCONTR = 120
 
@@ -40,6 +40,7 @@ module int2e_rys
     public :: int2_rys_data_t
     public :: int2_rys_compute
     public :: int2_rys_compute_ordered_am
+    public :: int2_rys_reduce_pure
     public :: rys_print_eri
 
 contains
@@ -270,6 +271,29 @@ contains
     call int2_rys_compute(ints, gdat, ppairs, zero_shq)
 
   end subroutine int2_rys_compute_ordered_am
+
+  subroutine int2_rys_reduce_pure(basis, gdat, ints, nbf_out)
+    use cart2sph, only: cart2sph_eri
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    type(int2_rys_data_t), intent(in) :: gdat
+    real(kind=dp), intent(inout) :: ints(:)
+    integer, intent(out) :: nbf_out(4)
+
+    integer :: am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
+
+    nbf_out = gdat%nbf
+    if (.not. HARMONIC_ACTIVE) return
+
+    am_s = gdat%am([4,3,2,1])
+    pure_s = basis%harmonic(gdat%id([4,3,2,1]))
+    if (.not. any(pure_s == 1 .and. am_s >= 2)) return
+
+    nbf_s = gdat%nbf([4,3,2,1])
+    call cart2sph_eri(ints, am_s, pure_s, nbf_s, nbf_out_s)
+    nbf_out = nbf_out_s([4,3,2,1])
+  end subroutine int2_rys_reduce_pure
 
   subroutine compute(gdat, ng, nmax, mmax, ints)
 

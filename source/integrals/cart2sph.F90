@@ -81,12 +81,13 @@ contains
   end function c2s_ncomp
 
   !> @brief Return the c2s matrix B(l) (ncart x nsph) for a pure shell.
-  !> @details Only l = 2,3,4 carry a non-trivial transform. Caller guarantees
+  !> @details Only l >= 2 carries a non-trivial transform. Caller guarantees
   !>          l >= 2 (s/p never reach here because c2s_ncomp keeps them
   !>          Cartesian). The result is a copy sized (NUM_CART_BF(l), 2l+1).
   subroutine c2s_get(l, b)
     integer, intent(in) :: l
     real(dp), allocatable, intent(out) :: b(:,:)
+    real(dp), allocatable, save :: c2s_h(:,:), c2s_i(:,:)
     select case (l)
     case (2)
       b = C2S_D
@@ -94,10 +95,100 @@ contains
       b = C2S_F
     case (4)
       b = C2S_G
+    case (5)
+      if (.not. allocated(c2s_h)) c2s_h = c2s_build(l)
+      b = c2s_h
+    case (6)
+      if (.not. allocated(c2s_i)) c2s_i = c2s_build(l)
+      b = c2s_i
     case default
-      error stop 'cart2sph: pure spherical transforms are implemented only through g shells'
+      error stop 'cart2sph: requested angular momentum exceeds BAS_MXANG'
     end select
   end subroutine c2s_get
+
+  !> @brief Build B(l) for higher shells from the closed-form real solid-harmonic
+  !>        expansion used to generate the checked d/f/g tables above.
+  function c2s_build(l) result(b)
+    use constants, only: CART_X, CART_Y, CART_Z
+    integer, intent(in) :: l
+    real(dp), allocatable :: b(:,:)
+    integer :: nc, ns, col, m, am, t, u, k, k_start, ax, ay, az
+    integer :: sign_pow, cidx, ic, jc
+    real(dp), allocatable :: metric(:,:), row(:)
+    real(dp) :: coeff, norm2
+
+    nc = NUM_CART_BF(l)
+    ns = NUM_SPH_BF(l)
+    allocate(b(nc, ns), metric(nc, nc), row(nc))
+
+    do ic = 1, nc
+      do jc = 1, nc
+        metric(ic,jc) = cart_overlap(CART_X(ic,l), CART_Y(ic,l), CART_Z(ic,l), &
+                                     CART_X(jc,l), CART_Y(jc,l), CART_Z(jc,l))
+      end do
+    end do
+
+    col = 0
+    do m = -l, l
+      col = col + 1
+      am = abs(m)
+      row = 0.0_dp
+      do t = 0, (l - am) / 2
+        do u = 0, t
+          k_start = merge(0, 1, m >= 0)
+          do k = k_start, am, 2
+            sign_pow = t + (k - k_start) / 2
+            coeff = merge(1.0_dp, -1.0_dp, mod(sign_pow, 2) == 0) &
+                  * (0.25_dp ** t) &
+                  * real(ibinom(l, t), dp) &
+                  * real(ibinom(l - t, am + t), dp) &
+                  * real(ibinom(t, u), dp) &
+                  * real(ibinom(am, k), dp)
+            if (coeff == 0.0_dp) cycle
+            ax = 2*t + am - 2*u - k
+            ay = 2*u + k
+            az = l - 2*t - am
+            if (ax < 0 .or. ay < 0 .or. az < 0) cycle
+            cidx = cart_index(l, ax, ay, az)
+            row(cidx) = row(cidx) + coeff / cart_component_norm(ax, ay, az)
+          end do
+        end do
+      end do
+      norm2 = dot_product(row, matmul(metric, row))
+      b(:, col) = row / sqrt(norm2)
+    end do
+  end function c2s_build
+
+  integer function cart_index(l, ax, ay, az) result(idx)
+    use constants, only: CART_X, CART_Y, CART_Z
+    integer, intent(in) :: l, ax, ay, az
+    integer :: i
+    do i = 1, NUM_CART_BF(l)
+      if (CART_X(i,l) == ax .and. CART_Y(i,l) == ay .and. CART_Z(i,l) == az) then
+        idx = i
+        return
+      end if
+    end do
+    error stop 'cart2sph: generated monomial is absent from CART_X/Y/Z'
+  end function cart_index
+
+  pure real(dp) function cart_component_norm(ax, ay, az) result(n)
+    integer, intent(in) :: ax, ay, az
+    n = 1.0_dp / sqrt(real(idfact(2*ax - 1) * idfact(2*ay - 1) * idfact(2*az - 1), dp))
+  end function cart_component_norm
+
+  pure integer function ibinom(n, k) result(c)
+    integer, intent(in) :: n, k
+    integer :: i
+    if (k < 0 .or. k > n) then
+      c = 0
+      return
+    end if
+    c = 1
+    do i = 1, k
+      c = c * (n - i + 1) / i
+    end do
+  end function ibinom
 
   !> @brief Contract one index of a 3-way-folded block: out(il,is,ir) =
   !>        sum_ic B(ic,is) * a(il,ic,ir), with the index laid out as
@@ -427,7 +518,8 @@ contains
 
   !> @brief Self-test: rebuild the intra-shell metric S of unit-normalized
   !>        Cartesian Gaussians from the canonical exponents and verify
-  !>        B(l) S B(l)^T = I for l = 2,3,4. Returns the worst deviation.
+  !>        B(l) S B(l)^T = I for every supported pure shell. Returns the
+  !>        worst deviation.
   subroutine c2s_selftest(max_err)
     use constants, only: CART_X, CART_Y, CART_Z
     real(dp), intent(out) :: max_err
@@ -436,7 +528,7 @@ contains
     real(dp) :: err
 
     max_err = 0.0_dp
-    do l = 2, 4
+    do l = 2, BAS_MXANG
       nc = NUM_CART_BF(l)
       ns = NUM_SPH_BF(l)
       call c2s_get(l, b)

@@ -88,7 +88,7 @@ contains
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
     use types, only: information
-    use constants, only: HARMONIC_ACTIVE, tol_int
+    use constants, only: tol_int
     use int1, only: giao_h10_core, giao_overlap_derivative, pso_integrals, &
                     nmr_dia_shielding, giao_a11part_corr, giao_a01gp_contract
     use nmr_giao_debug_mod, only: giao_h10_twoe_matrix
@@ -147,11 +147,6 @@ contains
     ! log instead of an orphan fort.* file.
     inquire(unit=iw, opened=iw_open)
     if (.not. iw_open) open(unit=iw, file=infos%log_filename, position="append")
-
-    if (HARMONIC_ACTIVE .and. any(basis%harmonic == 1)) then
-      call show_message('GIAO NMR shielding with pure spherical AO dimensions &
-        &is not implemented; use input.ispher=False for GIAO NMR.', with_abort)
-    end if
 
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
     call check_status(status, module_name, subroutine_name, OQP_DM_A)
