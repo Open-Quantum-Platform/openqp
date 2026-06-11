@@ -62,3 +62,35 @@ print('CPHF target (dn-dci-dov)      :', np.round(d_cphf_target, 5),
 print('frozen/orbital ratio = %.3f' % (np.linalg.norm(dov)/np.linalg.norm(d_orb_target)))
 print('CPHF/orbital   ratio = %.3f' % (np.linalg.norm(d_cphf_target)/np.linalg.norm(d_orb_target)))
 
+# ===== analytical CPHF term via z-vector interchange =====
+def grad_now():
+    oqp.tdhf_mrsf_gradient(mol)
+    return mol.get_grad().reshape((natom, 3)).copy()
+
+def cphf_term(i, j):
+    mol.data.set_tdhf_target(i)
+    oqp.set_mrsf_nac_cphf(mol, i, j)      # CPHF mode on
+    oqp.tdhf_mrsf_z_vector(mol)
+    if not mol.mol_energy.Z_Vector_converged:
+        oqp.set_mrsf_nac_cphf(mol, 0, 0)
+        return None
+    gZ = grad_now()                        # SCF + nuc + d^cphf
+    # zero the relaxed/transition densities -> pure SCF+nuc gradient
+    mol.data['OQP::td_p'] = np.zeros_like(np.array(mol.data['OQP::td_p'], copy=True))
+    gS = grad_now()
+    oqp.set_mrsf_nac_cphf(mol, 0, 0)      # CPHF mode off
+    return (gZ - gS).reshape(-1)
+
+d_cphf_ana = cphf_term(i, j)
+print('\n--- analytical CPHF term vs target ---')
+if d_cphf_ana is None:
+    print('CPHF z-vector did NOT converge')
+else:
+    t = d_cphf_target
+    s = np.sign(np.dot(t, d_cphf_ana)) or 1.0
+    cos = np.dot(t, d_cphf_ana)/(np.linalg.norm(t)*np.linalg.norm(d_cphf_ana)+1e-30)
+    print('CPHF target :', np.round(t, 5), ' |.|=%.4f' % np.linalg.norm(t))
+    print('CPHF analyt :', np.round(d_cphf_ana, 5), ' |.|=%.4f' % np.linalg.norm(d_cphf_ana))
+    print('cos(target, analyt) = %+.4f   best-sign resid = %.5f' %
+          (cos, np.linalg.norm(s*d_cphf_ana - t)))
+
