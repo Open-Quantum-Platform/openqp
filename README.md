@@ -113,7 +113,7 @@ pip install .
 | `-DENABLE_OPENTRAH=OFF` | ON | Skip the external OpenTrustRegion (OpenTRAH) solver; the TRAH SCF converger then uses the built-in native implementation only. |
 | `-DOQP_REUSE_EXTERNALS=OFF` | ON | Disable the automatic reusable cache for bundled external dependency builds. |
 
-Bundled external dependencies are cached automatically across fresh OpenQP build directories. The cache uses the platform cache directory (`~/Library/Caches/openqp/externals` on macOS, `$XDG_CACHE_HOME/openqp/externals` or `~/.cache/openqp/externals` elsewhere) and is keyed by operating system, architecture, compiler IDs/versions, build type, linkage mode, BLAS/LAPACK choice, BLAS/LAPACK integer ABI, and bundled external versions, so Fortran modules and libraries are reused only by compatible builds. Advanced users can relocate the cache with `-DOQP_EXTERNALS_ROOT=<path>`.
+Bundled external dependencies are cached automatically across fresh OpenQP build directories. The cache uses the platform cache directory (`~/Library/Caches/openqp/externals` on macOS, `$XDG_CACHE_HOME/openqp/externals` or `~/.cache/openqp/externals` elsewhere) and is keyed by operating system, architecture, CMake generator, compiler IDs/versions, build type, linkage mode, BLAS/LAPACK choice, BLAS/LAPACK integer ABI, and bundled external versions, so Fortran modules and libraries are reused only by compatible builds. Advanced users can relocate the cache with `-DOQP_EXTERNALS_ROOT=<path>`.
 
 To build without Ninja, drop `-G Ninja` and replace `ninja` with `make`.
 
