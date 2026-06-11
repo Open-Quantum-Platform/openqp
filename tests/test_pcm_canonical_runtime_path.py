@@ -71,10 +71,10 @@ class PcmCanonicalRuntimePathTests(unittest.TestCase):
         )
 
     def test_provisional_conventions_documented_in_source(self):
-        # The sign/scale conventions that are not yet validated against a trusted
-        # PCM reference are recorded next to the code that relies on them.
+        # The scalar sign/scale conventions validated by the Born/ddX and
+        # f(eps)*PySCF ddCOSMO gates are recorded next to the code that relies on them.
         pcm = _read("source", "solvent_pcm.F90")
-        self.assertIn("PROVISIONAL CONVENTIONS", pcm)
+        self.assertIn("VALIDATED SCALAR CONVENTIONS", pcm)
         self.assertIn("phi_cav sign", pcm)
         self.assertIn("ddx_get_xi", pcm)         # q_cav from ddX adjoint charge
         self.assertIn("q_cav sign/scale", pcm)

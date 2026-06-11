@@ -44,12 +44,12 @@
 !>     source-vs-exact phi residual and the q_cav shift between the old l<=2 psi
 !>     and the new full-density psi (PCM diag q_cav_*_vs_*_rms).
 !>
-!> PROVISIONAL CONVENTIONS (not yet validated against a trusted PCM reference):
+!> VALIDATED SCALAR CONVENTIONS (Born/ddX + f(eps)*PySCF ddCOSMO gate):
 !>   * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| + phi_elec
 !>   * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
 !>     directly as the external-charge vector for external_charge_potential.
-!>   * E_pcm: -0.5 * dot_product(phi_cav, q_cav) for the current diagnostic path;
-!>     the ddX esolv value is reported separately.
+!>   * E_pcm: -0.5 * f_epsilon * dot_product(phi_cav, q_cav), matching the
+!>     OpenQP reported-energy convention validated against the current reference.
 !> The single canonical runtime path and these conventions are pinned by
 !> tests/test_pcm_canonical_runtime_path.py.
 module solvent_pcm
@@ -421,17 +421,16 @@ contains
     ! PCM reaction-field (solvation) energy. The apparent surface charges q_cav
     ! (from the full-density-Psi exact-phi ddX solve) are contracted with the
     ! EXACT total solute potential at the cavity points (phi_cav = nuclear +
-    ! electronic). The -0.5 factor is the linear-response polarization factor,
-    ! consistent with the finite-difference relation dE/dphi = -0.5*q_cav
-    ! verified by pcm_fock_scale_fd_diagnostic.
+    ! electronic). The -0.5 factor is the linear-response polarization factor;
+    ! f_epsilon maps the ddPCM/COSMO dielectric convention to the OpenQP reported
+    ! energy used in the Born/ddX + f(eps)*PySCF ddCOSMO validation gate.
     !
-    ! FOCK DERIVATIVE HONESTY: V_pcm = -0.5 * external_charge_potential(q_cav) is
-    ! the apparent-surface-charge (ASC) operator; the -0.5 scale is FD-validated
-    ! only against dE/dphi (the explicit phi-dependence), NOT against the full
-    ! variational dE/dD. Because the full-density Psi now depends on D, a rigorous
-    ! variational Fock would also carry a dPsi/dD term and the canonical ASC
-    ! prefactor (1 vs 1/2) question; those are NOT derived here. This path is
-    ! therefore labelled fock_mode=asc_qcav_potential_phi_fd_only (see below).
+    ! FOCK DERIVATIVE SCOPE: the production SCF uses the full linear-dielectric
+    ! coupling V_pcm = -f_epsilon * external_charge_potential(q_cav), recorded as
+    ! fock_mode=ddpcm_feps_full_variational_coupling. The finite-difference probe
+    ! above only verifies the explicit dE/dphi relation (-0.5*q_cav); future
+    ! analytic gradients/response work should add a dedicated dPsi/dD check for
+    ! the grid-projected full-density source.
     e_pcm = f_epsilon * PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
 
     ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --

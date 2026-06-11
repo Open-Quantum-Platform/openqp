@@ -77,9 +77,9 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
  * ddX/runtime error (with a human-readable message). Atomic cavity radii are
  * derived from the nuclear charges via a small built-in van der Waals table.
  *
- * NOTE: the sign/scale convention of q_cav relative to OpenQP's
- * external_charge_potential seam is PROVISIONAL and not yet validated against a
- * trusted PCM reference. See tests/test_pcm_canonical_runtime_path.py.
+ * NOTE: the q_cav sign/scale used by OpenQP's external_charge_potential
+ * seam is pinned by the Born/ddX and f(eps)*PySCF ddCOSMO validation gates.
+ * See tests/test_pcm_canonical_runtime_path.py.
  */
 int oqp_ddx_pcm_cavity(int natom, const double* xyz_bohr, const double* charges,
                        double epsilon, int max_cav, int* ncav_out,

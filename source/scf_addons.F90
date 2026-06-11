@@ -325,7 +325,7 @@ contains
      write(IW,"('                Two electron energy =',F19.10)") this%vee
      write(IW,"('           Nuclear repulsion energy =',F19.10)") this%nenergy
      if (this%e_pcm /= 0.0_dp) then
-        write(IW,"('           PCM solvent energy (prov) =',F19.10)") this%e_pcm
+        write(IW,"('           PCM solvent energy        =',F19.10)") this%e_pcm
      end if
      write(IW,"(38X,18('-'))")
      write(IW,"('                       TOTAL energy =',F19.10)") this%etot

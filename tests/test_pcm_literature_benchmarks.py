@@ -427,8 +427,8 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag phi_cav_min=-9.00000000000000E-01\n"
         " PCM diag phi_cav_max= 1.00000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=total_qm_atom_multipoles_l2\n"
-        "           PCM solvent energy (prov) =     -0.0099000000\n"
+        " PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak\n"
+        "           PCM solvent energy        =     -0.0099000000\n"
         "                       TOTAL energy =     -76.0200000000\n"
         # converged iteration (last wins):
         " PCM diag e_pcm=-1.23456789000000E-02\n"
@@ -447,8 +447,8 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag phi_cav_min=-9.10000000000000E-01\n"
         " PCM diag phi_cav_max= 1.10000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=total_qm_atom_multipoles_l2\n"
-        "           PCM solvent energy (prov) =     -0.0123456789\n"
+        " PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak\n"
+        "           PCM solvent energy        =     -0.0123456789\n"
         "                       TOTAL energy =     -76.0230456789\n"
     )
 
@@ -465,7 +465,7 @@ class DiagnosticParsingUnit(unittest.TestCase):
         self.assertAlmostEqual(diag["phi_source_vs_exact_rms"], 0.066)
         self.assertAlmostEqual(diag["phi_cav_min"], -0.91)
         self.assertEqual(diag["ncav"], 1452)
-        self.assertEqual(diag["psi_source"], "total_qm_atom_multipoles_l2")
+        self.assertEqual(diag["psi_source"], "full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak")
         # The separately-printed e_pcm and the diag e_pcm must agree.
         self.assertAlmostEqual(_pcm_energy(self.SAMPLE), diag["e_pcm"], places=6)
         self.assertAlmostEqual(_total_energy(self.SAMPLE), -76.0230456789)
