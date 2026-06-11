@@ -3275,14 +3275,21 @@ class NAC(Calculator):
         flags = []
 
         dump_log(mol, title=(
-            'PyOQP: WARNING -- analytical NAC is EXPERIMENTAL. The '
-            'gradient-polarization route below yields only the '
-            'Hellmann-Feynman / CI contribution h_IJ^(CI) = X_I^T (dA/dx) X_J '
-            '(+ orbital relaxation). For MRSF this is sub-dominant; the full '
-            'derivative coupling is dominated by the orbital-overlap (Pulay/ETF) '
-            'term Sum_pq gamma^IJ_pq <phi_p|d_x phi_q>, which is NOT in an '
-            'energy gradient and is still to be implemented. Use type=numerical '
-            'for production.'))
+            'PyOQP: WARNING -- analytical NAC is EXPERIMENTAL / NOT VALIDATED. '
+            'd_IJ = h^(CI)_IJ/(E_J-E_I) + d^(ov)_IJ. The CI part (gradient '
+            'polarization) is correct and symmetry-respecting. The '
+            'orbital-overlap (Pulay) part d^(ov) = Sum gamma^IJ <phi|d_x phi> '
+            '(Fortran mrsf_nac_overlap, ket-half overlap derivative) does NOT '
+            'yet reproduce the numerical NAC: it omits the CPHF orbital-response '
+            '(U^x) piece of <phi_p|d_x phi_q> and is sensitive to run-to-run '
+            'SCF/Davidson phase. Use type=numerical for production.'))
+
+        # ---- orbital-overlap (Pulay) term for all pairs, computed in Fortran:
+        # d^ov_IJ(c,A) = sum_uv (C gamma^IJ C^T)_uv <chi_u|d_{A,c} chi_v>
+        oqp.mrsf_nac_overlap(mol)
+        ovraw = np.array(mol.data['OQP::nac_overlap'], copy=True)  # (3*natom, nstate, nstate) Fortran
+        # ovraw[k, ist, jst], k=(a-1)*3+c. Move state axes to front, keep pair order:
+        ov = np.transpose(ovraw, (1, 2, 0)).reshape((nstate, nstate, natom, 3))
 
         pairs = [tuple(p) for p in self.nac_states]
         for (i, j) in pairs:
@@ -3297,12 +3304,16 @@ class NAC(Calculator):
             if gp is None or gm is None:
                 flags.append('failed')
                 continue
-            h = 0.5 * (gp - gm)
+            h_ci = 0.5 * (gp - gm)             # Hellmann-Feynman / CI h-vector
             gap = mol.energies[j] - mol.energies[i]
-            nacv[i - 1, j - 1] = h
-            nacv[j - 1, i - 1] = -h
-            dcv[i - 1, j - 1] = h / gap
-            dcv[j - 1, i - 1] = -h / gap
+            d_ci = h_ci / gap                  # CI derivative-coupling part
+            d_ov = ov[i - 1, j - 1]            # orbital-overlap (Pulay) part
+            d_ij = d_ci + d_ov                 # total derivative coupling
+            h_ij = d_ij * gap                  # report h = d * gap (NACV convention)
+            nacv[i - 1, j - 1] = h_ij
+            nacv[j - 1, i - 1] = -h_ij
+            dcv[i - 1, j - 1] = d_ij
+            dcv[j - 1, i - 1] = -d_ij
 
         mol.data[bkey] = raw0                  # full restore of amplitudes
         return nacv, dcv, flags

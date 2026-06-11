@@ -259,6 +259,105 @@ contains
 
 !###############################################################################
 
+  subroutine mrsf_nac_overlap_C(c_handle) bind(C, name="mrsf_nac_overlap")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_overlap(inf)
+  end subroutine mrsf_nac_overlap_C
+
+!> @brief Orbital-overlap (Pulay) contribution to the first-order NAC for all
+!>   MRSF state pairs: d^ov_{IJ,Ac} = sum_uv (C gamma^IJ C^T)_uv <chi_u|d_{Ac} chi_v>,
+!>   the interstate transition density contracted with the ket-half overlap
+!>   derivative. This is the dominant part of the derivative coupling and is
+!>   absent from any energy gradient; it complements the Hellmann-Feynman/CI
+!>   part computed by gradient polarization in the Python driver. Result stored
+!>   in OQP::nac_overlap, shape (3, natom, nstate, nstate).
+  subroutine mrsf_nac_overlap(infos)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use grd1, only: der_overlap_matrix_ket
+    use tdhf_mrsf_lib, only: get_mrsf_transition_density
+    use mathlib, only: orthogonal_transform
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_overlap"
+    character(len=*), parameter :: OQP_nac_overlap = "OQP::nac_overlap"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    integer :: nbf, natom, nstate, i, j, ist, jst, mu, nu, c, a, ok
+    real(kind=dp), allocatable :: dSket(:,:,:,:), trden(:,:), trden_ao(:,:), &
+                                  tmp(:,:), gnorm(:,:)
+    real(kind=dp), pointer :: nac_ov(:,:,:)
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), bvec_mo(:,:)
+    real(kind=dp) :: acc
+    character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
+      OQP_VEC_MO_A, OQP_td_bvec_mo /)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    natom = ubound(infos%atoms%grad, 2)
+    nstate = infos%tddft%nstate
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_overlap /))
+    call infos%dat%reserve_data(OQP_nac_overlap, ta_type_real64, &
+          3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
+    call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
+    nac_ov = 0.0_dp
+
+    allocate(dSket(nbf,nbf,3,natom), trden(nbf,nbf), trden_ao(nbf,nbf), &
+             tmp(nbf,nbf), gnorm(nbf,nbf), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    ! ket-half AO overlap derivative <chi_u | d_{A,c} chi_v>
+    call der_overlap_matrix_ket(basis, dSket)
+
+    do ist = 1, nstate
+      do jst = 1, nstate
+        if (ist == jst) cycle
+        ! interstate transition density (MO), then -> AO: C * trden * C^T
+        call get_mrsf_transition_density(infos, trden, bvec_mo, ist, jst)
+        call orthogonal_transform('t', nbf, mo_a, trden, trden_ao, tmp)
+        ! apply basis normalization (dSket is in unnormalized convention)
+        do nu = 1, nbf
+          do mu = 1, nbf
+            gnorm(mu,nu) = trden_ao(mu,nu)*basis%bfnrm(mu)*basis%bfnrm(nu)
+          end do
+        end do
+        ! contract: d^ov(c,A) = sum_uv gnorm_uv dSket(u,v,c,A)  (ket-half)
+        do a = 1, natom
+          do c = 1, 3
+            acc = 0.0_dp
+            do nu = 1, nbf
+              do mu = 1, nbf
+                acc = acc + gnorm(mu,nu)*dSket(mu,nu,c,a)
+              end do
+            end do
+            nac_ov((a-1)*3+c, ist, jst) = acc
+          end do
+        end do
+      end do
+    end do
+
+    deallocate(dSket, trden, trden_ao, tmp, gnorm)
+
+  end subroutine mrsf_nac_overlap
+
+!###############################################################################
+
 !> @brief The driver for the two electron gradient
   subroutine mrsf_2e_grad(basis, infos, d, p, spc, v)
 

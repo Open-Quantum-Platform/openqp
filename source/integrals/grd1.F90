@@ -39,6 +39,7 @@ module grd1
    public hess_ee_kinetic
    public hess_en
    public der_overlap_matrix
+   public der_overlap_matrix_ket
    public der_kinetic_matrix
    public der_nucattr_matrix
    public grad_en_hellman_feynman
@@ -876,6 +877,68 @@ contains
                 END DO
             END DO
             deallocate(dblk, sblk)
+        END DO
+    END DO
+ END SUBROUTINE
+
+!-------------------------------------------------------------------------------
+
+!> @brief Build the "ket-half" AO overlap first-derivative matrices,
+!>   dSket(u,v,c,A) = <chi_u | d/dR_{A,c} chi_v>, i.e. the derivative acting on
+!>   the KET basis function only (nonzero when v is centered on atom A).
+!> @details Needed for first-order nonadiabatic derivative couplings,
+!>   d^ov_{IJ} = sum_uv (C gamma^IJ C^T)_uv <chi_u|d_x chi_v>, which uses the
+!>   one-sided (ket) overlap derivative, NOT the symmetric full derivative
+!>   dS = <d chi_u|chi_v> + <chi_u|d chi_v> used by the energy gradient. For an
+!>   ordered shell pair (ii on A_at, jj on B_at), comp_overlap_der1_block gives
+!>   the bra-center block <d_{A_at} chi_i|chi_j> = dblk; by translational
+!>   invariance of the two-center overlap the ket-center derivative is
+!>   <chi_i|d_{B_at} chi_j> = -dblk, which is scattered to atom B_at (the ket
+!>   atom). Same unnormalized convention as der_overlap_matrix: contract with
+!>   bfnrm-normalized density.
+ SUBROUTINE der_overlap_matrix_ket(basis, dSket, logtol)
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(out) :: dSket(:,:,:,:)   ! (nbf, nbf, 3, natom)
+    real(kind=dp), optional :: logtol
+
+    INTEGER :: ii, jj, c, i, j, gi, gj, B_at, oi, oj
+    REAL(kind=dp) :: tol
+    REAL(kind=dp), ALLOCATABLE :: dblk(:,:,:)
+    TYPE(shell_t) :: shi, shj
+    TYPE(shpair_t) :: cntp
+
+    if (present(logtol)) then
+        tol = logtol
+    else
+        tol = tol_default
+    end if
+
+    dSket = 0.0d0
+
+    CALL cntp%alloc(basis)
+    DO ii = 1, basis%nshell
+        CALL shi%fetch_by_id(basis, ii)
+        oi = basis%ao_offset(ii) - 1
+        DO jj = 1, basis%nshell
+            CALL shj%fetch_by_id(basis, jj)
+            B_at = shj%atid
+            oj = basis%ao_offset(jj) - 1
+            CALL cntp%shell_pair(basis, shi, shj, tol, dup=.false.)
+            IF (cntp%numpairs==0) CYCLE
+            allocate(dblk(cntp%inao, cntp%jnao, 3), source=0.0d0)
+            CALL comp_overlap_der1_block(cntp, dblk)
+            DO c = 1, 3
+                DO i = 1, cntp%inao
+                    gi = oi + i
+                    DO j = 1, cntp%jnao
+                        gj = oj + j
+                        ! ket-center derivative: <chi_i | d_{B_at} chi_j> = -dblk
+                        dSket(gi, gj, c, B_at) = dSket(gi, gj, c, B_at) - dblk(i,j,c)
+                    END DO
+                END DO
+            END DO
+            deallocate(dblk)
         END DO
     END DO
  END SUBROUTINE
