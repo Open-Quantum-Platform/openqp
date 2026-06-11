@@ -26,7 +26,7 @@ module trah_native
   use types,            only: information
   use mod_dft_molgrid,  only: dft_grid_t
   use scf_converger,    only: trah_converger, scf_conv_result, scf_conv_trah_result
-  use scf_addons,       only: calc_fock, compute_energy, scf_energy_t
+  use scf_addons,       only: calc_fock, compute_energy, scf_energy_t, scf_rhf
   use guess,            only: get_ab_initio_density
   use basis_tools,      only: basis_set
   use io_constants,     only: IW
@@ -50,6 +50,7 @@ contains
     integer  :: n, macro, nmac, nmic, micro_used, irst, nrst
     real(dp) :: delta, dmax, conv_tol, gnorm, e0, etrial, rho, pred, snorm, e_best
     real(dp), allocatable :: g(:), hdiag(:), p(:), mo0_a(:,:), mo0_b(:,:), mob_a(:,:), mob_b(:,:)
+    real(dp), allocatable :: mo_e_a(:), mo_e_b(:)
     real(dp), allocatable :: vmin(:)
     real(dp) :: lam
     logical  :: accepted, conv_ok, have_best
@@ -71,7 +72,7 @@ contains
     delta    = real(infos%control%trh_r0, dp)
     dmax     = max(4.0_dp, 8.0_dp*delta)
 
-    allocate(g(n), hdiag(n), p(n), vmin(n))
+    allocate(g(n), hdiag(n), p(n), vmin(n), mo_e_a(conv%nbf), mo_e_b(conv%nbf))
     conv%f_old = 0.0_dp
     conv%d_old = 0.0_dp
 
@@ -269,13 +270,53 @@ contains
     end if
 
     conv%etot = e0
+    call compute_native_mo_energies(conv%nbf, conv%fock_ao(:,1), conv%mo_a, &
+                                    mo_e_a, conv%work1, conv%work2)
+    if (infos%control%scftype /= scf_rhf) then
+      call compute_native_mo_energies(conv%nbf, conv%fock_ao(:,2), conv%mo_b, &
+                                      mo_e_b, conv%work1, conv%work2)
+    else
+      mo_e_b = mo_e_a
+    end if
+    conv%dat%buffer(conv%dat%slot)%focks = conv%fock_ao
+    conv%dat%buffer(conv%dat%slot)%densities = conv%dens
+    conv%dat%buffer(conv%dat%slot)%energy = e0
+    conv%dat%buffer(conv%dat%slot)%mo_a = conv%mo_a
+    conv%dat%buffer(conv%dat%slot)%mo_e_a = mo_e_a
+    if (infos%control%scftype /= scf_rhf) then
+      conv%dat%buffer(conv%dat%slot)%mo_b = conv%mo_b
+      conv%dat%buffer(conv%dat%slot)%mo_e_b = mo_e_b
+    end if
     select type (res)
     class is (scf_conv_trah_result)
       res%iter = macro
     end select
 
-    deallocate(g, hdiag, p, vmin, mo0_a, mo0_b, mob_a, mob_b)
+    deallocate(g, hdiag, p, vmin, mo0_a, mo0_b, mob_a, mob_b, mo_e_a, mo_e_b)
   end subroutine trah_native_run
+
+  subroutine compute_native_mo_energies(nbf, fock, mo_coeffs, mo_energies, work_1, work_2)
+    use mathlib, only: unpack_matrix
+    integer,  intent(in)    :: nbf
+    real(dp), intent(in)    :: fock(:), mo_coeffs(:,:)
+    real(dp), intent(out)   :: mo_energies(:)
+    real(dp), intent(inout) :: work_1(:,:), work_2(:,:)
+    integer :: i
+
+    call unpack_matrix(fock, work_1)
+    call dgemm('T', 'N', nbf, nbf, nbf, &
+               1.0_dp, mo_coeffs, nbf, &
+                       work_1, nbf, &
+               0.0_dp, work_2, nbf)
+    call dgemm('N', 'N', nbf, nbf, nbf, &
+               1.0_dp, work_2, nbf, &
+                       mo_coeffs, nbf, &
+               0.0_dp, work_1, nbf)
+
+    do i = 1, nbf
+      mo_energies(i) = work_1(i, i)
+    end do
+  end subroutine compute_native_mo_energies
 
   !> @brief Build density+Fock from the given orbitals and return the (scaled)
   !>        orbital gradient, Hessian diagonal, and total energy.
