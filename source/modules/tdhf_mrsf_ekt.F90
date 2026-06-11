@@ -27,7 +27,7 @@ contains
   subroutine tdhf_mrsf_ekt(infos, electron_affinity)
     use io_constants, only: iw
     use oqp_tagarray_driver
-    use types, only: information
+    use types, only: information, energy_results
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
     use util, only: measure_time
@@ -58,6 +58,7 @@ contains
     real(kind=dp), allocatable :: fock_pack(:)
     type(dft_grid_t), target :: ea_molgrid
     type(scf_energy_t) :: ea_energy
+    type(energy_results) :: saved_mol_energy
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
     real(kind=dp), allocatable :: density_alpha_mo(:,:), density_beta_mo(:,:)
     real(kind=dp), allocatable :: density_ip_mo(:,:), density_ea_mo(:,:)
@@ -216,17 +217,19 @@ contains
         call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
         saved_fock_ao(:,2) = fock_b
       end if
+      saved_mol_energy = infos%mol_energy
 
       nschwz = 0
       if (infos%control%hamilton >= 20) call dft_initialize(infos, basis, ea_molgrid)
       call calc_fock(basis, infos, ea_molgrid, ea_fock_ao, ea_energy, &
                      mo_a_in=mo_a, dens_in=ea_density_ao, nschwz=nschwz)
 
-      ! calc_fock updates the stored SCF Fock/energy as a side effect; restore
-      ! them because this EA-specific relaxed-density Fock is only an EKT
-      ! operator ingredient, not a new SCF reference.
+      ! calc_fock updates the stored SCF Fock and infos%mol_energy%energy as
+      ! side effects; restore them because this EA-specific relaxed-density
+      ! Fock is only an EKT operator ingredient, not a new SCF reference.
       fock_a = saved_fock_ao(:,1)
       if (nfocks > 1) fock_b = saved_fock_ao(:,2)
+      infos%mol_energy = saved_mol_energy
 
       call orthogonal_transform_sym(nbf, nbf, ea_fock_ao(:,1), mo_a, nbf, fock_pack)
       call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
