@@ -95,8 +95,7 @@ contains
     case (4)
       b = C2S_G
     case default
-      ! Should never happen; leave unallocated so callers fail loudly.
-      allocate(b(0,0))
+      error stop 'cart2sph: pure spherical transforms are implemented only through g shells'
     end select
   end subroutine c2s_get
 

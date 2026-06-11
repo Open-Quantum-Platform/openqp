@@ -381,7 +381,7 @@ contains
       maxi = basis%naos(i)
       n = basis%ao_offset(i)
       ang = basis%am(i)
-      if (basis%harmonic(i) == 1) then
+      if (HARMONIC_ACTIVE .and. basis%harmonic(i) == 1) then
         ! Pure spherical components are already unit-normalized by the
         ! Cartesian->spherical transform (which folds in shells_pnrm2), so
         ! bas_norm_matrix must not rescale them again.

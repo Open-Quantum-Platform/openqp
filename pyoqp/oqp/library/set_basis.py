@@ -68,7 +68,7 @@ class BasisData:
             # Auto-select the AO convention the basis was published with,
             # e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical (5d).
             shell_ft = shell.get('function_type', 'gto')
-            shell_harmonic = 1 if shell_ft.endswith('spherical') else 0
+            shell_is_spherical = shell_ft.endswith('spherical')
 
             for coefficients in shell['coefficients']:
                 shell['angular_momentum']
@@ -76,6 +76,13 @@ class BasisData:
                     ang_mom = shell['angular_momentum'][ang_ii]
                 else:
                     ang_mom = shell['angular_momentum'][0]
+                if shell_is_spherical and ang_mom > 4 and self.mol.config["input"].get("ispher", True):
+                    raise ValueError(
+                        "input.ispher=True only supports pure spherical shells through g "
+                        f"(angular_momentum <= 4); basis '{basis_name}' requests l={ang_mom}. "
+                        "Use input.ispher=False or a basis without h/i spherical shells."
+                    )
+                shell_harmonic = 1 if shell_is_spherical and ang_mom <= 4 else 0
 
                 self.shell_num += 1
 

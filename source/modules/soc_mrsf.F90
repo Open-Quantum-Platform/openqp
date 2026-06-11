@@ -335,9 +335,10 @@ contains
 !> @param[out]   lz_ao   Lz AO integrals, packed lower-triangular
 subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
   use basis_tools,       only: basis_set, bas_norm_matrix
+  use cart2sph,          only: cart2sph_mat
   use mod_1e_primitives, only: comp_soc_int1_prim, update_triang_matrix
   use mod_shell_tools,   only: shell_t, shpair_t
-  use constants,         only: tol_int
+  use constants,         only: HARMONIC_ACTIVE, tol_int
   use precision,         only: dp
   use types,             only: information
   use parallel,          only: par_env_t
@@ -402,6 +403,11 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
         end do
       end do
 
+      if (HARMONIC_ACTIVE .and. (shi%harmonic == 1 .or. shj%harmonic == 1)) then
+        call cart2sph_mat(socblk(:,1), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+        call cart2sph_mat(socblk(:,2), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+        call cart2sph_mat(socblk(:,3), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+      end if
       call update_triang_matrix(shi, shj, socblk(:,1), lx_ao)
       call update_triang_matrix(shi, shj, socblk(:,2), ly_ao)
       call update_triang_matrix(shi, shj, socblk(:,3), lz_ao)

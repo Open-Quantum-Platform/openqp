@@ -46,3 +46,34 @@ def test_pcm_ddx_sources_are_present_after_main_sync():
     assert "oqp_ddx_pcm_solve" in solvent
     assert "'pcm':" in schema
     assert "single-point energies only" in checker
+
+
+def test_pcm_uses_active_ao_ranges_for_mulliken_sources():
+    solvent = (ROOT / "source/solvent_pcm.F90").read_text()
+
+    assert "i1 = basis%ao_offset(ish) + basis%naos(ish) - 1" in solvent
+    assert "i1 = basis%ao_offset(ish) + NUM_CART_BF(basis%am(ish)) - 1" not in solvent
+
+
+def test_property_integral_consumers_transform_spherical_blocks():
+    int1 = (ROOT / "source/integrals/int1.F90").read_text()
+    dk = (ROOT / "source/modules/dk_scalar.F90").read_text()
+    soc = (ROOT / "source/modules/soc_mrsf.F90").read_text()
+    grd1 = (ROOT / "source/integrals/grd1.F90").read_text()
+
+    assert "subroutine prepare_density_matrix" in int1
+    assert "call build_cart_density" in int1
+    assert "call density_ordered_matrix(shi, shj, den, dens, off)" in int1
+    assert "densb(off(ii):, off(jj):)" in int1
+    assert "call cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic)" in int1
+    assert "CALL cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic" in int1
+    assert "call cart2sph_mat(pvpblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic" in dk
+    assert "call cart2sph_mat(socblk(:,1), shj%ang, shj%harmonic, shi%ang, shi%harmonic" in soc
+    assert "dens(off(ii):, off(jj):), alpha, dernuc" in grd1
+
+
+def test_giao_nmr_true_spherical_path_is_guarded():
+    text = (ROOT / "source/modules/nmr_giao_shielding.F90").read_text()
+
+    assert "HARMONIC_ACTIVE .and. any(basis%harmonic == 1)" in text
+    assert "GIAO NMR shielding with pure spherical AO dimensions" in text

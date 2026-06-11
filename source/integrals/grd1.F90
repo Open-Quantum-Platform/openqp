@@ -1072,7 +1072,7 @@ contains
 
                 ! Ewald screening
                 IF (present(alpha)) THEN
-                    CALL comp_ewaldlr_der1(cntp, cxyz, -znuc, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), alpha, dernuc)
+                    CALL comp_ewaldlr_der1(cntp, cxyz, -znuc, dens(off(ii):, off(jj):), alpha, dernuc)
                 END IF
 
                 de1 = de1 + 2*dernuc(1:3)
