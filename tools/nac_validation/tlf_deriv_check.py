@@ -115,17 +115,19 @@ def displaced(coord):
     # (b) frozen amplitudes: old = new = X(R0), same aligned M
     mol.data['OQP::td_bvec_mo'] = X0_raw
     S_frozen = states_overlap()
-    return S_real, S_frozen, Xd
+    return S_real, S_frozen, Xd, M_al
 
 
 ncoord = 3 * natom
 A_real = np.zeros((ncoord, nstate, nstate))
 A_frozen = np.zeros((ncoord, nstate, nstate))
 d_amp = np.zeros((ncoord, nstate, nstate))
+theta_al = np.zeros((ncoord, nbf, nbf))    # gauge-consistent with A_frozen
 
 for k in range(ncoord):
-    Sp_r, Sp_f, Xp = displaced(xyz0 + DELTA * np.eye(ncoord)[k])
-    Sm_r, Sm_f, Xm = displaced(xyz0 - DELTA * np.eye(ncoord)[k])
+    Sp_r, Sp_f, Xp, Mp = displaced(xyz0 + DELTA * np.eye(ncoord)[k])
+    Sm_r, Sm_f, Xm, Mm = displaced(xyz0 - DELTA * np.eye(ncoord)[k])
+    theta_al[k] = (Mp - Mm) / (2 * DELTA)
     print(f'k={k}: |S+f - I|={np.abs(Sp_f - np.eye(nstate)).max():.2e} '
           f'|S-f - I|={np.abs(Sm_f - np.eye(nstate)).max():.2e} '
           f'|S+r - I|={np.abs(Sp_r - np.eye(nstate)).max():.2e}', flush=True)
@@ -172,7 +174,8 @@ tag = 'hf' if 'HF' in inp.upper() and 'BHH' not in inp.upper() else 'bhh'
 if 'hf' in inp.lower() and 'tight' in inp.lower():
     tag = 'hf'
 np.savez(f'/tmp/nactest/tlf_deriv_{tag}.npz', A_real=A_real, A_frozen=A_frozen,
-         d_amp=d_amp, dn=dn, dn_all=dn_all, X0=X0, noca=noca, nocb=nocb, nbf=nbf)
+         d_amp=d_amp, dn=dn, dn_all=dn_all, X0=X0, noca=noca, nocb=nocb, nbf=nbf,
+         theta=theta_al)
 print(f'\nsaved /tmp/nactest/tlf_deriv_{tag}.npz')
 
 print('\n===== the exact relation, all pairs: dn =?= -(2*damp + A_frozen) =====')
