@@ -289,17 +289,17 @@ contains
 
     character(len=*), parameter :: subroutine_name = "mrsf_nac_overlap"
     character(len=*), parameter :: OQP_nac_overlap = "OQP::nac_overlap"
+    character(len=*), parameter :: OQP_nac_trden = "OQP::nac_trden_mo"
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
     integer :: nbf, natom, nstate, i, j, ist, jst, mu, nu, c, a, ok
-    integer :: noca, nocb, p, q
-    logical :: ssp, ssq
+    integer :: noca, nocb, p, q, isp, jsq
     real(kind=dp), allocatable :: dSket(:,:,:,:), dSfull(:,:,:,:), &
                                   trden(:,:), trden_ss(:,:), trden_ao(:,:), &
                                   tmp(:,:), gnorm(:,:), gnorm2(:,:)
-    real(kind=dp), pointer :: nac_ov(:,:,:)
+    real(kind=dp), pointer :: nac_ov(:,:,:), trden_st(:,:,:)
     real(kind=dp), contiguous, pointer :: mo_a(:,:), bvec_mo(:,:)
     real(kind=dp) :: acc
     character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
@@ -317,11 +317,17 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
 
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_overlap /))
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_overlap, &
+                                                          OQP_nac_trden /))
     call infos%dat%reserve_data(OQP_nac_overlap, ta_type_real64, &
           3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
     call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
     nac_ov = 0.0_dp
+    ! also export the MO interstate transition densities for diagnostics
+    call infos%dat%reserve_data(OQP_nac_trden, ta_type_real64, &
+          nbf*nbf*nstate*nstate, (/ nbf*nbf, nstate, nstate /))
+    call tagarray_get_data(infos%dat, OQP_nac_trden, trden_st)
+    trden_st = 0.0_dp
 
     allocate(dSket(nbf,nbf,3,natom), dSfull(nbf,nbf,3,natom), &
              trden(nbf,nbf), trden_ss(nbf,nbf), trden_ao(nbf,nbf), &
@@ -339,6 +345,7 @@ contains
         if (ist == jst) cycle
         ! interstate transition density (MO), then -> AO: C * trden * C^T
         call get_mrsf_transition_density(infos, trden, bvec_mo, ist, jst)
+        trden_st(:, ist, jst) = reshape(trden, (/ nbf*nbf /))
         call orthogonal_transform('t', nbf, mo_a, trden, trden_ao, tmp)
         ! apply basis normalization (dSket is in unnormalized convention)
         do nu = 1, nbf
@@ -347,19 +354,26 @@ contains
           end do
         end do
         ! Term (3) frozen S^x-half: sum_uv gnorm_uv dSket(u,v,c,A) on all blocks
-        ! Term (2) constraint -1/2 sum_{same-space pq} gamma_pq S^x_pq:
-        !   restrict trden (MO) to same-space blocks (doc-doc, socc-socc,
-        !   virt-virt: doc=[1,nocb], socc=[nocb+1,noca], virt=[noca+1,nbf]),
-        !   transform to AO, contract with the FULL overlap derivative * (-1/2).
+        ! Skeleton S^[x] terms from eliminating the dependent U^x blocks
+        ! (orthonormality U^x_pq + U^x_qp = -S^[x]_pq), contracted with the
+        ! FULL overlap derivative * (-1):
+        !   same-space blocks (doc-doc, socc-socc, virt-virt): U^x = -1/2 S^[x]
+        !     -> weight 1/2 (constraint term),
+        !   cross-space (lo,hi) blocks (doc-socc, doc-virt, socc-virt with the
+        !     row in the LOWER space): U^x_(lo,hi) = -S^[x] - U^x_(hi,lo)
+        !     -> weight 1; the -U^x_(hi,lo) part goes to the CPHF RHS
+        !        (antisymmetrized gamma in build_mrsf_zvector_rhs).
+        ! Spaces: doc=[1,nocb], socc=[nocb+1,noca], virt=[noca+1,nbf].
         trden_ss = 0.0_dp
         do q = 1, nbf
-          ssq = .false.
+          jsq = merge(1, merge(2, 3, q<=noca), q<=nocb)
           do p = 1, nbf
-            ! same space iff both in doc, both in socc, or both in virt
-            ssp = ((p<=nocb .and. q<=nocb) .or. &
-                   (p>nocb .and. p<=noca .and. q>nocb .and. q<=noca) .or. &
-                   (p>noca .and. q>noca))
-            if (ssp) trden_ss(p,q) = trden(p,q)
+            isp = merge(1, merge(2, 3, p<=noca), p<=nocb)
+            if (isp == jsq) then
+              trden_ss(p,q) = 0.5_dp*trden(p,q)
+            else if (isp < jsq) then
+              trden_ss(p,q) = trden(p,q)
+            end if
           end do
         end do
         call orthogonal_transform('t', nbf, mo_a, trden_ss, trden_ao, tmp)
@@ -374,7 +388,7 @@ contains
             do nu = 1, nbf
               do mu = 1, nbf
                 acc = acc + gnorm(mu,nu)*dSket(mu,nu,c,a) &                ! frozen
-                          - 0.5_dp*gnorm2(mu,nu)*dSfull(mu,nu,c,a)        ! constraint
+                          - gnorm2(mu,nu)*dSfull(mu,nu,c,a)               ! skeleton U^x elim.
               end do
             end do
             nac_ov((a-1)*3+c, ist, jst) = acc

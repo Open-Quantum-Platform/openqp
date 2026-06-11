@@ -3236,6 +3236,9 @@ contains
 
     end if
 
+    ! get_trans_den accumulates into trden; define it here (intent(out))
+    ! so callers may pass reused work arrays.
+    trden = 0.0_dp
     call get_trans_den(trden, xv12i, xv12j, noca, nocb, nvirb)
 
     return

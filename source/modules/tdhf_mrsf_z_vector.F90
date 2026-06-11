@@ -258,6 +258,10 @@ module tdhf_mrsf_z_vector_mod
   logical :: mrsf_nac_cphf_mode = .false.
   integer :: mrsf_nac_istate = 0
   integer :: mrsf_nac_jstate = 0
+  ! Rotation-block restriction for per-block calibration of the NAC CPHF
+  ! RHS: 0 = all blocks, 1 = doc-socc only, 2 = doc-virt only,
+  ! 3 = socc-virt only.
+  integer :: mrsf_nac_cphf_block = 0
 
 contains
 
@@ -318,6 +322,16 @@ contains
     mrsf_nac_jstate = int(j)
     mrsf_nac_cphf_mode = (mrsf_nac_istate > 0 .and. mrsf_nac_jstate > 0)
   end subroutine set_mrsf_nac_cphf_C
+
+  ! C-bound setter for the NAC CPHF rotation-block restriction (see
+  ! mrsf_nac_cphf_block above).
+  subroutine set_mrsf_nac_cphf_block_C(c_handle, b) bind(C, name="set_mrsf_nac_cphf_block")
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+    use c_interop, only: oqp_handle_t
+    type(oqp_handle_t) :: c_handle
+    integer(c_int64_t), value :: b
+    mrsf_nac_cphf_block = int(b)
+  end subroutine set_mrsf_nac_cphf_block_C
 
   ! Initialize GMRES work arrays
   subroutine init_gmres_work(nbf, nocca, noccb)
@@ -2312,23 +2326,31 @@ contains
           rhs = 0.0_dp
           block
             integer :: ii, jj, kk, ijp
+            ! Antisymmetrized RHS: the full U^x block assembly contracts
+            ! [gamma(hi,lo) - gamma(lo,hi)] with the independent U^x_(hi,lo);
+            ! the gamma(lo,hi) row comes from eliminating the dependent
+            ! U^x_(lo,hi) block via orthonormality (its skeleton -gamma.S^[x]
+            ! half lives in mrsf_nac_overlap).
             ijp = 0
             do ii = noccb+1, nocca          ! doc-socc: socc x doc
               do jj = 1, noccb
                 ijp = ijp+1
-                rhs(ijp) = wrk1(ii,jj)
+                if (mrsf_nac_cphf_block == 0 .or. mrsf_nac_cphf_block == 1) &
+                  rhs(ijp) = wrk1(ii,jj) - wrk1(jj,ii)
               end do
             end do
             do kk = nocca+1, nbf            ! doc-virt: virt x doc
               do jj = 1, noccb
                 ijp = ijp+1
-                rhs(ijp) = wrk1(kk,jj)
+                if (mrsf_nac_cphf_block == 0 .or. mrsf_nac_cphf_block == 2) &
+                  rhs(ijp) = wrk1(kk,jj) - wrk1(jj,kk)
               end do
             end do
             do kk = nocca+1, nbf            ! soc-virt: virt x socc
               do ii = noccb+1, nocca
                 ijp = ijp+1
-                rhs(ijp) = wrk1(kk,ii)
+                if (mrsf_nac_cphf_block == 0 .or. mrsf_nac_cphf_block == 3) &
+                  rhs(ijp) = wrk1(kk,ii) - wrk1(ii,kk)
               end do
             end do
           end block

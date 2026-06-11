@@ -3287,9 +3287,14 @@ class NAC(Calculator):
         # ---- orbital-overlap (Pulay) term for all pairs, computed in Fortran:
         # d^ov_IJ(c,A) = sum_uv (C gamma^IJ C^T)_uv <chi_u|d_{A,c} chi_v>
         oqp.mrsf_nac_overlap(mol)
-        ovraw = np.array(mol.data['OQP::nac_overlap'], copy=True)  # (3*natom, nstate, nstate) Fortran
-        # ovraw[k, ist, jst], k=(a-1)*3+c. Move state axes to front, keep pair order:
-        ov = np.transpose(ovraw, (1, 2, 0)).reshape((nstate, nstate, natom, 3))
+        ovraw = np.array(mol.data['OQP::nac_overlap'], copy=True)
+        # The tagarray getter exposes the Fortran (3*natom, nstate, nstate)
+        # column-major buffer with C-order strides, so the linear buffer must
+        # be re-read in Fortran order: buffer[(k-1) + 3natom*(ist-1) +
+        # 3natom*nstate*(jst-1)] = nac_ov(k, ist, jst).
+        ovF = ovraw.reshape(-1).reshape((nstate, nstate, 3 * natom))
+        # ovF[jst-1, ist-1, k-1]; swap state axes so ov[I-1, J-1] = d^ov_IJ
+        ov = np.transpose(ovF, (1, 0, 2)).reshape((nstate, nstate, natom, 3))
 
         pairs = [tuple(p) for p in self.nac_states]
         for (i, j) in pairs:

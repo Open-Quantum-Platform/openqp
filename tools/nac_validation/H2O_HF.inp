@@ -6,7 +6,7 @@ system=
 charge=0
 runtype=energy
 basis=6-31g*
-functional=bhhlyp
+
 method=tdhf
 
 [guess]
