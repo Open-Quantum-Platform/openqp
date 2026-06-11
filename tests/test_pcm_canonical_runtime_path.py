@@ -54,25 +54,36 @@ class PcmCanonicalRuntimePathTests(unittest.TestCase):
         )
 
     def test_pcm_energy_convention(self):
-        # e_pcm = -1/2 * f(eps) * <phi_cav, q_cav>: the surface charges contracted
-        # with the exact total solute potential, the canonical -0.5 polarization
-        # factor, AND the ddPCM dielectric factor f(eps) = (eps-1)/eps that ddX's
-        # pcm_energy omits but PySCF's ddPCM (epcm = 0.5*f_eps*<psi,Xvec>) carries.
+        # e_pcm = -1/2 * <phi_cav, q_cav>: the surface charges contracted with
+        # the exact total solute potential and the canonical -0.5 polarization
+        # factor, with NO additional dielectric factor. ddX folds the complete
+        # dielectric response into its ddPCM R_eps operators, so
+        # -0.5*<phi_cav,q_cav> = ddx_pcm_energy = the physical solvation free
+        # energy; this is pinned by the analytic Born-ion oracle. An extra
+        # f(eps) = (eps-1)/eps here (PySCF solvent.ddpcm's convention) would
+        # double-count the dielectric scaling and fail the Born oracle.
         pcm = _read("source", "solvent_pcm.F90")
         self.assertIn("PCM_QCAV_TO_FOCK_SCALE = -0.5_dp", pcm)
+        # f_epsilon survives only as a reported diagnostic, never in e_pcm/vpcm.
         self.assertIn("f_epsilon = (eps - 1.0_dp) / eps", pcm)
         self.assertIn(
-            "e_pcm = f_epsilon * PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)",
+            "e_pcm = PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)",
             pcm,
         )
-        # Fock carries the full variational coupling (-f_eps), not the bare -0.5.
+        self.assertNotIn(
+            "e_pcm = f_epsilon * PCM_QCAV_TO_FOCK_SCALE", pcm
+        )
+        # Fock carries the full variational coupling (-1), not the bare -0.5.
         self.assertIn(
-            "vpcm(:) = 2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon * vpcm(:)", pcm
+            "vpcm(:) = 2.0_dp * PCM_QCAV_TO_FOCK_SCALE * vpcm(:)", pcm
+        )
+        self.assertNotIn(
+            "2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon * vpcm(:)", pcm
         )
 
     def test_provisional_conventions_documented_in_source(self):
-        # The scalar sign/scale conventions validated by the Born/ddX and
-        # f(eps)*PySCF ddCOSMO gates are recorded next to the code that relies on them.
+        # The scalar sign/scale conventions validated by the analytic Born-ion
+        # /ddX oracle are recorded next to the code that relies on them.
         pcm = _read("source", "solvent_pcm.F90")
         self.assertIn("VALIDATED SCALAR CONVENTIONS", pcm)
         self.assertIn("phi_cav sign", pcm)

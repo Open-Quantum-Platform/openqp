@@ -44,12 +44,18 @@
 !>     source-vs-exact phi residual and the q_cav shift between the old l<=2 psi
 !>     and the new full-density psi (PCM diag q_cav_*_vs_*_rms).
 !>
-!> VALIDATED SCALAR CONVENTIONS (Born/ddX + f(eps)*PySCF ddCOSMO gate):
+!> VALIDATED SCALAR CONVENTIONS (analytic Born-ion/ddX oracle gate):
 !>   * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| + phi_elec
 !>   * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
 !>     directly as the external-charge vector for external_charge_potential.
-!>   * E_pcm: -0.5 * f_epsilon * dot_product(phi_cav, q_cav), matching the
-!>     OpenQP reported-energy convention validated against the current reference.
+!>   * E_pcm: -0.5 * dot_product(phi_cav, q_cav), with NO additional dielectric
+!>     factor: ddX folds the full dielectric response into its ddPCM R_eps
+!>     operators, so -0.5*<phi_cav, q_cav> = ddx_pcm_energy = the PHYSICAL
+!>     solvation free energy. Proven by the Born-ion oracle (point charge q
+!>     centered in a single sphere of radius R): -0.5*<phi,q_cav> reproduces
+!>     -(1/2)(1-1/eps)*q^2/R to machine precision at eps = 78.3553 and eps = 2.
+!>     An extra f(eps) = (eps-1)/eps here (as in PySCF's solvent.ddpcm) would
+!>     double-count the dielectric scaling, by -1.3% at eps=78 and -50% at eps=2.
 !> The single canonical runtime path and these conventions are pinned by
 !> tests/test_pcm_canonical_runtime_path.py.
 module solvent_pcm
@@ -262,12 +268,15 @@ contains
 
     natom = int(infos%mol_prop%natom, c_int)
     eps = infos%control%pcm_epsilon
-    ! ddPCM dielectric scaling factor f(eps) = (eps-1)/eps. ddX folds the bulk
-    ! of the dielectric response into its R_eps operator but, unlike PySCF's
-    ! ddPCM (ddpcm.py _get_vind: epcm = 0.5*f_eps*<psi,Xvec>), its pcm_energy =
-    ! 0.5*<xs,psi> carries NO explicit f(eps). The two ddPCM energies therefore
-    ! differ by exactly this factor at a matched source, so OpenQP must apply it
-    ! to both the reported energy and the Fock operator to match the reference.
+    ! DIAGNOSTIC-ONLY dielectric factor f(eps) = (eps-1)/eps. It is reported in
+    ! the diagnostics below but is NOT applied to e_pcm or the Fock operator:
+    ! ddX folds the COMPLETE dielectric response into its ddPCM R_eps operators,
+    ! so its pcm_energy = 0.5*<xs,psi> (= -0.5*<phi_cav,q_cav> by the adjoint
+    ! identity) is already the physical solvation free energy. This is proven by
+    ! the Born-ion oracle: -0.5*<phi,q_cav> = -(1/2)(1-1/eps)q^2/R to machine
+    ! precision. PySCF's solvent.ddpcm applies an extra 0.5*f_eps*<psi,Xvec>
+    ! scaling on top of its R_eps solve, which is why it FAILS the same Born
+    ! oracle; it must not be imitated here.
     f_epsilon = (eps - 1.0_dp) / eps
     nbf_tri = size(d, 1)
 
@@ -405,15 +414,16 @@ contains
          fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr, &
          fd_fock_samples)
     ! Fock reaction-field operator. The variational PCM free energy
-    !   E_pcm = -0.5 * f_eps * <phi_cav(D), q_cav(D)>
+    !   E_pcm = -0.5 * <phi_cav(D), q_cav(D)>
     ! is quadratic in D (both phi_cav and q_cav are linear in D for the
-    ! symmetric ddPCM response), so its derivative dE/dD = -f_eps * ext(q_cav):
+    ! symmetric ddPCM response), so its derivative dE/dD = -ext(q_cav):
     ! the explicit factor of 1/2 cancels against the two equal D-dependent terms
-    ! (cf. PySCF ddpcm.py vpcm = 0.5*f_eps*vmat, where vmat already carries both
-    ! the source- and field-side contributions). The full coupling is therefore
-    ! 2*PCM_QCAV_TO_FOCK_SCALE*f_eps = -f_eps, NOT the bare -0.5 explicit-phi
-    ! factor that pcm_fock_scale_fd_diagnostic verifies for dE/dphi.
-    vpcm(:) = 2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon * vpcm(:)
+    ! (the phi-side and psi-side contributions, equal by the symmetry of the
+    ! continuum reaction-field kernel). The full coupling is therefore
+    ! 2*PCM_QCAV_TO_FOCK_SCALE = -1, NOT the bare -0.5 explicit-phi factor that
+    ! pcm_fock_scale_fd_diagnostic verifies for dE/dphi. No dielectric factor is
+    ! applied: q_cav already carries the full eps response (see f_epsilon note).
+    vpcm(:) = 2.0_dp * PCM_QCAV_TO_FOCK_SCALE * vpcm(:)
     do ii = 1, nfocks
       f(:, ii) = f(:, ii) + vpcm(:)
     end do
@@ -421,17 +431,17 @@ contains
     ! PCM reaction-field (solvation) energy. The apparent surface charges q_cav
     ! (from the full-density-Psi exact-phi ddX solve) are contracted with the
     ! EXACT total solute potential at the cavity points (phi_cav = nuclear +
-    ! electronic). The -0.5 factor is the linear-response polarization factor;
-    ! f_epsilon maps the ddPCM/COSMO dielectric convention to the OpenQP reported
-    ! energy used in the Born/ddX + f(eps)*PySCF ddCOSMO validation gate.
+    ! electronic). The -0.5 factor is the linear-response polarization factor.
+    ! No additional dielectric factor: -0.5*<phi_cav,q_cav> equals ddX's
+    ! pcm_energy and the physical solvation free energy (Born-ion oracle).
     !
     ! FOCK DERIVATIVE SCOPE: the production SCF uses the full linear-dielectric
-    ! coupling V_pcm = -f_epsilon * external_charge_potential(q_cav), recorded as
-    ! fock_mode=ddpcm_feps_full_variational_coupling. The finite-difference probe
-    ! above only verifies the explicit dE/dphi relation (-0.5*q_cav); future
-    ! analytic gradients/response work should add a dedicated dPsi/dD check for
-    ! the grid-projected full-density source.
-    e_pcm = f_epsilon * PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
+    ! coupling V_pcm = -external_charge_potential(q_cav), recorded as
+    ! fock_mode=ddpcm_physical_full_variational_coupling. The finite-difference
+    ! probe above only verifies the explicit dE/dphi relation (-0.5*q_cav);
+    ! future analytic gradients/response work should add a dedicated dPsi/dD
+    ! check for the grid-projected full-density source.
+    e_pcm = PCM_QCAV_TO_FOCK_SCALE * dot_product(phi_cav, q_cav)
 
     ! ---- Diagnostic block (validation gate; does NOT affect e_pcm or Fock) --
     ! Exposes, in Fortran, the quantities needed to validate the QM SCF PCM
@@ -484,7 +494,7 @@ contains
     write(iw,'(1x,"PCM diag fock_q_scale=",ES22.14)') PCM_QCAV_TO_FOCK_SCALE
     write(iw,'(1x,"PCM diag f_epsilon=",ES22.14)') f_epsilon
     write(iw,'(1x,"PCM diag fock_q_coupling=",ES22.14)') &
-         2.0_dp * PCM_QCAV_TO_FOCK_SCALE * f_epsilon
+         2.0_dp * PCM_QCAV_TO_FOCK_SCALE
     write(iw,'(1x,"PCM diag fd_fock_scale_mean=",ES22.14)') fd_fock_scale_mean
     write(iw,'(1x,"PCM diag fd_fock_scale_rms=",ES22.14)') fd_fock_scale_rms
     write(iw,'(1x,"PCM diag fd_fock_scale_maxerr=",ES22.14)') fd_fock_scale_maxerr
@@ -516,7 +526,7 @@ contains
     end block
     write(iw,'(1x,"PCM diag pcm_source_mode=full_density_multipoles_lmax8_exact_phi")')
     write(iw,'(1x,"PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak")')
-    write(iw,'(1x,"PCM diag fock_mode=ddpcm_feps_full_variational_coupling")')
+    write(iw,'(1x,"PCM diag fock_mode=ddpcm_physical_full_variational_coupling")')
 
   end subroutine add_pcm_reaction_field
 
