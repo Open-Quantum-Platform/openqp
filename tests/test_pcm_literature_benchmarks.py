@@ -301,7 +301,7 @@ def _make_pcm_diagnostics_test(bench):
 
 def _make_pcm_reference_test(bench):
     """Tier-2: the real scientific pass/fail gate -- match e_pcm to a verified
-    reference_value (Born/ddX + f(eps)*PySCF ddCOSMO, literature, or an explicit
+    reference_value (Born/ddX + unscaled PySCF ddCOSMO, literature, or an explicit
     regression target). Skips while pending so the gate never gives false
     confidence and no fabricated number is compared.
     """
@@ -313,7 +313,7 @@ def _make_pcm_reference_test(bench):
                 f"benchmark '{bench['id']}' has no verified reference yet "
                 f"(category={bench.get('category')!r}, status={bench.get('status')!r}); "
                 "populate tests/data/pcm_literature_benchmarks.json (Born/ddX + "
-                "f(eps)*PySCF ddCOSMO, literature_value, or an explicit trusted "
+                "unscaled PySCF ddCOSMO, literature_value, or an explicit trusted "
                 "regression under the identical protocol)."
             )
         proc, log = _run(_input_text(bench, pcm_on=True))
