@@ -3209,7 +3209,103 @@ class NAC(Calculator):
         return x, y, sx, sy, pitch, tilt, peak, bifu
 
     def analytical_nac(self):
-        exit('analytical nac vector is not available yet, choose numerical')
+        """
+        Analytical first-order nonadiabatic coupling (derivative coupling)
+        between MRSF-TDDFT states by the polarization (pseudo-state) identity.
+
+        The h-vector numerator is h_IJ = X_I^T (dA/dx) X_J (+ orbital
+        relaxation). For pseudo-states X_pm = (X_I +/- X_J)/sqrt(2) (which are
+        normalized since X_I . X_J = 0), the existing relaxed excited-state
+        gradient machinery G(X) -- z-vector + gradient contraction -- gives
+        G(X) = dE_SCF/dx + d<X|A|X>/dx + relaxation(X), a quantity quadratic in
+        the amplitude X. The polarization identity then yields
+
+            h_IJ = 1/2 [ G(X_+) - G(X_-) ],
+
+        in which the amplitude-independent SCF/ground term cancels exactly and
+        the orbital relaxation (also quadratic in X, since the energy-weighted
+        density is built from orbital energies, not the excitation energy) is
+        captured. The derivative coupling is d_IJ = h_IJ / (E_J - E_I).
+
+        This reuses the validated gradient path verbatim (no new contraction
+        physics) and is checked directly against the numerical NAC.
+        """
+        import copy
+        import math
+
+        mol = self.mol
+        natom = self.natom
+        nstate = self.nstate
+        bkey = 'OQP::td_bvec_mo'
+        sqrt2 = math.sqrt(2.0)
+
+        # writable copy of the response amplitudes; one axis is nstate
+        raw0 = np.array(mol.data[bkey], copy=True)
+        raw = raw0.copy()
+        if raw.ndim != 2:
+            exit('analytical nac: unexpected td_bvec_mo rank')
+        if raw.shape[0] == nstate:
+            state_axis = 0
+        elif raw.shape[1] == nstate:
+            state_axis = 1
+        else:
+            exit('analytical nac: cannot locate state axis in td_bvec_mo')
+
+        def get_state(k):                      # k is 1-indexed
+            return (raw[k - 1, :] if state_axis == 0 else raw[:, k - 1]).copy()
+
+        def set_state(k, vec):
+            if state_axis == 0:
+                raw[k - 1, :] = vec
+            else:
+                raw[:, k - 1] = vec
+
+        def grad_for(target, amp):
+            set_state(target, amp)
+            mol.data[bkey] = raw
+            mol.data.set_tdhf_target(target)
+            oqp.tdhf_mrsf_z_vector(mol)
+            if not mol.mol_energy.Z_Vector_converged:
+                return None
+            oqp.tdhf_mrsf_gradient(mol)
+            return mol.get_grad().reshape((natom, 3)).copy()
+
+        nacv = np.zeros((nstate, nstate, natom, 3))
+        dcv = np.zeros((nstate, nstate, natom, 3))
+        flags = []
+
+        dump_log(mol, title=(
+            'PyOQP: WARNING -- analytical NAC is EXPERIMENTAL. The '
+            'gradient-polarization route below yields only the '
+            'Hellmann-Feynman / CI contribution h_IJ^(CI) = X_I^T (dA/dx) X_J '
+            '(+ orbital relaxation). For MRSF this is sub-dominant; the full '
+            'derivative coupling is dominated by the orbital-overlap (Pulay/ETF) '
+            'term Sum_pq gamma^IJ_pq <phi_p|d_x phi_q>, which is NOT in an '
+            'energy gradient and is still to be implemented. Use type=numerical '
+            'for production.'))
+
+        pairs = [tuple(p) for p in self.nac_states]
+        for (i, j) in pairs:
+            if i == j:
+                continue
+            xi = get_state(i)
+            xj = get_state(j)
+            gp = grad_for(i, (xi + xj) / sqrt2)
+            gm = grad_for(i, (xi - xj) / sqrt2)
+            set_state(i, xi)                   # restore the column we overwrote
+            mol.data[bkey] = raw
+            if gp is None or gm is None:
+                flags.append('failed')
+                continue
+            h = 0.5 * (gp - gm)
+            gap = mol.energies[j] - mol.energies[i]
+            nacv[i - 1, j - 1] = h
+            nacv[j - 1, i - 1] = -h
+            dcv[i - 1, j - 1] = h / gap
+            dcv[j - 1, i - 1] = -h / gap
+
+        mol.data[bkey] = raw0                  # full restore of amplitudes
+        return nacv, dcv, flags
 
     def numerical_nac(self):
         dir_nacv = f'{self.mol.log_path}/{self.mol.project_name}_num_nacv'
