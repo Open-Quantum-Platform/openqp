@@ -22,6 +22,8 @@ class BasisData:
         self.atom_xyz = mol.data["xyz"]
         self.basis_names = []
         self.shells_data = []
+        self._ffi_buffer_refs = []
+        self.mol._ffi_buffer_refs = self._ffi_buffer_refs
         self.ecp = {
             "ang": [],
             "r_expo": [],
@@ -33,6 +35,15 @@ class BasisData:
             "num_expo": []
         }
         self.use_ecp = False
+
+    def _buffer_ptr(self, values, dtype, ctype):
+        array = np.ascontiguousarray(np.asarray(values, dtype=dtype))
+        if not hasattr(self, "_ffi_buffer_refs"):
+            self._ffi_buffer_refs = []
+        if getattr(self.mol, "_ffi_buffer_refs", None) is not self._ffi_buffer_refs:
+            self.mol._ffi_buffer_refs = self._ffi_buffer_refs
+        self._ffi_buffer_refs.append(array)
+        return ffi.cast(ctype, ffi.from_buffer(array))
 
     def get_basis_data(self, elements, basis_name='STO-3G', el_index=0):
         """
@@ -191,27 +202,13 @@ class BasisData:
         self.mol.data["element_id"] = int(self.ecp["element_id"])
         self.mol.data["ecp_nam"] = len(self.ecp["ang"])
 
-        n_expo_array = np.array(self.ecp["num_expo"], dtype=np.int32)
-        self.mol.data["num_expo"] = ffi.cast("int*", ffi.from_buffer(n_expo_array))
-
-        expo_array = np.array(self.ecp["g_expo"], dtype=np.float64)
-        self.mol.data["expo"] = ffi.cast("double*", ffi.from_buffer(expo_array))
-        coef_array = np.array(self.ecp["coef"], dtype=np.float64)
-        self.mol.data["coef"] = ffi.cast("double*", ffi.from_buffer(coef_array))
-
-        r_expo_array = np.array(self.ecp["r_expo"], dtype=np.float64)
-        self.mol.data["ecp_rex"] = ffi.cast("int*", ffi.from_buffer(r_expo_array))
-
-        coord_array = np.array(self.ecp["coord"], dtype=np.float64)
-        # Keep the numpy arrays alive in named variables until append_ecp has
-        # consumed them: ffi.from_buffer does not hold a reference, so passing
-        # a temporary leaves mol.data with a dangling pointer (garbage
-        # ecp_zn_num -> garbage nuclear repulsion for large systems).
-        ecp_am_array = np.array(self.ecp["ang"], dtype=np.float64)
-        ecp_zn_array = np.array(self.ecp["ecp_electron"], dtype=np.int32)
-        self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(ecp_am_array))
-        self.mol.data["ecp_zn"] = ffi.cast("int*", ffi.from_buffer(ecp_zn_array))
-        self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
+        self.mol.data["num_expo"] = self._buffer_ptr(self.ecp["num_expo"], np.int32, "int*")
+        self.mol.data["expo"] = self._buffer_ptr(self.ecp["g_expo"], np.float64, "double*")
+        self.mol.data["coef"] = self._buffer_ptr(self.ecp["coef"], np.float64, "double*")
+        self.mol.data["ecp_rex"] = self._buffer_ptr(self.ecp["r_expo"], np.float64, "int*")
+        self.mol.data["ecp_am"] = self._buffer_ptr(self.ecp["ang"], np.float64, "int*")
+        self.mol.data["ecp_zn"] = self._buffer_ptr(self.ecp["ecp_electron"], np.int32, "int*")
+        self.mol.data["ecp_coord"] = self._buffer_ptr(self.ecp["coord"], np.float64, "double*")
 
         oqp.append_ecp(self.mol)
 
@@ -249,14 +246,9 @@ class BasisData:
             self.mol.data["ang_mom"] = shell["angular_momentum"]
             self.mol.data["harmonic"] = int(shell.get("harmonic", 0))
 
-            n_expo_array = np.array([len(shell["exponents"])], dtype=np.int32)
-            self.mol.data["num_expo"] = ffi.cast("int*", ffi.from_buffer(n_expo_array))
-
-            expo_array = np.array(shell["exponents"], dtype=np.float64)
-            self.mol.data["expo"] = ffi.cast("double*", ffi.from_buffer(expo_array))
-
-            coef_array = np.array(shell["coefficients"], dtype=np.float64)
-            self.mol.data["coef"] = ffi.cast("double*", ffi.from_buffer(coef_array))
+            self.mol.data["num_expo"] = self._buffer_ptr([len(shell["exponents"])], np.int32, "int*")
+            self.mol.data["expo"] = self._buffer_ptr(shell["exponents"], np.float64, "double*")
+            self.mol.data["coef"] = self._buffer_ptr(shell["coefficients"], np.float64, "double*")
 
             oqp.append_shell(self.mol)
 

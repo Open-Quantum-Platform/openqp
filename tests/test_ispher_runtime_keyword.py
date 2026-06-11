@@ -31,11 +31,16 @@ def test_apply_basis_reports_runtime_cartesian_override():
 def test_auto_spherical_basis_uses_all_supported_transforms():
     set_basis = (ROOT / "pyoqp/oqp/library/set_basis.py").read_text()
     cart2sph = (ROOT / "source/integrals/cart2sph.F90").read_text()
+    constants = (ROOT / "source/constants.F90").read_text()
     symmetry = (ROOT / "pyoqp/oqp/library/symmetry.py").read_text()
 
     assert "shell_harmonic = 1 if shell_is_spherical else 0" in set_basis
     assert "input.ispher=True only supports pure spherical shells through g" not in set_basis
+    assert "integer, parameter :: BAS_MXANG = 6" in constants
+    assert "integer, parameter :: NUM_SPH_BF(0:BAS_MXANG)  = [(2*i+1, i = 0, BAS_MXANG)]" in constants
     assert "c2s_build(l)" in cart2sph
+    assert "c2s_h = c2s_build(l)" in cart2sph
+    assert "c2s_i = c2s_build(l)" in cart2sph
     assert "do l = 2, BAS_MXANG" in cart2sph
     assert "pure spherical transforms are implemented only through g shells" not in cart2sph
     assert "5: [(5, 0, 0)" in symmetry
@@ -55,8 +60,12 @@ def test_two_e_backends_reduce_pure_blocks_before_consumers():
 
     assert "public genr22_reduce_pure" in rot
     assert "subroutine genr22_reduce_pure" in rot
+    assert "if (.not. HARMONIC_ACTIVE) return" in rot
+    assert "nbf = nbf_out_s([4,3,2,1])" in rot
     assert "public :: int2_rys_reduce_pure" in rys
     assert "subroutine int2_rys_reduce_pure" in rys
+    assert "if (.not. HARMONIC_ACTIVE) return" in rys
+    assert "nbf_out = nbf_out_s([4,3,2,1])" in rys
     assert "call genr22_reduce_pure(basis, eri_data%ids, eri_data%flips" in int2
     assert "call int2_rys_reduce_pure(basis, eri_data%gdat, eri_data%ints, nbf)" in int2
     assert "call genr22_reduce_pure(basis, shell_ids, flips, ints, nbf)" in int2
