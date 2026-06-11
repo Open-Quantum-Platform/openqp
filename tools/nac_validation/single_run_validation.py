@@ -46,3 +46,19 @@ print('analyt  d:', np.round(da, 5))
 print('CI part  :', np.round(dci, 5))
 print('overlap  :', np.round(dov, 5))
 
+# align numerical to the analytical sign convention (global per-pair sign)
+s = np.sign(np.dot(dn, da)) or 1.0
+dn_al = s * dn
+# orbital part (must be supplied by frozen-overlap + CPHF) and the CPHF target
+d_orb_target = dn_al - dci
+d_cphf_target = dn_al - dci - dov
+print('\n--- decomposition targets ---')
+print('orbital target (dn-dci)      :', np.round(d_orb_target, 5),
+      ' |.|=%.4f' % np.linalg.norm(d_orb_target))
+print('frozen overlap (coded)       :', np.round(dov, 5),
+      ' |.|=%.4f' % np.linalg.norm(dov))
+print('CPHF target (dn-dci-dov)      :', np.round(d_cphf_target, 5),
+      ' |.|=%.4f' % np.linalg.norm(d_cphf_target))
+print('frozen/orbital ratio = %.3f' % (np.linalg.norm(dov)/np.linalg.norm(d_orb_target)))
+print('CPHF/orbital   ratio = %.3f' % (np.linalg.norm(d_cphf_target)/np.linalg.norm(d_orb_target)))
+
