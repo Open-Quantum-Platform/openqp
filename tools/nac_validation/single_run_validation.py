@@ -93,4 +93,17 @@ else:
     print('CPHF analyt :', np.round(d_cphf_ana, 5), ' |.|=%.4f' % np.linalg.norm(d_cphf_ana))
     print('cos(target, analyt) = %+.4f   best-sign resid = %.5f' %
           (cos, np.linalg.norm(s*d_cphf_ana - t)))
+    # in-plane calibration (drop z indices 2,5,8)
+    ip = [0, 1, 3, 4, 6, 7]
+    scale = np.dot(t[ip], d_cphf_ana[ip]) / np.dot(d_cphf_ana[ip], d_cphf_ana[ip])
+    cphf_cal = scale * d_cphf_ana
+    total = dci + dov + cphf_cal
+    def rep(name, v, ref):
+        c = np.dot(ref, v)/(np.linalg.norm(ref)*np.linalg.norm(v)+1e-30)
+        print('  %-22s cos=%+.4f |v|=%.4f |ref|=%.4f' % (name, c, np.linalg.norm(v), np.linalg.norm(ref)))
+    print('\n--- full analytical NAC vs numerical (in-plane calib scale=%.3f) ---' % scale)
+    rep('frozen+cphf vs orbital', dov + cphf_cal, d_orb_target)
+    rep('TOTAL vs numerical', total, dn_al)
+    print('  TOTAL    :', np.round(total, 4))
+    print('  numerical:', np.round(dn_al, 4))
 
