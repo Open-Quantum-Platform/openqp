@@ -281,7 +281,7 @@ contains
     use types, only: information
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
-    use grd1, only: der_overlap_matrix_ket
+    use grd1, only: der_overlap_matrix_ket, der_overlap_matrix
     use tdhf_mrsf_lib, only: get_mrsf_transition_density
     use mathlib, only: orthogonal_transform
 
@@ -294,8 +294,11 @@ contains
     type(basis_set), pointer :: basis
 
     integer :: nbf, natom, nstate, i, j, ist, jst, mu, nu, c, a, ok
-    real(kind=dp), allocatable :: dSket(:,:,:,:), trden(:,:), trden_ao(:,:), &
-                                  tmp(:,:), gnorm(:,:)
+    integer :: noca, nocb, p, q
+    logical :: ssp, ssq
+    real(kind=dp), allocatable :: dSket(:,:,:,:), dSfull(:,:,:,:), &
+                                  trden(:,:), trden_ss(:,:), trden_ao(:,:), &
+                                  tmp(:,:), gnorm(:,:), gnorm2(:,:)
     real(kind=dp), pointer :: nac_ov(:,:,:)
     real(kind=dp), contiguous, pointer :: mo_a(:,:), bvec_mo(:,:)
     real(kind=dp) :: acc
@@ -307,6 +310,8 @@ contains
     nbf = basis%nbf
     natom = ubound(infos%atoms%grad, 2)
     nstate = infos%tddft%nstate
+    noca = infos%mol_prop%nelec_a
+    nocb = infos%mol_prop%nelec_b
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
@@ -318,12 +323,16 @@ contains
     call tagarray_get_data(infos%dat, OQP_nac_overlap, nac_ov)
     nac_ov = 0.0_dp
 
-    allocate(dSket(nbf,nbf,3,natom), trden(nbf,nbf), trden_ao(nbf,nbf), &
-             tmp(nbf,nbf), gnorm(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(dSket(nbf,nbf,3,natom), dSfull(nbf,nbf,3,natom), &
+             trden(nbf,nbf), trden_ss(nbf,nbf), trden_ao(nbf,nbf), &
+             tmp(nbf,nbf), gnorm(nbf,nbf), gnorm2(nbf,nbf), &
+             source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
-    ! ket-half AO overlap derivative <chi_u | d_{A,c} chi_v>
+    ! ket-half AO overlap derivative <chi_u | d_{A,c} chi_v> (frozen term)
     call der_overlap_matrix_ket(basis, dSket)
+    ! full AO overlap derivative dS_uv/dR (constraint term)
+    call der_overlap_matrix(basis, dSfull)
 
     do ist = 1, nstate
       do jst = 1, nstate
@@ -337,13 +346,35 @@ contains
             gnorm(mu,nu) = trden_ao(mu,nu)*basis%bfnrm(mu)*basis%bfnrm(nu)
           end do
         end do
-        ! contract: d^ov(c,A) = sum_uv gnorm_uv dSket(u,v,c,A)  (ket-half)
+        ! Term (3) frozen S^x-half: sum_uv gnorm_uv dSket(u,v,c,A) on all blocks
+        ! Term (2) constraint -1/2 sum_{same-space pq} gamma_pq S^x_pq:
+        !   restrict trden (MO) to same-space blocks (doc-doc, socc-socc,
+        !   virt-virt: doc=[1,nocb], socc=[nocb+1,noca], virt=[noca+1,nbf]),
+        !   transform to AO, contract with the FULL overlap derivative * (-1/2).
+        trden_ss = 0.0_dp
+        do q = 1, nbf
+          ssq = .false.
+          do p = 1, nbf
+            ! same space iff both in doc, both in socc, or both in virt
+            ssp = ((p<=nocb .and. q<=nocb) .or. &
+                   (p>nocb .and. p<=noca .and. q>nocb .and. q<=noca) .or. &
+                   (p>noca .and. q>noca))
+            if (ssp) trden_ss(p,q) = trden(p,q)
+          end do
+        end do
+        call orthogonal_transform('t', nbf, mo_a, trden_ss, trden_ao, tmp)
+        do nu = 1, nbf
+          do mu = 1, nbf
+            gnorm2(mu,nu) = trden_ao(mu,nu)*basis%bfnrm(mu)*basis%bfnrm(nu)
+          end do
+        end do
         do a = 1, natom
           do c = 1, 3
             acc = 0.0_dp
             do nu = 1, nbf
               do mu = 1, nbf
-                acc = acc + gnorm(mu,nu)*dSket(mu,nu,c,a)
+                acc = acc + gnorm(mu,nu)*dSket(mu,nu,c,a) &                ! frozen
+                          - 0.5_dp*gnorm2(mu,nu)*dSfull(mu,nu,c,a)        ! constraint
               end do
             end do
             nac_ov((a-1)*3+c, ist, jst) = acc
