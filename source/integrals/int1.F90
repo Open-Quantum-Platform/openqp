@@ -1300,7 +1300,8 @@ contains
             zblk = 0.0
             CALL int1_lz(cntp, zblk)
             IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                CALL cart2sph_mat(zblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                CALL cart2sph_mat(zblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                  iandj=(shi%shid==shj%shid), antisym=.true.)
             CALL update_triang_matrix(shi, shj, zblk, z)
 
         END DO
@@ -1947,7 +1948,8 @@ contains
 
             do m = 1, 3
               IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                    iandj=(shi%shid==shj%shid), antisym=.true.)
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -2078,7 +2080,8 @@ contains
             CALL int1_giao_h10_core(cntp, coord, zq, nat, blk)
             do m = 1, 3
               IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
-                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                    iandj=(shi%shid==shj%shid), antisym=.true.)
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
         END DO

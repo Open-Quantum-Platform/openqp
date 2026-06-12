@@ -277,16 +277,19 @@ contains
   !>          (fast = shj, slow = shi). On exit blk(1:n_out) holds the
   !>          spherical block in the same fast/slow layout and n_fast_out/
   !>          n_slow_out give its extents.
-  subroutine cart2sph_mat(blk, l_fast, pure_fast, l_slow, pure_slow, n_fast_out, n_slow_out, iandj)
+  subroutine cart2sph_mat(blk, l_fast, pure_fast, l_slow, pure_slow, n_fast_out, n_slow_out, iandj, antisym)
     use constants, only: shells_pnrm2
     real(dp), intent(inout) :: blk(:)
     integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow
     integer, intent(out), optional :: n_fast_out, n_slow_out
     logical, intent(in), optional :: iandj   !< .true. for a same-shell block,
                                              !< stored as a lower triangle (fast<=slow)
+    logical, intent(in), optional :: antisym !< .true. if the operator is
+                                             !< antisymmetric (L, GIAO H10, SOC);
+                                             !< affects the iandj unpacking only
 
     integer :: ncf, ncs, nsf, nss, k, ic, ir
-    logical :: tri
+    logical :: tri, anti
     real(dp), allocatable :: b(:,:), src(:), dst(:)
 
     ncf = NUM_CART_BF(l_fast)
@@ -300,12 +303,15 @@ contains
 
     tri = .false.
     if (present(iandj)) tri = iandj
+    anti = .false.
+    if (present(antisym)) anti = antisym
 
     ! Same-shell blocks (update_triang_matrix iandj path) are stored as a lower
-    ! triangle blk((i-1)i/2 + j), j<=i, symmetric. Unpack to a full Cartesian
-    ! block, transform as a rectangle, then repack to the spherical triangle.
+    ! triangle blk((i-1)i/2 + j), j<=i. Unpack to a full Cartesian block using
+    ! the operator's parity, transform as a rectangle, then repack to the
+    ! spherical triangle.
     if (tri) then
-      call cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss)
+      call cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss, anti)
       return
     end if
 
@@ -486,23 +492,33 @@ contains
   end subroutine cart2sph_vec
 
   !> @brief Same-shell (iandj) variant: the block is a packed lower triangle
-  !>        blk((i-1)i/2 + j), j<=i. Unpack to a full symmetric Cartesian
-  !>        block, transform as a rectangle, repack to the spherical triangle.
-  subroutine cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss)
+  !>        blk((i-1)i/2 + j), j<=i. Unpack to a full Cartesian block with the
+  !>        operator's parity (full(j>i) = +/- blk, zero diagonal when
+  !>        antisymmetric), transform as a rectangle, repack to the spherical
+  !>        triangle.
+  subroutine cart2sph_tri(blk, l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss, antisym)
     real(dp), intent(inout) :: blk(:)
     integer, intent(in) :: l_fast, pure_fast, l_slow, pure_slow, ncf, ncs, nsf, nss
+    logical, intent(in) :: antisym
     real(dp), allocatable :: full(:)
     integer :: i, j, nn
+    real(dp) :: mirror
+
+    mirror = 1.0_dp
+    if (antisym) mirror = -1.0_dp
 
     allocate(full(ncf*ncs))
     do i = 1, ncs            ! slow index (shi)
       do j = 1, ncf          ! fast index (shj)
-        if (j <= i) then
-          nn = i*(i-1)/2 + j
+        if (j < i) then
+          full((i-1)*ncf + j) = blk(i*(i-1)/2 + j)
+        else if (j > i) then
+          full((i-1)*ncf + j) = mirror*blk(j*(j-1)/2 + i)  ! mirrored counterpart
+        else if (antisym) then
+          full((i-1)*ncf + j) = 0.0_dp   ! antisymmetric diagonal is exact zero
         else
-          nn = j*(j-1)/2 + i  ! symmetric counterpart
+          full((i-1)*ncf + j) = blk(i*(i-1)/2 + j)
         end if
-        full((i-1)*ncf + j) = blk(nn)
       end do
     end do
 

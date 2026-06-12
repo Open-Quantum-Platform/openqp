@@ -94,6 +94,18 @@ contains
 
     do_2e_soc = (infos%control%soc_2e /= 0)
 
+    ! The 2e SOC kernel (grd2_rys soc2e path) still scatters Cartesian
+    ! component counts against spherical AO offsets: under ispher with pure
+    ! shells it would silently corrupt memory. Abort until it is ported.
+    block
+      use constants, only: HARMONIC_ACTIVE
+      if (do_2e_soc .and. HARMONIC_ACTIVE) then
+        if (any(infos%basis%harmonic == 1)) &
+          call show_message('soc_mrsf: 2e SOC is not yet available with '// &
+                            'spherical-harmonic AOs; set soc_2e=0 or ispher=false', WITH_ABORT)
+      end if
+    end block
+
     if (pe%rank == 0) then
       open(unit=iw, file=infos%log_filename, position="append")
       if (do_2e_soc) then
@@ -404,9 +416,12 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
       end do
 
       if (HARMONIC_ACTIVE .and. (shi%harmonic == 1 .or. shj%harmonic == 1)) then
-        call cart2sph_mat(socblk(:,1), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
-        call cart2sph_mat(socblk(:,2), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
-        call cart2sph_mat(socblk(:,3), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+        call cart2sph_mat(socblk(:,1), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                          iandj=(shi%shid==shj%shid), antisym=.true.)
+        call cart2sph_mat(socblk(:,2), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                          iandj=(shi%shid==shj%shid), antisym=.true.)
+        call cart2sph_mat(socblk(:,3), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                          iandj=(shi%shid==shj%shid), antisym=.true.)
       end if
       call update_triang_matrix(shi, shj, socblk(:,1), lx_ao)
       call update_triang_matrix(shi, shj, socblk(:,2), ly_ao)
