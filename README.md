@@ -109,8 +109,11 @@ pip install .
 | `-DENABLE_OPENMP=ON` | ON | OpenMP threading. |
 | `-DUSE_LIBINT=ON` | OFF | Use `libint` for ERIs instead of the built-in Rys-quadrature engine. |
 | `-DLINALG_LIB=<vendor>` | auto | BLAS/LAPACK provider (`auto`, `MKL`, `OpenBLAS`, `netlib`, …). |
-| `-DLINALG_LIB_INT64=OFF` | ON | Use the 32-bit-integer BLAS/LAPACK interface (required for macOS Accelerate). |
+| `-DLINALG_LIB_INT64=ON` | ON | Use the required 64-bit-integer BLAS/LAPACK interface. |
 | `-DENABLE_OPENTRAH=OFF` | ON | Skip the external OpenTrustRegion (OpenTRAH) solver; the TRAH SCF converger then uses the built-in native implementation only. |
+| `-DOQP_REUSE_EXTERNALS=OFF` | ON | Disable the automatic reusable cache for bundled external dependency builds. |
+
+Bundled external dependencies are cached automatically across fresh OpenQP build directories. The cache uses the platform cache directory (`~/Library/Caches/openqp/externals` on macOS, `$XDG_CACHE_HOME/openqp/externals` or `~/.cache/openqp/externals` elsewhere) and is keyed by operating system, architecture, CMake generator, compiler IDs/versions, compiler flags, build type, linkage mode, BLAS/LAPACK choice, BLAS/LAPACK integer ABI, and bundled external versions, so Fortran modules and libraries are reused only by compatible builds. Advanced users can relocate the cache with `-DOQP_EXTERNALS_ROOT=<path>`. The cache is not safe for concurrent use: do not run two fresh OpenQP builds with the same configuration at the same time, or configure one of them with `-DOQP_REUSE_EXTERNALS=OFF`.
 
 To build without Ninja, drop `-G Ninja` and replace `ninja` with `make`.
 
