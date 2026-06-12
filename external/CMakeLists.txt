@@ -44,8 +44,25 @@ if(OQP_REUSE_EXTERNALS)
     string(REPLACE ";" "+" _oqp_external_configurations "${CMAKE_CONFIGURATION_TYPES}")
     string(APPEND _oqp_external_generator "-${_oqp_external_configurations}")
   endif()
+  # User compiler flags are forwarded into the external builds but are not
+  # otherwise visible in the key, so hash them in: a build with e.g.
+  # -DCMAKE_Fortran_FLAGS="-fcheck=all" must not reuse externals compiled
+  # without those flags.
+  set(_oqp_external_flag_blob
+      "C=${CMAKE_C_FLAGS}|CXX=${CMAKE_CXX_FLAGS}|Fortran=${CMAKE_Fortran_FLAGS}")
+  set(_oqp_external_flag_configs "${CMAKE_BUILD_TYPE}")
+  if(CMAKE_CONFIGURATION_TYPES)
+    set(_oqp_external_flag_configs "${CMAKE_CONFIGURATION_TYPES}")
+  endif()
+  foreach(_oqp_external_config IN LISTS _oqp_external_flag_configs)
+    string(TOUPPER "${_oqp_external_config}" _oqp_external_config_upper)
+    string(APPEND _oqp_external_flag_blob
+        "|C_${_oqp_external_config_upper}=${CMAKE_C_FLAGS_${_oqp_external_config_upper}}|CXX_${_oqp_external_config_upper}=${CMAKE_CXX_FLAGS_${_oqp_external_config_upper}}|Fortran_${_oqp_external_config_upper}=${CMAKE_Fortran_FLAGS_${_oqp_external_config_upper}}")
+  endforeach()
+  string(MD5 _oqp_external_flags_hash "${_oqp_external_flag_blob}")
+  string(SUBSTRING "${_oqp_external_flags_hash}" 0 12 _oqp_external_flags_hash)
   set(_oqp_external_key
-      "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${_oqp_external_generator}-${CMAKE_C_COMPILER_ID}${CMAKE_C_COMPILER_VERSION}-${CMAKE_CXX_COMPILER_ID}${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_Fortran_COMPILER_ID}${CMAKE_Fortran_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}-${_oqp_external_linkage}-${_LINALG_LIB_TYPE}-blasint${BLA_SIZEOF_INTEGER}-${_OQP_EXTERNALS_VERSION_KEY}")
+      "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${_oqp_external_generator}-${CMAKE_C_COMPILER_ID}${CMAKE_C_COMPILER_VERSION}-${CMAKE_CXX_COMPILER_ID}${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_Fortran_COMPILER_ID}${CMAKE_Fortran_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}-${_oqp_external_linkage}-${_LINALG_LIB_TYPE}-blasint${BLA_SIZEOF_INTEGER}-flags${_oqp_external_flags_hash}-${_OQP_EXTERNALS_VERSION_KEY}")
   string(REGEX REPLACE "[^A-Za-z0-9_.+-]" "_" _oqp_external_key "${_oqp_external_key}")
   set(OQP_EXTERNALS_SOURCE_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/src" CACHE INTERNAL "OQP_EXTERNALS_SOURCE_ROOT" FORCE)
   set(OQP_EXTERNALS_BUILD_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/build" CACHE INTERNAL "OQP_EXTERNALS_BUILD_ROOT" FORCE)
