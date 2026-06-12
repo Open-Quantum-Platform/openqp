@@ -55,7 +55,8 @@ def Gfull(col):
     return gZ - gS                       # the coded dOmega(Z)
 
 Zs = {'Z13': (X[0]+X[2])/math.sqrt(2), 'Z23': (X[1]+X[2])/math.sqrt(2),
-      'X1': X[0].copy(), 'X3': X[2].copy()}
+      'Z12': (X[0]+X[1])/math.sqrt(2),
+      'X1': X[0].copy(), 'X2': X[1].copy(), 'X3': X[2].copy()}
 GZ = {n: Gfull(z) for n, z in Zs.items()}
 
 mol.save_data()
@@ -84,8 +85,9 @@ def disp(coord):
     Etot = list(mol.energies)
     return Xal, Etot
 
+results = {n: {'coded': GZ[n], 'numeric': np.zeros(9)} for n in Zs}
 print('\n===== coded Q(Z) vs exact d(Z^T A Z) per coordinate =====')
-for k in (3, 4, 5):
+for k in range(9):
     Xp, Ep = disp(xyz0 + DELTA*np.eye(9)[k])
     Xm, Em = disp(xyz0 - DELTA*np.eye(9)[k])
     for n, z in Zs.items():
@@ -100,4 +102,7 @@ for k in (3, 4, 5):
                 tot += (E[K+1] - E[0]) * ov*ov   # excitation energies
             return tot
         num = (om(Ep, Xp) - om(Em, Xm)) / (2*DELTA)
-        print(f'k={k} {n}: coded={GZ[n][k]:+.7f}  numeric={num:+.7f}  diff={GZ[n][k]-num:+.3e}')
+        results[n]['numeric'][k] = num
+np.savez('/tmp/nactest/qz_full.npz',
+         **{f'{n}_{w}': results[n][w] for n in results for w in ('coded','numeric')})
+print('saved qz_full.npz')

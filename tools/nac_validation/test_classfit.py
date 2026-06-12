@@ -76,6 +76,8 @@ def refold(c):
     out = c.copy(); out[nocb,0] = math.sqrt(2.0)*c[nocb,0]; out[nocb+1,1] = 0.0
     return out.T.reshape(-1)
 
+QDOTS = []
+
 def disp(coord):
     mol.update_system(coord); oqp.library.ints_1e(mol); oqp.library.guess(mol)
     SinglePoint(mol).energy()
@@ -92,6 +94,7 @@ def disp(coord):
     for st in range(nstate):
         c = unfold(Xd[st]); cp = Q[:noca,:noca].T @ c @ Q[nocb:,nocb:]
         Xal[st] = refold(cp)
+    QDOTS.append(Q.copy())
     return Xal.T
 
 damp_PT = np.zeros((9, nstate, nstate))
@@ -103,7 +106,9 @@ for k in range(9):
             if np.dot(X0[:,st], Xx[:,st]) < 0: Xx[:,st] *= -1
     damp_PT[k] = X0.T @ ((Xp-Xm)/(2*DELTA))
 
-np.savez('/tmp/nactest/classfit.npz', damp_PT=damp_PT,
+qdots = np.array([(QDOTS[2*k] - QDOTS[2*k+1])/(2*DELTA) for k in range(9)])
+np.savez('/tmp/nactest/classfit.npz', damp_PT=damp_PT, qdots=qdots,
+         X0=X0, noca=noca, nocb=nocb, nbf=nbf,
          energies=np.array(mol.energies),
          **{f'B_{i}{j}_{a}{b}': Bsub[(i,j,a,b)]
             for (i,j,a,b) in Bsub})
