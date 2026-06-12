@@ -511,7 +511,7 @@ contains
   subroutine transform_ecp_matrix(basis, raw_matrix, matrix)
 
     use basis_tools, only: basis_set
-    use cart2sph, only: cart2sph_mat_unit
+    use cart2sph, only: cart2sph_mat
     type(basis_set), intent(in) :: basis
     real(c_double), dimension(:), intent(in) :: raw_matrix
     real(c_double), dimension(:), allocatable, intent(out) :: matrix
@@ -582,7 +582,11 @@ contains
           end do
         end do
 
-        call cart2sph_mat_unit(blk, basis%am(jsh), pure_j, basis%am(ish), pure_i)
+        ! libecpint blocks are in the same pure-power Cartesian convention as
+        ! the native 1e primitives (bas_norm_matrix folds shells_pnrm2 for
+        ! Cartesian shells later, but bfnrm = 1 for pure shells), so the
+        ! transform must fold shells_pnrm2 along each pure index itself.
+        call cart2sph_mat(blk, basis%am(jsh), pure_j, basis%am(ish), pure_i)
 
         do si = 1, nsi
           do sj = 1, nsj

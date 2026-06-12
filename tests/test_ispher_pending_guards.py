@@ -7,9 +7,15 @@ def test_ecp_spherical_path_uses_cartesian_to_spherical_transform():
     text = (ROOT / "source/ecp.F90").read_text()
     c2s = (ROOT / "source/integrals/cart2sph.F90").read_text()
     assert "subroutine transform_ecp_matrix" in text
-    assert "cart2sph_mat_unit" in text
+    # libecpint blocks are pure-power Cartesian (bas_norm_matrix folds
+    # shells_pnrm2 only for Cartesian shells, bfnrm=1 for pure ones), so the
+    # ECP reduction must use cart2sph_mat, which folds shells_pnrm2 along
+    # each transformed index. cart2sph_mat_unit here loses the fold and was
+    # ~2.6 Ha wrong for HBr/cc-pVDZ-PP vs PySCF.
+    assert "call cart2sph_mat(blk" in text
+    assert "call cart2sph_mat_unit(" not in text
     assert "ECP integrals with spherical-harmonic AO dimensions" not in text
-    assert "subroutine cart2sph_mat_unit" in c2s
+    assert "subroutine cart2sph_mat" in c2s
 
 
 def test_ground_state_hessian_spherical_path_is_not_guarded():
