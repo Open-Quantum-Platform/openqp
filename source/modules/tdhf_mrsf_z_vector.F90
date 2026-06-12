@@ -2259,6 +2259,10 @@ contains
         call iatogen(bvec_mo(:,target_state), wrk1, nocca, noccb)
         call mrsfcbc(infos, mo_a, mo_a, wrk1, fmrst1(1,:,:,:))
 
+        ! NOTE (NAC audit 2026-06-13): mrsfcbc's own channel-7 `ball` density
+        ! is numerically IDENTICAL to sfdmat's td_abxc (verified, 1e-15), so
+        ! this overwrite is a no-op kept for clarity; the ground-configuration
+        ! cross-bilinear deficiency does NOT originate here.
         fmrst1(1,7,:,:) = td_abxc
 
         td_mrsf_den(1:7,:,:) = fmrst1(1,1:7,:,:)
