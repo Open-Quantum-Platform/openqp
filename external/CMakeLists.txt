@@ -75,6 +75,36 @@ function(oqp_set_external_paths var_prefix name default_prefix default_source de
   set(${var_prefix}_INSTALL_DIR "${_install}" CACHE INTERNAL "${var_prefix}_INSTALL_DIR" FORCE)
 endfunction()
 
+# Reuse already-built bundled externals across fresh build directories.
+#
+# The externals are compiled into a persistent per-toolchain cache (see
+# oqp_set_external_paths) so their artifacts survive `rm -rf build`. ExternalProject
+# alone is not enough to *reuse* them, though: deleting the build directory drops
+# build/.ninja_log, and on the next build ninja finds no recorded command line for
+# any ExternalProject stamp and conservatively marks every step dirty
+# ("command line not found in log"), recompiling all externals despite the cache.
+#
+# This helper short-circuits that. When OQP_REUSE_EXTERNALS is on and every cached
+# artifact listed already exists, it creates a no-op stand-in target with the same
+# name as the ExternalProject. oqp consumes the externals through -L/library-name
+# and full-path links (not through these targets), which are only used for
+# add_dependencies() ordering, so the stand-in keeps add_dependencies() valid while
+# the real ExternalProject_Add is skipped (guarded by `if(NOT TARGET <name>)`).
+# A cold build, or any incomplete cache, leaves the target undefined and falls
+# through to a normal ExternalProject build.
+function(oqp_reuse_or_build target)
+  if(NOT OQP_REUSE_EXTERNALS)
+    return()
+  endif()
+  foreach(_artifact IN LISTS ARGN)
+    if(NOT EXISTS "${_artifact}")
+      return()
+    endif()
+  endforeach()
+  add_custom_target(${target})
+  message(STATUS "Reusing cached external '${target}' (skipping rebuild)")
+endfunction()
+
 if(${USE_LIBINT})
 oqp_set_external_paths(LIBINT2 libint
     "${CMAKE_BINARY_DIR}/external/libint"
@@ -84,6 +114,8 @@ oqp_set_external_paths(LIBINT2 libint
     "${CMAKE_BINARY_DIR}/external/install/libint")
 set(LIBINT2_LIBRARY "${LIBINT2_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}int2${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "LIBINT2_LIBRARY" FORCE)
 
+oqp_reuse_or_build(libint2 "${LIBINT2_LIBRARY}" "${LIBINT2_BUILD_DIR}/fortran" "${LIBINT2_BUILD_DIR}/include")
+if(NOT TARGET libint2)
 ExternalProject_Add(libint2
     PREFIX ${LIBINT2_PREFIX}
     URL https://qchemlab.knu.ac.kr/vmironov/oqp-libint/-/archive/v${_OQP_LIBINT2_VERSION}/oqp-libint-v${_OQP_LIBINT2_VERSION}.tar.gz
@@ -105,6 +137,7 @@ ExternalProject_Add(libint2
                -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
 )
 endif()
+endif()
 
 oqp_set_external_paths(NLOPT nlopt
         "${CMAKE_BINARY_DIR}/external/nlopt"
@@ -113,6 +146,8 @@ oqp_set_external_paths(NLOPT nlopt
         "${CMAKE_BINARY_DIR}/external/nlopt/stamp-${CMAKE_Fortran_COMPILER_ID}"
         "${CMAKE_BINARY_DIR}/external/install/nlopt")
 set(NLOPT_LIBRARY "${NLOPT_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}nlopt${CMAKE_STATIC_LIBRARY_SUFFIX}" CACHE INTERNAL "NLOPT_LIBRARY" FORCE)
+oqp_reuse_or_build(nlopt "${NLOPT_LIBRARY}" "${NLOPT_BUILD_DIR}/nlopt.f")
+if(NOT TARGET nlopt)
 ExternalProject_Add(nlopt
         PREFIX ${NLOPT_PREFIX}
         URL https://github.com/stevengj/nlopt/archive/v${_OQP_NLOPT_VERSION}.tar.gz
@@ -136,6 +171,7 @@ ExternalProject_Add(nlopt
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         )
+endif()
 
 oqp_set_external_paths(LIBXC libxc
         "${CMAKE_SOURCE_DIR}/external/libxc"
@@ -145,6 +181,11 @@ oqp_set_external_paths(LIBXC libxc
         "${CMAKE_BINARY_DIR}/external/install/libxc")
 set(LIBXC_LIBRARY_DIR "${LIBXC_BUILD_DIR}" CACHE INTERNAL "LIBXC_LIBRARY_DIR" FORCE)
 set(LIBXC_INCLUDE_DIR "${LIBXC_BUILD_DIR}" CACHE INTERNAL "LIBXC_INCLUDE_DIR" FORCE)
+oqp_reuse_or_build(libxc
+        "${LIBXC_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}xc${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${LIBXC_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}xcf03${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${LIBXC_BUILD_DIR}/xc_f03_lib_m.mod")
+if(NOT TARGET libxc)
 ExternalProject_Add(libxc
         PREFIX ${LIBXC_PREFIX}
 	URL https://gitlab.com/libxc/libxc/-/archive/${_OQP_LIBXC_VERSION}/libxc-${_OQP_LIBXC_VERSION}.tar.gz
@@ -165,6 +206,7 @@ ExternalProject_Add(libxc
                    -DCMAKE_POLICY_VERSION_MINIMUM=3.25
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
+endif()
 
 oqp_set_external_paths(TAGARRAY libtagarray
         "${CMAKE_SOURCE_DIR}/external/libtagarray"
@@ -176,6 +218,11 @@ set(TAGARRAY_LIBRARY_DIR "${TAGARRAY_BUILD_DIR}" CACHE INTERNAL "TAGARRAY_LIBRAR
 set(TAGARRAY_INCLUDE_DIRS
     "${TAGARRAY_BUILD_DIR}/include/tagarray;${TAGARRAY_SOURCE_DIR}/include"
     CACHE INTERNAL "TAGARRAY_INCLUDE_DIRS" FORCE)
+oqp_reuse_or_build(libtagarray
+        "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray_f${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${TAGARRAY_BUILD_DIR}/include/tagarray")
+if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
         PREFIX ${TAGARRAY_PREFIX}
         URL https://github.com/foxtran/libtagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
@@ -193,6 +240,7 @@ ExternalProject_Add(libtagarray
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
+endif()
 
 oqp_set_external_paths(LIBECPINT libecpint
         "${CMAKE_SOURCE_DIR}/external/libecpint"
@@ -205,6 +253,11 @@ set(FADDEEVA_LIBRARY_DIR "${LIBECPINT_BUILD_DIR}/external/Faddeeva" CACHE INTERN
 set(LIBECPINT_INCLUDE_DIRS
     "${LIBECPINT_INSTALL_DIR}/include/libecpint;${LIBECPINT_INSTALL_DIR}/include"
     CACHE INTERNAL "LIBECPINT_INCLUDE_DIRS" FORCE)
+oqp_reuse_or_build(libecpint
+        "${LIBECPINT_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}ecpint${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${FADDEEVA_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}Faddeeva${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        "${LIBECPINT_INSTALL_DIR}/include/libecpint")
+if(NOT TARGET libecpint)
 ExternalProject_Add(libecpint
         PREFIX ${LIBECPINT_PREFIX}
         URL https://github.com/robashaw/libecpint/archive/refs/tags/v${_OQP_LIBECPINT_VERSION}.tar.gz
@@ -222,6 +275,7 @@ ExternalProject_Add(libecpint
 		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
+endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   set(BLA_LIB_SUFFIX "64")
   if(BUILD_SHARED_LIBS)
@@ -240,7 +294,8 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
   set(LIBBLAS   ${LAPACK_BUILD_DIR}/lib/libblas${BLA_LIB_SUFFIX}.a CACHE INTERNAL "LIBBLAS" FORCE)
   message(STATUS "BLAS_SUFFIX = ${BLA_LIB_SUFFIX}")
 
-
+  oqp_reuse_or_build(LAPACK "${LIBLAPACK}" "${LIBBLAS}")
+  if(NOT TARGET LAPACK)
   ExternalProject_Add(LAPACK
         PREFIX ${LAPACK_PREFIX}
         URL https://github.com/Reference-LAPACK/lapack/archive/refs/tags/v${_OQP_LAPACK_VERSION}.tar.gz
@@ -268,6 +323,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
                    -DCMAKE_TRY_COMPILE_PLATFORM_VARIABLES=CMAKE_POLICY_VERSION_MINIMUM
                    -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
         )
+  endif()
 endif()
 if(ENABLE_OPENTRAH)
 oqp_set_external_paths(OPENTRUSTREGION opentrustregion
@@ -321,6 +377,9 @@ endif()
 # across toolchains (old/new gfortran, x86, aarch64) and free of the SIGILL. OTR is a
 # small solver, so losing -march tuning is negligible; main OpenQP uses no -march.
 set(_OTR_ARCH_SED "s/-march=native//g; s/-xHost//g")
+oqp_reuse_or_build(libopentrustregion
+    "${OPENTRUSTREGION_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+if(NOT TARGET libopentrustregion)
 ExternalProject_Add(libopentrustregion
     PREFIX ${OPENTRUSTREGION_PREFIX}
     URL https://github.com/eriksen-lab/opentrustregion/archive/refs/tags/v${_OQP_OPENTRUSTREGION_VERSION}.tar.gz
@@ -332,6 +391,7 @@ ExternalProject_Add(libopentrustregion
     BINARY_DIR ${OPENTRUSTREGION_BUILD_DIR}
     STAMP_DIR  ${OPENTRUSTREGION_STAMP_DIR}
 )
+endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
   add_dependencies(libopentrustregion LAPACK)
 endif()
@@ -347,6 +407,8 @@ if(ENABLE_Formatter)
     set(FPRETTIFY_PREFIX "${CMAKE_SOURCE_DIR}/external/fprettify" CACHE INTERNAL "FPRETTIFY_PREFIX" FORCE)
     set(FPRETTIFY_SOURCE_DIR "${CMAKE_SOURCE_DIR}/external/fprettify/src/fprettify" CACHE INTERNAL "FPRETTIFY_SOURCE_DIR" FORCE)
   endif()
+  oqp_reuse_or_build(fprettify "${FPRETTIFY_SOURCE_DIR}/fprettify.py")
+  if(NOT TARGET fprettify)
   ExternalProject_Add(fprettify
           PREFIX ${FPRETTIFY_PREFIX}
           URL https://github.com/pseewald/fprettify/archive/refs/tags/v${_OQP_FPRETTIFY_VERSION}.tar.gz
@@ -358,6 +420,7 @@ if(ENABLE_Formatter)
           BUILD_COMMAND ""
           INSTALL_COMMAND ""
           )
+  endif()
   add_custom_target(format ${Python3_EXECUTABLE} ${FPRETTIFY_SOURCE_DIR}/fprettify.py --indent 2
                                                  --whitespace 1
                                                  --c-relations
@@ -455,6 +518,8 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
     endif()
 
+    oqp_reuse_or_build(ddx "${DDX_LIBRARY}" "${DDX_INCLUDE_DIR}")
+    if(NOT TARGET ddx)
     ExternalProject_Add(ddx
         PREFIX ${DDX_PREFIX}
         URL https://github.com/ddsolvation/ddX/archive/refs/tags/v${_OQP_DDX_VERSION}.tar.gz
@@ -468,6 +533,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         UPDATE_COMMAND ""
         CMAKE_ARGS ${DDX_CMAKE_ARGS}
     )
+    endif()
     if(_LINALG_LIB_TYPE STREQUAL NetLib)
         add_dependencies(ddx LAPACK)
     endif()
