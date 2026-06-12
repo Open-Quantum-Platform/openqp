@@ -13,13 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+      # Keep in sync with the FROM line in Dockerfile and docker/buildenv.Dockerfile.
+      BUILDENV_IMAGE: openqp/openqp-buildenv:1
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
@@ -28,28 +27,23 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
+      # The build environment (toolchain, ILP64 OpenBLAS, Python deps) is a
+      # prebuilt image; pull it instead of reinstalling prerequisites on every
+      # run. Until the image has been published once (or right after a tag
+      # bump) the pull fails and we build it here; the next push-to-main run
+      # with Docker Hub credentials publishes it.
+      - name: Prepare build environment image
+        run: |
+          if ! docker pull "${BUILDENV_IMAGE}"; then
+            echo "::warning::${BUILDENV_IMAGE} not in registry; building it from docker/buildenv.Dockerfile"
+            docker build -t "${BUILDENV_IMAGE}" -f docker/buildenv.Dockerfile docker
+          fi
 
-      # Layer cache backed by the GitHub Actions cache: the apt, pip, and
-      # OpenBLAS-build layers are restored instead of re-executed and only
-      # rerun when the Dockerfile changes. The OpenQP build layers after
-      # `COPY . /opt/openqp` are invalidated by any source change and still
-      # rebuild each run.
-      - name: Build Docker Image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64
-          push: ${{ github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true' }}
-          tags: openqp/openqp:v1.0
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build OpenQP image
+        run: docker build -t openqp/openqp:v1.0 .
 
-      - name: Verify Docker Image
+      - name: Push images
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         run: |
-          docker pull openqp/openqp:v1.0
-          docker inspect openqp/openqp:v1.0
+          docker push "${BUILDENV_IMAGE}"
+          docker push openqp/openqp:v1.0
