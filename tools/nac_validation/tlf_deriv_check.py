@@ -87,11 +87,17 @@ def displaced(coord):
     # ROHF SCF can rotate the near-degenerate socc pair nondeterministically;
     # the production overlap is gauge-covariant, but the frozen-amplitude
     # decomposition is not unless the gauge is pinned).
-    Q = np.zeros((nbf, nbf))
-    for lo, hi in ((0, nocb), (nocb, noca), (noca, nbf)):
-        B = M_f[lo:hi, lo:hi]
-        W, s, Vt = np.linalg.svd(B)
-        Q[lo:hi, lo:hi] = Vt.T @ W.T       # Q_sp = V W^T -> B Q_sp = SPD
+    import os
+    if os.environ.get('NAC_NOROT'):
+        # production-equivalent gauge: per-orbital sign fixes only
+        sgn0 = np.sign(np.diag(M_f)); sgn0[sgn0 == 0] = 1.0
+        Q = np.diag(sgn0)
+    else:
+        Q = np.zeros((nbf, nbf))
+        for lo, hi in ((0, nocb), (nocb, noca), (noca, nbf)):
+            B = M_f[lo:hi, lo:hi]
+            W, s, Vt = np.linalg.svd(B)
+            Q[lo:hi, lo:hi] = Vt.T @ W.T   # Q_sp = V W^T -> B Q_sp = SPD
     M_al = M_f @ Q                         # aligned: diag(M_al) ~ +1
     if np.min(np.diag(M_al)) < 0.98:
         print('  WARNING: weak aligned diag', np.min(np.diag(M_al)))
@@ -108,7 +114,12 @@ def displaced(coord):
         Xt = Q[:noca, :noca].T @ Xm @ Q[nocb:, nocb:]
         Xd_al[st] = Xt.T.reshape(-1)
     Xd = Xd_al.T.copy()                                  # [ij, st]
-    # (a) production-like: old=X0, new=Xd (gauge-aligned), M aligned
+    # state-sign-align the displaced amplitudes to R0 so the rebuilt state
+    # overlap has +1 diagonal (clean central differencing)
+    for st in range(nstate):
+        if np.dot(X0[:, st], Xd[:, st]) < 0:
+            Xd[:, st] *= -1.0
+    # (a) production-like: old=X0, new=Xd (gauge- and sign-aligned), M aligned
     mol.data['OQP::td_bvec_mo_old'] = X0_raw
     mol.data['OQP::td_bvec_mo'] = np.ascontiguousarray(Xd.T).reshape(Xd_raw.shape)
     S_real = states_overlap()
@@ -186,3 +197,17 @@ for (I, J) in ((1, 2), (1, 3), (2, 3)):
     c = np.dot(t, s * v) / (np.linalg.norm(t) * np.linalg.norm(v) + 1e-30)
     print(f'({I},{J}): cos={c:+.6f}  |pred|={np.linalg.norm(v):.5f}  '
           f'|dn|={np.linalg.norm(t):.5f}  resid={np.linalg.norm(s*v - t):.5f}')
+
+print('\n===== in-process rebuild vs production, all pairs =====')
+for (I, J) in ((1, 2), (1, 3), (2, 3)):
+    t = dn_all[I - 1, J - 1]
+    v = A_real[:, I - 1, J - 1]
+    s = np.sign(np.dot(t, v)) or 1.0
+    c = np.dot(t, s * v) / (np.linalg.norm(t) * np.linalg.norm(v) + 1e-30)
+    print(f'({I},{J}): cos={c:+.6f}  |rebuild|={np.linalg.norm(v):.5f}  '
+          f'|dn|={np.linalg.norm(t):.5f}  resid={np.linalg.norm(s*v - t):.5f}')
+    # and the split consistency: rebuild =?= -(...)? sign conventions equal:
+    w = 2 * d_amp[:, I - 1, J - 1] + A_frozen[:, I - 1, J - 1]
+    sw = np.sign(np.dot(v, w)) or 1.0
+    print(f'        split check |rebuild -+ (2damp+Afrozen)| = '
+          f'{min(np.linalg.norm(v - w), np.linalg.norm(v + w)):.5f}')

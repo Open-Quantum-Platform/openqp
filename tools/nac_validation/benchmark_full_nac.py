@@ -181,6 +181,13 @@ def displaced_amps(coord):
     mol.data['OQP::E_MO_B_old'] = e0_b
     oqp.get_structures_ao_overlap(mol)
     M_f = np.array(mol.data[OVTAG], copy=True).reshape(-1).reshape((nbf, nbf)).T
+    # Procrustes parallel-transport gauge (consistent with the cross-only
+    # analytic orbital term). The rotation must act on the UNFOLDED
+    # determinant amplitudes and be refolded: the spin-adapted ijlr slots do
+    # NOT transform like grid entries (rotating the folded grid was the
+    # source of the former '(1,2) 25% gap'). The singlet sector is closed
+    # under socc rotations (the triplet ijlr2 combo is trace-like and stays
+    # empty), so the refold is exact.
     Q = np.zeros((nbf, nbf))
     for lo, hi in ((0, nocb), (nocb, noca), (noca, nbf)):
         W, s, Vt = np.linalg.svd(M_f[lo:hi, lo:hi])
@@ -189,9 +196,15 @@ def displaced_amps(coord):
     Xd_mat = Xd_raw.reshape(-1).reshape((nstate, nij))
     Xd_al = np.zeros_like(Xd_mat)
     for st in range(nstate):
-        Xm = Xd_mat[st].reshape((nvirb, noca)).T
-        Xt = Q[:noca, :noca].T @ Xm @ Q[nocb:, nocb:]
-        Xd_al[st] = Xt.T.reshape(-1)
+        c = unfold(Xd_mat.T, st + 1)               # determinant amplitudes
+        cp = Q[:noca, :noca].T @ c @ Q[nocb:, nocb:]
+        leak = abs(cp[nocb, 0] + cp[nocb + 1, 1])  # triplet (trace) leakage
+        if leak > 1e-8:
+            print(f'  WARNING: ijlr2 leakage {leak:.2e} state {st+1}')
+        f = cp.copy()
+        f[nocb, 0] = np.sqrt(2.0) * cp[nocb, 0]    # refold singlet slot
+        f[nocb + 1, 1] = 0.0                       # ijlr2 slot stays empty
+        Xd_al[st] = f.T.reshape(-1)
     return Xd_al.T
 
 
