@@ -12,6 +12,7 @@ module ecp_tool
     use libecp_result, only : ecp_result
     use basis_tools, only: basis_set
     use precision, only: dp
+    use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
 
     implicit none
 
@@ -24,7 +25,7 @@ module ecp_tool
 contains
     !> @brief Add ECP one-electron contribution to the AO-core Hamiltonian (packed).
     !> @detail Computes scalar ECP integrals with libecpint (deriv order 0),
-    !>         remaps them into OpenQP AO ordering via @ref transform_matrix,
+    !>         remaps them into OpenQP AO ordering via @ref transform_ecp_matrix,
     !>         and accumulates into upper-triangular packed Hcore.
     !> @param[in]  basis   Basis set (contains ECP params and AO metadata).
     !> @param[in]  coord   Nuclear coordinates (3×natm).
@@ -39,6 +40,7 @@ contains
         type(c_ptr) :: integrator
         type(ecp_result) :: result_ptr
         real(c_double), pointer :: libecp_res(:)
+        real(c_double), allocatable :: ecp_mat(:)
         integer :: i, j, c
         integer(c_int) :: driv_order
 
@@ -53,13 +55,13 @@ contains
         call c_f_pointer(result_ptr%data, libecp_res, [result_ptr%size])
 
 
-        call transform_matrix(basis, libecp_res)
+        call transform_ecp_matrix(basis, libecp_res, ecp_mat)
 
         c = 0
         do i = 1, basis%nbf
             do j = 1, i
                 c = c + 1
-                hcore(c) = libecp_res((i - 1) * basis%nbf + j) + hcore(c)
+                hcore(c) = ecp_mat((i - 1) * basis%nbf + j) + hcore(c)
             end do
         end do
 
@@ -69,6 +71,7 @@ contains
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
+        deallocate(ecp_mat)
 
         call free_integrator(integrator)
 
@@ -96,10 +99,9 @@ contains
         type(ecp_result) :: result_ptr
         type(c_ptr) :: integrator
         real(c_double), pointer :: libecp_res(:)
-        real(real64), allocatable :: res_x(:), res_y(:), res_z(:)
+        real(c_double), allocatable :: raw_block(:), ecp_mat(:)
         real(real64), allocatable :: deloc(:,:)
-        integer :: i, j, c, n, natm, prim
-        integer :: tri_size
+        integer :: i, j, c, n, natm, prim, cc, nbf_raw
         ! 64-bit: slice offsets reach 3*natm*nbf^2 and overflow default integers
         integer(c_int64_t) :: full_size
         integer(c_int) :: driv_order
@@ -110,12 +112,9 @@ contains
 
         driv_order = 1
 
-        tri_size = basis%nbf * (basis%nbf + 1) / 2
-        full_size = int(basis%nbf, c_int64_t) * basis%nbf
-
-        allocate(res_x(full_size))
-        allocate(res_y(full_size))
-        allocate(res_z(full_size))
+        nbf_raw = ecp_cart_nbf(basis)
+        full_size = int(nbf_raw, c_int64_t) * nbf_raw
+        allocate(raw_block(full_size))
 
         natm = size(coord, dim=2)
 
@@ -130,26 +129,23 @@ contains
 
 
         do n = 1, natm
-            res_x = libecp_res(full_size * (3 * n - 3)+1:full_size * (3 * n - 2))
-            res_y = libecp_res(full_size * (3 * n - 2)+1:full_size * (3 * n - 1))
-            res_z = libecp_res(full_size * (3 * n - 1)+1:full_size * (3 * n))
-            call transform_matrix(basis, res_x)
-            call transform_matrix(basis, res_y)
-            call transform_matrix(basis, res_z)
+            do cc = 1, 3
+                raw_block = libecp_res(full_size * (3 * (n - 1) + cc - 1) + 1 : &
+                                       full_size * (3 * (n - 1) + cc))
+                call transform_ecp_matrix(basis, raw_block, ecp_mat)
 
-            do j = 1, basis%nbf
-                do i = 1, j
-                    c = j * (j - 1) / 2 + i
+                do j = 1, basis%nbf
+                    do i = 1, j
+                        c = j * (j - 1) / 2 + i
 
-                    if (i == j) then
-                        prim = 1
-                    else
-                        prim = 2
-                    end if
+                        if (i == j) then
+                            prim = 1
+                        else
+                            prim = 2
+                        end if
 
-                    deloc(1, n) = deloc(1, n) + prim * res_x((i - 1) * basis%nbf + j) * denab(c)
-                    deloc(2, n) = deloc(2, n) + prim * res_y((i - 1) * basis%nbf + j) * denab(c)
-                    deloc(3, n) = deloc(3, n) + prim * res_z((i - 1) * basis%nbf + j) * denab(c)
+                        deloc(cc, n) = deloc(cc, n) + prim * ecp_mat((i - 1) * basis%nbf + j) * denab(c)
+                    end do
                 end do
             end do
 
@@ -162,6 +158,8 @@ contains
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
+        if (allocated(ecp_mat)) deallocate(ecp_mat)
+        deallocate(raw_block)
 
         call free_integrator(integrator)
 
@@ -192,8 +190,8 @@ contains
         type(ecp_result) :: result_ptr
         type(c_ptr) :: integrator
         real(c_double), pointer :: libecp_res(:)
-        real(real64), allocatable :: res_c(:)
-        integer :: nbf, natm, n, cc, i, j
+        real(c_double), allocatable :: raw_block(:), ecp_mat(:)
+        integer :: nbf, nbf_raw, natm, n, cc, i, j
         ! 64-bit: slice offsets reach 3*natm*nbf^2 and overflow default integers
         integer(c_int64_t) :: full_size
         integer(c_int) :: driv_order
@@ -205,9 +203,10 @@ contains
 
         driv_order = 1
         nbf = basis%nbf
-        full_size = int(nbf, c_int64_t) * nbf
+        nbf_raw = ecp_cart_nbf(basis)
+        full_size = int(nbf_raw, c_int64_t) * nbf_raw
         natm = size(coord, dim=2)
-        allocate(res_c(full_size))
+        allocate(raw_block(full_size))
 
         call set_integrator(integrator, basis, coord, driv_order)
 
@@ -216,12 +215,12 @@ contains
 
         do n = 1, natm
             do cc = 1, 3
-                res_c = libecp_res(full_size*(3*(n - 1) + cc - 1) + 1 : &
-                                   full_size*(3*(n - 1) + cc))
-                call transform_matrix(basis, res_c)
+                raw_block = libecp_res(full_size*(3*(n - 1) + cc - 1) + 1 : &
+                                       full_size*(3*(n - 1) + cc))
+                call transform_ecp_matrix(basis, raw_block, ecp_mat)
                 do j = 1, nbf
                     do i = 1, nbf
-                        dVecp(i, j, cc, n) = res_c((i - 1)*nbf + j)
+                        dVecp(i, j, cc, n) = ecp_mat((i - 1)*nbf + j)
                     end do
                 end do
             end do
@@ -232,9 +231,10 @@ contains
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
+        if (allocated(ecp_mat)) deallocate(ecp_mat)
 
         call free_integrator(integrator)
-        deallocate(res_c)
+        deallocate(raw_block)
 
     end subroutine ecp_deriv_ints
 
@@ -269,8 +269,8 @@ contains
         type(ecp_result) :: result_ptr
         type(c_ptr) :: integrator
         real(c_double), pointer :: libecp_res(:)
-        real(real64), allocatable :: blk(:)
-        integer :: nbf, natm
+        real(c_double), allocatable :: raw_block(:), ecp_mat(:)
+        integer :: nbf, nbf_raw, natm
         integer :: iat, jat, ia0, ja0, hstart, base, ncomp, n
         integer :: a, b, i, j, c, prim
         ! 64-bit: block offsets reach 3N(3N+1)/2 * nbf^2 and overflow default integers
@@ -285,9 +285,10 @@ contains
 
         driv_order = 2
         nbf = basis%nbf
-        mat_sz = int(nbf, c_int64_t) * nbf
+        nbf_raw = ecp_cart_nbf(basis)
+        mat_sz = int(nbf_raw, c_int64_t) * nbf_raw
         natm = size(coord, dim=2)
-        allocate(blk(mat_sz))
+        allocate(raw_block(mat_sz))
 
         call set_integrator(integrator, basis, coord, driv_order)
 
@@ -313,8 +314,8 @@ contains
                 end if
 
                 do n = 1, ncomp
-                    blk = libecp_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
-                    call transform_matrix(basis, blk)
+                    raw_block = libecp_res((base + n - 1)*mat_sz + 1 : (base + n - 1)*mat_sz + mat_sz)
+                    call transform_ecp_matrix(basis, raw_block, ecp_mat)
 
                     val = 0.0_dp
                     do j = 1, nbf
@@ -325,7 +326,7 @@ contains
                             else
                                 prim = 2
                             end if
-                            val = val + prim * blk((i - 1)*nbf + j) * denab(c)
+                            val = val + prim * ecp_mat((i - 1)*nbf + j) * denab(c)
                         end do
                     end do
 
@@ -347,9 +348,10 @@ contains
         result_ptr%data = c_null_ptr
         result_ptr%size = 0
         nullify(libecp_res)
+        if (allocated(ecp_mat)) deallocate(ecp_mat)
 
         call free_integrator(integrator)
-        deallocate(blk)
+        deallocate(raw_block)
 
     end subroutine add_ecphess
 
@@ -425,21 +427,53 @@ contains
   !>         layout so that full-square AO matrices can be permuted consistently.
   !> @param[in]    basis     Basis set (AO layout and shell metadata).
   !> @param[inout] label_map Integer array of length nbf receiving the permutation.
-  !> @see transform_matrix
+  !> @see transform_ecp_matrix
   !> @author Mohsen Mazaherifar
   !> @date January 2025
-  subroutine libecpint_map(basis, label_map)
+  integer function ecp_cart_nbf(basis) result(nbf_cart)
+
+    type(basis_set), intent(in) :: basis
+    integer :: ish
+
+    nbf_cart = 0
+    do ish = 1, basis%nshell
+      nbf_cart = nbf_cart + NUM_CART_BF(basis%am(ish))
+    end do
+
+  end function ecp_cart_nbf
+
+  subroutine ecp_cart_offsets(basis, cart_off, nbf_cart)
+
+    type(basis_set), intent(in) :: basis
+    integer, allocatable, intent(out) :: cart_off(:)
+    integer, intent(out) :: nbf_cart
+    integer :: ish
+
+    allocate(cart_off(basis%nshell))
+    nbf_cart = 0
+    do ish = 1, basis%nshell
+      cart_off(ish) = nbf_cart + 1
+      nbf_cart = nbf_cart + NUM_CART_BF(basis%am(ish))
+    end do
+
+  end subroutine ecp_cart_offsets
+
+  subroutine libecpint_map(basis, cart_off, label_map)
 
     use basis_tools, only: basis_set
     use constants, only: map_canonical
 
     type(basis_set), intent(in) :: basis
+    integer, dimension(:), intent(in) :: cart_off
     integer, dimension(:), intent(inout):: label_map
-    integer :: i,j
+    integer :: ish, i, old
 
-    do i = 1, basis%nbf
-      j = basis%bf_to_shell(i)
-      label_map(i + map_canonical(i-basis%ao_offset(j)+1, basis%am(j))) = i
+    label_map = 0
+    do ish = 1, basis%nshell
+      do i = 1, NUM_CART_BF(basis%am(ish))
+        old = cart_off(ish) + i - 1
+        label_map(old + map_canonical(i, basis%am(ish))) = old
+      end do
     end do
 
   end  subroutine libecpint_map
@@ -474,36 +508,95 @@ contains
   !> @see libecpint_map
   !> @author Mohsen Mazaherifar
   !> @date January 2025
-  subroutine transform_matrix(basis, matrix)
+  subroutine transform_ecp_matrix(basis, raw_matrix, matrix)
 
     use basis_tools, only: basis_set
+    use cart2sph, only: cart2sph_mat
     type(basis_set), intent(in) :: basis
-    real(c_double), dimension(:), intent(inout) :: matrix
-    real(c_double), dimension(:), allocatable :: tmp_matrix
+    real(c_double), dimension(:), intent(in) :: raw_matrix
+    real(c_double), dimension(:), allocatable, intent(out) :: matrix
+    real(c_double), dimension(:), allocatable :: cart_matrix
+    real(c_double), dimension(:), allocatable :: blk
     integer, dimension(:), allocatable :: label_map
-    integer :: i, j, row, col, n
+    integer, allocatable :: cart_off(:)
+    integer :: i, j, row, col, nbf_raw, nbf_sph
+    integer :: ish, jsh, nci, ncj, nsi, nsj, coi, coj, soi, soj
+    integer :: si, sj, max_blk, pure_i, pure_j
 
-    n = basis%nbf
-    allocate(label_map(n))
+    call ecp_cart_offsets(basis, cart_off, nbf_raw)
+    nbf_sph = basis%nbf
+    allocate(label_map(nbf_raw))
 
-    if (size(matrix) /= n * n) then
+    if (size(raw_matrix) /= nbf_raw * nbf_raw) then
       print *, "Error: original_matrix size does not match labels."
       stop
     end if
 
-    call libecpint_map(basis, label_map)
-    allocate(tmp_matrix(n * n))
+    call libecpint_map(basis, cart_off, label_map)
+    allocate(cart_matrix(nbf_raw * nbf_raw))
+    allocate(matrix(nbf_sph * nbf_sph))
 
-    tmp_matrix = matrix
-
-    do i = 1, n
-      do j = 1, n
+    cart_matrix = 0.0_dp
+    matrix = 0.0_dp
+    do i = 1, nbf_raw
+      do j = 1, nbf_raw
         row = label_map(i)
         col = label_map(j)
-        matrix((row - 1) * n + col) = tmp_matrix((i - 1) * n + j)
+        cart_matrix((row - 1) * nbf_raw + col) = raw_matrix((i - 1) * nbf_raw + j)
       end do
     end do
-  end subroutine transform_matrix
+
+    max_blk = 0
+    do ish = 1, basis%nshell
+      do jsh = 1, basis%nshell
+        max_blk = max(max_blk, NUM_CART_BF(basis%am(ish)) * NUM_CART_BF(basis%am(jsh)))
+      end do
+    end do
+    allocate(blk(max_blk))
+
+    do ish = 1, basis%nshell
+      nci = NUM_CART_BF(basis%am(ish))
+      nsi = basis%naos(ish)
+      coi = cart_off(ish)
+      soi = basis%ao_offset(ish)
+      if (HARMONIC_ACTIVE) then
+        pure_i = basis%harmonic(ish)
+      else
+        pure_i = 0
+      end if
+
+      do jsh = 1, basis%nshell
+        ncj = NUM_CART_BF(basis%am(jsh))
+        nsj = basis%naos(jsh)
+        coj = cart_off(jsh)
+        soj = basis%ao_offset(jsh)
+        if (HARMONIC_ACTIVE) then
+          pure_j = basis%harmonic(jsh)
+        else
+          pure_j = 0
+        end if
+
+        do si = 1, nci
+          do sj = 1, ncj
+            blk((si - 1) * ncj + sj) = cart_matrix((coi + si - 2) * nbf_raw + coj + sj - 1)
+          end do
+        end do
+
+        ! libecpint blocks are in the same pure-power Cartesian convention as
+        ! the native 1e primitives (bas_norm_matrix folds shells_pnrm2 for
+        ! Cartesian shells later, but bfnrm = 1 for pure shells), so the
+        ! transform must fold shells_pnrm2 along each pure index itself.
+        call cart2sph_mat(blk, basis%am(jsh), pure_j, basis%am(ish), pure_i)
+
+        do si = 1, nsi
+          do sj = 1, nsj
+            matrix((soi + si - 2) * nbf_sph + soj + sj - 1) = blk((si - 1) * nsj + sj)
+          end do
+        end do
+      end do
+    end do
+
+  end subroutine transform_ecp_matrix
 
 
 end module ecp_tool

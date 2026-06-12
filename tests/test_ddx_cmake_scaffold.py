@@ -27,6 +27,7 @@ class DDXCMakeScaffoldTests(unittest.TestCase):
         self.assertIn("if(ENABLE_DDX)", text)
         self.assertIn("OQP_ENABLE_DDX", text)
         self.assertIn("target_link_libraries(oqp DDX::ddx)", text)
+        self.assertIn("install(FILES ${DDX_LIBRARY} DESTINATION lib)", text)
 
     def test_oqp_owned_ddx_adapter_api_exists(self):
         header = (ROOT / "source" / "solvent_ddx_adapter.h").read_text(encoding="utf-8")

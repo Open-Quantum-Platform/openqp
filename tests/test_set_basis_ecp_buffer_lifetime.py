@@ -33,6 +33,19 @@ def test_no_inline_temporary_buffers_in_set_basis():
     """ffi.from_buffer(np.array(...)) hands CFFI a temporary — forbidden."""
     source = SET_BASIS.read_text()
     assert "ffi.from_buffer(np.array(" not in source
+    assert "def _buffer_ptr" in source
+    assert "self._ffi_buffer_refs.append(array)" in source
+    assert "self.mol._ffi_buffer_refs" in source
+
+
+def test_numpy_requirement_no_longer_caps_modern_numpy():
+    pyproject = (ROOT / "pyproject.toml").read_text()
+    legacy_setup = (ROOT / "pyoqp" / "setup.py").read_text()
+
+    assert '"numpy>=1.20.0"' in pyproject
+    assert "'numpy>=1.20.0'" in legacy_setup
+    assert "numpy>=1.20.0,<2.2" not in pyproject
+    assert "numpy>=1.20.0,<2.2" not in legacy_setup
 
 
 def test_append_ecp_sees_live_no_ecp_zn_buffer(monkeypatch):
@@ -74,6 +87,7 @@ def test_append_ecp_sees_live_no_ecp_zn_buffer(monkeypatch):
 
     basis_data.set_ecp_data()
 
+    assert basis_data.mol._ffi_buffer_refs is basis_data._ffi_buffer_refs
     assert captured["ecp_zn"].shape == (natom,)
     # No ECP: every entry must be exactly zero, not recycled-heap garbage.
     assert np.all(captured["ecp_zn"] == 0)
@@ -122,5 +136,6 @@ def test_append_ecp_sees_live_ecp_am_buffer(monkeypatch):
 
     basis_data.set_ecp_data()
 
+    assert basis_data.mol._ffi_buffer_refs is basis_data._ffi_buffer_refs
     np.testing.assert_array_equal(captured["ecp_zn"], np.array([0, 2, 0, 0], dtype=np.int32))
     np.testing.assert_array_equal(captured["ecp_am"], expected_am)

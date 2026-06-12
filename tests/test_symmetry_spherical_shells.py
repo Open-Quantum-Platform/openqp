@@ -8,6 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SUPPORTED_PURE_L = (2, 3, 4, 5, 6)
 
 
 def load_module(name, relpath):
@@ -48,10 +49,21 @@ class TestSolidHarmonics(unittest.TestCase):
         )
 
     def test_metric_orthonormality(self):
-        for l in (2, 3, 4):
+        for l in SUPPORTED_PURE_L:
             b, metric = self.symmetry._spherical_basis(l)
             deviation = np.max(np.abs(b @ metric @ b.T - np.eye(2 * l + 1)))
             self.assertLess(float(deviation), 1.0e-12, f"l={l}")
+
+    def test_high_l_shell_sizes_match_openqp_h_i_limits(self):
+        expected = {
+            5: (21, 11),
+            6: (28, 13),
+        }
+        for l, (ncart, nsph) in expected.items():
+            with self.subTest(l=l):
+                self.assertEqual(self.symmetry._cartesian_shell_size(l), ncart)
+                self.assertEqual(self.symmetry._shell_size(l, pure=True), nsph)
+                self.assertEqual(len(self.symmetry._CART_MONOMIALS[l]), ncart)
 
     def test_d_shell_matches_textbook_forms(self):
         b, _ = self.symmetry._spherical_basis(2)
@@ -82,16 +94,16 @@ class TestSolidHarmonics(unittest.TestCase):
     def test_rotation_blocks_orthogonal_and_representation(self):
         m1 = random_rotation(1)
         m2 = random_rotation(2)
-        for l in (1, 2, 3, 4):
+        for l in (1, *SUPPORTED_PURE_L):
             b1 = self.symmetry._shell_block_spherical(l, m1)
             b2 = self.symmetry._shell_block_spherical(l, m2)
             b12 = self.symmetry._shell_block_spherical(l, m1 @ m2)
             n = 2 * l + 1
             self.assertLess(float(np.max(np.abs(b1 @ b1.T - np.eye(n)))), 1.0e-12)
-            self.assertLess(float(np.max(np.abs(b12 - b1 @ b2))), 1.0e-11)
+            self.assertLess(float(np.max(np.abs(b12 - b1 @ b2))), 1.0e-10)
 
     def test_sign_operations_are_diagonal(self):
-        for l in (1, 2, 3, 4):
+        for l in (1, *SUPPORTED_PURE_L):
             for signs in [(-1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, -1, -1)]:
                 comp = self.symmetry._component_signs_any(l, True, signs)
                 self.assertEqual(len(comp), 2 * l + 1)

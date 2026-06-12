@@ -39,6 +39,26 @@ def string(strng):
     return strng.lower()
 
 
+def ispher_mode(strng):
+    """Normalize the ispher keyword to one of three modes:
+    'auto'  - per-shell AO convention from the basis-set metadata
+              (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
+    'true'  - force pure spherical for every l>=2 shell regardless of how
+              the basis was published (GAMESS ISPHER=1 semantics);
+    'false' - force Cartesian for every shell.
+    Booleans (from saved/dict configs) map to 'true'/'false'."""
+    if isinstance(strng, bool):
+        return 'true' if strng else 'false'
+    s = str(strng).strip().lower()
+    if s in ('auto', 'bse', 'basis'):
+        return 'auto'
+    if s in ('true', 't', '1', 'yes', 'on', '.true.'):
+        return 'true'
+    if s in ('false', 'f', '0', 'no', 'off', '.false.'):
+        return 'false'
+    raise ValueError(f"ispher must be auto, true, or false; got: {strng}")
+
+
 def path(strng):
     """Convert string to Path"""
     return Path(strng)
@@ -54,6 +74,7 @@ OQP_CONFIG_SCHEMA = {
         'runtype': {'type': string, 'default': 'energy'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
+        'ispher': {'type': ispher_mode, 'default': 'auto'},
         'd4': {'type': bool, 'default': 'False'},
         # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
         # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
@@ -933,6 +954,7 @@ class OQPData:
         Apply the data from the OQP config
         The latter has to be read from the input file
         """
+        lib.oqp_set_harmonic_active(ispher_mode(config['input'].get('ispher', 'auto')) != 'false')
         for section in config:
             self.parse_section(config, section)
 

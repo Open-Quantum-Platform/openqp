@@ -1349,6 +1349,7 @@ class Molecule:
             mdw = MoldenWriter(fout)
             mdw.write_atoms(nat, self.elem, self.xyz, angstrom=False)
             mdw.write_basis(nat, basis)
+            mdw.write_spherical_markers(basis)
 
             if self.config['scf']['type'] == 'rhf':
                 # alpha only
@@ -1400,8 +1401,23 @@ class Molecule:
         data['json'] = {
             'scf_type': self.config['scf']['type'],
             'basis': self.config['input']['basis'],
-            'library': self.config['input']['library']
+            'library': self.config['input']['library'],
+            'ispher': self.config['input'].get('ispher', 'auto'),
         }
+        # Report the AO dimension and whether pure spherical harmonics are in
+        # use (the dimension is reduced vs Cartesian when d/f/g are spherical).
+        try:
+            basis = self.data.get_basis()
+            angs = basis['angs']
+            nbf = int(basis['nbf'])
+            ncart = int(sum(int((a + 1) * (a + 2) // 2) for a in angs))
+            data['json'].update({
+                'nbf': nbf,
+                'nbf_cartesian': ncart,
+                'spherical_harmonics': bool(nbf != ncart),
+            })
+        except Exception:
+            pass
         return data
 
     @mpi_dump
