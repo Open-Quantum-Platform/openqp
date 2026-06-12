@@ -965,7 +965,7 @@ contains
 
   subroutine shellquartet(basis, ppairs, cutoffs, eri_data, zero_shq)
     use io_constants, only: iw
-    use int2e_rotaxis, only: genr22, genr22_reduce_pure
+    use int2e_rotaxis, only: genr22, genr22_pure, genr22_reduce_pure
     use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_rys, only: int2_rys_compute, int2_rys_reduce_pure, rys_print_eri
     use iso_c_binding, only: c_f_pointer
@@ -998,16 +998,28 @@ contains
 
     if (rotspd) then
 
-      if (eri_data%attenuated_ints) then
-        ! erf-attenuated integrals
-        call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs, eri_data%mu2)
+      if (HARMONIC_ACTIVE .and. &
+          any(basis%harmonic(eri_data%ids) == 1 .and. eri_data%am >= 2)) then
+        ! direct pure-spherical output: lab rotation and c2s fused per index
+        if (eri_data%attenuated_ints) then
+          call genr22_pure(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, &
+                           cutoffs, eri_data%nbf, eri_data%mu2)
+        else
+          call genr22_pure(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, &
+                           cutoffs, eri_data%nbf)
+        end if
       else
-        ! regular integrals
-        call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs)
-      end if
+        if (eri_data%attenuated_ints) then
+          ! erf-attenuated integrals
+          call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs, eri_data%mu2)
+        else
+          ! regular integrals
+          call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs)
+        end if
 
-      eri_data%nbf = eri_data%nbf(eri_data%flips)
-      call genr22_reduce_pure(basis, eri_data%ids, eri_data%flips, eri_data%ints, eri_data%nbf)
+        eri_data%nbf = eri_data%nbf(eri_data%flips)
+        call genr22_reduce_pure(basis, eri_data%ids, eri_data%flips, eri_data%ints, eri_data%nbf)
+      end if
       eri_data%pints(1:eri_data%nbf(4), 1:eri_data%nbf(3), 1:eri_data%nbf(2), 1:eri_data%nbf(1)) => eri_data%ints
 
     else if (libint) then
@@ -1483,7 +1495,7 @@ contains
 !###############################################################################
 
   subroutine ints_exchange(basis, schwarz_ints, mu2, rys_only)
-    use int2e_rotaxis, only: genr22, genr22_reduce_pure
+    use int2e_rotaxis, only: genr22, genr22_pure, genr22_reduce_pure
     use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
     use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_libint, only: libint_t, libint2_active
@@ -1556,13 +1568,22 @@ contains
         libint = .not.rotspd.and.libint2_active.and..not.attenuated.and..not.rys_only_
         rys = .not.rotspd.and..not.libint
         if (rotspd) then
-          if (attenuated) then
-            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
+          if (HARMONIC_ACTIVE .and. any(basis%harmonic(shell_ids) == 1 .and. am >= 2)) then
+            ! direct pure-spherical output: lab rotation and c2s fused per index
+            if (attenuated) then
+              call genr22_pure(basis, ppairs, ints, shell_ids, flips, cutoffs, nbf, mu2)
+            else
+              call genr22_pure(basis, ppairs, ints, shell_ids, flips, cutoffs, nbf)
+            end if
           else
-            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs)
+            if (attenuated) then
+              call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
+            else
+              call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs)
+            end if
+            nbf = NUM_CART_BF(am(flips))
+            call genr22_reduce_pure(basis, shell_ids, flips, ints, nbf)
           end if
-          nbf = NUM_CART_BF(am(flips))
-          call genr22_reduce_pure(basis, shell_ids, flips, ints, nbf)
           vmax = maxval(abs(ints(1:product(nbf))))
         else if (libint) then
           call libint_compute_eri(basis, ppairs, cutoffs, shell_ids, 0, erieval, flips, zero_shq)
