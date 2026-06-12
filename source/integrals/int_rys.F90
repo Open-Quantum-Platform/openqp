@@ -1,7 +1,8 @@
 module int2e_rys
     use precision, only: dp
     use basis_tools, only: basis_set
-    use constants, only: HARMONIC_ACTIVE, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z
+    use constants, only: HARMONIC_ACTIVE, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z, shells_pnrm2
+    use int2_pure_generated, only: int2_shell_projection_t, int2_init_shell_projection
 
     integer, parameter :: MAXCONTR = 120
 
@@ -10,9 +11,13 @@ module int2e_rys
       integer :: at(4)
       integer :: am(4)
       integer :: nbf(4)
+      integer :: nbf_cart(4)
+      integer :: nbf_direct(4)
       integer :: flips(4)
       integer :: nroots
       logical :: iandj, kandl, same
+      logical :: direct_pure = .false.
+      type(int2_shell_projection_t) :: proj(4)
       real(kind=dp), allocatable :: gijkl(:)
       real(kind=dp), allocatable :: gnkl (:)
       real(kind=dp), allocatable :: gnm  (:)
@@ -139,16 +144,18 @@ contains
 
   end subroutine gdat_set_ids
 
-  subroutine int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)
+  subroutine int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2, basis, direct_pure)
 
     use int2_pairs, only: int2_pair_storage
     implicit none
 
-    type(int2_rys_data_t) :: gdat
+    type(int2_rys_data_t), intent(inout) :: gdat
     type(int2_pair_storage), intent(in) :: ppairs
     real(kind=dp), intent(inout) :: ints(*)
     real(kind=dp), intent(in), optional :: mu2
-    logical :: zero_shq
+    type(basis_set), intent(in), optional :: basis
+    logical, intent(in), optional :: direct_pure
+    logical, intent(out) :: zero_shq
 
     integer :: ijg, klg, maxgg, mmax, ng
     integer :: nmax
@@ -156,6 +163,7 @@ contains
     real(kind=dp) :: pfac, rho
     real(kind=dp) :: p(3), q(3)
     logical :: first
+    logical :: use_direct_pure
     integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
     real(kind=dp) :: mu2_1
 
@@ -165,6 +173,9 @@ contains
 
 !   Prepare shell block
     call set_shells(gdat)
+    use_direct_pure = .false.
+    if (present(direct_pure)) use_direct_pure = direct_pure
+    if (use_direct_pure .and. present(basis)) call prepare_direct_pure(gdat, basis)
 
 
     id1 = maxval(gdat%id(1:2))
@@ -251,6 +262,7 @@ contains
       zero_shq = .false.
     end if
 
+    if (gdat%direct_pure) gdat%nbf = gdat%nbf_direct
 
   end subroutine int2_rys_compute
 
@@ -295,6 +307,28 @@ contains
     nbf_out = nbf_out_s([4,3,2,1])
   end subroutine int2_rys_reduce_pure
 
+  subroutine prepare_direct_pure(gdat, basis)
+    implicit none
+
+    type(int2_rys_data_t), intent(inout) :: gdat
+    type(basis_set), intent(in) :: basis
+
+    integer :: pure_s(4)
+    integer :: s
+
+    gdat%direct_pure = .false.
+    if (.not. HARMONIC_ACTIVE) return
+
+    pure_s = basis%harmonic(gdat%id)
+    if (.not. any(pure_s == 1 .and. gdat%am >= 2)) return
+
+    gdat%direct_pure = .true.
+    do s = 1, 4
+      call int2_init_shell_projection(gdat%am(s), pure_s(s), gdat%proj(s))
+      gdat%nbf_direct(s) = gdat%proj(s)%nout
+    end do
+  end subroutine prepare_direct_pure
+
   subroutine compute(gdat, ng, nmax, mmax, ints)
 
     type(int2_rys_data_t), intent(inout) :: gdat
@@ -321,7 +355,11 @@ contains
                 gdat%dij,gdat%dkl)
 
 !   compute integrals
-    call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    if (gdat%direct_pure) then
+      call compute_ints_direct_pure(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    else
+      call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    end if
   end subroutine
 
   subroutine set_shells(gdat)
@@ -340,7 +378,10 @@ contains
     gdat%kandl = ksh == lsh
     gdat%same = ish == ksh.and.jsh == lsh
 
+    gdat%direct_pure = .false.
     gdat%nbf = num_cart_bf(gdat%am)
+    gdat%nbf_cart = gdat%nbf
+    gdat%nbf_direct = gdat%nbf
 
 !   Set number of quadrature points
     gdat%nroots = (sum(gdat%am)+2 )/2
@@ -606,7 +647,11 @@ contains
 
     type(int2_rys_data_t) :: gdat
     real(kind=dp) :: ints(*)
-    ints(1:product(gdat%nbf)) = 0
+    if (gdat%direct_pure) then
+      ints(1:product(gdat%nbf_direct)) = 0
+    else
+      ints(1:product(gdat%nbf)) = 0
+    end if
 
   end subroutine clear_ints
 
@@ -647,6 +692,70 @@ contains
     end do
 
   end subroutine compute_ints
+
+  subroutine compute_ints_direct_pure(gdat,ngnr,ijklxyz,g0,ints)
+
+    implicit none
+
+    type(int2_rys_data_t) :: gdat
+    integer :: ngnr
+    integer :: ijklxyz(:,:,:)
+    real(kind=dp) ::  g0(ngnr,3,*)
+    real(kind=dp), target :: ints(*)
+
+    integer :: i, j, k, l
+    integer :: nx, ny, nz
+    integer :: ti, tj, tk, tl
+    integer :: oi, oj, ok, ol
+    real(kind=dp) :: val, vi, vij, vijk
+    real(kind=dp), pointer :: p(:,:,:,:)
+
+    p(1:gdat%nbf_direct(4),1:gdat%nbf_direct(3),1:gdat%nbf_direct(2),1:gdat%nbf_direct(1)) &
+        => ints(1:product(gdat%nbf_direct))
+
+    do i = 1, gdat%nbf_cart(1)
+      do j = 1, gdat%nbf_cart(2)
+        do k = 1, gdat%nbf_cart(3)
+          do l = 1, gdat%nbf_cart(4)
+            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
+
+            associate ( x  => g0(:,1,nx) &
+                      , y  => g0(:,2,ny) &
+                      , z  => g0(:,3,nz) &
+                      )
+                val = sum(x*y*z) &
+                    * shells_pnrm2(i,gdat%am(1)) &
+                    * shells_pnrm2(j,gdat%am(2)) &
+                    * shells_pnrm2(k,gdat%am(3)) &
+                    * shells_pnrm2(l,gdat%am(4))
+            end associate
+            if (val == 0.0_dp) cycle
+
+            do ti = 1, gdat%proj(1)%nterm(i)
+              oi = gdat%proj(1)%out_idx(ti,i)
+              vi = val * gdat%proj(1)%coeff(ti,i)
+              do tj = 1, gdat%proj(2)%nterm(j)
+                oj = gdat%proj(2)%out_idx(tj,j)
+                vij = vi * gdat%proj(2)%coeff(tj,j)
+                do tk = 1, gdat%proj(3)%nterm(k)
+                  ok = gdat%proj(3)%out_idx(tk,k)
+                  vijk = vij * gdat%proj(3)%coeff(tk,k)
+                  do tl = 1, gdat%proj(4)%nterm(l)
+                    ol = gdat%proj(4)%out_idx(tl,l)
+                    p(ol,ok,oj,oi) = p(ol,ok,oj,oi) + vijk * gdat%proj(4)%coeff(tl,l)
+                  end do
+                end do
+              end do
+            end do
+
+          end do
+        end do
+      end do
+    end do
+
+  end subroutine compute_ints_direct_pure
 
   subroutine rys_print_eri(gdat, ints)
     use constants, only: shells_pnrm2

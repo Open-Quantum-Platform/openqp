@@ -63,7 +63,12 @@ def test_response_energy_nmr_pcm_and_ekt_use_active_spherical_ao_dimensions():
     assert "i1 = basis%ao_offset(ish) + basis%naos(ish) - 1" in pcm
 
     nmr = read("source/modules/nmr_giao_shielding.F90")
+    nmr_giao_twoe = read("source/modules/nmr_giao_debug.F90")
     int1 = read("source/integrals/int1.F90")
     assert "nbf = basis%nbf" in nmr
     assert "HARMONIC_ACTIVE .and. any(basis%harmonic == 1)" not in nmr
+    assert "call build_cart_density(basis, dm_norm, dm_cart" in nmr_giao_twoe
+    assert "call reduce_cart_giao_matrix(basis, cart_off" in nmr_giao_twoe
+    assert "ni = NUM_CART_BF(basis%am(si))" in nmr_giao_twoe
+    assert "mapr = raised_cart_index(ii, am0(1), axis)" in nmr_giao_twoe
     assert "CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic" in int1

@@ -970,7 +970,7 @@ contains
     use int2e_rys, only: int2_rys_compute, int2_rys_reduce_pure, rys_print_eri
     use iso_c_binding, only: c_f_pointer
     use constants, only: HARMONIC_ACTIVE
-    use cart2sph, only: cart2sph_eri
+    use int2_pure_generated, only: int2_project_pure_block
     implicit none
     type(basis_set), intent(in) :: basis
     type(int2_pair_storage), intent(in) :: ppairs
@@ -1024,20 +1024,27 @@ contains
       call eri_data%gdat%set_ids(basis, eri_data%ids)
       if (eri_data%attenuated_ints) then
         ! erf-attenuated integrals
-        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, eri_data%mu2)
+        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, &
+                              mu2=eri_data%mu2, basis=basis, direct_pure=.true.)
       else
         ! regular integrals
-        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq)
+        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, &
+                              basis=basis, direct_pure=.true.)
       end if
 
       if (zero_shq) return
       nbf = eri_data%gdat%nbf
       eri_data%flips = eri_data%gdat%flips
-      eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
-      call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
-      call int2_rys_reduce_pure(basis, eri_data%gdat, eri_data%ints, nbf)
-      eri_data%nbf = nbf
-      eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+      if (eri_data%gdat%direct_pure) then
+        eri_data%nbf = nbf
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+      else
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+        call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
+        call int2_rys_reduce_pure(basis, eri_data%gdat, eri_data%ints, nbf)
+        eri_data%nbf = nbf
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+      end if
 
     end if
 
@@ -1053,7 +1060,7 @@ contains
       end do
       if (any(pure_s == 1 .and. am_s >= 2)) then
         eri_data%ints(1:product(nbf_s)) = reshape(eri_data%pints, [product(nbf_s)])
-        call cart2sph_eri(eri_data%ints, am_s, pure_s, nbf_s, nbf_out_s)
+        call int2_project_pure_block(eri_data%ints, am_s, pure_s, nbf_s, nbf_out_s)
         do s_ = 1, 4
           eri_data%nbf(5 - s_) = nbf_out_s(s_)
         end do
@@ -1483,7 +1490,7 @@ contains
     use int2e_rys, only: int2_rys_compute, int2_rys_reduce_pure
     use types, only: information
     use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
-    use cart2sph, only: cart2sph_eri
+    use int2_pure_generated, only: int2_project_pure_block
     use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT,  c_f_pointer
 
     implicit none
@@ -1575,7 +1582,7 @@ contains
               end do
               if (any(pure_s == 1 .and. am_s >= 2)) then
                 ints(1:product(nbf_s)) = reshape(pints, [product(nbf_s)])
-                call cart2sph_eri(ints, am_s, pure_s, nbf_s, nbf_out_s)
+                call int2_project_pure_block(ints, am_s, pure_s, nbf_s, nbf_out_s)
                 do s_ = 1, 4
                   nbf(5 - s_) = nbf_out_s(s_)
                 end do
@@ -1590,17 +1597,23 @@ contains
         else if (rys) then
           call gdat%set_ids(basis, shell_ids)
           if (attenuated) then
-            call int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq, &
+                                  mu2=mu2, basis=basis, direct_pure=.true.)
           else
-            call int2_rys_compute(ints, gdat, ppairs, zero_shq)
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq, &
+                                  basis=basis, direct_pure=.true.)
           end if
           if (zero_shq) then
             vmax = 0.0_dp
           else
             nbf = gdat%nbf
-            pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
-            call normalize_ints(nbf, gdat%am, pints)
-            call int2_rys_reduce_pure(basis, gdat, ints, nbf)
+            if (gdat%direct_pure) then
+              pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
+            else
+              pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
+              call normalize_ints(nbf, gdat%am, pints)
+              call int2_rys_reduce_pure(basis, gdat, ints, nbf)
+            end if
             vmax = maxval(abs(ints(1:product(nbf))))
           end if
         end if

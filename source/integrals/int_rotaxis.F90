@@ -299,7 +299,7 @@ contains
   end subroutine genr22
 
   subroutine genr22_reduce_pure(basis, shell_ids, flips, grotspd, nbf)
-    use cart2sph, only: cart2sph_eri
+    use int2_pure_generated, only: int2_project_pure_block
     implicit none
 
     type(basis_set), intent(in) :: basis
@@ -317,7 +317,7 @@ contains
     if (.not. any(pure_s == 1 .and. am_s >= 2)) return
 
     nbf_s = nbf([4,3,2,1])
-    call cart2sph_eri(grotspd, am_s, pure_s, nbf_s, nbf_out_s)
+    call int2_project_pure_block(grotspd, am_s, pure_s, nbf_s, nbf_out_s)
     nbf = nbf_out_s([4,3,2,1])
   end subroutine genr22_reduce_pure
 
