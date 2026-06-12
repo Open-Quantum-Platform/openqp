@@ -1094,7 +1094,8 @@ class Hessian(Calculator):
 
     def _spherical_ao_active(self):
         """Return True when the current basis is dimension-reduced by ispher."""
-        if not self.mol.config.get('input', {}).get('ispher', True):
+        from oqp.molecule.oqpdata import ispher_mode
+        if ispher_mode(self.mol.config.get('input', {}).get('ispher', 'auto')) == 'false':
             return False
         try:
             basis = self.mol.data.get_basis()

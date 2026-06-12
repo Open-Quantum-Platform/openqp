@@ -1402,7 +1402,7 @@ class Molecule:
             'scf_type': self.config['scf']['type'],
             'basis': self.config['input']['basis'],
             'library': self.config['input']['library'],
-            'ispher': self.config['input'].get('ispher', True),
+            'ispher': self.config['input'].get('ispher', 'auto'),
         }
         # Report the AO dimension and whether pure spherical harmonics are in
         # use (the dimension is reduced vs Cartesian when d/f/g are spherical).

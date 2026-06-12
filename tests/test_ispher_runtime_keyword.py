@@ -8,8 +8,36 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_ispher_input_schema_defaults_enabled():
     text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
-    assert "'ispher': {'type': bool, 'default': 'True'}" in text
+    # three-state keyword: auto (per-shell BSE metadata, the default),
+    # true (force pure spherical for all l>=2), false (force Cartesian)
+    assert "'ispher': {'type': ispher_mode, 'default': 'auto'}" in text
+    assert "def ispher_mode(strng):" in text
     assert "oqp_set_harmonic_active" in text
+
+
+def test_ispher_mode_normalization():
+    import importlib.util
+    import re
+
+    text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+    src = re.search(r"def ispher_mode\(strng\):.*?raise ValueError[^\n]*\n", text, re.S).group(0)
+    ns = {}
+    exec(src, ns)
+    ispher_mode = ns['ispher_mode']
+
+    assert ispher_mode('auto') == 'auto'
+    assert ispher_mode('AUTO') == 'auto'
+    assert ispher_mode('true') == 'true'
+    assert ispher_mode('.TRUE.') == 'true'
+    assert ispher_mode(True) == 'true'
+    assert ispher_mode('false') == 'false'
+    assert ispher_mode(False) == 'false'
+    try:
+        ispher_mode('maybe')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('ispher_mode must reject unknown values')
 
 
 def test_ispher_cffi_binding_is_declared():
@@ -35,7 +63,7 @@ def test_auto_spherical_basis_uses_all_supported_transforms():
     constants = (ROOT / "source/constants.F90").read_text()
     symmetry = (ROOT / "pyoqp/oqp/library/symmetry.py").read_text()
 
-    assert "shell_harmonic = 1 if shell_is_spherical else 0" in set_basis
+    assert "shell_harmonic = 1 if (shell_is_spherical or force_spherical) else 0" in set_basis
     assert "input.ispher=True only supports pure spherical shells through g" not in set_basis
     assert "integer, parameter :: BAS_MXANG = 6" in constants
     assert "integer, parameter :: NUM_SPH_BF(0:BAS_MXANG)  = [(2*i+1, i = 0, BAS_MXANG)]" in constants
@@ -64,7 +92,7 @@ def test_bse_function_type_drives_basis_native_cartesian_vs_spherical():
         ]
 
     assert "shell_ft = shell.get('function_type', 'gto')" in set_basis
-    assert "shell_harmonic = 1 if shell_is_spherical else 0" in set_basis
+    assert "shell_harmonic = 1 if (shell_is_spherical or force_spherical) else 0" in set_basis
     assert d_shell_types("6-31G*") == ["gto_cartesian"]
     assert d_shell_types("cc-pVDZ") == ["gto_spherical"]
 

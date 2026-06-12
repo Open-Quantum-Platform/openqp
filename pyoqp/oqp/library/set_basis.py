@@ -9,7 +9,7 @@ from oqp import ffi
 import basis_set_exchange as bse
 from oqp.utils.mpi_utils import MPIManager
 import json
-from oqp.molecule.oqpdata import compute_alpha_beta_electrons
+from oqp.molecule.oqpdata import compute_alpha_beta_electrons, ispher_mode
 
 
 class BasisData:
@@ -35,6 +35,9 @@ class BasisData:
             "num_expo": []
         }
         self.use_ecp = False
+
+    def _ispher_mode(self):
+        return ispher_mode(self.mol.config['input'].get('ispher', 'auto'))
 
     def _buffer_ptr(self, values, dtype, ctype):
         array = np.ascontiguousarray(np.asarray(values, dtype=dtype))
@@ -76,10 +79,13 @@ class BasisData:
 
             # BSE tags the harmonic type per shell: 'gto_spherical' |
             # 'gto_cartesian' | 'gto' (s/p, where Cartesian == spherical).
-            # Auto-select the AO convention the basis was published with,
-            # e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical (5d).
+            # ispher=auto selects the AO convention the basis was published
+            # with, e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical
+            # (5d); ispher=true forces pure spherical for every shell (GAMESS
+            # ISPHER=1); ispher=false deactivates the harmonic gate globally.
             shell_ft = shell.get('function_type', 'gto')
             shell_is_spherical = shell_ft.endswith('spherical')
+            force_spherical = self._ispher_mode() == 'true'
 
             for coefficients in shell['coefficients']:
                 shell['angular_momentum']
@@ -87,7 +93,7 @@ class BasisData:
                     ang_mom = shell['angular_momentum'][ang_ii]
                 else:
                     ang_mom = shell['angular_momentum'][0]
-                shell_harmonic = 1 if shell_is_spherical else 0
+                shell_harmonic = 1 if (shell_is_spherical or force_spherical) else 0
 
                 self.shell_num += 1
 
