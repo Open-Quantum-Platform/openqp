@@ -1,7 +1,7 @@
 module int2e_rys
     use precision, only: dp
     use basis_tools, only: basis_set
-    use constants, only: HARMONIC_ACTIVE, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z, shells_pnrm2
+    use constants, only: HARMONIC_ACTIVE, bas_mxang, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z, shells_pnrm2
     use int2_pure_generated, only: int2_shell_projection_t, int2_init_shell_projection
 
     integer, parameter :: MAXCONTR = 120
@@ -17,7 +17,11 @@ module int2e_rys
       integer :: nroots
       logical :: iandj, kandl, same
       logical :: direct_pure = .false.
-      type(int2_shell_projection_t) :: proj(4)
+      ! projection tables cached per (l, pure); rebuilding them per quartet
+      ! was a measurable overhead in the direct-pure hot loop
+      integer :: pure_flags(4) = 0
+      logical :: proj_cache_ready = .false.
+      type(int2_shell_projection_t) :: proj_cache(0:bas_mxang,0:1)
       real(kind=dp), allocatable :: gijkl(:)
       real(kind=dp), allocatable :: gnkl (:)
       real(kind=dp), allocatable :: gnm  (:)
@@ -323,9 +327,19 @@ contains
     if (.not. any(pure_s == 1 .and. gdat%am >= 2)) return
 
     gdat%direct_pure = .true.
+    if (.not. gdat%proj_cache_ready) then
+      block
+        integer :: l
+        do l = 0, bas_mxang
+          call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))
+          call int2_init_shell_projection(l, 1, gdat%proj_cache(l,1))
+        end do
+      end block
+      gdat%proj_cache_ready = .true.
+    end if
     do s = 1, 4
-      call int2_init_shell_projection(gdat%am(s), pure_s(s), gdat%proj(s))
-      gdat%nbf_direct(s) = gdat%proj(s)%nout
+      gdat%pure_flags(s) = merge(1, 0, pure_s(s) == 1)
+      gdat%nbf_direct(s) = gdat%proj_cache(gdat%am(s), gdat%pure_flags(s))%nout
     end do
   end subroutine prepare_direct_pure
 
@@ -713,6 +727,12 @@ contains
     p(1:gdat%nbf_direct(4),1:gdat%nbf_direct(3),1:gdat%nbf_direct(2),1:gdat%nbf_direct(1)) &
         => ints(1:product(gdat%nbf_direct))
 
+    associate ( pr1 => gdat%proj_cache(gdat%am(1), gdat%pure_flags(1)) &
+              , pr2 => gdat%proj_cache(gdat%am(2), gdat%pure_flags(2)) &
+              , pr3 => gdat%proj_cache(gdat%am(3), gdat%pure_flags(3)) &
+              , pr4 => gdat%proj_cache(gdat%am(4), gdat%pure_flags(4)) &
+              )
+
     do i = 1, gdat%nbf_cart(1)
       do j = 1, gdat%nbf_cart(2)
         do k = 1, gdat%nbf_cart(3)
@@ -733,18 +753,18 @@ contains
             end associate
             if (val == 0.0_dp) cycle
 
-            do ti = 1, gdat%proj(1)%nterm(i)
-              oi = gdat%proj(1)%out_idx(ti,i)
-              vi = val * gdat%proj(1)%coeff(ti,i)
-              do tj = 1, gdat%proj(2)%nterm(j)
-                oj = gdat%proj(2)%out_idx(tj,j)
-                vij = vi * gdat%proj(2)%coeff(tj,j)
-                do tk = 1, gdat%proj(3)%nterm(k)
-                  ok = gdat%proj(3)%out_idx(tk,k)
-                  vijk = vij * gdat%proj(3)%coeff(tk,k)
-                  do tl = 1, gdat%proj(4)%nterm(l)
-                    ol = gdat%proj(4)%out_idx(tl,l)
-                    p(ol,ok,oj,oi) = p(ol,ok,oj,oi) + vijk * gdat%proj(4)%coeff(tl,l)
+            do ti = 1, pr1%nterm(i)
+              oi = pr1%out_idx(ti,i)
+              vi = val * pr1%coeff(ti,i)
+              do tj = 1, pr2%nterm(j)
+                oj = pr2%out_idx(tj,j)
+                vij = vi * pr2%coeff(tj,j)
+                do tk = 1, pr3%nterm(k)
+                  ok = pr3%out_idx(tk,k)
+                  vijk = vij * pr3%coeff(tk,k)
+                  do tl = 1, pr4%nterm(l)
+                    ol = pr4%out_idx(tl,l)
+                    p(ol,ok,oj,oi) = p(ol,ok,oj,oi) + vijk * pr4%coeff(tl,l)
                   end do
                 end do
               end do
@@ -754,6 +774,8 @@ contains
         end do
       end do
     end do
+
+    end associate
 
   end subroutine compute_ints_direct_pure
 

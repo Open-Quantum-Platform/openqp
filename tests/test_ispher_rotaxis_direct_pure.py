@@ -15,8 +15,18 @@ class RotaxisDirectPureWiring(unittest.TestCase):
         src = _read('source/integrals/int_rotaxis_pure.F90')
         self.assertIn('submodule (int2e_rotaxis) int2e_rotaxis_pure', src)
         self.assertIn('module subroutine genr22_pure', src)
-        # fused transform must come from the shared projection tables
-        self.assertIn('int2_init_shell_projection', src)
+
+    def test_constant_d_projection_matches_generated_table(self):
+        # the hard-coded sparse d projection (hot loop, no per-quartet table
+        # builds) must carry the same coefficients as load_l2 in
+        # int2_pure_generated.F90
+        src = _read('source/integrals/int_rotaxis_pure.F90')
+        gen = _read('source/integrals/int2_pure_generated.F90')
+        for coef in ('-4.999999999999999e-01', '8.660254037844386e-01',
+                     '9.999999999999999e-01'):
+            self.assertIn(coef, src)
+            self.assertIn(coef, gen)
+        self.assertIn('CD_NTERM(6) = [2, 2, 1, 1, 1, 1]', src)
 
     def test_parent_module_declares_interface(self):
         src = _read('source/integrals/int_rotaxis.F90')
