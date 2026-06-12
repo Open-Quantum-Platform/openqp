@@ -10,6 +10,17 @@ include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
+option(OQP_REUSE_EXTERNALS
+       "Reuse bundled external dependency builds across fresh OpenQP build directories"
+       ON)
+set(OQP_EXTERNALS_ROOT "" CACHE PATH
+    "Optional override for the reusable bundled external dependency cache root.")
+if(DEFINED OQP_EXTERNAL_ROOT AND NOT OQP_EXTERNALS_ROOT)
+    set(OQP_EXTERNALS_ROOT "${OQP_EXTERNAL_ROOT}" CACHE PATH
+        "Optional override for the reusable bundled external dependency cache root." FORCE)
+    message(STATUS "OQP_EXTERNAL_ROOT is accepted as an alias for OQP_EXTERNALS_ROOT.")
+endif()
+mark_as_advanced(OQP_EXTERNALS_ROOT)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)
