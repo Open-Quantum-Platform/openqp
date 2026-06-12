@@ -33,19 +33,20 @@ jobs:
         with:
           platforms: all
 
+      # Layer cache backed by the GitHub Actions cache: the apt, pip, and
+      # OpenBLAS-build layers are restored instead of re-executed and only
+      # rerun when the Dockerfile changes. The OpenQP build layers after
+      # `COPY . /opt/openqp` are invalidated by any source change and still
+      # rebuild each run.
       - name: Build Docker Image
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        run: |
-          PUSH_ARGS=""
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${DOCKER_USERNAME}" ] && [ -n "${DOCKER_PASSWORD}" ]; then
-            PUSH_ARGS="--push --tag openqp/openqp:v1.0"
-          fi
-          docker buildx build \
-            --platform linux/amd64 \
-            ${PUSH_ARGS} \
-            .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true' }}
+          tags: openqp/openqp:v1.0
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Verify Docker Image
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
