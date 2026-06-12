@@ -61,8 +61,23 @@ if(OQP_REUSE_EXTERNALS)
   endforeach()
   string(MD5 _oqp_external_flags_hash "${_oqp_external_flag_blob}")
   string(SUBSTRING "${_oqp_external_flags_hash}" 0 12 _oqp_external_flags_hash)
+  # _LINALG_LIB_TYPE collapses every non-MKL system BLAS to "other", but some
+  # cached externals bake the concrete provider into their artifacts (the
+  # shared libddx.so links BLAS/LAPACK at its own build time, and ddX receives
+  # BLA_VENDOR), so hash the resolved provider and library paths into the key.
+  # The bundled-NetLib route is normalized to a constant: it must produce the
+  # same key whether netlib was chosen explicitly or reached by fallback, and
+  # any BLAS variables left over from a failed system search must not split it.
+  if(_LINALG_LIB_TYPE STREQUAL "NetLib")
+    set(_oqp_external_blas_blob "netlib-bundled")
+  else()
+    set(_oqp_external_blas_blob
+        "${LINALG_LIB}|${BLA_VENDOR}|${BLAS_LIBRARIES}|${LAPACK_LIBRARIES}")
+  endif()
+  string(MD5 _oqp_external_blas_hash "${_oqp_external_blas_blob}")
+  string(SUBSTRING "${_oqp_external_blas_hash}" 0 12 _oqp_external_blas_hash)
   set(_oqp_external_key
-      "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${_oqp_external_generator}-${CMAKE_C_COMPILER_ID}${CMAKE_C_COMPILER_VERSION}-${CMAKE_CXX_COMPILER_ID}${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_Fortran_COMPILER_ID}${CMAKE_Fortran_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}-${_oqp_external_linkage}-${_LINALG_LIB_TYPE}-blasint${BLA_SIZEOF_INTEGER}-flags${_oqp_external_flags_hash}-${_OQP_EXTERNALS_VERSION_KEY}")
+      "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${_oqp_external_generator}-${CMAKE_C_COMPILER_ID}${CMAKE_C_COMPILER_VERSION}-${CMAKE_CXX_COMPILER_ID}${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_Fortran_COMPILER_ID}${CMAKE_Fortran_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}-${_oqp_external_linkage}-${_LINALG_LIB_TYPE}-blas${_oqp_external_blas_hash}-blasint${BLA_SIZEOF_INTEGER}-flags${_oqp_external_flags_hash}-${_OQP_EXTERNALS_VERSION_KEY}")
   string(REGEX REPLACE "[^A-Za-z0-9_.+-]" "_" _oqp_external_key "${_oqp_external_key}")
   set(OQP_EXTERNALS_SOURCE_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/src" CACHE INTERNAL "OQP_EXTERNALS_SOURCE_ROOT" FORCE)
   set(OQP_EXTERNALS_BUILD_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/build" CACHE INTERNAL "OQP_EXTERNALS_BUILD_ROOT" FORCE)
