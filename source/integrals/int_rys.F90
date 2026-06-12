@@ -18,10 +18,15 @@ module int2e_rys
       logical :: iandj, kandl, same
       logical :: direct_pure = .false.
       ! projection tables cached per (l, pure); rebuilding them per quartet
-      ! was a measurable overhead in the direct-pure hot loop
+      ! was a measurable overhead in the direct-pure hot loop. Allocated on
+      ! first pure quartet rather than held as a static rank-2 component:
+      ! a default-initialized array-of-derived component here aborted at
+      ! runtime ("integer overflow when calculating the amount of memory to
+      ! allocate") with gfortran-14/-fdefault-integer-8 on linux-x86-64 in
+      ! the Docker CI smoke test, and the allocatable form also costs
+      ! nothing for Cartesian-only runs.
       integer :: pure_flags(4) = 0
-      logical :: proj_cache_ready = .false.
-      type(int2_shell_projection_t) :: proj_cache(0:bas_mxang,0:1)
+      type(int2_shell_projection_t), allocatable :: proj_cache(:,:)
       real(kind=dp), allocatable :: gijkl(:)
       real(kind=dp), allocatable :: gnkl (:)
       real(kind=dp), allocatable :: gnm  (:)
@@ -327,15 +332,15 @@ contains
     if (.not. any(pure_s == 1 .and. gdat%am >= 2)) return
 
     gdat%direct_pure = .true.
-    if (.not. gdat%proj_cache_ready) then
+    if (.not. allocated(gdat%proj_cache)) then
       block
         integer :: l
+        allocate(gdat%proj_cache(0:bas_mxang, 0:1))
         do l = 0, bas_mxang
           call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))
           call int2_init_shell_projection(l, 1, gdat%proj_cache(l,1))
         end do
       end block
-      gdat%proj_cache_ready = .true.
     end if
     do s = 1, 4
       gdat%pure_flags(s) = merge(1, 0, pure_s(s) == 1)

@@ -125,7 +125,7 @@ def test_two_e_backends_reduce_pure_blocks_before_consumers():
     assert "public :: int2_rys_reduce_pure" in rys
     assert "subroutine int2_rys_reduce_pure" in rys
     assert "if (.not. HARMONIC_ACTIVE) return" in rys
-    assert "type(int2_shell_projection_t) :: proj_cache(0:bas_mxang,0:1)" in rys
+    assert "type(int2_shell_projection_t), allocatable :: proj_cache(:,:)" in rys
     assert "subroutine compute_ints_direct_pure" in rys
     assert "call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))" in rys
     assert "pr1 => gdat%proj_cache(gdat%am(1), gdat%pure_flags(1))" in rys
