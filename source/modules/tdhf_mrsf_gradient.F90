@@ -278,6 +278,7 @@ contains
   subroutine mrsf_nac_overlap(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver
+    use, intrinsic :: iso_c_binding, only: c_int32_t
     use types, only: information
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
@@ -290,12 +291,17 @@ contains
     character(len=*), parameter :: subroutine_name = "mrsf_nac_overlap"
     character(len=*), parameter :: OQP_nac_overlap = "OQP::nac_overlap"
     character(len=*), parameter :: OQP_nac_trden = "OQP::nac_trden_mo"
+    character(len=*), parameter :: OQP_nac_gamma = "OQP::nac_gamma_tlf"
 
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
     integer :: nbf, natom, nstate, i, j, ist, jst, mu, nu, c, a, ok
     integer :: noca, nocb, p, q, isp, jsq
+    integer(c_int32_t) :: gstat, gtag_id
+    character(len=80) :: tags_gamma(1)
+    real(kind=dp), contiguous, pointer :: gam_tlf(:,:,:)
+    logical :: have_custom
     real(kind=dp), allocatable :: dSket(:,:,:,:), dSfull(:,:,:,:), &
                                   trden(:,:), trden_ss(:,:), trden_ao(:,:), &
                                   tmp(:,:), gnorm(:,:), gnorm2(:,:)
@@ -316,6 +322,14 @@ contains
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    ! optional override: if OQP::nac_gamma_tlf is present (the TLF-overlap-
+    ! consistent transition density, e.g. built in Python from the closed
+    ! form), contract it instead of get_mrsf_transition_density's gamma.
+    tags_gamma(1) = OQP_nac_gamma
+    gstat = infos%dat%has_records(tags_gamma, gtag_id)
+    have_custom = (gstat == ta_ok)
+    if (have_custom) call tagarray_get_data(infos%dat, OQP_nac_gamma, gam_tlf)
 
     call infos%dat%remove_records((/ character(len=80) :: OQP_nac_overlap, &
                                                           OQP_nac_trden /))
@@ -344,7 +358,11 @@ contains
       do jst = 1, nstate
         if (ist == jst) cycle
         ! interstate transition density (MO), then -> AO: C * trden * C^T
-        call get_mrsf_transition_density(infos, trden, bvec_mo, ist, jst)
+        if (have_custom) then
+          trden = reshape(gam_tlf(:, ist, jst), (/ nbf, nbf /))
+        else
+          call get_mrsf_transition_density(infos, trden, bvec_mo, ist, jst)
+        end if
         trden_st(:, ist, jst) = reshape(trden, (/ nbf*nbf /))
         call orthogonal_transform('t', nbf, mo_a, trden, trden_ao, tmp)
         ! apply basis normalization (dSket is in unnormalized convention)

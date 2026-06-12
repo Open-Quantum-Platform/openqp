@@ -1220,6 +1220,7 @@ contains
     use precision, only: dp
     use io_constants, only: iw
     use oqp_tagarray_driver
+    use, intrinsic :: iso_c_binding, only: c_int32_t
 
     use types, only: information
     use strings, only: Cstring, fstring
@@ -2321,8 +2322,22 @@ contains
       ! gradient contracts only it (=> -sum Z B^x = d^cphf, after the
       ! SCF/ground part is removed by differencing in the driver).
         if (mrsf_nac_cphf_mode) then
-          call get_mrsf_transition_density(infos, wrk1, bvec_mo, &
-                                           mrsf_nac_istate, mrsf_nac_jstate)
+          block
+            character(len=80) :: tags_gamma(1)
+            integer(c_int32_t) :: gstat, gtag_id
+            real(kind=dp), contiguous, pointer :: gam_tlf(:,:,:)
+            tags_gamma(1) = "OQP::nac_gamma_tlf"
+            gstat = infos%dat%has_records(tags_gamma, gtag_id)
+            if (gstat == ta_ok) then
+              ! TLF-consistent transition density supplied externally
+              call tagarray_get_data(infos%dat, "OQP::nac_gamma_tlf", gam_tlf)
+              wrk1(:,:) = reshape(gam_tlf(:, mrsf_nac_istate, mrsf_nac_jstate), &
+                                  (/ nbf, nbf /))
+            else
+              call get_mrsf_transition_density(infos, wrk1, bvec_mo, &
+                                               mrsf_nac_istate, mrsf_nac_jstate)
+            end if
+          end block
           rhs = 0.0_dp
           block
             integer :: ii, jj, kk, ijp
