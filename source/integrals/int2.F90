@@ -1565,8 +1565,9 @@ contains
           call genr22_reduce_pure(basis, shell_ids, flips, ints, nbf)
           vmax = maxval(abs(ints(1:product(nbf))))
         else if (libint) then
-          nbf = NUM_CART_BF(am(flips))
           call libint_compute_eri(basis, ppairs, cutoffs, shell_ids, 0, erieval, flips, zero_shq)
+          ! flips is intent(out) of libint_compute_eri; only valid afterwards
+          nbf = NUM_CART_BF(am(flips))
           if (zero_shq) then
             vmax = 0.0_dp
           else
