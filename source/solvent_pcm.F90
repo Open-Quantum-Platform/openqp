@@ -25,7 +25,11 @@
 !>     Bragg-Slater table (H = 0.35 A), WITH the literature outside-sphere
 !>     leak continuation q*rsph^(2l+1)/r^(l+1) for r>rsph
 !>     (build_full_density_multipoles / pcm_grid_update). The moments are in
-!>     the exact ddX harmonic convention (solvent_pcm_harmonics), then mapped
+!>     the exact ddX harmonic convention -- the real-solid-harmonic basis is
+!>     evaluated by ddX's OWN routines (use ddx_harmonics: ylmscale, ylmbas)
+!>     so ddX stays an external, dynamically-linked dependency and no harmonic
+!>     code is vendored into OpenQP; only the interior/exterior leak
+!>     bookkeeping in pcm_accumulate_leak is OpenQP's. They are then mapped
 !>     to psi by the ddX rule psi(lm,isph)=4*pi/((2l+1) rsph^l) M_lm(isph)
 !>     using the production cavity radii (oqp_ddx_pcm_radii). The production
 !>     q_cav is the ddX adjoint charge from oqp_ddx_pcm_solve_psi(psi,
@@ -76,8 +80,12 @@ module solvent_pcm
   use mod_dft_gridint, only: xc_engine_t, xc_consumer_t, xc_options_t, run_grid_aos
   use mod_dft_partfunc, only: PTYPE_BECKE3
   use dft, only: dft_initialize
-  use solvent_pcm_harmonics, only: pcm_ylmscale, accumulate_point_multipole, &
-       accumulate_point_multipole_leak
+  ! ddX's own harmonic routines (external, dynamically-linked LGPL library):
+  ! ylmscale builds the real-spherical-harmonic scaling factors and ylmbas
+  ! evaluates the normalised real solid harmonics in ddX's exact convention.
+  ! Using them directly (rather than vendoring a copy) keeps ddX external and
+  ! guarantees the per-l normalisation/ordering matches the model ddX builds.
+  use ddx_harmonics, only: ylmscale, ylmbas
 
   implicit none
   private
@@ -650,6 +658,72 @@ contains
   end subroutine pack_ddx_l2_multipoles
 
 
+  !> @brief Accumulate the full-density ddPCM source moment of one grid point
+  !>        onto its parent sphere, with the outside-sphere exterior ("leak")
+  !>        continuation.
+  !>
+  !> The real-solid-harmonic basis Y_lm is evaluated by ddX's OWN ylmbas
+  !> (use ddx_harmonics), so the per-l normalisation and (l,m) ordering match
+  !> the multipole array ddX consumes internally (multipole_psi:
+  !> psi(lm,isph)=4*pi/((2l+1) rsph^l) M_lm). ddX therefore stays an external,
+  !> dynamically-linked dependency and no harmonic code is copied into OpenQP.
+  !> Only the interior/exterior bookkeeping below -- the literature leak
+  !> continuation q*rsph^(2l+1)/r^(l+1) for points outside their sphere -- is
+  !> OpenQP's own and is NOT part of ddX's point-to-multipole routine:
+  !>
+  !>   r <= rsph :  M_lm += q * r^l * Y_lm                   (interior)
+  !>   r >  rsph :  M_lm += q * Y_lm * rsph^(2l+1) / r^(l+1) (exterior leak)
+  !>                       = (interior term) * (rsph/r)^(2l+1)
+  !>
+  !> @param[in]    c        radius vector from the charge to the sphere centre
+  !> @param[in]    src_q    charge of the source point
+  !> @param[in]    p        maximal degree
+  !> @param[in]    vscales  scaling factors from ylmscale, dim (p+1)**2
+  !> @param[in]    rsph     radius of the sphere the moment is accumulated on
+  !> @param[inout] dst_m    multipole coefficients, dim (p+1)**2 (accumulated)
+  subroutine pcm_accumulate_leak(c, src_q, p, vscales, rsph, dst_m)
+    integer,  intent(in)    :: p
+    real(dp), intent(in)    :: c(3), src_q, vscales((p+1)**2), rsph
+    real(dp), intent(inout) :: dst_m((p+1)**2)
+
+    real(dp) :: vylm((p+1)**2), vplm((p+1)**2), vcos(p+1), vsin(p+1)
+    real(dp) :: rho, ctheta, stheta, cphi, sphi, t, ratio2, sqrt4pi
+    integer  :: n, ind
+
+    if (src_q == 0.0_dp) return
+    sqrt4pi = sqrt(4.0_dp * acos(-1.0_dp))
+
+    ! ddX's own real-solid-harmonic evaluation (external library).
+    call ylmbas(c, rho, ctheta, stheta, cphi, sphi, p, vscales, vylm, vplm, &
+                vcos, vsin)
+
+    if (rho == 0.0_dp) then
+      ! Exactly at the sphere centre (e.g. a nuclear charge): only l=0 survives.
+      dst_m(1) = dst_m(1) + src_q / sqrt4pi
+      return
+    end if
+
+    if (rho <= rsph .or. rsph <= 0.0_dp) then
+      ! Interior point: standard bare moment q*r^l*Y_lm.
+      t = src_q
+      do n = 0, p
+        ind = n*n + n + 1
+        dst_m(ind-n:ind+n) = dst_m(ind-n:ind+n) + t*vylm(ind-n:ind+n)
+        t = t * rho
+      end do
+    else
+      ! Exterior (leak) point: q * rsph^(2l+1)/rho^(l+1) * Y_lm
+      ! (= the interior term q*rho^l scaled by (rsph/rho)^(2l+1)).
+      ratio2 = rsph * (rsph/rho)
+      t = src_q * (rsph/rho)
+      do n = 0, p
+        ind = n*n + n + 1
+        dst_m(ind-n:ind+n) = dst_m(ind-n:ind+n) + t*vylm(ind-n:ind+n)
+        t = t * ratio2
+      end do
+    end if
+  end subroutine pcm_accumulate_leak
+
   subroutine build_full_density_multipoles(basis, infos, density_packed, charges, &
        radii, xyz, natom, lmax, multipoles, mult_norm)
     type(basis_set), intent(in) :: basis
@@ -668,6 +742,8 @@ contains
     real(dp), allocatable, target :: density_full(:,:)
     integer :: nbf, i, j, idx, maxl, nang
     real(dp) :: sqrt4pi
+    ! Extra ddX ylmscale outputs we do not use, sized per its interface.
+    real(dp) :: v4pi2lp1(lmax+1), vscales_rel((lmax+1)**2)
     character(kind=c_char) :: saved_xcname(20)
     integer(c_int64_t) :: saved_partfun, saved_bfc_algo, saved_nrad, &
          saved_nang, saved_radtype
@@ -732,7 +808,7 @@ contains
     dat%natom = natom
     dat%xyz => xyz
     allocate(dat%vscales(dat%nbasis))
-    call pcm_ylmscale(lmax, dat%vscales)
+    call ylmscale(lmax, dat%vscales, v4pi2lp1, vscales_rel)
     allocate(dat%radii(natom))
     dat%radii(:) = radii(1:natom)
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
@@ -849,9 +925,9 @@ contains
       qpt = -sum(rho(:,ipt)) * xce%wts(ipt)
       if (qpt == 0.0_dp) cycle
       c(:) = xce%xyzw(ipt,1:3) - self%xyz(:,iown)
-      call accumulate_point_multipole_leak(c, qpt, self%lmax, self%vscales, &
-                                           self%radii(iown), &
-                                           self%multipoles(:,iown,mythread))
+      call pcm_accumulate_leak(c, qpt, self%lmax, self%vscales, &
+                               self%radii(iown), &
+                               self%multipoles(:,iown,mythread))
     end do
   end subroutine pcm_grid_update
 
