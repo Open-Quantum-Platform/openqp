@@ -20,6 +20,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        id: setup-buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         env:
@@ -33,14 +37,52 @@ jobs:
       # bump) the pull fails and we build it here; the next push-to-main run
       # with Docker Hub credentials publishes it.
       - name: Prepare build environment image
+        id: buildenv
         run: |
-          if ! docker pull "${BUILDENV_IMAGE}"; then
+          if docker pull "${BUILDENV_IMAGE}"; then
+            echo "source=registry" >> "${GITHUB_OUTPUT}"
+          else
             echo "::warning::${BUILDENV_IMAGE} not in registry; building it from docker/buildenv.Dockerfile"
             docker build -t "${BUILDENV_IMAGE}" -f docker/buildenv.Dockerfile docker
+            echo "source=local" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Cache Docker build mounts
+        if: steps.buildenv.outputs.source == 'registry'
+        id: docker-cache-mounts
+        uses: actions/cache@v4
+        with:
+          path: docker-cache-mounts
+          key: docker-cache-mounts-${{ runner.os }}-${{ hashFiles('Dockerfile', 'pyproject.toml', 'external/CMakeLists.txt') }}
+          restore-keys: |
+            docker-cache-mounts-${{ runner.os }}-
+
+      - name: Restore Docker build mounts
+        if: steps.buildenv.outputs.source == 'registry'
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: docker-cache-mounts
+          dockerfile: Dockerfile
+          skip-extraction: ${{ steps.docker-cache-mounts.outputs.cache-hit }}
+
       - name: Build OpenQP image
-        run: docker build -t openqp/openqp:v1.0 .
+        if: steps.buildenv.outputs.source == 'registry'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: openqp/openqp:v1.0
+          load: true
+          # BuildKit's GitHub cache keeps source-independent Docker layers.
+          # actions/cache + buildkit-cache-dance above keep the pip/OpenQP
+          # externals cache mounts. pyproject.toml or external/CMakeLists.txt
+          # changes get a new mount-cache key and refresh subsequent builds.
+          cache-from: type=gha,scope=openqp-docker
+          cache-to: type=gha,mode=max,scope=openqp-docker
+
+      - name: Build OpenQP image with local buildenv fallback
+        if: steps.buildenv.outputs.source == 'local'
+        run: DOCKER_BUILDKIT=1 docker build -t openqp/openqp:v1.0 .
 
       - name: Push images
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
