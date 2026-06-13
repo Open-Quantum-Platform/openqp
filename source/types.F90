@@ -191,6 +191,7 @@ module types
     integer(c_int) :: element_id = -1
 !    integer(c_int) :: num_expo = 0
     integer(c_int) :: ang_mom = 0
+    integer(c_int) :: harmonic = 0   !< 1 = pure spherical-harmonic shell, 0 = Cartesian
     integer(c_int) :: ecp_nam = 0
     type(c_ptr) :: num_expo
     type(c_ptr) :: expo

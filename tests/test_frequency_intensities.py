@@ -11,35 +11,45 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_frequency_module():
-    oqp = types.ModuleType("oqp")
-    oqp.__path__ = []
-    sys.modules["oqp"] = oqp
+    stub_names = ("oqp", "oqp.utils", "oqp.utils.constants")
+    saved_modules = {name: sys.modules.get(name) for name in stub_names}
 
-    utils = types.ModuleType("oqp.utils")
-    utils.__path__ = []
-    sys.modules["oqp.utils"] = utils
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
 
-    constants = types.ModuleType("oqp.utils.constants")
-    constants.SPEED_OF_LIGHT = 2.99792458e10
-    constants.ATMOS = 101.325
-    constants.BOHR = 0.52917721090299996e-10
-    constants.FREQ_TO_INV_CM = 5140.489195376594
-    constants.AMU_to_KG = 1.66053886E-27
-    constants.J_TO_AU = 1 / (4.184 * 627.509541 * 1000.0)
-    constants.GAS_CONSTANT = 8.3144621
-    constants.PLANCK_CONSTANT = 6.62606957e-34
-    constants.BOLTZMANN_CONSTANT = 1.3806488e-23
-    constants.AVOGADRO_CONSTANT = 6.0221415e23
-    sys.modules["oqp.utils.constants"] = constants
+        utils = types.ModuleType("oqp.utils")
+        utils.__path__ = []
+        sys.modules["oqp.utils"] = utils
 
-    spec = importlib.util.spec_from_file_location(
-        "frequency_under_test",
-        ROOT / "pyoqp/oqp/library/frequency.py",
-    )
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["frequency_under_test"] = module
-    spec.loader.exec_module(module)
-    return module
+        constants = types.ModuleType("oqp.utils.constants")
+        constants.SPEED_OF_LIGHT = 2.99792458e10
+        constants.ATMOS = 101.325
+        constants.BOHR = 0.52917721090299996e-10
+        constants.FREQ_TO_INV_CM = 5140.489195376594
+        constants.AMU_to_KG = 1.66053886E-27
+        constants.J_TO_AU = 1 / (4.184 * 627.509541 * 1000.0)
+        constants.GAS_CONSTANT = 8.3144621
+        constants.PLANCK_CONSTANT = 6.62606957e-34
+        constants.BOLTZMANN_CONSTANT = 1.3806488e-23
+        constants.AVOGADRO_CONSTANT = 6.0221415e23
+        sys.modules["oqp.utils.constants"] = constants
+
+        spec = importlib.util.spec_from_file_location(
+            "frequency_under_test",
+            ROOT / "pyoqp/oqp/library/frequency.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["frequency_under_test"] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for name, module in saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 class TestVibrationalIntensities(unittest.TestCase):

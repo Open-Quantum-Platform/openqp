@@ -2,6 +2,7 @@ MODULE mod_shell_tools
 
  USE precision, only: dp
  USE basis_tools, ONLY: basis_set
+ USE constants, ONLY: NUM_CART_BF
 
  TYPE shell_t
      !INTEGER :: shid, atid, ig1, ig2, ang, minbf, maxbf, locao, nao
@@ -12,6 +13,7 @@ MODULE mod_shell_tools
      INTEGER :: ang        !< angular momentum + 1
      INTEGER :: locao      !< position of shell's first basis function in the basis set
      INTEGER :: nao        !< number of basis functions (atomic orbitals) in shell
+     INTEGER :: harmonic = 0 !< 1 = pure spherical-harmonic shell, 0 = Cartesian
      REAL(kind=dp) :: r(3) !< shell origin
      CONTAINS
      PROCEDURE :: fetch_by_id => bas_set_indices
@@ -87,6 +89,7 @@ CONTAINS
     shinfo%ang   = basis%am(shid)
     shinfo%locao = basis%ao_offset(shid)
     shinfo%nao   = basis%naos(shid)
+    shinfo%harmonic = basis%harmonic(shid)
     shinfo%r     = basis%atoms%xyz(:,shinfo%atid)
 
  END SUBROUTINE bas_set_indices
@@ -176,8 +179,10 @@ CONTAINS
     pair%iang = shi%ang
     pair%jang = shj%ang
 
-    pair%inao = shi%nao
-    pair%jnao = shj%nao
+    ! Integral primitives fill Cartesian shell blocks; the component count
+    ! must stay Cartesian even when nao (placement) is the spherical count.
+    pair%inao = NUM_CART_BF(shi%ang)
+    pair%jnao = NUM_CART_BF(shj%ang)
 
 !   I primitive
     ij = 0
@@ -257,8 +262,10 @@ CONTAINS
     pair%iang = shi%ang
     pair%jang = shj%ang
 
-    pair%inao = shi%nao
-    pair%jnao = shj%nao
+    ! Integral primitives fill Cartesian shell blocks; the component count
+    ! must stay Cartesian even when nao (placement) is the spherical count.
+    pair%inao = NUM_CART_BF(shi%ang)
+    pair%jnao = NUM_CART_BF(shj%ang)
 
 !   I primitive
     ij = 0

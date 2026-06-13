@@ -1,0 +1,35 @@
+# Spherical-harmonic AO MRSF-TDDFT gradient smoke case.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=grad
+basis=cc-pvdz
+functional=bhhlyp
+method=tdhf
+ispher=true
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-8
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+
+[tdhf]
+type=mrsf
+nstate=3
+conv=1.0e-8
+zvconv=1.0e-8
+
+[properties]
+grad=3

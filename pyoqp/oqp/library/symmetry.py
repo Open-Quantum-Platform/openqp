@@ -162,7 +162,7 @@ def update_one_electron_block_diagnostics(
 # Cartesian monomial exponents (a, b, c) per shell component in OpenQP's
 # canonical AO order (see bf_names in source/constants.F90):
 # d: XX YY ZZ XY XZ YZ ; f: XXX YYY ZZZ XXY XXZ YYX YYZ ZZX ZZY XYZ ;
-# g: XXXX YYYY ZZZZ XXXY XXXZ YYYX YYYZ ZZZX ZZZY XXYY XXZZ YYZZ XXYZ YYXZ ZZXY
+# g/h/i follow the same OpenQP CART_X/Y/Z ordering in source/constants.F90.
 _CART_MONOMIALS: dict[int, list[tuple[int, int, int]]] = {
     0: [(0, 0, 0)],
     1: [(1, 0, 0), (0, 1, 0), (0, 0, 1)],
@@ -172,6 +172,17 @@ _CART_MONOMIALS: dict[int, list[tuple[int, int, int]]] = {
     4: [(4, 0, 0), (0, 4, 0), (0, 0, 4), (3, 1, 0), (3, 0, 1),
         (1, 3, 0), (0, 3, 1), (1, 0, 3), (0, 1, 3), (2, 2, 0),
         (2, 0, 2), (0, 2, 2), (2, 1, 1), (1, 2, 1), (1, 1, 2)],
+    5: [(5, 0, 0), (0, 5, 0), (0, 0, 5), (4, 1, 0), (4, 0, 1),
+        (1, 4, 0), (0, 4, 1), (1, 0, 4), (0, 1, 4), (3, 2, 0),
+        (3, 0, 2), (2, 3, 0), (0, 3, 2), (2, 0, 3), (0, 2, 3),
+        (3, 1, 1), (1, 3, 1), (1, 1, 3), (2, 2, 1), (2, 1, 2),
+        (1, 2, 2)],
+    6: [(6, 0, 0), (0, 6, 0), (0, 0, 6), (5, 1, 0), (5, 0, 1),
+        (1, 5, 0), (0, 5, 1), (1, 0, 5), (0, 1, 5), (4, 2, 0),
+        (4, 0, 2), (2, 4, 0), (0, 4, 2), (2, 0, 4), (0, 2, 4),
+        (4, 1, 1), (1, 4, 1), (1, 1, 4), (3, 3, 0), (3, 0, 3),
+        (0, 3, 3), (3, 2, 1), (3, 1, 2), (2, 3, 1), (1, 3, 2),
+        (2, 1, 3), (1, 2, 3), (2, 2, 2)],
 }
 
 
@@ -189,7 +200,7 @@ def _cartesian_shell_size(l: int) -> int:
     if l < 0:
         raise ValueError("angular momentum must be non-negative")
     if l not in _CART_MONOMIALS:
-        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
+        raise ValueError("only s/p/d/f/g/h/i Cartesian shells are supported in this metadata-only scaffold")
     return len(_CART_MONOMIALS[l])
 
 
@@ -197,7 +208,7 @@ def _component_signs(l: int, signs: tuple[int, int, int]) -> list[int]:
     """Per-component characters of a Cartesian shell under diag(sx, sy, sz)."""
 
     if l not in _CART_MONOMIALS:
-        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
+        raise ValueError("only s/p/d/f/g/h/i Cartesian shells are supported in this metadata-only scaffold")
     sx, sy, sz = signs
     return [(sx ** a) * (sy ** b) * (sz ** c) for a, b, c in _CART_MONOMIALS[l]]
 
@@ -380,7 +391,7 @@ def _solid_harmonic_coefficients(l: int) -> np.ndarray:
     """
 
     if l not in _CART_MONOMIALS:
-        raise ValueError("only s/p/d/f/g shells are supported in this metadata-only scaffold")
+        raise ValueError("only s/p/d/f/g/h/i shells are supported in this metadata-only scaffold")
 
     monomials = _CART_MONOMIALS[l]
     index = {mono: i for i, mono in enumerate(monomials)}
@@ -455,7 +466,7 @@ def _spherical_basis(l: int) -> tuple[np.ndarray, np.ndarray]:
 
 def _spherical_shell_size(l: int) -> int:
     if l < 0 or l not in _CART_MONOMIALS:
-        raise ValueError("only s/p/d/f/g shells are supported in this metadata-only scaffold")
+        raise ValueError("only s/p/d/f/g/h/i shells are supported in this metadata-only scaffold")
     return 2 * l + 1
 
 
@@ -483,12 +494,12 @@ def _shell_block(l: int, op_matrix: np.ndarray) -> np.ndarray:
     """Representation of an orthogonal 3x3 operation on one Cartesian shell.
 
     Acts on coefficient columns: c' = block @ c. For sign-diagonal operations
-    this reduces to the diagonal of component signs. Supports s/p/d/f/g in
+    this reduces to the diagonal of component signs. Supports s/p/d/f/g/h/i in
     OpenQP's canonical component order.
     """
 
     if l not in _CART_MONOMIALS:
-        raise ValueError("only s/p/d/f/g Cartesian shells are supported in this metadata-only scaffold")
+        raise ValueError("only s/p/d/f/g/h/i Cartesian shells are supported in this metadata-only scaffold")
     if l == 0:
         return np.ones((1, 1))
     if l == 1:

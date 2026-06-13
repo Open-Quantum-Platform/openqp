@@ -2,7 +2,8 @@ module tdhf_sf_gradient_mod
 
   use precision, only: dp
   use grd2, only: grd2_driver, grd2_compute_data_t
-  use basis_tools, only: basis_set
+  use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+  use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
 
   implicit none
@@ -15,11 +16,15 @@ module tdhf_sf_gradient_mod
     real(kind=dp), pointer :: d2(:,:,:) => null()
     real(kind=dp), pointer :: p2(:,:,:) => null()
     real(kind=dp), pointer :: v2(:,:) => null()
+    ! Cartesian-effective (bfnrm-folded) copies + offsets for HARMONIC_ACTIVE.
+    real(kind=dp), allocatable :: d2a_c(:,:), d2b_c(:,:), p2a_c(:,:), p2b_c(:,:), v2_c(:,:)
+    integer, allocatable :: cart_off(:)
     integer :: nbf = 0
   contains
     procedure :: init => grd2_sf_compute_data_t_init
     procedure :: clean => grd2_sf_compute_data_t_clean
     procedure :: get_density => grd2_sf_compute_data_t_get_density
+    procedure :: build_cart => grd2_sf_build_cart
   end type
 
 contains
@@ -331,6 +336,11 @@ contains
 
     call gcomp%init()
 
+    select type (gcomp)
+    class is (grd2_sf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
+
     call grd2_driver(infos, basis, de, gcomp, &
                      cam = dft.and.infos%dft%cam_flag, &
                      alpha = infos%tddft%cam_alpha, &
@@ -361,6 +371,36 @@ contains
 
 !###############################################################################
 
+!> @brief Cartesian-effective copies of the SF gradient densities (alpha/beta
+!>   d and p, transition v) for HARMONIC_ACTIVE. Call AFTER init (which
+!>   combines the spin densities).
+  subroutine grd2_sf_build_cart(this, basis)
+    class(grd2_sf_compute_data_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, allocatable :: od(:)
+    integer :: nc
+    if (.not. HARMONIC_ACTIVE) return
+    call sf_cart_one(basis, this%d2(:,:,1), this%d2a_c, this%cart_off, nc)
+    call sf_cart_one(basis, this%d2(:,:,2), this%d2b_c, od, nc)
+    call sf_cart_one(basis, this%p2(:,:,1), this%p2a_c, od, nc)
+    call sf_cart_one(basis, this%p2(:,:,2), this%p2b_c, od, nc)
+    call sf_cart_one(basis, this%v2,        this%v2_c,  od, nc)
+  end subroutine grd2_sf_build_cart
+
+  subroutine sf_cart_one(basis, m, m_cart, off, nc)
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: m(:,:)
+    real(kind=dp), allocatable, intent(out) :: m_cart(:,:)
+    integer, allocatable, intent(out) :: off(:)
+    integer, intent(out) :: nc
+    real(kind=dp), allocatable :: tmp(:,:)
+    tmp = m
+    call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+    call build_cart_density(basis, tmp, m_cart, off, nc)
+  end subroutine sf_cart_one
+
+!###############################################################################
+
   subroutine grd2_sf_compute_data_t_clean(this)
     implicit none
     class(grd2_sf_compute_data_t), target, intent(inout) :: this
@@ -381,21 +421,33 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: df1, dq1, dt2
+    real(kind=dp) :: df1, dq1, dt2, bfn
     real(kind=dp) :: coulfact, xcfact, xcfact2
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: d2a(:,:), d2b(:,:), p2a(:,:), p2b(:,:), v2(:,:)
+    logical :: usecart
     integer :: i1, j1, k1, l1
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
     xcfact2 = this%hfscale2
     dabmax = 0
-    loc = basis%ao_offset(id)-1
 
-    nbf = basis%naos(id)
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      d2a => this%d2a_c;  d2b => this%d2b_c
+      p2a => this%p2a_c;  p2b => this%p2b_c;  v2 => this%v2_c
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      d2a => this%d2(:,:,1);  d2b => this%d2(:,:,2)
+      p2a => this%p2(:,:,1);  p2b => this%p2(:,:,2);  v2 => this%v2
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
@@ -410,28 +462,30 @@ contains
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = (this%d2(i1,j1,1)+this%p2(i1,j1,1))*this%d2(k1,l1,1) &
-                +  this%d2(i1,j1,1)                  *this%p2(k1,l1,1)
+            df1 = (d2a(i1,j1)+p2a(i1,j1))*d2a(k1,l1) &
+                +  d2a(i1,j1)                  *p2a(k1,l1)
             df1 = df1 * coulfact
 
             if (xcfact /= 0.0_dp .or. xcfact2 /= 0.0_dp) then
-              dq1 = (this%d2(i1,k1,1)+this%p2(i1,k1,1))*this%d2(j1,l1,1) &
-                  +  this%d2(i1,k1,1)                  *this%p2(j1,l1,1) &
-                  + (this%d2(i1,l1,1)+this%p2(i1,l1,1))*this%d2(j1,k1,1) &
-                  +  this%d2(i1,l1,1)                  *this%p2(j1,k1,1) &
-                  + (this%d2(i1,k1,2)+this%p2(i1,k1,2))*this%d2(j1,l1,2) &
-                  +  this%d2(i1,k1,2)                  *this%p2(j1,l1,2) &
-                  + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
-                  +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
-              dt2 = this%v2(i1,k1)*this%v2(j1,l1) &
-                  + this%v2(k1,i1)*this%v2(l1,j1) &
-                  + this%v2(i1,l1)*this%v2(j1,k1) &
-                  + this%v2(l1,i1)*this%v2(k1,j1)
+              dq1 = (d2a(i1,k1)+p2a(i1,k1))*d2a(j1,l1) &
+                  +  d2a(i1,k1)                  *p2a(j1,l1) &
+                  + (d2a(i1,l1)+p2a(i1,l1))*d2a(j1,k1) &
+                  +  d2a(i1,l1)                  *p2a(j1,k1) &
+                  + (d2b(i1,k1)+p2b(i1,k1))*d2b(j1,l1) &
+                  +  d2b(i1,k1)                  *p2b(j1,l1) &
+                  + (d2b(i1,l1)+p2b(i1,l1))*d2b(j1,k1) &
+                  +  d2b(i1,l1)                  *p2b(j1,k1)
+              dt2 = v2(i1,k1)*v2(j1,l1) &
+                  + v2(k1,i1)*v2(l1,j1) &
+                  + v2(i1,l1)*v2(j1,k1) &
+                  + v2(l1,i1)*v2(k1,j1)
 
               df1 = df1-xcfact*dq1-xcfact2*2.0_dp*dt2
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*bfn
           end do
         end do
       end do

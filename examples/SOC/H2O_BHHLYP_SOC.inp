@@ -8,6 +8,10 @@ runtype=soc
 method=tdhf
 functional=bhhlyp
 basis=6-31G(2df,p)
+# BSE publishes 6-31G(2df,p) with spherical d/f tags; keep this deck on the
+# Cartesian path because 2e SOC (soc_2e=1) is not yet available with
+# spherical-harmonic AOs, and the reference data is Cartesian.
+ispher=false
 
 [guess]
 save_mol=true

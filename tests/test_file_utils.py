@@ -11,48 +11,66 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_file_utils():
-    oqp = types.ModuleType("oqp")
-    oqp.__path__ = []
-    sys.modules["oqp"] = oqp
-
-    molden = types.ModuleType("oqp.molden")
-    molden.__path__ = []
-    sys.modules["oqp.molden"] = molden
-
-    moldenwriter = types.ModuleType("oqp.molden.moldenwriter")
-    setattr(moldenwriter, "write_frequency", lambda *args, **kwargs: "")
-    sys.modules["oqp.molden.moldenwriter"] = moldenwriter
-
-    periodic_table = types.ModuleType("oqp.periodic_table")
-    setattr(periodic_table, "SYMBOL_MAP", {1: 1, 8: 8, "1": 1, "8": 8})
-    elements = [""] * 9
-    elements[1] = "H"
-    elements[8] = "O"
-    setattr(periodic_table, "ELEMENTS_NAME", elements)
-    sys.modules["oqp.periodic_table"] = periodic_table
-
-    utils = types.ModuleType("oqp.utils")
-    utils.__path__ = []
-    sys.modules["oqp.utils"] = utils
-
-    constants = types.ModuleType("oqp.utils.constants")
-    setattr(constants, "ANGSTROM_TO_BOHR", 0.529177210903)
-    sys.modules["oqp.utils.constants"] = constants
-
-    mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
-    setattr(mpi_utils, "mpi_dump", lambda func: func)
-    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
-
-    spec = importlib.util.spec_from_file_location(
-        "file_utils_under_test",
-        ROOT / "pyoqp/oqp/utils/file_utils.py",
+    stub_names = (
+        "oqp",
+        "oqp.molden",
+        "oqp.molden.moldenwriter",
+        "oqp.periodic_table",
+        "oqp.utils",
+        "oqp.utils.constants",
+        "oqp.utils.mpi_utils",
     )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["file_utils_under_test"] = module
-    spec.loader.exec_module(module)
-    return module
+    saved_modules = {name: sys.modules.get(name) for name in stub_names}
+
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
+
+        molden = types.ModuleType("oqp.molden")
+        molden.__path__ = []
+        sys.modules["oqp.molden"] = molden
+
+        moldenwriter = types.ModuleType("oqp.molden.moldenwriter")
+        setattr(moldenwriter, "write_frequency", lambda *args, **kwargs: "")
+        sys.modules["oqp.molden.moldenwriter"] = moldenwriter
+
+        periodic_table = types.ModuleType("oqp.periodic_table")
+        setattr(periodic_table, "SYMBOL_MAP", {1: 1, 8: 8, "1": 1, "8": 8})
+        elements = [""] * 9
+        elements[1] = "H"
+        elements[8] = "O"
+        setattr(periodic_table, "ELEMENTS_NAME", elements)
+        sys.modules["oqp.periodic_table"] = periodic_table
+
+        utils = types.ModuleType("oqp.utils")
+        utils.__path__ = []
+        sys.modules["oqp.utils"] = utils
+
+        constants = types.ModuleType("oqp.utils.constants")
+        setattr(constants, "ANGSTROM_TO_BOHR", 0.529177210903)
+        sys.modules["oqp.utils.constants"] = constants
+
+        mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+        setattr(mpi_utils, "mpi_dump", lambda func: func)
+        sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+
+        spec = importlib.util.spec_from_file_location(
+            "file_utils_under_test",
+            ROOT / "pyoqp/oqp/utils/file_utils.py",
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["file_utils_under_test"] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for name, module in saved_modules.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 class TestWriteXYZ(unittest.TestCase):
