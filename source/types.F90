@@ -145,7 +145,7 @@ module types
     integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
     real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
     real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
-    integer(c_int64_t)     :: trh_impl = 0          !< TRAH solver: 0=OpenTrustRegion (external, default), 1=native Fortran (opt-in; not yet validated for gradients/MRSF/state-specific)
+    integer(c_int64_t)     :: trh_impl = 1          !< TRAH solver: 1=native Fortran (default), 0=OpenTrustRegion (external)
     ! SD parameters
     logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
     ! PCM implicit solvent (energy-only, ddX backend; off by default)
@@ -192,6 +192,7 @@ module types
     integer(c_int) :: element_id = -1
 !    integer(c_int) :: num_expo = 0
     integer(c_int) :: ang_mom = 0
+    integer(c_int) :: harmonic = 0   !< 1 = pure spherical-harmonic shell, 0 = Cartesian
     integer(c_int) :: ecp_nam = 0
     type(c_ptr) :: num_expo
     type(c_ptr) :: expo
@@ -254,7 +255,6 @@ contains
     ok = 1
     this%atoms = atoms
 
-  end function
+end function
 
 end module types
-

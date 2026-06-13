@@ -12,11 +12,13 @@ module int1
     use, intrinsic :: iso_fortran_env, only: real64
     use basis_tools, only: basis_set, &
             bas_norm_matrix, &
-            bas_denorm_matrix
+            bas_denorm_matrix, &
+            build_cart_density
+    use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
+    use cart2sph, only: cart2sph_mat
     use mod_1e_primitives, only: &
         update_triang_matrix, &
         update_rectangular_matrix, &
-        density_ordered, &
         comp_coulomb_int1_prim, &
         comp_ewaldlr_int1_prim, &
         comp_kin_ovl_int1_prim, &
@@ -66,6 +68,62 @@ module int1
     public overlap
 
 contains
+
+ subroutine prepare_density_matrix(basis, denab, dens, off, apply_norm)
+    use mathlib, only: unpack_matrix
+    type(basis_set), intent(in) :: basis
+    real(real64), contiguous, intent(in) :: denab(:)
+    real(real64), allocatable, intent(out) :: dens(:,:)
+    integer, allocatable, intent(out) :: off(:)
+    logical, intent(in) :: apply_norm
+
+    real(real64), allocatable :: dcart(:,:)
+    integer, allocatable :: cart_off(:)
+    integer :: nbf_cart
+
+    allocate(dens(basis%nbf,basis%nbf), source=0.0_real64)
+    call unpack_matrix(denab, dens, basis%nbf, 'U')
+    if (apply_norm) call bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
+
+    if (HARMONIC_ACTIVE) then
+      call build_cart_density(basis, dens, dcart, cart_off, nbf_cart)
+      call move_alloc(dcart, dens)
+      call move_alloc(cart_off, off)
+    else
+      allocate(off(basis%nshell))
+      off = basis%ao_offset(1:basis%nshell)
+    end if
+ end subroutine prepare_density_matrix
+
+ subroutine density_ordered_matrix(shi, shj, dij, dmat, off)
+    type(shell_t), intent(in) :: shi, shj
+    real(real64), contiguous, intent(out) :: dij(:)
+    real(real64), intent(in) :: dmat(:,:)
+    integer, intent(in) :: off(:)
+
+    integer :: ij, i, j, jmax, i0, j0, ni, nj
+    real(real64) :: den
+    logical :: iandj
+
+    iandj = shi%shid == shj%shid
+    ni = merge(NUM_CART_BF(shi%ang), shi%nao, HARMONIC_ACTIVE)
+    nj = merge(NUM_CART_BF(shj%ang), shj%nao, HARMONIC_ACTIVE)
+    jmax = nj - 1
+
+    ij = 0
+    do i = 0, ni - 1
+      if (iandj) jmax = i
+      do j = 0, jmax
+        ij = ij + 1
+        i0 = off(shi%shid) + i
+        j0 = off(shj%shid) + j
+        den = 2.0_real64*dmat(i0,j0)
+        if (iandj .and. i == j) den = dmat(i0,j0)
+        dij(ij) = den
+      end do
+    end do
+ end subroutine density_ordered_matrix
+
 !> @brief Driver for conventional h, S, and T integrals
 !
 !> @details  Compute one electron integrals and core Hamiltonian,
@@ -527,7 +585,6 @@ contains
 !> @param[in]   logtol   optional screening tolerance
  subroutine nmr_dia_shielding(basis, denab, o, coords, nat, gdia, logtol)
     use precision, only: dp
-    use mathlib, only: unpack_matrix
 
     type(basis_set), intent(in) :: basis
     real(real64), contiguous, intent(in) :: denab(:)
@@ -539,17 +596,14 @@ contains
 
     real(real64), allocatable :: dens(:,:)
     real(real64) :: tol
-    integer :: ii, jj, ic, nbf
+    integer :: ii, jj, ic
+    integer, allocatable :: off(:)
     type(shell_t) :: shi, shj
     type(shpair_t) :: cntp
 
     tol = log(10.0_dp)*20
     if (present(logtol)) tol = logtol
-    nbf = basis%nbf
-
-    allocate(dens(nbf,nbf), source=0.0d0)
-    call unpack_matrix(denab, dens, nbf, 'U')
-    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+    call prepare_density_matrix(basis, denab, dens, off, apply_norm=.true.)
 
     gdia = 0.0d0
 
@@ -563,12 +617,12 @@ contains
         if (cntp%numpairs==0) cycle
         do ic = 1, nat
           call comp_nmr_dia_int1_prim(cntp, coords(:,ic), o, &
-                 dens(basis%ao_offset(ii):, basis%ao_offset(jj):), gdia(:,:,ic))
+                 dens(off(ii):, off(jj):), gdia(:,:,ic))
         end do
       end do
     end do
 
-    deallocate(dens)
+    deallocate(dens, off)
 
  end subroutine
 
@@ -599,7 +653,6 @@ contains
 !>  0 (nmr_dia_shielding with o=0) to form the full GIAO a11part contribution.
  subroutine giao_a11part_corr(basis, denab, coords, nat, corr, logtol)
     use precision, only: dp
-    use mathlib, only: unpack_matrix
     use mod_1e_primitives, only: comp_coulomb_helfeyder1
 
     type(basis_set), intent(in) :: basis
@@ -611,22 +664,21 @@ contains
 
     real(real64), allocatable :: dens(:,:), densb(:,:), aoc(:,:)
     real(real64) :: tol, der(3)
-    integer :: ii, jj, ic, nbf, b, ish, ao, k
+    integer :: ii, jj, ic, b, ish, ao, k, ncomp
+    integer, allocatable :: off(:)
     type(shell_t) :: shi, shj
     type(shpair_t) :: cntp
 
     tol = log(10.0_dp)*20
     if (present(logtol)) tol = logtol
-    nbf = basis%nbf
-
-    allocate(dens(nbf,nbf), densb(nbf,nbf), aoc(nbf,3), source=0.0d0)
-    call unpack_matrix(denab, dens, nbf, 'U')
-    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+    call prepare_density_matrix(basis, denab, dens, off, apply_norm=.true.)
+    allocate(densb(size(dens,1),size(dens,2)), aoc(size(dens,1),3), source=0.0d0)
 
     ! AO -> shell center map
     do ish = 1, basis%nshell
-      do k = 1, basis%naos(ish)
-        ao = basis%ao_offset(ish) + k - 1
+      ncomp = merge(NUM_CART_BF(basis%am(ish)), basis%naos(ish), HARMONIC_ACTIVE)
+      do k = 1, ncomp
+        ao = off(ish) + k - 1
         aoc(ao,1:3) = basis%shell_centers(ish,1:3)
       end do
     end do
@@ -636,7 +688,7 @@ contains
 
     do b = 1, 3
       ! scale ket (column) by its shell-center b-component
-      do ao = 1, nbf
+      do ao = 1, size(dens,1)
         densb(:,ao) = dens(:,ao)*aoc(ao,b)
       end do
       do ii = 1, basis%nshell
@@ -648,14 +700,14 @@ contains
           do ic = 1, nat
             der = 0.0d0
             call comp_coulomb_helfeyder1(cntp, coords(:,ic), 1.0d0, &
-                   densb(basis%ao_offset(ii):, basis%ao_offset(jj):), der)
+                   densb(off(ii):, off(jj):), der)
             corr(1:3,b,ic) = corr(1:3,b,ic) + 0.5d0*der(1:3)
           end do
         end do
       end do
     end do
 
-    deallocate(dens, densb, aoc)
+    deallocate(dens, densb, aoc, off)
 
  end subroutine
 
@@ -667,7 +719,6 @@ contains
 !>  a11part contribution.
  subroutine giao_a01gp_contract(basis, denab, coords, nat, e2, logtol)
     use precision, only: dp
-    use mathlib, only: unpack_matrix
     use mod_1e_primitives, only: comp_giao_a01gp_prim
 
     type(basis_set), intent(in) :: basis
@@ -679,27 +730,24 @@ contains
 
     real(real64), allocatable :: dens(:,:)
     real(real64) :: tol, cvec(3), blk(blocksize,9)
-    integer :: ii, jj, ic, nbf, a, col, i, j, ij, oi, oj
+    integer :: ii, jj, ic, a, col, i, j, ij, oi, oj
+    integer, allocatable :: off(:)
     type(shell_t) :: shi, shj
     type(shpair_t) :: cntp
 
     tol = log(10.0_dp)*20
     if (present(logtol)) tol = logtol
-    nbf = basis%nbf
-
-    allocate(dens(nbf,nbf), source=0.0d0)
-    call unpack_matrix(denab, dens, nbf, 'U')
-    call bas_norm_matrix(dens, basis%bfnrm, nbf)
+    call prepare_density_matrix(basis, denab, dens, off, apply_norm=.true.)
 
     e2 = 0.0d0
     call cntp%alloc(basis)
 
     do ii = 1, basis%nshell
       call shi%fetch_by_id(basis, ii)
-      oi = basis%ao_offset(ii)
+      oi = off(ii)
       do jj = 1, basis%nshell
         call shj%fetch_by_id(basis, jj)
-        oj = basis%ao_offset(jj)
+        oj = off(jj)
         call cntp%shell_pair(basis, shi, shj, tol)
         if (cntp%numpairs==0) cycle
         cvec = basis%shell_centers(ii,1:3) - basis%shell_centers(jj,1:3)
@@ -723,7 +771,7 @@ contains
       end do
     end do
 
-    deallocate(dens)
+    deallocate(dens, off)
 
  end subroutine
 
@@ -758,6 +806,8 @@ contains
         blk = 0.0d0
         call comp_pso_int1_prim(cntp, c, blk)
         do m = 1, 3
+          if (HARMONIC_ACTIVE .and. (shi%harmonic==1 .or. shj%harmonic==1)) &
+              call cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic)
           ! blk is ordered (bra=shi outer, ket=shj inner); update_rectangular_matrix
           ! then writes ints(ket_global, bra_global) = <bra|A|ket>.
           call update_rectangular_matrix(shi, shj, blk(:,m), ints(:,:,m))
@@ -972,6 +1022,8 @@ contains
 
             CALL int1_kin_ovl(cntp, dokinetic, sblk, tblk)
 
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic)
             CALL update_rectangular_matrix(shi, shj, sblk, s)
 
         END DO
@@ -1041,6 +1093,8 @@ contains
 
             CALL int1_kin_ovl(cntp, dokinetic, sblk, tblk)
 
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             CALL update_triang_matrix(shi, shj, sblk, s)
 
         END DO
@@ -1114,6 +1168,10 @@ contains
 
             CALL int1_kin_ovl(cntp, dokinetic, sblk, tblk)
 
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) THEN
+                CALL cart2sph_mat(sblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+                CALL cart2sph_mat(tblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
+            END IF
             CALL update_triang_matrix(shi, shj, sblk, s)
             CALL update_triang_matrix(shi, shj, tblk, t)
 
@@ -1174,6 +1232,8 @@ contains
             CALL int1_allmul(cntp, r, mxmom, blk)
 
             do m = 1, mult_all_bs(mxmom)
+              IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -1234,6 +1294,8 @@ contains
             CALL int1_mul(cntp, r, mom, blk)
 
             do m = 1, mult_bs(mom)
+              IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -1291,6 +1353,9 @@ contains
 
             zblk = 0.0
             CALL int1_lz(cntp, zblk)
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                CALL cart2sph_mat(zblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                  iandj=(shi%shid==shj%shid), antisym=.true.)
             CALL update_triang_matrix(shi, shj, zblk, z)
 
         END DO
@@ -1355,6 +1420,8 @@ contains
 
             call int1_coul(cntp, coord, zq, nat, 0.0d0, vblk)
 
+            if (HARMONIC_ACTIVE .and. (shi%harmonic==1 .or. shj%harmonic==1)) &
+                call cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             call update_triang_matrix(shi, shj, vblk, h)
 
         end do
@@ -1432,6 +1499,8 @@ contains
 
             CALL int1_coul(cntp, x, y, z, chg, nat, chgtol, vblk)
 
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                CALL cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             CALL update_triang_matrix(shi, shj, vblk, h)
 
         END DO
@@ -1512,6 +1581,8 @@ contains
 !           Subtract long-range Ewald term
             CALL int1_ewald(cntp, x, y, z, chg, nat, chgtol, omega, vblk)
 
+            IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                CALL cart2sph_mat(vblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             CALL update_triang_matrix(shi, shj, vblk, h)
 
         END DO
@@ -1554,8 +1625,11 @@ contains
 
     type(shell_t) :: shi, shj
     type(shpair_t) :: cntp
+    real(real64), allocatable :: dens(:,:)
+    integer, allocatable :: off(:)
 
     npts = ubound(x,1)
+    call prepare_density_matrix(basis, d, dens, off, apply_norm=.false.)
 
 !$omp parallel &
 !$omp   private( &
@@ -1580,7 +1654,7 @@ contains
         call cntp%shell_pair(basis, shi, shj, tol)
         if (cntp%numpairs==0) cycle
 
-        call density_ordered(shi, shj, den, d)
+        call density_ordered_matrix(shi, shj, den, dens, off)
         do n = 1, npts
           pot(n) = pot(n) + int1_epoten(cntp, x(n), y(n), z(n), den)
         end do
@@ -1589,6 +1663,8 @@ contains
 !$omp end do nowait
     end do
 !$omp end parallel
+
+    deallocate(dens, off)
 
  end subroutine
 
@@ -1958,6 +2034,9 @@ contains
             CALL int1_amom(cntp, o, blk)
 
             do m = 1, 3
+              IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                    iandj=(shi%shid==shj%shid), antisym=.true.)
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
 
@@ -2024,6 +2103,8 @@ contains
             blk = 0.0d0
             CALL int1_giao_overlap_deriv(cntp, blk)
             do m = 1, 3
+              IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
         END DO
@@ -2085,6 +2166,9 @@ contains
             blk = 0.0d0
             CALL int1_giao_h10_core(cntp, coord, zq, nat, blk)
             do m = 1, 3
+              IF (HARMONIC_ACTIVE .AND. (shi%harmonic==1 .OR. shj%harmonic==1)) &
+                  CALL cart2sph_mat(blk(:,m), shj%ang, shj%harmonic, shi%ang, shi%harmonic, &
+                                    iandj=(shi%shid==shj%shid), antisym=.true.)
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
         END DO

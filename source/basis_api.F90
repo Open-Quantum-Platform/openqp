@@ -34,6 +34,7 @@ module basis_api
 
     type, extends(base_shell) :: electron_shell
         integer :: angular_momentum
+        integer :: harmonic = 0   !< 1 = pure spherical-harmonic shell, 0 = Cartesian
         type(electron_shell), pointer :: next => null()
    contains
       procedure :: clear => electron_shell_clear
@@ -170,6 +171,7 @@ contains
         new_node%id = info%elshell%id
         new_node%element_id = info%elshell%element_id
         new_node%angular_momentum = info%elshell%ang_mom
+        new_node%harmonic = info%elshell%harmonic
         allocate(new_node%exponents(n_expo))
         allocate(new_node%coefficient(n_expo))
         allocate(new_node%n_exponents(1))
@@ -218,7 +220,7 @@ contains
     subroutine map_shell2basis_set(infos)
         use basis_tools, only: basis_set
         use types, only: information
-        use constants, only: NUM_CART_BF
+        use constants, only: NUM_CART_BF, num_ao
 
         type(information), target, intent(inout) :: infos
         class(basis_set), pointer :: basis
@@ -253,7 +255,7 @@ contains
             nshell = temp%id
             nprim = nprim + temp%n_exponents(1)
 
-            nbf = nbf + NUM_CART_BF(temp%angular_momentum)
+            nbf = nbf + num_ao(temp%angular_momentum, temp%harmonic)
 
             temp => temp%next  ! Move to the next shell
         end do
@@ -270,6 +272,7 @@ contains
         if (.not. allocated(basis%g_offset)) allocate(basis%g_offset(nshell))
         if (.not. allocated(basis%origin)) allocate(basis%origin(nshell))
         if (.not. allocated(basis%am)) allocate(basis%am(nshell))
+        if (.not. allocated(basis%harmonic)) allocate(basis%harmonic(nshell), source=0)
         if (.not. allocated(basis%ncontr)) allocate(basis%ncontr(nshell))
         if (.not. allocated(basis%ao_offset)) allocate(basis%ao_offset(nshell))
         if (.not. allocated(basis%naos)) allocate(basis%naos(nshell))
@@ -298,7 +301,8 @@ contains
 
             basis%origin(ii) = temp1%element_id
             basis%am(ii) = temp1%angular_momentum
-            basis%naos(ii) = NUM_CART_BF(temp1%angular_momentum)
+            basis%harmonic(ii) = temp1%harmonic
+            basis%naos(ii) = num_ao(temp1%angular_momentum, temp1%harmonic)
             n1 = temp1%n_exponents(1)
 
             temp1 => temp1%next

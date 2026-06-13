@@ -386,7 +386,7 @@ contains
     do i = 1, basis%nshell
       iatom = basis%origin(i)
       i0 = basis%ao_offset(i)
-      i1 = basis%ao_offset(i)+NUM_CART_BF(basis%am(i))-1
+      i1 = basis%ao_offset(i)+basis%naos(i)-1   ! AO count per shell (spherical-aware)
       at_pop(iatom) = at_pop(iatom) + sum(ao_pop(i0:i1))
     end do
   end subroutine

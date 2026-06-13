@@ -965,10 +965,12 @@ contains
 
   subroutine shellquartet(basis, ppairs, cutoffs, eri_data, zero_shq)
     use io_constants, only: iw
-    use int2e_rotaxis, only: genr22
+    use int2e_rotaxis, only: genr22, genr22_pure, genr22_reduce_pure
     use int2e_libint, only: libint_compute_eri, libint_print_eri
-    use int2e_rys, only: int2_rys_compute, rys_print_eri
+    use int2e_rys, only: int2_rys_compute, int2_rys_reduce_pure, rys_print_eri
     use iso_c_binding, only: c_f_pointer
+    use constants, only: HARMONIC_ACTIVE
+    use int2_pure_generated, only: int2_project_pure_block
     implicit none
     type(basis_set), intent(in) :: basis
     type(int2_pair_storage), intent(in) :: ppairs
@@ -977,6 +979,7 @@ contains
     logical, intent(out) :: zero_shq
     logical :: rotspd, libint, rys
     integer :: nbf(4)
+    integer :: s_, fp_, orig_, am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
     logical, parameter :: dbg_output = .false.
 !    logical, parameter :: dbg_output = .true.
     integer :: max_am
@@ -995,15 +998,28 @@ contains
 
     if (rotspd) then
 
-      if (eri_data%attenuated_ints) then
-        ! erf-attenuated integrals
-        call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs, eri_data%mu2)
+      if (HARMONIC_ACTIVE .and. &
+          any(basis%harmonic(eri_data%ids) == 1 .and. eri_data%am >= 2)) then
+        ! direct pure-spherical output: lab rotation and c2s fused per index
+        if (eri_data%attenuated_ints) then
+          call genr22_pure(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, &
+                           cutoffs, eri_data%nbf, eri_data%mu2)
+        else
+          call genr22_pure(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, &
+                           cutoffs, eri_data%nbf)
+        end if
       else
-        ! regular integrals
-        call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs)
-      end if
+        if (eri_data%attenuated_ints) then
+          ! erf-attenuated integrals
+          call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs, eri_data%mu2)
+        else
+          ! regular integrals
+          call genr22(basis, ppairs, eri_data%ints, eri_data%ids, eri_data%flips, cutoffs)
+        end if
 
-      eri_data%nbf = eri_data%nbf(eri_data%flips)
+        eri_data%nbf = eri_data%nbf(eri_data%flips)
+        call genr22_reduce_pure(basis, eri_data%ids, eri_data%flips, eri_data%ints, eri_data%nbf)
+      end if
       eri_data%pints(1:eri_data%nbf(4), 1:eri_data%nbf(3), 1:eri_data%nbf(2), 1:eri_data%nbf(1)) => eri_data%ints
 
     else if (libint) then
@@ -1013,26 +1029,56 @@ contains
       nbf = eri_data%nbf(eri_data%flips)
       eri_data%nbf = nbf
       call c_f_pointer(eri_data%erieval(1)%targets(1), eri_data%pints, shape=nbf([4,3,2,1]))
-      call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
+      call normalize_ints(nbf, eri_data%am(eri_data%flips), eri_data%pints)
 
     else if (rys) then
 
       call eri_data%gdat%set_ids(basis, eri_data%ids)
       if (eri_data%attenuated_ints) then
         ! erf-attenuated integrals
-        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, eri_data%mu2)
+        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, &
+                              mu2=eri_data%mu2, basis=basis, direct_pure=.true.)
       else
         ! regular integrals
-        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq)
+        call int2_rys_compute(eri_data%ints, eri_data%gdat, ppairs, zero_shq, &
+                              basis=basis, direct_pure=.true.)
       end if
 
       if (zero_shq) return
       nbf = eri_data%gdat%nbf
-      eri_data%nbf = nbf
       eri_data%flips = eri_data%gdat%flips
-      eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
-      call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
+      if (eri_data%gdat%direct_pure) then
+        eri_data%nbf = nbf
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+      else
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+        call normalize_ints(nbf, eri_data%gdat%am, eri_data%pints)
+        call int2_rys_reduce_pure(basis, eri_data%gdat, eri_data%ints, nbf)
+        eri_data%nbf = nbf
+        eri_data%pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => eri_data%ints
+      end if
 
+    end if
+
+    ! Libint returns a normalized Cartesian target buffer. Stage it into the
+    ! owned ERI buffer before reducing harmonic-flagged shells to pure output.
+    if (HARMONIC_ACTIVE .and. libint) then
+      do s_ = 1, 4
+        fp_ = 5 - s_                       ! pints storage dim s_ <-> flipped position fp_
+        orig_ = eri_data%flips(fp_)        ! original shell index at that position
+        am_s(s_)   = eri_data%am(orig_)
+        pure_s(s_) = basis%harmonic(eri_data%ids(orig_))
+        nbf_s(s_)  = eri_data%nbf(fp_)
+      end do
+      if (any(pure_s == 1 .and. am_s >= 2)) then
+        eri_data%ints(1:product(nbf_s)) = reshape(eri_data%pints, [product(nbf_s)])
+        call int2_project_pure_block(eri_data%ints, am_s, pure_s, nbf_s, nbf_out_s)
+        do s_ = 1, 4
+          eri_data%nbf(5 - s_) = nbf_out_s(s_)
+        end do
+        eri_data%pints(1:eri_data%nbf(4), 1:eri_data%nbf(3), &
+                       1:eri_data%nbf(2), 1:eri_data%nbf(1)) => eri_data%ints
+      end if
     end if
 
     if (dbg_output) then
@@ -1449,13 +1495,14 @@ contains
 !###############################################################################
 
   subroutine ints_exchange(basis, schwarz_ints, mu2, rys_only)
-    use int2e_rotaxis, only: genr22
+    use int2e_rotaxis, only: genr22, genr22_pure, genr22_reduce_pure
     use int2e_libint, only: libint2_init_eri, libint2_cleanup_eri
     use int2e_libint, only: libint_compute_eri, libint_print_eri
     use int2e_libint, only: libint_t, libint2_active
-    use int2e_rys, only: int2_rys_compute
+    use int2e_rys, only: int2_rys_compute, int2_rys_reduce_pure
     use types, only: information
-    use constants, only: NUM_CART_BF
+    use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
+    use int2_pure_generated, only: int2_project_pure_block
     use, intrinsic :: iso_c_binding, only: C_NULL_PTR, C_INT,  c_f_pointer
 
     implicit none
@@ -1478,6 +1525,7 @@ contains
     integer :: ish, jsh
     integer :: i, j, jmax
     integer :: am(4), max_am
+    integer :: s_, fp_, orig_, am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
     integer :: ok
     logical :: rotspd, libint, zero_shq, rys
     logical :: attenuated, rys_only_
@@ -1520,30 +1568,76 @@ contains
         libint = .not.rotspd.and.libint2_active.and..not.attenuated.and..not.rys_only_
         rys = .not.rotspd.and..not.libint
         if (rotspd) then
-          if (attenuated) then
-            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
+          if (HARMONIC_ACTIVE .and. any(basis%harmonic(shell_ids) == 1 .and. am >= 2)) then
+            ! direct pure-spherical output: lab rotation and c2s fused per index
+            if (attenuated) then
+              call genr22_pure(basis, ppairs, ints, shell_ids, flips, cutoffs, nbf, mu2)
+            else
+              call genr22_pure(basis, ppairs, ints, shell_ids, flips, cutoffs, nbf)
+            end if
           else
-            call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs)
+            if (attenuated) then
+              call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs, mu2)
+            else
+              call genr22(basis, ppairs, ints, shell_ids, flips, cutoffs)
+            end if
+            nbf = NUM_CART_BF(am(flips))
+            call genr22_reduce_pure(basis, shell_ids, flips, ints, nbf)
           end if
-          nbf = am(flips)
-          nbf = (nbf+1)*(nbf+2)/2
           vmax = maxval(abs(ints(1:product(nbf))))
         else if (libint) then
-          nbf = am(flips)
           call libint_compute_eri(basis, ppairs, cutoffs, shell_ids, 0, erieval, flips, zero_shq)
-          call c_f_pointer(erieval(1)%targets(1), pints, shape=nbf([4,3,2,1]))
-          vmax = maxval(abs(pints))
+          ! flips is intent(out) of libint_compute_eri; only valid afterwards
+          nbf = NUM_CART_BF(am(flips))
+          if (zero_shq) then
+            vmax = 0.0_dp
+          else
+            call c_f_pointer(erieval(1)%targets(1), pints, shape=nbf([4,3,2,1]))
+            call normalize_ints(nbf, am(flips), pints)
+            if (HARMONIC_ACTIVE) then
+              do s_ = 1, 4
+                fp_ = 5 - s_
+                orig_ = flips(fp_)
+                am_s(s_)   = am(orig_)
+                pure_s(s_) = basis%harmonic(shell_ids(orig_))
+                nbf_s(s_)  = nbf(fp_)
+              end do
+              if (any(pure_s == 1 .and. am_s >= 2)) then
+                ints(1:product(nbf_s)) = reshape(pints, [product(nbf_s)])
+                call int2_project_pure_block(ints, am_s, pure_s, nbf_s, nbf_out_s)
+                do s_ = 1, 4
+                  nbf(5 - s_) = nbf_out_s(s_)
+                end do
+                vmax = maxval(abs(ints(1:product(nbf))))
+              else
+                vmax = maxval(abs(pints))
+              end if
+            else
+              vmax = maxval(abs(pints))
+            end if
+          end if
         else if (rys) then
           call gdat%set_ids(basis, shell_ids)
           if (attenuated) then
-            call int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq, &
+                                  mu2=mu2, basis=basis, direct_pure=.true.)
           else
-            call int2_rys_compute(ints, gdat, ppairs, zero_shq)
+            call int2_rys_compute(ints, gdat, ppairs, zero_shq, &
+                                  basis=basis, direct_pure=.true.)
           end if
-          nbf = gdat%nbf
-          pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
-          call normalize_ints(nbf, gdat%am, pints)
-          vmax = maxval(abs(pints))
+          if (zero_shq) then
+            vmax = 0.0_dp
+          else
+            nbf = gdat%nbf
+            if (gdat%direct_pure) then
+              pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
+            else
+              pints(1:nbf(4), 1:nbf(3), 1:nbf(2), 1:nbf(1)) => ints
+              call normalize_ints(nbf, gdat%am, pints)
+              call int2_rys_reduce_pure(basis, gdat, ints, nbf)
+            end if
+            vmax = maxval(abs(ints(1:product(nbf))))
+          end if
         end if
         schwarz_ints(ish, jsh) = sqrt(vmax)
         schwarz_ints(jsh, ish) = sqrt(vmax)

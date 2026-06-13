@@ -165,6 +165,7 @@ struct electron_shell {
         int id;
 	int element_id;
 	int32_t ang_mom;
+	int32_t harmonic;
 	int32_t ecp_nam;
 	int* num_expo;
 	double* expo;
@@ -191,6 +192,7 @@ int64_t oqp_get_basis(struct oqp_handle_t *c_handle,
 
 /* `mass` is optional, pass NULL if not needed */
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
+void oqp_set_harmonic_active(bool flag);
 void oqp_banner(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);

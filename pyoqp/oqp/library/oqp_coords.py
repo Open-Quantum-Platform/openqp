@@ -273,57 +273,17 @@ class RedundantInternalCoordinates:
         if natom < 2:
             return None
 
-        radii = np.array([covalent_radius_bohr(z) for z in atoms])
-
-        # Bonds from covalent connectivity.
-        neighbours = {a: set() for a in range(natom)}
-        bonds = []
-        for a in range(natom):
-            for b in range(a + 1, natom):
-                rab = np.linalg.norm(x[a] - x[b])
-                if rab < bond_factor * (radii[a] + radii[b]):
-                    bonds.append((a, b))
-                    neighbours[a].add(b)
-                    neighbours[b].add(a)
-
-        # Connect disjoint fragments by their closest interatomic contact so the
-        # internal set spans intermolecular translations/rotations.
+        bonds, neighbours, _ = _covalent_graph(atoms, x, bond_factor)
+        # Single connected graph, then augment so the internals span 3N-6 (long
+        # conjugated / floppy systems are otherwise rank-deficient and force a
+        # slow Cartesian fallback).
         bonds = _connect_fragments(bonds, neighbours, x, natom)
-
-        primitives = [Bond(a, b) for (a, b) in bonds]
-
-        # Angles: apex j with neighbour pair (i, k); skip near-linear.
-        for j in range(natom):
-            nb = sorted(neighbours[j])
-            for ii in range(len(nb)):
-                for kk in range(ii + 1, len(nb)):
-                    i, k = nb[ii], nb[kk]
-                    ang = Angle(i, j, k)
-                    val = ang.value(x)
-                    if 0.26 < val < (np.pi - 0.26):  # ~15 deg .. 165 deg
-                        primitives.append(ang)
-
-        # Dihedrals along each bond (j-k) with terminal neighbours i and l.
-        seen = set()
-        for (j, k) in bonds:
-            for i in sorted(neighbours[j]):
-                if i == k:
-                    continue
-                if not _well_defined_angle(x, i, j, k):
-                    continue
-                for l in sorted(neighbours[k]):
-                    if l == j or l == i:
-                        continue
-                    if not _well_defined_angle(x, j, k, l):
-                        continue
-                    key = (i, j, k, l) if (i, j) < (l, k) else (l, k, j, i)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    primitives.append(Dihedral(i, j, k, l))
+        bonds, neighbours = _augment_internals(atoms, x, bonds, neighbours, natom)
+        primitives = _make_internals(bonds, neighbours, x)
 
         coords = cls(primitives, natom)
-        # Reject rank-deficient sets (e.g. linear species) -> Cartesian fallback.
+        # Only a genuinely degenerate set (e.g. exactly linear) stays rank
+        # -deficient after augmentation -> Cartesian fallback.
         if not coords.spans_internal_space(x):
             return None
         return coords
@@ -343,9 +303,20 @@ class RedundantInternalCoordinates:
         return b
 
     def _g_inverse(self, b, eig_tol=1.0e-6):
+        b = np.asarray(b, dtype=float)
+        nq = b.shape[0]
+        # A degenerate primitive (linear bend -> 1/sin(180deg), near-coincident
+        # atoms -> 1/r) gives a non-finite B-matrix row; flag rank 0 so the caller
+        # augments / falls back instead of poisoning g = B Bt with inf/nan (the
+        # source of the divide-by-zero / overflow / invalid matmul warnings).
+        if nq == 0 or not np.all(np.isfinite(b)):
+            return np.zeros((nq, nq)), 0
         g = b @ b.T
         w, v = np.linalg.eigh(g)
-        keep = w > eig_tol
+        # Relative cutoff: drop near-null eigenvalues so the pseudo-inverse does
+        # not divide by ~0 (an absolute cutoff lets tiny-but-positive eigenvalues
+        # through and blows the G-inverse up on ill-conditioned, near-linear sets).
+        keep = w > eig_tol * max(float(w.max()), 1.0)
         inv = (v[:, keep] / w[keep]) @ v[:, keep].T
         rank = int(np.count_nonzero(keep))
         return inv, rank
@@ -495,7 +466,14 @@ def _build_tric(atoms, x, bond_factor=1.3):
         return None
 
     bonds, neighbours, fragments = _covalent_graph(atoms, x, bond_factor)
-    primitives = _make_internals(bonds, neighbours, x)
+    # Augment the bonded internals towards 3N-6, but only with WITHIN-fragment
+    # contacts: the inter-fragment degrees of freedom are supplied by the
+    # per-fragment translation/rotation coordinates appended below, so bridging
+    # fragments here would add artificial intermolecular bonds and couple their
+    # motion.  (The original fragments are kept for those externals.)
+    aug_bonds, aug_neighbours = _augment_internals(
+        atoms, x, bonds, neighbours, natom, fragments=fragments)
+    primitives = _make_internals(aug_bonds, aug_neighbours, x)
 
     for frag in fragments:
         for axis in range(3):
@@ -641,6 +619,73 @@ def _make_internals(bonds, neighbours, x):
                 seen.add(key)
                 primitives.append(Dihedral(i, j, k, l))
     return primitives
+
+
+def _augment_internals(atoms, x, bonds, neighbours, natom, fragments=None):
+    """Add auxiliary bonds (+ the angles/torsions they enable) until the bonded
+    internal set spans the 3N-6 internal degrees of freedom.
+
+    A minimal covalent connectivity is often rank-deficient for floppy or long
+    conjugated systems (e.g. rPSB6): near-linear chain segments drop the bends
+    that would pin the missing modes, so the B-matrix cannot span 3N-6. Without
+    this, the optimizer falls back to Cartesians (or runs with an ill-conditioned
+    B), which converges slowly. We add the closest non-bonded contacts first --
+    just enough to complete the space -- and let the redundant-internal G-inverse
+    absorb the extra coordinates. Returns the (extended) bonds and neighbour map.
+
+    ``fragments`` (TRIC): when supplied, only *within-fragment* contacts are
+    considered. Inter-fragment degrees of freedom are already carried by the
+    per-fragment translation/rotation coordinates, so bridging separate
+    fragments here would inject artificial intermolecular bonds/angles and
+    couple otherwise independent fragment motion. When omitted (the redundant-
+    internal path, which first merges everything into one connected graph),
+    every pair is a candidate as before.
+
+    The loop also stops as soon as a batch fails to raise the rank: an exactly
+    collinear molecule/chain has missing bend/torsion modes that no extra
+    distance row can restore (its rank can never reach 3N-6), so this avoids
+    walking every remaining pair and diagonalizing ever-larger G matrices --
+    such degenerate inputs fall back to Cartesians quickly, as before.
+    """
+    atoms = np.asarray(atoms, dtype=int).reshape(-1)
+    x = np.asarray(x, dtype=float).reshape(-1, 3)
+    radii = np.array([covalent_radius_bohr(z) for z in atoms])
+    target = 3 * natom - 6 if natom > 2 else 3 * natom - 5
+
+    def _rank(bnd, nbr):
+        coords = RedundantInternalCoordinates(_make_internals(bnd, nbr, x), natom)
+        _, r = coords._g_inverse(coords.b_matrix(x))
+        return r
+
+    rank = _rank(bonds, neighbours)
+    if target - rank <= 0:
+        return bonds, neighbours
+
+    fragof = None
+    if fragments is not None:
+        fragof = {a: fi for fi, frag in enumerate(fragments) for a in frag}
+
+    have = {(min(a, b), max(a, b)) for (a, b) in bonds}
+    cand = sorted((np.linalg.norm(x[a] - x[b]) / (radii[a] + radii[b]), a, b)
+                  for a in range(natom) for b in range(a + 1, natom)
+                  if (a, b) not in have                       # closest contacts first
+                  and (fragof is None or fragof[a] == fragof[b]))  # intra-fragment only
+
+    bonds = list(bonds)
+    neighbours = {k: set(v) for k, v in neighbours.items()}
+    idx = 0
+    while target - rank > 0 and idx < len(cand):
+        batch = max(target - rank, 4)                         # add ~deficit at a time
+        for _, a, b in cand[idx:idx + batch]:
+            bonds.append((a, b))
+            neighbours[a].add(b)
+            neighbours[b].add(a)
+        idx += batch
+        new_rank = _rank(bonds, neighbours)
+        if new_rank <= rank:                                  # batch added no mode -> stop
+            break
+        rank = new_rank
+    return bonds, neighbours
 
 
 def build_coordinates(atoms, x, coordsys="tric"):

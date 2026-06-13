@@ -1537,10 +1537,10 @@ contains
         type is (trah_converger)
 #ifdef OQP_HAVE_OPENTRAH
           if (infos%control%trh_impl == 1) then
-            ! native Fortran trust-region augmented-Hessian solver (opt-in: trh_impl=native)
+            ! native Fortran trust-region augmented-Hessian solver (default)
             call trah_native_run(infos, mol_grid, sc, res, energy)
           else
-            ! external OpenTrustRegion library (default; validated for gradients/MRSF)
+            ! external OpenTrustRegion library (explicit trh_impl=otr)
             call init_trah_solver(infos, mol_grid, sc , energy)
             call run_trah_solver(res)
           end if
@@ -1813,4 +1813,3 @@ contains
     end if
   end function fmt_real14
 end module scf
-

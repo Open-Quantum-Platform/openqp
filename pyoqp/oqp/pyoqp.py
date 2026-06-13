@@ -222,6 +222,44 @@ class Runner:
 
         dump_log(self.mol, title='', section='start')
         dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
+        # Log the running OpenQP version + git HEAD commit so every output records
+        # which build produced it (works for source/editable installs; falls back to
+        # the package version when no git tree is reachable).
+        try:
+            import subprocess as _sp
+            _pkg = os.path.dirname(os.path.abspath(oqp.__file__))
+            # This very module: present in any OpenQP package, used as a sentinel.
+            _sentinel = os.path.join(_pkg, "pyoqp.py")
+            _ver = getattr(oqp, "__version__", "")
+            _commit = ""
+            for _d in (os.environ.get("OPENQP_ROOT"), _pkg):
+                if not _d:
+                    continue
+                # Only trust a discovered git worktree if it actually TRACKS the
+                # OpenQP package source. A wheel installed under an unrelated
+                # project's virtualenv would otherwise let `git -C <site-packages>/oqp`
+                # discover that parent project's .git and report its commit as the
+                # OpenQP build. Requiring this package file to be tracked rules that
+                # out -- it is tracked only in a genuine source/editable checkout.
+                _chk = _sp.run(["git", "-C", _d, "ls-files", "--error-unmatch", _sentinel],
+                               capture_output=True, text=True, timeout=2)
+                if _chk.returncode != 0:
+                    continue
+                _r = _sp.run(["git", "-C", _d, "rev-parse", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=2)
+                if _r.returncode == 0 and _r.stdout.strip():
+                    _commit = _r.stdout.strip()
+                    # "+dirty" reflects only the OpenQP package subtree.
+                    _dirty = _sp.run(["git", "-C", _d, "status", "--porcelain", "--", _pkg],
+                                     capture_output=True, text=True, timeout=2)
+                    if _dirty.stdout.strip():
+                        _commit += "+dirty"
+                    break
+            _bv = "OpenQP" + (" v%s" % _ver if _ver else "") + \
+                  ((" (git %s)" % _commit) if _commit else " (git commit unknown)")
+            dump_log(self.mol, section='', title='PyOQP build: %s' % _bv)
+        except Exception:
+            pass
 
     def run(self, test_mod=False):
         """
@@ -230,7 +268,6 @@ class Runner:
         Args:
             test_mod (bool): Flag to run in test mode.
         """
-
 
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]

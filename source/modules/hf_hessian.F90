@@ -503,9 +503,10 @@ contains
     block
       use grd2, only: grd2_hess_driver, grd2_compute_data_t
       use hf_gradient_mod, only: grd2_rhf_compute_data_t
-      class(grd2_compute_data_t), allocatable :: gcomp
+      type(grd2_rhf_compute_data_t) :: gcomp
       gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = hfscale, nbf = nbf )
       call gcomp%init()
+      call gcomp%build_cart(basis)
       call grd2_hess_driver(infos, basis, hess_native, gcomp)
       call gcomp%clean()
     end block
@@ -1067,9 +1068,10 @@ contains
     block
       use grd2, only: grd2_hess_driver, grd2_compute_data_t
       use hf_gradient_mod, only: grd2_uhf_compute_data_t
-      class(grd2_compute_data_t), allocatable :: gcomp
+      type(grd2_uhf_compute_data_t) :: gcomp
       gcomp = grd2_uhf_compute_data_t( da = dma, db = dmb, hfscale = hfscale, nbf = nbf )
       call gcomp%init()
+      call gcomp%build_cart(basis)
       call grd2_hess_driver(infos, basis, hess_native, gcomp)
       call gcomp%clean()
     end block
@@ -1503,7 +1505,7 @@ contains
       real(dp), allocatable :: ptP_tri(:), wlag(:), ta(:), hc(:), sm(:), tm(:)
       real(dp) :: tol
       integer :: ii, ij
-      class(grd2_compute_data_t), allocatable :: gc
+      type(grd2_uhf_compute_data_t) :: gc
 
       allocate(cocc(nbf,nocca), pap(nbf,nbf), pbp(nbf,nbf))
       allocate(paP_tri(nbf2), pbP_tri(nbf2), ptP_tri(nbf2), wlag(nbf2), ta(nbf2))
@@ -1595,6 +1597,7 @@ contains
       end block
       gc = grd2_uhf_compute_data_t( da = paP_tri, db = pbP_tri, hfscale = hfscale, nbf = nbf )
       call gc%init()
+      call gc%build_cart(basis)
       call grd2_driver(infos, basis, gout, gc)
       call gc%clean()
 

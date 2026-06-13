@@ -1100,6 +1100,19 @@ class Hessian(Calculator):
             f"Analytic Hessian is not implemented for method={method}, tdhf.type={td_type}"
         )
 
+    def _spherical_ao_active(self):
+        """Return True when the current basis is dimension-reduced by ispher."""
+        from oqp.molecule.oqpdata import ispher_mode
+        if ispher_mode(self.mol.config.get('input', {}).get('ispher', 'auto')) == 'false':
+            return False
+        try:
+            basis = self.mol.data.get_basis()
+            nbf = int(basis['nbf'])
+            ncart = int(sum(int((ang + 1) * (ang + 2) // 2) for ang in basis['angs']))
+            return nbf != ncart
+        except Exception:
+            return False
+
     def analytical_ground_state_hess(self):
         """Run the native OpenQP HF/DFT analytic Hessian kernel and return its stored matrix."""
 

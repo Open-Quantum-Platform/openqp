@@ -40,6 +40,26 @@ def string(strng):
     return strng.lower()
 
 
+def ispher_mode(strng):
+    """Normalize the ispher keyword to one of three modes:
+    'auto'  - per-shell AO convention from the basis-set metadata
+              (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
+    'true'  - force pure spherical for every l>=2 shell regardless of how
+              the basis was published (GAMESS ISPHER=1 semantics);
+    'false' - force Cartesian for every shell.
+    Booleans (from saved/dict configs) map to 'true'/'false'."""
+    if isinstance(strng, bool):
+        return 'true' if strng else 'false'
+    s = str(strng).strip().lower()
+    if s in ('auto', 'bse', 'basis'):
+        return 'auto'
+    if s in ('true', 't', '1', 'yes', 'on', '.true.'):
+        return 'true'
+    if s in ('false', 'f', '0', 'no', 'off', '.false.'):
+        return 'false'
+    raise ValueError(f"ispher must be auto, true, or false; got: {strng}")
+
+
 def path(strng):
     """Convert string to Path"""
     return Path(strng)
@@ -71,6 +91,7 @@ OQP_CONFIG_SCHEMA = {
         'runtype': {'type': string, 'default': 'energy'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
+        'ispher': {'type': ispher_mode, 'default': 'auto'},
         'd4': {'type': bool, 'default': 'False'},
         'qmmm_flag': {'type': bool, 'default': 'False'},
         # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
@@ -164,11 +185,11 @@ OQP_CONFIG_SCHEMA = {
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},
         'cam_mu': {'type': float, 'default': '-1.0'},
-        'rad_type': {'type': string, 'default': 'mhl'},
-        'rad_npts': {'type': int, 'default': '50'},
-        'ang_npts': {'type': int, 'default': '194'},
+        'rad_type': {'type': string, 'default': 'ta'},
+        'rad_npts': {'type': int, 'default': '96'},
+        'ang_npts': {'type': int, 'default': '302'},
         'partfun': {'type': string, 'default': 'ssf'},
-        'pruned': {'type': string, 'default': 'SG1'},
+        'pruned': {'type': string, 'default': 'SG2'},
         'grid_ao_pruned': {'type': bool, 'default': 'True'},
         'grid_ao_threshold': {'type': float, 'default': '1.0e-15'},
         'grid_ao_sparsity_ratio': {'type': float, 'default': '0.9'},
@@ -760,16 +781,11 @@ class OQPData:
         """
         Select the TRAH implementation.
         Valid values:
-          auto   : native for ground-state SCF energy (validated, incl. broken
-                   symmetry); OTR for paths that need canonical orbitals
-                   (gradients, geometry, Hessian, excited-state/MRSF, couplings).
-                   Resolved in apply_config once runtype/method are known.
-          otr    : external OpenTrustRegion library
+          auto   : native Fortran trust-region augmented-Hessian solver
           native : native Fortran trust-region augmented-Hessian solver
+          otr    : external OpenTrustRegion library
         """
-        # 'auto' is tentatively OTR here; apply_config() resolves it to native
-        # for ground-state energy runs once the full config is available.
-        impl_map = {"otr": 0, "native": 1, "auto": 0}
+        impl_map = {"otr": 0, "native": 1, "auto": 1}
         if not isinstance(trh_impl, str):
             raise TypeError("trh_impl must be a string")
         self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
@@ -1030,24 +1046,17 @@ class OQPData:
         Apply the data from the OQP config
         The latter has to be read from the input file
         """
+        lib.oqp_set_harmonic_active(ispher_mode(config['input'].get('ispher', 'auto')) != 'false')
         for section in config:
             self.parse_section(config, section)
 
         molecule = self._data
 
-        # Resolve 'auto' TRAH implementation now that runtype/method are known.
-        # Native TRAH is validated for ground-state SCF energy (all SCF types,
-        # incl. broken symmetry) but converges open-shell references to a
-        # different (non-canonical) stationary point than OTR, which corrupts
-        # analytic gradients and MRSF/SF excited states. So default to native
-        # only for single-point ground-state energy; use OTR everywhere a
-        # canonical reference is required. Explicit trh_impl=native/otr wins.
+        # Native TRAH is the default implementation. Explicit trh_impl=otr still
+        # selects the external OpenTrustRegion implementation when it is compiled.
         trh_choice = str(config.get('scf', {}).get('trh_impl', 'auto')).strip().lower()
         if trh_choice == 'auto':
-            runtype = str(config.get('input', {}).get('runtype', 'energy')).strip().lower()
-            method = str(config.get('input', {}).get('method', 'hf')).strip().lower()
-            native_ok = (runtype == 'energy') and (method == 'hf')
-            molecule.control.trh_impl = 1 if native_ok else 0
+            molecule.control.trh_impl = 1
         natom = molecule.mol_prop.natom
         charge = molecule.mol_prop.charge
         nelec = sum(int(molecule.qn[i]) for i in range(natom)) - charge
