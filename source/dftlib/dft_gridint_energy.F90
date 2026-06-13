@@ -25,7 +25,7 @@ module mod_dft_gridint_energy
 !-------------------------------------------------------------------------------
 
   private
-  public dmatd_blk
+  public dmatd_blk, dmatd_density_blk
 
 !-------------------------------------------------------------------------------
 
@@ -396,7 +396,103 @@ contains
 
     call dat%clean()
 
-  end subroutine
+  end subroutine dmatd_blk
+
+!-------------------------------------------------------------------------------
+
+  subroutine dmatd_density_blk(basis, molGrid, dena, denb, fa, fb, &
+                       exc, totele, totkin, &
+                       mxAngMom, nbf, dft_threshold, urohf, infos)
+    use mod_dft_molgrid, only: dft_grid_t
+    use basis_tools, only: basis_set
+    use mod_dft_gridint, only: xc_options_t, run_xc
+    use types, only: information
+    implicit none
+
+    type(dft_grid_t), target, intent(in) :: molGrid
+    type(information), target, intent(in) :: infos
+    type(basis_set) :: basis
+    logical, intent(in) :: urohf
+    integer, intent(in) :: mxAngMom, nbf
+    real(kind=fp), intent(out) :: exc, totele, totkin
+    real(kind=fp), target, intent(in) :: dena(nbf,nbf), denb(nbf,nbf)
+    real(kind=fp), intent(inout) :: fa(*), fb(*)
+    real(kind=fp), intent(in) :: dft_threshold
+
+    type(xc_consumer_ks_t) :: dat
+    type(xc_options_t) :: xc_opts
+    real(kind=fp), target, allocatable :: da2(:,:), db2(:,:)
+    integer :: i0, i, j, nang
+
+    allocate(da2(nbf,nbf), source=0.0_fp)
+    do j = 1, nbf
+      da2(:,j) = dena(:,j)*basis%bfnrm(j)*basis%bfnrm(1:nbf)
+    end do
+    if (urohf) then
+      allocate(db2(nbf,nbf), source=0.0_fp)
+      do j = 1, nbf
+        db2(:,j) = denb(:,j)*basis%bfnrm(j)*basis%bfnrm(1:nbf)
+      end do
+    end if
+
+    nang = maxval(basis%am)+1+1
+    fa(1:nbf*(nbf+1)/2) = 0.0_fp
+    if (urohf) fb(1:nbf*(nbf+1)/2) = 0.0_fp
+    exc = 0.0_fp
+    totele = 0.0_fp
+    totkin = 0.0_fp
+
+    xc_opts%isGGA = infos%functional%needGrd
+    xc_opts%needTau = infos%functional%needTau
+    xc_opts%functional => infos%functional
+    xc_opts%hasBeta = urohf
+    xc_opts%isWFVecs = .false.
+    xc_opts%numAOs = nbf
+    xc_opts%maxPts = molGrid%maxSlicePts
+    xc_opts%limPts = molGrid%maxNRadTimesNAng
+    xc_opts%numAtoms = infos%mol_prop%natom
+    xc_opts%maxAngMom = nang
+    xc_opts%nDer = 0
+    xc_opts%numOccAlpha = infos%mol_prop%nelec_A
+    xc_opts%numOccBeta = infos%mol_prop%nelec_B
+    xc_opts%wfAlpha => da2
+    if (urohf) xc_opts%wfBeta => db2
+    xc_opts%molGrid => molGrid
+    xc_opts%dft_threshold = dft_threshold
+    xc_opts%ao_threshold = infos%dft%grid_ao_threshold
+    xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    call run_xc(xc_opts, dat, basis)
+
+    exc = dat%E_xc
+    totele = dat%N_elec
+    totkin = dat%E_kin
+
+    i0 = 0
+    do i = 1, nbf
+      fa(i0+1:i0+i) = fa(i0+1:i0+i) + &
+                      dat%fa2((i-1)*nbf+1:(i-1)*nbf+i,1) &
+                      *basis%bfnrm(i) &
+                      *basis%bfnrm(1:i)
+      i0 = i0+i
+    end do
+
+    if (urohf) then
+      i0 = 0
+      do i = 1, nbf
+        fb(i0+1:i0+i) = fb(i0+1:i0+i) + &
+                        dat%fb2((i-1)*nbf+1:(i-1)*nbf+i,1) &
+                        *basis%bfnrm(i) &
+                        *basis%bfnrm(1:i)
+        i0 = i0+i
+      end do
+    end if
+
+    call dat%clean()
+    if (allocated(da2)) deallocate(da2)
+    if (allocated(db2)) deallocate(db2)
+  end subroutine dmatd_density_blk
 
 !-------------------------------------------------------------------------------
 

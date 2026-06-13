@@ -1561,6 +1561,49 @@ contains
 
   end subroutine calc_dft_xc
 
+  !> @brief Computes DFT exchange-correlation contributions from explicit AO density matrices.
+  subroutine calc_dft_xc_density(infos, basis, molgrid, dmat, pfxc, eexc, totele, totkin)
+    use precision, only: dp
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use basis_tools, only: basis_set
+    use mod_dft_gridint_energy, only: dmatd_density_blk
+    use mathlib, only: unpack_matrix
+    implicit none
+
+    type(information), intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    type(dft_grid_t), intent(in) :: molgrid
+    real(kind=dp), intent(in) :: dmat(:,:)
+    real(kind=dp), intent(out) :: pfxc(:,:)
+    real(kind=dp), intent(out) :: eexc, totele, totkin
+
+    integer :: scf_type, nbf, nbf_tri, nang
+    logical :: urohf
+    real(kind=dp), allocatable :: da(:,:), db(:,:)
+
+    scf_type = infos%control%scftype
+    urohf = scf_type /= scf_rhf
+    nbf = basis%nbf
+    nbf_tri = nbf*(nbf+1)/2
+    nang = maxval(basis%am)+1+1
+    allocate(da(nbf,nbf), source=0.0_dp)
+    call unpack_matrix(dmat(:,1), da, nbf, "U")
+    allocate(db(nbf,nbf), source=0.0_dp)
+    if (urohf .and. size(dmat,2) > 1) then
+      call unpack_matrix(dmat(:,2), db, nbf, "U")
+    else
+      db = da
+    end if
+
+    pfxc = 0.0_dp
+    call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
+                          eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
+                          urohf, infos)
+
+    deallocate(da, db)
+  end subroutine calc_dft_xc_density
+
   !> @brief Builds J/K (and optional DFT XC) Fock contribution(s) and energies.
   !> @detail Forms two-electron Fock using `fock_jk`, adds the one-electron core
   !>         Hamiltonian, and accumulates SCF energy components:
@@ -1590,7 +1633,7 @@ contains
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
-                               molgrid, mo_a, mo_b, nschwz, f_old, d_old)
+                               molgrid, mo_a, mo_b, nschwz, f_old, d_old, density_xc)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
@@ -1609,6 +1652,7 @@ contains
     real(dp),          intent(inout),optional :: mo_b(:,:)  ! (nbf, nbf)
     real(dp),          intent(inout) :: f(:,:)              ! (nbf_tri, nfocks)
     real(dp), intent(inout), optional        :: d_old(:,:), f_old(:,:)
+    logical, intent(in), optional :: density_xc
     integer,  intent(inout)    :: nschwz
     integer, intent(in) :: nfocks
 
@@ -1617,9 +1661,11 @@ contains
     integer  :: scf_type, nbf
     integer :: ii
     real(dp), allocatable :: pfxc(:,:)
-    logical :: is_dft = .false.
+    logical :: is_dft = .false., use_density_xc
 
     is_dft = infos%control%hamilton >= 20
+    use_density_xc = .false.
+    if (present(density_xc)) use_density_xc = density_xc
     if (is_dft) then
       scale_factor = infos%dft%HFscale
     else
@@ -1676,7 +1722,11 @@ contains
     allocate(pfxc(nbf*(nbf+1)/2, nfocks))
     pfxc = 0.0_dp
 
-    call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+    if (use_density_xc) then
+      call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+    else
+      call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+    end if
 
     f = f + pfxc
     E%etot=E%etot + E%eexc
@@ -1773,10 +1823,10 @@ contains
     fock_ao = 0.0_dp
     if (present(dens_old)) then
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old)
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old, density_xc=present(dens_in))
     else
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz)
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, density_xc=present(dens_in))
     end if
 
     E%psinrm    = 0.0_dp
