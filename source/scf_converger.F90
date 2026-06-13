@@ -553,6 +553,8 @@ module scf_converger
   contains
     procedure, pass :: get_mo_a     => conv_result_trah_get_mo_a
     procedure, pass :: get_mo_b     => conv_result_trah_get_mo_b
+    procedure, pass :: get_mo_e_a   => conv_result_trah_get_mo_e_a
+    procedure, pass :: get_mo_e_b   => conv_result_trah_get_mo_e_b
     procedure, pass :: get_fock     => conv_result_trah_get_fock
     procedure, pass :: get_rms_grad => conv_result_trah_get_rms_g
     procedure, pass :: get_iter     => conv_result_trah_get_iter
@@ -1395,6 +1397,34 @@ contains
     matrix = self%dat%buffer(self%dat%slot)%mo_b
     istat = 0
   end subroutine conv_result_trah_get_mo_b
+
+  subroutine conv_result_trah_get_mo_e_a(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_a
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_a
+
+  subroutine conv_result_trah_get_mo_e_b(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_b
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_b
 
   subroutine conv_result_trah_get_fock(self, matrix, istat)
     class(scf_conv_trah_result), intent(in) :: self

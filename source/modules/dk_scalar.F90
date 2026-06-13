@@ -240,7 +240,8 @@ contains
     use basis_tools,       only: basis_set, bas_norm_matrix
     use mod_1e_primitives, only: comp_pvp_int1_prim, update_triang_matrix
     use mod_shell_tools,   only: shell_t, shpair_t
-    use constants,         only: tol_int
+    use cart2sph,          only: cart2sph_mat
+    use constants,         only: HARMONIC_ACTIVE, tol_int
     use messages,          only: show_message, with_abort
     use precision,         only: dp
     use io_constants,      only: iw
@@ -300,6 +301,8 @@ contains
                 end do
             end do
 
+            if (HARMONIC_ACTIVE .and. (shi%harmonic == 1 .or. shj%harmonic == 1)) &
+                call cart2sph_mat(pvpblk, shj%ang, shj%harmonic, shi%ang, shi%harmonic, iandj=(shi%shid==shj%shid))
             call update_triang_matrix(shi, shj, pvpblk, pvpmat)
         end do
     end do

@@ -69,7 +69,6 @@ module solvent_pcm
   use messages, only: show_message, with_abort
   use io_constants, only: iw
   use mathlib, only: traceprod_sym_packed
-  use constants, only: NUM_CART_BF
   use oqp_tagarray_driver, only: OQP_SM, data_has_tags, tagarray_get_data
   use int1, only: electrostatic_potential_unweighted, external_charge_potential, &
        multipole_integrals
@@ -549,7 +548,7 @@ contains
     do ish = 1, basis%nshell
       iatom = basis%origin(ish)
       i0 = basis%ao_offset(ish)
-      i1 = basis%ao_offset(ish) + NUM_CART_BF(basis%am(ish)) - 1
+      i1 = basis%ao_offset(ish) + basis%naos(ish) - 1
       atom_pop(iatom) = atom_pop(iatom) + sum(ao_pop(i0:i1))
     end do
   end subroutine mulliken_atomic_population_from_density
@@ -573,7 +572,7 @@ contains
     do ish = 1, basis%nshell
       iat = basis%origin(ish)
       i0 = basis%ao_offset(ish)
-      i1 = basis%ao_offset(ish) + NUM_CART_BF(basis%am(ish)) - 1
+      i1 = basis%ao_offset(ish) + basis%naos(ish) - 1
       ao_atom(i0:i1) = iat
     end do
 

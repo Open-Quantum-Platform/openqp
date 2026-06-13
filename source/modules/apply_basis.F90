@@ -94,6 +94,27 @@ contains
                       infos%alt_basis%nshell, infos%alt_basis%nprim, &
                       infos%alt_basis%nbf, infos%alt_basis%mxam
     endif
+
+    ! Report the angular (Cartesian vs pure spherical-harmonic) AO treatment.
+    block
+      use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
+      integer :: ish, ncart, nsphsh
+      ncart = 0
+      nsphsh = 0
+      do ish = 1, infos%basis%nshell
+        ncart = ncart + NUM_CART_BF(infos%basis%am(ish))
+        if (infos%basis%harmonic(ish) == 1) nsphsh = nsphsh + 1
+      end do
+      if (HARMONIC_ACTIVE .and. nsphsh > 0) then
+        write(iw,'(5X,"AO angular type: spherical harmonics (5d/7f/9g)")')
+        write(iw,'(5X,"Pure spherical shells  =",I8)') nsphsh
+        write(iw,'(5X,"Spherical AO functions =",I8,5X,"Cartesian-equivalent =",I8/)') &
+                infos%basis%nbf, ncart
+      else
+        write(iw,'(5X,"AO angular type: Cartesian (6d/10f/15g)"/)')
+      end if
+    end block
+
     close (iw)
 
     call print_basis(infos)

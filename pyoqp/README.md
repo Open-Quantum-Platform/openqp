@@ -18,26 +18,25 @@
 
 ## Installation
 
-- download the source files
+PyOQP is installed together with the OpenQP native library by the top-level
+pip install (see the main [README](../README.md) for details and build options):
 
-      git https://qchemlab.knu.ac.kr/open-quantum-package/modules.git
-
-- compile OQP
-
-      following instructions in /modules/README.md
-
-- install PyOQP
-
-      cd ./modules/pyoqp/pyoqp
+      git clone https://github.com/Open-Quantum-Platform/openqp.git
+      cd openqp
       pip install .
+
+No environment variables are required afterwards: the installed package
+locates its own native library and data files, so do not set `OPENQP_ROOT`.
+
+Only the manual cmake/ninja development flow ("Detailed Compile" in the main
+README, where the native library stays in the source tree and PyOQP is
+installed from this directory) still needs `OPENQP_ROOT` pointing at that tree.
 
 ## Usage
 
-- required environment variable
+- optional environment variable
 
-      export OPENQP_ROOT=/path/to/oqp
       export OMP_NUM_THREADS=4
-      export LD_LIBRARY_PATH=/other/dependent/lib:$LD_LIBRARY_PATH
 
 - test pyoqp
 
