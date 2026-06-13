@@ -69,7 +69,6 @@ def load_runfunc_with_namd_stubs():
         "oqp.library.libscipy": types.ModuleType("oqp.library.libscipy"),
         "oqp.library.libgeometric": types.ModuleType("oqp.library.libgeometric"),
         "oqp.library.liboqp": types.ModuleType("oqp.library.liboqp"),
-        "oqp.library.libdlfind": types.ModuleType("oqp.library.libdlfind"),
     }
     for module_name, names in {
         "oqp.library.libscipy": ("StateSpecificOpt", "MECIOpt", "MECPOpt", "MEP", "QMMMOpt"),
@@ -92,7 +91,6 @@ def load_runfunc_with_namd_stubs():
             "OQPIRCOpt",
             "OQPMEPOpt",
         ),
-        "oqp.library.libdlfind": ("DLFindMin", "DLFindTS", "DLFindMECI", "DLFindQMMM"),
     }.items():
         for name in names:
             setattr(modules[module_name], name, noop)

@@ -107,10 +107,6 @@ def load_runfunc_with_stubs():
     for name in ("StateSpecificOpt", "MECIOpt", "MECPOpt", "MEP", "QMMMOpt"):
         setattr(libscipy, name, _Noop)
 
-    libdlfind = types.ModuleType("oqp.library.libdlfind")
-    for name in ("DLFindMin", "DLFindTS", "DLFindMECI", "DLFindQMMM"):
-        setattr(libdlfind, name, _Noop)
-
     libgeometric = types.ModuleType("oqp.library.libgeometric")
     for name in (
         "GeometricIRCOpt",
@@ -144,7 +140,6 @@ def load_runfunc_with_stubs():
         "oqp.library.dftbplus",
         "oqp.library.single_point",
         "oqp.library.libscipy",
-        "oqp.library.libdlfind",
         "oqp.library.libgeometric",
         "oqp.library.liboqp",
         "oqp.library.namd",
@@ -155,7 +150,6 @@ def load_runfunc_with_stubs():
         "oqp.library.dftbplus": dftbplus,
         "oqp.library.single_point": single_point,
         "oqp.library.libscipy": libscipy,
-        "oqp.library.libdlfind": libdlfind,
         "oqp.library.libgeometric": libgeometric,
         "oqp.library.liboqp": liboqp,
         "oqp.library.namd": namd,

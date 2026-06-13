@@ -20,8 +20,6 @@ from oqp.library.liboqp import (
     OQPOpt, OQPTSOpt, OQPMECIOpt, OQPMECPOpt, OQPTCIOpt,
     OQPNEBOpt, OQPIRCOpt, OQPMEPOpt,
 )
-from oqp.library.libdlfind import DLFindMin, DLFindTS, DLFindMECI, DLFindQMMM
-from oqp.library.namd import NAMD
 #from oqp.library.libopenmm import QMMM_MD
 
 
@@ -51,6 +49,7 @@ def compute_namd(mol):
             from oqp.library.namd import NAMD_SOC
             NAMD_SOC(mol).run()
     else:
+        from oqp.library.namd import NAMD
         NAMD(mol).run()
 
 
@@ -290,11 +289,6 @@ def get_optimizer(mol):
             'neb': OQPNEBOpt,
         },
     }
-
-    # QM/MM dispatch (wired up later with the qmmm_flag input option):
-    #    if runtype == 'optimize' and mol.config['input']['qmmm_flag']:
-    #       if lib == 'dlfind': opt_lib[lib][runtype] = DLFindQMMM
-    #       elif lib == 'scipy': opt_lib[lib][runtype] = QMMMOpt
 
     if opt_lib[lib].get(runtype):
         return opt_lib[lib][runtype](mol)
