@@ -53,6 +53,11 @@ if(ENABLE_DDX)
     add_dependencies(oqp ddx)
   endif()
   target_link_libraries(oqp DDX::ddx)
+  # solvent_pcm.F90 does `use ddx_harmonics`; gfortran needs ddX's Fortran
+  # module dir (ddx_harmonics.mod) on the include path. The autobuild DDX::ddx
+  # target does not always propagate it, so add it explicitly (harmless if the
+  # imported target already carries it).
+  target_include_directories(oqp PRIVATE ${DDX_INCLUDE_DIR})
   install(FILES ${DDX_LIBRARY} DESTINATION lib)
 endif()
 if(ENABLE_MPI)

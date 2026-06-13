@@ -85,7 +85,12 @@ module solvent_pcm
   ! evaluates the normalised real solid harmonics in ddX's exact convention.
   ! Using them directly (rather than vendoring a copy) keeps ddX external and
   ! guarantees the per-l normalisation/ordering matches the model ddX builds.
+  ! Only available when OpenQP is built with ddX (OQP_ENABLE_DDX); the whole
+  ! full-density source projection is unreachable otherwise (the C adapter
+  ! returns status 2 and add_pcm_reaction_field aborts before it is called).
+#ifdef OQP_ENABLE_DDX
   use ddx_harmonics, only: ylmscale, ylmbas
+#endif
 
   implicit none
   private
@@ -690,6 +695,7 @@ contains
     real(dp) :: rho, ctheta, stheta, cphi, sphi, t, ratio2, sqrt4pi
     integer  :: n, ind
 
+#ifdef OQP_ENABLE_DDX
     if (src_q == 0.0_dp) return
     sqrt4pi = sqrt(4.0_dp * acos(-1.0_dp))
 
@@ -722,6 +728,12 @@ contains
         t = t * ratio2
       end do
     end if
+#else
+    ! Unreachable without ddX (callers gate on the C adapter's ddX-availability
+    ! status); abort defensively. Unused dummy args here are intentional.
+    call show_message('PCM full-density source projection requires a ddX-enabled &
+        &build (OQP_ENABLE_DDX)', with_abort)
+#endif
   end subroutine pcm_accumulate_leak
 
   subroutine build_full_density_multipoles(basis, infos, density_packed, charges, &
@@ -808,7 +820,12 @@ contains
     dat%natom = natom
     dat%xyz => xyz
     allocate(dat%vscales(dat%nbasis))
+#ifdef OQP_ENABLE_DDX
     call ylmscale(lmax, dat%vscales, v4pi2lp1, vscales_rel)
+#else
+    call show_message('PCM full-density source projection requires a ddX-enabled &
+        &build (OQP_ENABLE_DDX)', with_abort)
+#endif
     allocate(dat%radii(natom))
     dat%radii(:) = radii(1:natom)
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
