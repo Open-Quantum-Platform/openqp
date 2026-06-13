@@ -1138,8 +1138,10 @@ contains
 
     ! QM/MM (ESPF): excited-state Mulliken population and ESP charges for the
     ! relaxed density, needed for the MM electrostatic embedding gradient.
-    call mulliken_excited(infos)
-    call form_esp_charges_excited(infos)
+    if (infos%control%qmmm_flag) then
+       call mulliken_excited(infos)
+       call form_esp_charges_excited(infos)
+    end if
 
     call int2_driver%clean()
 

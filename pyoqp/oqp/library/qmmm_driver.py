@@ -364,6 +364,7 @@ class OpenQpQMMM:
         topology=self.topology
         forcefield=self.forcefield
         qm_atoms =self.qm_atoms
+        qm_set = set(int(i) for i in qm_atoms)
         Cutoff=self.Cutoff
         nb_cutoff = _periodic_nonbonded_cutoff(topology, Cutoff)
 
@@ -374,7 +375,7 @@ class OpenQpQMMM:
 
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chgProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
-            if (p1 not in qm_atoms) or (p2 not in qm_atoms):
+            if (int(p1) in qm_set) or (int(p2) in qm_set):
                nonbonded.setExceptionParameters(i, p1, p2, chgProd, 0.0, 0.0)
 
         for p1 in qm_atoms:

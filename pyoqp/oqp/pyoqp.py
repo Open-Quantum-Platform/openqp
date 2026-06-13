@@ -412,14 +412,15 @@ def main():
         qmmm_flag = _cfg.getboolean('input', 'qmmm_flag', fallback=False)
     except Exception:
         qmmm_flag = False
-    # runtype=namd with qmmm goes through the Runner (-> compute_namd ->
-    # NAMD_QMMM); only the ground-state OpenMM-MD path is handled here.
+    # Only the legacy ground-state OpenMM-MD path is handled here. QM/MM energy,
+    # gradient, optimization, and NAMD inputs go through Runner so their normal
+    # runtype dispatch and read_system paths are preserved.
     runtype_l = ""
     try:
         runtype_l = _cfg.get('input', 'runtype', fallback='energy').strip().lower()
     except Exception:
         runtype_l = 'energy'
-    if qmmm_flag and runtype_l != 'namd':
+    if qmmm_flag and runtype_l == 'md':
         from oqp.library.qmmm_md import QMMM_MD
         md = QMMM_MD(oqp_cfg=input_file)
         md.run()

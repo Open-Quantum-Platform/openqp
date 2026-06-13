@@ -19,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
 NAMD = ROOT / "pyoqp" / "oqp" / "library" / "namd.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
+PYOQP = ROOT / "pyoqp" / "oqp" / "pyoqp.py"
+QMMM_DRIVER = ROOT / "pyoqp" / "oqp" / "library" / "qmmm_driver.py"
+MRSF_Z_VECTOR = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
 
 
 def load_runfunc_with_namd_stubs():
@@ -178,6 +181,35 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)", src)
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
+
+    def test_qmmm_single_point_inputs_stay_on_runner_path(self):
+        src = PYOQP.read_text()
+
+        self.assertIn("if qmmm_flag and runtype_l == 'md':", src)
+        self.assertNotIn("if qmmm_flag and runtype_l != 'namd':", src)
+
+    def test_mm_mm_nonbonded_exceptions_are_preserved(self):
+        src = QMMM_DRIVER.read_text()
+
+        self.assertIn("qm_set = set(int(i) for i in qm_atoms)", src)
+        self.assertIn("if (int(p1) in qm_set) or (int(p2) in qm_set):", src)
+        self.assertNotIn("if (p1 not in qm_atoms) or (p2 not in qm_atoms):", src)
+
+    def test_trivial_crossing_active_state_updates_are_applied(self):
+        src = NAMD.read_text()
+
+        self.assertGreaterEqual(src.count("active_changed = new_active != active_old"), 2)
+        self.assertIn("kernel can update ACTIVE without marking HOPPED", src)
+
+    def test_espf_charge_fit_is_qmmm_only_in_mrsf_z_vector(self):
+        src = MRSF_Z_VECTOR.read_text()
+
+        block = re.search(
+            r"if \(infos%control%qmmm_flag\) then\s+call mulliken_excited\(infos\)\s+call form_esp_charges_excited\(infos\)\s+end if",
+            src,
+            re.S,
+        )
+        self.assertIsNotNone(block)
 
 
 if __name__ == "__main__":

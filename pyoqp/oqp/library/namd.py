@@ -289,11 +289,15 @@ class NAMD:
 
             # state overlap (couplings) and FSSH hop
             self._state_overlap()
+            active_old = self.active
             new_active, hopped = self._hop()
 
-            if hopped:
+            active_changed = new_active != active_old
+            if active_changed:
                 self.active = new_active
-                # force for the next step is on the new active surface
+                # force for the next step is on the new active surface. This
+                # also covers trivial-crossing following, where the Fortran
+                # kernel can update ACTIVE without marking HOPPED.
                 accel_new = -self._active_gradient() / self.mass[:, None]
 
             accel = accel_new
@@ -670,9 +674,11 @@ class NAMD_QMMM(NAMD):
             # couplings + QM-only FSSH hop
             self._state_overlap()
             self.vel = self.v_all[self.qm_atoms].copy()       # hop sees QM velocities
+            active_old = self.active
             new_active, hopped = self._hop()
             self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
-            if hopped:
+            active_changed = new_active != active_old
+            if active_changed:
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
                 accel_new = f_all / self.m_all[:, None]
