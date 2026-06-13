@@ -249,6 +249,7 @@ contains
     real(dp) :: q_cav_shift_rms, q_cav_full_vs_l2_rms, psi_full_norm, mult_full_norm
     real(dp) :: fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr
     integer :: fd_fock_samples
+    logical :: pcm_diag
     real(dp), allocatable :: xyz(:,:), charges(:)
     real(dp), allocatable :: cav_xyz(:), cx(:), cy(:), cz(:)
     real(dp), allocatable :: phi_elec(:), phi_cav(:), phi_source(:), q_cav(:), q_cav_source(:)
@@ -278,6 +279,11 @@ contains
     ! oracle; it must not be imitated here.
     f_epsilon = (eps - 1.0_dp) / eps
     nbf_tri = size(d, 1)
+    ! Convention self-diagnostics (two extra baseline ddX solves, a finite-
+    ! difference Fock-scale probe, and a ~40-line per-cycle log block) are gated
+    ! to high verbosity. Production runs (verbose <= 2, the default) perform a
+    ! single full-density ddX solve and emit no PCM diag lines.
+    pcm_diag = (infos%control%verbose >= 3)
 
     allocate(xyz(3, natom), charges(natom))
     xyz(:,:) = infos%atoms%xyz(:, 1:natom)
@@ -333,44 +339,50 @@ contains
     ! density by parent-atom Becke-partitioned grid quadrature, in the exact ddX harmonic
     ! convention, mapped to psi by the ddX rule. The l<=2 Mulliken-multipole
     ! source (3a/3b) is retained ONLY as a diagnostic baseline.
-    allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
-             ao_dip(3, basis%nbf), atom_dip(3, natom), &
-             ao_quad(6, basis%nbf), atom_quad(6, natom), source=0.0_dp)
-    call data_has_tags(infos%dat, tags_overlap, &
-                       'solvent_pcm:add_pcm_reaction_field', with_abort)
-    call tagarray_get_data(infos%dat, OQP_SM, smat)
-    call mulliken_atomic_population_from_density(basis, smat, dtot, &
-                                                 ao_pop, atom_pop)
-    call mulliken_atomic_multipoles_from_density(basis, dtot, atom_pop, &
-                                                 ao_dip, atom_dip, ao_quad, atom_quad)
-    source_charges(:) = charges(:) - atom_pop(:)
+    ! Production needs only the full-density adjoint solve (3c) below; q_cav is
+    ! its cavity-projected adjoint charge that drives the Fock matrix and e_pcm.
+    allocate(q_cav(ncav))
 
-    nmultipoles = 9_c_int
-    allocate(source_multipoles(nmultipoles, natom), source=0.0_dp)
-    call pack_ddx_l2_multipoles(source_charges, atom_dip, atom_quad, source_multipoles)
+    if (pcm_diag) then
+      ! (3a/3b) DIAGNOSTIC ONLY -- the l<=2 Mulliken-multipole source, retained
+      ! as a baseline so the q_cav shift from upgrading to the full-density Psi
+      ! can be measured. Skipped in production: it costs two extra ddX solves per
+      ! SCF cycle and never feeds the Fock matrix or e_pcm.
+      allocate(ao_pop(basis%nbf), atom_pop(natom), source_charges(natom), &
+               ao_dip(3, basis%nbf), atom_dip(3, natom), &
+               ao_quad(6, basis%nbf), atom_quad(6, natom), source=0.0_dp)
+      call data_has_tags(infos%dat, tags_overlap, &
+                         'solvent_pcm:add_pcm_reaction_field', with_abort)
+      call tagarray_get_data(infos%dat, OQP_SM, smat)
+      call mulliken_atomic_population_from_density(basis, smat, dtot, &
+                                                   ao_pop, atom_pop)
+      call mulliken_atomic_multipoles_from_density(basis, dtot, atom_pop, &
+                                                   ao_dip, atom_dip, ao_quad, atom_quad)
+      source_charges(:) = charges(:) - atom_pop(:)
 
-    allocate(phi_source(ncav), q_cav(ncav), q_cav_source(ncav), q_cav_l2(ncav))
+      nmultipoles = 9_c_int
+      allocate(source_multipoles(nmultipoles, natom), source=0.0_dp)
+      call pack_ddx_l2_multipoles(source_charges, atom_dip, atom_quad, source_multipoles)
 
-    ! (3a) DIAGNOSTIC -- legacy all-multipole solve: both Phi and Psi from the
-    ! l<=2 atom-centered source. Exposes phi_source (source-vs-exact phi
-    ! residual) and q_cav_source. Does not feed the Fock matrix or e_pcm.
-    rc = oqp_ddx_pcm_solve_multipole_source(natom, xyz, charges, &
-         nmultipoles, source_multipoles, eps, ncav, phi_source, q_cav_source, &
-         esolv_source, cmsg, int(size(cmsg), c_int))
-    if (rc /= 0) then
-      call c_message_to_fortran(cmsg, fmsg)
-      call show_message('PCM (ddX) diagnostic source solve failed: '//trim(fmsg), with_abort)
-    end if
+      allocate(phi_source(ncav), q_cav_source(ncav), q_cav_l2(ncav))
 
-    ! (3b) DIAGNOSTIC -- previous production path: exact phi_cav + l<=2 multipole
-    ! Psi. Kept so the q_cav shift from upgrading to full-density Psi can be
-    ! measured (q_cav_full_vs_l2_rms below).
-    rc = oqp_ddx_pcm_solve_multipole_source_with_phi(natom, xyz, charges, &
-         nmultipoles, source_multipoles, eps, ncav, phi_cav, q_cav_l2, esolv_l2, &
-         cmsg, int(size(cmsg), c_int))
-    if (rc /= 0) then
-      call c_message_to_fortran(cmsg, fmsg)
-      call show_message('PCM (ddX) l2-psi diagnostic solve failed: '//trim(fmsg), with_abort)
+      ! (3a) legacy all-multipole solve: both Phi and Psi from the l<=2 source.
+      rc = oqp_ddx_pcm_solve_multipole_source(natom, xyz, charges, &
+           nmultipoles, source_multipoles, eps, ncav, phi_source, q_cav_source, &
+           esolv_source, cmsg, int(size(cmsg), c_int))
+      if (rc /= 0) then
+        call c_message_to_fortran(cmsg, fmsg)
+        call show_message('PCM (ddX) diagnostic source solve failed: '//trim(fmsg), with_abort)
+      end if
+
+      ! (3b) previous production path: exact phi_cav + l<=2 multipole Psi.
+      rc = oqp_ddx_pcm_solve_multipole_source_with_phi(natom, xyz, charges, &
+           nmultipoles, source_multipoles, eps, ncav, phi_cav, q_cav_l2, esolv_l2, &
+           cmsg, int(size(cmsg), c_int))
+      if (rc /= 0) then
+        call c_message_to_fortran(cmsg, fmsg)
+        call show_message('PCM (ddX) l2-psi diagnostic solve failed: '//trim(fmsg), with_abort)
+      end if
     end if
 
     ! (3c) PRODUCTION solve -- full-density Psi (l = 0..PCM_PSI_LMAX) from the AO
@@ -405,13 +417,17 @@ contains
     ! ---- Phase 4: V_pcm AO matrix, add to Fock blocks, report E_pcm --------
     allocate(vpcm(nbf_tri))
     call external_charge_potential(basis, vpcm, cx, cy, cz, q_cav)
-    ! FD-validate dE/dphi = -0.5*q_cav about the EXACT phi_cav baseline using the
-    ! SAME full-density psi as the production solve, so the perturbed re-solves
-    ! match the production forward/adjoint source.
-    call pcm_fock_scale_fd_diagnostic(natom, xyz, charges, eps, ncav, nbasis, &
-         psi_full, phi_cav, q_cav, &
-         fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr, &
-         fd_fock_samples)
+    ! FD self-test of dE/dphi = -0.5*q_cav about the EXACT phi_cav baseline
+    ! (verbose >= 3 only): two extra perturbed ddX re-solves per cycle, purely
+    ! for convention validation. Skipped in production.
+    fd_fock_scale_mean = 0.0_dp; fd_fock_scale_rms = 0.0_dp
+    fd_fock_scale_maxerr = 0.0_dp; fd_fock_samples = 0
+    if (pcm_diag) then
+      call pcm_fock_scale_fd_diagnostic(natom, xyz, charges, eps, ncav, nbasis, &
+           psi_full, phi_cav, q_cav, &
+           fd_fock_scale_mean, fd_fock_scale_rms, fd_fock_scale_maxerr, &
+           fd_fock_samples)
+    end if
     ! Fock reaction-field operator. The variational PCM free energy
     !   E_pcm = -0.5 * <phi_cav(D), q_cav(D)>
     ! is quadratic in D (both phi_cav and q_cav are linear in D for the
@@ -451,6 +467,7 @@ contains
     ! alongside the ddX esolv so the e_pcm-vs-(1/2)Tr[D.V] bookkeeping question
     ! can be measured rather than assumed. psi_source records the QM source now
     ! used consistently for ddX phi and psi.
+    if (pcm_diag) then
     half_tr_dv  = 0.5_dp * traceprod_sym_packed(dtot, vpcm, basis%nbf)
     q_cav_sum   = sum(q_cav)
     q_cav_absnorm = sqrt(sum(q_cav*q_cav))
@@ -526,6 +543,7 @@ contains
     write(iw,'(1x,"PCM diag pcm_source_mode=full_density_multipoles_lmax8_exact_phi")')
     write(iw,'(1x,"PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak")')
     write(iw,'(1x,"PCM diag fock_mode=ddpcm_physical_full_variational_coupling")')
+    end if
 
   end subroutine add_pcm_reaction_field
 

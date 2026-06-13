@@ -106,6 +106,9 @@ def _input_text(bench, *, pcm_on: bool) -> str:
         "[scf]\n"
         f"multiplicity={bench['multiplicity']}\n"
         f"type={bench['scf_type']}\n"
+        # verbose>=3 turns the PCM convention self-diagnostics back on (the
+        # 'PCM diag' lines parsed below); only needed for the PCM-on runs.
+        f"{'verbose=3' + chr(10) if pcm_on else ''}"
         f"{pcm}"
     )
 
