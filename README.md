@@ -2,6 +2,12 @@
 
 Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform featuring cutting-edge capabilities like [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on open-source ecosystem.
 
+### Web tools
+
+- [Try OpenQP Web](https://app.openqp.org/) - Phase 1 static app for choosing example workflows, previewing structures, and downloading OpenQP input files. Calculations are prepared locally in the browser and are not executed online yet.
+- [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/) - existing browser input generator with a 3D molecular editor.
+- [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) - browser-based viewer for OpenQP logs, JSON, Molden, cube, and XYZ data.
+
 ### Capabilities
 
 **Electronic structure**
@@ -29,7 +35,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - OpenMP/MPI parallelism, ILP64 BLAS/LAPACK, pip installs, and Docker images
 
 **Ecosystem**
-- LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, and the browser-based [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) viewer
+- LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, [OpenQP Web](https://app.openqp.org/), the [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/), and the browser-based [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) viewer
 
 ### Upcoming Features
 - **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
@@ -190,6 +196,9 @@ defaults and knobs keep it efficient:
 
 For more in-depth information, visit:
 - [OpenQP Documentation](https://github.com/Open-Quantum-Platform/openqp/wiki)
+
+### OpenQP Web
+Prepare OpenQP inputs in the browser at [app.openqp.org](https://app.openqp.org/). The Phase 1 web app is static: it provides example workflows, local structure preview, downloadable `.inp` and `.xyz` files, tutorials, and links to the existing OpenQP browser tools. It does not run OpenQP jobs online, require login, or expose API keys in the browser.
 
 ### Input Generator
 Easily create input files for OpenQP using our [Web-based Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/).
