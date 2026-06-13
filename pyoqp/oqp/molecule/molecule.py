@@ -1142,12 +1142,33 @@ class Molecule:
         except AttributeError:
             return None
 
+        # The Fortran tagarray reserves nbf slots, but the EKT solver may
+        # skip null/near-zero eigenvalue channels and only fill a compact
+        # prefix of physically stored Dyson roots. Keep the structured JSON
+        # aligned with the printed/stored root ladder instead of exposing
+        # trailing all-zero scratch slots.
+        ekt_slot_tol = 1.0e-12
+        if eigenvalues.ndim == 1 and strengths.ndim == 1 and orbitals.ndim == 2 \
+                and strengths.shape[0] == eigenvalues.shape[0]:
+            active = (np.abs(eigenvalues) > ekt_slot_tol) \
+                | (np.abs(strengths) > ekt_slot_tol)
+            if orbitals.shape[0] == eigenvalues.shape[0]:
+                active = active | np.any(np.abs(orbitals) > ekt_slot_tol, axis=1)
+                eigenvalues = eigenvalues[active]
+                strengths = strengths[active]
+                orbitals = orbitals[active, :]
+            elif orbitals.shape[1] == eigenvalues.shape[0]:
+                active = active | np.any(np.abs(orbitals) > ekt_slot_tol, axis=0)
+                eigenvalues = eigenvalues[active]
+                strengths = strengths[active]
+                orbitals = orbitals[:, active]
+
         hartree_to_ev = 27.211386245988
         return {
-            'eigenvalues_hartree': eigenvalues.tolist(),
-            'ebe_ev': (-eigenvalues * hartree_to_ev).tolist(),
-            'pole_strengths': strengths.tolist(),
-            'dyson_orbitals_mo': orbitals.tolist(),
+            "eigenvalues_hartree": eigenvalues.tolist(),
+            "ebe_ev": (-eigenvalues * hartree_to_ev).tolist(),
+            "pole_strengths": strengths.tolist(),
+            "dyson_orbitals_mo": orbitals.tolist(),
         }
 
     def snapshot_mrsf_ekt_results(self, kind):
@@ -1636,7 +1657,7 @@ def compare_data(data_1, data_2):
             return 'failed', 1.0
         diff = 0.0
         for key in sorted(data_2):
-            if key == 'orbitals_mo':
+            if key in ('orbitals_mo', 'dyson_orbitals_mo'):
                 # EKT orbital vectors are phase/sign ambiguous between runs;
                 # eigenvalues and pole strengths provide the stable regression
                 # signal for the structured EKT result.

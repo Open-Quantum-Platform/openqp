@@ -27,7 +27,7 @@ contains
   subroutine tdhf_mrsf_ekt(infos, electron_affinity)
     use io_constants, only: iw
     use oqp_tagarray_driver
-    use types, only: information
+    use types, only: information, energy_results
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
     use util, only: measure_time
@@ -37,6 +37,9 @@ contains
     use printing, only: print_module_info
     use tdhf_mrsf_energy_mod, only: tdhf_mrsf_energy
     use tdhf_mrsf_z_vector_mod, only: tdhf_mrsf_z_vector
+    use dft, only: dft_initialize
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_addons, only: calc_fock, scf_energy_t
 
     implicit none
 
@@ -45,24 +48,28 @@ contains
     logical, intent(in) :: electron_affinity
 
     type(basis_set), pointer :: basis
-    integer :: nbf, nbf2, nroot, ok, i
+    integer :: nbf, nbf2, nroot, ok, i, nfocks, nschwz
     integer :: nactive
     integer, allocatable :: dom_mo_idx(:), dom_no_idx(:)
     ! EKT natural-orbital deflation threshold, matching GAMESS EKT-MRSF
     ! (thresh = 1.0d-2, sfgrad.src:3298).
     real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
     real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
-    real(kind=dp), allocatable :: dens_pack(:), fock_pack(:)
+    real(kind=dp), allocatable :: fock_pack(:)
+    type(dft_grid_t), target :: ea_molgrid
+    type(scf_energy_t) :: ea_energy
+    type(energy_results) :: saved_mol_energy
     real(kind=dp), allocatable :: density_alpha_ao(:), density_beta_ao(:)
     real(kind=dp), allocatable :: density_alpha_mo(:,:), density_beta_mo(:,:)
     real(kind=dp), allocatable :: density_ip_mo(:,:), density_ea_mo(:,:)
     real(kind=dp), allocatable :: smat(:)
     real(kind=dp), allocatable :: density_mo(:,:), fock_mo(:,:), lagrangian_mo(:,:)
+    real(kind=dp), allocatable :: ea_density_ao(:,:), ea_fock_ao(:,:), saved_fock_ao(:,:)
     real(kind=dp), allocatable :: ekt_metric(:,:), ekt_operator(:,:)
     real(kind=dp), allocatable :: eig(:)
     real(kind=dp), allocatable :: orbitals(:,:), strengths(:), metric_norms(:)
     real(kind=dp), allocatable :: dom_mo_coeff(:), dom_no_coeff(:), dom_no_occ(:)
-    real(kind=dp), contiguous, pointer :: fock_a(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), dmat_a(:), dmat_b(:), mo_a(:,:), td_p(:,:), wao(:)
     real(kind=dp), contiguous, pointer :: density_store(:,:), lagrangian_store(:,:)
     real(kind=dp), contiguous, pointer :: fock_store(:,:), orbital_store(:,:), eig_store(:), strength_store(:)
     character(len=*), parameter :: tags_required(7) = (/ character(len=80) :: &
@@ -88,7 +95,16 @@ contains
     basis => infos%basis
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
-    nroot = max(1, min(infos%tddft%nstate, nbf))
+    ! Print/store all retained EKT Dyson roots available after the natural-
+    ! orbital deflation, matching the GAMESS behavior.  The TDDFT NSTATE input
+    ! still controls the parent MRSF calculation; it is not an EKT print cap.
+    nroot = nbf
+    select case (infos%control%scftype)
+    case (1)
+      nfocks = 1
+    case default
+      nfocks = 2
+    end select
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -98,7 +114,8 @@ contains
     call tagarray_get_data(infos%dat, OQP_td_p, td_p)
     call tagarray_get_data(infos%dat, OQP_WAO, wao)
 
-    allocate(dens_pack(nbf2), fock_pack(nbf2), &
+    allocate(fock_pack(nbf2), &
+             ea_density_ao(nbf2,nfocks), ea_fock_ao(nbf2,nfocks), saved_fock_ao(nbf2,nfocks), &
              density_alpha_ao(nbf2), density_beta_ao(nbf2), &
              density_alpha_mo(nbf,nbf), density_beta_mo(nbf,nbf), &
              density_ip_mo(nbf,nbf), density_ea_mo(nbf,nbf), &
@@ -178,12 +195,45 @@ contains
     end block
 
     if (electron_affinity) then
-      ! EKT-EA: (F - W) * x = (I - P) * x * lambda
-      density_mo = density_ea_mo
+      ! EKT-EA: (F - W) * x = (I - P) * x * lambda.
+      ! GAMESS rebuilds the Fock matrix for EA from the relaxed MRSF density
+      ! (sfgrad.src:3269-3280, BUILDFOCK(..., MRDEA)) before forming F-W.
+      ! Reproduce that path here instead of using the reference SCF Fock.
+      ! GAMESS MRDEA uses the spin-averaged relaxed MRSF density
+      ! P = 1/2*(Da+Db) for the EA complement metric, not beta alone.
+      density_mo = 0.5_dp*(density_ip_mo + density_ea_mo)
       ekt_metric = -density_mo
       do i = 1, nbf
         ekt_metric(i,i) = ekt_metric(i,i) + 1.0_dp
       end do
+
+      ! GAMESS MRDEA builds a closed-shell Fock from the spin-summed
+      ! relaxed density: LDVAL = AO(Pavg), DSCAL(2), BUILDFOCK; internally
+      ! its DFT path halves that total density for alpha=beta.
+      ea_density_ao(:,1) = 0.5_dp*(density_alpha_ao + density_beta_ao)
+      if (nfocks > 1) ea_density_ao(:,2) = ea_density_ao(:,1)
+      saved_fock_ao(:,1) = fock_a
+      if (nfocks > 1) then
+        call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+        saved_fock_ao(:,2) = fock_b
+      end if
+      saved_mol_energy = infos%mol_energy
+
+      nschwz = 0
+      if (infos%control%hamilton >= 20) call dft_initialize(infos, basis, ea_molgrid)
+      call calc_fock(basis, infos, ea_molgrid, ea_fock_ao, ea_energy, &
+                     mo_a_in=mo_a, dens_in=ea_density_ao, nschwz=nschwz)
+
+      ! calc_fock updates the stored SCF Fock and infos%mol_energy%energy as
+      ! side effects; restore them because this EA-specific relaxed-density
+      ! Fock is only an EKT operator ingredient, not a new SCF reference.
+      fock_a = saved_fock_ao(:,1)
+      if (nfocks > 1) fock_b = saved_fock_ao(:,2)
+      infos%mol_energy = saved_mol_energy
+
+      call orthogonal_transform_sym(nbf, nbf, ea_fock_ao(:,1), mo_a, nbf, fock_pack)
+      call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
+      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator (GAMESS MRDEA path)")')
       ekt_operator = fock_mo - lagrangian_mo
     else
       ! EKT: W * x = P * x * lambda.  Metric is the spin-summed relaxed
@@ -241,21 +291,22 @@ contains
     strength_store = strengths
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT electron affinities")')
+      write(iw,'(/,2x,"MRSF-EKT electron affinities (Dyson roots)")')
     else
-      write(iw,'(/,2x,"MRSF-EKT ionization potentials (Dyson eBEs)")')
+      write(iw,'(/,2x,"MRSF-EKT ionization potentials (Dyson roots)")')
     end if
+    write(iw,'(2x,"Rows index EKT Dyson roots/orbitals, not TDDFT excited states.")')
     ! eig holds the EKT eigenvalues epsilon of  W C = D C epsilon.  The
     ! electron binding energy (IP) of a detachment is -epsilon; print both
     ! the eigenvalue and the eBE in hartree and eV with the Dyson pole
     ! strength (norm of the Dyson vector, <= 1 for a physical root).
-    write(iw,'(2x,"state",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"metric",7x,"strength")')
+    write(iw,'(2x,"dyson",6x,"eig(ha)",8x,"eBE(ha)",8x,"eBE(eV)",7x,"metric",7x,"strength")')
     do i = 1, min(nroot, nactive)
       write(iw,'(2x,I5,2x,F14.6,2x,F14.6,2x,F12.4,2x,F12.6,2x,F12.6)') &
             i, eig(i), -eig(i), -eig(i)*hartree_to_ev, metric_norms(i), strengths(i)
     end do
-    write(iw,'(/,2x,"--- EKT root-character diagnostics ---")')
-    write(iw,'(2x,"state",2x,"dom_mo",2x,"mo_coeff",2x,"dom_no",2x,"no_coeff",2x,"no_occ",2x,"character",2x,"spurious")')
+    write(iw,'(/,2x,"--- EKT Dyson-root character diagnostics ---")')
+    write(iw,'(2x,"dyson",2x,"dom_mo",2x,"mo_coeff",2x,"dom_no",2x,"no_coeff",2x,"no_occ",2x,"character",2x,"spurious")')
     do i = 1, min(nroot, nactive)
       write(iw,'(2x,I5,2x,I6,2x,F10.6,2x,I6,2x,F10.6,2x,F10.6,2x,A12,2x,L1)') &
             i, dom_mo_idx(i), dom_mo_coeff(i), dom_no_idx(i), dom_no_coeff(i), &
@@ -265,12 +316,11 @@ contains
     write(iw,'(2x,"--------------------------------------")')
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = EA roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = EA roots)")')
     else
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (MO-basis coefficients, columns = IP roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = IP roots)")')
     end if
-    call print_dyson_orbitals(orbitals, eig, strengths, nbf, min(nroot, nactive), &
-                              hartree_to_ev)
+    call print_dyson_orbitals(basis, mo_a, orbitals, eig, strengths, nbf, min(nroot, nactive))
     call flush(iw)
 
     call measure_time(print_total=1, log_unit=iw)
@@ -278,33 +328,55 @@ contains
 
   end subroutine tdhf_mrsf_ekt
 
-  !> @brief Print Dyson orbitals to the log in root blocks
-  !> @detail Each block of up to 5 roots shows the root index, the electron
-  !>         binding energy eBE = -eig (eV), and the Dyson pole strength,
-  !>         followed by the MO-basis Dyson orbital coefficients of each root.
-  subroutine print_dyson_orbitals(dyson_mo, eig, strengths, nbf, nroot, h2ev)
+  !> @brief Print Dyson orbitals in a GAMESS-like block.
+  !> @detail The EKT solver returns Dyson-orbital coefficients in the OpenQP
+  !>         MO basis.  For direct log-level comparison with GAMESS, transform
+  !>         them back to the AO basis and print five roots per block with
+  !>         ENERGY and STRENGTH header rows followed by AO basis-function
+  !>         labels and coefficients.  This routine is output-only: it does not
+  !>         change eigenvalues, strengths, root selection, or stored MO-basis
+  !>         Dyson orbitals.
+  subroutine print_dyson_orbitals(basis, mo_a, dyson_mo, eig, strengths, nbf, nroot)
     use precision, only: dp
     use io_constants, only: iw
+    use basis_tools, only: basis_set
 
     implicit none
 
+    type(basis_set), intent(in) :: basis
     integer, intent(in) :: nbf, nroot
-    real(kind=dp), intent(in) :: dyson_mo(nbf,*), eig(*), strengths(*)
-    real(kind=dp), intent(in) :: h2ev
+    real(kind=dp), intent(in) :: mo_a(nbf,nbf), dyson_mo(nbf,*), eig(*), strengths(*)
 
     integer, parameter :: mxlen = 5
-    integer :: i, j, i0, i1
+    integer :: i, j, k, i0, i1
+    real(kind=dp), allocatable :: dyson_ao(:,:)
+
+    allocate(dyson_ao(nbf,nroot), source=0.0_dp)
+    do i = 1, nroot
+      do k = 1, nbf
+        do j = 1, nbf
+          dyson_ao(j,i) = dyson_ao(j,i) + mo_a(j,k)*dyson_mo(k,i)
+        end do
+      end do
+    end do
+
+    write(iw,'(/,10x,46("-"))')
+    write(iw,'(12x,"EKT DYSON ORBITALS, ENERGIES AND NORMS")')
+    write(iw,'(12x,"OpenQP AO-basis coefficients; GAMESS-style layout")')
+    write(iw,'(10x,46("-"))')
 
     do i0 = 1, nroot, mxlen
       i1 = min(nroot, i0+mxlen-1)
-      write(iw,'(/,2x,"root",7x,*(i7,4x))') (i, i=i0, i1)
-      write(iw,'(2x,"eBE (eV)",3x,*(f11.4))') (-eig(i)*h2ev, i=i0, i1)
-      write(iw,'(2x,"strength",3x,*(f11.6))') (strengths(i), i=i0, i1)
-      write(iw,*)
+      write(iw,'(/,14x,5i11)') (i, i=i0, i1)
+      write(iw,'(5x,"ENERGY",3x,5f11.6)') (eig(i), i=i0, i1)
+      write(iw,'(5x,"STRENGTH",1x,5f11.6)') (strengths(i), i=i0, i1)
+      write(iw,'(14x,5(10x,a1))') ("A", i=i0, i1)
       do j = 1, nbf
-        write(iw,'(2x,i5,4x,*(f11.6))') j, (dyson_mo(j,i), i=i0, i1)
+        write(iw,'(i5,2x,a8,5f11.6)') j, basis%bf_label(j), (dyson_ao(j,i), i=i0, i1)
       end do
     end do
+
+    deallocate(dyson_ao)
 
   end subroutine print_dyson_orbitals
 
@@ -440,9 +512,16 @@ contains
     real(kind=dp), allocatable :: dsym(:,:), nocc(:), uno(:,:), ukeep(:,:)
     integer, allocatable :: kept_idx(:)
     real(kind=dp), allocatable :: d_no(:,:), w_no(:,:), tmp(:,:)
-    real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:)
+    real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:), d_times_x(:)
     real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str, coeff_abs, best_abs
-    integer :: i, j, m, ierr, ok, nout, best_idx
+    integer :: i, j, m, ierr, ok, nout, best_idx, out_idx, n_skipped
+    ! EKT eigenvalue print/retention threshold.  GAMESS skips near-zero EKT
+    ! eigenvalues (|eps| <= thresh) when transferring solved EKT roots to its
+    ! output (sfgrad.src:3411, thresh = 1.0d-2 Ha); mirror that here so the
+    ! printed/stored Dyson ladder aligns with GAMESS without a one-root shift.
+    ! Kept separate from the NO occupation tolerance (ekt_occ_tol) which only
+    ! governs natural-orbital deflation.
+    real(kind=dp), parameter :: ekt_eig_tol = 1.0e-2_dp
 
     ! (1) symmetrize the metric
     allocate(dsym(nbf,nbf), nocc(nbf), uno(nbf,nbf), source=0.0_dp, stat=ok)
@@ -469,7 +548,6 @@ contains
       end if
     end do
     if (m == 0) call show_message('EKT: no NOs above occupation tolerance', WITH_ABORT)
-    nkeep = m
 
     allocate(ukeep(nbf,m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
@@ -492,6 +570,8 @@ contains
     write(iw,'(2x,"occ_tol = ",es10.2,"   retained NOs = ",i0," / ",i0)') occ_tol, m, nbf
     write(iw,'(2x,"discarded trace = ",f12.6,"   retained occ range = [",f10.6,",",f10.6,"]")') &
           tr_disc, occ_min, occ_max
+    write(iw,'(2x,"eig_tol = ",es10.2," Ha   (skip EKT roots with |eps| <= eig_tol; GAMESS sfgrad.src)")') &
+          ekt_eig_tol
     write(iw,'(2x,"-------------------------------------",/)')
 
     ! (5) project D and W into the retained NO space
@@ -520,13 +600,15 @@ contains
       if (xnorm > 1.0e-14_dp) xvec(:,j) = xvec(:,j)/sqrt(xnorm)
     end do
 
-    ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X,
-    !     pole strength = X^T D_NO X  (<= 1 for physical NOs)
-    allocate(cdys(nbf,m), source=0.0_dp, stat=ok)
+    ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X.
+    !     Metric norms are X^T D_NO X after normalization (=1 for retained
+    !     physical roots).  EKT pole strengths follow the GAMESS/Pomogaev
+    !     definition X^T D_NO^2 X; weak Dyson roots therefore retain small
+    !     strengths instead of being forced to 1 by metric normalization.
+    allocate(cdys(nbf,m), d_times_x(m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     cdys = matmul(ukeep, xvec)
 
-    nout = min(nroot, m)
     eig = 0.0_dp
     dyson_mo = 0.0_dp
     strengths = 0.0_dp
@@ -536,15 +618,28 @@ contains
     dom_mo_coeff = 0.0_dp
     dom_no_coeff = 0.0_dp
     dom_no_occ = 0.0_dp
-    do j = 1, nout
-      eig(j) = eps(j)
-      dyson_mo(:,j) = cdys(:,j)
+    ! Transfer solved EKT roots to the output arrays, skipping near-zero EKT
+    ! eigenvalues the GAMESS way (|eps| <= ekt_eig_tol).  The source eigenpair
+    ! index is j (xvec/cdys/eps); out_idx is a separate compressed counter into
+    ! the output arrays so the printed/stored ladder matches GAMESS.
+    out_idx = 0
+    n_skipped = 0
+    do j = 1, m
+      if (abs(eps(j)) <= ekt_eig_tol) then
+        n_skipped = n_skipped + 1
+        cycle
+      end if
+      out_idx = out_idx + 1
+      if (out_idx > nroot) exit
+      eig(out_idx) = eps(j)
+      dyson_mo(:,out_idx) = cdys(:,j)
       str = 0.0_dp
       do i = 1, m
         str = str + xvec(i,j)*dot_product(d_no(i,:), xvec(:,j))
       end do
-      metric_norms(j) = str
-      strengths(j) = str
+      metric_norms(out_idx) = str
+      d_times_x = matmul(d_no, xvec(:,j))
+      strengths(out_idx) = dot_product(d_times_x, d_times_x)
 
       best_abs = -1.0_dp
       best_idx = 0
@@ -555,8 +650,8 @@ contains
           best_idx = i
         end if
       end do
-      dom_mo_idx(j) = best_idx
-      if (best_idx > 0) dom_mo_coeff(j) = cdys(best_idx,j)
+      dom_mo_idx(out_idx) = best_idx
+      if (best_idx > 0) dom_mo_coeff(out_idx) = cdys(best_idx,j)
 
       best_abs = -1.0_dp
       best_idx = 0
@@ -568,13 +663,21 @@ contains
         end if
       end do
       if (best_idx > 0) then
-        dom_no_idx(j) = kept_idx(best_idx)
-        dom_no_coeff(j) = xvec(best_idx,j)
-        dom_no_occ(j) = nocc(kept_idx(best_idx))
+        dom_no_idx(out_idx) = kept_idx(best_idx)
+        dom_no_coeff(out_idx) = xvec(best_idx,j)
+        dom_no_occ(out_idx) = nocc(kept_idx(best_idx))
       end if
     end do
+    nout = min(out_idx, nroot)
+    ! The caller uses nkeep as nactive when printing rows/Dyson orbitals, so it
+    ! must reflect the number of stored output roots (nout), not the retained
+    ! NO-space dimension (m); otherwise a zero row is printed for skipped roots.
+    nkeep = nout
+    write(iw,'(2x,"EKT eigenvalue filter: skipped ",i0," near-zero root(s) ", &
+         &"(|eps| <= ",es10.2," Ha); stored ",i0," / ",i0," roots")') &
+          n_skipped, ekt_eig_tol, nout, nroot
 
-    deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys)
+    deallocate(dsym, nocc, uno, ukeep, kept_idx, d_no, w_no, tmp, xvec, eps, cdys, d_times_x)
   end subroutine solve_ekt_no_deflation
 
   pure logical function ekt_is_spurious(ebe_ev, metric_norm, pole_strength) result(flag)
