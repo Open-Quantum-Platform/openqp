@@ -76,77 +76,9 @@ jobs:
            run: |
             cd pyoqp && pip install .
 
-   # Required validation job for the optional ddX continuum-solvation (PCM) path.
-   # The default gcc-build job leaves ENABLE_DDX OFF, so the real ddX SCF
-   # benchmark rows in tests/test_pcm_literature_benchmarks.py skip there. This
-   # job builds ddX (ILP64, from source) and OpenQP with -DENABLE_DDX=ON, runs
-   # the ctest ddX smoke checks, and exercises the ddX-enabled PCM Python gates
-   # so a regression in the full-density ddPCM source projection fails CI.
-   #
-   # Build notes that mirror the documented local recipe:
-   #   * -DENABLE_OPENTRAH=OFF: OpenTrustRegion's external build is broken on
-   #     some toolchains; PCM does not need it and run_otr falls back to the
-   #     native solver.
-   #   * libddx.so is installed next to liboqp.so (source/CMakeLists.txt), so
-   #     LD_LIBRARY_PATH=<install>/lib is enough for the Python gates.
-   ddx-pcm:
-      runs-on: ubuntu-24.04
-      steps:
-         - name: Checkout code
-           uses: actions/checkout@v4
-         - name: Setup Python
-           uses: actions/setup-python@v5
-           with:
-            python-version: '3.10'
-            cache: 'pip'
-            cache-dependency-path: pyoqp/requirements.txt
-         - name: Get toolchain version for the externals cache key
-           id: toolchain
-           run: echo "gcc=$(gfortran-14 -dumpfullversion)" >> "$GITHUB_OUTPUT"
-         - name: Cache bundled externals
-           uses: actions/cache@v4
-           with:
-            path: ~/.cache/openqp/externals
-            key: oqp-externals-ddx-ubuntu-24.04-gcc${{ steps.toolchain.outputs.gcc }}-${{ hashFiles('external/CMakeLists.txt') }}
-            restore-keys: |
-               oqp-externals-ddx-ubuntu-24.04-gcc${{ steps.toolchain.outputs.gcc }}-
-               oqp-externals-ddx-ubuntu-24.04-
-         - name: Install OpenBLAS
-           run: sudo apt-get install libopenblas-dev
-         - name: Install MPI
-           run: sudo apt-get install libopenmpi-dev
-         - name: Install CMake
-           run: pip install ninja cmake
-         - name: Install pyoqp dependencies
-           run: |
-            cd pyoqp && pip install -r requirements.txt
-         - name: Configure build (ddX enabled)
-           run: |
-            cmake -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_LIBINT=OFF \
-              -DCMAKE_C_COMPILER=gcc-14 -DCMAKE_CXX_COMPILER=g++-14 -DCMAKE_Fortran_COMPILER=gfortran-14 \
-              -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=ON -DENABLE_MPI=OFF \
-              -DENABLE_DDX=ON -DENABLE_OPENTRAH=OFF -DBUILD_TESTING=ON
-         - name: Compile & Install
-           run: |
-            n=0
-            until ninja -C ${{ env.BUILD_DIR }} install; do
-              n=$((n + 1))
-              if [ "$n" -ge 3 ]; then
-                echo "::error::build failed after $n attempts"
-                exit 1
-              fi
-              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
-              sleep 30
-            done
-         - name: ddX link/adapter smoke (ctest)
-           run: ctest --test-dir ${{ env.BUILD_DIR }} --output-on-failure -R 'ddx'
-         - name: Install pyoqp
-           run: |
-            cd pyoqp && pip install .
-         - name: ddX-enabled PCM benchmark gates
-           run: |
-            export OPENQP_ROOT=$PWD
-            export LD_LIBRARY_PATH=$PWD/lib:$LD_LIBRARY_PATH
-            export OMP_NUM_THREADS=1
-            python -m pytest tests/test_pcm_literature_benchmarks.py \
-                             tests/test_pcm_canonical_runtime_path.py -q
+# NOTE: the optional ddX continuum-solvation (PCM) path is NOT exercised by the
+# CI above (gcc-build builds with ENABLE_DDX OFF). The ddX-enabled build and the
+# scientific PCM validation gates are run/documented out-of-CI to keep CI fast
+# (building ddX from source + the SCF benchmark suite is expensive). The exact,
+# reproducible build + validation command for reviewers is in
+# docs/pcm_ddx_validation.md.

@@ -17,6 +17,11 @@ Skip semantics (so the gate never produces false confidence):
 
 Python here only builds inputs and parses output. It does **not** compute the
 reaction field, Fock contribution, or solvation energy.
+
+Running this suite requires a ddX-enabled build (``-DENABLE_DDX=ON``); the exact
+reproducible build + validation recipe (kept out of per-push CI because building
+ddX from source and running the SCF benchmark suite is slow) is documented in
+``docs/pcm_ddx_validation.md``.
 """
 
 import json
