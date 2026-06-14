@@ -17,6 +17,11 @@ Skip semantics (so the gate never produces false confidence):
 
 Python here only builds inputs and parses output. It does **not** compute the
 reaction field, Fock contribution, or solvation energy.
+
+Running this suite requires a ddX-enabled build (``-DENABLE_DDX=ON``); the exact
+reproducible build + validation recipe (kept out of per-push CI because building
+ddX from source and running the SCF benchmark suite is slow) is documented in
+``docs/pcm_ddx_validation.md``.
 """
 
 import json
@@ -106,6 +111,9 @@ def _input_text(bench, *, pcm_on: bool) -> str:
         "[scf]\n"
         f"multiplicity={bench['multiplicity']}\n"
         f"type={bench['scf_type']}\n"
+        # verbose>=3 turns the PCM convention self-diagnostics back on (the
+        # 'PCM diag' lines parsed below); only needed for the PCM-on runs.
+        f"{'verbose=3' + chr(10) if pcm_on else ''}"
         f"{pcm}"
     )
 
@@ -232,12 +240,11 @@ def _make_pcm_diagnostics_test(bench):
             )
         if _ddpcm_nonconvergence(log):
             self.skipTest(
-                "KNOWN BLOCKER: ddX ddPCM solve does not converge for the QM "
-                f"'{bench['id']}' cavity with the committed defaults (FMM on, "
-                "small molecule). Verified ddX-enabled run; raising maxiter does "
-                "not help, disabling FMM converges but yields physically wrong "
-                "e_pcm. This skip auto-activates once the "
-                "convergence/convention blockers are resolved."
+                "ddX ddPCM solve did not converge for this diagnostic row under "
+                f"the current build/protocol ({bench['id']}). Verified reference "
+                "gates still fail in the separate reference test if the same run "
+                "cannot produce an e_pcm, so this diagnostic skip must not be "
+                "reported as a passing scientific reference."
             )
         # #5 SCF convergence; #2 finite nonzero e_pcm; #4 total moved off vacuum.
         self.assertEqual(proc.returncode, 0, log)
@@ -272,7 +279,11 @@ def _make_pcm_diagnostics_test(bench):
             )
         # ddX esolv reported by the diag block must match the printed e_pcm.
         self.assertAlmostEqual(diag["e_pcm"], e_pcm, places=6, msg=log)
-        self.assertEqual(diag.get("psi_source"), "total_qm_atom_multipoles_l2", log)
+        self.assertEqual(
+            diag.get("psi_source"),
+            "full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak",
+            log,
+        )
         self.assertLess(abs(diag["source_charge_sum"]), 1.0, log)
         self.assertLess(abs(diag["q_cav_sum"]), 1.0, log)
         self.assertGreater(abs(diag["q_cav_absnorm"]), 0.0, log)
@@ -298,8 +309,9 @@ def _make_pcm_diagnostics_test(bench):
 
 def _make_pcm_reference_test(bench):
     """Tier-2: the real scientific pass/fail gate -- match e_pcm to a verified
-    literature_value or trusted_reference_regression. Skips while pending so the
-    gate never gives false confidence and no fabricated number is compared.
+    reference_value (Born/ddX + unscaled PySCF ddCOSMO, literature, or an explicit
+    regression target). Skips while pending so the gate never gives false
+    confidence and no fabricated number is compared.
     """
 
     def test(self):
@@ -308,8 +320,9 @@ def _make_pcm_reference_test(bench):
             self.skipTest(
                 f"benchmark '{bench['id']}' has no verified reference yet "
                 f"(category={bench.get('category')!r}, status={bench.get('status')!r}); "
-                "populate tests/data/pcm_literature_benchmarks.json (literature_value, or a "
-                "pyddx trusted_reference_regression under the identical protocol)."
+                "populate tests/data/pcm_literature_benchmarks.json (Born/ddX + "
+                "unscaled PySCF ddCOSMO, literature_value, or an explicit trusted "
+                "regression under the identical protocol)."
             )
         proc, log = _run(_input_text(bench, pcm_on=True))
         if _ddx_unavailable(log):
@@ -422,8 +435,8 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag phi_cav_min=-9.00000000000000E-01\n"
         " PCM diag phi_cav_max= 1.00000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=total_qm_atom_multipoles_l2\n"
-        "           PCM solvent energy (prov) =     -0.0099000000\n"
+        " PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak\n"
+        "           PCM solvent energy        =     -0.0099000000\n"
         "                       TOTAL energy =     -76.0200000000\n"
         # converged iteration (last wins):
         " PCM diag e_pcm=-1.23456789000000E-02\n"
@@ -442,8 +455,8 @@ class DiagnosticParsingUnit(unittest.TestCase):
         " PCM diag phi_cav_min=-9.10000000000000E-01\n"
         " PCM diag phi_cav_max= 1.10000000000000E-01\n"
         " PCM diag ncav=1452\n"
-        " PCM diag psi_source=total_qm_atom_multipoles_l2\n"
-        "           PCM solvent energy (prov) =     -0.0123456789\n"
+        " PCM diag psi_source=full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak\n"
+        "           PCM solvent energy        =     -0.0123456789\n"
         "                       TOTAL energy =     -76.0230456789\n"
     )
 
@@ -460,7 +473,7 @@ class DiagnosticParsingUnit(unittest.TestCase):
         self.assertAlmostEqual(diag["phi_source_vs_exact_rms"], 0.066)
         self.assertAlmostEqual(diag["phi_cav_min"], -0.91)
         self.assertEqual(diag["ncav"], 1452)
-        self.assertEqual(diag["psi_source"], "total_qm_atom_multipoles_l2")
+        self.assertEqual(diag["psi_source"], "full_density_grid_multipoles_lmax8_becke3_treutler_parent_atom_leak")
         # The separately-printed e_pcm and the diag e_pcm must agree.
         self.assertAlmostEqual(_pcm_energy(self.SAMPLE), diag["e_pcm"], places=6)
         self.assertAlmostEqual(_total_energy(self.SAMPLE), -76.0230456789)

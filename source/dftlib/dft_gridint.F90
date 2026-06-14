@@ -157,6 +157,11 @@ module mod_dft_gridint
     logical :: skip_p = .true. !< skip if no pruned numAOs
     integer :: numPts = 0
     integer :: numAtoms = 0
+    !< Index of the atom whose atomic grid generated the current slice
+    !< (molGrid%idOrigin(iSlice)); set by the slice driver before each
+    !< consumer update so consumers can associate points with their owning
+    !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
+    integer :: currAtom = 0
     integer :: maxPts = 0
     integer :: maxAngMom = 0
     integer :: nAODer = 0
@@ -2425,6 +2430,8 @@ contains
 
         IF (skip) CYCLE
 
+        xce%currAtom = iAtom
+
         call xce%compXC(xc_opts%functional, skip)
 
         IF (skip) CYCLE
@@ -2566,6 +2573,8 @@ contains
         call xce%pruneAOs(skip)
 
         IF (skip) CYCLE
+
+        xce%currAtom = iAtom
 
         call xc_dat%update(xce, myThread)
 

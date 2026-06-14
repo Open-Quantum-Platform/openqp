@@ -77,9 +77,9 @@ int oqp_ddx_run_explicit_pcm_reaction_field_smoke(
  * ddX/runtime error (with a human-readable message). Atomic cavity radii are
  * derived from the nuclear charges via a small built-in van der Waals table.
  *
- * NOTE: the sign/scale convention of q_cav relative to OpenQP's
- * external_charge_potential seam is PROVISIONAL and not yet validated against a
- * trusted PCM reference. See tests/test_pcm_canonical_runtime_path.py.
+ * NOTE: the q_cav sign/scale used by OpenQP's external_charge_potential
+ * seam is pinned by the Born/ddX and f(eps)*PySCF ddCOSMO validation gates.
+ * See tests/test_pcm_canonical_runtime_path.py.
  */
 int oqp_ddx_pcm_cavity(int natom, const double* xyz_bohr, const double* charges,
                        double epsilon, int max_cav, int* ncav_out,
@@ -109,6 +109,28 @@ int oqp_ddx_pcm_solve_multipole_source_with_phi(
     int nmultipoles, const double* source_multipoles, double epsilon, int ncav,
     const double* phi_cav, double* q_cav_out, double* esolv_out,
     char* message, int message_len);
+
+/*
+ * Return the per-sphere ddPCM cavity radii (Bohr) used by the production model,
+ * so the caller can apply the ddX multipole_psi scaling
+ *   psi(lm,isph) = 4*pi/((2l+1) * rsph(isph)^l) * M_lm(isph)
+ * when building a full-density Psi from the AO density.
+ */
+int oqp_ddx_pcm_radii(int natom, const double* charges, double* radii_bohr_out,
+                      char* message, int message_len);
+
+/*
+ * Production PCM solve driven by a CALLER-BUILT adjoint source psi (column-major
+ * (nbasis, nsph), nbasis = (lmax+1)^2) and the exact total cavity potential
+ * phi_cav. Does NOT derive psi from a multipole source; verifies nbasis/ncav
+ * against the rebuilt model, runs the ddPCM forward/adjoint lifecycle, and
+ * returns q_cav (ddx_get_xi) and esolv (ddx_pcm_energy).
+ */
+int oqp_ddx_pcm_solve_psi(int natom, const double* xyz_bohr,
+                          const double* charges, double epsilon, int ncav,
+                          int nbasis, const double* psi, const double* phi_cav,
+                          double* q_cav_out, double* esolv_out, char* message,
+                          int message_len);
 
 #ifdef __cplusplus
 }

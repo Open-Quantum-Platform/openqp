@@ -758,7 +758,8 @@ contains
       use bragg_slater_radii, only: set_bragg_slater, &
           BRSL_NUM_ELEMENTS, &
           BRSL_TYPE_GILL, &
-          BRSL_TYPE_TA
+          BRSL_TYPE_TA, &
+          BRSL_TYPE_BECKE
       use types, only: information
 
       implicit none
@@ -782,6 +783,8 @@ contains
       real(kind=dp), allocatable :: wtab(:,:,:)
       real(kind=dp), allocatable :: rij(:,:), aij(:,:)
       real(kind=dp), allocatable :: bsrad(:)
+      real(KIND=dp) :: brsl_becke(BRSL_NUM_ELEMENTS)
+      real(kind=dp), allocatable :: bsrad_becke(:)
 
       type(atomic_grid_t) :: atomic_grid
 
@@ -948,6 +951,23 @@ contains
         call setaij(aij, nat, bsrad)
 !       Becke's algorithm:
 !       4th deg. Becke's polynomial and surface shifting
+        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+                infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
+
+      case (2)
+!       Reference ddCOSMO/ddPCM-compatible Becke partition:
+!       surface shifting with the Treutler-Ahlrichs sqrt(chi) atomic-size
+!       adjustment (JCP 102, 346 (1995)) built from the Becke Bragg-Slater
+!       table (Slater radii, H = 0.35 A), independent of the radial-grid
+!       scaling radii selected above.  Combine with dft_partfun =
+!       PTYPE_BECKE3 to reproduce the standard Becke-original molecular
+!       partition used by the ddPCM literature source projection.
+        allocate(bsrad_becke(nat), source=0.0d0)
+        call set_bragg_slater(brsl_becke, BRSL_TYPE_BECKE)
+        do i = 1, nat
+          bsrad_becke(i) = bragg_slater_radius(brsl_becke, infos%atoms%zn(i))
+        end do
+        call setaij_treutler(aij, nat, bsrad_becke)
         call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 
@@ -1215,6 +1235,49 @@ contains
           cycle
         end if
         chi = radi/radj
+        chi2 = (chi-1)/(chi+1)
+        aij(jatm,iatm) = chi2/(chi2*chi2-1)
+        aij(jatm,iatm) = min(aij(jatm,iatm),  0.5)
+        aij(jatm,iatm) = max(aij(jatm,iatm), -0.5)
+      end do
+    end do
+  end subroutine
+
+!> @brief Calculate surface shifting parameters with the Treutler-Ahlrichs
+!>        atomic-size adjustment, chi = sqrt(R_i/R_j) (JCP 102, 346 (1995)).
+!> @details Identical to setaij except that the radii ratio enters through
+!>  its square root, i.e. a_ij = u/(u^2-1) with u = (chi-1)/(chi+1) and
+!>  chi = sqrt(R_i/R_j), clipped to |a| <= 0.5.  This is the adjustment used
+!>  by the reference ddCOSMO/ddPCM (and PySCF gen_grid default) Becke
+!>  partition that the PCM full-density source projection must reproduce.
+!> @param[out]  aij   surface shifting parameters
+!> @param[in]   nat   number of atoms
+!> @param[in]   bsrad Bragg-Slater radii of the atoms
+  subroutine setaij_treutler(aij, nat, bsrad)
+
+    implicit none
+
+    real(kind=dp), intent(out) :: aij(nat,*)
+    integer, intent(in) :: nat
+    real(kind=dp), intent(in) :: bsrad(:)
+    integer :: iatm, jatm
+    real(kind=dp) :: radi, radj, chi, chi2
+
+    do iatm = 1, nat
+      aij(iatm,iatm) = 0.0d0
+      radi = bsrad(iatm)
+
+      do jatm = 1, nat
+        if (iatm==jatm) cycle
+
+        radj = bsrad(jatm)
+        if (radi<0.001 .or. radj<0.001) then
+          ! Dummy/unknown atoms carry no surface shift; they are excluded
+          ! from the fuzzy-cell partition via molGrid%dummyAtom anyway.
+          aij(jatm,iatm) = 0.0d0
+          cycle
+        end if
+        chi = sqrt(radi/radj)
         chi2 = (chi-1)/(chi+1)
         aij(jatm,iatm) = chi2/(chi2*chi2-1)
         aij(jatm,iatm) = min(aij(jatm,iatm),  0.5)
