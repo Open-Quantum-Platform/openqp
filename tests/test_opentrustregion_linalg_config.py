@@ -27,8 +27,10 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn("fdefault-integer-8", external_cmake)
         self.assertIn("fallow-argument-mismatch", external_cmake)
         self.assertIn("CMAKE_Fortran_FLAGS=${otr_fortran_flags}", external_cmake)
-        self.assertIn("BLAS_LIBRARIES=${LIBBLAS}", external_cmake)
-        self.assertIn("LAPACK_LIBRARIES=${LIBLAPACK}", external_cmake)
+        self.assertIn("OQP_EXTERNAL_LIST_SEPARATOR", external_cmake)
+        self.assertIn("oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES", external_cmake)
+        self.assertIn("oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES", external_cmake)
+        self.assertIn("LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}", external_cmake)
         self.assertIn("add_dependencies(libopentrustregion LAPACK)", external_cmake)
         self.assertIn("CMAKE_POLICY_VERSION_MINIMUM=3.5", external_cmake)
         self.assertIn("PATCH_COMMAND /usr/bin/perl", external_cmake)
@@ -44,6 +46,11 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn("if(TARGET oqp)", functions_cmake)
         self.assertIn("add_dependencies(oqp LAPACK)", functions_cmake)
         self.assertIn("target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})", functions_cmake)
+
+    def test_python_wheel_uses_native_trah_without_building_opentrah(self):
+        pyproject = (ROOT / "pyproject.toml").read_text()
+
+        self.assertIn('ENABLE_OPENTRAH = "OFF"', pyproject)
 
 
 if __name__ == "__main__":
