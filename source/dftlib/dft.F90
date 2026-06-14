@@ -775,6 +775,7 @@ contains
       integer :: grid_id
       integer :: max_ang_pts
       integer :: ngr, rtid, nrad_at, override
+      integer :: rad_grid_type, dft_partfun, dft_bfc_algo
       real(kind=dp) :: dftthr0
       real(KIND=dp) :: brsl_radii(BRSL_NUM_ELEMENTS)
       logical :: verbose_
@@ -792,10 +793,13 @@ contains
       if (present(verbose)) verbose_ = verbose
 
       nat = ubound(infos%atoms%zn, 1)
+      rad_grid_type = int(infos%dft%rad_grid_type)
+      dft_partfun = int(infos%dft%dft_partfun)
+      dft_bfc_algo = int(infos%dft%dft_bfc_algo)
       max_ang_pts = maxval(pruned%nang)
       if (allocated(pruned%nang_override)) &
         max_ang_pts = max(max_ang_pts, maxval(pruned%nang_override))
-      nrad = infos%dft%grid_rad_size
+      nrad = int(infos%dft%grid_rad_size)
       ! A pruned grid may prescribe its own radial grid size
       if (pruned%nrad > 0) nrad = pruned%nrad
       maxpt_per_atom = nrad*max_ang_pts
@@ -826,7 +830,7 @@ contains
 !     Treutler-Ahlrichs Bragg-Slater radii; selecting only becke (3) here left
 !     rad_type='ta' on Gill radii (a TA-quadrature/Gill-radii hybrid), so
 !     include 2 as well.
-      select case(infos%dft%rad_grid_type)
+      select case(rad_grid_type)
       case (2, 3)
         bstype = BRSL_TYPE_TA
       case default
@@ -840,7 +844,7 @@ contains
 
 !     Set up radial grid (the standard grid is radial type 1)
       call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
-              nrad, infos%dft%rad_grid_type)
+              nrad, rad_grid_type)
 
 !     Element-specific radial grids, absolute radii.
 !     MultiExp (SG-0): per-element node count and scaling radius;
@@ -872,7 +876,7 @@ contains
       molGrid%dummyAtom(:nat) = bsrad(:nat) == 0.0_dp
 
 !     Find nearest neighbours for all atoms
-      call molGrid%find_neighbours(rij, partFunType=infos%dft%dft_partfun)
+      call molGrid%find_neighbours(rij, partFunType=dft_partfun)
 
 !     Compute atomic grids for each atom
       do iat = 1, nat
@@ -940,18 +944,18 @@ contains
 !     Assemble molecular grid from atomic grids
 
 !     Do Becke's fuzzy cell
-      select case (infos%dft%dft_bfc_algo)
+      select case (dft_bfc_algo)
       case(0)
 !       SSF algorithm:
 !       various partitioning functions, no surface shifting
-        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+        call dft_fc_blk(molgrid, dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab)
       case (1)
 !       Precompute surface shifting parameters
         call setaij(aij, nat, bsrad)
 !       Becke's algorithm:
 !       4th deg. Becke's polynomial and surface shifting
-        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+        call dft_fc_blk(molgrid, dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 
       case (2)
@@ -968,7 +972,7 @@ contains
           bsrad_becke(i) = bragg_slater_radius(brsl_becke, infos%atoms%zn(i))
         end do
         call setaij_treutler(aij, nat, bsrad_becke)
-        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+        call dft_fc_blk(molgrid, dft_partfun, &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 
       end select

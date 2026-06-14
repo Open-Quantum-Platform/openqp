@@ -84,8 +84,8 @@ if(NOT ${LINALG_LIB} STREQUAL none)
   findLinearAlgebra()
 endif()
 
-target_compile_definitions(oqp PRIVATE OQP_BLAS_INT=8)
-set_property(SOURCE ${SOURCES_mathlib_ilp64} APPEND PROPERTY COMPILE_DEFINITIONS OQP_BLAS_INT=8)
+target_compile_definitions(oqp PRIVATE OQP_BLAS_INT=${BLA_SIZEOF_INTEGER})
+set_property(SOURCE ${SOURCES_mathlib_ilp64} APPEND PROPERTY COMPILE_DEFINITIONS OQP_BLAS_INT=${BLA_SIZEOF_INTEGER})
 
 # NLopt include
 add_dependencies(oqp nlopt)

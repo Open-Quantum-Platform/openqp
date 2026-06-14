@@ -1,0 +1,40 @@
+# Thymine DFT/BHHLYP/cc-pVDZ benchmark geometry from PubChem CID 1135 3D SDF.
+[input]
+system=
+  O     -1.519300     1.806700    -0.000900
+  O      2.839400     0.291300    -0.000700
+  N      0.664300     1.062300     0.001100
+  N      1.114800    -1.231600    -0.000200
+  C     -1.161200    -0.543200     0.000200
+  C     -0.712900     0.880200     0.000400
+  C     -0.226000    -1.501300    -0.000100
+  C     -2.630000    -0.818900    -0.000100
+  C      1.631000     0.054500     0.000300
+  H     -0.478700    -2.555300    -0.000400
+  H      1.001400     2.020900     0.001100
+  H      1.756400    -2.019100    -0.000900
+  H     -3.100400    -0.386000    -0.888900
+  H     -3.100600    -0.386200     0.888700
+  H     -2.843300    -1.893100    -0.000300
+charge=0
+runtype=energy
+basis=cc-pvdz
+functional=bhhlyp
+method=hf
+d4=False
+
+[guess]
+type=huckel
+save_mol=False
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+conv=1.0e-7
+save_molden=False
+
+[dftgrid]
+rad_npts=75
+ang_npts=302
+pruned=

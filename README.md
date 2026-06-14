@@ -4,7 +4,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 ### Web tools
 
-- [Try OpenQP Web](https://app.openqp.org/) - Phase 1 static app for choosing example workflows, previewing structures, and downloading OpenQP input files. Calculations are prepared locally in the browser and are not executed online yet.
+- [Try OpenQP Web](https://app.openqp.org/) - browser app for choosing example workflows, previewing structures, and downloading OpenQP input files. Calculations are prepared locally in the browser and are not executed online yet.
 - [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/) - existing browser input generator with a 3D molecular editor.
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) - browser-based viewer for OpenQP logs, JSON, Molden, cube, and XYZ data.
 
@@ -115,11 +115,13 @@ pip install .
 | `-DENABLE_OPENMP=ON` | ON | OpenMP threading. |
 | `-DUSE_LIBINT=ON` | OFF | Use `libint` for ERIs instead of the built-in Rys-quadrature engine. |
 | `-DLINALG_LIB=<vendor>` | auto | BLAS/LAPACK provider (`auto`, `MKL`, `OpenBLAS`, `netlib`, …). |
-| `-DLINALG_LIB_INT64=ON` | ON | Use the required 64-bit-integer BLAS/LAPACK interface. |
+| `-DLINALG_LIB_INT64=ON` | ON | Use the default 64-bit-integer BLAS/LAPACK interface. |
 | `-DENABLE_OPENTRAH=OFF` | ON | Skip the external OpenTrustRegion (OpenTRAH) solver; the TRAH SCF converger then uses the built-in native implementation only. |
 | `-DOQP_REUSE_EXTERNALS=OFF` | ON | Disable the automatic reusable cache for bundled external dependency builds. |
 
 Bundled external dependencies are cached automatically across fresh OpenQP build directories. The cache uses the platform cache directory (`~/Library/Caches/openqp/externals` on macOS, `$XDG_CACHE_HOME/openqp/externals` or `~/.cache/openqp/externals` elsewhere) and is keyed by operating system, architecture, CMake generator, compiler IDs/versions, compiler flags, build type, linkage mode, BLAS/LAPACK choice, BLAS/LAPACK integer ABI, and bundled external versions, so Fortran modules and libraries are reused only by compatible builds. Advanced users can relocate the cache with `-DOQP_EXTERNALS_ROOT=<path>`. The cache is not safe for concurrent use: do not run two fresh OpenQP builds with the same configuration at the same time, or configure one of them with `-DOQP_REUSE_EXTERNALS=OFF`.
+
+LP64 BLAS/LAPACK (`-DLINALG_LIB_INT64=OFF`) is a macOS-only exception intended for a consistent native Accelerate stack. OpenBLAS and MKL builds should use ILP64 for normal use.
 
 To build without Ninja, drop `-G Ninja` and replace `ninja` with `make`.
 
@@ -198,7 +200,7 @@ For more in-depth information, visit:
 - [OpenQP Documentation](https://github.com/Open-Quantum-Platform/openqp/wiki)
 
 ### OpenQP Web
-Prepare OpenQP inputs in the browser at [app.openqp.org](https://app.openqp.org/). The Phase 1 web app is static: it provides example workflows, local structure preview, downloadable `.inp` and `.xyz` files, tutorials, and links to the existing OpenQP browser tools. It does not run OpenQP jobs online, require login, or expose API keys in the browser.
+Prepare OpenQP inputs in the browser at [app.openqp.org](https://app.openqp.org/). The web app provides example workflows, local structure preview, downloadable `.inp` and `.xyz` files, tutorials, and links to the existing OpenQP browser tools. It does not run OpenQP jobs online, require login, or expose API keys in the browser.
 
 ### Input Generator
 Easily create input files for OpenQP using our [Web-based Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/).
@@ -224,6 +226,8 @@ If you use OpenQP in your research, please cite the following papers:
 - **Igor Gerasimov**, [i.s.ger@yandex.ru](mailto:i.s.ger@yandex.ru)
 - **Hiroya Nakata**, Fukui Institute for Fundamental Chemistry, Japan, [nakata.hiro07@gmail.com](mailto:nakata.hiro07@gmail.com)
 - **Mohsen Mazaherifar**, Kyungpook National University, South Korea, [moh.mazaheri@gmail.com](mailto:moh.mazaheri@gmail.com)
+- **Vladimir Makhnev**, [VladimirMakhnev](https://github.com/VladimirMakhnev)
+- **Alireza Lashkaripour**, [Alireza Lashkaripour](https://github.com/Alireza-Lashkaripour)
 ### Legal Notice
 
 See the separate LICENSE file.

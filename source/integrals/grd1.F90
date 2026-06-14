@@ -1,5 +1,6 @@
 module grd1
 
+   use iso_c_binding, only: c_int64_t
    use io_constants, only: iw
    use precision, only: dp
    use types, only: information
@@ -199,9 +200,10 @@ contains
 
     implicit none
 !    type(information), intent(in) :: infos
+    integer(c_int64_t), intent(in) :: n
     real(kind=dp), intent(out) :: gmax, grms
     real(kind=dp) :: de(3,n)
-    integer :: n, i
+    integer(c_int64_t) :: i
 
   ! Calculate maximum value
   gmax = maxval(abs(de))
@@ -211,7 +213,7 @@ contains
   do i = 1, n
     grms = grms + de(1,i)**2 + de(2,i) ** 2 + de(3,i) ** 2
   end do
-  grms = sqrt(grms / real(n * 3))
+  grms = sqrt(grms / real(n * 3, kind=dp))
 
   end subroutine grad_max_rms
 
