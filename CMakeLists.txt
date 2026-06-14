@@ -72,10 +72,12 @@ endif()
 
 option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
 if(NOT LINALG_LIB_INT64)
-    message(FATAL_ERROR
+    message(WARNING
       "LP64 BLAS/LAPACK is no longer supported after removal of defined/defind. "
-      "OpenQP requires ILP64 BLAS/LAPACK with OQP_BLAS_INT=8."
+      "Forcing LINALG_LIB_INT64=ON so stale CMake caches are repaired automatically."
     )
+    set(LINALG_LIB_INT64 ON CACHE BOOL
+        "Use 64-bit integer interface to BLAS/LAPACK" FORCE)
 endif()
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
