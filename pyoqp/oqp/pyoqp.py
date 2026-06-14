@@ -240,7 +240,7 @@ class Runner:
             _sentinel = os.path.join(_pkg, "pyoqp.py")
             _ver = getattr(oqp, "__version__", "")
             _commit = ""
-            for _d in (os.environ.get("OPENQP_ROOT"), _pkg):
+            for _d in (getattr(oqp, "oqp_root", None), _pkg):
                 if not _d:
                     continue
                 # Only trust a discovered git worktree if it actually TRACKS the

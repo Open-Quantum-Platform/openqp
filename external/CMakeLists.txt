@@ -137,6 +137,13 @@ function(oqp_reuse_or_build target)
   message(STATUS "Reusing cached external '${target}' (skipping rebuild)")
 endfunction()
 
+set(OQP_EXTERNAL_LIST_SEPARATOR "|")
+function(oqp_external_cmake_list_arg out_var cache_var)
+  set(_value "${ARGN}")
+  string(REPLACE ";" "${OQP_EXTERNAL_LIST_SEPARATOR}" _value "${_value}")
+  set(${out_var} "-D${cache_var}:STRING=${_value}" PARENT_SCOPE)
+endfunction()
+
 if(${USE_LIBINT})
 oqp_set_external_paths(LIBINT2 libint
     "${CMAKE_BINARY_DIR}/external/libint"
@@ -387,17 +394,24 @@ set(OTR_CMAKE_ARGS
         -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
         -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
-        -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
 )
+if(CMAKE_PREFIX_PATH)
+    oqp_external_cmake_list_arg(_otr_prefix_path_arg CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+    list(APPEND OTR_CMAKE_ARGS "${_otr_prefix_path_arg}")
+endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${LIBBLAS})
+    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
     list(APPEND OTR_CMAKE_ARGS
-        -DBLAS_LIBRARIES=${LIBBLAS}
-        -DLAPACK_LIBRARIES=${LIBLAPACK}
+        "${_otr_blas_arg}"
+        "${_otr_lapack_arg}"
     )
 elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
+    oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
+    oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
     list(APPEND OTR_CMAKE_ARGS
-        -DBLAS_LIBRARIES=${BLAS_LIBRARIES}
-        -DLAPACK_LIBRARIES=${LAPACK_LIBRARIES}
+        "${_otr_blas_arg}"
+        "${_otr_lapack_arg}"
     )
 elseif(DEFINED BLA_VENDOR)
     list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
@@ -424,6 +438,7 @@ ExternalProject_Add(libopentrustregion
     SOURCE_DIR ${OPENTRUSTREGION_SOURCE_DIR}
     UPDATE_COMMAND ""
     PATCH_COMMAND /usr/bin/perl -0pi -e "${_OTR_ARCH_SED}" <SOURCE_DIR>/CMakeLists.txt
+    LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
     CMAKE_ARGS ${OTR_CMAKE_ARGS}
     BINARY_DIR ${OPENTRUSTREGION_BUILD_DIR}
     STAMP_DIR  ${OPENTRUSTREGION_STAMP_DIR}
@@ -544,13 +559,16 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     # location reaches the ddX subbuild. An empty -D would override the
     # environment CMAKE_PREFIX_PATH the ExternalProject otherwise inherits.
     if(CMAKE_PREFIX_PATH)
-        list(APPEND DDX_CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH})
+        oqp_external_cmake_list_arg(_ddx_prefix_path_arg CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
+        list(APPEND DDX_CMAKE_ARGS "${_ddx_prefix_path_arg}")
     endif()
     # Forward the same BLAS/LAPACK choice OpenQP resolved (findLinearAlgebra()).
     if(_LINALG_LIB_TYPE STREQUAL NetLib)
+        oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${LIBBLAS})
+        oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
         list(APPEND DDX_CMAKE_ARGS
-            -DBLAS_LIBRARIES=${LIBBLAS}
-            -DLAPACK_LIBRARIES=${LIBLAPACK})
+            "${_ddx_blas_arg}"
+            "${_ddx_lapack_arg}")
     elseif(DEFINED BLA_VENDOR)
         list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
     endif()
@@ -562,6 +580,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         URL https://github.com/ddsolvation/ddX/archive/refs/tags/v${_OQP_DDX_VERSION}.tar.gz
         URL_HASH SHA256=6f6d08c7699dd69d4b12dd0b1f8c519f5f3f84a3d23cc526dd1a4a60914969d6
         TLS_VERIFY TRUE
+        LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
         SOURCE_DIR ${DDX_SOURCE_DIR}
         PATCH_COMMAND patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/ddx-v0.8.0-ilp64.patch
         BINARY_DIR ${DDX_BUILD_DIR}
