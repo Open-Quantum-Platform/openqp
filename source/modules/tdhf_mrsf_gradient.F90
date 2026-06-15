@@ -32,6 +32,29 @@ module tdhf_mrsf_gradient_mod
     procedure :: build_cart => grd2_mrsf_build_cart
   end type
 
+  ! NAC amplitude-term (Phase 11): the bilinear generalisation of
+  ! grd2_mrsf_compute_data_t for G_IJ = X_I^T (d_x A) X_J. The reference
+  ! density d2 (state-independent) and the interstate relaxed difference
+  ! density p2 (=p2^{IJ}) are shared scalars; the seven transition/amplitude
+  ! channels are carried separately for states I (spcI) and J (spcJ). Every
+  ! pure transition-density product f(a)*g(b) in get_density becomes the
+  ! symmetrised bilinear 1/2[ f_I(a) g_J(b) + f_J(a) g_I(b) ], while the
+  ! reference/relaxed (df1,dq1) terms keep the production form with p2->p2^{IJ}.
+  ! At I=J this collapses bit-for-bit to grd2_mrsf_compute_data_t.
+  type, extends(grd2_compute_data_t) :: grd2_mrsf_nac_compute_data_t
+    real(kind=dp), pointer :: d2(:,:,:) => null()
+    real(kind=dp), pointer :: p2(:,:,:) => null()
+    real(kind=dp), pointer :: spcI(:,:,:) => null()
+    real(kind=dp), pointer :: spcJ(:,:,:) => null()
+    integer :: nbf = 0
+    integer :: mrst = 1
+    real(kind=dp), dimension(3) :: spcscale = [0.0_dp, 0.0_dp, 0.0_dp]
+  contains
+    procedure :: init => grd2_mrsf_nac_compute_data_t_init
+    procedure :: clean => grd2_mrsf_nac_compute_data_t_clean
+    procedure :: get_density => grd2_mrsf_nac_compute_data_t_get_density
+  end type
+
 contains
 
   subroutine tdhf_mrsf_gradient_C(c_handle) bind(C, name="tdhf_mrsf_gradient")
@@ -249,6 +272,16 @@ contains
     end if
 
     call print_gradient(infos)
+
+!   Phase 11 self-test (opt-in): verify the bilinear NAC density type
+!   reproduces this production 2e gradient bit-for-bit at I=J.
+    block
+      character(len=8) :: env_selftest
+      integer :: env_len, env_stat
+      call get_environment_variable("OQP_NAC_SELFTEST", env_selftest, &
+                                    env_len, env_stat)
+      if (env_stat == 0 .and. env_len > 0) call mrsf_nac_amp_selftest(infos)
+    end block
 
 !   Print timings
     call measure_time(print_total=1, log_unit=iw)
@@ -837,6 +870,358 @@ contains
       end do
     end do
   end subroutine grd2_mrsf_compute_data_t_get_density
+
+!###############################################################################
+!  Phase 11: NAC amplitude-term bilinear compute-data type
+!###############################################################################
+
+  subroutine grd2_mrsf_nac_compute_data_t_init(this)
+    implicit none
+    class(grd2_mrsf_nac_compute_data_t), target, intent(inout) :: this
+
+    call this%clean()
+
+    ! same alpha/beta -> total/spin recombination as the production type;
+    ! applied to the shared reference (d2) and interstate relaxed (p2) densities
+    this%d2(:,:,1) = this%d2(:,:,1) +   this%d2(:,:,2)
+    this%d2(:,:,2) = this%d2(:,:,1) - 2*this%d2(:,:,2)
+
+    this%p2(:,:,1) = this%p2(:,:,1) +   this%p2(:,:,2)
+    this%p2(:,:,2) = this%p2(:,:,1) - 2*this%p2(:,:,2)
+
+  end subroutine
+
+!###############################################################################
+
+  subroutine grd2_mrsf_nac_compute_data_t_clean(this)
+    implicit none
+    class(grd2_mrsf_nac_compute_data_t), target, intent(inout) :: this
+  end subroutine
+
+!###############################################################################
+
+!> @brief Bilinear four-index density product for the NAC amplitude term
+!>        G_IJ = X_I^T (d_x A) X_J. Identical in structure to
+!>        grd2_mrsf_compute_data_t_get_density but every pure transition-density
+!>        product f(a)*g(b) is replaced by 1/2[ f_I(a) g_J(b) + f_J(a) g_I(b) ].
+!>        Collapses bit-for-bit to the production form at I=J.
+  subroutine grd2_mrsf_nac_compute_data_t_get_density(this, basis, id, dab, dabmax)
+
+    implicit none
+
+    class(grd2_mrsf_nac_compute_data_t), target, intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: id(4)
+    real(kind=dp), target, intent(out) :: dab(*)
+    real(kind=dp), intent(out) :: dabmax
+
+    real(kind=dp) :: xcfact, xcfact2, coulfact, df1, dq1, dt2
+    real(kind=dp) :: qfspcp1, qfspcp2, qfspcp3, sgnk
+    real(kind=dp) :: db1, db2, dc1, dc2, dc3, dc4, dd1, dd2, dd3, dd4
+    real(kind=dp), pointer, dimension(:,:) :: &
+      ballI, bo2vI, bo1vI, bco1I, bco2I, co12I, o21vI, &
+      ballJ, bo2vJ, bo1vJ, bco1J, bco2J, co12J, o21vJ
+    integer :: i, j, k, l
+    integer :: loc(4)
+    integer :: nbf(4)
+    real(kind=dp), pointer :: ab(:,:,:,:)
+    integer :: i1, j1, k1, l1
+
+    ! state-I transition/amplitude channels
+    ballI => this%spcI(7,:,:)
+    bo2vI => this%spcI(1,:,:)
+    bo1vI => this%spcI(2,:,:)
+    bco1I => this%spcI(3,:,:)
+    bco2I => this%spcI(4,:,:)
+    o21vI => this%spcI(5,:,:)
+    co12I => this%spcI(6,:,:)
+    ! state-J transition/amplitude channels
+    ballJ => this%spcJ(7,:,:)
+    bo2vJ => this%spcJ(1,:,:)
+    bo1vJ => this%spcJ(2,:,:)
+    bco1J => this%spcJ(3,:,:)
+    bco2J => this%spcJ(4,:,:)
+    o21vJ => this%spcJ(5,:,:)
+    co12J => this%spcJ(6,:,:)
+
+    coulfact = 4*this%coulscale
+    xcfact = this%hfscale
+    xcfact2 = this%hfscale2
+    qfspcp1 = this%spcscale(1)
+    qfspcp2 = this%spcscale(2)
+    qfspcp3 = this%spcscale(3)
+
+    sgnk = 1.0_dp
+    if (this%mrst==3) sgnk = -1.0_dp
+    dabmax = 0
+    loc = basis%ao_offset(id)-1
+
+    nbf = basis%naos(id)
+
+    ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
+
+    do i = 1, nbf(1)
+      i1 = loc(1) + i
+
+      do j = 1, nbf(2)
+        j1 = loc(2) + j
+
+        do k = 1, nbf(3)
+          k1 = loc(3) + k
+
+          do l = 1, nbf(4)
+            l1 = loc(4) + l
+            ! Coulomb + relaxed/reference: reference (d2) state-independent,
+            ! relaxed (p2) already the interstate object -> production form.
+            df1 = (this%d2(i1,j1,1)+this%p2(i1,j1,1))*this%d2(k1,l1,1) &
+                +  this%d2(i1,j1,1)                  *this%p2(k1,l1,1)
+            df1 = df1 * coulfact
+
+            if (xcfact /= 0.0_dp .or. xcfact2 /= 0.0_dp) then
+              dq1 = (this%d2(i1,k1,1)+this%p2(i1,k1,1))*this%d2(j1,l1,1) &
+                  +  this%d2(i1,k1,1)                  *this%p2(j1,l1,1) &
+                  + (this%d2(i1,l1,1)+this%p2(i1,l1,1))*this%d2(j1,k1,1) &
+                  +  this%d2(i1,l1,1)                  *this%p2(j1,k1,1) &
+                  + (this%d2(i1,k1,2)+this%p2(i1,k1,2))*this%d2(j1,l1,2) &
+                  +  this%d2(i1,k1,2)                  *this%p2(j1,l1,2) &
+                  + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
+                  +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
+              ! channel-7 exchange (ball), symmetrised I<->J
+              dt2 = 0.5_dp*(ballI(i1,k1)*ballJ(j1,l1) + ballJ(i1,k1)*ballI(j1,l1)) &
+                  + 0.5_dp*(ballI(k1,i1)*ballJ(l1,j1) + ballJ(k1,i1)*ballI(l1,j1)) &
+                  + 0.5_dp*(ballI(i1,l1)*ballJ(j1,k1) + ballJ(i1,l1)*ballI(j1,k1)) &
+                  + 0.5_dp*(ballI(l1,i1)*ballJ(k1,j1) + ballJ(l1,i1)*ballI(k1,j1))
+
+              df1 = df1-xcfact*dq1-xcfact2*2.0_dp*dt2
+            end if
+
+            if (qfspcp1 /= 0.0_dp) then
+              db1 = 0.5_dp*(co12I(i1,k1)*co12J(l1,j1) + co12J(i1,k1)*co12I(l1,j1)) &
+                  + 0.5_dp*(co12I(i1,l1)*co12J(k1,j1) + co12J(i1,l1)*co12I(k1,j1)) &
+                  + 0.5_dp*(co12I(j1,k1)*co12J(l1,i1) + co12J(j1,k1)*co12I(l1,i1)) &
+                  + 0.5_dp*(co12I(j1,l1)*co12J(k1,i1) + co12J(j1,l1)*co12I(k1,i1)) &
+                  + 0.5_dp*(co12I(l1,j1)*co12J(i1,k1) + co12J(l1,j1)*co12I(i1,k1)) &
+                  + 0.5_dp*(co12I(k1,j1)*co12J(i1,l1) + co12J(k1,j1)*co12I(i1,l1)) &
+                  + 0.5_dp*(co12I(l1,i1)*co12J(j1,k1) + co12J(l1,i1)*co12I(j1,k1)) &
+                  + 0.5_dp*(co12I(k1,i1)*co12J(j1,l1) + co12J(k1,i1)*co12I(j1,l1))
+
+              df1 = df1 + sgnk*qfspcp1*db1
+            end if
+
+            if (qfspcp2 /= 0.0_dp) then
+              db2 = 0.5_dp*(o21vI(i1,k1)*o21vJ(l1,j1) + o21vJ(i1,k1)*o21vI(l1,j1)) &
+                  + 0.5_dp*(o21vI(i1,l1)*o21vJ(k1,j1) + o21vJ(i1,l1)*o21vI(k1,j1)) &
+                  + 0.5_dp*(o21vI(j1,k1)*o21vJ(l1,i1) + o21vJ(j1,k1)*o21vI(l1,i1)) &
+                  + 0.5_dp*(o21vI(j1,l1)*o21vJ(k1,i1) + o21vJ(j1,l1)*o21vI(k1,i1)) &
+                  + 0.5_dp*(o21vI(l1,j1)*o21vJ(i1,k1) + o21vJ(l1,j1)*o21vI(i1,k1)) &
+                  + 0.5_dp*(o21vI(k1,j1)*o21vJ(i1,l1) + o21vJ(k1,j1)*o21vI(i1,l1)) &
+                  + 0.5_dp*(o21vI(l1,i1)*o21vJ(j1,k1) + o21vJ(l1,i1)*o21vI(j1,k1)) &
+                  + 0.5_dp*(o21vI(k1,i1)*o21vJ(j1,l1) + o21vJ(k1,i1)*o21vI(j1,l1))
+
+              df1 = df1 + sgnk*qfspcp2*db2
+            end if
+
+            if (qfspcp3 /= 0.0_dp) then
+              dc1 = 0.5_dp*(bco1I(i1,k1)*bo2vJ(j1,l1) + bco1J(i1,k1)*bo2vI(j1,l1)) &
+                  + 0.5_dp*(bco1I(i1,l1)*bo2vJ(j1,k1) + bco1J(i1,l1)*bo2vI(j1,k1)) &
+                  + 0.5_dp*(bco1I(j1,k1)*bo2vJ(i1,l1) + bco1J(j1,k1)*bo2vI(i1,l1)) &
+                  + 0.5_dp*(bco1I(j1,l1)*bo2vJ(i1,k1) + bco1J(j1,l1)*bo2vI(i1,k1)) &
+                  + 0.5_dp*(bco1I(l1,j1)*bo2vJ(k1,i1) + bco1J(l1,j1)*bo2vI(k1,i1)) &
+                  + 0.5_dp*(bco1I(k1,j1)*bo2vJ(l1,i1) + bco1J(k1,j1)*bo2vI(l1,i1)) &
+                  + 0.5_dp*(bco1I(l1,i1)*bo2vJ(k1,j1) + bco1J(l1,i1)*bo2vI(k1,j1)) &
+                  + 0.5_dp*(bco1I(k1,i1)*bo2vJ(l1,j1) + bco1J(k1,i1)*bo2vI(l1,j1))
+
+              dc2 = 0.5_dp*(bco2I(i1,k1)*bo1vJ(j1,l1) + bco2J(i1,k1)*bo1vI(j1,l1)) &
+                  + 0.5_dp*(bco2I(i1,l1)*bo1vJ(j1,k1) + bco2J(i1,l1)*bo1vI(j1,k1)) &
+                  + 0.5_dp*(bco2I(j1,k1)*bo1vJ(i1,l1) + bco2J(j1,k1)*bo1vI(i1,l1)) &
+                  + 0.5_dp*(bco2I(j1,l1)*bo1vJ(i1,k1) + bco2J(j1,l1)*bo1vI(i1,k1)) &
+                  + 0.5_dp*(bco2I(l1,j1)*bo1vJ(k1,i1) + bco2J(l1,j1)*bo1vI(k1,i1)) &
+                  + 0.5_dp*(bco2I(k1,j1)*bo1vJ(l1,i1) + bco2J(k1,j1)*bo1vI(l1,i1)) &
+                  + 0.5_dp*(bco2I(l1,i1)*bo1vJ(k1,j1) + bco2J(l1,i1)*bo1vI(k1,j1)) &
+                  + 0.5_dp*(bco2I(k1,i1)*bo1vJ(l1,j1) + bco2J(k1,i1)*bo1vI(l1,j1))
+
+              dc3 = 0.5_dp*(bo2vI(i1,k1)*bco1J(j1,l1) + bo2vJ(i1,k1)*bco1I(j1,l1)) &
+                  + 0.5_dp*(bo2vI(i1,l1)*bco1J(j1,k1) + bo2vJ(i1,l1)*bco1I(j1,k1)) &
+                  + 0.5_dp*(bo2vI(j1,k1)*bco1J(i1,l1) + bo2vJ(j1,k1)*bco1I(i1,l1)) &
+                  + 0.5_dp*(bo2vI(j1,l1)*bco1J(i1,k1) + bo2vJ(j1,l1)*bco1I(i1,k1)) &
+                  + 0.5_dp*(bo2vI(l1,j1)*bco1J(k1,i1) + bo2vJ(l1,j1)*bco1I(k1,i1)) &
+                  + 0.5_dp*(bo2vI(k1,j1)*bco1J(l1,i1) + bo2vJ(k1,j1)*bco1I(l1,i1)) &
+                  + 0.5_dp*(bo2vI(l1,i1)*bco1J(k1,j1) + bo2vJ(l1,i1)*bco1I(k1,j1)) &
+                  + 0.5_dp*(bo2vI(k1,i1)*bco1J(l1,j1) + bo2vJ(k1,i1)*bco1I(l1,j1))
+
+              dc4 = 0.5_dp*(bo1vI(i1,k1)*bco2J(j1,l1) + bo1vJ(i1,k1)*bco2I(j1,l1)) &
+                  + 0.5_dp*(bo1vI(i1,l1)*bco2J(j1,k1) + bo1vJ(i1,l1)*bco2I(j1,k1)) &
+                  + 0.5_dp*(bo1vI(j1,k1)*bco2J(i1,l1) + bo1vJ(j1,k1)*bco2I(i1,l1)) &
+                  + 0.5_dp*(bo1vI(j1,l1)*bco2J(i1,k1) + bo1vJ(j1,l1)*bco2I(i1,k1)) &
+                  + 0.5_dp*(bo1vI(l1,j1)*bco2J(k1,i1) + bo1vJ(l1,j1)*bco2I(k1,i1)) &
+                  + 0.5_dp*(bo1vI(k1,j1)*bco2J(l1,i1) + bo1vJ(k1,j1)*bco2I(l1,i1)) &
+                  + 0.5_dp*(bo1vI(l1,i1)*bco2J(k1,j1) + bo1vJ(l1,i1)*bco2I(k1,j1)) &
+                  + 0.5_dp*(bo1vI(k1,i1)*bco2J(l1,j1) + bo1vJ(k1,i1)*bco2I(l1,j1))
+
+              dd1 = 0.5_dp*(bco1I(i1,j1)*bo2vJ(l1,k1) + bco1J(i1,j1)*bo2vI(l1,k1)) &
+                  + 0.5_dp*(bco1I(i1,j1)*bo2vJ(k1,l1) + bco1J(i1,j1)*bo2vI(k1,l1)) &
+                  + 0.5_dp*(bco1I(j1,i1)*bo2vJ(l1,k1) + bco1J(j1,i1)*bo2vI(l1,k1)) &
+                  + 0.5_dp*(bco1I(j1,i1)*bo2vJ(k1,l1) + bco1J(j1,i1)*bo2vI(k1,l1)) &
+                  + 0.5_dp*(bco1I(l1,k1)*bo2vJ(i1,j1) + bco1J(l1,k1)*bo2vI(i1,j1)) &
+                  + 0.5_dp*(bco1I(k1,l1)*bo2vJ(i1,j1) + bco1J(k1,l1)*bo2vI(i1,j1)) &
+                  + 0.5_dp*(bco1I(l1,k1)*bo2vJ(j1,i1) + bco1J(l1,k1)*bo2vI(j1,i1)) &
+                  + 0.5_dp*(bco1I(k1,l1)*bo2vJ(j1,i1) + bco1J(k1,l1)*bo2vI(j1,i1))
+
+              dd2 = 0.5_dp*(bco2I(i1,j1)*bo1vJ(l1,k1) + bco2J(i1,j1)*bo1vI(l1,k1)) &
+                  + 0.5_dp*(bco2I(i1,j1)*bo1vJ(k1,l1) + bco2J(i1,j1)*bo1vI(k1,l1)) &
+                  + 0.5_dp*(bco2I(j1,i1)*bo1vJ(l1,k1) + bco2J(j1,i1)*bo1vI(l1,k1)) &
+                  + 0.5_dp*(bco2I(j1,i1)*bo1vJ(k1,l1) + bco2J(j1,i1)*bo1vI(k1,l1)) &
+                  + 0.5_dp*(bco2I(l1,k1)*bo1vJ(i1,j1) + bco2J(l1,k1)*bo1vI(i1,j1)) &
+                  + 0.5_dp*(bco2I(k1,l1)*bo1vJ(i1,j1) + bco2J(k1,l1)*bo1vI(i1,j1)) &
+                  + 0.5_dp*(bco2I(l1,k1)*bo1vJ(j1,i1) + bco2J(l1,k1)*bo1vI(j1,i1)) &
+                  + 0.5_dp*(bco2I(k1,l1)*bo1vJ(j1,i1) + bco2J(k1,l1)*bo1vI(j1,i1))
+
+              dd3 = 0.5_dp*(bo2vI(i1,j1)*bco1J(l1,k1) + bo2vJ(i1,j1)*bco1I(l1,k1)) &
+                  + 0.5_dp*(bo2vI(i1,j1)*bco1J(k1,l1) + bo2vJ(i1,j1)*bco1I(k1,l1)) &
+                  + 0.5_dp*(bo2vI(j1,i1)*bco1J(l1,k1) + bo2vJ(j1,i1)*bco1I(l1,k1)) &
+                  + 0.5_dp*(bo2vI(j1,i1)*bco1J(k1,l1) + bo2vJ(j1,i1)*bco1I(k1,l1)) &
+                  + 0.5_dp*(bo2vI(l1,k1)*bco1J(i1,j1) + bo2vJ(l1,k1)*bco1I(i1,j1)) &
+                  + 0.5_dp*(bo2vI(k1,l1)*bco1J(i1,j1) + bo2vJ(k1,l1)*bco1I(i1,j1)) &
+                  + 0.5_dp*(bo2vI(l1,k1)*bco1J(j1,i1) + bo2vJ(l1,k1)*bco1I(j1,i1)) &
+                  + 0.5_dp*(bo2vI(k1,l1)*bco1J(j1,i1) + bo2vJ(k1,l1)*bco1I(j1,i1))
+
+              dd4 = 0.5_dp*(bo1vI(i1,j1)*bco2J(l1,k1) + bo1vJ(i1,j1)*bco2I(l1,k1)) &
+                  + 0.5_dp*(bo1vI(i1,j1)*bco2J(k1,l1) + bo1vJ(i1,j1)*bco2I(k1,l1)) &
+                  + 0.5_dp*(bo1vI(j1,i1)*bco2J(l1,k1) + bo1vJ(j1,i1)*bco2I(l1,k1)) &
+                  + 0.5_dp*(bo1vI(j1,i1)*bco2J(k1,l1) + bo1vJ(j1,i1)*bco2I(k1,l1)) &
+                  + 0.5_dp*(bo1vI(l1,k1)*bco2J(i1,j1) + bo1vJ(l1,k1)*bco2I(i1,j1)) &
+                  + 0.5_dp*(bo1vI(k1,l1)*bco2J(i1,j1) + bo1vJ(k1,l1)*bco2I(i1,j1)) &
+                  + 0.5_dp*(bo1vI(l1,k1)*bco2J(j1,i1) + bo1vJ(l1,k1)*bco2I(j1,i1)) &
+                  + 0.5_dp*(bo1vI(k1,l1)*bco2J(j1,i1) + bo1vJ(k1,l1)*bco2I(j1,i1))
+
+              df1  = df1 + sgnk*qfspcp3*(-dc1-dc2-dc3-dc4 &
+                                         +dd1+dd2+dd3+dd4)
+            end if
+
+            dabmax = max(dabmax, abs(df1))
+            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+          end do
+        end do
+      end do
+    end do
+  end subroutine grd2_mrsf_nac_compute_data_t_get_density
+
+!###############################################################################
+
+!> @brief Phase 11 self-test: at I=J the bilinear NAC compute-data type must
+!>        reproduce the production grd2_mrsf_compute_data_t two-electron
+!>        gradient bit-for-bit. Reads the same tagarrays the production gradient
+!>        consumed (DM_A/B reference, td_p relaxed, td_mrsf_density channels)
+!>        for the current target state, runs both grd2 paths in one process, and
+!>        prints max|de_nac - de_prod|. Triggered by env OQP_NAC_SELFTEST.
+  subroutine mrsf_nac_amp_selftest(infos)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use mathlib, only: unpack_matrix
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_amp_selftest"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), &
+                                          td_mrsf_density(:,:,:), td_p(:,:)
+    character(len=*), parameter :: tags_general(*) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_DM_B, OQP_td_p /)
+    character(len=*), parameter :: tags_mrsf(1) = (/ character(len=80) :: &
+      OQP_td_mrsf_density /)
+
+    real(kind=dp), allocatable, target :: dA(:,:,:), pA(:,:,:), &
+                                          dB(:,:,:), pB(:,:,:), spc(:,:,:)
+    real(kind=dp), allocatable :: deP(:,:), deN(:,:)
+    class(grd2_compute_data_t), allocatable :: gP
+    class(grd2_compute_data_t), allocatable :: gN
+    real(kind=dp) :: scale_exch, scale_exch2, dmax, gmax
+    logical :: dft, do_cam
+    integer :: nbf, mrst, natom, ok
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf   = basis%nbf
+    natom = ubound(infos%atoms%zn,1)
+    mrst  = infos%tddft%mult
+
+    dft = infos%control%hamilton == 20
+    scale_exch  = 1.0_dp
+    scale_exch2 = 1.0_dp
+    if (dft) then
+      scale_exch  = infos%dft%HFscale
+      scale_exch2 = infos%tddft%HFscale
+    end if
+    do_cam = dft .and. infos%dft%cam_flag
+
+    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    call tagarray_get_data(infos%dat, OQP_td_p, td_p)
+    call data_has_tags(infos%dat, tags_mrsf, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_td_mrsf_density, td_mrsf_density)
+
+    allocate(dA(nbf,nbf,2), pA(nbf,nbf,2), dB(nbf,nbf,2), pB(nbf,nbf,2), &
+             spc(7,nbf,nbf), source=0.0_dp, stat=ok)
+    if (ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
+
+    call unpack_matrix(td_p(:,1), pA(:,:,1))
+    call unpack_matrix(td_p(:,2), pA(:,:,2))
+    call unpack_matrix(dmat_a, dA(:,:,1))
+    call unpack_matrix(dmat_b, dA(:,:,2))
+    spc(1:7,:,:) = td_mrsf_density
+    ! independent copies (init mutates d2/p2 in place)
+    dB = dA
+    pB = pA
+
+    allocate(deP(3,natom), deN(3,natom), source=0.0_dp)
+
+    ! Path A: production quadratic type
+    gP = grd2_mrsf_compute_data_t( d2 = dA, p2 = pA, spc2 = spc, &
+                                   nbf = nbf, hfscale = scale_exch, &
+                                   hfscale2 = scale_exch2, &
+                                   spcscale = [infos%tddft%spc_coco, &
+                                               infos%tddft%spc_ovov, &
+                                               infos%tddft%spc_coov], &
+                                   mrst = mrst )
+    call gP%init()
+    call grd2_driver(infos, basis, deP, gP, &
+                     cam = do_cam, alpha = infos%tddft%cam_alpha, &
+                     beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
+    call gP%clean()
+
+    ! Path B: bilinear NAC type at I=J (spcI == spcJ == spc)
+    gN = grd2_mrsf_nac_compute_data_t( d2 = dB, p2 = pB, spcI = spc, spcJ = spc, &
+                                       nbf = nbf, hfscale = scale_exch, &
+                                       hfscale2 = scale_exch2, &
+                                       spcscale = [infos%tddft%spc_coco, &
+                                                   infos%tddft%spc_ovov, &
+                                                   infos%tddft%spc_coov], &
+                                       mrst = mrst )
+    call gN%init()
+    call grd2_driver(infos, basis, deN, gN, &
+                     cam = do_cam, alpha = infos%tddft%cam_alpha, &
+                     beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
+    call gN%clean()
+
+    dmax = maxval(abs(deN - deP))
+    gmax = maxval(abs(deP))
+    write(iw,'(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
+    write(iw,'(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
+    write(iw,'(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
+    write(*, '(/5X,"=== Phase 11 NAC amplitude self-test (I=J) ===")')
+    write(*, '(5X,"production 2e-grad max |de|      = ",ES20.12)') gmax
+    write(*, '(5X,"max |de_nac(I=J) - de_prod|      = ",ES20.12)') dmax
+
+    deallocate(dA, pA, dB, pB, spc, deP, deN)
+
+  end subroutine mrsf_nac_amp_selftest
 
 !###############################################################################
 

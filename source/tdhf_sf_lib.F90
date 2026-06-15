@@ -425,8 +425,17 @@ contains
 
     real(kind=dp), allocatable, dimension(:,:) :: wrk
     integer :: nbf, i, j, ij, k, nconf
+    logical :: zero_2ft
+    character(len=8) :: ev_2ft
 
     nbf = ubound(fa, 1)
+
+  ! NAC Phase 11 diagnostic gate: zero the 2*F*T orbital-relaxation terms that
+  ! the Davidson matvec does NOT have (mrsfesum contracts F with the amplitude
+  ! X, not with the difference density T). Probes whether these terms are the
+  ! source of the off-diagonal ground-pair coupling deficiency.
+    call get_environment_variable('NAC_ZERO_2FT', ev_2ft)
+    zero_2ft = len_trim(ev_2ft) > 0
 
     allocate(wrk(nbf,nbf), &
              source=0.0_dp)
@@ -438,13 +447,16 @@ contains
 
   ! Alpha
   ! XHXA+= 2*FA(P+,I+)*TA(I+,J+)
+    if (.not. zero_2ft) then
     call dgemm('n', 'n', nbf, noca, noca, &
                2.0_dp, fa, nbf, &
                        tij, noca, &
                1.0_dp, xhxa, nbf)
+    end if
 
   ! Beta
   ! XHXB+= 2*FB(P-,A-)*TB(A-,B-)
+    if (.not. zero_2ft) then
     do j = nocb+1, nbf
       do i = nocb+1, nbf
         wrk(i,j) = tab(i-nocb,j-nocb)
@@ -454,6 +466,7 @@ contains
                2.0_dp, fb, nbf, &
                        wrk, nbf, &
                1.0_dp, xhxb, nbf)
+    end if
 
   ! doc-socc
     ij = 0

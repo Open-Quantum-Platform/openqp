@@ -59,6 +59,135 @@ contains
     infos%control%maxit_dav = maxit0
   end subroutine tdhf_mrsf_energy_with_restart
 
+!###############################################################################
+
+  subroutine mrsf_matvec_apply_C(c_handle) bind(C, name="mrsf_matvec_apply")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_matvec_apply(inf)
+  end subroutine mrsf_matvec_apply_C
+
+!> @brief NAC Phase 11 diagnostic. Apply the MRSF Davidson matvec A (TDA) to a
+!>   single trial amplitude (OQP::td_bvec_mo column 1) using the CURRENT
+!>   orbitals VEC_MO_A/B but the FROZEN AO Fock FOCK_A/B (rebuilt as the MO
+!>   Fock C^T F_AO C from the given orbitals). Writes A.x to OQP::nac_mvax.
+!>   Driving this from Python with orbital-rotated VEC_MO_A/B (FOCK_A/B held
+!>   fixed) yields a frozen-Fock finite-difference reconstruction of the
+!>   amplitude-term orbital gradient X_I^T(d_theta A)X_J, the matvec-derived
+!>   Z-vector RHS that must replace the gradient chain (sfrorhs) off-diagonal.
+  subroutine mrsf_matvec_apply(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use precision, only: dp
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfmntoia, mrsfesum
+    use tdhf_lib, only: iatogen
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix
+    use iso_c_binding, only: c_f_pointer, c_int
+
+    implicit none
+    character(len=*), parameter :: subroutine_name = "mrsf_matvec_apply"
+    character(len=*), parameter :: OQP_nac_mvax = "OQP::nac_mvax"
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
+                                          mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
+    real(kind=dp), pointer :: nac_ax(:)
+    real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
+    real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    type(int2_compute_t) :: int2_driver
+    type(int2_mrsf_data_t), target :: int2_data_st
+    integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, iter, diag_index
+    integer(c_int), pointer :: ixcore_ptr(:)
+    real(kind=dp) :: scale_exch, hfs
+    logical :: dft
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_td_bvec_mo /)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb
+    xvec_dim = nocca*nvirb
+    mrst = infos%tddft%mult
+    dft = infos%control%hamilton == 20
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%tddft%hfscale
+    hfs = infos%tddft%hfscale
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    if (.not. (infos%tddft%ixcore_len == 0)) &
+      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
+
+    allocate(fa(nbf,nbf), fb(nbf,nbf), scr(nbf2), wrk1(nbf,nbf), &
+             mrsf_density(1,7,nbf,nbf), amo(xvec_dim,1), source=0.0_dp)
+
+    ! MO Fock from the FROZEN AO Fock and the (possibly rotated) orbitals
+    call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
+    if (.not. (infos%tddft%ixcore_len == 0)) then
+      do iter = 1, noccb
+        if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == iter)) then
+          diag_index = (iter + 1) * iter / 2
+          scr(diag_index) = -1.0d6
+        end if
+      end do
+    end if
+    call unpack_matrix(scr, fa)
+    call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, scr)
+    call unpack_matrix(scr, fb)
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+
+    ! A . x   (TDA),  x = bvec_mo(:,1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfcbc(infos, mo_a, mo_b, wrk1, mrsf_density(1,:,:,:))
+    int2_data_st = int2_mrsf_data_t( &
+      d3 = mrsf_density(:1,:,:,:), &
+      tamm_dancoff = .true., &
+      scale_exchange = scale_exch, &
+      scale_coulomb = scale_exch)
+    call int2_driver%run(int2_data_st, &
+      cam = dft .and. infos%dft%cam_flag, &
+      alpha = infos%tddft%cam_alpha, alpha_coulomb = infos%tddft%cam_alpha, &
+      beta = infos%tddft%cam_beta, beta_coulomb = infos%tddft%cam_beta, &
+      mu = infos%tddft%cam_mu)
+    fmrst2 => int2_data_st%f3(:,:,:,:,1)
+    if (mrst==3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+    if (infos%tddft%spc_coco /= hfs) &
+      fmrst2(:,6,:,:) = fmrst2(:,6,:,:)*infos%tddft%spc_coco/hfs
+    if (infos%tddft%spc_ovov /= hfs) &
+      fmrst2(:,5,:,:) = fmrst2(:,5,:,:)*infos%tddft%spc_ovov/hfs
+    if (infos%tddft%spc_coov /= hfs) &
+      fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
+
+    call mrsfmntoia(infos, fmrst2(1,:,:,:), amo, mo_a, mo_b, 1)
+    call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
+    call mrsfesum(infos, wrk1, fa, fb, amo, 1)
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mvax /))
+    call infos%dat%reserve_data(OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
+    call tagarray_get_data(infos%dat, OQP_nac_mvax, nac_ax)
+    nac_ax = amo(:,1)
+
+  end subroutine mrsf_matvec_apply
+
   subroutine tdhf_mrsf_energy(infos)
     use io_constants, only: iw
     use oqp_tagarray_driver

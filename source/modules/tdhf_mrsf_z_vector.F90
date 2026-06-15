@@ -2342,6 +2342,22 @@ contains
         call sfrorhs(rhs, hxa, hxb, ab1_mo_a, ab1_mo_b, &
                      Tij, Tab, Fa, Fb, nocca, noccb)
 
+        ! NAC Phase 11 diagnostic: export the production gradient-chain z-vector
+        ! RHS so the frozen-Fock matvec-derived RHS can be compared element-wise
+        ! (diagonal must match; off-diagonal difference is the deficiency fix).
+        block
+          character(len=8) :: ev_dump
+          real(kind=dp), pointer :: rhs_dump(:)
+          call get_environment_variable('NAC_DUMP_RHS', ev_dump)
+          if (len_trim(ev_dump) > 0) then
+            call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_zvec_rhs' /))
+            call infos%dat%reserve_data('OQP::nac_zvec_rhs', ta_type_real64, &
+                 size(rhs), (/ size(rhs) /))
+            call tagarray_get_data(infos%dat, 'OQP::nac_zvec_rhs', rhs_dump)
+            rhs_dump = rhs
+          end if
+        end block
+
       ! ----------------------------------------------------------------
       ! NAC orbital-response (CPHF) override. Replace the gradient RHS by
       ! the interstate transition density gamma^IJ projected onto the
