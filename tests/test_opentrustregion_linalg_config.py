@@ -1,3 +1,7 @@
+import shutil
+import subprocess
+import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -161,12 +165,79 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
 
         self.assertIn("find_package(OpenBLAS CONFIG QUIET)", functions_cmake)
         self.assertIn("OPENBLAS_USE64BITINT", functions_cmake)
-        self.assertIn("set(BLAS_LIBRARIES ${OpenBLAS_LIBRARIES})", functions_cmake)
-        self.assertIn("set(LAPACK_LIBRARIES ${OpenBLAS_LIBRARIES})", functions_cmake)
+        self.assertIn("OpenBLAS_LIBRARY", functions_cmake)
+        self.assertIn("IMPORTED_LOCATION", functions_cmake)
+        self.assertIn("set(BLAS_LIBRARIES ${_openblas_libraries})", functions_cmake)
+        self.assertIn("set(LAPACK_LIBRARIES ${_openblas_libraries})", functions_cmake)
         self.assertIn("oqp_external_cmake_list_arg(_otr_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})", external_cmake)
         self.assertIn("oqp_external_cmake_list_arg(_otr_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})", external_cmake)
         self.assertIn("oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})", external_cmake)
         self.assertIn("oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})", external_cmake)
+
+    def test_openblas_config_fallback_uses_imported_library_before_transitive_deps(self):
+        cmake = shutil.which("cmake")
+        self.assertIsNotNone(cmake)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            package_root = tmp_path / "openblas"
+            include_dir = package_root / "include"
+            lib_dir = package_root / "lib"
+            config_dir = lib_dir / "cmake" / "OpenBLAS"
+            source_dir = tmp_path / "source"
+            build_dir = tmp_path / "build"
+            include_dir.mkdir(parents=True)
+            lib_dir.mkdir(parents=True)
+            config_dir.mkdir(parents=True)
+            source_dir.mkdir()
+
+            openblas_library = lib_dir / "libopenblas.a"
+            openblas_library.write_text("")
+            (include_dir / "openblas_config.h").write_text("#define OPENBLAS_USE64BITINT 1\n")
+            (config_dir / "OpenBLASConfig.cmake").write_text(textwrap.dedent(f"""
+                set(OpenBLAS_FOUND TRUE)
+                set(OpenBLAS_INCLUDE_DIRS [=[{include_dir.as_posix()}]=])
+                set(OpenBLAS_LIBRARY [=[{openblas_library.as_posix()}]=])
+                set(OpenBLAS_LIBRARIES pthread;m)
+                add_library(OpenBLAS::OpenBLAS UNKNOWN IMPORTED)
+                set_target_properties(OpenBLAS::OpenBLAS PROPERTIES
+                  IMPORTED_LOCATION [=[{openblas_library.as_posix()}]=]
+                  INTERFACE_LINK_LIBRARIES "${{OpenBLAS_LIBRARIES}}"
+                  INTERFACE_INCLUDE_DIRECTORIES "${{OpenBLAS_INCLUDE_DIRS}}")
+            """))
+            (source_dir / "CMakeLists.txt").write_text(textwrap.dedent(f"""
+                cmake_minimum_required(VERSION 3.16)
+                project(openblas_config_probe NONE)
+                set(CMAKE_PREFIX_PATH [=[{package_root.as_posix()}]=])
+                set(BLA_SIZEOF_INTEGER 8)
+                set(LINALG_LIB_INT64 ON)
+                include([=[{(ROOT / "cmake" / "oqp_functions.cmake").as_posix()}]=])
+                findOpenBLASConfig()
+                if(NOT BLAS_FOUND OR NOT LAPACK_FOUND)
+                  message(FATAL_ERROR "OpenBLAS config fallback did not mark BLAS/LAPACK found")
+                endif()
+                list(GET BLAS_LIBRARIES 0 _blas_first)
+                if(NOT _blas_first STREQUAL [=[{openblas_library.as_posix()}]=])
+                  message(FATAL_ERROR "BLAS_LIBRARIES did not start with the OpenBLAS library: ${{BLAS_LIBRARIES}}")
+                endif()
+                if(BLAS_LIBRARIES MATCHES "OpenBLAS::OpenBLAS")
+                  message(FATAL_ERROR "BLAS_LIBRARIES leaked an imported target into subbuild args: ${{BLAS_LIBRARIES}}")
+                endif()
+                if(NOT BLAS_LIBRARIES MATCHES "pthread" OR NOT BLAS_LIBRARIES MATCHES "m")
+                  message(FATAL_ERROR "BLAS_LIBRARIES lost transitive dependencies: ${{BLAS_LIBRARIES}}")
+                endif()
+                if(NOT BLAS_SIZEOF_INTEGER EQUAL 8 OR NOT LAPACK_SIZEOF_INTEGER EQUAL 8)
+                  message(FATAL_ERROR "OpenBLAS config fallback did not preserve the requested integer width")
+                endif()
+            """))
+
+            result = subprocess.run(
+                [cmake, "-S", str(source_dir), "-B", str(build_dir)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
