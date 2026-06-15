@@ -25,8 +25,6 @@ BLAS variant was run three times with:
 - Single-thread BLAS where the BLAS library exposes a direct thread control
   environment variable.
 
-The exact input decks are in `inputs/`.
-
 ## Results summary
 
 Mean OpenQP wall times are in `thymine_bhhlyp_blas_means.tsv`. Failed cases are
