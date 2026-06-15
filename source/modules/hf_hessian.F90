@@ -810,7 +810,7 @@ contains
             mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) + hxr*dmoa
             mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) + hxr*dmob
             frap = 0.0_dp; frbp = 0.0_dp
-            call dftexcor(basis, mgr, infos%control%scftype, frap, frbp, mopa, mopb, &
+            call dftexcor(basis, mgr, int(infos%control%scftype), frap, frbp, mopa, mopb, &
                           nbf, nbf2, exr, telr, tknr, infos)
             call dftclean(infos)
             basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - 2*hxr
@@ -819,7 +819,7 @@ contains
             mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) - hxr*dmoa
             mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) - hxr*dmob
             fram = 0.0_dp; frbm = 0.0_dp
-            call dftexcor(basis, mgr, infos%control%scftype, fram, frbm, mopa, mopb, &
+            call dftexcor(basis, mgr, int(infos%control%scftype), fram, frbm, mopa, mopb, &
                           nbf, nbf2, exr, telr, tknr, infos)
             call dftclean(infos)
             basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
@@ -1000,7 +1000,7 @@ contains
           mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) + hx*sp(1)%dCx(:,:,yy2)
           mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) + hx*sp(2)%dCx(:,:,yy2)
           frap = 0.0_dp; frbp = 0.0_dp
-          call dftexcor(basis, mg, infos%control%scftype, frap, frbp, mopa, mopb, &
+          call dftexcor(basis, mg, int(infos%control%scftype), frap, frbp, mopa, mopb, &
                         nbf, nbf2, exr, telr, tknr, infos)
           call dftclean(infos)
           basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) - 2*hx
@@ -1013,7 +1013,7 @@ contains
           mopa = sp(1)%mo; mopa(:,1:nocca) = sp(1)%mo(:,1:nocca) - hx*sp(1)%dCx(:,:,yy2)
           mopb = sp(2)%mo; mopb(:,1:noccb) = sp(2)%mo(:,1:noccb) - hx*sp(2)%dCx(:,:,yy2)
           fram = 0.0_dp; frbm = 0.0_dp
-          call dftexcor(basis, mg, infos%control%scftype, fram, frbm, mopa, mopb, &
+          call dftexcor(basis, mg, int(infos%control%scftype), fram, frbm, mopa, mopb, &
                         nbf, nbf2, exr, telr, tknr, infos)
           call dftclean(infos)
           basis%atoms%xyz(ccy,kcy) = basis%atoms%xyz(ccy,kcy) + hx
@@ -1381,7 +1381,7 @@ contains
             mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) + hxr*dmoa
             mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) + hxr*dmob
             frap = 0.0_dp; frbp = 0.0_dp
-            call dftexcor(basis, mgr, infos%control%scftype, frap, frbp, mopa, mopb, &
+            call dftexcor(basis, mgr, int(infos%control%scftype), frap, frbp, mopa, mopb, &
                           nbf, nbf2, exr, telr, tknr, infos)
             call dftclean(infos)
             basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) - 2*hxr
@@ -1390,7 +1390,7 @@ contains
             mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) - hxr*dmoa
             mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) - hxr*dmob
             fram = 0.0_dp; frbm = 0.0_dp
-            call dftexcor(basis, mgr, infos%control%scftype, fram, frbm, mopa, mopb, &
+            call dftexcor(basis, mgr, int(infos%control%scftype), fram, frbm, mopa, mopb, &
                           nbf, nbf2, exr, telr, tknr, infos)
             call dftclean(infos)
             basis%atoms%xyz(cc,kc) = basis%atoms%xyz(cc,kc) + hxr
@@ -1563,7 +1563,7 @@ contains
           mopa = mo; mopa(:,1:nocca) = mo(:,1:nocca) + sgn*hstep*dCa
           mopb = mo; mopb(:,1:noccb) = mo(:,1:noccb) + sgn*hstep*dCb
           fra = 0.0_dp; frb = 0.0_dp
-          call dftexcor(basis, mg, infos%control%scftype, fra, frb, mopa, mopb, &
+          call dftexcor(basis, mg, int(infos%control%scftype), fra, frb, mopa, mopb, &
                         nbf, nbf2, exr, telr, tknr, infos)
           faop = faop + fra; fbop = fbop + frb
           dedft = 0.0_dp

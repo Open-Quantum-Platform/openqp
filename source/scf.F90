@@ -510,7 +510,7 @@ contains
       write(IW,'(5X,"Converger = TRAH (trust-region augmented Hessian)")')
     else if (use_soscf) then
       write(IW,'(5X,"Converger = SOSCF (",A,")")') &
-                 trim(get_solver_name(infos%control%converger_type))
+                 trim(get_solver_name(int(infos%control%converger_type)))
     else
       write(IW,'(5X,"Converger = ",A,"   MaxDIIS = ",I0)') &
                  trim(diis_name(infos%control%diis_type)), infos%control%maxdiis
@@ -890,7 +890,7 @@ contains
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
+                       verbose=int(infos%control%verbose))
         ! After resetting DIIS, we need to skip SD
         call conv%add_data(f=pfock(:,1:diis_nfocks), &
                            dens=pdmat(:,1:diis_nfocks), &
@@ -1348,13 +1348,20 @@ contains
 
     real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! c-DIIS error threshold
     real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! e-DIIS error threshold
+    integer :: control_converger, control_diis, control_verbose
+    integer :: control_maxit, control_scftype
 
     use_soscf = .false.
     use_trah = .false.
+    control_converger = int(infos%control%converger_type)
+    control_diis = int(infos%control%diis_type)
+    control_verbose = int(infos%control%verbose)
+    control_maxit = int(infos%control%maxit)
+    control_scftype = int(infos%control%scftype)
 
-    select case (infos%control%converger_type)
+    select case (control_converger)
     case (scf_diis) ! DIIS family
-      if (infos%control%diis_type == 5) then
+      if (control_diis == 5) then
         ! v-DIIS: cascade of c-DIIS / e-DIIS / c-DIIS with level shift
         call conv%init(ldim=nbf, &
                        maxvec=maxdiis, &
@@ -1364,7 +1371,7 @@ contains
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
+                       verbose=control_verbose)
         if (infos%control%vshift == 0.0_dp) then
           infos%control%vshift = 0.1_dp
           vshift = 0.1_dp
@@ -1380,43 +1387,43 @@ contains
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
+                       verbose=control_verbose)
       else
         ! Standard single DIIS method from input
         call conv%init(ldim=nbf, &
                        maxvec=maxdiis, &
-                       subconvergers=[infos%control%diis_type], &
+                       subconvergers=[control_diis], &
                        thresholds   =[ethr_cdiis_big], &
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
+                       verbose=control_verbose)
       end if
 
     case (scf_bfgs) ! SOSCF
       use_soscf = .true.
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                     maxvec=infos%control%maxit, &
+                     maxvec=control_maxit, &
                      subconvergers=[conv_soscf], &
                      thresholds   =[huge(1.0_dp)], &
                      overlap=smat_full, &
                      overlap_sqrt=qmat, &
                      num_focks=soscf_nfocks, &
-                     scf_type=infos%control%scftype, &
-                     verbose=infos%control%verbose)
+                     scf_type=control_scftype, &
+                     verbose=control_verbose)
       call set_soscf_parametres(infos, conv)
 
     case (scf_trah) ! TRAH
       use_trah = .true.
       call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                     maxvec=infos%control%maxit, &
+                     maxvec=control_maxit, &
                      subconvergers=[conv_trah], &
                      thresholds   =[huge(1.0_dp)], &
                      overlap=smat_full, &
                      overlap_sqrt=qmat, &
                      num_focks=soscf_nfocks, &
-                     scf_type=infos%control%scftype, &
-                     verbose=infos%control%verbose, &
+                     scf_type=control_scftype, &
+                     verbose=control_verbose, &
                      sd_scf=infos%control%sd_scf)
       call set_trah_parametres(infos, molgrid, conv)
 

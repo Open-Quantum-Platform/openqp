@@ -13,6 +13,13 @@ set(_OQP_DDX_VERSION "0.8.0")
 set(_OQP_EXTERNALS_VERSION_KEY
     "ext${_OQP_EXTERNALS_CACHE_REVISION}-libint${_OQP_LIBINT2_VERSION}-nlopt${_OQP_NLOPT_VERSION}-libxc${_OQP_LIBXC_VERSION}-tag${_OQP_TAGARRAY_VERSION}-ecp${_OQP_LIBECPINT_VERSION}-lapack${_OQP_LAPACK_VERSION}-otr${_OQP_OPENTRUSTREGION_VERSION}-fmt${_OQP_FPRETTIFY_VERSION}-ddx${_OQP_DDX_VERSION}")
 
+set(OQP_EXTERNAL_GENERATOR_ARGS
+        -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+)
+if(CMAKE_MAKE_PROGRAM)
+    list(APPEND OQP_EXTERNAL_GENERATOR_ARGS -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM})
+endif()
+
 if(OQP_REUSE_EXTERNALS)
   if(OQP_EXTERNALS_ROOT)
     set(_OQP_EXTERNALS_ROOT "${OQP_EXTERNALS_ROOT}")
@@ -39,6 +46,11 @@ if(OQP_REUSE_EXTERNALS)
   endif()
   if(CMAKE_GENERATOR_INSTANCE)
     string(APPEND _oqp_external_generator "-${CMAKE_GENERATOR_INSTANCE}")
+  endif()
+  if(CMAKE_MAKE_PROGRAM)
+    string(MD5 _oqp_external_make_program_hash "${CMAKE_MAKE_PROGRAM}")
+    string(SUBSTRING "${_oqp_external_make_program_hash}" 0 12 _oqp_external_make_program_hash)
+    string(APPEND _oqp_external_generator "-make${_oqp_external_make_program_hash}")
   endif()
   if(CMAKE_CONFIGURATION_TYPES)
     string(REPLACE ";" "+" _oqp_external_configurations "${CMAKE_CONFIGURATION_TYPES}")
@@ -173,7 +185,7 @@ ExternalProject_Add(libint2
                -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                -DLIBINT2_BUILD_SHARED_AND_STATIC_LIBS=${BUILD_SHARED_LIBS}
-               -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+               ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
 endif()
 endif()
@@ -209,7 +221,25 @@ ExternalProject_Add(nlopt
                    -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
+endif()
+
+set(LIBXC_CMAKE_ARGS
+        -DDISABLE_VXC=OFF
+        -DDISABLE_FXC=OFF
+        -DDISABLE_KXC=OFF
+        -DENABLE_FORTRAN=ON
+        -DBUILD_TESTING=OFF
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.25
+        ${OQP_EXTERNAL_GENERATOR_ARGS}
+)
+set(OQP_LIBXC_C_FLAGS_RELEASE "" CACHE STRING "Optional release C flags for external libxc")
+if(OQP_LIBXC_C_FLAGS_RELEASE)
+    list(APPEND LIBXC_CMAKE_ARGS -DCMAKE_C_FLAGS_RELEASE=${OQP_LIBXC_C_FLAGS_RELEASE})
 endif()
 
 oqp_set_external_paths(LIBXC libxc
@@ -234,16 +264,7 @@ ExternalProject_Add(libxc
         STAMP_DIR  ${LIBXC_STAMP_DIR}
         UPDATE_COMMAND ""
         INSTALL_COMMAND ""
-        CMAKE_ARGS -DDISABLE_VXC=OFF
-                   -DDISABLE_FXC=OFF
-                   -DDISABLE_KXC=OFF
-                   -DENABLE_FORTRAN=ON
-                   -DBUILD_TESTING=OFF
-                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-                   -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-                   -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   -DCMAKE_POLICY_VERSION_MINIMUM=3.25
-                   -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+        CMAKE_ARGS ${LIBXC_CMAKE_ARGS}
         )
 endif()
 
@@ -272,12 +293,13 @@ ExternalProject_Add(libtagarray
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
+        PATCH_COMMAND /bin/sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
-                   -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+                   ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
 endif()
 
@@ -309,14 +331,20 @@ ExternalProject_Add(libecpint
         CMAKE_ARGS -DLIBECPINT_BUILD_DOCS=OFF
                    -DLIBECPINT_BUILD_TESTS=OFF
 		   -DLIBECPINT_USE_PUGIXML=OFF
+                   -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   ${OQP_EXTERNAL_GENERATOR_ARGS}
 		   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target install
         )
 endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  set(BLA_LIB_SUFFIX "64")
+  if(LINALG_LIB_INT64)
+    set(BLA_LIB_SUFFIX "64")
+  else()
+    set(BLA_LIB_SUFFIX "")
+  endif()
   if(BUILD_SHARED_LIBS)
     set(la_fortran_flags "${CMAKE_Fortran_FLAGS} -fpic")
   else()
@@ -360,7 +388,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
                    -DCMAKE_Fortran_FLAGS=${la_fortran_flags}
                    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
                    -DCMAKE_TRY_COMPILE_PLATFORM_VARIABLES=CMAKE_POLICY_VERSION_MINIMUM
-                   -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+                   ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
   endif()
 endif()
@@ -372,12 +400,14 @@ oqp_set_external_paths(OPENTRUSTREGION opentrustregion
     "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/install/opentrustregion")
 set(otr_integer_flags "")
-if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
-    set(otr_integer_flags "-fdefault-integer-8")
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-    set(otr_integer_flags "-fdefault-integer-8")
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-    set(otr_integer_flags "-i8")
+if(LINALG_LIB_INT64)
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
+        set(otr_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        set(otr_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        set(otr_integer_flags "-i8")
+    endif()
 endif()
 set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -393,7 +423,7 @@ set(OTR_CMAKE_ARGS
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         -DCMAKE_Fortran_FLAGS=${otr_fortran_flags}
-        -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+        ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
 if(CMAKE_PREFIX_PATH)
     oqp_external_cmake_list_arg(_otr_prefix_path_arg CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH})
@@ -415,6 +445,15 @@ elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
     )
 elseif(DEFINED BLA_VENDOR)
     list(APPEND OTR_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+    if(DEFINED BLA_PREFER_PKGCONFIG)
+        list(APPEND OTR_CMAKE_ARGS -DBLA_PREFER_PKGCONFIG=${BLA_PREFER_PKGCONFIG})
+    endif()
+    if(DEFINED BLA_PKGCONFIG_BLAS)
+        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_BLAS=${BLA_PKGCONFIG_BLAS})
+    endif()
+    if(DEFINED BLA_PKGCONFIG_LAPACK)
+        list(APPEND OTR_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
+    endif()
 endif()
 
 # Portability: the bundled OpenTrustRegion hardcodes -march=native/-xHost in its
@@ -508,13 +547,9 @@ endif()
 #
 # ddX is LGPL-3.0 and stays an external, dynamically-linked dependency: its
 # source is never vendored into OpenQP. When no prebuilt DDX_ROOT is supplied we
-# build ddX v0.8.0 here, as ILP64, so its BLAS integer width matches OpenQP's
-# mandatory 64-bit-integer BLAS:
-#   * -fdefault-integer-8 (same as OpenTrustRegion above), and
-#   * a small C-bridge patch (cmake/patches/ddx-v0.8.0-ilp64.patch) that keeps
-#     ddX's int32 C ABI while letting the core be int64.
-# A stock LP64 ddX would export an unsuffixed dgemm_ that collides with OpenQP's
-# ILP64 dgemm_ on Linux's flat symbol namespace.
+# build ddX v0.8.0 here with the same BLAS integer width as OpenQP.  ILP64
+# builds use -fdefault-integer-8/-i8 and a small C-bridge patch that keeps
+# ddX's int32 C ABI while letting the core be int64.
 # ---------------------------------------------------------------------------
 if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     oqp_set_external_paths(DDX ddx
@@ -529,12 +564,14 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         ${DDX_INSTALL}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}ddx${CMAKE_SHARED_LIBRARY_SUFFIX}
         CACHE INTERNAL "DDX_LIBRARY" FORCE)
 
-    # Match OpenTrustRegion's ILP64 Fortran flags.
+    # Match OpenTrustRegion's BLAS integer flags.
     set(ddx_integer_flags "")
-    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-        set(ddx_integer_flags "-fdefault-integer-8")
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-        set(ddx_integer_flags "-i8")
+    if(LINALG_LIB_INT64)
+        if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+            set(ddx_integer_flags "-fdefault-integer-8")
+        elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+            set(ddx_integer_flags "-i8")
+        endif()
     endif()
     set(ddx_fortran_flags "${CMAKE_Fortran_FLAGS} ${ddx_integer_flags}")
     if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -553,7 +590,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
         -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         -DCMAKE_Fortran_FLAGS=${ddx_fortran_flags}
-        -DCMAKE_GENERATOR:INTERNAL=${CMAKE_GENERATOR}
+        ${OQP_EXTERNAL_GENERATOR_ARGS}
     )
     # Forward CMAKE_PREFIX_PATH only when set, so a non-standard ILP64 OpenBLAS
     # location reaches the ddX subbuild. An empty -D would override the
@@ -569,8 +606,23 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         list(APPEND DDX_CMAKE_ARGS
             "${_ddx_blas_arg}"
             "${_ddx_lapack_arg}")
+    elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
+        oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
+        oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
+        list(APPEND DDX_CMAKE_ARGS
+            "${_ddx_blas_arg}"
+            "${_ddx_lapack_arg}")
     elseif(DEFINED BLA_VENDOR)
         list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+        if(DEFINED BLA_PREFER_PKGCONFIG)
+            list(APPEND DDX_CMAKE_ARGS -DBLA_PREFER_PKGCONFIG=${BLA_PREFER_PKGCONFIG})
+        endif()
+        if(DEFINED BLA_PKGCONFIG_BLAS)
+            list(APPEND DDX_CMAKE_ARGS -DBLA_PKGCONFIG_BLAS=${BLA_PKGCONFIG_BLAS})
+        endif()
+        if(DEFINED BLA_PKGCONFIG_LAPACK)
+            list(APPEND DDX_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
+        endif()
     endif()
 
     oqp_reuse_or_build(ddx "${DDX_LIBRARY}" "${DDX_INCLUDE_DIR}")
@@ -602,7 +654,7 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     set_target_properties(DDX::ddx PROPERTIES
         IMPORTED_LOCATION ${DDX_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
-    message(STATUS "ddX will be built ILP64 from source: ${DDX_LIBRARY}")
+    message(STATUS "ddX will be built with ${BLA_SIZEOF_INTEGER}-byte BLAS integers from source: ${DDX_LIBRARY}")
 endif()
 
 

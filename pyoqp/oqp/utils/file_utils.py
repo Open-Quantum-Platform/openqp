@@ -117,10 +117,13 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'start':
         mode = 'w'
+        build = ''
+        if info and info.get('build'):
+            build = '   PyOQP build: %s\n' % info['build']
         loginfo = """
    PyOQP started at %s
-
-""" % what_is_time()
+%s
+""" % (what_is_time(), build)
 
     if section == 'end':
         start = mol.start_time

@@ -71,13 +71,12 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
 endif()
 
 option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
-if(NOT LINALG_LIB_INT64)
-    message(WARNING
-      "LP64 BLAS/LAPACK is no longer supported after removal of defined/defind. "
-      "Forcing LINALG_LIB_INT64=ON so stale CMake caches are repaired automatically."
+if(NOT LINALG_LIB_INT64 AND NOT APPLE)
+    message(FATAL_ERROR
+      "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "
+      "Accelerate builds. Other platforms require ILP64 BLAS/LAPACK with "
+      "OQP_BLAS_INT=8."
     )
-    set(LINALG_LIB_INT64 ON CACHE BOOL
-        "Use 64-bit integer interface to BLAS/LAPACK" FORCE)
 endif()
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
@@ -106,7 +105,6 @@ endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   add_compile_options(
-  $<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>
   $<$<COMPILE_LANGUAGE:Fortran>:-ffree-line-length-none>
   )
   if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -150,16 +148,21 @@ if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
       -fsanitize=thread
       )
   endif()
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
 endif()
-set(BLA_SIZEOF_INTEGER 8)
-set(OTR_SUFFIX "_64")
-set(OTR_DEFS "-DUSE_ILP64")
+if(LINALG_LIB_INT64)
+    set(BLA_SIZEOF_INTEGER 8)
+    set(OTR_SUFFIX "_64")
+    set(OTR_DEFS "-DUSE_ILP64")
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
+    endif()
+else()
+    set(BLA_SIZEOF_INTEGER 4)
+    set(OTR_SUFFIX "_32")
+    set(OTR_DEFS "")
+endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
 # external library is neither downloaded nor compiled, otr_interface.F90 is dropped
@@ -184,17 +187,17 @@ if(ENABLE_DDX)
   # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
   # (never vendored into the OpenQP tree). Two ways to provide it:
   #   * DDX_ROOT given -> use that prebuilt install (find_package).
-  #   * otherwise      -> CMake builds ddX v0.8.0 from source as ILP64 to match
-  #                       OpenQP's mandatory 64-bit-integer BLAS (see external/).
-  # The ILP64 build is required: a stock LP64 ddX exports an unsuffixed dgemm_
-  # that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
+  #   * otherwise      -> CMake builds ddX v0.8.0 from source to match OpenQP's
+  #                       selected BLAS integer width (see external/).
+  # For ILP64 builds, this also avoids a stock LP64 ddX exporting an unsuffixed
+  # dgemm_ that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
   if(DEFINED DDX_ROOT OR DEFINED ENV{DDX_ROOT})
     find_package(DDX REQUIRED)
     set(OQP_DDX_AUTOBUILD OFF)
     message(STATUS "ddX continuum-solvation backend (prebuilt): ${DDX_LIBRARY}")
   else()
     set(OQP_DDX_AUTOBUILD ON)
-    message(STATUS "ddX continuum-solvation backend: building ILP64 from source (v0.8.0)")
+    message(STATUS "ddX continuum-solvation backend: building ${BLA_SIZEOF_INTEGER}-byte BLAS integer variant from source (v0.8.0)")
   endif()
 endif()
 
