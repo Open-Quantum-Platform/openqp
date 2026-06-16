@@ -87,19 +87,21 @@ contains
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfmntoia, mrsfesum
     use tdhf_lib, only: iatogen
-    use mathlib, only: orthogonal_transform_sym, unpack_matrix
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix, orthogonal_transform
     use iso_c_binding, only: c_f_pointer, c_int
 
     implicit none
     character(len=*), parameter :: subroutine_name = "mrsf_matvec_apply"
     character(len=*), parameter :: OQP_nac_mvax = "OQP::nac_mvax"
+    character(len=*), parameter :: OQP_nac_gmo = "OQP::nac_gmo"
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
                                           mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
-    real(kind=dp), pointer :: nac_ax(:)
+    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
+    real(kind=dp), allocatable :: gmo(:,:)
     real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
     type(int2_compute_t) :: int2_driver
@@ -136,7 +138,7 @@ contains
       call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
 
     allocate(fa(nbf,nbf), fb(nbf,nbf), scr(nbf2), wrk1(nbf,nbf), &
-             mrsf_density(1,7,nbf,nbf), amo(xvec_dim,1), source=0.0_dp)
+             mrsf_density(1,7,nbf,nbf), amo(xvec_dim,1), gmo(nbf,nbf), source=0.0_dp)
 
     ! MO Fock from the FROZEN AO Fock and the (possibly rotated) orbitals
     call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, scr)
@@ -177,6 +179,15 @@ contains
     if (infos%tddft%spc_coov /= hfs) &
       fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
 
+    ! NAC Phase 11: export the FULL-MO 2e kernel of the matvec, G_MO =
+    ! mo_a^T * agdlr^AO * mo_a (channel-7 AO Fock back-transformed to MO space),
+    ! identical to the production z-vector's wrk2 (tdhf_mrsf_z_vector.F90:1707).
+    ! With G_MO in hand the orbital-rotation z-vector RHS hxa/hxb can be built
+    ! ANALYTICALLY from the INPUT-folded amplitude (mrsfxvec) in Python, avoiding
+    ! both the finite-difference and mrsfesum's output-side SOMO fold (the FD
+    ! artifact diagnosed in PHASE11_fd_findings.md).
+    call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), gmo)
+
     call mrsfmntoia(infos, fmrst2(1,:,:,:), amo, mo_a, mo_b, 1)
     call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
     call mrsfesum(infos, wrk1, fa, fb, amo, 1)
@@ -185,6 +196,11 @@ contains
     call infos%dat%reserve_data(OQP_nac_mvax, ta_type_real64, xvec_dim, (/ xvec_dim /))
     call tagarray_get_data(infos%dat, OQP_nac_mvax, nac_ax)
     nac_ax = amo(:,1)
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_gmo /))
+    call infos%dat%reserve_data(OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_gmo, nac_gmo)
+    nac_gmo = reshape(gmo, (/ nbf*nbf /))
 
   end subroutine mrsf_matvec_apply
 
