@@ -239,6 +239,39 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertEqual(calc.mol.mol_energy.energy, -2.0)
         self.assertTrue(calc.mol.mol_energy.SCF_converged)
 
+    def test_stability_safeguard_relaxes_unstable_tdhf_reference(self):
+        # The SCF stability safeguard must also run for the excited-state
+        # reference SCF (method='tdhf', e.g. MRSF), not only for ground-state
+        # HF.  A DIIS-converged but unstable open-shell reference must be relaxed
+        # to the lower solution; otherwise MRSF builds on the wrong reference and
+        # disagrees with the standalone SCF along a PES.  Before the fix this
+        # path was gated to method=='hf', so no TRAH stability pass ran here and
+        # the unstable -2.0 solution would have been returned.
+        calc = self.make_calculator()
+        calc.method = "tdhf"
+        calc.stability = True
+
+        def scf_unstable_then_relaxes():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                # primary DIIS converges to an unstable, higher solution
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                # the TRAH stability pass escapes to a genuinely lower solution
+                calc.mol.mol_energy.energy = -2.5
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_unstable_then_relaxes
+
+        converged = calc._run_scf()
+
+        self.assertTrue(converged)
+        # The safeguard ran for tdhf (a TRAH stability pass was invoked) ...
+        self.assertIn("trah", calc.mol.data.convergers)
+        # ... and the lower (relaxed) solution was kept.
+        self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+
 
 if __name__ == "__main__":
     unittest.main()

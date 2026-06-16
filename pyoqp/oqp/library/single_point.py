@@ -567,12 +567,17 @@ class SinglePoint(Calculator):
             converged = self.mol.mol_energy.SCF_converged
 
         # --- Stage 3: stability safeguard ---
-        # Applied to ground-state targets (method='hf'), where a non-lowest SCF
-        # solution would be the returned result.  Skipped for excited-state
-        # (tdhf) runs: there the SCF is an intermediate reference and the extra
-        # TRAH pass can energy-invariantly re-canonicalize orbitals, perturbing
-        # sensitive (e.g. range-separated MRSF) excited-state gradients.
-        if converged and stability and primary != 'trah' and self.method == 'hf':
+        # Applied to ground-state targets (method='hf') AND to excited-state
+        # reference SCFs (method='tdhf', e.g. MRSF).  A DIIS-converged but
+        # *unstable* open-shell solution is just as wrong a reference for an
+        # excited-state calculation as it is a wrong ground state: building MRSF
+        # on it makes the reference (and the excited states) disagree with the
+        # standalone SCF along a PES.  The safeguard only KEEPS the relaxed
+        # orbitals when TRAH finds a genuinely lower solution (e_post < e_pre);
+        # an energy-invariant re-canonicalization (no lowering) is reverted below
+        # by restoring the snapshot, so a sensitive excited-state gradient at a
+        # genuine minimum is not perturbed.
+        if converged and stability and primary != 'trah' and self.method in ('hf', 'tdhf'):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
