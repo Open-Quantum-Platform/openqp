@@ -96,14 +96,16 @@ contains
     character(len=*), parameter :: OQP_nac_gmo = "OQP::nac_gmo"
     character(len=*), parameter :: OQP_nac_fa = "OQP::nac_fa"
     character(len=*), parameter :: OQP_nac_fb = "OQP::nac_fb"
+    character(len=*), parameter :: OQP_nac_gchan = "OQP::nac_gchan"
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
                                           mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
-    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:), nac_fa(:), nac_fb(:)
+    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:), nac_fa(:), nac_fb(:), nac_gchan(:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
-    real(kind=dp), allocatable :: gmo(:,:)
+    real(kind=dp), allocatable :: gmo(:,:), gchan(:,:,:)
+    integer :: ich
     real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
     type(int2_compute_t) :: int2_driver
@@ -190,6 +192,19 @@ contains
     ! artifact diagnosed in PHASE11_fd_findings.md).
     call orthogonal_transform('n', nbf, mo_a, fmrst2(1,7,:,:), gmo)
 
+    ! NAC Phase 11: also export the SIX spin-pair channel MO kernels
+    ! gchan(:,:,ich) = mo_a^T * channel_ich^AO * mo_a (ich=1..6: ado2v, ado1v,
+    ! adco1, adco2, ao21v, aco12), AFTER the triplet flip + spc rescale, exactly
+    ! as mrsfmntoia/mrsfsp consume them. With these fixed MO kernels the matvec's
+    ! full 2e back-transform (mrsfmntoia sections 3-6 + the SOMO output fold) can
+    ! be reconstructed at any rotated C in Python (U^T gchan U) and its rotation
+    ! gradient L^mntoia compared to the gradient chain [G_MO + mrsfsp] -- the
+    ! discriminating test for the O==M^T output-fold-transpose deficiency.
+    allocate(gchan(nbf,nbf,6), source=0.0_dp)
+    do ich = 1, 6
+      call orthogonal_transform('n', nbf, mo_a, fmrst2(1,ich,:,:), gchan(:,:,ich))
+    end do
+
     call mrsfmntoia(infos, fmrst2(1,:,:,:), amo, mo_a, mo_b, 1)
     call iatogen(bvec_mo(:,1), wrk1, nocca, noccb)
     call mrsfesum(infos, wrk1, fa, fb, amo, 1)
@@ -218,6 +233,11 @@ contains
     call infos%dat%reserve_data(OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_fb, nac_fb)
     nac_fb = reshape(fb, (/ nbf*nbf /))
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_gchan /))
+    call infos%dat%reserve_data(OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
+    call tagarray_get_data(infos%dat, OQP_nac_gchan, nac_gchan)
+    nac_gchan = reshape(gchan, (/ nbf*nbf*6 /))
 
   end subroutine mrsf_matvec_apply
 
