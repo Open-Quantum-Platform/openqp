@@ -94,12 +94,14 @@ contains
     character(len=*), parameter :: subroutine_name = "mrsf_matvec_apply"
     character(len=*), parameter :: OQP_nac_mvax = "OQP::nac_mvax"
     character(len=*), parameter :: OQP_nac_gmo = "OQP::nac_gmo"
+    character(len=*), parameter :: OQP_nac_fa = "OQP::nac_fa"
+    character(len=*), parameter :: OQP_nac_fb = "OQP::nac_fb"
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
 
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
                                           mo_a(:,:), mo_b(:,:), bvec_mo(:,:)
-    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:)
+    real(kind=dp), pointer :: nac_ax(:), nac_gmo(:), nac_fa(:), nac_fb(:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:), scr(:), wrk1(:,:), amo(:,:)
     real(kind=dp), allocatable :: gmo(:,:)
     real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
@@ -201,6 +203,21 @@ contains
     call infos%dat%reserve_data(OQP_nac_gmo, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_gmo, nac_gmo)
     nac_gmo = reshape(gmo, (/ nbf*nbf /))
+
+    ! NAC Phase 11: also export the frozen-Fock MO Fock matrices fa,fb
+    ! (= mo_a^T F_AO_a mo_a and mo_b^T F_AO_b mo_b, F_AO frozen, incl. any
+    ! ixcore level shift) that mrsfesum contracts with the amplitude. Lets the
+    ! interstate relaxation term be built analytically in Python with the
+    ! bit-identical Fock (no packed-triangular reconstruction).
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_fa /))
+    call infos%dat%reserve_data(OQP_nac_fa, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fa, nac_fa)
+    nac_fa = reshape(fa, (/ nbf*nbf /))
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_fb /))
+    call infos%dat%reserve_data(OQP_nac_fb, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_fb, nac_fb)
+    nac_fb = reshape(fb, (/ nbf*nbf /))
 
   end subroutine mrsf_matvec_apply
 
