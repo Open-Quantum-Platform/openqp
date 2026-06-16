@@ -22,7 +22,10 @@ INP = '/tmp/nactest/H2O_en.inp'
 SQ = 1.0/np.sqrt(2.0)
 
 r = Runner(input_file=INP, log='/tmp/nactest/mntoia.log'); r.run(); mol = r.mol
-print("RUN OK", flush=True)
+mol.data._data.control.int2e_cutoff = 1e-20    # TIGHT screening: the default 5e-11
+# ball-based density screening corrupts the small mixed channels 5,6 (o21v/co12),
+# making the matvec artifactually nonlinear. 1e-20 -> matvec linear to 1e-15.
+print("RUN OK (tight int2e_cutoff=1e-20)", flush=True)
 noca = int(np.asarray(mol.data['nelec_A']).ravel()[0]); nocb = noca-2
 nbf = np.array(mol.data['OQP::VEC_MO_A'], copy=True).shape[0]
 nvirb = nbf-nocb; nij = noca*nvirb; nstate = 3
