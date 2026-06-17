@@ -454,8 +454,9 @@ class SinglePoint(Calculator):
         Data summary (OpenQP, 58 cells): C-DIIS is the best primary (wins 52/58, mean
         ~21 Fock builds vs A-DIIS 39, E-DIIS 53); the hard class is open-shell
         transition-metal systems (esp. DFT), where C-DIIS can stall/find a wrong basin
-        -> keep C-DIIS but enable the TRAH stability safeguard. The reactive escalation
-        ladder (DIIS->SOSCF->TRAH) remains the safety net for all classes.
+        -> keep C-DIIS and rely on the reactive escalation ladder
+        (DIIS->SOSCF->TRAH) as the safety net for all classes. The TRAH stability
+        safeguard is opt-in (scf.stability) and is never enabled here automatically.
 
         mode='ml' uses a trained, distilled model if shipped in pyoqp; otherwise it
         transparently falls back to these rules.
@@ -472,13 +473,12 @@ class SinglePoint(Calculator):
             except Exception:
                 used = 'ML(no model -> rules)'
 
-        # ROHF/UHF stability is the priority: ROKS is the MRSF-TDDFT reference, so an
-        # open-shell SCF that lands on a non-lowest (unstable) solution corrupts the
-        # excited-state calculation. Enable the stability safeguard for open-shell
-        # references (especially DFT/ROKS and transition-metal), where it matters most.
-        hard = f['open_shell'] and (f['transition_metal'] or f['is_dft'])
-        if used != 'ML-model' and hard:
-            stability = True
+        # Stability following is opt-in: it runs only when the user sets
+        # scf.stability in the input. The SCF manager never enables it on its
+        # own -- not even for the hard class (open-shell DFT/ROKS or
+        # transition-metal references), where it matters most. The reactive
+        # escalation ladder (DIIS->SOSCF->TRAH) remains the convergence safety
+        # net for all classes regardless.
 
         dump_log(self.mol, section='',
                  title='PyOQP SCF manager [%s]: %s%s%s%s -> primary=%s%s' % (
@@ -487,7 +487,7 @@ class SinglePoint(Calculator):
                      'TM ' if f['transition_metal'] else '',
                      'DFT' if f['is_dft'] else 'HF',
                      ' natom=%d' % f['natom'],
-                     primary, ' +stability' if (stability and hard) else ''))
+                     primary, ' +stability' if stability else ''))
         return primary, stability
 
     def _run_scf(self):
@@ -508,13 +508,14 @@ class SinglePoint(Calculator):
              ``scf.alternative_scf`` (back-compat) sets only the final method.
              The primary converger is dropped from the chain and duplicates are
              removed while preserving order.
-          3. **Stability safeguard** (``scf.stability``, default on) — seed a
+          3. **Stability safeguard** (``scf.stability``, default off,
+             opt-in) — when the user requests it in the input, seed a
              stability-following TRAH pass from the converged orbitals.  At a
              genuine minimum this is a ~0-iteration no-op; when the converged
              point is an unstable saddle it relaxes to the lowest solution.
              This catches the case where DIIS *converges* to a non-aufbau /
              non-lowest open-shell (UHF/ROHF) solution and would otherwise be
-             returned silently.
+             returned silently.  It is never enabled automatically.
 
         Returns
         -------

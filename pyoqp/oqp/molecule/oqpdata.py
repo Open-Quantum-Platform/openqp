@@ -144,7 +144,7 @@ OQP_CONFIG_SCHEMA = {
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
         'scal_rel': {'type': int, 'default': '0'},
-        'stability': {'type': bool, 'default': 'True'},
+        'stability': {'type': bool, 'default': 'False'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
         'escalation': {'type': string, 'default': ''},
