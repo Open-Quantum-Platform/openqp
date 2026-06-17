@@ -31,9 +31,12 @@ pip install (see the main [README](../README.md) for details and build options):
 No environment variables are required afterwards: the installed package
 locates its own native library and data files, so do not set `OPENQP_ROOT`.
 
-Only the manual cmake/ninja development flow ("Detailed Compile" in the main
-README, where the native library stays in the source tree and PyOQP is
-installed from this directory) still needs `OPENQP_ROOT` pointing at that tree.
+The manual cmake/ninja development flow ("Detailed Compile" in the main
+README) is also detected when PyOQP is imported directly from the source
+checkout with the native library installed into that tree. Keep `OPENQP_ROOT`
+only as a compatibility fallback for custom layouts where Python is separated
+from the OpenQP runtime tree, such as a separate `cd pyoqp && pip install .`
+development install.
 
 ## Usage
 

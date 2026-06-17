@@ -1165,8 +1165,8 @@ contains
           b = rhs, &
           x = xk, &
           n = lzdim, &
-          restart = min(infos%tddft%gmres_dim, lzdim), &
-          max_iter = infos%control%maxit_zv, &
+          restart = min(int(infos%tddft%gmres_dim), lzdim), &
+          max_iter = int(infos%control%maxit_zv), &
           tol = cnvtol, &
           infos = infos, basis = basis, molGrid = molGrid, &
           int2_driver = int2_driver, &

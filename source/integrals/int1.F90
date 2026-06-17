@@ -1098,7 +1098,7 @@ contains
             CALL update_triang_matrix(shi, shj, sblk, s)
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -1176,7 +1176,7 @@ contains
             CALL update_triang_matrix(shi, shj, tblk, t)
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -1238,7 +1238,7 @@ contains
             end do
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -1300,7 +1300,7 @@ contains
             end do
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -1504,7 +1504,7 @@ contains
             CALL update_triang_matrix(shi, shj, vblk, h)
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -1586,7 +1586,7 @@ contains
             CALL update_triang_matrix(shi, shj, vblk, h)
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
 !   End of shell loops
@@ -2041,7 +2041,7 @@ contains
             end do
 
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
  END SUBROUTINE
@@ -2108,7 +2108,7 @@ contains
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
  END SUBROUTINE
@@ -2172,7 +2172,7 @@ contains
               CALL update_triang_matrix(shi, shj, blk(:,m), ints(:,m))
             end do
         END DO
-!$omp end do nowait
+!$omp end do
     END DO
 !$omp end parallel
  END SUBROUTINE

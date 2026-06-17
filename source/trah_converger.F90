@@ -88,6 +88,11 @@ contains
     ! solve (the validated default).
     nrst = max(1, int(infos%control%trh_nrtv))
     if (infos%control%mom) nrst = 1     ! no symmetry-breaking restarts under MOM
+    ! The RHF TRAH setup stores only alpha MOs.  The native trust-region
+    ! driver passes both alpha and beta arrays through shared RHF/UHF/ROHF
+    ! helpers, so provide a beta shadow for RHF instead of dereferencing an
+    ! unallocated conv%mo_b.
+    if (.not. allocated(conv%mo_b)) allocate(conv%mo_b, source=conv%mo_a)
     allocate(mo0_a, source=conv%mo_a); allocate(mo0_b, source=conv%mo_b)
     allocate(mob_a, source=conv%mo_a); allocate(mob_b, source=conv%mo_b)
     e_best = huge(1.0_dp); have_best = .false.

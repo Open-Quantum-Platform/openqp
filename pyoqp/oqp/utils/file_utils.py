@@ -6,6 +6,7 @@ import datetime
 import numpy as np
 from oqp.molden.moldenwriter import write_frequency
 from oqp.periodic_table import SYMBOL_MAP, ELEMENTS_NAME
+from oqp.runtime import basis_search_paths
 from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.utils.mpi_utils import mpi_dump
 from oqp.utils.qmmm import gradient_qmmm
@@ -15,18 +16,8 @@ def try_basis(basis, path=None, fallback='6-31g'):
 
     if path:
         basis_paths = [path]
-#    elif os.environ["OPENQP_ROOT"]:
-#        basis_path = os.environ["OPENQP_ROOT"] + "/share/basis_sets"
     else:
-        try:
-            os.environ["OPENQP_ROOT"]
-        except KeyError:
-            os.environ["OPENQP_ROOT"] = os.path.abspath(os.path.dirname(__file__), os.pardir)
-        root = os.environ["OPENQP_ROOT"]
-        basis_paths = [
-            os.path.join(root, "share", "basis_sets"),
-            os.path.join(root, "basis_sets"),
-        ]
+        basis_paths = basis_search_paths()
 
     if not basis:
         basis = fallback
@@ -51,16 +42,10 @@ def try_data_file(name):
     """Resolve a data file shipped under share/basis_sets (installed) or the
     source basis_sets/ tree (development)."""
 
-    try:
-        root = os.environ["OPENQP_ROOT"]
-    except KeyError:
-        root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    candidates = [name]
+    candidates.extend(os.path.join(path, name) for path in basis_search_paths())
 
-    for candidate in (
-        name,
-        os.path.join(root, "share", "basis_sets", name),
-        os.path.join(root, "basis_sets", name),
-    ):
+    for candidate in candidates:
         if os.path.isfile(candidate):
             return candidate
 
@@ -132,10 +117,13 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'start':
         mode = 'w'
+        build = ''
+        if info and info.get('build'):
+            build = '   PyOQP build: %s\n' % info['build']
         loginfo = """
    PyOQP started at %s
-
-""" % what_is_time()
+%s
+""" % (what_is_time(), build)
 
     if section == 'end':
         start = mol.start_time

@@ -8,12 +8,14 @@ module bragg_slater_radii
   public BRSL_TYPE_GAMESS
   public BRSL_TYPE_GILL
   public BRSL_TYPE_TA
+  public BRSL_TYPE_BECKE
   public set_bragg_slater
 
   integer, parameter :: BRSL_NUM_ELEMENTS  = 137
   integer, parameter :: BRSL_TYPE_GAMESS = 0
   integer, parameter :: BRSL_TYPE_GILL = 1
   integer, parameter :: BRSL_TYPE_TA = 2
+  integer, parameter :: BRSL_TYPE_BECKE = 3
 
 ! J.C.Slater, Quantum Theory of Molecules and Solids, Volume 2, Chapter 3
 ! Except that hydrogen is changed from 0.25 -> bohr radius,
@@ -111,6 +113,43 @@ module bragg_slater_radii
      1.0D+00, 1.0D+00, 1.0D+00, 1.0D+00, 1.0D+00, &
      1.0D+00]
 
+! J.C.Slater, JCP 41, 3199 (1964), with Becke's hydrogen value of 0.35 A
+! (A.D.Becke, JCP 88, 2547 (1988)) and noble gases / super-heavy elements
+! filled with the same conventional values used by the Becke-partition
+! reference implementations (e.g. the libdft table behind PySCF's
+! dft.radi.BRAGG_RADII).  This is the radii table that defines the
+! Becke--Treutler "atomic size adjustment" of the reference ddCOSMO/ddPCM
+! density-partition (solvent_pcm), NOT a radial-grid scaling table.
+  real(kind=dp), parameter :: brsl_values_becke(BRSL_NUM_ELEMENTS) = [&
+    0.35D+00, 1.40D+00, 1.45D+00, 1.05D+00, 0.85D+00, &
+    0.70D+00, 0.65D+00, 0.60D+00, 0.50D+00, 1.50D+00, &
+    1.80D+00, 1.50D+00, 1.25D+00, 1.10D+00, 1.00D+00, &
+    1.00D+00, 1.00D+00, 1.80D+00, 2.20D+00, 1.80D+00, &
+    1.60D+00, 1.40D+00, 1.35D+00, 1.40D+00, 1.40D+00, &
+    1.40D+00, 1.35D+00, 1.35D+00, 1.35D+00, 1.35D+00, &
+    1.30D+00, 1.25D+00, 1.15D+00, 1.15D+00, 1.15D+00, &
+    1.90D+00, 2.35D+00, 2.00D+00, 1.80D+00, 1.55D+00, &
+    1.45D+00, 1.45D+00, 1.35D+00, 1.30D+00, 1.35D+00, &
+    1.40D+00, 1.60D+00, 1.55D+00, 1.55D+00, 1.45D+00, &
+    1.45D+00, 1.40D+00, 1.40D+00, 2.10D+00, 2.60D+00, &
+    2.15D+00, 1.95D+00, 1.85D+00, 1.85D+00, 1.85D+00, &
+    1.85D+00, 1.85D+00, 1.85D+00, 1.80D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.55D+00, 1.45D+00, 1.35D+00, 1.35D+00, &
+    1.30D+00, 1.35D+00, 1.35D+00, 1.35D+00, 1.50D+00, &
+    1.90D+00, 1.80D+00, 1.60D+00, 1.90D+00, 1.45D+00, &
+    2.10D+00, 1.80D+00, 2.15D+00, 1.95D+00, 1.80D+00, &
+    1.80D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, 1.75D+00, &
+    1.75D+00, 1.75D+00]
+
 contains
 
   subroutine set_bragg_slater(array, bstype)
@@ -126,6 +165,9 @@ contains
 
     case (BRSL_TYPE_GILL)
       array = brsl_values_gill
+
+    case (BRSL_TYPE_BECKE)
+      array = brsl_values_becke
 
     case default
       array = brsl_values_gill

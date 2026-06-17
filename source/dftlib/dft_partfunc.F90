@@ -30,10 +30,12 @@ module mod_dft_partfunc
   integer, parameter :: PTYPE_SMSTP3 = 4
   integer, parameter :: PTYPE_SMSTP4 = 5
   integer, parameter :: PTYPE_SMSTP5 = 6
+  integer, parameter :: PTYPE_BECKE3 = 7
 
   private
   public partition_function
   public PTYPE_BECKE4
+  public PTYPE_BECKE3
   public PTYPE_SSF
   public PTYPE_ERF
   public PTYPE_SMSTP2
@@ -68,6 +70,39 @@ contains
     f = x
     df = 1.0_fp
     do i = 1, 4
+      df = df*(1.0_fp-f*f)
+      f = 0.5_fp*f*(3.0_fp-f*f)
+    end do
+    df = -FACTOR*df
+  end function
+
+!-------------------------------------------------------------------------------
+
+!> @brief Becke's original partition function (3 softening iterations),
+!>  Becke, JCP 88, 2547 (1988). This is the standard "k=3" stiffness used by
+!>  the reference ddCOSMO/ddPCM source projection (and by PySCF's gen_grid),
+!>  as opposed to the 4-iteration variant PTYPE_BECKE4 above.
+  pure function partf_eval_becke3(x) result(f)
+    real(KIND=fp) :: f
+    real(KIND=fp), intent(IN) :: x
+    integer :: i
+    f = x
+    do i = 1, 3
+      f = 0.5_fp*f*(3.0_fp-f*f)
+    end do
+    f = 0.5_fp-0.5_fp*f
+  end function
+
+!> @brief Becke's original (3-iteration) partition function derivative
+  pure function partf_diff_becke3(x) result(df)
+    real(KIND=fp) :: df
+    real(KIND=fp), intent(IN) :: x
+    real(KIND=fp), parameter :: FACTOR = 27.0_fp/16.0_fp
+    real(KIND=fp) :: f
+    integer :: i
+    f = x
+    df = 1.0_fp
+    do i = 1, 3
       df = df*(1.0_fp-f*f)
       f = 0.5_fp*f*(3.0_fp-f*f)
     end do
@@ -311,6 +346,11 @@ contains
       partfunc%limit = 1.0_fp
       partfunc%eval => partf_eval_becke4
       partfunc%deriv => partf_diff_becke4
+
+    case (PTYPE_BECKE3)
+      partfunc%limit = 1.0_fp
+      partfunc%eval => partf_eval_becke3
+      partfunc%deriv => partf_diff_becke3
 
     case (PTYPE_SSF)
       partfunc%limit = 0.64_fp
