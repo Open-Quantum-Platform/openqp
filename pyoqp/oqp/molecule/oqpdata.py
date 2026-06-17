@@ -820,7 +820,7 @@ class OQPData:
 
     def set_qmmm_constraints(self, constraints):
         """Handle QM/MM calculation constraints"""
-        qmmm.contraints = constraints
+        qmmm.constraints = constraints
 
     def set_qmmm_nsteps(self, nsteps):
         """Handle QM/MM calculation constraints"""

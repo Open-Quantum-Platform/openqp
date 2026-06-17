@@ -171,6 +171,14 @@ class OpenQpQMMM:
 
     def forces_qm_openqp(self, potmm=None, potqm=None):
 
+        # PR #205 review (M1a): the separate QM-QM POTQM correction was folded into
+        # the embedded energy (and the SCF Fock via OQP::POTQM) but had no matching
+        # force term, an energy/force inconsistency. PME POTMM already captures the
+        # periodic MM embedding with the QM self-image removed, so zero POTQM here to
+        # match the resolution already applied in the NAMD driver.
+        if potqm is not None:
+            potqm = np.zeros_like(potqm)
+
         if self.use_mol:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
@@ -265,8 +273,8 @@ class OpenQpQMMM:
                 oqp.grad_esp_qmmm(self.op.mol)
                 gqm += self.op.mol.data["OQP::ESPF_GRAD"]
                 # --- Unit conversion to OpenMM conventions ------------------------
-                self.eqm *= 2625.5 * unit.kilojoule_per_mole
-                self.gqm = gqm[0]*49578.9  # already dimensionless, factor to kJ/mol/nm
+                self.eqm *= 2625.499639 * unit.kilojoule_per_mole
+                self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
             if gradient.method == 'tdhf':
                 energies = self.op.sp.excitation([self.eqm])
                 grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
@@ -291,12 +299,9 @@ class OpenQpQMMM:
                     oqp.grad_esp_qmmm_excited(self.op.mol)
                     gqm += self.op.mol.data["OQP::ESPF_GRAD"]
                     grads[i] = gqm.copy()
-                    self.gqm = gqm*49578.9#49614.78
-                    self.eqm = energies[i] * 2625.5 * unit.kilojoule_per_mole
+                    self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
+                    self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
             self.op.mol.save_data()
-
-
-            print(f"self.gqm:{self.gqm}")
 
         return self.eqm, self.gqm, self.pchg_qm
 

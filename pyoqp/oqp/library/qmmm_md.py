@@ -489,6 +489,19 @@ class QMMM_MD:
             self.setup()
 
         sim0 = self.mm_systems["sim0"]
+
+        # PR #205 review (M1c): update the QM/MM force at the CURRENT positions
+        # BEFORE integrating, so the integrator applies a force consistent with the
+        # positions it acts on. The previous order (step first, update after) left
+        # the QM force one step stale and broke energy conservation.
+        state_pre = self.simulation_md.context.getState(getPositions=True)
+        pos_pre = state_pre.getPositions()
+        sim0.context.setPositions(pos_pre)
+        if self.cutoff is not app.NoCutoff:
+            self.mm_systems["simew"].context.setPositions(pos_pre)
+            self.mm_systems["simor"].context.setPositions(pos_pre)
+        self._update_qmmm_force(pos_pre)
+
         self.simulation_md.step(1)
 
         state_md = self.simulation_md.context.getState(getPositions=True)
@@ -498,8 +511,6 @@ class QMMM_MD:
         if self.cutoff is not app.NoCutoff:
             self.mm_systems["simew"].context.setPositions(pos0)
             self.mm_systems["simor"].context.setPositions(pos0)
-
-        self._update_qmmm_force(pos0)
 
         state_energy = self.simulation_md.context.getState(getEnergy=True)
         E_pot = state_energy.getPotentialEnergy().value_in_unit(

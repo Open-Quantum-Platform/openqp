@@ -104,7 +104,7 @@ contains
 
     character(len=*), parameter :: subroutine_name = "mulliken_excited"
 
-!    open (unit=IW, file=infos%log_filename, position="append")
+    open (unit=IW, file=infos%log_filename, position="append")
 
     basis => infos%basis
     basis%atoms => infos%atoms

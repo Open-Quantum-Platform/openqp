@@ -476,6 +476,7 @@ contains
 
     REAL(kind=dp) :: de1(3)
     REAL(kind=dp), ALLOCATABLE :: de_priv(:,:), dens(:,:)
+    INTEGER, ALLOCATABLE :: off(:)
 
     REAL(kind=dp) :: dernuc(3), tol
     LOGICAL :: out, dbg, norm
@@ -501,13 +502,12 @@ contains
         tol = tol_default
     end if
 
-    norm = .true.
-    allocate(dens(basis%nbf,basis%nbf), source=0.0d0)
-    call unpack_matrix(denab, dens)
-
-    IF (norm) THEN
-        CALL bas_norm_matrix(dens, basis%bfnrm, basis%nbf)
-    END IF
+!   Build the gradient density. Under HARMONIC_ACTIVE this expands pure-spherical
+!   shell blocks to the Cartesian "effective" density that comp_coulomb_der1
+!   expects, and returns Cartesian shell offsets in `off`. Previously this routine
+!   sliced the raw spherical density with ao_offset, which is wrong for l>=2 pure
+!   spherical shells (PR #205 review, finding H1). Mirrors grad_en_pulay et al.
+    call prepare_grad_density(basis, denab, dens, off)
 
 !   temporary storage for 1e gradient
     ALLOCATE(de_priv, mold=de)
@@ -541,7 +541,7 @@ contains
             IF (cntp%numpairs==0) CYCLE
 
 !           Nuclear attraction derivative
-            CALL comp_coulomb_der1(cntp, coord(:), -zq, dens(basis%ao_offset(ii):, basis%ao_offset(jj):), dernuc)
+            CALL comp_coulomb_der1(cntp, coord(:), -zq, dens(off(ii):, off(jj):), dernuc)
             de1 = de1 + 2*dernuc(1:3)
 !           End of primitive loops
 
