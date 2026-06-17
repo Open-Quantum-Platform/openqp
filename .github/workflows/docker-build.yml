@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
-      # Keep in sync with the FROM line in Dockerfile and docker/buildenv.Dockerfile.
+      # Keep in sync with the FROM line in Dockerfile and the openqp-dev repo's
+      # buildenv.Dockerfile / publish-buildenv.yml (which publishes this tag).
       BUILDENV_IMAGE: openqp/openqp-buildenv:1
 
     steps:
@@ -32,20 +33,20 @@ jobs:
         run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
       # The build environment (toolchain, ILP64 OpenBLAS, Python deps) is a
-      # prebuilt image; pull it instead of reinstalling prerequisites on every
-      # run. Until the image has been published once (or right after a tag
-      # bump) the pull fails and we build it here; the next push-to-main run
-      # with Docker Hub credentials publishes it.
+      # prebuilt image, built and published by the
+      # Open-Quantum-Platform/openqp-dev companion repo
+      # (.github/workflows/publish-buildenv.yml). Here we only pull it; if it is
+      # missing, fail loudly rather than rebuild a recipe this repo no longer
+      # carries.
       - name: Prepare build environment image
         id: buildenv
         run: |
-          if docker pull "${BUILDENV_IMAGE}"; then
-            echo "source=registry" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::warning::${BUILDENV_IMAGE} not in registry; building it from docker/buildenv.Dockerfile"
-            docker build -t "${BUILDENV_IMAGE}" -f docker/buildenv.Dockerfile docker
-            echo "source=local" >> "${GITHUB_OUTPUT}"
+          if ! docker pull "${BUILDENV_IMAGE}"; then
+            echo "::error::${BUILDENV_IMAGE} not found in registry. Publish it from" \
+                 "the openqp-dev repo (publish-buildenv.yml) before building here."
+            exit 1
           fi
+          echo "source=registry" >> "${GITHUB_OUTPUT}"
 
       - name: Cache Docker build mounts
         if: steps.buildenv.outputs.source == 'registry'
@@ -80,12 +81,8 @@ jobs:
           cache-from: type=gha,scope=openqp-docker
           cache-to: type=gha,mode=max,scope=openqp-docker
 
-      - name: Build OpenQP image with local buildenv fallback
-        if: steps.buildenv.outputs.source == 'local'
-        run: DOCKER_BUILDKIT=1 docker build -t openqp/openqp:v1.0 .
-
-      - name: Push images
+      - name: Push image
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
-        run: |
-          docker push "${BUILDENV_IMAGE}"
-          docker push openqp/openqp:v1.0
+        # The buildenv image is published by the openqp-dev companion repo, not
+        # here; this repo only publishes the OpenQP application image.
+        run: docker push openqp/openqp:v1.0

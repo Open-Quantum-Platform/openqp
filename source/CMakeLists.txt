@@ -15,6 +15,17 @@ add_subdirectory(modules)
 add_subdirectory(integrals)
 add_subdirectory(dftlib)
 
+# Self-test bind(C) harnesses live under tests/fortran/ rather than the
+# production modules/ tree, but must be linked into liboqp so the cffi-driven
+# pytest drivers (tests/test_*_selftest.py) can call them. Listed explicitly,
+# not globbed: tests/fortran/ also holds standalone test PROGRAMs that must NOT
+# be compiled into the library.
+list(APPEND SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fock_deriv_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/hess1_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/grd2_hess_selftest.F90"
+)
+
 message(STATUS ${SOURCES})
 message(STATUS "CMAKE_INSTALL_LIBDIR = ${CMAKE_INSTALL_LIBDIR}")
 set(OTR_LIB_NAME "${CMAKE_STATIC_LIBRARY_PREFIX}opentrustregion${OTR_SUFFIX}${CMAKE_STATIC_LIBRARY_SUFFIX}")
