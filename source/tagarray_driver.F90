@@ -88,7 +88,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
 
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
-  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  ! is enabled)
   character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
   character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
   character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"

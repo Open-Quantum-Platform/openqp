@@ -399,8 +399,7 @@ class Molecule:
         try:
             from oqp.library.symmetry_detect import attach_detection_metadata
 
-            # Reorient (design decision recorded in
-            # docs/plans/2026-06-07-symmetry-reductions-design.md).
+            # Reorient.
             #
             # Detection of a rotated geometry may legitimately pick a
             # different but equivalent standard frame (degenerate axis
