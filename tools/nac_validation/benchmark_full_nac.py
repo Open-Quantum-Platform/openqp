@@ -232,7 +232,12 @@ for (i, j) in ((1, 2), (1, 3), (2, 3)):
     # sign conventions (one global sign vs the kernel extraction, verified
     # against the exact requirement -dn - 2*damp at cos +1.0000)
     d_orb = Dij - dov_ij
-    pred = -(2 * damp + d_orb)
+    # factor-2 fix (2026-06-18): numerical_nac() now uses the standard
+    # (S - S^T)/(2*dt) HST convention, so dn is the physical <I|dJ> (half the
+    # former value). The master decomposition dn_old = -(2*damp + d_orb) was an
+    # identity against the 2x-too-large numerical, so the physical prediction is
+    # d_phys = -(2*damp + d_orb)/2 = -(damp + d_orb/2). Halve to match.
+    pred = -(2 * damp + d_orb) * 0.5
     s = np.sign(np.dot(dn, pred)) or 1.0
     cos = np.dot(dn, s * pred) / (np.linalg.norm(dn) * np.linalg.norm(pred) + 1e-30)
     print(f'\npair ({i},{j}):  gap = {mol.energies[j] - mol.energies[i]:.6f}')
