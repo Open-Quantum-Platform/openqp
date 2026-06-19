@@ -592,6 +592,11 @@ contains
     ! MO->AO transformation: P^bco1_(mu,nu) = C^alpha_(mu,i) * X_(i,HOMO-1) * C^beta_(nu,HOMO-1)
     ! where i runs over doubly-occupied orbitals (1:noccb)
     !
+    ! Block C->O/C->V when there is no doubly-occupied core (noccb=0, e.g. H2
+    ! triplet): these Closed-origin excitation classes are empty and contribute
+    ! nothing. bco1/bco2/co12 and the CV update of ball stay at their zeroed value
+    ! (mrsf_density=0 before the vector loop), so the spin-flip response is correct.
+    if (noccb > 0) then
     ! Step 1: Intermediate vector tmp = sum_i C^alpha_(mu,i) X_(i,HOMO-1)
     !   tmp_mu = sum_{i in occ_alpha} C^alpha_(mu,i) * X_(i,HOMO-1)
     call dgemm('n', 'n', nbf, 1, noccb, &
@@ -605,6 +610,7 @@ contains
                1.0_dp, tmp(:,1:1), nbf, &
                        vb(:,lr1:lr1), nbf, &
                1.0_dp, bco1, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Component 4: bco2 - C(alpha) -> O2(HOMO, beta) excitations (CO block)
@@ -618,6 +624,7 @@ contains
     ! MO->AO transformation: P^bco2_(mu,nu) = C^alpha_(mu,i) * X_(i,HOMO) * C^beta_(nu,HOMO)
     ! where i runs over doubly-occupied orbitals (1:noccb)
     !
+    if (noccb > 0) then
     ! Step 1: Intermediate vector tmp = sum_i C^alpha_(mu,i) X_(i,HOMO)
     !   tmp_mu = sum_{i in occ_alpha} C^alpha_(mu,i) * X_(i,HOMO)
     call dgemm('n', 'n', nbf, 1, noccb, &
@@ -631,6 +638,7 @@ contains
                1.0_dp, tmp(:,1:1), nbf, &
                        vb(:,lr2:lr2), nbf, &
                1.0_dp, bco2, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Component 5: o21v - Mixed (O1<->O2)(alpha) x V(beta) (OV block)
@@ -689,6 +697,7 @@ contains
     !       C^beta_(mu,HOMO) * X_(i,HOMO-1) - C^beta_(mu,HOMO-1) * X_(i,HOMO)
     !                          ] * C^alpha_(nu,i)
     !
+    if (noccb > 0) then
     ! Step 1: Intermediate vector from occ_alpha -> HOMO-1_beta amplitudes
     !   tmp_mu = sum_{i in occ_alpha} C^alpha_(mu,i) * X_(i,HOMO-1)
     call dgemm('n', 'n', nbf, 1, noccb, &
@@ -715,6 +724,7 @@ contains
               -1.0_dp, vb(:,lr1:lr1), nbf, &
                        tmp(:,1:1), nbf, &
                1.0_dp, co12, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Sum the four primary components into the total response matrix
@@ -738,6 +748,7 @@ contains
     ! Transformation: P^ball_(mu,nu) += sum_ia C^alpha_(mu,i) * X_(i,a) * C^beta_(nu,a)
     ! where i in doubly-occupied (1:noccb), a in virtual_beta (nocca+1:nbf)
     !
+    if (noccb > 0) then
     ! Step 1: Intermediate tmp_(mu,i) = sum_a C^beta_(mu,a) * X_(i,a)
     call dgemm('n', 't', nbf, noccb, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
@@ -749,6 +760,7 @@ contains
                1.0_dp, va, nbf, &
                        tmp(:,1:noccb), nbf, &
                1.0_dp, ball, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1<->O2) x (O1<->O2) block (OO)
@@ -912,6 +924,10 @@ contains
                            -tmp2(:,3)*vb(m,nocca-1)
     end do
 
+    ! Closed->Virtual block: empty when there is no doubly-occupied core
+    ! (nocca-2 = noccb = 0, e.g. H2 triplet). Skip explicitly so the UHF path
+    ! mirrors the ROHF guard (the do i=1,nocca-2 loop above is already a no-op).
+    if (nocca > 2) then
     call dgemm('n','t', nbf, nocca-2, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
                        bvec(:,nocca+1), nbf, &
@@ -921,6 +937,7 @@ contains
                1.0_dp, va, nbf, &
                        tmp, nbf, &
                1.0_dp, ball, nbf)
+    end if
 
     if (mrst==1) then
       do m = 1, nbf
@@ -1096,10 +1113,16 @@ contains
                one, tmp, nbf)
     ! Step 3: Project onto doubly-occupied alpha-orbitals
     !   F^MO_(i,HOMO) += sum_mu C^alpha_(mu,i) * tmp_mu  (i=1:noca-2)
+    ! Guard: when noca<=2 there is no doubly-occupied core below the open-shell
+    ! frontier (HOMO-1,HOMO), so the Closed->Open block is empty (e.g. H2 triplet,
+    ! noca=2 => noccb=noca-2=0). Without the guard DGEMM gets M=LDC=noca-2<=0
+    ! (illegal value), crashing the MRSF Davidson. Matches umrsfmntoia (do i=1,lr1-1).
+    if (noca > 2) then
     call dgemm('t','n',noca-2,1,nbf, &
                one, va, nbf, &
                     tmp, nbf, &
                one, wrk(1:noca-2,lr2:lr2), noca-2)
+    end if
     !-----------------------------------------------------------------------
     ! Section 4: Corrections for C(alpha) -> O1(HOMO-1, beta) response element
     !-----------------------------------------------------------------------
@@ -1130,10 +1153,12 @@ contains
               -one, tmp, nbf)
     ! Step 3: Project onto doubly-occupied alpha-orbitals
     !   F^MO_(i,HOMO-1) += sum_mu C^alpha_(mu,i) * tmp_mu  (i=1:noca-2)
+    if (noca > 2) then   ! see guard note above; empty when no doubly-occupied core
     call dgemm('t','n',noca-2,1,nbf, &
                one, va, nbf, &
                     tmp, nbf, &
                one, wrk(1:noca-2,lr1:lr1), noca-2)
+    end if
     !-----------------------------------------------------------------------
     ! Section 5: Corrections for O1(HOMO-1, alpha) -> V(beta) response element
     !-----------------------------------------------------------------------
