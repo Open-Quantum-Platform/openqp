@@ -21,6 +21,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_SM = OQP_prefix // "SM"
   character(len=*), parameter, public :: OQP_QMAT = OQP_prefix // "QMAT"
   character(len=*), parameter, public :: OQP_TM = OQP_prefix // "TM"
+  character(len=*), parameter, public :: OQP_ERI_AO = OQP_prefix // "ERI_AO"
+  character(len=*), parameter, public :: OQP_ERI_AO_comment = &
+    "Two-electron repulsion integrals (mu nu|la si) in AO basis, chemist "// &
+    "notation, full nbf**4 array stored C-contiguous with si fastest"
   character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
   character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
   character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
