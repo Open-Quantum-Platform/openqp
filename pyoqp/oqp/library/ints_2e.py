@@ -16,29 +16,34 @@ def ints_2e(mol):
     oqp.int2e(mol)
 
 
-def eri_ao(mol):
-    """Return the AO two-electron integrals as a dense ``(nbf,nbf,nbf,nbf)``
-    NumPy array in chemist notation, computing them if necessary.
+def eri_ao(mol, recompute=True):
+    """Return dense AO two-electron integrals in chemist notation.
 
-    The full 8-fold permutational symmetry of the integrals makes the
-    C/Fortran storage-order difference irrelevant, so the flat tag can be
-    reshaped directly to ``(pq|rs)``.
+    By default this recomputes ``OQP::ERI_AO`` on every call.  A same-size tag
+    may belong to an earlier geometry/calculation on the same ``Molecule`` and
+    would silently mix stale ERIs with current one-electron data.  Set
+    ``recompute=False`` only when the caller has explicitly managed cache
+    validity.
     """
     basis = mol.data.get_basis()
     if not basis:
         raise RuntimeError("No basis available; apply a basis first.")
     nbf = int(basis["nbf"])
 
-    flat = None
-    try:
-        cached = np.asarray(mol.data["OQP::ERI_AO"], dtype=float).ravel()
-        if cached.size == nbf ** 4:
-            flat = cached
-    except Exception:
-        flat = None
-
-    if flat is None:
+    if recompute:
         ints_2e(mol)
-        flat = np.asarray(mol.data["OQP::ERI_AO"], dtype=float).ravel()
+    else:
+        try:
+            cached = np.asarray(mol.data["OQP::ERI_AO"], dtype=float).ravel()
+            if cached.size == nbf ** 4:
+                return cached.reshape(nbf, nbf, nbf, nbf)
+        except Exception:
+            pass
+        ints_2e(mol)
 
+    flat = np.asarray(mol.data["OQP::ERI_AO"], dtype=float).ravel()
+    if flat.size != nbf ** 4:
+        raise RuntimeError(
+            f"OQP::ERI_AO has {flat.size} elements, expected {nbf ** 4} "
+            f"for nbf={nbf}.")
     return flat.reshape(nbf, nbf, nbf, nbf)

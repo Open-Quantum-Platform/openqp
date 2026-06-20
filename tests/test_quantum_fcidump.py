@@ -8,6 +8,8 @@ their files so the math is still covered.
 
 import importlib.util
 import os
+import sys
+import types
 
 import numpy as np
 import pytest
@@ -228,6 +230,49 @@ def test_eri_ao_flat_reshape_is_chemist():
     recovered = flat.reshape(nbf, nbf, nbf, nbf)
     # Thanks to 8-fold symmetry this equals chemist (pq|rs) directly.
     assert np.allclose(recovered, ref)
+
+
+# --------------------------------------------------------------------------
+# ints_2e cache behavior
+# --------------------------------------------------------------------------
+
+def test_eri_ao_recomputes_by_default(tmp_path, monkeypatch):
+    calls = {"n": 0}
+
+    fake_oqp = types.ModuleType("oqp")
+
+    class FakeData(dict):
+        def get_basis(self):
+            return {"nbf": 2}
+
+    class FakeMol:
+        def __init__(self):
+            self.data = FakeData()
+
+    def int2e(mol):
+        calls["n"] += 1
+        mol.data["OQP::ERI_AO"] = np.full(16, calls["n"], dtype=float)
+
+    setattr(fake_oqp, "int2e", int2e)
+    monkeypatch.setitem(sys.modules, "oqp", fake_oqp)
+
+    spec = importlib.util.spec_from_file_location(
+        "_oqp_library_ints_2e_under_test",
+        os.path.join(_HERE, os.pardir, "pyoqp", "oqp", "library", "ints_2e.py"))
+    assert spec is not None
+    assert spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    mol = FakeMol()
+    mol.data["OQP::ERI_AO"] = np.zeros(16)
+
+    first = mod.eri_ao(mol)
+    second = mod.eri_ao(mol)
+
+    assert calls["n"] == 2
+    assert np.all(first == 1.0)
+    assert np.all(second == 2.0)
 
 
 if __name__ == "__main__":

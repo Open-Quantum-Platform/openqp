@@ -137,7 +137,16 @@ contains
   subroutine dump_parallel_stop(this)
     implicit none
     class(int2_dump_data_t), intent(inout) :: this
-    if (.false.) this%nbf = this%nbf
+
+!   int2_compute_t distributes shell-quartet work across MPI ranks.  Each rank
+!   scatters only its local quartets into the dense tensor, so combine the full
+!   tensor before returning it through OQP::ERI_AO.  For non-MPI runs this is a
+!   no-op through par_env_t%allreduce.
+    call this%pe%barrier()
+    if (associated(this%eri)) then
+      call this%pe%allreduce(this%eri, size(this%eri))
+    end if
+    call this%pe%barrier()
   end subroutine dump_parallel_stop
 
   subroutine dump_clean(this)
