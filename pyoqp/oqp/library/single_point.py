@@ -567,14 +567,14 @@ class SinglePoint(Calculator):
             converged = self.mol.mol_energy.SCF_converged
 
         # --- Stage 3: stability safeguard ---
-        # Applied to ground-state targets (method='hf') and to spin-flip
-        # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
-        # A DIIS-converged but *unstable* open-shell solution is just as wrong a
+        # Applied only when the user opts in with [scf] stability=true.  Covers
+        # ground-state targets (method='hf') and spin-flip excited-state
+        # reference SCFs (method='tdhf' with type sf/mrsf/umrsf).  A
+        # DIIS-converged but *unstable* open-shell solution is just as wrong a
         # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
         # building MRSF on it makes the reference (and the excited states)
         # disagree with the standalone SCF along a PES.  Do not apply this to
-        # ordinary closed-shell TDHF/TDA/RPA references, where stability defaults
-        # on and the extra TRAH pass would be unnecessary.  The safeguard only
+        # ordinary closed-shell TDHF/TDA/RPA references.  The safeguard only
         # KEEPS the relaxed orbitals when TRAH finds a genuinely lower solution
         # (e_post < e_pre); an energy-invariant re-canonicalization (no lowering)
         # is reverted below by restoring the snapshot.

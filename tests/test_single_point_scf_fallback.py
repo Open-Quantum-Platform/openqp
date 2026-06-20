@@ -240,14 +240,21 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertEqual(calc.mol.mol_energy.energy, -2.0)
         self.assertTrue(calc.mol.mol_energy.SCF_converged)
 
+    def test_default_scf_stability_is_opt_in(self):
+        # The post-SCF TRAH stability safeguard is expensive and can rotate
+        # orbitals; it must not run unless the user writes [scf]
+        # stability=true.
+        oqpdata = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+        self.assertIn("'stability': {'type': bool, 'default': 'False'}", oqpdata)
+
     def test_stability_safeguard_relaxes_unstable_tdhf_reference(self):
-        # The SCF stability safeguard must also run for the excited-state
-        # reference SCF (method='tdhf', e.g. MRSF), not only for ground-state
-        # HF.  A DIIS-converged but unstable open-shell reference must be relaxed
-        # to the lower solution; otherwise MRSF builds on the wrong reference and
-        # disagrees with the standalone SCF along a PES.  Before the fix this
-        # path was gated to method=='hf', so no TRAH stability pass ran here and
-        # the unstable -2.0 solution would have been returned.
+        # The SCF stability safeguard can also run for the excited-state
+        # reference SCF (method='tdhf', e.g. MRSF) when the user explicitly opts
+        # in with [scf] stability=true.  A DIIS-converged but unstable
+        # open-shell reference can otherwise make MRSF disagree with the
+        # standalone SCF along a PES.  Before the fix this path was gated to
+        # method=='hf', so no TRAH stability pass ran here and the unstable -2.0
+        # solution would have been returned.
         calc = self.make_calculator()
         calc.method = "tdhf"
         calc.td = "mrsf"
@@ -275,9 +282,10 @@ class TestSinglePointScfFallback(unittest.TestCase):
         self.assertEqual(calc.mol.mol_energy.energy, -2.5)
 
     def test_stability_safeguard_skips_ordinary_tdhf_reference(self):
-        # Ordinary closed-shell TDHF/TDA/RPA references should not pay for the
-        # extra TRAH stability pass just because scf.stability defaults on; the
-        # safeguard is only needed for spin-flip/open-shell references.
+        # Ordinary closed-shell TDHF/TDA/RPA references should not run the extra
+        # TRAH stability pass even when the user explicitly opts in for SCF
+        # stability; the safeguard is only meaningful here for spin-flip/open-
+        # shell references.
         calc = self.make_calculator()
         calc.method = "tdhf"
         calc.td = "rpa"
