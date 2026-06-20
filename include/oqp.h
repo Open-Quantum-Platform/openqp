@@ -201,6 +201,8 @@ void append_ecp(struct oqp_handle_t *inf);
 
 void int1e(struct oqp_handle_t *inf);
 
+void int2e(struct oqp_handle_t *inf);
+
 void guess_hcore(struct oqp_handle_t *inf);
 void guess_huckel(struct oqp_handle_t *inf);
 void guess_modhuckel(struct oqp_handle_t *inf);
