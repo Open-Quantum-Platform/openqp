@@ -71,6 +71,17 @@ add_custom_target(liboqp
         ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
 )
 
+if(APPLE)
+  add_custom_command(
+    TARGET liboqp
+    POST_BUILD
+    COMMAND install_name_tool -change @rpath/liboqp.dylib
+            @loader_path/liboqp.dylib
+            ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${OQP_ABI3_SUFFIX}
+    COMMENT "Rewriting PyOQP extension load path for package-local liboqp.dylib"
+  )
+endif()
+
 add_dependencies(liboqp oqp)
 
 get_filename_component(OQP_INSTALL ${CMAKE_INSTALL_PREFIX} ABSOLUTE)

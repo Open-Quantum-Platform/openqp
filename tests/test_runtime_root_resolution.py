@@ -138,3 +138,9 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         self.assertIn("Forcing LINALG_LIB_INT64=ON", source)
         self.assertIn("set(LINALG_LIB_INT64 ON CACHE BOOL", source)
         self.assertIn("FORCE)", source)
+
+    def test_macos_cffi_extension_uses_package_local_liboqp(self):
+        source = (ROOT / "pyoqp" / "CMakeLists.txt").read_text()
+
+        self.assertIn("install_name_tool -change @rpath/liboqp.dylib", source)
+        self.assertIn("@loader_path/liboqp.dylib", source)
