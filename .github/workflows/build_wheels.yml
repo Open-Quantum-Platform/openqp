@@ -8,6 +8,7 @@ name: Build and publish wheels
       - "CMakeLists.txt"
       - "MANIFEST.in"
       - "pyproject.toml"
+      - "basis_sets/**"
       - "cmake/**"
       - "external/**"
       - "include/**"
@@ -108,7 +109,7 @@ jobs:
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
-          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_BEFORE_ALL: ${{ matrix.before_all }}
           CIBW_ENVIRONMENT: ${{ matrix.environment }}
