@@ -144,3 +144,10 @@ class RuntimeRootResolutionTests(unittest.TestCase):
 
         self.assertIn("install_name_tool -change @rpath/liboqp.dylib", source)
         self.assertIn("@loader_path/liboqp.dylib", source)
+
+    def test_macos_wheel_target_matches_runner_gcc_runtime(self):
+        source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        self.assertIn("os: macos-15-intel", source)
+        self.assertIn("os: macos-15", source)
+        self.assertEqual(source.count("MACOSX_DEPLOYMENT_TARGET=15.0"), 2)

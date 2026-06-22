@@ -44,8 +44,8 @@ that job runs only after a GitHub Release is published.
 The first automated release workflow builds:
 
 - Linux x86_64 manylinux wheels
-- macOS x86_64 wheels
-- macOS arm64 wheels
+- macOS x86_64 wheels for macOS 15 or newer
+- macOS arm64 wheels for macOS 15 or newer
 - Source distribution
 
 Windows wheels should be added after native Windows runtime layout is validated.

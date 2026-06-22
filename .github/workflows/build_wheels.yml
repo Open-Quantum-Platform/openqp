@@ -71,6 +71,7 @@ jobs:
             archs: x86_64
             before_all: brew install gcc@15
             environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
@@ -86,6 +87,7 @@ jobs:
             archs: arm64
             before_all: brew install gcc@15
             environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
