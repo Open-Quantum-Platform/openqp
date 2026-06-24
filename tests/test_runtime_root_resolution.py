@@ -151,3 +151,27 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         self.assertIn("os: macos-15-intel", source)
         self.assertIn("os: macos-15", source)
         self.assertEqual(source.count("MACOSX_DEPLOYMENT_TARGET=15.0"), 2)
+
+    def test_pull_requests_use_cached_smoke_wheel_not_full_matrix(self):
+        source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        self.assertNotIn("tags:\n      - \"v*\"", source)
+        self.assertIn("types: [opened, synchronize, reopened, labeled, unlabeled]", source)
+        self.assertIn("build_wheel_smoke:", source)
+        self.assertIn(
+            "if: github.event_name == 'pull_request' && !contains("
+            "github.event.pull_request.labels.*.name, 'release')",
+            source,
+        )
+        self.assertNotIn("OQP_EXTERNALS_ROOT", source)
+        self.assertIn("CIBW_BUILD: \"cp311-*\"", source)
+        self.assertIn("path: .cache/openqp/externals", source)
+        self.assertIn("XDG_CACHE_HOME=\"$(pwd)/.cache\"", source)
+        self.assertIn("cache_path: ~/Library/Caches/openqp/externals", source)
+        self.assertIn("build_wheels:", source)
+        self.assertIn(
+            "if: github.event_name != 'pull_request' || contains("
+            "github.event.pull_request.labels.*.name, 'release')",
+            source,
+        )
+        self.assertIn("CIBW_BUILD: \"cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*\"", source)
