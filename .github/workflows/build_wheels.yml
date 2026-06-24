@@ -15,9 +15,6 @@ name: Build and publish wheels
       - "include/**"
       - "pyoqp/**"
       - "source/**"
-  push:
-    tags:
-      - "v*"
   release:
     types: [published]
 

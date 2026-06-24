@@ -155,6 +155,7 @@ class RuntimeRootResolutionTests(unittest.TestCase):
     def test_pull_requests_use_cached_smoke_wheel_not_full_matrix(self):
         source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
 
+        self.assertNotIn("tags:\n      - \"v*\"", source)
         self.assertIn("types: [opened, synchronize, reopened, labeled, unlabeled]", source)
         self.assertIn("build_wheel_smoke:", source)
         self.assertIn(

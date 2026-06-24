@@ -12,8 +12,8 @@ and one Linux smoke wheel whenever release-sensitive files change in an ordinary
 pull request. The smoke wheel compiles OpenQP source against a restored bundled
 externals cache so source changes are checked without rebuilding third-party
 libraries on every PR. Full Linux and macOS wheel builds run for pull requests
-labeled `release`, manual workflow dispatch, `v*` tag pushes, and GitHub
-Releases. Only the `release: published` event uploads to PyPI.
+labeled `release`, manual workflow dispatch, and GitHub Releases. Only the
+`release: published` event uploads to PyPI.
 
 ## Release Checklist
 
@@ -26,6 +26,10 @@ Releases. Only the `release: published` event uploads to PyPI.
 The workflow verifies that the GitHub Release tag is exactly `v` plus the
 `pyproject.toml` version. For example, `version = "1.2.0"` must be released as
 `v1.2.0`.
+
+Pushing a `v*` tag by itself does not start this workflow. Publish a GitHub
+Release from the tag instead, so the full wheel build and PyPI upload happen
+once from the release event.
 
 ## PyPI Trusted Publishing
 
