@@ -76,10 +76,10 @@ jobs:
           CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_BEFORE_ALL: yum install -y gcc-gfortran
           CIBW_ENVIRONMENT: >-
-            OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
-            CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+            CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+            -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
             -DLINALG_LIB=auto
-            -DLINALG_LIB_INT64=ON'
+            -DLINALG_LIB_INT64=ON"
           CIBW_REPAIR_WHEEL_COMMAND: >-
             LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
             auditwheel repair -w {dest_dir} {wheel}
@@ -112,10 +112,10 @@ jobs:
             archs: x86_64
             before_all: yum install -y gcc-gfortran
             environment: >-
-              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
-              CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
-              -DLINALG_LIB_INT64=ON'
+              -DLINALG_LIB_INT64=ON"
             repair: >-
               LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
               auditwheel repair -w {dest_dir} {wheel}
@@ -126,13 +126,13 @@ jobs:
             archs: x86_64
             before_all: brew install gcc@15
             environment: >-
-              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
               MACOSX_DEPLOYMENT_TARGET=15.0
-              CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
+              CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
-              -DLINALG_LIB_INT64=OFF'
+              -DLINALG_LIB_INT64=OFF"
             repair: >-
               delocate-wheel --require-archs {delocate_archs}
               -w {dest_dir} -v {wheel}
@@ -143,13 +143,13 @@ jobs:
             archs: arm64
             before_all: brew install gcc@15
             environment: >-
-              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
               MACOSX_DEPLOYMENT_TARGET=15.0
-              CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
+              CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
-              -DLINALG_LIB_INT64=OFF'
+              -DLINALG_LIB_INT64=OFF"
             repair: >-
               delocate-wheel --require-archs {delocate_archs}
               -w {dest_dir} -v {wheel}

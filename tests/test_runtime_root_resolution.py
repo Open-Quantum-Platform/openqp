@@ -164,7 +164,7 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         )
         self.assertIn("CIBW_BUILD: \"cp311-*\"", source)
         self.assertIn("path: .openqp-externals", source)
-        self.assertIn("OQP_EXTERNALS_ROOT=\"$(pwd)/.openqp-externals\"", source)
+        self.assertEqual(source.count("-DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals"), 4)
         self.assertIn("build_wheels:", source)
         self.assertIn(
             "if: github.event_name != 'pull_request' || contains("
