@@ -15,6 +15,11 @@ libraries on every PR. Full Linux and macOS wheel builds run for pull requests
 labeled `release`, manual workflow dispatch, and GitHub Releases. Only the
 `release: published` event uploads to PyPI.
 
+The workflow does not require `OQP_EXTERNALS_ROOT`. Linux wheel jobs set the
+standard `XDG_CACHE_HOME` to a cached checkout-local directory so OpenQP's
+existing cache auto-discovery uses `$XDG_CACHE_HOME/openqp/externals`. macOS
+wheel jobs use the default `~/Library/Caches/openqp/externals` location.
+
 ## Release Checklist
 
 1. Update `project.version` in `pyproject.toml`.

@@ -57,7 +57,7 @@ jobs:
       - name: Cache bundled externals
         uses: actions/cache@v4
         with:
-          path: .openqp-externals
+          path: .cache/openqp/externals
           key: oqp-wheel-externals-linux-x86_64-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
           restore-keys: |
             oqp-wheel-externals-linux-x86_64-
@@ -73,8 +73,8 @@ jobs:
           CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_BEFORE_ALL: yum install -y gcc-gfortran
           CIBW_ENVIRONMENT: >-
+            XDG_CACHE_HOME="$(pwd)/.cache"
             CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
-            -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
             -DLINALG_LIB=auto
             -DLINALG_LIB_INT64=ON"
           CIBW_REPAIR_WHEEL_COMMAND: >-
@@ -107,10 +107,11 @@ jobs:
             os: ubuntu-24.04
             platform: linux
             archs: x86_64
+            cache_path: .cache/openqp/externals
             before_all: yum install -y gcc-gfortran
             environment: >-
+              XDG_CACHE_HOME="$(pwd)/.cache"
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
-              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON"
             repair: >-
@@ -121,13 +122,13 @@ jobs:
             os: macos-15-intel
             platform: macos
             archs: x86_64
+            cache_path: ~/Library/Caches/openqp/externals
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
-              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=OFF"
             repair: >-
@@ -138,13 +139,13 @@ jobs:
             os: macos-15
             platform: macos
             archs: arm64
+            cache_path: ~/Library/Caches/openqp/externals
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS="-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
               -DCMAKE_Fortran_COMPILER=gfortran-15
-              -DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=OFF"
             repair: >-
@@ -161,7 +162,7 @@ jobs:
       - name: Cache bundled externals
         uses: actions/cache@v4
         with:
-          path: .openqp-externals
+          path: ${{ matrix.cache_path }}
           key: oqp-wheel-externals-${{ matrix.name }}-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
           restore-keys: |
             oqp-wheel-externals-${{ matrix.name }}-

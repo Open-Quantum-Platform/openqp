@@ -163,9 +163,11 @@ class RuntimeRootResolutionTests(unittest.TestCase):
             "github.event.pull_request.labels.*.name, 'release')",
             source,
         )
+        self.assertNotIn("OQP_EXTERNALS_ROOT", source)
         self.assertIn("CIBW_BUILD: \"cp311-*\"", source)
-        self.assertIn("path: .openqp-externals", source)
-        self.assertEqual(source.count("-DOQP_EXTERNALS_ROOT=$(pwd)/.openqp-externals"), 4)
+        self.assertIn("path: .cache/openqp/externals", source)
+        self.assertIn("XDG_CACHE_HOME=\"$(pwd)/.cache\"", source)
+        self.assertIn("cache_path: ~/Library/Caches/openqp/externals", source)
         self.assertIn("build_wheels:", source)
         self.assertIn(
             "if: github.event_name != 'pull_request' || contains("
