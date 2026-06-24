@@ -3,6 +3,7 @@ name: Build and publish wheels
 "on":
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - ".github/workflows/build_wheels.yml"
       - "CMakeLists.txt"
@@ -45,8 +46,61 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  build_wheel_smoke:
+    name: Build Linux wheel smoke
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache bundled externals
+        uses: actions/cache@v4
+        with:
+          path: .openqp-externals
+          key: oqp-wheel-externals-linux-x86_64-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
+          restore-keys: |
+            oqp-wheel-externals-linux-x86_64-
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade cibuildwheel
+
+      - name: Build smoke wheel
+        env:
+          CIBW_PLATFORM: linux
+          CIBW_ARCHS: x86_64
+          CIBW_BUILD: "cp311-*"
+          CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_BEFORE_ALL: yum install -y gcc-gfortran
+          CIBW_ENVIRONMENT: >-
+            OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
+            CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+            -DLINALG_LIB=auto
+            -DLINALG_LIB_INT64=ON'
+          CIBW_REPAIR_WHEEL_COMMAND: >-
+            LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
+            auditwheel repair -w {dest_dir} {wheel}
+          CIBW_TEST_COMMAND: >-
+            python -c "import oqp, pathlib;
+            root = pathlib.Path(oqp.oqp_root);
+            assert (root / 'include' / 'oqp.h').exists();
+            assert any((root / 'lib').glob('liboqp.*'));
+            assert (root / 'share' / 'basis_sets').exists();
+            print('OpenQP runtime root:', root)"
+        run: python -m cibuildwheel --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-wheel-smoke-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
   build_wheels:
     name: Build wheels (${{ matrix.name }})
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -58,6 +112,7 @@ jobs:
             archs: x86_64
             before_all: yum install -y gcc-gfortran
             environment: >-
+              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
               CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON'
@@ -71,6 +126,7 @@ jobs:
             archs: x86_64
             before_all: brew install gcc@15
             environment: >-
+              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
               MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
@@ -87,6 +143,7 @@ jobs:
             archs: arm64
             before_all: brew install gcc@15
             environment: >-
+              OQP_EXTERNALS_ROOT="$(pwd)/.openqp-externals"
               MACOSX_DEPLOYMENT_TARGET=15.0
               CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
               -DCMAKE_CXX_COMPILER=g++-15
@@ -103,6 +160,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Cache bundled externals
+        uses: actions/cache@v4
+        with:
+          path: .openqp-externals
+          key: oqp-wheel-externals-${{ matrix.name }}-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
+          restore-keys: |
+            oqp-wheel-externals-${{ matrix.name }}-
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel

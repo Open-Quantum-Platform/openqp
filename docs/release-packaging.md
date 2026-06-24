@@ -8,16 +8,19 @@ pip install openqp
 ```
 
 The `.github/workflows/build_wheels.yml` workflow builds source distributions
-and binary wheels whenever release-sensitive files change in a pull request,
-whenever a `v*` tag is pushed, and whenever a GitHub Release is published.
-Only the `release: published` event uploads to PyPI.
+and one Linux smoke wheel whenever release-sensitive files change in an ordinary
+pull request. The smoke wheel compiles OpenQP source against a restored bundled
+externals cache so source changes are checked without rebuilding third-party
+libraries on every PR. Full Linux and macOS wheel builds run for pull requests
+labeled `release`, manual workflow dispatch, `v*` tag pushes, and GitHub
+Releases. Only the `release: published` event uploads to PyPI.
 
 ## Release Checklist
 
 1. Update `project.version` in `pyproject.toml`.
 2. Create and push a matching tag, for example `v1.2.0`.
 3. Publish a GitHub Release from that tag.
-4. Wait for the wheel workflow to finish.
+4. Wait for the full wheel workflow to finish.
 5. Confirm that the release assets and PyPI files include the expected wheels.
 
 The workflow verifies that the GitHub Release tag is exactly `v` plus the
@@ -43,6 +46,9 @@ that job runs only after a GitHub Release is published.
 
 The first automated release workflow builds:
 
+- Ordinary pull requests: source distribution and one Linux x86_64 CPython 3.11
+  smoke wheel using the reusable bundled-externals cache
+- Pull requests labeled `release`: full Linux and macOS wheel matrix
 - Linux x86_64 manylinux wheels
 - macOS x86_64 wheels for macOS 15 or newer
 - macOS arm64 wheels for macOS 15 or newer
