@@ -152,6 +152,13 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         self.assertIn("os: macos-15", source)
         self.assertEqual(source.count("MACOSX_DEPLOYMENT_TARGET=15.0"), 2)
 
+    def test_release_wheel_matrix_includes_native_linux_arm64(self):
+        source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
+
+        self.assertIn("name: linux-aarch64", source)
+        self.assertIn("os: ubuntu-24.04-arm", source)
+        self.assertIn("archs: aarch64", source)
+
     def test_pull_requests_use_cached_smoke_wheel_not_full_matrix(self):
         source = (ROOT / ".github" / "workflows" / "build_wheels.yml").read_text()
 

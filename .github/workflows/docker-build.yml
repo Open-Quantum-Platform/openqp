@@ -21,6 +21,22 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Read package version
+        id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          from pathlib import Path
+
+          pyproject = Path("pyproject.toml").read_text()
+          match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+          if not match:
+              raise SystemExit("Could not find project.version in pyproject.toml")
+          version = match.group(1)
+          print(f"version={version}")
+          print(f"docker_tag=v{version}")
+          PY
+
       - name: Set up Docker Buildx
         id: setup-buildx
         uses: docker/setup-buildx-action@v3
@@ -72,7 +88,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          tags: openqp/openqp:v1.0
+          tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}
           load: true
           # BuildKit's GitHub cache keeps source-independent Docker layers.
           # actions/cache + buildkit-cache-dance above keep the pip/OpenQP
@@ -85,4 +101,4 @@ jobs:
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
         # The buildenv image is published by the openqp-dev companion repo, not
         # here; this repo only publishes the OpenQP application image.
-        run: docker push openqp/openqp:v1.0
+        run: docker push openqp/openqp:${{ steps.version.outputs.docker_tag }}

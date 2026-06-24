@@ -118,6 +118,21 @@ jobs:
               LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
               auditwheel repair -w {dest_dir} {wheel}
 
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            platform: linux
+            archs: aarch64
+            cache_path: .cache/openqp/externals
+            before_all: yum install -y gcc-gfortran
+            environment: >-
+              XDG_CACHE_HOME="$(pwd)/.cache"
+              CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              -DLINALG_LIB=auto
+              -DLINALG_LIB_INT64=ON"
+            repair: >-
+              LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
+              auditwheel repair -w {dest_dir} {wheel}
+
           - name: macos-x86_64
             os: macos-15-intel
             platform: macos
