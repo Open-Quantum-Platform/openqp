@@ -59,6 +59,7 @@ The first automated release workflow builds:
   smoke wheel using the reusable bundled-externals cache
 - Pull requests labeled `release`: full Linux and macOS wheel matrix
 - Linux x86_64 manylinux wheels
+- Linux aarch64 manylinux wheels
 - macOS x86_64 wheels for macOS 15 or newer
 - macOS arm64 wheels for macOS 15 or newer
 - Source distribution
