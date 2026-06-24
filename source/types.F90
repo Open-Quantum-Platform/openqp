@@ -151,6 +151,7 @@ module types
     ! PCM implicit solvent (energy-only, ddX backend; off by default)
     logical(c_bool) :: pcm_enabled = .false.     !< Enable PCM reaction-field contribution to SCF
     real(c_double)  :: pcm_epsilon = 78.3553_dp  !< Solvent dielectric constant (water default)
+    logical(c_bool) :: qmmm_flag = .false.       !< QM/MM Flag
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

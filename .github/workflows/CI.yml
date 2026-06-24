@@ -79,6 +79,4 @@ jobs:
 # NOTE: the optional ddX continuum-solvation (PCM) path is NOT exercised by the
 # CI above (gcc-build builds with ENABLE_DDX OFF). The ddX-enabled build and the
 # scientific PCM validation gates are run/documented out-of-CI to keep CI fast
-# (building ddX from source + the SCF benchmark suite is expensive). The exact,
-# reproducible build + validation command for reviewers is in
-# docs/pcm_ddx_validation.md.
+# (building ddX from source + the SCF benchmark suite is expensive).

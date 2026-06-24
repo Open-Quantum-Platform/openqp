@@ -65,6 +65,26 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  character(len=*), parameter, public :: OQP_mm_potential = OQP_prefix // "mm_potential"
+  character(len=*), parameter, public :: OQP_Hqmmm = OQP_prefix // "hamiltonian_qmmm"
+  character(len=*), parameter, public :: OQP_partial_charges = OQP_prefix // "partial_charges"
+  character(len=*), parameter, public :: OQP_mm_energy = OQP_prefix // "mm_energy"
+  character(len=*), parameter, public :: OQP_mm_gradient = OQP_prefix // "mm_gradient"
+  character(len=*), parameter, public :: OQP_ESPF_CORR = OQP_prefix // "ESPF_CORR"
+  character(len=*), parameter, public :: OQP_POTQM = OQP_prefix // "POTQM"
+  character(len=*), parameter, public :: OQP_POTMM = OQP_prefix // "POTMM"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD = OQP_prefix // "ESPF_GRAD"
+
+  ! NAMD (Tully FSSH) state exchanged with the Python trajectory driver
+  character(len=*), parameter, public :: OQP_namd_coef     = OQP_prefix // "namd_coef"
+  character(len=*), parameter, public :: OQP_namd_velocity = OQP_prefix // "namd_velocity"
+  character(len=*), parameter, public :: OQP_namd_params   = OQP_prefix // "namd_params"
+  character(len=*), parameter, public :: OQP_namd_results  = OQP_prefix // "namd_results"
+  character(len=*), parameter, public :: OQP_namd_tdc      = OQP_prefix // "namd_tdc"
+  character(len=*), parameter, public :: OQP_namd_eabs     = OQP_prefix // "namd_eabs"
+  character(len=*), parameter, public :: OQP_namd_stas     = OQP_prefix // "namd_stas"
+
+  ! MRSF spin-orbit coupling (from upstream SOC merge)
   character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
   character(len=*), parameter, public :: OQP_soc_evec_re = OQP_prefix // "soc_evec_re"
   character(len=*), parameter, public :: OQP_soc_evec_im = OQP_prefix // "soc_evec_im"
@@ -72,7 +92,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
 
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
-  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  ! is enabled)
   character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
   character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
   character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
@@ -102,7 +122,16 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_energies_comment = OQP_prefix // "Responce energies"
+  character(len=*), parameter, public :: OQP_mm_potential_comment = "MM potential"
+  character(len=*), parameter, public :: OQP_partial_charges_comment = "QM partial charges"
+  character(len=*), parameter, public :: OQP_mm_energy_comment = "MM energy"
+  character(len=*), parameter, public :: OQP_mm_gradient_comment = "MM gradient"
+  character(len=*), parameter, public :: OQP_Hqmmm_comment = "triangle QM/MM Hamiltonian matrix"
+  character(len=*), parameter, public :: OQP_espf_corr_comment = "ESPF one-electron operators for each QM atom"
   character(len=*), parameter, public :: OQP_log_filename_comment = OQP_prefix // "log filename"
+  character(len=*), parameter, public :: OQP_potqm_comment = OQP_prefix // "Quantum contribution to the potential"
+  character(len=*), parameter, public :: OQP_potmm_comment = OQP_prefix // "MM contribution to the potential"
+  character(len=*), parameter, public :: OQP_ESPF_GRAD_comment = OQP_prefix // "ESP contribution to the gradient"
   character(len=*), parameter, public :: OQP_basis_filename_comment = OQP_prefix // "basis filename"
   character(len=*), parameter, public :: OQP_hbasis_filename_comment = OQP_prefix // "Huckel basis_filename for Huckel Guess"
   character(len=*), parameter, public :: OQP_nac_comment = OQP_prefix // "nonadiabatic coupling nstates x nstates"
@@ -111,13 +140,19 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
+  character(len=*), parameter, public :: OQP_namd_coef_comment = OQP_prefix // "NAMD electronic amplitudes (2 x nstate: re,im)"
+  character(len=*), parameter, public :: OQP_namd_velocity_comment = OQP_prefix // "NAMD nuclear velocities (3 x natom, a.u.)"
+  character(len=*), parameter, public :: OQP_namd_params_comment = OQP_prefix // "NAMD packed scalar parameters/state"
+  character(len=*), parameter, public :: OQP_namd_results_comment = OQP_prefix // "NAMD per-step diagnostics (hop prob + flags)"
+  character(len=*), parameter, public :: OQP_namd_tdc_comment = OQP_prefix // "NAMD time-derivative coupling matrix (nstate x nstate)"
+  character(len=*), parameter, public :: OQP_namd_eabs_comment = OQP_prefix // "NAMD absolute state energies (Hartree)"
+  character(len=*), parameter, public :: OQP_namd_stas_comment = OQP_prefix // "NAMD state overlap matrix (flat n*n) for trivial-crossing"
   character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
   character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
   character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
   character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
   character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
-
-  character(len=*), parameter, public :: all_tags(39) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
@@ -126,7 +161,12 @@ module oqp_tagarray_driver
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
-    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap /)
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, &
+    OQP_Hqmmm, OQP_mm_potential, OQP_partial_charges,OQP_mm_energy, &
+    OQP_ESPF_CORR, OQP_POTMM, OQP_POTQM, &
+    OQP_namd_coef, OQP_namd_velocity, OQP_namd_params, OQP_namd_results, &
+    OQP_namd_tdc, OQP_namd_eabs, OQP_namd_stas /)
+
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
     module procedure tagarray_get_data_real64_val, tagarray_get_data_real64_1d, tagarray_get_data_real64_2d, tagarray_get_data_real64_3d

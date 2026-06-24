@@ -69,8 +69,8 @@ def _set_threading_defaults():
         "MKL_NUM_THREADS": "1",
         "BLIS_NUM_THREADS": "1",
         "VECLIB_MAXIMUM_THREADS": "1",
-        "OMP_STACKSIZE": "256M",
-        "GOMP_STACKSIZE": "256M",
+        "OMP_STACKSIZE": "512M",
+        "GOMP_STACKSIZE": "512M",
     }
     if sys.platform == "darwin":
         # macOS default: use the PERFORMANCE-core count, not all logical cores.
@@ -109,8 +109,9 @@ from oqp.utils.file_utils import dump_log
 from oqp.utils.input_checker import check_input_values
 from oqp.molecule import Molecule
 from oqp.library.runfunc import (
-   compute_energy, compute_grad, compute_nac, compute_soc, compute_geom,
-   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo
+   compute_energy, compute_grad, compute_nac, compute_soc, compute_geom, compute_md,
+   compute_nacme, compute_properties, compute_data, compute_hess, compute_thermo,
+   compute_namd
 )
 from oqp.utils.mpi_utils import MPIManager
 
@@ -197,6 +198,8 @@ class Runner:
             'meci': compute_geom,
             'mecp': compute_geom,
             'mep': compute_geom,
+            'md': compute_md,
+            'namd': compute_namd,
             'ts': compute_geom,
             'tci': compute_geom,
             'irc': compute_geom,
@@ -214,10 +217,20 @@ class Runner:
         # initialize mol
         self.mol = Molecule(project, input_file, log, silent=silent)
         self.mol.usempi = usempi
+
         if input_dict:
             self.mol.load_config(input_dict)
         else:
             self.mol.load_config(input_file)
+        if self.mpi_manager.rank != 0:
+            if os.name == 'nt':  # Windows
+                log = 'NUL'
+            else:
+                log = '/dev/null'
+        else:
+            log = self.mol.log
+
+        self.mol.data["OQP::log_filename"] = log
 
         # Apply the parsed `omp_threads` at runtime. The pre-import hook only sees
         # a CLI flag or an input *file*, so this also covers the programmatic
@@ -232,7 +245,6 @@ class Runner:
             elif not self.mol.silent:
                 print(f"PyOQP WARNING: omp_threads={_omp} requested but this "
                       "OpenQP build has no OpenMP support; running serially.")
-
         # check input values set default omp_num_threads
         _input_file = getattr(self.mol, "input_file", None)
         check_input_values(
@@ -245,6 +257,8 @@ class Runner:
 
         # Attach the starting time to mol
         self.mol.start_time = start_time
+        # Set up banner
+        oqp.oqp_banner(self.mol)
 
         dump_log(self.mol, title='', section='start',
                  info={"build": _openqp_build_label()})
@@ -257,20 +271,6 @@ class Runner:
         Args:
             test_mod (bool): Flag to run in test mode.
         """
-        # Set up logfile
-
-        if self.mpi_manager.rank != 0:
-            if os.name == 'nt':  # Windows
-                log = 'NUL'
-            else:
-                log = '/dev/null'
-        else:
-            log = self.mol.log
-
-        self.mol.data["OQP::log_filename"] = log
-
-        # Set up banner
-        oqp.oqp_banner(self.mol)
 
         # Get the run type from mol configuration
         run_type = self.mol.config["input"]["runtype"]
@@ -404,6 +404,30 @@ def main():
         log = mpi_manager.bcast(log)
 
     silent = 1 if args.silent else 0
+
+    # Detect the OpenMM-based QM/MM-MD mode without importing OpenMM-dependent
+    # modules (so plain energy/grad/NAMD runs work without OpenMM installed).
+    qmmm_flag = False
+    try:
+        import configparser
+        _cfg = configparser.ConfigParser()
+        _cfg.read(input_file)
+        qmmm_flag = _cfg.getboolean('input', 'qmmm_flag', fallback=False)
+    except Exception:
+        qmmm_flag = False
+    # Only the legacy ground-state OpenMM-MD path is handled here. QM/MM energy,
+    # gradient, optimization, and NAMD inputs go through Runner so their normal
+    # runtype dispatch and read_system paths are preserved.
+    runtype_l = ""
+    try:
+        runtype_l = _cfg.get('input', 'runtype', fallback='energy').strip().lower()
+    except Exception:
+        runtype_l = 'energy'
+    if qmmm_flag and runtype_l == 'md':
+        from oqp.library.qmmm_md import QMMM_MD
+        md = QMMM_MD(oqp_cfg=input_file)
+        md.run()
+        return
 
     # Initialize OQP class
     oqp_runner = Runner(project=project_name,

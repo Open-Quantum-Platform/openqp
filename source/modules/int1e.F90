@@ -33,8 +33,8 @@ contains
     use strings, only: Cstring, fstring
     use physical_constants, only: BOHR_TO_ANGSTROM
     use printing, only: print_module_info
+    use qmmm_mod, only: oqp_esp_qmmm
     use dk_scalar_mod, only: dk_scalar
-
 
     implicit none
 
@@ -48,11 +48,13 @@ contains
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
-      hcore(:), tmat(:), smat(:)
+      hcore(:), tmat(:), smat(:), Hqmmm(:), mm_potential(:)
     character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
       OQP_SM, OQP_TM, OQP_Hcore /)
     character(len=*), parameter :: tags_stale(1) = (/ character(len=80) :: &
       OQP_QMAT /)
+    character(len=*), parameter :: tags_qmmm(2) = (/ character(len=80) :: &
+      OQP_mm_potential,  OQP_Hqmmm/)
 
     logical dbg
     dbg = .false.
@@ -83,7 +85,9 @@ contains
 
 !   Allocate H, S and T matrices
     nbf2 = basis%nbf*(basis%nbf+1)/2
+    nat = ubound(infos%atoms%zn,1)
 
+!   If you remove records, you removes the tagarray of OQP_mm_potential defined in Python.
     call infos%dat%remove_records(tags_general)
 !   The overlap matrix changes, so the cached Q = S^(-1/2) is stale
     call infos%dat%remove_records(tags_stale)
@@ -91,7 +95,6 @@ contains
     call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
     call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)
     call infos%dat%reserve_data(OQP_Hcore, TA_TYPE_REAL64, nbf2, comment=OQP_Hcore_comment)
-
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
     call tagarray_get_data(infos%dat, OQP_TM, tmat)
@@ -106,10 +109,34 @@ contains
     call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num, hcore, smat, tmat,&
             logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
 
+!   Compute QM/MM interaction
+!    if(infos%control%qmmm_flag) then
+!       call infos%dat%reserve_data(OQP_Hqmmm, TA_TYPE_REAL64, nbf2, comment=OQP_Hqmmm_comment)
+!       call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
+!       call tagarray_get_data(infos%dat, OQP_Hqmmm, Hqmmm)
+!       call tagarray_get_data(infos%dat, OQP_mm_potential, mm_potential)
+!
+!       write(iw,"(/1X,'  Computing ESP One Electron Integrals (QM/MM) '/)")
+!       write(iw,"('External MM potential:'/)")
+!       do i=1,nat
+!          write(iw,"(i4,1X,f12.8)") i, mm_potential(i)
+!       end do
+!!   Compute QM/MM contribution to core Hamiltonian
+!!       call oqp_esp_qmmm(infos, Hqmmm, mm_potential, smat, logtol=tol)
+!!   Add QM/MM contribution to core Hamiltonian
+!       hcore = hcore + hqmmm
+!       write(iw,"(/1X,'  ... End of ESP One Electron Integrals ... '/)")
+!    endif
+
+!   Douglas-Kroll scalar-relativistic correction to the core Hamiltonian (SOC)
     if (dk.gt.0) call dk_scalar(infos)
 
     if (dbg) then
-        write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')
+        if(infos%control%qmmm_flag) then
+            write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V+QM/MM)")')
+        else
+            write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')
+        end if
         call print_sym_labeled(hcore,nbf, basis)
 
         write(iw,'(/"OVERLAP MATRIX")')
@@ -117,6 +144,11 @@ contains
 
         write(iw,'(/"KINETIC ENERGY INTEGRALS")')
         call print_sym_labeled(tmat,nbf, basis)
+
+        if (infos%control%qmmm_flag) then
+           write(iw,'(/"QM/MM HAMILTONIAN INTEGRALS")')
+           call print_sym_labeled(Hqmmm,nbf, basis)
+        end if
     end if
 
     write(iw,"(/1X,'...... End Of One Electron Integrals ......'/)")

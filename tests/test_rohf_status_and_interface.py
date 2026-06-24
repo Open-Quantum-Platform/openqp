@@ -104,12 +104,8 @@ def load_runfunc_with_stubs():
         setattr(single_point, name, _Noop)
 
     libscipy = types.ModuleType("oqp.library.libscipy")
-    for name in ("StateSpecificOpt", "MECIOpt", "MECPOpt", "MEP"):
+    for name in ("StateSpecificOpt", "MECIOpt", "MECPOpt", "MEP", "QMMMOpt"):
         setattr(libscipy, name, _Noop)
-
-    libdlfind = types.ModuleType("oqp.library.libdlfind")
-    for name in ("DLFindMin", "DLFindTS", "DLFindMECI"):
-        setattr(libdlfind, name, _Noop)
 
     libgeometric = types.ModuleType("oqp.library.libgeometric")
     for name in (
@@ -122,14 +118,31 @@ def load_runfunc_with_stubs():
     ):
         setattr(libgeometric, name, _Noop)
 
+    liboqp = types.ModuleType("oqp.library.liboqp")
+    for name in (
+        "OQPOpt",
+        "OQPTSOpt",
+        "OQPMECIOpt",
+        "OQPMECPOpt",
+        "OQPTCIOpt",
+        "OQPNEBOpt",
+        "OQPIRCOpt",
+        "OQPMEPOpt",
+    ):
+        setattr(liboqp, name, _Noop)
+
+    namd = types.ModuleType("oqp.library.namd")
+    setattr(namd, "NAMD", _Noop)
+
     saved = {name: sys.modules.get(name) for name in (
         "oqp",
         "oqp.library",
         "oqp.library.dftbplus",
         "oqp.library.single_point",
         "oqp.library.libscipy",
-        "oqp.library.libdlfind",
         "oqp.library.libgeometric",
+        "oqp.library.liboqp",
+        "oqp.library.namd",
     )}
     sys.modules.update({
         "oqp": oqp,
@@ -137,8 +150,9 @@ def load_runfunc_with_stubs():
         "oqp.library.dftbplus": dftbplus,
         "oqp.library.single_point": single_point,
         "oqp.library.libscipy": libscipy,
-        "oqp.library.libdlfind": libdlfind,
         "oqp.library.libgeometric": libgeometric,
+        "oqp.library.liboqp": liboqp,
+        "oqp.library.namd": namd,
     })
     try:
         spec = importlib.util.spec_from_file_location("runfunc_under_test", RUNFUNC)

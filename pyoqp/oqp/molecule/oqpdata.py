@@ -5,6 +5,7 @@ import numpy as np
 from oqp import ffi, lib
 from oqp.periodic_table import MASSES, SYMBOL_MAP
 from oqp.utils.constants import ANGSTROM_TO_BOHR
+import oqp.utils.qmmm as qmmm
 
 
 def sarray(strng):
@@ -65,6 +66,22 @@ def path(strng):
 
 
 OQP_CONFIG_SCHEMA = {
+    'qmmm': {
+        'forcefield': {'type': sarray, 'default': 'amber14-all.xml,amber14/tip3p.xml'},
+        'nonbondedmethod': {'type': str, 'default': 'NoCutoff'},
+        'constraints': {'type': str, 'default': 'None'},
+        'rigidwater': {'type': bool, 'default': 'False'},
+        'nsteps': {'type': int, 'default': '1'},
+        'timestep': {'type': int, 'default': '1'},
+        'istate': {'type': int, 'default': '0'},
+        # NAMD-QMMM (Runner runtype=namd) keys
+        'pdb_file': {'type': str, 'default': ''},
+        'forcefield_files': {'type': str, 'default': ''},
+        'qm_atoms': {'type': str, 'default': ''},
+        'cutoff': {'type': str, 'default': 'NoCutoff'},
+        'embedding': {'type': str, 'default': 'electrostatic'},
+        'temperature': {'type': float, 'default': '300.0'},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': '6-31g*'},
@@ -76,6 +93,7 @@ OQP_CONFIG_SCHEMA = {
         'system2': {'type': str, 'default': ''},
         'ispher': {'type': ispher_mode, 'default': 'auto'},
         'd4': {'type': bool, 'default': 'False'},
+        'qmmm_flag': {'type': bool, 'default': 'False'},
         # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
         # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
         'soc_2e': {'type': int, 'default': '1'},
@@ -296,6 +314,32 @@ OQP_CONFIG_SCHEMA = {
         'align': {'type': str, 'default': 'reorder'},
 
     },
+    'md': {
+        'nstep': {'type': int, 'default': '100'},
+        'dt': {'type': float, 'default': '0.5'},            # fs
+        'active': {'type': int, 'default': '1'},            # initial active excited state (1-based)
+        'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
+        'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
+        'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
+        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
+        'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
+        'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
+        'trivial_thresh': {'type': float, 'default': '0.5'},
+        'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
+        'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
+        'seed': {'type': int, 'default': '1'},
+        'restart': {'type': bool, 'default': 'False'},
+        'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
+        'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)
+        'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction
+        'soc_tdc_grad_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add MCH TDC-projected NAC gradient correction
+        'grad_wthr': {'type': float, 'default': '0.001'},   # SOC weighted-MCH gradient weight threshold (small -> continuous force)
+        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
+        'econs': {'type': bool, 'default': 'False'},        # temporary: per-step velocity rescale to conserve E_tot (band-aid for diagonal-gradient drift)
+        'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
+        'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
+        'dx_max': {'type': float, 'default': '0.02'},       # bohr, max per-step atomic displacement (adaptive dt criterion)
+    },
     'json': {
             'scf_type': {'type': string, 'default': ''},
             'basis': {'type': string, 'default': ''},
@@ -328,6 +372,7 @@ class OQPData:
             "functional": "set_dft_functional",
             "system": "set_system",
             "system2": "set_system2",
+            "qmmm_flag": "set_qmmm_flag",
             "soc_2e":     "set_soc_2e",
         },
         "guess": {
@@ -410,6 +455,15 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+        },
+        "qmmm": {
+            "forcefield": "set_qmmm_forcefield",
+            "nonbondedmethod": "set_qmmm_nonbondedmethod",
+            "constraints": "set_qmmm_constraints",
+            "rigidwater": "set_qmmm_rigidwater",
+            "nsteps": "set_qmmm_nsteps",
+            "timestep": "set_qmmm_timestep",
+            "istate": "set_qmmm_istate",
         },
     }
     _typemap = [np.void,
@@ -748,6 +802,38 @@ class OQPData:
         """Set the PCM solvent dielectric constant"""
         self._data.control.pcm_epsilon = epsilon
 
+    def set_qmmm_flag(self, qmmm_flag):
+        """Handle QM/MM calculation type"""
+        self._data.control.qmmm_flag=qmmm_flag
+
+    def set_qmmm_forcefield(self, forcefield):
+        """Handle QM/MM calculation forcefield"""
+        qmmm.force_field = forcefield
+
+    def set_qmmm_rigidwater(self, rigidwater):
+        """Handle QM/MM calculation rigidWater"""
+        qmmm.rigidWater = rigidwater
+
+    def set_qmmm_nonbondedmethod(self, nonbondedmethod):
+        """Handle QM/MM calculation nonbondedMethod"""
+        qmmm.nonbondedMethod = nonbondedmethod
+
+    def set_qmmm_constraints(self, constraints):
+        """Handle QM/MM calculation constraints"""
+        qmmm.constraints = constraints
+
+    def set_qmmm_nsteps(self, nsteps):
+        """Handle QM/MM calculation constraints"""
+        qmmm.nSteps = nsteps 
+
+    def set_qmmm_timestep(self, timestep):
+        """Handle QM/MM calculation constraints"""
+        qmmm.timeStep = timestep 
+
+    def set_qmmm_istate(self, istate):
+        """Handle QM/MM calculation istate"""
+        qmmm.istate = istate
+
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
         td_type = td_type.lower()
@@ -927,6 +1013,12 @@ class OQPData:
     def set_system(self, system):
         """Set up atomic data"""
         num_atoms, x, y, z, q, mass = read_system(system)
+        self.atomic_data = {
+                     "natom": num_atoms,
+                     "coords": np.column_stack([x, y, z]),
+                     "charge": q,
+                     "mass": mass,
+                 }
         self._data.mol_prop.natom = num_atoms
         lib.oqp_set_atoms(self._data, num_atoms, x, y, z, q, mass)
 
@@ -1042,8 +1134,10 @@ def compute_alpha_beta_electrons(n_e, mult):
 
 
 def read_system(system):
-    system = system.split("\n")
-    if system[0]:
+    system0 = system
+    system = system.split()
+    """Set up atomic data"""
+    if system[0].lower().endswith('.xyz'):
         if not os.path.exists(system[0]):
             raise FileNotFoundError("XYZ file %s is not found!" % system[0])
 
@@ -1052,22 +1146,57 @@ def read_system(system):
 
         num_atoms = int(system[0])
         system = system[2: 2 + num_atoms]
+        atoms = []
+        for i, line in enumerate(system):
+            line = line.split()
+            if len(line) >= 4:
+                atoms.append(line[0: 4])
+            else:
+                print(f"{system[i]} is not valid line for atom configuration!")
+
+        q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
+        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+    elif system[0].lower().endswith('.pdb'):
+
+        if not os.path.exists(system[0]):
+            raise FileNotFoundError("PDB file %s is not found!" % system[0])
+        qmmm.pdb_file=system[0]
+
+        atom_list = []
+        for i in system[1:]:
+           if i.find('-') != -1:
+              start, end = map(int, i.split('-'))
+              atom_list.extend(list(range(start, end + 1)))
+           else:
+              atom_list.append(int(i))
+
+        if len(atom_list) != len(set(atom_list)):
+           raise ValueError("Repeated entries in QM atom list")
+
+        if any(value < 0 for value in atom_list):
+           raise ValueError("Negative indexes are not allowed in QM atom list")
+
+        qmmm.qm_atoms,qmmm.pdb0,qmmm.forcefield0,qmmm.system0=qmmm.openmm_init(atom_list=atom_list)
+        num_atoms, x, y, z, q, mass = qmmm.openmm_system()
     else:
+        system = system0.split("\n")
         system = system[1:]
         num_atoms = len(system)
+        atoms = []
+        for i, line in enumerate(system):
+            line = line.split()
+            if len(line) >= 4:
+                atoms.append(line[0: 4])
+            else:
+                print(f"{system[i]} is not valid line for atom configuration!")
 
-    atoms = []
-    for i, line in enumerate(system):
-        line = line.split()
-        if len(line) >= 4:
-            atoms.append(line[0: 4])
-        else:
-            print(f"{system[i]} is not valid line for atom configuration!")
-
-    q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
-    x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
-    mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
+        q = [float(SYMBOL_MAP[atoms[i][0]]) for i in range(0, num_atoms)]
+        x = [float(atoms[i][1]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
+        mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
 
     return num_atoms, x, y, z, q, mass

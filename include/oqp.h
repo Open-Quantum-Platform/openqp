@@ -79,7 +79,7 @@ struct dft_parameters {
     bool dft_wt_der;
 };
 
- struct tddft_parameters {
+struct tddft_parameters {
     int64_t nstate;
     int64_t target_state;
     int64_t maxvec;
@@ -152,6 +152,7 @@ struct control_parameters {
     bool      sd_scf;
     bool      pcm_enabled;
     double    pcm_epsilon;
+    bool      qmmm_flag;
 };
 
 struct mpi_communicator {
@@ -251,6 +252,7 @@ void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
+void mrsf_namd_hop(struct oqp_handle_t *inf);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
@@ -260,3 +262,8 @@ void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);
 void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
 void nmr_giao_shielding(struct oqp_handle_t *inf);
+
+void espf_op_corr(struct oqp_handle_t *inf);
+void form_esp_charges(struct oqp_handle_t *inf);
+void grad_esp_qmmm(struct oqp_handle_t *inf);
+void grad_esp_qmmm_excited(struct oqp_handle_t *inf);

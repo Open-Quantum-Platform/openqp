@@ -26,7 +26,13 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 **Geometry & reaction paths**
 - Minima, transition states, MECI/MECP, constrained optimization, IRC, and NEB
-- Built-in native optimizer (`lib=oqp`, TRIC/DLC + restricted-step RFO), plus geomeTRIC and SciPy backends
+- Built-in native optimizer (`lib=oqp`, TRIC/DLC + restricted-step RFO), with geomeTRIC and SciPy available as optional backends. DL-FIND is no longer used in the Python startup/dispatch path.
+
+**Dynamics & QM/MM**
+- Native fewest-switches surface hopping (`runtype=namd`) for gas-phase MRSF-TDDFT internal conversion.
+- SOC-NAMD for intersystem crossing, including SHARC-like spin-adiabatic propagation and an MCH-basis SOC mode with exact active-root MCH gradients (`[md] soc_basis=mch`).
+- ESPF electrostatic QM/MM with OpenMM, including PME periodic electrostatics, smooth ESPF grid forces, and QM/MM NAMD/SOC-NAMD dispatch.
+- Overlap-based MRSF state tracking, finite-time NAC/TDC propagation, and SOC-QM/MM regression guards for hop bookkeeping and restart/reproducibility-sensitive state.
 
 **Reliability & performance**
 - Point-group **symmetry**: detection, MO/state/mode labels, and petite-list reductions accelerating integrals, XC, gradients, and response
@@ -38,7 +44,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 - LibXC, basis_set_exchange, libecpint, DFT-D4, PyRAI2MD, [OpenQP Web](https://app.openqp.org/), the [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/), and the browser-based [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) viewer
 
 ### Upcoming Features
-- **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
+- Full analytic spin-adiabatic SOC gradients, requiring MCH derivative-coupling vectors and SOC-gradient matrix elements.
 - **Scalar-relativistic (X2C) framework** extending the relativistic MRSF-TDDFT treatment
 
 ### Quickstart
@@ -165,6 +171,30 @@ is honored on the programmatic `Runner(input_dict=...)` path as well. If OpenQP
 was built without OpenMP (`-DENABLE_OPENMP=OFF`), the request is ignored with a
 warning and the run is serial. MPI rank count remains launcher-controlled
 (`mpirun -np ...`); `--nompi` disables MPI.
+
+##### NAMD, SOC-NAMD, and QM/MM
+
+Surface-hopping dynamics use `runtype=namd` with an `[md]` section. For
+gas-phase internal conversion, set `soc=false`; for SOC dynamics, set
+`soc=true`. The recommended SOC-QM/MM production mode is the MCH-basis SOC path:
+
+```ini
+[input]
+runtype=namd
+qmmm_flag=true
+
+[md]
+soc=true
+soc_basis=mch       # recommended SOC-QM/MM production mode
+dt=0.5
+nstep=200
+```
+
+The SHARC-like spin-adiabatic path remains available with
+`soc_basis=adiabatic`. Optional diagnostic corrections are controlled with
+`soc_du_dt_corr` and `soc_tdc_grad_corr`. QM/MM single-point energy, gradient,
+and optimization jobs stay on the normal `Runner` path; only legacy
+ground-state OpenMM molecular dynamics uses `runtype=md` with `qmmm_flag=true`.
 
 #### Performance and threading
 

@@ -7,7 +7,7 @@ from oqp.library.single_point import (
     BasisOverlap, NACME, NAC
 )
 
-from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt, MEP
+from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt, MEP, QMMMOpt
 from oqp.library.libgeometric import (
     GeometricIRCOpt,
     GeometricMECIOpt,
@@ -20,6 +20,37 @@ from oqp.library.liboqp import (
     OQPOpt, OQPTSOpt, OQPMECIOpt, OQPMECPOpt, OQPTCIOpt,
     OQPNEBOpt, OQPIRCOpt, OQPMEPOpt,
 )
+#from oqp.library.libopenmm import QMMM_MD
+
+
+def compute_namd(mol):
+    # Tully fewest-switches surface-hopping nonadiabatic molecular dynamics.
+    # Gas-phase or QM/MM (electrostatic ESPF embedding + OpenMM MM region).
+    qmmm = mol.config['input'].get('qmmm_flag')
+    soc = mol.config['md'].get('soc')
+    soc_basis = str(mol.config['md'].get('soc_basis', 'adiabatic')).lower()
+    if soc and soc_basis not in ('adiabatic', 'mch'):
+        raise ValueError("[md] soc_basis must be 'adiabatic' or 'mch'")
+    if qmmm and soc:
+        if soc_basis == 'mch':
+            from oqp.library.namd import NAMD_SOC_MCH_QMMM
+            NAMD_SOC_MCH_QMMM(mol).run()
+        else:
+            from oqp.library.namd import NAMD_SOC_QMMM
+            NAMD_SOC_QMMM(mol).run()
+    elif qmmm:
+        from oqp.library.namd import NAMD_QMMM
+        NAMD_QMMM(mol).run()
+    elif soc:
+        if soc_basis == 'mch':
+            from oqp.library.namd import NAMD_SOC_MCH
+            NAMD_SOC_MCH(mol).run()
+        else:
+            from oqp.library.namd import NAMD_SOC
+            NAMD_SOC(mol).run()
+    else:
+        from oqp.library.namd import NAMD
+        NAMD(mol).run()
 
 
 def compute_energy(mol):
@@ -74,6 +105,10 @@ def compute_scf_prop(mol):
         else:
             raise ValueError(f'Unknown property: {prop}')
 
+#    if 'resp' not in properties and mol.config['input']['qmmm_flag']:
+#        oqp.resp_charges(mol)
+
+
 
 def compute_grad(mol):
     # compute energy
@@ -84,9 +119,20 @@ def compute_grad(mol):
 
     # compute properties
     compute_scf_prop(mol)
+#    if mol.config['input']['qmmm_flag']:
+#       oqp.resp_charges(mol)
 
     # compute dftd4
     LastStep(mol).compute(mol, grad_list=mol.config['properties']['grad'])
+
+def compute_md(mol):
+
+    # prepare guess orbital
+    prep_guess(mol)
+    
+    #Run MD
+#    qmmm_md = QMMM_MD(mol)
+    qmmm_md.run_md()
 
 def compute_nacme(mol):
     # compute reference energy

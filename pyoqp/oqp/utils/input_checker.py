@@ -13,6 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt", "soc",
+    "namd",
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
@@ -1112,6 +1113,46 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             )
         return
 
+    if runtype == "namd":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "NAMD (surface hopping) currently supports only MRSF-TDDFT.",
+                value=f"{method}/{td_type}",
+                expected="input.method=tdhf and tdhf.type=mrsf",
+                action="Set [input] method=tdhf and [tdhf] type=mrsf for NAMD.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        nstate = int(_get(config, "tdhf", "nstate", 1))
+        active = int(_get(config, "md", "active", 1))
+        soc_val = _get(config, "md", "soc", False)
+        soc = (soc_val is True) or (str(soc_val).lower() in ("true", "1", "on", "yes"))
+        if soc:
+            # SOC-NAMD hops on the spin-adiabatic manifold: ns singlets +
+            # 3*nt triplet Ms sublevels (ns = nt = tdhf.nstate).
+            amax = nstate + 3 * nstate
+            if active < 1 or active > amax:
+                report.add(
+                    "ERROR",
+                    "md.active",
+                    "Initial active state must be a valid spin-adiabatic state.",
+                    value=active,
+                    expected=f"1 <= md.active <= ns+3*nt ({amax}) for SOC-NAMD",
+                    action="Set [md] active within the spin-adiabatic manifold (4*nstate states), or raise [tdhf] nstate.",
+                )
+        elif active < 1 or active > nstate:
+            report.add(
+                "ERROR",
+                "md.active",
+                "Initial active state must be a valid excited state.",
+                value=active,
+                expected=f"1 <= md.active <= tdhf.nstate ({nstate})",
+                action="Set [md] active within the number of excited states, and raise [tdhf] nstate if needed.",
+            )
+        return
+
     # UMRSF-TDDFT only implements the energy path. Every other runtype
     # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
     # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
@@ -1388,100 +1429,6 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             action="Set [neb] nimage=3 or larger.",
         )
 
-
-def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
-    runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
-    icoord = _get(config, "dlfind", "icoord", 3)
-    iopt = _get(config, "dlfind", "iopt", 3)
-    ims = _get(config, "dlfind", "ims", 0)
-
-    if runtype == "optimize":
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Single-state DL-FIND optimization only supports icoord 0-4.",
-                value=icoord,
-                action="Use icoord in 0,1,2,3,4.",
-            )
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Single-state DL-FIND optimization only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Single-state optimization requires ims=0.",
-                value=ims,
-                action="Set ims=0.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-
-    if runtype == "meci":
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "DL-FIND MECI only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims not in DLFIND_MECI_IMS:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "DL-FIND MECI requires ims=1, 2, or 3.",
-                value=ims,
-                action="Set ims to a MECI mode.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-        if ims == 3 and icoord not in DLFIND_LN_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Lagrange-Newton MECI requires icoord 10-14.",
-                value=icoord,
-                action="Use icoord 10-14 with ims=3.",
-            )
-        if ims in {1, 2} and icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Penalty/gradient-projection MECI requires icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 with ims=1 or ims=2.",
-            )
-
-    if runtype == "ts":
-        if iopt not in DLFIND_TS_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Transition-state DL-FIND uses P-RFO (iopt=9).",
-                value=iopt,
-                action="Set [dlfind] iopt=9 for runtype=ts.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Transition-state search is not a MECI mode and requires ims=0.",
-                value=ims,
-                action="Set [dlfind] ims=0 for runtype=ts.",
-            )
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Transition-state DL-FIND search expects icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 for TS optimization.",
-            )
 
 def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))

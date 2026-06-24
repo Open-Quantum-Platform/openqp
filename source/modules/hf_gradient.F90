@@ -151,6 +151,7 @@ contains
     use grd1, only: eijden, grad_nn, grad_ee_overlap, &
             grad_ee_kinetic, grad_en_hellman_feynman, &
             grad_en_pulay, grad_1e_ecp
+    use qmmm_mod, only: grad_esp_qmmm
 
     implicit none
 
@@ -215,6 +216,8 @@ contains
 
 !     Effective core potential gradient
       call grad_1e_ecp(infos, basis, xyz, dens, grad, logtol=tol)
+!     QM/MM force
+!      if(infos%control%qmmm_flag) call grad_esp_qmmm(infos, dens, grad,logtol=tol)
 
     end associate
 
