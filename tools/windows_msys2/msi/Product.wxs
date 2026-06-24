@@ -1,0 +1,67 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="OpenQP MSYS2 UCRT64 Installer"
+      Manufacturer="Open Quantum Platform"
+      Version="$(var.ProductVersion)"
+      UpgradeCode="9C8C6B1F-A0F7-4BD8-8E6D-53B63C8E0712"
+      Scope="perMachine">
+    <SummaryInformation
+        Description="OpenQP MSYS2 UCRT64 installer bundle"
+        Manufacturer="Open Quantum Platform" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer OpenQP MSYS2 installer is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="MainFeature" Title="OpenQP MSYS2 Installer" Level="1">
+      <ComponentGroupRef Id="OpenQPPayload" />
+      <ComponentRef Id="StartMenuShortcutComponent" />
+      <ComponentRef Id="DesktopShortcutComponent" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="OpenQP MSYS2 Installer" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="OpenQP" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <ComponentGroup Id="OpenQPPayload" Directory="INSTALLFOLDER">
+      <Component Id="CmdInstallerComponent">
+        <File Id="CmdInstaller" Source="$(var.PayloadDir)\install_openqp_msys2.cmd" KeyPath="yes" />
+      </Component>
+      <Component Id="PowerShellInstallerComponent">
+        <File Id="PowerShellInstaller" Source="$(var.PayloadDir)\install_openqp_msys2.ps1" KeyPath="yes" />
+      </Component>
+      <Component Id="PacmanPackageComponent">
+        <File Id="PacmanPackage" Source="$(var.PayloadDir)\openqp-msys2-ucrt64.pkg.tar.zst" KeyPath="yes" />
+      </Component>
+      <Component Id="ReadmeComponent">
+        <File Id="Readme" Source="$(var.PayloadDir)\README.txt" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcutComponent" Directory="ApplicationProgramsFolder">
+      <Shortcut
+          Id="StartMenuInstallerShortcut"
+          Name="Install OpenQP for MSYS2"
+          Description="Install OpenQP into an existing MSYS2 UCRT64 environment"
+          Target="[INSTALLFOLDER]install_openqp_msys2.cmd"
+          WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="Software\OpenQP\MSYS2Installer" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcutComponent" Directory="DesktopFolder">
+      <Shortcut
+          Id="DesktopInstallerShortcut"
+          Name="Install OpenQP for MSYS2"
+          Description="Install OpenQP into an existing MSYS2 UCRT64 environment"
+          Target="[INSTALLFOLDER]install_openqp_msys2.cmd"
+          WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKLM" Key="Software\OpenQP\MSYS2Installer" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

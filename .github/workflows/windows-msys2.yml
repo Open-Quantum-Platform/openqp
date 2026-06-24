@@ -1,0 +1,125 @@
+name: Windows MSYS2 package
+
+"on":
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  msys2-ucrt64:
+    name: Build MSYS2 UCRT64 package
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gcc-fortran
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-cffi
+            mingw-w64-ucrt-x86_64-python-numpy
+            mingw-w64-ucrt-x86_64-python-scipy
+            mingw-w64-ucrt-x86_64-python-build
+            mingw-w64-ucrt-x86_64-python-installer
+            mingw-w64-ucrt-x86_64-python-scikit-build-core
+            mingw-w64-ucrt-x86_64-python-setuptools
+            mingw-w64-ucrt-x86_64-python-wheel
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Build package
+        run: tools/windows_msys2/build_pkg.sh
+
+      - name: Stage clickable installer
+        run: |
+          ls dist/msys2-ucrt64/packages/*.pkg.tar.*
+          cp tools/windows_msys2/install_openqp_msys2.cmd dist/msys2-ucrt64/packages/
+          cp tools/windows_msys2/install_openqp_msys2.ps1 dist/msys2-ucrt64/packages/
+
+      - name: Build MSI installer
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix --version
+          tools/windows_msys2/build_msi.ps1
+
+      - name: Validate MSI wrapper install
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem dist/msys2-ucrt64/msi/OpenQP-MSYS2-UCRT64-*.msi | Select-Object -First 1
+          $log = Join-Path $env:RUNNER_TEMP "openqp-msi-install.log"
+          $install = Start-Process msiexec.exe -ArgumentList @("/i", $msi.FullName, "/qn", "/norestart", "/L*v", $log) -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            Get-Content -LiteralPath $log
+            throw "MSI install failed with exit code $($install.ExitCode)."
+          }
+
+          $installDir = Join-Path $env:ProgramFiles "OpenQP MSYS2 Installer"
+          $required = @(
+            "install_openqp_msys2.cmd",
+            "install_openqp_msys2.ps1",
+            "openqp-msys2-ucrt64.pkg.tar.zst",
+            "README.txt"
+          )
+          foreach ($name in $required) {
+            $path = Join-Path $installDir $name
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "MSI payload file is missing: $path"
+            }
+          }
+
+      - name: Create checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            Get-ChildItem dist/msys2-ucrt64/msi/*.msi
+            Get-ChildItem dist/msys2-ucrt64/packages/*.pkg.tar.*
+            Get-Item dist/msys2-ucrt64/packages/install_openqp_msys2.cmd
+            Get-Item dist/msys2-ucrt64/packages/install_openqp_msys2.ps1
+          )
+          $lines = foreach ($file in $files) {
+            $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $file.FullName
+            "$($hash.Hash.ToLowerInvariant())  $($file.Name)"
+          }
+          New-Item -ItemType Directory -Force -Path dist/msys2-ucrt64 | Out-Null
+          $lines | Set-Content -LiteralPath dist/msys2-ucrt64/SHA256SUMS.txt -Encoding ASCII
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-msys2-ucrt64
+          path: |
+            dist/msys2-ucrt64/packages/*
+            dist/msys2-ucrt64/msi/*.msi
+            dist/msys2-ucrt64/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Attach Windows installers to release
+        if: github.event_name == 'release'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @(
+            Get-ChildItem dist/msys2-ucrt64/msi/*.msi
+            Get-ChildItem dist/msys2-ucrt64/packages/*.pkg.tar.*
+            Get-Item dist/msys2-ucrt64/packages/install_openqp_msys2.cmd
+            Get-Item dist/msys2-ucrt64/packages/install_openqp_msys2.ps1
+            Get-Item dist/msys2-ucrt64/SHA256SUMS.txt
+          )
+          $assetPaths = $assets | ForEach-Object { $_.FullName }
+          gh release upload "${{ github.event.release.tag_name }}" @assetPaths --clobber
