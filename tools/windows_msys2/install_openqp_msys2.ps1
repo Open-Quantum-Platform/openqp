@@ -30,8 +30,8 @@ function Find-Msys2Root {
         }
         $root = [System.IO.Path]::GetFullPath($candidate)
         $bash = Join-Path $root "usr\bin\bash.exe"
-        $python = Join-Path $root "ucrt64\bin\python.exe"
-        if ((Test-Path -LiteralPath $bash) -and (Test-Path -LiteralPath $python)) {
+        $pacman = Join-Path $root "usr\bin\pacman.exe"
+        if ((Test-Path -LiteralPath $bash) -and (Test-Path -LiteralPath $pacman)) {
             return $root
         }
     }
@@ -121,7 +121,12 @@ Write-OpenQPMessage "Using package: $($package.FullName)"
 $env:OPENQP_PKG_WIN = $package.FullName
 
 Invoke-Ucrt64 -BashPath $bash -Description "Installing pacman support packages" -Command @'
-pacman --needed --noconfirm -S mingw-w64-ucrt-x86_64-python-pip
+pacman --needed --noconfirm -S \
+  mingw-w64-ucrt-x86_64-python \
+  mingw-w64-ucrt-x86_64-python-pip \
+  mingw-w64-ucrt-x86_64-python-cffi \
+  mingw-w64-ucrt-x86_64-python-numpy \
+  mingw-w64-ucrt-x86_64-python-scipy
 '@
 
 Invoke-Ucrt64 -BashPath $bash -Description "Installing OpenQP package" -Command @'
