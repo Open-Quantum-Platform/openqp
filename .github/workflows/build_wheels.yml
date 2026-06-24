@@ -1,42 +1,198 @@
-name: Build wheels
+name: Build and publish wheels
 
-on:
-  push:
-    branches: [pypi]
+"on":
+  workflow_dispatch:
   pull_request:
-    branches: [pypi]
+    paths:
+      - ".github/workflows/build_wheels.yml"
+      - "CMakeLists.txt"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "pyoqp/**"
+      - "source/**"
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+
+permissions:
+  contents: read
 
 jobs:
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build --sdist --outdir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-sdist
+          path: dist/*
+          if-no-files-found: error
+
   build_wheels:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build wheels (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            platform: linux
+            archs: x86_64
+            before_all: yum install -y gcc-gfortran
+            environment: >-
+              CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
+              -DLINALG_LIB=auto
+              -DLINALG_LIB_INT64=ON'
+            repair: >-
+              LD_LIBRARY_PATH="oqp/lib:$LD_LIBRARY_PATH"
+              auditwheel repair -w {dest_dir} {wheel}
+
+          - name: macos-x86_64
+            os: macos-15-intel
+            platform: macos
+            archs: x86_64
+            before_all: brew install gcc@15
+            environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
+              CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
+              -DCMAKE_CXX_COMPILER=g++-15
+              -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DLINALG_LIB=auto
+              -DLINALG_LIB_INT64=OFF'
+            repair: >-
+              delocate-wheel --require-archs {delocate_archs}
+              -w {dest_dir} -v {wheel}
+
+          - name: macos-arm64
+            os: macos-15
+            platform: macos
+            archs: arm64
+            before_all: brew install gcc@15
+            environment: >-
+              MACOSX_DEPLOYMENT_TARGET=15.0
+              CMAKE_ARGS='-DCMAKE_C_COMPILER=gcc-15
+              -DCMAKE_CXX_COMPILER=g++-15
+              -DCMAKE_Fortran_COMPILER=gfortran-15
+              -DLINALG_LIB=auto
+              -DLINALG_LIB_INT64=OFF'
+            repair: >-
+              delocate-wheel --require-archs {delocate_archs}
+              -w {dest_dir} -v {wheel}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel
+        run: python -m pip install --upgrade cibuildwheel
 
       - name: Build wheels
         env:
-          CIBW_PLATFORM: linux
-          CIBW_SKIP: "*-musllinux_*"
-          CIBW_BEFORE_ALL_LINUX: "yum install -y openblas-devel gcc-gfortran"
-          CIBW_ENVIRONMENT: "CMAKE_ARGS='-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH'"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "LD_LIBRARY_PATH=\"oqp/lib:$LD_LIBRARY_PATH\" auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_PLATFORM: ${{ matrix.platform }}
+          CIBW_ARCHS: ${{ matrix.archs }}
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_BEFORE_ALL: ${{ matrix.before_all }}
+          CIBW_ENVIRONMENT: ${{ matrix.environment }}
+          CIBW_REPAIR_WHEEL_COMMAND: ${{ matrix.repair }}
+          CIBW_TEST_COMMAND: >-
+            python -c "import oqp, pathlib;
+            root = pathlib.Path(oqp.oqp_root);
+            assert (root / 'include' / 'oqp.h').exists();
+            assert any((root / 'lib').glob('liboqp.*'));
+            assert (root / 'share' / 'basis_sets').exists();
+            print('OpenQP runtime root:', root)"
+        run: python -m cibuildwheel --output-dir dist
 
-        run: cibuildwheel --output-dir dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openqp-wheels-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
 
-        #      - name: Upload wheels as artifacts
-        #        uses: actions/upload-artifact@v4
-        #        with:
-        #          name: wheels-${{ matrix.os }}
-        #          path: wheelhouse/*.whl
+  verify_release_version:
+    name: Verify release tag matches pyproject version
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check tag and package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+          expected = f"v{version}"
+          if tag != expected:
+              raise SystemExit(
+                  f"Release tag {tag!r} does not match pyproject.toml version {version!r}. "
+                  f"Expected {expected!r}."
+              )
+          print(f"Release tag matches OpenQP version {version}.")
+          PY
+
+  publish:
+    name: Publish release artifacts
+    if: github.event_name == 'release'
+    needs:
+      - build_sdist
+      - build_wheels
+      - verify_release_version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openqp
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: openqp-*
+          path: dist
+          merge-multiple: true
+
+      - name: Show artifacts
+        run: ls -lh dist
+
+      - name: Attach artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/* --clobber
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
