@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(Open-Quantum-Package
-  VERSION 1.0.0
+  VERSION 1.2.0
   LANGUAGES C CXX Fortran)
 
 set(CMAKE_Fortran_STANDARD 2003)
