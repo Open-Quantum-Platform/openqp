@@ -1,6 +1,6 @@
 include(ExternalProject)
 
-set(_OQP_EXTERNALS_CACHE_REVISION "1")
+set(_OQP_EXTERNALS_CACHE_REVISION "2")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_NLOPT_VERSION "2.9.1")
 set(_OQP_LIBXC_VERSION "7.0.0")
@@ -336,6 +336,7 @@ ExternalProject_Add(libecpint
         STAMP_DIR  ${LIBECPINT_STAMP_DIR}
 	INSTALL_DIR ${LIBECPINT_INSTALL_DIR}
         UPDATE_COMMAND ""
+        PATCH_COMMAND sh -c "grep -q 'define M_PI 3.14159265358979323846' <SOURCE_DIR>/src/lib/gaussquad.cpp || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libecpint-v1.0.7-mingw-m-pi.patch"
         CMAKE_ARGS -DLIBECPINT_BUILD_DOCS=OFF
                    -DLIBECPINT_BUILD_TESTS=OFF
 		   -DLIBECPINT_USE_PUGIXML=OFF

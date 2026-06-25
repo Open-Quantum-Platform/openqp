@@ -111,6 +111,22 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn("CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}", libecpint_block)
         self.assertIn("CMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}", libecpint_block)
 
+    def test_libecpint_defines_m_pi_for_mingw(self):
+        external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
+        patch = (ROOT / "cmake" / "patches" / "libecpint-v1.0.7-mingw-m-pi.patch").read_text()
+
+        libecpint_block = external_cmake[
+            external_cmake.index("ExternalProject_Add(libecpint"):
+            external_cmake.index("if(_LINALG_LIB_TYPE STREQUAL NetLib)")
+        ]
+
+        self.assertIn('set(_OQP_EXTERNALS_CACHE_REVISION "2")', external_cmake)
+        self.assertIn("libecpint-v1.0.7-mingw-m-pi.patch", libecpint_block)
+        self.assertIn("PATCH_COMMAND sh -c", libecpint_block)
+        self.assertIn("define M_PI 3.14159265358979323846", libecpint_block)
+        self.assertIn("#ifndef M_PI", patch)
+        self.assertIn("#define M_PI 3.14159265358979323846", patch)
+
     def test_external_projects_receive_make_program_when_set(self):
         external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
 

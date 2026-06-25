@@ -1,0 +1,15 @@
+diff --git a/src/lib/gaussquad.cpp b/src/lib/gaussquad.cpp
+index e0484eb..5389dad 100644
+--- a/src/lib/gaussquad.cpp
++++ b/src/lib/gaussquad.cpp
+@@ -27,6 +27,10 @@
+ #include <cassert>
+ #include <iostream>
+ 
++#ifndef M_PI
++#define M_PI 3.14159265358979323846
++#endif
++
+ namespace libecpint {
+ 
+ 	// Constructor
