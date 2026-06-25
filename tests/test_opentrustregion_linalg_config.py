@@ -122,6 +122,9 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
     def test_reusable_external_cache_roots_are_created_before_downloads(self):
         external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
 
+        self.assertIn("if(WIN32)", external_cmake)
+        self.assertIn('string(MD5 _oqp_external_key_hash "${_oqp_external_key}")', external_cmake)
+        self.assertIn('set(_oqp_external_key "win-${_oqp_external_key_hash}")', external_cmake)
         self.assertIn("file(MAKE_DIRECTORY", external_cmake)
         self.assertIn('"${OQP_EXTERNALS_SOURCE_ROOT}"', external_cmake)
         self.assertIn('"${OQP_EXTERNALS_BUILD_ROOT}"', external_cmake)
