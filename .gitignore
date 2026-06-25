@@ -44,3 +44,6 @@ fort.6
 .venv-symmetry/
 build_dev/
 openqp_test_tmp_*/
+
+# pyoqp editable-install build metadata
+pyoqp/OpenQP.egg-info/
