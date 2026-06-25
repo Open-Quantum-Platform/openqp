@@ -37,7 +37,7 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn("LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}", external_cmake)
         self.assertIn("add_dependencies(libopentrustregion LAPACK)", external_cmake)
         self.assertIn("CMAKE_POLICY_VERSION_MINIMUM=3.5", external_cmake)
-        self.assertIn("PATCH_COMMAND /usr/bin/perl", external_cmake)
+        self.assertIn("PATCH_COMMAND perl", external_cmake)
         self.assertIn("cmake_minimum_required(VERSION 3.5)", external_cmake)
         self.assertLess(
             external_cmake.index("ExternalProject_Add(LAPACK"),
@@ -93,6 +93,7 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         patch = (ROOT / "cmake" / "patches" / "libtagarray-v0.0.6-default-integer-shapes.patch").read_text()
 
         self.assertIn("libtagarray-v0.0.6-default-integer-shapes.patch", external_cmake)
+        self.assertIn("PATCH_COMMAND sh -c", external_cmake)
         self.assertIn("grep -q reserve_data_default", external_cmake)
         self.assertIn("generic, public    :: reserve_data => reserve_data_i64, reserve_data_default", patch)
         self.assertIn("integer,                              optional, intent(in) :: array_shape(:)", patch)
