@@ -62,6 +62,7 @@ class WindowsMsys2PackagingTests(unittest.TestCase):
         self.assertIn('python -m installer --destdir="${pkgdir}"', pkgbuild)
         self.assertIn("basis_set_exchange", install)
         self.assertIn("makepkg-mingw", builder)
+        self.assertIn("sed -i 's/\\r$//' PKGBUILD ./*.install", builder)
         self.assertIn("pacman -U --noconfirm", builder)
         self.assertIn('--break-system-packages --upgrade "jsonschema<4.18" basis_set_exchange geometric', builder)
 
