@@ -42,6 +42,16 @@ fi
 rm -rf "$package_out"
 mkdir -p "$package_out"
 
+if [[ -z "${OQP_MSYS2_EXTERNALS_ROOT:-}" ]]; then
+  if [[ -n "${RUNNER_TEMP:-}" ]]; then
+    export OQP_MSYS2_EXTERNALS_ROOT="$(cygpath -u "$RUNNER_TEMP")/oqp-ext"
+  else
+    export OQP_MSYS2_EXTERNALS_ROOT="${TMPDIR:-/tmp}/oqp-ext"
+  fi
+fi
+rm -rf "$OQP_MSYS2_EXTERNALS_ROOT"
+mkdir -p "$OQP_MSYS2_EXTERNALS_ROOT"
+
 cd "$pkgbuild_dir"
 # GitHub's Windows checkout may apply CRLF line endings depending on
 # repository settings. makepkg sources these files directly and rejects CRLF.
