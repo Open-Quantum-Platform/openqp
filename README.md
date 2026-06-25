@@ -1,8 +1,31 @@
 # OpenQP
 
 Open Quantum Platform (OpenQP) is an open-source quantum chemistry package built
-around HF/DFT, TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and related excited-state
-workflows.
+around Mixed-Reference Spin-Flip TDDFT (MRSF-TDDFT) and practical excited-state
+workflows. It combines ordinary HF/DFT and TDHF/TDDFT capabilities with tools
+for multiconfigurational situations such as diradicals, bond breaking, conical
+intersections, nonadiabatic couplings, and spin-orbit coupling.
+
+MRSF-TDDFT is the central scientific feature of OpenQP. It keeps the practical
+linear-response structure of TDDFT while reducing the spin contamination that
+limits conventional spin-flip TDDFT, making it useful for automated excited-state
+calculations and photochemical workflows.
+
+## Highlights
+
+- MRSF-TDDFT as the main production excited-state method, designed to reduce
+  spin contamination while retaining TDDFT-like practicality
+- MRSF-TDDFT energies, analytic gradients, geometry optimization, MECI/MECP/TCI,
+  NACME, spin-orbit coupling, and MRSF-EKT workflows
+- DTCAM-series functionals, UMRSF-TDDFT, and newer MRSF extensions for broader
+  excited-state coverage
+- Practical photochemistry targets: diradicals, bond breaking, conical
+  intersections, nonadiabatic dynamics, X-ray absorption, SOC, and inverted
+  singlet-triplet materials
+- HF/DFT, TDHF/TDDFT, and SF-TDDFT foundations with RHF, ROHF, and UHF
+  references
+- Native optimizer (`lib=oqp`), geomeTRIC/SciPy backends, HF/DFT Hessians,
+  NMR/IR/Raman, PCM/ddX energies, OpenMP/MPI, pip installs, and Docker support
 
 ## Install
 
@@ -49,36 +72,12 @@ omp_threads=16
 
 ## Documentation
 
-The repo-owned manual starts in [`docs/index.md`](docs/index.md).
+The user manual lives in the separate documentation repository:
 
-Important entry points:
-
-- [Installation](docs/installation.md)
-- [Quickstart](docs/quickstart.md)
-- [Input files](docs/input-file.md)
-- [Capabilities](docs/capabilities.md)
-- [Workflow examples](docs/examples/index.md)
-- [Keyword reference](docs/keywords/index.md)
-- [Troubleshooting](docs/troubleshooting.md)
-
-To preview the manual locally:
-
-```bash
-pip install -r docs/requirements.txt
-mkdocs serve
-```
-
-## Highlights
-
-- RHF, ROHF, and UHF references for HF and DFT
-- TDHF/TDDFT, SF-TDDFT, MRSF-TDDFT, and energy-only UMRSF-TDDFT
-- MRSF-EKT ionization potentials and electron affinities
-- Analytic gradients and native HF/DFT Hessians for supported workflows
-- MRSF-TDDFT NACME and spin-orbit couplings
-- Energy-only reference-SCF PCM/ddX
-- Native geometry optimizer (`lib=oqp`) plus geomeTRIC and SciPy backends
-- NMR shielding, vibrational frequencies, IR, and Raman intensities
-- OpenMP/MPI parallelism, ILP64 BLAS/LAPACK, pip installs, and Docker support
+- [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/)
+- [Manual source](https://github.com/Open-Quantum-Platform/openqp-docs)
+- [Example inputs](examples)
+- [API documentation](https://open-quantum-platform.github.io/openqp)
 
 ## Web Tools
 
@@ -89,15 +88,40 @@ mkdocs serve
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) inspects
   OpenQP logs, JSON, Molden, cube, and XYZ data in the browser.
 
-## Citation
+## Key Papers
 
-If you use OpenQP in research, cite:
+If you use OpenQP in research, cite the OpenQP platform paper:
 
-Mironov V, Komarov K, Li J, Gerasimov I, Mazaheri M, Park W, Lashkaripour A,
-Oh M, Nakata H, Ishimura K, Huix-Rotllant M, Lee S, and Choi CH. "OpenQP: A
-Quantum Chemical Platform Featuring MRSF-TDDFT with an Emphasis on Open-source
-Ecosystem." Journal of Chemical Theory and Computation, 2024.
-https://doi.org/10.1021/acs.jctc.4c01117
+- Mironov V, Komarov K, Li J, Gerasimov I, Mazaheri M, Park W, Lashkaripour A,
+  Oh M, Nakata H, Ishimura K, Huix-Rotllant M, Lee S, and Choi CH. "OpenQP: A
+  Quantum Chemical Platform Featuring MRSF-TDDFT with an Emphasis on Open-source
+  Ecosystem." Journal of Chemical Theory and Computation, 2024.
+  https://doi.org/10.1021/acs.jctc.4c01117
+
+Original MRSF-TDDFT theory and implementation papers:
+
+- Lee S, Filatov M, Lee S, and Choi CH. "Eliminating Spin-Contamination of
+  Spin-Flip Time-Dependent Density Functional Theory Within Linear Response
+  Formalism by the Use of Zeroth-Order Mixed-Reference Reduced Density Matrix."
+  Journal of Chemical Physics, 2018. https://doi.org/10.1063/1.5044202
+- Lee S, Kim EE, Nakata H, Lee S, and Choi CH. "Efficient Implementations of
+  Analytic Energy Gradient for Mixed-Reference Spin-Flip Time-Dependent Density
+  Functional Theory (MRSF-TDDFT)." Journal of Chemical Physics, 2019.
+  https://doi.org/10.1063/1.5086895
+
+Recent MRSF-TDDFT accounts and overview papers:
+
+- Park W, Komarov K, Lee S, and Choi CH. "Mixed-Reference Spin-Flip
+  Time-Dependent Density Functional Theory: Multireference Advantages with the
+  Practicality of Linear Response Theory." Journal of Physical Chemistry
+  Letters, 2023. https://doi.org/10.1021/acs.jpclett.3c02296
+- Lee S, Park W, and Choi CH. "Expanding Horizons in Quantum Chemical Studies:
+  The Versatile Power of MRSF-TDDFT." Accounts of Chemical Research, 2025.
+  https://doi.org/10.1021/acs.accounts.4c00640
+- Park W, Lee S, Komarov K, Mironov V, Nakata H, Zeng T, Huix-Rotllant M, and
+  Choi CH. "MRSF-TDDFT: A New Tool in Quantum Chemistry for Better
+  Understanding Molecules and Materials." Bulletin of the Korean Chemical
+  Society, 2025. https://doi.org/10.1002/bkcs.70011
 
 ## License
 
