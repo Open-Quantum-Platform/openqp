@@ -301,7 +301,7 @@ ExternalProject_Add(libtagarray
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
-        PATCH_COMMAND /bin/sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
+        PATCH_COMMAND sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
@@ -381,7 +381,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         BUILD_BYPRODUCTS ${LIBLAPACK}
                          ${LIBBLAS}
         UPDATE_COMMAND ""
-        PATCH_COMMAND /usr/bin/perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
+        PATCH_COMMAND perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
         INSTALL_COMMAND ""
         CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
                    -DBUILD_SINGLE=ON
