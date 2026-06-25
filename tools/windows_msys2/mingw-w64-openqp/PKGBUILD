@@ -46,7 +46,7 @@ build() {
 
   rm -rf "${srcdir}/dist"
   cd "${_srcdir}"
-  python -m build --wheel --no-isolation --outdir "${srcdir}/dist"
+  python -m build --wheel --no-isolation --skip-dependency-check --outdir "${srcdir}/dist"
 }
 
 package() {

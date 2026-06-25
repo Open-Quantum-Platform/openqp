@@ -40,7 +40,7 @@ python -m pip install --user --break-system-packages --upgrade cffi scikit-build
 rm -rf "$build_dir" "$prefix" "$wheelhouse"
 mkdir -p "$prefix" "$wheelhouse"
 
-python -m build --wheel --no-isolation --outdir "$wheelhouse" "$repo_root"
+python -m build --wheel --no-isolation --skip-dependency-check --outdir "$wheelhouse" "$repo_root"
 
 wheel_path="$(find "$wheelhouse" -maxdepth 1 -type f -name '*.whl' | head -n 1)"
 if [[ -z "$wheel_path" ]]; then
