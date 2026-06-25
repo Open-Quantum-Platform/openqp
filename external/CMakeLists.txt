@@ -94,6 +94,10 @@ if(OQP_REUSE_EXTERNALS)
   set(OQP_EXTERNALS_SOURCE_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/src" CACHE INTERNAL "OQP_EXTERNALS_SOURCE_ROOT" FORCE)
   set(OQP_EXTERNALS_BUILD_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/build" CACHE INTERNAL "OQP_EXTERNALS_BUILD_ROOT" FORCE)
   set(OQP_EXTERNALS_INSTALL_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/install" CACHE INTERNAL "OQP_EXTERNALS_INSTALL_ROOT" FORCE)
+  file(MAKE_DIRECTORY
+      "${OQP_EXTERNALS_SOURCE_ROOT}"
+      "${OQP_EXTERNALS_BUILD_ROOT}"
+      "${OQP_EXTERNALS_INSTALL_ROOT}")
   message(STATUS "Reusable bundled externals cache: ${_OQP_EXTERNALS_ROOT}")
   message(STATUS "Reusable bundled externals key: ${_oqp_external_key}")
 endif()

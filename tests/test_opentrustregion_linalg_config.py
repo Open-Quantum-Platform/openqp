@@ -119,6 +119,14 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn('string(APPEND _oqp_external_generator "-make${_oqp_external_make_program_hash}")', external_cmake)
         self.assertIn("${OQP_EXTERNAL_GENERATOR_ARGS}", external_cmake)
 
+    def test_reusable_external_cache_roots_are_created_before_downloads(self):
+        external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
+
+        self.assertIn("file(MAKE_DIRECTORY", external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_SOURCE_ROOT}"', external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_BUILD_ROOT}"', external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_INSTALL_ROOT}"', external_cmake)
+
     def test_gradient_atom_count_uses_explicit_kind(self):
         grd1 = (ROOT / "source" / "integrals" / "grd1.F90").read_text()
 
