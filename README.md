@@ -78,7 +78,8 @@ The user manual lives in the separate documentation repository:
 - [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/)
 - [Manual source](https://github.com/Open-Quantum-Platform/openqp-docs)
 - [Example inputs](examples)
-- [API documentation](https://open-quantum-platform.github.io/openqp)
+- [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
+- [Generated API reference](https://open-quantum-platform.github.io/openqp)
 
 ## Web Tools
 
