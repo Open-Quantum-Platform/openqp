@@ -45,7 +45,7 @@ Install that package in a UCRT64 shell with:
 
 ```bash
 pacman -U dist/msys2-ucrt64/packages/mingw-w64-ucrt-x86_64-openqp-<version>-1-any.pkg.tar.zst
-python -m pip install --user basis_set_exchange geometric  # temporary dependency bridge
+python -m pip install --user --break-system-packages "jsonschema<4.18" basis_set_exchange geometric  # temporary dependency bridge
 openqp examples/other/h2o_rhf_6-31g_hf.inp --omp 2
 ```
 
@@ -122,9 +122,11 @@ The supported package path is now a local MSYS2 pacman package. Build with
 There is one important upstream-packaging blocker: OpenQP imports
 `basis_set_exchange` at runtime and supports geomeTRIC workflows, but those two
 Python projects are not yet available as MSYS2 UCRT64 packages. The local package
-builder can install them from PyPI for validation; an official MSYS2 submission
-should first add package recipes for them or make the OpenQP imports fully
-optional.
+builder can install them from PyPI for validation. The preview bridge pins
+`jsonschema<4.18` because newer `jsonschema` releases pull `rpds-py`, whose
+current build chain does not support MSYS2 MinGW Python cleanly. An official
+MSYS2 submission should first add package recipes for these dependencies or make
+the OpenQP imports fully optional.
 
 ## Distribution
 

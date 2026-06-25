@@ -7,7 +7,7 @@ Known dependency gap:
   but they are not yet packaged in MSYS2 UCRT64. Until those packages exist,
   install them into the same UCRT64 Python environment with:
 
-    python -m pip install --user basis_set_exchange geometric
+    python -m pip install --user --break-system-packages "jsonschema<4.18" basis_set_exchange geometric
 
 EOF
 }

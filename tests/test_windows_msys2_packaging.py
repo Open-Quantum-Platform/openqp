@@ -35,7 +35,8 @@ class WindowsMsys2PackagingTests(unittest.TestCase):
         self.assertIn("git \\", script)
         self.assertIn("mingw-w64-ucrt-x86_64-gcc-fortran", script)
         self.assertIn("-DLINALG_LIB=netlib", script)
-        self.assertIn("pip install --user --upgrade", script)
+        self.assertIn('pip install --user --break-system-packages --upgrade', script)
+        self.assertIn('"jsonschema<4.18"', script)
         self.assertIn("python -m build --wheel --no-isolation", script)
         self.assertIn("PYTHONPATH", script)
         self.assertIn('$prefix/bin:$PATH', script)
@@ -62,6 +63,7 @@ class WindowsMsys2PackagingTests(unittest.TestCase):
         self.assertIn("basis_set_exchange", install)
         self.assertIn("makepkg-mingw", builder)
         self.assertIn("pacman -U --noconfirm", builder)
+        self.assertIn('--break-system-packages --upgrade "jsonschema<4.18" basis_set_exchange geometric', builder)
 
     def test_clickable_installer_wraps_real_pacman_package(self):
         cmd = (ROOT / "tools" / "windows_msys2" / "install_openqp_msys2.cmd").read_text()
@@ -80,7 +82,7 @@ class WindowsMsys2PackagingTests(unittest.TestCase):
         self.assertIn("mingw-w64-ucrt-x86_64-python-scipy", ps1)
         self.assertIn("mingw-w64-ucrt-x86_64-openqp-*.pkg.tar.*", ps1)
         self.assertIn("pacman -U --noconfirm", ps1)
-        self.assertIn("basis_set_exchange geometric", ps1)
+        self.assertIn('--break-system-packages --upgrade "jsonschema<4.18" basis_set_exchange geometric', ps1)
         self.assertIn("OpenQP UCRT64.cmd", ps1)
         self.assertIn("openqp-msys2-ucrt64.pkg.tar.*", ps1)
         self.assertIn("command -v openqp", ps1)

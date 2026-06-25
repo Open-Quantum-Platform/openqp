@@ -27,7 +27,7 @@ Users can then install that artifact in UCRT64 with:
 
 ```bash
 pacman -U mingw-w64-ucrt-x86_64-openqp-<version>-1-any.pkg.tar.zst
-python -m pip install --user basis_set_exchange geometric  # temporary dependency bridge
+python -m pip install --user --break-system-packages "jsonschema<4.18" basis_set_exchange geometric  # temporary dependency bridge
 openqp examples/other/h2o_rhf_6-31g_hf.inp --omp 2
 ```
 
@@ -124,7 +124,8 @@ openqp examples/other/h2o_rhf_6-31g_hf.inp --omp 2
 `mingw-w64-openqp/PKGBUILD` is the real MSYS2 package recipe. The remaining
 upstream-packaging blocker is dependency coverage: `basis_set_exchange` and
 geomeTRIC still need MSYS2 Python packages before OpenQP can be submitted cleanly
-to the official MSYS2 repository.
+to the official MSYS2 repository. The preview PyPI bridge pins `jsonschema<4.18`
+to avoid the newer `rpds-py` dependency path on MSYS2 MinGW Python.
 
 `build_msys2.sh` is kept as a lower-level source-prefix validation helper. The
 zip archive it creates is not a standalone installer.

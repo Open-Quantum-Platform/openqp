@@ -35,7 +35,7 @@ export FC="${FC:-gfortran}"
 export CMAKE_BUILD_PARALLEL_LEVEL="$jobs"
 export CMAKE_ARGS="${CMAKE_ARGS:-} -DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DLINALG_LIB=netlib -DLINALG_LIB_INT64=ON -DOQP_EXTERNALS_ROOT=$repo_root/.cache/openqp/externals"
 
-python -m pip install --user --upgrade cffi scikit-build-core build setuptools wheel geometric basis_set_exchange
+python -m pip install --user --break-system-packages --upgrade cffi scikit-build-core build setuptools wheel "jsonschema<4.18" geometric basis_set_exchange
 
 rm -rf "$build_dir" "$prefix" "$wheelhouse"
 mkdir -p "$prefix" "$wheelhouse"
