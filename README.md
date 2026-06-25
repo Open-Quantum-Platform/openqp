@@ -1,24 +1,25 @@
 # OpenQP
 
 Open Quantum Platform (OpenQP) is an open-source quantum chemistry package built
-around Mixed-Reference Spin-Flip TDDFT (MRSF-TDDFT) and practical excited-state
-workflows. It combines ordinary HF/DFT and TDHF/TDDFT capabilities with tools
-for multiconfigurational situations such as diradicals, bond breaking, conical
+around Mixed-Reference Spin-Flip TDDFT (MRSF-TDDFT) and practical workflows for
+multiconfigurational ground and excited states. It combines ordinary HF/DFT and
+TDHF/TDDFT capabilities with tools for diradicals, bond breaking, conical
 intersections, nonadiabatic couplings, and spin-orbit coupling.
 
 MRSF-TDDFT is the central scientific feature of OpenQP. It keeps the practical
 linear-response structure of TDDFT while reducing the spin contamination that
-limits conventional spin-flip TDDFT, making it useful for automated excited-state
-calculations and photochemical workflows.
+limits conventional spin-flip TDDFT, making it useful for multiconfigurational
+ground-state surfaces as well as excited-state and photochemical workflows.
 
 ## Highlights
 
-- MRSF-TDDFT as the main production excited-state method, designed to reduce
-  spin contamination while retaining TDDFT-like practicality
+- MRSF-TDDFT as the main production method for multiconfigurational ground and
+  excited states, designed to reduce spin contamination while retaining
+  TDDFT-like practicality
 - MRSF-TDDFT energies, analytic gradients, geometry optimization, MECI/MECP/TCI,
   NACME, spin-orbit coupling, and MRSF-EKT workflows
 - DTCAM-series functionals, UMRSF-TDDFT, and newer MRSF extensions for broader
-  excited-state coverage
+  multistate coverage
 - Practical photochemistry targets: diradicals, bond breaking, conical
   intersections, nonadiabatic dynamics, X-ray absorption, SOC, and inverted
   singlet-triplet materials
