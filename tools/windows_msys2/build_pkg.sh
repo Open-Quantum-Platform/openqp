@@ -43,6 +43,9 @@ rm -rf "$package_out"
 mkdir -p "$package_out"
 
 cd "$pkgbuild_dir"
+# GitHub's Windows checkout may apply CRLF line endings depending on
+# repository settings. makepkg sources these files directly and rejects CRLF.
+sed -i 's/\r$//' PKGBUILD ./*.install
 rm -f ./*.pkg.tar.*
 makepkg-mingw --noconfirm --syncdeps --cleanbuild --clean
 
