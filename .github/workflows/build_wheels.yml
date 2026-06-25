@@ -2,6 +2,15 @@ name: Build and publish wheels
 
 "on":
   workflow_dispatch:
+    inputs:
+      publish_artifacts_run_id:
+        description: "Existing workflow run ID containing openqp-* artifacts to publish"
+        required: false
+        type: string
+      release_tag:
+        description: "Release tag to publish when publishing existing artifacts"
+        required: false
+        type: string
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
@@ -24,6 +33,7 @@ permissions:
 jobs:
   build_sdist:
     name: Build source distribution
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish_artifacts_run_id == ''
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +107,7 @@ jobs:
 
   build_wheels:
     name: Build wheels (${{ matrix.name }})
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')) && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish_artifacts_run_id == '')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -268,7 +278,50 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dist/* --clobber
+        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  publish_existing_artifacts:
+    name: Publish existing release artifacts
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_artifacts_run_id != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openqp
+    steps:
+      - name: Validate publish inputs
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: |
+          test -n "$RELEASE_TAG" || {
+            echo "release_tag is required when publish_artifacts_run_id is set."
+            exit 1
+          }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: openqp-*
+          path: dist
+          merge-multiple: true
+          run-id: ${{ github.event.inputs.publish_artifacts_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Show artifacts
+        run: ls -lh dist
+
+      - name: Attach artifacts to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
