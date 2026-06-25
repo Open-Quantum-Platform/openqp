@@ -16,15 +16,19 @@ contains
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
     use io_constants, only: iw
-    use printing, only: print_module_info
+    use hf_gradient_mod, only: hf_gradient
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
     open(unit=iw, file=inf%log_filename, position="append")
-    call print_module_info('UMRSF_TDHF_Gradient','UMRSF-TDDFT Gradient (STUB: pipeline wiring)')
-    write(iw,'(/2x,a)') 'UMRSF gradient: STUB (zeroes gradient; analytic assembly not yet implemented)'
+    write(iw,'(/2x,a)') 'UMRSF gradient [Stage1 step1]: reference UHF-triplet gradient '// &
+                        '(response P^Delta + Z-vector + M1 added next)'
     close(iw)
-    inf%atoms%grad = 0.0d0
+    ! Stage-1 step 1: reference (UHF triplet) nuclear gradient via the reusable HF/DFT gradient
+    ! primitive (grd1/grd2 with the converged DM_A/DM_B). Response terms (relaxed difference density,
+    ! 2-particle density, energy-weighted W) + Z-vector + M1 are added next, FD-gated on CH2.
+    ! See DERIVATIONS/stage1_hf_gradient_spec.md.
+    call hf_gradient(inf)
   end subroutine tdhf_umrsf_gradient_C
 
 end module tdhf_umrsf_gradient_mod
