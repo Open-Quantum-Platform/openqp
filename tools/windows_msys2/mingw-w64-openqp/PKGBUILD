@@ -42,8 +42,17 @@ build() {
   export CXX="${CXX:-g++}"
   export FC="${FC:-gfortran}"
   export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc)}"
+  local _externals_root="${OQP_MSYS2_EXTERNALS_ROOT:-}"
+  if [[ -z "${_externals_root}" ]]; then
+    if [[ -n "${RUNNER_TEMP:-}" ]]; then
+      _externals_root="$(cygpath -u "${RUNNER_TEMP}")/oqp-ext"
+    else
+      _externals_root="${TMPDIR:-/tmp}/oqp-ext"
+    fi
+  fi
+  mkdir -p "${_externals_root}"
   local _external_root
-  _external_root="$(cygpath -m "${srcdir}/openqp-externals")"
+  _external_root="$(cygpath -m "${_externals_root}")"
   export CMAKE_ARGS="${CMAKE_ARGS:-} -DUSE_LIBINT=OFF -DENABLE_OPENMP=ON -DENABLE_OPENTRAH=OFF -DLINALG_LIB=netlib -DLINALG_LIB_INT64=ON -DOQP_EXTERNALS_ROOT=${_external_root}"
 
   rm -rf "${srcdir}/dist"
