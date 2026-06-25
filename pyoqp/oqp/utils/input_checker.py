@@ -1118,15 +1118,15 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     # which exist for UMRSF yet. Reject them here at the single choke point
     # so validation fails early instead of dying at runtime.
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if method == "tdhf" and td_type == "umrsf" and runtype != "energy":
+    if method == "tdhf" and td_type == "umrsf" and runtype not in ("energy", "grad"):
         report.add(
             "ERROR",
             "tdhf.type",
-            "UMRSF-TDDFT only supports runtype=energy; "
-            "gradients, Hessians, and Z-vectors are not implemented.",
+            "UMRSF-TDDFT supports runtype=energy and runtype=grad; "
+            "Hessians, NAC, and geometry optimizations are not implemented yet.",
             value=f"{td_type}/{runtype}",
-            expected="energy",
-            action="Use runtype=energy for UMRSF-TDDFT until UMRSF-TDDFT gradients/Z-vectors are implemented.",
+            expected="energy or grad",
+            action="Use runtype=energy or runtype=grad for UMRSF-TDDFT.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
