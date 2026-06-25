@@ -136,7 +136,7 @@ pacman -U --noconfirm "$pkg"
 
 if (-not $SkipPythonDeps) {
     Invoke-Ucrt64 -BashPath $bash -Description "Installing temporary Python runtime dependencies" -Command @'
-python -m pip install --user --upgrade basis_set_exchange geometric
+python -m pip install --user --break-system-packages --upgrade "jsonschema<4.18" basis_set_exchange geometric
 '@
 }
 

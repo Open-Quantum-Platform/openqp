@@ -36,7 +36,7 @@ fi
 # These two runtime dependencies are not currently available as MSYS2 packages.
 # Install them only for local validation until separate PKGBUILDs are added.
 if [[ "${OQP_MSYS2_INSTALL_PYPI_DEPS:-1}" == "1" ]]; then
-  python -m pip install --user --upgrade basis_set_exchange geometric
+  python -m pip install --user --break-system-packages --upgrade "jsonschema<4.18" basis_set_exchange geometric
 fi
 
 rm -rf "$package_out"
