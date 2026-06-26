@@ -130,29 +130,39 @@ def load_openqp_module():
                 sys.modules[name] = module
 
 
-class TestOpenQPPythonicAPI(unittest.TestCase):
-    def test_constructor_accepts_pyscf_style_molecule_arguments(self):
+class TestOpenQPNativeAPI(unittest.TestCase):
+    def test_molecule_and_hf_helpers_build_openqp_input(self):
         openqp = load_openqp_module()
 
-        job = openqp.OpenQP(
-            atom=[("H", (0, 0, 0)), ("H", (0, 0, 1.4))],
-            basis="6-31g*",
-            charge=0,
-            spin=2,
-            project="h2_triplet",
-            usempi=False,
+        job = (
+            openqp.OpenQP(project="h2", usempi=False)
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="6-31g*", charge=0)
+            .hf()
         )
 
         config = job.to_input_dict()
         self.assertEqual(config["input"]["system"], "\nH 0 0 0\nH 0 0 1.4")
         self.assertEqual(config["input"]["basis"], "6-31g*")
         self.assertEqual(config["input"]["charge"], "0")
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+    def test_mrsf_helper_uses_openqp_defaults(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2_mrsf").molecule("H 0 0 0; H 0 0 0.74").mrsf(nstate=4)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["scf"]["type"], "rohf")
         self.assertEqual(config["scf"]["multiplicity"], "3")
-        self.assertEqual(job.scf.multiplicity, 3)
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
 
     def test_section_proxy_updates_openqp_keywords(self):
         openqp = load_openqp_module()
-        job = openqp.OpenQP(atom="H 0 0 0; H 0 0 0.74")
+        job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
 
         job.input(method="tdhf", runtype="energy")
         job.scf(type="rohf", multiplicity=3)
@@ -168,7 +178,7 @@ class TestOpenQPPythonicAPI(unittest.TestCase):
 
     def test_run_builds_runner_lazily_and_returns_molecule(self):
         openqp = load_openqp_module()
-        job = openqp.OpenQP(atom="H 0 0 0", basis="sto-3g", project="h_atom", usempi=False)
+        job = openqp.OpenQP(project="h_atom", usempi=False).molecule("H 0 0 0", basis="sto-3g")
 
         mol = job.run(run_type="grad")
 

@@ -12,29 +12,6 @@ from oqp.utils.kword_map import resolve_param_key
 
 
 _BOHR_UNITS = {"bohr", "au", "a.u.", "atomic_unit", "atomic_units"}
-_INPUT_ALIASES = {
-    "atom": "input.system",
-    "system": "input.system",
-    "basis": "input.basis",
-    "charge": "input.charge",
-    "functional": "input.functional",
-    "method": "input.method",
-    "run_type": "input.runtype",
-    "runtype": "input.runtype",
-    "ispher": "input.ispher",
-    "omp_threads": "input.omp_threads",
-    "scf_type": "scf.type",
-    "reference": "scf.type",
-    "multiplicity": "scf.multiplicity",
-    "td_type": "tdhf.type",
-    "tdhf_type": "tdhf.type",
-    "nstate": "tdhf.nstate",
-}
-_SECTION_ALIASES = {
-    "input.atom": "input.system",
-    "input.run_type": "input.runtype",
-    "tdhf.states": "tdhf.nstate",
-}
 
 
 def _is_bohr(unit):
@@ -93,8 +70,8 @@ def normalize_system(system, unit="Angstrom"):
     Normalize inline molecular geometries for OpenQP input.system.
 
     Coordinates are written in Angstrom because the OpenQP input reader converts
-    the text geometry into its internal Bohr representation. PySCF-style Bohr
-    inputs can be passed with unit="Bohr".
+    the text geometry into its internal Bohr representation. Bohr inputs can be
+    passed with unit="Bohr".
     """
     if isinstance(system, (list, tuple)):
         lines = [_normalize_atom_row(item, unit) for item in system]
@@ -160,36 +137,27 @@ class _SectionProxy:
 
 class OpenQP:
     """
-    Pythonic, PySCF-compatible convenience layer over the OpenQP input schema.
+    OpenQP-native convenience layer over the OpenQP input schema.
 
     This class is additive: it builds the same sectioned input dictionary used
-    by Runner and existing OpenQP input files, while allowing common molecular
-    arguments such as atom, basis, charge, and spin.
+    by Runner and existing OpenQP input files, while making section-style
+    keyword editing concise in Python scripts.
     """
 
     def __init__(
         self,
-        atom=None,
-        system=None,
-        basis=None,
-        charge=None,
-        spin=None,
-        multiplicity=None,
-        unit="Angstrom",
         project="oqp_project",
         log=None,
         silent=0,
         usempi=True,
-        **kwargs,
+        config=None,
+        **sections,
     ):
-        if atom is not None and system is not None:
-            raise ValueError("Use either atom= or system=, not both.")
-
         self.project = project or "oqp_project"
         self.log = log if log is not None else f"{self.project}.log"
         self.silent = silent
         self.usempi = usempi
-        self.unit = unit
+        self.unit = "Angstrom"
         self.runner = None
         self.mol = None
 
@@ -197,22 +165,10 @@ class OpenQP:
         self.config_str = dump_strings_from_parser(parser)
         self.config_typed = parser.validate()
 
-        updates = {}
-        molecule = system if system is not None else atom
-        if molecule is not None:
-            updates["input.system"] = molecule
-        if basis is not None:
-            updates["input.basis"] = basis
-        if charge is not None:
-            updates["input.charge"] = charge
-        if spin is not None and multiplicity is None:
-            multiplicity = int(spin) + 1
-        if multiplicity is not None:
-            updates["scf.multiplicity"] = multiplicity
-
-        updates.update(kwargs)
-        if updates:
-            self.set(**updates)
+        if config:
+            self.update(config)
+        if sections:
+            self.update(sections)
 
     def __getattr__(self, name):
         if name in OQP_CONFIG_SCHEMA:
@@ -226,25 +182,78 @@ class OpenQP:
 
         PySCF's spin convention is 2S, so spin=2 maps to multiplicity=3.
         """
-        params = {}
-        for attr in ("atom", "basis", "charge", "spin", "unit"):
+        runtime_keys = {"project", "log", "silent", "usempi", "config"}
+        runtime = {key: kwargs.pop(key) for key in list(kwargs) if key in runtime_keys}
+        job = cls(**runtime)
+
+        system = getattr(mol, "atom", None)
+        unit = getattr(mol, "unit", "Angstrom")
+        input_updates = {}
+        for attr in ("basis", "charge"):
             if hasattr(mol, attr):
                 value = getattr(mol, attr)
                 if value is not None:
-                    params[attr] = value
-        params.update(kwargs)
-        return cls(**params)
+                    input_updates[attr] = value
+
+        if system is not None:
+            job.molecule(system, unit=unit, **input_updates)
+        elif input_updates:
+            job.input(**input_updates)
+
+        if hasattr(mol, "spin"):
+            spin = getattr(mol, "spin")
+            if spin is not None:
+                job.scf(multiplicity=int(spin) + 1)
+
+        if kwargs:
+            job.update(kwargs)
+        return job
+
+    def molecule(self, system, basis=None, charge=None, unit="Angstrom", **kwargs):
+        """Set molecular system data using OpenQP input-section keywords."""
+        self.unit = unit
+        updates = {"input.system": system}
+        if basis is not None:
+            updates["input.basis"] = basis
+        if charge is not None:
+            updates["input.charge"] = charge
+        for option, value in kwargs.items():
+            updates[f"input.{option}"] = value
+        return self.set(**updates)
+
+    def hf(self, reference="rhf", runtype="energy", multiplicity=None, **scf_keywords):
+        """Use a compact OpenQP HF setup for ordinary single-reference jobs."""
+        self.input(method="hf", runtype=runtype)
+        updates = {}
+        if reference is not None:
+            updates["type"] = reference
+        if multiplicity is not None:
+            updates["multiplicity"] = multiplicity
+        updates.update(scf_keywords)
+        if updates:
+            self.scf(**updates)
+        return self
+
+    def mrsf(self, nstate=3, reference="rohf", multiplicity=3,
+             runtype="energy", **tdhf_keywords):
+        """Use a compact OpenQP MRSF-TDDFT setup with an open-shell reference."""
+        self.input(method="tdhf", runtype=runtype)
+        self.scf(type=reference, multiplicity=multiplicity)
+        updates = {"type": "mrsf", "nstate": nstate}
+        updates.update(tdhf_keywords)
+        return self.tdhf(**updates)
 
     def section(self, section, **kwargs):
         """Update one OpenQP section using keyword arguments."""
         if section not in OQP_CONFIG_SCHEMA:
             raise KeyError(f"Unknown OpenQP section '{section}'.")
+        if section == "input" and "unit" in kwargs:
+            self.unit = kwargs.pop("unit")
         return self.set(**{f"{section}.{opt}": value for opt, value in kwargs.items()})
 
     def set(self, **kwargs):
         """
-        Update configuration with dotted OpenQP keys, section dictionaries, or
-        convenience aliases such as basis=, atom=, spin=, and nstate=.
+        Update configuration with dotted OpenQP keys or section dictionaries.
         """
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for sec, opts in self.config_str.items():
@@ -313,13 +322,6 @@ class OpenQP:
 
     def _canonicalize_key_value(self, key, value):
         key = str(key)
-        if key == "spin":
-            return "scf.multiplicity", int(value) + 1
-        if key in _INPUT_ALIASES:
-            key = _INPUT_ALIASES[key]
-        elif key in _SECTION_ALIASES:
-            key = _SECTION_ALIASES[key]
-
         if key in ("input.system", "input.system2"):
             value = normalize_system(value, self.unit)
         return key, value
