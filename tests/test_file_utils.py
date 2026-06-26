@@ -16,6 +16,7 @@ def load_file_utils():
         "oqp.molden",
         "oqp.molden.moldenwriter",
         "oqp.periodic_table",
+        "oqp.runtime",
         "oqp.utils",
         "oqp.utils.constants",
         "oqp.utils.mpi_utils",
@@ -42,6 +43,10 @@ def load_file_utils():
         elements[8] = "O"
         setattr(periodic_table, "ELEMENTS_NAME", elements)
         sys.modules["oqp.periodic_table"] = periodic_table
+
+        runtime = types.ModuleType("oqp.runtime")
+        setattr(runtime, "basis_search_paths", lambda: [])
+        sys.modules["oqp.runtime"] = runtime
 
         utils = types.ModuleType("oqp.utils")
         utils.__path__ = []
