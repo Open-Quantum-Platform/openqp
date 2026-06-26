@@ -35,8 +35,20 @@ from oqp.library.oqp_coords import build_coordinates, CartesianCoordinates
 
 
 def _sym_eigh(a):
-    """Symmetric eigensolve via LAPACK (syevd driver)."""
-    return sla.eigh(0.5 * (a + a.T))
+    """Symmetric eigensolve via LAPACK (divide-and-conquer 'evd' driver).
+
+    Avoids scipy's default MRRR driver ('evr'): some OpenBLAS builds (e.g. the
+    0.3.27 wheel shipped with scipy 1.13) raise ``LinAlgError("Internal Error.")``
+    in the threaded dsyevr/MRRR path on large matrices with clustered eigenvalues
+    (the diagonal model Hessian used here is exactly that case). The matrix is
+    finite and well-conditioned -- numpy.linalg.eigh and the 'evd' driver solve
+    it fine -- so route through 'evd', falling back to NumPy if it is unavailable.
+    """
+    a = 0.5 * (a + a.T)
+    try:
+        return sla.eigh(a, driver="evd")
+    except (sla.LinAlgError, TypeError, ValueError):
+        return np.linalg.eigh(a)
 
 
 class ConvergenceSignal(Exception):
