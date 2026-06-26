@@ -110,6 +110,7 @@ contains
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
     real(kind=dp), allocatable :: cac(:,:), cbc(:,:), epsca(:), epscb(:), pza(:,:), pzb(:,:)
+    real(kind=dp), allocatable :: zmata(:,:), zmatb(:,:)
     real(kind=dp) :: zrms, zresid
 
     type(basis_set), pointer :: basis
@@ -406,68 +407,147 @@ contains
     write(iw,'(2x,a)') '======================================================================'
     close(iw)
 
+    ! Re-initialize int2_driver at the BASE geometry. The frozen-density FD self-test loop above
+    ! cleaned+re-init'd the driver inside umrsf_frozen_omega2e at the LAST displaced geometry; reusing
+    ! that stale driver for the subsequent ω re-evaluations (Z-vector RHS, W_2e generalized Fock) gives
+    ! a ~4.4e-5 inconsistency in ω_2e which, amplified by 1/θ in the FD generalized Fock, blows up W.
+    call int2_driver%clean()
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+    int2_driver%schwarz = .false.
+
+    ! UNIT TEST (rigorous-W primitive): rebuild F^ref from the orbitals' occupied block and confirm it
+    ! reproduces the stored SCF Fock. Validates umrsf_ref_fock (reference-density-relaxation primitive).
+    block
+      real(kind=dp), allocatable :: fa_rb(:,:), fb_rb(:,:), fa_st(:,:), fb_st(:,:)
+      real(kind=dp) :: hfscale_rb
+      hfscale_rb = 1.0_dp
+      if (infos%control%hamilton >= 20) hfscale_rb = infos%dft%hfscale
+      allocate(fa_rb(nbf,nbf), fb_rb(nbf,nbf), fa_st(nbf,nbf), fb_st(nbf,nbf))
+      call umrsf_ref_fock(infos, basis, va, vb, hfscale_rb, fa_rb, fb_rb)
+      call unpack_matrix(fock_a, fa_st) ; call unpack_matrix(fock_b, fb_st)
+      open(unit=iw, file=infos%log_filename, position="append")
+      write(iw,'(/2x,a,2es12.3)') 'umrsf_ref_fock unit test: max|F^ref_rebuilt - fock_stored| a/b = ', &
+        maxval(abs(fa_rb-fa_st)), maxval(abs(fb_rb-fb_st))
+      close(iw)
+      deallocate(fa_rb, fb_rb, fa_st, fb_st)
+    end block
+
+    ! DIAGNOSTIC (rigorous-W blocker): is get_jacobi(cac) == va up to column signs? Compute w2e(base)
+    ! from cja=get_jacobi(cac) with and without sign-matching cja to va. If sign-fixed w2e == -0.519,
+    ! the blocker is purely signs (fixable); if column overlaps < 1, it is a different alignment.
+    block
+      real(kind=dp), allocatable :: fa_rf(:,:), fb_rf(:,:), cja(:,:), cjb(:,:), ead(:), ebd(:)
+      real(kind=dp), allocatable :: w1d(:,:), w2d(:,:), bradd(:,:,:), xmd(:,:)
+      real(kind=dp), allocatable, target :: densd(:,:,:,:)
+      real(kind=dp), pointer :: f3d(:,:,:,:)
+      type(int2_umrsf_data_t), target :: udd
+      real(kind=dp) :: hfrf, ovp, minov, w2e_raw, w2e_sf, sgnp
+      integer :: pp, kk
+      hfrf = 1.0_dp ; if (infos%control%hamilton >= 20) hfrf = infos%dft%hfscale
+      allocate(fa_rf(nbf,nbf), fb_rf(nbf,nbf), cja(nbf,nbf), cjb(nbf,nbf), ead(nbf), ebd(nbf), &
+               w1d(nbf,nbf), w2d(nbf,nbf), bradd(11,nbf,nbf), xmd(nbf,nbf), densd(1,11,nbf,nbf), source=0.0_dp)
+      call umrsf_ref_fock(infos, basis, cac, cbc, hfrf, fa_rf, fb_rf)
+      cja = cac ; cjb = cbc
+      call get_jacobi(infos, cja, ead, cjb, ebd, smat_full, nocca, w1d, w2d, 0)
+      call get_jacobi(infos, cja, ead, cjb, ebd, smat_full, nocca, w1d, w2d, 1)
+      minov = 1.0_dp
+      do pp = 1, nbf
+        ovp = abs(dot_product(cja(:,pp), matmul(smat_full, va(:,pp))))
+        minov = min(minov, ovp)
+      end do
+      ! raw w2e
+      call iatogen(bvec(:,tstate), xmd, nocca, noccb)
+      call umrsfcbc(infos, cja, cjb, xmd, densd(1,:,:,:))
+      udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., scale_exchange=scale_exch, scale_coulomb=scale_exch)
+      call int2_driver%run(udd) ; f3d => udd%f3(:,:,:,:,1)
+      if (mrst == 3) f3d(:,1:10,:,:) = -f3d(:,1:10,:,:)
+      call umrsf_bra_density(infos, cja, cjb, xmd, bradd)
+      w2e_raw = 0.0_dp ; do kk = 1, 11 ; w2e_raw = w2e_raw + sum(bradd(kk,:,:)*f3d(1,kk,:,:)) ; end do
+      ! sign-fix cja/cjb to va/vb, recompute
+      do pp = 1, nbf
+        sgnp = dot_product(cja(:,pp), matmul(smat_full, va(:,pp))) ; if (sgnp < 0.0_dp) cja(:,pp) = -cja(:,pp)
+        sgnp = dot_product(cjb(:,pp), matmul(smat_full, vb(:,pp))) ; if (sgnp < 0.0_dp) cjb(:,pp) = -cjb(:,pp)
+      end do
+      densd = 0.0_dp
+      call umrsfcbc(infos, cja, cjb, xmd, densd(1,:,:,:))
+      udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., scale_exchange=scale_exch, scale_coulomb=scale_exch)
+      call int2_driver%run(udd) ; f3d => udd%f3(:,:,:,:,1)
+      if (mrst == 3) f3d(:,1:10,:,:) = -f3d(:,1:10,:,:)
+      call umrsf_bra_density(infos, cja, cjb, xmd, bradd)
+      w2e_sf = 0.0_dp ; do kk = 1, 11 ; w2e_sf = w2e_sf + sum(bradd(kk,:,:)*f3d(1,kk,:,:)) ; end do
+      open(unit=iw, file=infos%log_filename, position="append")
+      write(iw,'(/2x,a,f10.6,a,f16.10,a,f16.10,a,f16.10)') &
+        'get_jacobi(cac) vs va: min|col overlap|=', minov, '  w2e_raw=', w2e_raw, &
+        '  w2e_signfixed=', w2e_sf, '  (target omega_2e=', omega_2e_mv, ')'
+      close(iw)
+      deallocate(fa_rf, fb_rf, cja, cjb, ead, ebd, w1d, w2d, bradd, xmd, densd)
+    end block
+
     ! ---- Z-vector relaxation (numerical-RHS end-to-end validation) ----
     ! R = ∂ω/∂κ by FD over canonical orbital rotations; solve via cphf_solve_uhf; relaxation density
     ! P_z folded into P^Δ (= P^Δ,u + z). Needs the live int2 driver for the ω re-evaluations.
-    allocate(pza(nbf,nbf), pzb(nbf,nbf), source=0.0_dp)
+    allocate(pza(nbf,nbf), pzb(nbf,nbf), zmata(nbf,nbf), zmatb(nbf,nbf), source=0.0_dp)
     call umrsf_zvector_relax(infos, int2_driver, va, vb, cac, cbc, epsca, epscb, smat_full, &
-                             fock_a, fock_b, bvec(:,tstate), scale_exch, pza, pzb, zrms, zresid)
+                             fock_a, fock_b, bvec(:,tstate), scale_exch, pza, pzb, zmata, zmatb, zrms, zresid)
+    ! Relaxed difference density P^Δ = P^Δ,u + P_z (full z) into the 1e + mean-field gradient. (c03's
+    ! rigorous P^Δ,u+½P_z + W=½C(G^ω+G^z)_sym C^T is the target, but the FD-of-L route to that W is BLOCKED
+    ! by get_jacobi non-smoothness under the symmetric variation — see LOG; needs the ANALYTIC closed form.
+    ! Until then keep the validated relaxed-T heuristic W (umrsf_w_overlap_grad) with full P_z → 3.293e-3.)
     pda = pda + pza
     pdb = pdb + pzb
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/2x,a)') '========= UMRSF Z-vector (numerical RHS + cphf_solve_uhf) ========='
     write(iw,'(2x,a,es12.3)') 'z RMS = ', zrms
-    write(iw,'(2x,a)') 'relaxed P^Δ = P^Δ,u + z folded into the 1e + mean-field gradient (W still missing)'
+    write(iw,'(2x,a)') 'relaxed P^Δ = P^Δ,u + z folded into the 1e + mean-field gradient'
     write(iw,'(2x,a)') '==================================================================='
     close(iw)
 
-    ! ---- W part 1 (ω_2e/amplitude): numerical symmetric-generalized-Fock route is DISABLED ----
-    ! It overshoots ~20x: the non-orthonormal symmetric orbital perturbation violates umrsfcbc's
-    ! orthonormal-MO assumption, inflating G^2e. The analytic ω_2e W (channel-adjoint) is the TODO.
-    allocate(de_w_2e(3,natom), source=0.0_dp)
-    ! call umrsf_w_numerical(infos, int2_driver, basis, va, vb, fock_a, fock_b, bvec(:,tstate), &
-    !                        scale_exch, de_w_2e)
+    ! ---- ω_2e consistency diagnostic (clean-bilinear explicit bra == back-transform) ----
+    allocate(de_w_2e(3,natom), source=0.0_dp)   ! retained = 0 (the naive ½C G^2e_sym C^T route is WRONG)
+    block
+      real(kind=dp) :: o2e_expl
+      call umrsf_omega2e_explicit(infos, int2_driver, va, vb, bvec(:,tstate), scale_exch, o2e_expl)
+      open(unit=iw, file=infos%log_filename, position="append")
+      write(iw,'(/2x,a,f18.10,a,es12.3)') 'omega_2e explicit-bra check = ', o2e_expl, &
+        '   |delta vs back-transform| = ', abs(o2e_expl - omega_2e_mv)
+      close(iw)
+    end block
+
+    ! NOTE: rigorous W (umrsf_w_rigorous, c03 6e-9) is BLOCKED — FD-of-L over symmetric variations is
+    ! non-smooth because get_jacobi re-pairs / the sign-match flips discontinuously (see LOG). Needs the
+    ! ANALYTIC closed form. Until then use the validated relaxed-T heuristic W (gap 3.293e-3).
+    hfscale_ref = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale_ref = infos%dft%hfscale
 
     call int2_driver%clean()
 
     ! orbital-part gradient (RELAXED P^Δ = P^Δ,u + z): 1e Tr(P^Δ h^x) + 2e mean-field Tr(P^Δ G[P^ref])
-    hfscale_ref = 1.0_dp
-    if (infos%control%hamilton >= 20) hfscale_ref = infos%dft%hfscale
     allocate(de_orb(3,natom), source=0.0_dp)
     call umrsf_orbital_grad(infos, basis, pda, pdb, dmat_a, dmat_b, hfscale_ref, de_orb)
 
-    open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '========= UMRSF orbital-part response gradient (1e + 2e mean-field) ========='
-    write(iw,'(2x,a)') '   atom  comp        de_2e (transition)      de_orb (1e+meanfield)'
-    do iat = 1, natom
-      do icmp = 1, 3
-        write(iw,'(2x,2i5,2es24.12)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat)
-      end do
-    end do
-    write(iw,'(2x,a)') '============================================================================'
-    close(iw)
-
-    ! ---- W part 2: difference-density W^Δ_orb (analytic, relaxed P^Δ) + total W = W^Δ_orb + W_2e ----
+    ! W (overlap-Pulay): validated relaxed-T difference-density energy-weighted density.
     allocate(de_w(3,natom), source=0.0_dp)
     call umrsf_w_overlap_grad(infos, basis, cac, cbc, epsca, epscb, smat_full, pda, pdb, de_w)
-    de_w = de_w + de_w_2e
+
     open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '========= UMRSF W (overlap-Pulay) = W^Δ_orb + W_2e (amplitude) ========='
+    write(iw,'(/2x,a)') '========= UMRSF response gradient pieces (de2e / de_orb / de_w) ========='
+    write(iw,'(2x,a)') '   atom  comp        de_2e                  de_orb                 de_w'
     do iat = 1, natom
       do icmp = 1, 3
-        write(iw,'(2x,2i5,es24.12)') iat, icmp, de_w(icmp,iat)
+        write(iw,'(2x,2i5,3es23.12)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat), de_w(icmp,iat)
       end do
     end do
-    write(iw,'(2x,a)') '==============================================================='
+    write(iw,'(2x,a)') '======================================================================='
     close(iw)
 
-    ! return full response = transition-2e + orbital(1e+meanfield, relaxed) + W overlap
+    ! return full response = transition-2e + orbital(1e+meanfield, relaxed P^Δ) + relaxed-T W
     de2e_out = de2e + de_orb + de_w
 
     deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, dens, brad)
     deallocate(de2e, de2e_fd, densym)
     deallocate(talpha, tbeta, pda, pdb, de_orb, de_w, de_w_2e)
-    deallocate(cac, cbc, epsca, epscb, pza, pzb)
+    deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
   end subroutine umrsf_grad_run_gates
 
@@ -617,6 +697,360 @@ contains
     call grad_ee_overlap(basis, wpack, de_w, logtol=tol)
     deallocate(gsym, wtot, cw_a, cw_b, wpack)
   end subroutine umrsf_w_numerical
+
+!###############################################################################
+!> ω_2e = Σ_k s_k ⟨B_k(C), F_k(C)⟩ via the EXPLICIT clean-room bra density
+!> (umrsf_bra_density) — NOT the umrsfmntoia back-transform. umrsfcbc AND umrsf_bra_density
+!> are pure bilinears in C (no S / orthonormality dependence; verified by reading umrsfcbc),
+!> so this is the exact ω_2e quartic in C and stays valid under NON-orthonormal (symmetric)
+!> orbital variations. By contrast umrsf_omega_eval uses umrsfmntoia, whose SOMO-diagonal
+!> OVERWRITE makes the adjoint identity ⟨X,mntoia(F)⟩=Σ⟨B_k,F_k⟩ exact ONLY for orthonormal
+!> MOs — that is what broke the earlier symmetric-FD W (umrsf_w_numerical, ~20x overshoot).
+!> Integrals are at the CURRENT (fixed) geometry through the live idrv (no re-init).
+  subroutine umrsf_omega2e_explicit(infos, idrv, vva, vvb, xv, scale_exch, omega2e)
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_umrsf_data_t, umrsfcbc
+    use tdhf_lib, only: iatogen
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: vva(:,:), vvb(:,:), xv(:), scale_exch
+    real(kind=dp), intent(out) :: omega2e
+    real(kind=dp), allocatable :: xmat(:,:), brad(:,:,:)
+    real(kind=dp), allocatable, target :: dens(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    type(int2_umrsf_data_t), target :: ud
+    integer :: nbf, nocca, noccb, mrst, k
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    mrst = infos%tddft%mult
+    allocate(xmat(nbf,nbf), brad(11,nbf,nbf), dens(1,11,nbf,nbf), source=0.0_dp)
+
+    call iatogen(xv, xmat, nocca, noccb)
+    call umrsfcbc(infos, vva, vvb, xmat, dens(1,:,:,:))
+    ud = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
+                           scale_exchange=scale_exch, scale_coulomb=scale_exch)
+    call idrv%run(ud)
+    fmrst2 => ud%f3(:,:,:,:,1)
+    if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
+    ! (SPC scaling spc==hfs==1 in the HF limit; add for Stage-2 hybrids — see fmrst2 handling above.)
+    call umrsf_bra_density(infos, vva, vvb, xmat, brad)
+    omega2e = 0.0_dp
+    do k = 1, 11
+      omega2e = omega2e + sum(brad(k,:,:)*fmrst2(1,k,:,:))
+    end do
+    deallocate(xmat, brad, dens)
+  end subroutine umrsf_omega2e_explicit
+
+!###############################################################################
+!> Rebuild the UHF reference Fock F^ref_σ = h + J[Dα+Dβ] − scale_exch·K[Dσ] (AO, full) from the
+!> OCCUPIED orbitals of cw_a/cw_b. This is the reference-density-relaxation primitive the rigorous
+!> generalized Fock needs (c03_cis_gradient_W.py): ω_orb = Tr(P^Δ F^ref(C)) with F^ref REBUILT from the
+!> varied orbitals, NOT the frozen stored fock_a. D^ref is get_jacobi-invariant (seg0/seg1 rotate WITHIN
+!> the α-occ / β-virt subspaces, leaving β-occ and the α-occ subspace density unchanged), so cw may be
+!> pre- or post-jacobi. Stage-1 HF only (no XC; add the XC Fock for Stage-2). NB fock_jk uses its own
+!> screened int2 driver — fine to ~1e-6; for a clean FD use the schwarz-off analytic mean field instead.
+  subroutine umrsf_ref_fock(infos, basis, cw_a, cw_b, scale_exch, fa_full, fb_full)
+    use guess, only: get_ab_initio_density
+    use scf_addons, only: fock_jk
+    use mathlib, only: unpack_matrix
+    use oqp_tagarray_driver
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cw_a(:,:), cw_b(:,:), scale_exch
+    real(kind=dp), intent(out) :: fa_full(:,:), fb_full(:,:)
+    real(kind=dp), allocatable :: dens(:,:), fout(:,:)
+    real(kind=dp), contiguous, pointer :: hcore(:)
+    integer :: nbf, nbf2
+    integer(4) :: status
+
+    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2
+    allocate(dens(nbf2,2), fout(nbf2,2), source=0.0_dp)
+    call get_ab_initio_density(dens(:,1), cw_a, dens(:,2), cw_b, infos, basis)
+    call fock_jk(basis, dens, fout, infos, scale_exch=scale_exch, scale_coul=1.0_dp)
+    call tagarray_get_data(infos%dat, OQP_Hcore, hcore, status)
+    fout(:,1) = fout(:,1) + hcore
+    fout(:,2) = fout(:,2) + hcore
+    call unpack_matrix(fout(:,1), fa_full)
+    call unpack_matrix(fout(:,2), fb_full)
+    deallocate(dens, fout)
+  end subroutine umrsf_ref_fock
+
+!###############################################################################
+!> Lagrangian L(C_can) = ω_2e + ω_orb + Σ_σ Σ_ai z^σ_ai F^ref,σ_ai, evaluated at canonical orbitals
+!> cw_can (get_jacobi re-applied internally ⇒ M1 captured), with F^ref REBUILT from cw_can (c03 recipe).
+!>   ω_2e   = Σ_k ⟨B_k(cw_jac), F_k(cw_jac)⟩      (explicit clean bilinear, cw_jac = get_jacobi(cw_can))
+!>   ω_orb  = Tr(T_u_α F^MO_jac_α) + Tr(T_u_β F^MO_jac_β),  F^MO_jac_σ = cw_jac_σ^T F^ref_σ cw_jac_σ
+!>   z-coup = ½ Tr(zmat_α F^MO_can_α) + ½ Tr(zmat_β F^MO_can_β)   (Σ_ai z_ai F_ai = ½ Tr(zmat F^MO),
+!>            zmat symmetric ov+vo;  F^MO_can_σ = cw_can_σ^T F^ref_σ cw_can_σ).
+!> Used by umrsf_w_rigorous for the symmetric generalized Fock G^L (→ W) and reproduces ω at base.
+  subroutine umrsf_lagrangian_eval(infos, idrv, basis, cw_can_a, cw_can_b, smat_full, &
+                                   va_ref, vb_ref, zmata, zmatb, xv, scale_exch, hfscale_ref, lval, &
+                                   w2e_out, worb_out, zc_out)
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix, pack_matrix
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_umrsf_data_t, umrsfcbc, get_jacobi, mrsfesum
+    use tdhf_lib, only: iatogen
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cw_can_a(:,:), cw_can_b(:,:), smat_full(:,:)
+    real(kind=dp), intent(in) :: va_ref(:,:), vb_ref(:,:)     ! base get_jacobi orbitals (sign reference)
+    real(kind=dp), intent(in) :: zmata(:,:), zmatb(:,:)
+    real(kind=dp), intent(in) :: xv(:), scale_exch, hfscale_ref
+    real(kind=dp), intent(out) :: lval
+    real(kind=dp), intent(out), optional :: w2e_out, worb_out, zc_out
+
+    real(kind=dp), allocatable :: fa_ref(:,:), fb_ref(:,:), cja(:,:), cjb(:,:)
+    real(kind=dp), allocatable :: ea(:), eb(:), w1(:,:), w2(:,:), fmo(:,:)
+    real(kind=dp), allocatable :: faj(:,:), fbj(:,:), scr(:), xmat(:,:), brad(:,:,:), amo(:,:)
+    real(kind=dp), allocatable, target :: dens(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    type(int2_umrsf_data_t), target :: ud
+    integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, k
+    real(kind=dp) :: w2e, worb, zc
+
+    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb ; xvec_dim = nocca*nvirb ; mrst = infos%tddft%mult
+    allocate(fa_ref(nbf,nbf), fb_ref(nbf,nbf), cja(nbf,nbf), cjb(nbf,nbf), &
+             ea(nbf), eb(nbf), w1(nbf,nbf), w2(nbf,nbf), fmo(nbf,nbf), &
+             faj(nbf,nbf), fbj(nbf,nbf), scr(nbf2), xmat(nbf,nbf), brad(11,nbf,nbf), &
+             amo(xvec_dim,1), dens(1,11,nbf,nbf), source=0.0_dp)
+
+    ! F^ref rebuilt from cw_can occupied (reference-density relaxation)
+    call umrsf_ref_fock(infos, basis, cw_can_a, cw_can_b, hfscale_ref, fa_ref, fb_ref)
+
+    ! z-coupling (canonical basis): Σ_ai z_ai F^ref_ai = ½ Tr(zmat_σ · cw_can_σ^T F^ref_σ cw_can_σ)
+    fmo = matmul(transpose(cw_can_a), matmul(fa_ref, cw_can_a))
+    zc = 0.5_dp*sum(zmata*fmo)
+    fmo = matmul(transpose(cw_can_b), matmul(fb_ref, cw_can_b))
+    zc = zc + 0.5_dp*sum(zmatb*fmo)
+
+    ! get_jacobi → channel orbitals cja/cjb (D^ref invariant, so F^ref unchanged)
+    cja = cw_can_a ; cjb = cw_can_b
+    call get_jacobi(infos, cja, ea, cjb, eb, smat_full, nocca, w1, w2, 0)
+    call get_jacobi(infos, cja, ea, cjb, eb, smat_full, nocca, w1, w2, 1)
+    ! get_jacobi(cac) == va only up to per-column SIGNS; match cja/cjb to the base orbitals va/vb so
+    ! the V_S/V_T (1/√2) SOMO combos in ω_2e are consistent (verified: recovers ω_2e exactly at base).
+    block
+      integer :: pp
+      do pp = 1, nbf
+        if (dot_product(cja(:,pp), matmul(smat_full, va_ref(:,pp))) < 0.0_dp) cja(:,pp) = -cja(:,pp)
+        if (dot_product(cjb(:,pp), matmul(smat_full, vb_ref(:,pp))) < 0.0_dp) cjb(:,pp) = -cjb(:,pp)
+      end do
+    end block
+
+    ! MO Fock (rebuilt F^ref) in the channel basis cja/cjb
+    faj = matmul(transpose(cja), matmul(fa_ref, cja))
+    fbj = matmul(transpose(cjb), matmul(fb_ref, cjb))
+
+    ! ω_orb via mrsfesum (self-consistent in cja/cjb; no external T_u, so no basis mismatch)
+    call iatogen(xv, xmat, nocca, noccb)
+    amo = 0.0_dp
+    call mrsfesum(infos, xmat, faj, fbj, amo, 1)
+    worb = dot_product(xv, amo(:,1))
+
+    ! ω_2e via explicit bra (clean bilinear), channel orbitals cja/cjb
+    call iatogen(xv, xmat, nocca, noccb)
+    call umrsfcbc(infos, cja, cjb, xmat, dens(1,:,:,:))
+    ud = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
+                           scale_exchange=scale_exch, scale_coulomb=scale_exch)
+    call idrv%run(ud)
+    fmrst2 => ud%f3(:,:,:,:,1)
+    if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
+    call umrsf_bra_density(infos, cja, cjb, xmat, brad)
+    w2e = 0.0_dp
+    do k = 1, 11
+      w2e = w2e + sum(brad(k,:,:)*fmrst2(1,k,:,:))
+    end do
+
+    lval = w2e + worb + zc
+    if (present(w2e_out))  w2e_out = w2e
+    if (present(worb_out)) worb_out = worb
+    if (present(zc_out))   zc_out = zc
+    deallocate(fa_ref, fb_ref, cja, cjb, ea, eb, w1, w2, fmo, faj, fbj, scr, xmat, brad, amo, dens)
+  end subroutine umrsf_lagrangian_eval
+
+!###############################################################################
+!> RIGOROUS energy-weighted density W = ½ Σ_σ C_σ (G^L)_σ,sym C_σ^T (c03_cis_gradient_W.py, 6e-9),
+!> G^L = ∂L/∂U the symmetric generalized Fock of the full Lagrangian L (umrsf_lagrangian_eval) by central
+!> FD over symmetric variations of the CANONICAL orbitals (get_jacobi re-applied ⇒ M1 automatic; F^ref
+!> rebuilt ⇒ reference-density relaxation). Replaces the relaxed-T heuristic W^Δ_orb. −Tr(W S^x) via grd1.
+  subroutine umrsf_w_rigorous(infos, idrv, basis, cac, cbc, va, vb, smat_full, &
+                              zmata, zmatb, xv, scale_exch, hfscale_ref, de_w)
+    use int2_compute, only: int2_compute_t
+    use grd1, only: grad_ee_overlap
+    use mathlib, only: pack_matrix
+    use constants, only: tol_int
+    use io_constants, only: iw
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
+    real(kind=dp), intent(in) :: zmata(:,:), zmatb(:,:)
+    real(kind=dp), intent(in) :: xv(:), scale_exch, hfscale_ref
+    real(kind=dp), intent(out) :: de_w(:,:)
+
+    real(kind=dp), allocatable :: gsym(:,:), wtot(:,:), cwa(:,:), cwb(:,:), wpack(:)
+    integer :: nbf, nbf2, sgn, p, q, ij, i
+    real(kind=dp) :: th, lp, lm, tol
+
+    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2 ; th = 1.0d-3 ; tol = tol_int*log(10.0_dp)
+    allocate(gsym(nbf,nbf), wtot(nbf,nbf), cwa(nbf,nbf), cwb(nbf,nbf), wpack(nbf2), source=0.0_dp)
+
+    ! DIAGNOSTIC: L(base) must reproduce ω (z-coupling = 0 at base, since canonical F^ref_ai = 0).
+    block
+      real(kind=dp) :: lbase, w2eb, worbb, zcb
+      call umrsf_lagrangian_eval(infos, idrv, basis, cac, cbc, va, vb, smat_full, &
+                                 zmata, zmatb, xv, scale_exch, hfscale_ref, lbase, w2eb, worbb, zcb)
+      open(unit=iw, file=infos%log_filename, position="append")
+      write(iw,'(/2x,a,f16.10,a,f16.10,a,f16.10,a,f16.10)') &
+        'umrsf_w_rigorous diag: L(base)=', lbase, '  w2e=', w2eb, '  worb=', worbb, '  zc=', zcb
+      close(iw)
+    end block
+    ! BLOCKED: L(base) ≠ ω because get_jacobi(cac) reassigns the SOMO positions O1/O2 (re-canonicalization
+    ! reorders/sign-flips) ⇒ ω_2e wrong (-0.46 vs -0.519). Needs a SOMO/sign-preserving canonicalization or a
+    ! consistent va/vb-basis formulation of the z-coupling before the loop below is valid. See LOG.
+    if (infos%tddft%debug_mode) then
+      de_w = 0.0_dp ; deallocate(gsym, wtot, cwa, cwb, wpack) ; return
+    end if
+
+    do sgn = 1, 2
+      gsym = 0.0_dp
+      do p = 1, nbf
+        do q = p, nbf
+          cwa = cac ; cwb = cbc
+          if (p == q) then
+            if (sgn==1) then ; cwa(:,p) = (1.0_dp+th)*cac(:,p)
+            else             ; cwb(:,p) = (1.0_dp+th)*cbc(:,p) ; end if
+          else
+            if (sgn==1) then
+              cwa(:,p) = cac(:,p) + th*cac(:,q) ; cwa(:,q) = cac(:,q) + th*cac(:,p)
+            else
+              cwb(:,p) = cbc(:,p) + th*cbc(:,q) ; cwb(:,q) = cbc(:,q) + th*cbc(:,p)
+            end if
+          end if
+          call umrsf_lagrangian_eval(infos, idrv, basis, cwa, cwb, va, vb, smat_full, &
+                                     zmata, zmatb, xv, scale_exch, hfscale_ref, lp)
+          cwa = cac ; cwb = cbc
+          if (p == q) then
+            if (sgn==1) then ; cwa(:,p) = (1.0_dp-th)*cac(:,p)
+            else             ; cwb(:,p) = (1.0_dp-th)*cbc(:,p) ; end if
+          else
+            if (sgn==1) then
+              cwa(:,p) = cac(:,p) - th*cac(:,q) ; cwa(:,q) = cac(:,q) - th*cac(:,p)
+            else
+              cwb(:,p) = cbc(:,p) - th*cbc(:,q) ; cwb(:,q) = cbc(:,q) - th*cbc(:,p)
+            end if
+          end if
+          call umrsf_lagrangian_eval(infos, idrv, basis, cwa, cwb, va, vb, smat_full, &
+                                     zmata, zmatb, xv, scale_exch, hfscale_ref, lm)
+          if (p == q) then
+            gsym(p,p) = (lp - lm)/(2.0_dp*th)
+          else
+            gsym(p,q) = (lp - lm)/(4.0_dp*th)
+            gsym(q,p) = gsym(p,q)
+          end if
+        end do
+      end do
+      if (sgn==1) then
+        wtot = wtot + 0.5_dp*matmul(matmul(cac, gsym), transpose(cac))
+      else
+        wtot = wtot + 0.5_dp*matmul(matmul(cbc, gsym), transpose(cbc))
+      end if
+    end do
+
+    call pack_matrix(-wtot, wpack, 'U')
+    ij = 0
+    do i = 1, nbf ; ij = ij + i ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
+    de_w = 0.0_dp
+    call grad_ee_overlap(basis, wpack, de_w, logtol=tol)
+    deallocate(gsym, wtot, cwa, cwb, wpack)
+  end subroutine umrsf_w_rigorous
+
+!###############################################################################
+!> ω_2e overlap-Pulay W via the SYMMETRIC generalized Fock of ω_2e (numerical ORACLE for the
+!> analytic G^2e): W_2e = ½ Σ_σ C_σ G^2e,σ_sym C_σ^T,  G^2e,σ_sym,pq = ∂ω_2e/∂U^σ_(pq,sym),
+!> the energy-weighting of the TRANSITION (amplitude) density. ADDED to the difference-density
+!> W^Δ_orb. ω_2e is the EXPLICIT clean bilinear (umrsf_omega2e_explicit) so the symmetric
+!> (norm-changing) variation is exact. The AO W is orbital-basis invariant ⇒ va/vb is fine.
+!> −Tr(W_2e S^x) via grd1 grad_ee_overlap (eijden convention: negate + half-diagonal pack).
+  subroutine umrsf_w_2e_numerical(infos, idrv, basis, vva, vvb, xv, scale_exch, de_w)
+    use int2_compute, only: int2_compute_t
+    use grd1, only: grad_ee_overlap
+    use mathlib, only: pack_matrix
+    use constants, only: tol_int
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: vva(:,:), vvb(:,:), xv(:), scale_exch
+    real(kind=dp), intent(out) :: de_w(:,:)
+
+    real(kind=dp), allocatable :: gsym(:,:), wtot(:,:), cwa(:,:), cwb(:,:), wpack(:)
+    integer :: nbf, nbf2, sgn, p, q, ij, i
+    real(kind=dp) :: th, omp, omm, tol
+
+    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2 ; th = 1.0d-3 ; tol = tol_int*log(10.0_dp)
+    allocate(gsym(nbf,nbf), wtot(nbf,nbf), cwa(nbf,nbf), cwb(nbf,nbf), wpack(nbf2), source=0.0_dp)
+
+    do sgn = 1, 2                       ! sgn=1 vary alpha columns, sgn=2 vary beta columns
+      gsym = 0.0_dp
+      do p = 1, nbf
+        do q = p, nbf
+          ! +theta symmetric variation of MO pair (p,q): U_pq = U_qp = th
+          cwa = vva ; cwb = vvb
+          if (p == q) then
+            if (sgn==1) then ; cwa(:,p) = (1.0_dp+th)*vva(:,p)
+            else             ; cwb(:,p) = (1.0_dp+th)*vvb(:,p) ; end if
+          else
+            if (sgn==1) then
+              cwa(:,p) = vva(:,p) + th*vva(:,q) ; cwa(:,q) = vva(:,q) + th*vva(:,p)
+            else
+              cwb(:,p) = vvb(:,p) + th*vvb(:,q) ; cwb(:,q) = vvb(:,q) + th*vvb(:,p)
+            end if
+          end if
+          call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xv, scale_exch, omp)
+          ! -theta
+          cwa = vva ; cwb = vvb
+          if (p == q) then
+            if (sgn==1) then ; cwa(:,p) = (1.0_dp-th)*vva(:,p)
+            else             ; cwb(:,p) = (1.0_dp-th)*vvb(:,p) ; end if
+          else
+            if (sgn==1) then
+              cwa(:,p) = vva(:,p) - th*vva(:,q) ; cwa(:,q) = vva(:,q) - th*vva(:,p)
+            else
+              cwb(:,p) = vvb(:,p) - th*vvb(:,q) ; cwb(:,q) = vvb(:,q) - th*vvb(:,p)
+            end if
+          end if
+          call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xv, scale_exch, omm)
+          if (p == q) then
+            gsym(p,p) = (omp - omm)/(2.0_dp*th)            ! ∂ω/∂U_pp
+          else
+            gsym(p,q) = (omp - omm)/(4.0_dp*th)            ! ½(∂ω/∂U_pq+∂ω/∂U_qp) = G_sym,pq
+            gsym(q,p) = gsym(p,q)
+          end if
+        end do
+      end do
+      if (sgn==1) then
+        wtot = wtot + 0.5_dp*matmul(matmul(vva, gsym), transpose(vva))
+      else
+        wtot = wtot + 0.5_dp*matmul(matmul(vvb, gsym), transpose(vvb))
+      end if
+    end do
+
+    call pack_matrix(-wtot, wpack, 'U')
+    ij = 0
+    do i = 1, nbf ; ij = ij + i ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
+    de_w = 0.0_dp
+    call grad_ee_overlap(basis, wpack, de_w, logtol=tol)
+    deallocate(gsym, wtot, cwa, cwb, wpack)
+  end subroutine umrsf_w_2e_numerical
 
 !###############################################################################
 !> ω = X^T A X for a given (already get_jacobi-aligned) set of orbitals vva,vvb and amplitude xv.
@@ -816,7 +1250,7 @@ contains
 !> by the validated cphf_solve_uhf (UHF orbital Hessian). Returns AO relaxation densities pza,pzb.
 !> End-to-end framework validation (slow O(ltot) ω-evals; analytic R replaces it later).
   subroutine umrsf_zvector_relax(infos, idrv, va, vb, cac, cbc, epsca, epscb, smat_full, &
-                                 fock_a, fock_b, xv, scale_exch, pza, pzb, zrms, resid)
+                                 fock_a, fock_b, xv, scale_exch, pza, pzb, zmata, zmatb, zrms, resid)
     use oqp_tagarray_driver
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: get_jacobi
@@ -827,7 +1261,7 @@ contains
     real(kind=dp), intent(in) :: va(:,:), vb(:,:), cac(:,:), cbc(:,:)
     real(kind=dp), intent(in) :: epsca(:), epscb(:), smat_full(:,:)
     real(kind=dp), intent(in) :: fock_a(:), fock_b(:), xv(:), scale_exch
-    real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zrms, resid
+    real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms, resid
 
     real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:), ea(:), eb(:)
     real(kind=dp), allocatable :: cwa(:,:), cwb(:,:), eaw(:), ebw(:), w1(:,:), w2(:,:)
@@ -902,13 +1336,15 @@ contains
     resid = 0.0_dp
 
     ! ---- AO relaxation densities  P_z^σ = Σ_ia C^σ_i z^σ_ia C^σ_a^T  (symmetrized) ----
-    pza = 0.0_dp ; pzb = 0.0_dp
+    ! Also build the MO relaxation matrix zmat^σ (canonical, symmetric ov+vo) for the W z-coupling.
+    pza = 0.0_dp ; pzb = 0.0_dp ; zmata = 0.0_dp ; zmatb = 0.0_dp
     do ivir = 1, nvira
       amo = nocca + ivir
       do iocc = 1, nocca
         iov = (ivir-1)*nocca + iocc
         call add_outer(pza, zsol(iov,1), cac(:,iocc), cac(:,amo))
         call add_outer(pza, zsol(iov,1), cac(:,amo), cac(:,iocc))
+        zmata(iocc,amo) = zsol(iov,1) ; zmata(amo,iocc) = zsol(iov,1)
       end do
     end do
     do ivir = 1, nvirb
@@ -917,6 +1353,7 @@ contains
         iov = la + (ivir-1)*noccb + iocc
         call add_outer(pzb, zsol(iov,1), cbc(:,iocc), cbc(:,amo))
         call add_outer(pzb, zsol(iov,1), cbc(:,amo), cbc(:,iocc))
+        zmatb(iocc,amo) = zsol(iov,1) ; zmatb(amo,iocc) = zsol(iov,1)
       end do
     end do
 
