@@ -43,8 +43,7 @@ pip install .
 ```
 
 The package install keeps the Python wrapper, native library, headers, and data
-files together. Normal `openqp` command-line use does not require
-`OPENQP_ROOT`.
+files together for normal `openqp` command-line use.
 
 ## First Run
 
@@ -82,7 +81,7 @@ The user manual lives in the separate documentation repository:
 - [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
 - [Generated API reference](https://open-quantum-platform.github.io/openqp)
 
-## Web Tools
+## Graphic Web Tools
 
 - [OpenQP Web](https://app.openqp.org/) prepares inputs and previews structures
   locally in the browser.
