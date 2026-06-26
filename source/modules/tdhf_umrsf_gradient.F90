@@ -83,12 +83,14 @@ contains
     use oqp_tagarray_driver
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
-    use mathlib, only: orthogonal_transform_sym, unpack_matrix
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix, pack_matrix
     use eigen, only: diag_symm_full
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: int2_umrsf_data_t, umrsfcbc, umrsfmntoia, mrsfesum, get_jacobi
     use tdhf_lib, only: iatogen
     use grd2, only: grd2_driver
+    use grd1, only: grad_ee_overlap
+    use constants, only: tol_int
     use oqp_linalg
     use iso_c_binding, only: c_int, c_f_pointer
 
@@ -105,18 +107,15 @@ contains
     real(kind=dp) :: omega_p, omega_m, hfd, omega_base, maxd2e
     ! unrelaxed difference density P^Δ,u + orbital-part gradient
     real(kind=dp), allocatable :: talpha(:,:), tbeta(:,:), pda(:,:), pdb(:,:)
-    real(kind=dp), allocatable :: peffa(:,:), peffb(:,:)        ! P_eff = P^Δ,u + ½ P_z (c03 recipe)
-    real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:), de_m1(:,:)
-    integer :: iwmode                                          ! DEBUG bisection switch (UMRSF_WMODE)
-    real(kind=dp) :: zw                                        ! z-weight in P_eff
-    logical :: lrr, l2e, lm1, lwsz                             ! include refrelax / 2e / M1 ; zero within-seg 2e
-    integer :: irbrhs                                          ! RHS mode: 0 frozen+jacobi / 1 rebuilt+jacobi / 2 rebuilt+fixed-align
+    real(kind=dp), allocatable :: peffa(:,:), peffb(:,:)        ! P_eff = P^Δ,u + ½ P_z (c03/c04 split)
+    real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:)
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
+    real(kind=dp) :: dbg_zw                                     ! DEBUG: z weight in P_eff
+    logical :: dbg_wgz, dbg_w2e, dbg_wrr, dbg_wsz, dbg_rnum     ! DEBUG: W components on/off ; R numerical
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
     real(kind=dp), allocatable :: cac(:,:), cbc(:,:), epsca(:), epscb(:), pza(:,:), pzb(:,:)
     real(kind=dp), allocatable :: zmata(:,:), zmatb(:,:)
-    real(kind=dp) :: zrms, zresid
 
     type(basis_set), pointer :: basis
     ! tagarray pointers
@@ -129,7 +128,7 @@ contains
     ! locals
     real(kind=dp), allocatable :: va(:,:), vb(:,:), fa(:,:), fb(:,:), smat_full(:,:)
     real(kind=dp), allocatable :: ea(:), eb(:), wrk1(:,:), wrk2(:,:), scr(:)
-    real(kind=dp), allocatable :: xmat(:,:), amo(:,:), amo2e(:,:)
+    real(kind=dp), allocatable :: xmat(:,:), amo(:,:), amo2e(:,:), xamp(:)
     real(kind=dp), allocatable :: brad(:,:,:)
     real(kind=dp), allocatable, target :: dens(:,:,:,:)
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
@@ -137,7 +136,7 @@ contains
     type(int2_umrsf_data_t), target :: int2_udata
     integer :: nbf, nbf2, nocca, noccb, nvirb, xvec_dim, mrst, nstates, tstate
     integer :: k, it, diag_index
-    real(kind=dp) :: scale_exch, hfs, omega_recon, omega_2e_mv, omega_2e_tr
+    real(kind=dp) :: scale_exch, hfs, omega_recon, omega_2e_mv, omega_2e_tr, omega_eig
     real(kind=dp) :: spc_coco, spc_ovov, spc_coov
 
     integer(4) :: status
@@ -182,7 +181,7 @@ contains
 
     allocate(va(nbf,nbf), vb(nbf,nbf), fa(nbf,nbf), fb(nbf,nbf), smat_full(nbf,nbf), &
              ea(nbf), eb(nbf), wrk1(nbf,nbf), wrk2(nbf,nbf), scr(nbf2), &
-             xmat(nbf,nbf), amo(xvec_dim,1), amo2e(xvec_dim,1), source=0.0_dp)
+             xmat(nbf,nbf), amo(xvec_dim,1), amo2e(xvec_dim,1), xamp(xvec_dim), source=0.0_dp)
     allocate(dens(1,11,nbf,nbf), brad(11,nbf,nbf), source=0.0_dp)
 
     open(unit=iw, file=infos%log_filename, position="append")
@@ -192,6 +191,39 @@ contains
     ! Corresponding-orbital (Jacobi) alignment — idempotent on already-aligned MOs.
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 0)
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 1)
+
+    ! ---- MILESTONE (RULES §15 step 2.1): SMOOTH/converged get_jacobi alignment ----
+    ! The energy's get_jacobi stops at a 1e-3 threshold (+ min-|θ| early exit), leaving within-segment
+    ! cross-overlaps up to ~1e-3 — THE contamination of the earlier numerical-RHS z. The analytic
+    ! gradient needs the converged fixed point (within-seg off-diags → 0) so G^f = V G̃ Vᵀ is exact.
+    ! Polish va,vb (already threshold-aligned ⇒ correct basin + sign convention) to convergence.
+    block
+      real(kind=dp), allocatable :: va_thr(:,:), vb_thr(:,:)
+      real(kind=dp) :: off_thr, off_smooth, dva, orthoa, orthob
+      allocate(va_thr, source=va) ; allocate(vb_thr, source=vb)
+      ! off_thr/off_smooth = max within-seg |btt| (the get_jacobi STATIONARITY residual;
+      ! c05: the off-diagonals themselves need NOT vanish, only btt → 0 at the fixed point).
+      off_thr = within_seg_btt(va, vb, smat_full, nocca)
+      call umrsf_jacobi_smooth(va, vb, smat_full, nocca, off_smooth)
+      off_smooth = within_seg_btt(va, vb, smat_full, nocca)
+      dva = sum(abs(va-va_thr)) + sum(abs(vb-vb_thr))
+      orthoa = maxval(abs(matmul(transpose(va), matmul(smat_full, va)) - id_nbf(nbf)))
+      orthob = maxval(abs(matmul(transpose(vb), matmul(smat_full, vb)) - id_nbf(nbf)))
+      ! iw is already open (line above) — write directly; do NOT close (G1 gate below shares the bracket).
+      write(iw,'(/2x,a)') '========= UMRSF gradient: SMOOTH get_jacobi alignment (§15 step 2.1) ========='
+      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) THRESHOLD (1e-3+minθ) = ', off_thr
+      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) SMOOTH (converged)    = ', off_smooth
+      write(iw,'(2x,a,es12.3)') '||va_smooth - va_thr||_1 (within-seg polish size)        = ', dva
+      write(iw,'(2x,a,2es12.3)') 'S-orthonormality max|CᵀSC−I| alpha/beta (smooth)        = ', orthoa, orthob
+      if (off_smooth <= 1.0e-10_dp .and. max(orthoa,orthob) <= 1.0e-9_dp) then
+        write(iw,'(2x,a)') 'VERDICT: smooth alignment CONVERGED (max|btt| → 0; S-orthonormal). '// &
+                           'ω-reproduction = G1 gate below (omega_recon vs td_energies).'
+      else
+        write(iw,'(2x,a)') 'VERDICT: smooth alignment CHECK (see residuals above)'
+      end if
+      write(iw,'(2x,a)') '============================================================================='
+      deallocate(va_thr, vb_thr)
+    end block
 
     ! MO-basis Fock (rotated orbitals); frozen-core shift identical to the energy path.
     call orthogonal_transform_sym(nbf, nbf, fock_a, va, nbf, scr)
@@ -212,8 +244,27 @@ contains
     call int2_driver%set_screening()
     int2_driver%schwarz = .false.         ! validation: disable Schwarz screening (RULES sec.9)
 
+    ! ---- RE-DIAGONALIZE A in the SMOOTH basis → genuine eigenvector xamp (§15 / c05) ----
+    ! The stored bvec is the eigenvector in the energy's THRESHOLD basis (non-stationary here ~1.5e-6).
+    ! The ov-only Z-vector + W machinery needs X to be a TRUE eigenvector of A in the SMOOTH basis.
+    call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
+                               hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+    write(iw,'(/2x,a)') '----- smooth-basis amplitude re-diagonalization (genuine eigenvector) -----'
+    write(iw,'(2x,a,f18.10)') 'omega (smooth-basis eigenvalue) = ', omega_eig
+    write(iw,'(2x,a,f18.10)') 'omega stored (td_energies)      = ', td_en(tstate)
+    write(iw,'(2x,a,es12.3)') '  |delta| vs td_energy          = ', abs(omega_eig-td_en(tstate))
+    write(iw,'(2x,a,es12.3)') '  |overlap deficit| 1-|x·bvec|  = ', 1.0_dp-abs(dot_product(xamp,bvec(:,tstate)))
+    ! The |delta| vs td_energy is the THRESHOLD-vs-SMOOTH alignment gap (OQP's energy uses the 1e-3
+    ! threshold get_jacobi; the gradient uses the converged one). It is the irreducible §15-step-3
+    ! "smoothness-permitting cross-check" residual; must be << 1e-5 (the S1 gate).
+    if (abs(omega_eig-td_en(tstate)) <= 1.0e-5_dp) then
+      write(iw,'(2x,a)') 'VERDICT: genuine smooth-basis eigenvector (threshold-vs-smooth gap << 1e-5 gate).'
+    else
+      write(iw,'(2x,a)') 'VERDICT: CHECK omega_eig vs td_energy delta (threshold/smooth gap too large).'
+    end if
+
     ! ---- response matvec on the converged target-state amplitude ----
-    call iatogen(bvec(:,tstate), xmat, nocca, noccb)
+    call iatogen(xamp, xmat, nocca, noccb)
     call umrsfcbc(infos, va, vb, xmat, dens(1,:,:,:))
 
     int2_udata = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
@@ -232,7 +283,7 @@ contains
     ! 2e part of A.X via the back-transform (the energy path)
     amo2e = 0.0_dp
     call umrsfmntoia(infos, fmrst2(1,:,:,:), amo2e, va, vb, 1)
-    omega_2e_mv = dot_product(bvec(:,tstate), amo2e(:,1))
+    omega_2e_mv = dot_product(xamp, amo2e(:,1))
 
     ! 2e part via the response 2-PDM bra densities B_k = adjoint(umrsfmntoia).X :
     ! omega_2e = sum_k <B_k, F_k>  with  F_k = int2_k(D_k),  D_k = umrsfcbc(X).
@@ -245,13 +296,13 @@ contains
 
     ! full omega = 2e part + orbital-energy (Fock-diagonal) part
     amo(:,1) = amo2e(:,1)
-    call iatogen(bvec(:,tstate), xmat, nocca, noccb)
+    call iatogen(xamp, xmat, nocca, noccb)
     call mrsfesum(infos, xmat, fa, fb, amo, 1)
-    omega_recon = dot_product(bvec(:,tstate), amo(:,1))
+    omega_recon = dot_product(xamp, amo(:,1))
 
     write(iw,'(/2x,a)') '================ UMRSF gradient NON-FD gate G1 ================'
     write(iw,'(2x,a,i0,a,i0)') 'target_state = ', tstate, '   mrst = ', mrst
-    write(iw,'(2x,a,f18.12)')  'X^T X (amplitude norm)          = ', dot_product(bvec(:,tstate),bvec(:,tstate))
+    write(iw,'(2x,a,f18.12)')  'X^T X (amplitude norm)          = ', dot_product(xamp,xamp)
     write(iw,'(2x,a,f18.10)')  'omega reconstructed (X^T A X)   = ', omega_recon
     write(iw,'(2x,a,f18.10)')  'omega stored      (td_energies) = ', td_en(tstate)
     write(iw,'(2x,a,es12.3)')  '  |delta| omega                 = ', abs(omega_recon-td_en(tstate))
@@ -322,269 +373,325 @@ contains
     close(iw)
     call gcomp%clean()
 
-    ! ================= unrelaxed difference density P^Δ,u (omega_orb check) =================
-    ! Standard CIS/TDA difference density (spin-flip): occ_α-occ_α  T_α(i,j) = -Σ_a X_ia X_ja,
-    ! virt_β-virt_β  T_β(a,b) = +Σ_i X_ia X_ib, occ-virt = 0 (filled later by the Z-vector).
-    ! Must reproduce ω_orb = Tr(P^Δ,u F^AO) = X·mrsfesum(X). Gate-check before wiring the 1e/W terms.
+    ! ===== unrelaxed difference density T_u / P^Δ,u (aligned C̃ basis) + canonical SCF orbitals =====
+    ! Spin-flip TDA difference density from the genuine eigenvector xamp: occ_α-occ_α T_α(i,j)=−Σ_a X_ia X_ja,
+    ! virt_β-virt_β T_β(a,b)=+Σ_i X_ia X_ib. P^Δ,u_σ = C̃_σ T_u_σ C̃_σᵀ (aligned). ω_orb gate Tr(T_u F̃)=ω_orb.
     omega_orb = omega_recon - omega_2e_mv
     allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), source=0.0_dp)
-    call iatogen(bvec(:,tstate), xmat, nocca, noccb)
-    do j = 1, nocca
-      do i = 1, nocca
-        do ia = noccb+1, nbf
-          talpha(i,j) = talpha(i,j) - xmat(i,ia)*xmat(j,ia)
-        end do
-      end do
-    end do
-    do ib = noccb+1, nbf
-      do ia = noccb+1, nbf
-        do i = 1, nocca
-          tbeta(ia,ib) = tbeta(ia,ib) + xmat(i,ia)*xmat(i,ib)
-        end do
-      end do
-    end do
+    call iatogen(xamp, xmat, nocca, noccb)
+    do j = 1, nocca ; do i = 1, nocca ; do ia = noccb+1, nbf
+      talpha(i,j) = talpha(i,j) - xmat(i,ia)*xmat(j,ia)
+    end do ; end do ; end do
+    do ib = noccb+1, nbf ; do ia = noccb+1, nbf ; do i = 1, nocca
+      tbeta(ia,ib) = tbeta(ia,ib) + xmat(i,ia)*xmat(i,ib)
+    end do ; end do ; end do
     omega_orb_chk = sum(talpha*fa) + sum(tbeta*fb)
+    pda = matmul(matmul(va, talpha), transpose(va))     ! AO P^Δ,u_α = C̃_α T_α C̃_αᵀ
+    pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P^Δ,u_β = C̃_β T_β C̃_βᵀ
 
-    ! DIAGNOSTIC (Z-vector prep): are the STORED MOs canonical (F diagonal) or get_jacobi-rotated?
-    ! cphf_solve_uhf assumes canonical MOs (uses e_a-e_i). Check ||va - mo_a|| and off-diag(fa).
-    block
-      real(kind=dp) :: dva, offocc, offvir
-      integer :: ii, jj
-      dva = sum(abs(va-mo_a)) + sum(abs(vb-mo_b))
-      offocc = 0.0_dp; offvir = 0.0_dp
-      do jj = 1, nocca; do ii = 1, nocca
-        if (ii/=jj) offocc = max(offocc, abs(fa(ii,jj)))
-      end do; end do
-      do jj = noccb+1, nbf; do ii = noccb+1, nbf
-        if (ii/=jj) offvir = max(offvir, abs(fb(ii,jj)))
-      end do; end do
-      open(unit=iw, file=infos%log_filename, position="append")
-      write(iw,'(/2x,a)') '--- Z-vector prep diagnostic ---'
-      write(iw,'(2x,a,es12.3)') '||va-mo_a||+||vb-mo_b|| (rotation persisted in store?) = ', dva
-      write(iw,'(2x,a,es12.3)') 'max|off-diag fa| within alpha-occ block               = ', offocc
-      write(iw,'(2x,a,es12.3)') 'max|off-diag fb| within beta-virt block               = ', offvir
-      close(iw)
-    end block
-
-    ! Re-canonicalize the ground-state MO-Fock (G2 prep): fa,fb are occ/virt block-diagonal (SCF F_ai=0,
-    ! get_jacobi only mixes within α-occ / β-virt), so diagonalizing gives canonical MOs WITHOUT occ-virt
-    ! mixing. Cσ_can = Cσ_rot·Vσ, εσ = eigenvalues. cphf_solve_uhf needs exactly these. Verify diagonal.
+    ! Canonical SCF orbitals cac,cbc (= c05 Ca,Cb; the Z-vector frame) by diagonalizing the aligned
+    ! MO-Fock fa,fb. These are occ/virt block-diagonal (SCF F_ai=0; the smooth get_jacobi only mixes
+    ! within α-occ / β-virt), so the eigenvectors carry NO occ-virt mixing. cac is alignment-invariant.
     allocate(cac(nbf,nbf), cbc(nbf,nbf), epsca(nbf), epscb(nbf))
     block
-      real(kind=dp), allocatable :: fac(:,:), fbc(:,:), fmo(:,:)
-      real(kind=dp) :: offa, offb
-      integer :: ierr, ii, jj
-      allocate(fac(nbf,nbf), fbc(nbf,nbf), fmo(nbf,nbf))
-      fac = fa ; fbc = fb
+      real(kind=dp), allocatable :: fac(:,:), fbc(:,:)
+      integer :: ierr
+      allocate(fac, source=fa) ; allocate(fbc, source=fb)
       call diag_symm_full(1, nbf, fac, nbf, epsca, ierr)   ! fac -> Vα (eigenvectors)
       call diag_symm_full(1, nbf, fbc, nbf, epscb, ierr)   ! fbc -> Vβ
-      cac = matmul(va, fac)                                  ! canonical α MOs = Cα_rot · Vα
-      cbc = matmul(vb, fbc)                                  ! canonical β MOs
-      ! verify Cα_canᵀ fock_a Cα_can is diagonal (= εα)
-      call orthogonal_transform_sym(nbf, nbf, fock_a, cac, nbf, scr) ; call unpack_matrix(scr, fmo)
-      offa = 0.0_dp
-      do jj = 1, nbf; do ii = 1, nbf
-        if (ii/=jj) offa = max(offa, abs(fmo(ii,jj)))
-      end do; end do
-      call orthogonal_transform_sym(nbf, nbf, fock_b, cbc, nbf, scr) ; call unpack_matrix(scr, fmo)
-      offb = 0.0_dp
-      do jj = 1, nbf; do ii = 1, nbf
-        if (ii/=jj) offb = max(offb, abs(fmo(ii,jj)))
-      end do; end do
-      open(unit=iw, file=infos%log_filename, position="append")
-      write(iw,'(2x,a,2es12.3)') 're-canonicalized: max|off-diag F^MO_can| alpha/beta = ', offa, offb
-      if (max(offa,offb) <= 1.0e-9_dp) then
-        write(iw,'(2x,a)') 'VERDICT: re-canonicalization OK (F^MO_can diagonal; ready for cphf_solve_uhf)'
-      else
-        write(iw,'(2x,a)') 'VERDICT: re-canonicalization CHECK (F^MO_can not diagonal)'
-      end if
-      close(iw)
-      deallocate(fac, fbc, fmo)
+      cac = matmul(va, fac) ; cbc = matmul(vb, fbc)
+      deallocate(fac, fbc)
     end block
-    pda = matmul(matmul(va, talpha), transpose(va))     ! AO P^Δ,u_α = C^α T_α C^α^T
-    pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P^Δ,u_β = C^β T_β C^β^T
+
+    hfscale_ref = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale_ref = infos%dft%hfscale
 
     open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '========= UMRSF difference density P^Delta,u (omega_orb check) ========='
-    write(iw,'(2x,a,f18.10)') 'omega_orb via P^Delta,u (Tr T fa+Tr T fb) = ', omega_orb_chk
-    write(iw,'(2x,a,f18.10)') 'omega_orb true (X.mrsfesum)               = ', omega_orb
-    write(iw,'(2x,a,es12.3)') '  |delta| omega_orb                       = ', abs(omega_orb_chk-omega_orb)
-    write(iw,'(2x,a)') '======================================================================'
-    close(iw)
+    write(iw,'(/2x,a)') '============ UMRSF response: c05 CLOSED FORM (R + M1 V-transform + W) ============'
+    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u F̃) − omega_orb|        = ', abs(omega_orb_chk-omega_orb)
 
-    ! Re-initialize int2_driver at the BASE geometry. The frozen-density FD self-test loop above
-    ! cleaned+re-init'd the driver inside umrsf_frozen_omega2e at the LAST displaced geometry; reusing
-    ! that stale driver for the subsequent ω re-evaluations (Z-vector RHS, W_2e generalized Fock) gives
-    ! a ~4.4e-5 inconsistency in ω_2e which, amplified by 1/θ in the FD generalized Fock, blows up W.
+    ! Re-init int2 at the BASE geometry (the frozen-density 2e FD self-test left it displaced).
     call int2_driver%clean()
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
     int2_driver%schwarz = .false.
 
-    ! UNIT TEST (rigorous-W primitive): rebuild F^ref from the orbitals' occupied block and confirm it
-    ! reproduces the stored SCF Fock. Validates umrsf_ref_fock (reference-density-relaxation primitive).
-    block
-      real(kind=dp), allocatable :: fa_rb(:,:), fb_rb(:,:), fa_st(:,:), fb_st(:,:)
-      real(kind=dp) :: hfscale_rb
-      hfscale_rb = 1.0_dp
-      if (infos%control%hamilton >= 20) hfscale_rb = infos%dft%hfscale
-      allocate(fa_rb(nbf,nbf), fb_rb(nbf,nbf), fa_st(nbf,nbf), fb_st(nbf,nbf))
-      call umrsf_ref_fock(infos, basis, va, vb, hfscale_rb, fa_rb, fb_rb)
-      call unpack_matrix(fock_a, fa_st) ; call unpack_matrix(fock_b, fb_st)
-      open(unit=iw, file=infos%log_filename, position="append")
-      write(iw,'(/2x,a,2es12.3)') 'umrsf_ref_fock unit test: max|F^ref_rebuilt - fock_stored| a/b = ', &
-        maxval(abs(fa_rb-fa_st)), maxval(abs(fb_rb-fb_st))
-      close(iw)
-      deallocate(fa_rb, fb_rb, fa_st, fb_st)
-    end block
-
-    ! DIAGNOSTIC (rigorous-W blocker): is get_jacobi(cac) == va up to column signs? Compute w2e(base)
-    ! from cja=get_jacobi(cac) with and without sign-matching cja to va. If sign-fixed w2e == -0.519,
-    ! the blocker is purely signs (fixable); if column overlaps < 1, it is a different alignment.
-    block
-      real(kind=dp), allocatable :: fa_rf(:,:), fb_rf(:,:), cja(:,:), cjb(:,:), ead(:), ebd(:)
-      real(kind=dp), allocatable :: w1d(:,:), w2d(:,:), bradd(:,:,:), xmd(:,:)
-      real(kind=dp), allocatable, target :: densd(:,:,:,:)
-      real(kind=dp), pointer :: f3d(:,:,:,:)
-      type(int2_umrsf_data_t), target :: udd
-      real(kind=dp) :: hfrf, ovp, minov, w2e_raw, w2e_sf, sgnp
-      integer :: pp, kk
-      hfrf = 1.0_dp ; if (infos%control%hamilton >= 20) hfrf = infos%dft%hfscale
-      allocate(fa_rf(nbf,nbf), fb_rf(nbf,nbf), cja(nbf,nbf), cjb(nbf,nbf), ead(nbf), ebd(nbf), &
-               w1d(nbf,nbf), w2d(nbf,nbf), bradd(11,nbf,nbf), xmd(nbf,nbf), densd(1,11,nbf,nbf), source=0.0_dp)
-      call umrsf_ref_fock(infos, basis, cac, cbc, hfrf, fa_rf, fb_rf)
-      cja = cac ; cjb = cbc
-      call get_jacobi(infos, cja, ead, cjb, ebd, smat_full, nocca, w1d, w2d, 0)
-      call get_jacobi(infos, cja, ead, cjb, ebd, smat_full, nocca, w1d, w2d, 1)
-      minov = 1.0_dp
-      do pp = 1, nbf
-        ovp = abs(dot_product(cja(:,pp), matmul(smat_full, va(:,pp))))
-        minov = min(minov, ovp)
-      end do
-      ! raw w2e
-      call iatogen(bvec(:,tstate), xmd, nocca, noccb)
-      call umrsfcbc(infos, cja, cjb, xmd, densd(1,:,:,:))
-      udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., scale_exchange=scale_exch, scale_coulomb=scale_exch)
-      call int2_driver%run(udd) ; f3d => udd%f3(:,:,:,:,1)
-      if (mrst == 3) f3d(:,1:10,:,:) = -f3d(:,1:10,:,:)
-      call umrsf_bra_density(infos, cja, cjb, xmd, bradd)
-      w2e_raw = 0.0_dp ; do kk = 1, 11 ; w2e_raw = w2e_raw + sum(bradd(kk,:,:)*f3d(1,kk,:,:)) ; end do
-      ! sign-fix cja/cjb to va/vb, recompute
-      do pp = 1, nbf
-        sgnp = dot_product(cja(:,pp), matmul(smat_full, va(:,pp))) ; if (sgnp < 0.0_dp) cja(:,pp) = -cja(:,pp)
-        sgnp = dot_product(cjb(:,pp), matmul(smat_full, vb(:,pp))) ; if (sgnp < 0.0_dp) cjb(:,pp) = -cjb(:,pp)
-      end do
-      densd = 0.0_dp
-      call umrsfcbc(infos, cja, cjb, xmd, densd(1,:,:,:))
-      udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., scale_exchange=scale_exch, scale_coulomb=scale_exch)
-      call int2_driver%run(udd) ; f3d => udd%f3(:,:,:,:,1)
-      if (mrst == 3) f3d(:,1:10,:,:) = -f3d(:,1:10,:,:)
-      call umrsf_bra_density(infos, cja, cjb, xmd, bradd)
-      w2e_sf = 0.0_dp ; do kk = 1, 11 ; w2e_sf = w2e_sf + sum(bradd(kk,:,:)*f3d(1,kk,:,:)) ; end do
-      open(unit=iw, file=infos%log_filename, position="append")
-      write(iw,'(/2x,a,f10.6,a,f16.10,a,f16.10,a,f16.10)') &
-        'get_jacobi(cac) vs va: min|col overlap|=', minov, '  w2e_raw=', w2e_raw, &
-        '  w2e_signfixed=', w2e_sf, '  (target omega_2e=', omega_2e_mv, ')'
-      close(iw)
-      deallocate(fa_rf, fb_rf, cja, cjb, ead, ebd, w1d, w2d, bradd, xmd, densd)
-    end block
-
-    ! ---- Z-vector relaxation (numerical-RHS end-to-end validation) ----
-    ! R = ∂ω/∂κ by FD over canonical orbital rotations; solve via cphf_solve_uhf; relaxation density
-    ! P_z folded into P^Δ (= P^Δ,u + z). Needs the live int2 driver for the ω re-evaluations.
-    ! UMRSF_RBRHS=1 ⇒ R uses REBUILT F^ref (c03; captures the refrelax term Tr(P^Δ,u ∂F^ref/∂κ) in R).
-    hfscale_ref = 1.0_dp
-    if (infos%control%hamilton >= 20) hfscale_ref = infos%dft%hfscale
-    block
-      character(len=16) :: renv
-      integer :: ios
-      call get_environment_variable("UMRSF_RBRHS", renv, status=ios)
-      irbrhs = 0 ; if (ios == 0) read(renv,*,iostat=ios) irbrhs ; if (ios /= 0) irbrhs = 0
-    end block
     allocate(pza(nbf,nbf), pzb(nbf,nbf), zmata(nbf,nbf), zmatb(nbf,nbf), source=0.0_dp)
-    call umrsf_zvector_relax(infos, int2_driver, basis, va, vb, cac, cbc, epsca, epscb, smat_full, &
-                             fock_a, fock_b, hfscale_ref, irbrhs, bvec(:,tstate), scale_exch, &
-                             pza, pzb, zmata, zmatb, zrms, zresid)
-    ! c03 rigorous recipe (CAS-verified in c04_uhf_W_factors.py): the 1e + mean-field gradient uses
-    ! P_eff = P^Δ,u + ½ P_z (relaxation at HALF weight); the OTHER ½ P_z is carried by the W z-coupling
-    ! (G^z). Keep pda/pdb = P^Δ,u (UNRELAXED) for the analytic W refrelax/2e; build P_eff separately.
-    ! W-mode switch UMRSF_WMODE. DEFAULT 1 = validated heuristic (relaxed-T frozen W, 3.293e-3) —
-    ! the best result to date; the rigorous c03 recipe (0) is CAS-verified but INCOMPLETE (the M1
-    ! get_jacobi within-segment response is missing — see LOG/PROGRESS), so it currently regresses
-    ! to ~1.78e-2. Modes 0,2-8 are the analysis switches used to localize M1 (kept for next session):
-    !   0 rigorous(½z, frozen+rr+2e, +M1probe) | 1 heuristic(1z, frozen only) DEFAULT 3.293e-3
-    !   2 ½z fr+rr | 3 ½z fr+2e | 4 ½z fr | 5 1z fr+rr+2e | 6 0z fr+rr+2e | 7 0z fr | 8 −½z fr+rr+2e
+    allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), source=0.0_dp)
+
+    ! DEBUG bisection toggles (default = c05 closed form): UMRSF_ZW (z weight in P_eff, 0.5),
+    ! UMRSF_WGZ (G^z in W, 1), UMRSF_W2E (2e in G̃-W, 1), UMRSF_WRR (refrelax in G̃-W, 1).
     block
-      character(len=16) :: wenv
-      integer :: ios
-      call get_environment_variable("UMRSF_WMODE", wenv, status=ios)
-      iwmode = 1 ; if (ios == 0) read(wenv,*,iostat=ios) iwmode ; if (ios /= 0) iwmode = 1
+      character(len=16) :: e ; integer :: ios
+      dbg_zw = 0.5_dp ; dbg_wgz = .true. ; dbg_w2e = .true. ; dbg_wrr = .true. ; dbg_wsz = .false.
+      call get_environment_variable("UMRSF_ZW", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
+      call get_environment_variable("UMRSF_WGZ", e, status=ios) ; if (ios==0) dbg_wgz = (trim(e)/="0")
+      call get_environment_variable("UMRSF_W2E", e, status=ios) ; if (ios==0) dbg_w2e = (trim(e)/="0")
+      call get_environment_variable("UMRSF_WRR", e, status=ios) ; if (ios==0) dbg_wrr = (trim(e)/="0")
+      call get_environment_variable("UMRSF_WSZ", e, status=ios) ; if (ios==0) dbg_wsz = (trim(e)=="1")
+      dbg_rnum = .false.   ! default: analytic V-transform R (fast, §15-mandated; == numerical to ~7e-3)
+      call get_environment_variable("UMRSF_RNUM", e, status=ios) ; if (ios==0) dbg_rnum = (trim(e)=="1")
     end block
-    zw = 0.5_dp ; lrr = .true. ; l2e = .true. ; lm1 = .true. ; lwsz = .false.
-    select case (iwmode)
-    case (1) ; zw = 1.0_dp ; lrr = .false. ; l2e = .false. ; lm1 = .false.
-    case (2) ; l2e = .false.
-    case (3) ; lrr = .false.
-    case (4) ; lrr = .false. ; l2e = .false.
-    case (5) ; zw = 1.0_dp
-    case (6) ; zw = 0.0_dp                                   ! rigorous, NO relaxation (test z sign/size)
-    case (7) ; zw = 0.0_dp ; lrr = .false. ; l2e = .false.  ! frozen-only, no z (P^Δ,u)
-    case (8) ; zw = -0.5_dp                                  ! rigorous, NEGATIVE ½z (test z sign)
-    case (10) ; lwsz = .true.                                ! rigorous + ZERO 2e within-segment (M1 span-invariance test)
-    case (11) ; zw = 0.0_dp ; lwsz = .true.                 ! zw=0 rigorous + zero 2e within-seg
-    end select
-    allocate(peffa(nbf,nbf), peffb(nbf,nbf))
-    peffa = pda + zw*pza
-    peffb = pdb + zw*pzb
-    open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '========= UMRSF Z-vector (numerical RHS + cphf_solve_uhf) ========='
-    write(iw,'(2x,a,es12.3)') 'z RMS = ', zrms
-    write(iw,'(2x,a,i0,a,f4.2,4(a,l1))') 'WMODE=', iwmode, ' zw=', zw, ' rr=',lrr,' 2e=',l2e,' m1=',lm1
-    write(iw,'(2x,a)') '==================================================================='
-    close(iw)
 
-    ! W (energy-weighted density, overlap Pulay): RIGOROUS analytic c03 recipe (CAS-verified, c04),
-    !   W = ½ Σ_σ C_σ (G^ω + G^z)_σ,sym C_σ^T,  F^ref REBUILT — NO FD-of-L / NO get_jacobi re-apply.
-    ! Built from closed-form pieces: frozen ½(F^MO T_eff + T_eff F^MO) + ref-relaxation 2 C^T G[P_eff] C
-    ! |occ-cols (both with P_eff = P^Δ,u+½P_z, in the canonical basis) + the 2e channel generalized Fock
-    ! (va basis). NB needs the live (Schwarz-off) int2 driver for the 2e part — compute BEFORE clean.
-    allocate(de_w(3,natom), de_m1(3,natom), source=0.0_dp)
-    call umrsf_w_analytic(infos, int2_driver, basis, fock_a, fock_b, va, vb, smat_full, &
-                          peffa, peffb, lrr, l2e, lwsz, bvec(:,tstate), scale_exch, hfscale_ref, de_w)
+    ! ================= c05 closed form: G̃ → M1 V-transform → R → z → W =================
+    block
+      real(kind=dp), allocatable :: famoa(:,:), famob(:,:), ya(:,:), yb(:,:), tmp(:,:)
+      real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:)
+      real(kind=dp), allocatable :: rablk(:,:), rbblk(:,:), gza(:,:), gzb(:,:), wao(:,:), wpack(:)
+      real(kind=dp) :: zrms, tolw
+      integer :: pp, qq, ij, ii, nva, nvb
+      nva = nbf - nocca ; nvb = nbf - noccb ; tolw = tol_int*log(10.0_dp)
+      allocate(famoa(nbf,nbf), famob(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), &
+               gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), &
+               gza(nbf,nbf), gzb(nbf,nbf), wao(nbf,nbf), &
+               rablk(nocca,nva), rbblk(noccb,nvb), wpack(nbf2), source=0.0_dp)
 
-    ! M1 (two-reference): the get_jacobi alignment's explicit overlap (dS/dx) Pulay response — the
-    ! ANALYTIC closed form is intractable (normalized Jacobi sweep + 1e-3 threshold), so compute it
-    ! EXACTLY via the same get_jacobi re-aligned to S(x±θ) with orbitals/ERIs at base (smooth). Needs
-    ! the live int2 driver for ω. (Geometry is perturbed+restored internally.)
-    if (lm1) call umrsf_m1_overlap_grad(infos, int2_driver, basis, cac, cbc, va, vb, fock_a, fock_b, &
-                               smat_full, bvec(:,tstate), scale_exch, de_m1)
+      ! ---- G̃_σ (raw aligned-basis generalized Fock = c04 factors) ----
+      ! F̃_σ = C̃_σᵀ F^ref_σ C̃_σ (stored fock = F^ref) ; refrelax mean field Y_σ = J[P^Δu]−hfscale·K[P^Δu_σ]
+      call orthogonal_transform_sym(nbf, nbf, fock_a, va, nbf, scr) ; call unpack_matrix(scr, famoa)
+      call orthogonal_transform_sym(nbf, nbf, fock_b, vb, nbf, scr) ; call unpack_matrix(scr, famob)
+      call umrsf_meanfield(basis, infos, pda, pdb, hfscale_ref, ya, yb)
+      ! alpha: frozen 2 F̃ T_u + refrelax 2(C̃ᵀ Y C̃)|occ-cols + 2e one-sided.
+      ! dbg_wsz zeros the 2e WITHIN-SEGMENT block (α SEG0={1..nocca-1}², β SEG1={nocca..nbf}²) — the
+      ! get_jacobi span-invariance gauge (PROGRESS WMODE=10).
+      gta = 2.0_dp*matmul(famoa, talpha)
+      if (dbg_w2e) then ; call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2e)
+        if (dbg_wsz) g2e(1:nocca-1,1:nocca-1) = 0.0_dp
+        gta = gta + g2e ; end if
+      if (dbg_wrr) then ; tmp = matmul(transpose(va), matmul(ya, va))
+        gta(:,1:nocca) = gta(:,1:nocca) + 2.0_dp*tmp(:,1:nocca) ; end if
+      ! beta
+      gtb = 2.0_dp*matmul(famob, tbeta)
+      if (dbg_w2e) then ; call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2e)
+        if (dbg_wsz) g2e(nocca:nbf,nocca:nbf) = 0.0_dp
+        gtb = gtb + g2e ; end if
+      if (dbg_wrr) then ; tmp = matmul(transpose(vb), matmul(yb, vb))
+        gtb(:,1:noccb) = gtb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb) ; end if
+
+      ! ---- M1 (full two-reference): R^σ = ∂ω/∂κ via SMOOTH re-alignment + REBUILT F^ref ----
+      ! This is the c05 f_through_align gen-Fock (ov antisym) computed EXACTLY: perturb the canonical
+      ! orbitals by an occ-virt rotation κ, re-align with the SMOOTH get_jacobi (full M1, incl. the
+      ! alignment Jacobian dV/dκ that the V-transform shortcut drops — it is NOT negligible here because
+      ! the within-seg antisym G̃ ≈ 3e-3 ≠ 0 and the alignment is sensitive), rebuild F^ref (refrelax),
+      ! sign-fix to va/vb, evaluate ω with xamp fixed (Hellmann-Feynman). Orthonormal throughout ⇒
+      ! umrsf_omega_eval_rb (umrsfmntoia back-transform) is exact. The V-transform V G̃ Vᵀ matches this
+      ! to ~7e-3 (the dropped dV/dκ); the converged-alignment numerical R is the clean (uncontaminated) one.
+      if (dbg_rnum) then
+      block
+        real(kind=dp), allocatable :: cwa(:,:), cwb(:,:)
+        real(kind=dp) :: th2, omp2, omm2, dum, ct2, st2
+        integer :: io, iv, am, isp, nocc, nvir, base
+        th2 = 1.0d-4 ; ct2 = cos(th2) ; st2 = sin(th2)
+        allocate(cwa(nbf,nbf), cwb(nbf,nbf), source=0.0_dp)
+        do isp = 1, 2
+          if (isp == 1) then ; nocc = nocca ; nvir = nva
+          else               ; nocc = noccb ; nvir = nvb ; end if
+          do iv = 1, nvir ; am = nocc+iv ; do io = 1, nocc
+            cwa = cac ; cwb = cbc
+            if (isp == 1) then
+              cwa(:,io) = ct2*cac(:,io) - st2*cac(:,am) ; cwa(:,am) = st2*cac(:,io) + ct2*cac(:,am)
+            else
+              cwb(:,io) = ct2*cbc(:,io) - st2*cbc(:,am) ; cwb(:,am) = st2*cbc(:,io) + ct2*cbc(:,am)
+            end if
+            call umrsf_jacobi_smooth(cwa, cwb, smat_full, nocca, dum)
+            call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
+            call umrsf_omega_eval_rb(infos, int2_driver, basis, cwa, cwb, hfscale_ref, xamp, scale_exch, omp2)
+            cwa = cac ; cwb = cbc
+            if (isp == 1) then
+              cwa(:,io) = ct2*cac(:,io) + st2*cac(:,am) ; cwa(:,am) = -st2*cac(:,io) + ct2*cac(:,am)
+            else
+              cwb(:,io) = ct2*cbc(:,io) + st2*cbc(:,am) ; cwb(:,am) = -st2*cbc(:,io) + ct2*cbc(:,am)
+            end if
+            call umrsf_jacobi_smooth(cwa, cwb, smat_full, nocca, dum)
+            call m1_sign_fix(cwa, cwb, va, vb, smat_full, nbf)
+            call umrsf_omega_eval_rb(infos, int2_driver, basis, cwa, cwb, hfscale_ref, xamp, scale_exch, omm2)
+            if (isp == 1) then ; rablk(io,iv) = (omp2-omm2)/(2.0_dp*th2)
+            else               ; rbblk(io,iv) = (omp2-omm2)/(2.0_dp*th2) ; end if
+          end do ; end do
+        end do
+        deallocate(cwa, cwb)
+      end block
+      else
+        ! ANALYTIC M1 V-transform (user-mandated): G^f_σ = V_σ G̃_σ V_σᵀ, V_σ = C_can,σᵀ S C̃_σ.
+        ! R^σ = (G^f_σ)_ov antisym. Drops the dV/dκ alignment-Jacobian (exact iff within-seg antisym G̃=0).
+        block
+          real(kind=dp), allocatable :: va_(:,:), vb_(:,:), gfa(:,:), gfb(:,:)
+          integer :: pp2, qq2, am2
+          allocate(va_(nbf,nbf), vb_(nbf,nbf), gfa(nbf,nbf), gfb(nbf,nbf))
+          va_ = matmul(transpose(cac), matmul(smat_full, va))
+          vb_ = matmul(transpose(cbc), matmul(smat_full, vb))
+          gfa = matmul(va_, matmul(gta, transpose(va_)))
+          gfb = matmul(vb_, matmul(gtb, transpose(vb_)))
+          do qq2 = 1, nva ; am2 = nocca+qq2 ; do pp2 = 1, nocca
+            rablk(pp2,qq2) = gfa(pp2,am2) - gfa(am2,pp2)
+          end do ; end do
+          do qq2 = 1, nvb ; am2 = noccb+qq2 ; do pp2 = 1, noccb
+            rbblk(pp2,qq2) = gfb(pp2,am2) - gfb(am2,pp2)
+          end do ; end do
+          deallocate(va_, vb_, gfa, gfb)
+        end block
+      end if
+
+      ! ---- Z-vector: M z = −R via cphf_solve_uhf (canonical MOs) ----
+      call umrsf_zvector_analytic(infos, cac, cbc, epsca, epscb, rablk, rbblk, &
+                                  pza, pzb, zmata, zmatb, zrms)
+
+      ! ---- G^z_σ (z-coupling gen-Fock, canonical): frozen F^MO_can z (=ε_p z_pq) + refrelax 2(Cᵀ G[½Pz] C)|occ ----
+      call umrsf_meanfield(basis, infos, 0.5_dp*pza, 0.5_dp*pzb, hfscale_ref, ya, yb)
+      do qq = 1, nbf ; do pp = 1, nbf
+        gza(pp,qq) = epsca(pp)*zmata(pp,qq)
+        gzb(pp,qq) = epscb(pp)*zmatb(pp,qq)
+      end do ; end do
+      tmp = matmul(transpose(cac), matmul(ya, cac))
+      gza(:,1:nocca) = gza(:,1:nocca) + 2.0_dp*tmp(:,1:nocca)
+      tmp = matmul(transpose(cbc), matmul(yb, cbc))
+      gzb(:,1:noccb) = gzb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb)
+
+      ! ---- W_ao = Σ_σ C̃_σ ¼(G̃+G̃ᵀ) C̃_σᵀ + Σ_σ C_σ ¼(G^z+G^zᵀ) C_σᵀ  ;  de_w = −Tr(W S^x) ----
+      wao = matmul(va,  matmul(0.25_dp*(gta+transpose(gta)), transpose(va)))  &
+          + matmul(vb,  matmul(0.25_dp*(gtb+transpose(gtb)), transpose(vb)))
+      if (dbg_wgz) wao = wao &
+          + matmul(cac, matmul(0.25_dp*(gza+transpose(gza)), transpose(cac))) &
+          + matmul(cbc, matmul(0.25_dp*(gzb+transpose(gzb)), transpose(cbc)))
+      call pack_matrix(-wao, wpack, 'U')
+      ij = 0 ; do ii = 1, nbf ; ij = ij + ii ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
+      call grad_ee_overlap(basis, wpack, de_w, logtol=tolw)
+
+      write(iw,'(2x,a,es12.3)') 'z RMS (analytic R = (V G̃ Vᵀ)_ov, cphf M z=−R)  = ', zrms
+      ! within-SEGMENT antisym of G̃ must vanish (c05: span-invariance ⇒ the V-transform is exact).
+      ! SEG0(α)={1..nocca-1}, SEG1(β)={nocca..nbf}.
+      block
+        real(kind=dp) :: wa, wb, ra_n, rb_n
+        integer :: si, sj
+        wa = 0.0_dp ; wb = 0.0_dp
+        do sj = 1, nocca-1 ; do si = 1, nocca-1
+          wa = max(wa, abs(0.5_dp*(gta(si,sj)-gta(sj,si))))
+        end do ; end do
+        do sj = nocca, nbf ; do si = nocca, nbf
+          wb = max(wb, abs(0.5_dp*(gtb(si,sj)-gtb(sj,si))))
+        end do ; end do
+        ra_n = sqrt(sum(rablk**2)) ; rb_n = sqrt(sum(rbblk**2))
+        write(iw,'(2x,a,2es12.3)') 'within-seg antisym G̃ α/β (c05 ⇒ ~0)            = ', wa, wb
+        write(iw,'(2x,a,2es12.3)') '||R_α|| ||R_β|| (Z-vector RHS) ; ||W_ao||        = ', ra_n, rb_n
+      end block
+      write(iw,'(2x,a,es12.3)') '||W_ao||                                        = ', sqrt(sum(wao**2))
+      deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, gza, gzb, wao, &
+                 rablk, rbblk, wpack)
+    end block
 
     call int2_driver%clean()
 
-    ! orbital-part gradient: 1e Tr(P_eff h^x) + 2e mean-field Tr(P_eff G[P^ref])  (P_eff = P^Δ,u + ½P_z)
-    allocate(de_orb(3,natom), source=0.0_dp)
+    ! de_orb = umrsf_orbital_grad(P_eff = P^Δ,u + ½ P_z) = de_explicit_orbital + de_zexplicit
+    ! (the ½ on P_z is the c03/c04 split; the OTHER ½ lives in the W z-coupling G^z).
+    peffa = pda + dbg_zw*pza
+    peffb = pdb + dbg_zw*pzb
     call umrsf_orbital_grad(infos, basis, peffa, peffb, dmat_a, dmat_b, hfscale_ref, de_orb)
 
-    open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '====== UMRSF response gradient pieces (de2e / de_orb / de_w / de_m1) ======'
-    write(iw,'(2x,a)') '   atom  comp        de_2e               de_orb               de_w                de_m1'
-    do iat = 1, natom
-      do icmp = 1, 3
-        write(iw,'(2x,2i5,4es21.11)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat), de_w(icmp,iat), de_m1(icmp,iat)
-      end do
-    end do
-    write(iw,'(2x,a)') '=========================================================================='
+    write(iw,'(2x,a)') '   atom  comp        de_2e               de_orb               de_w'
+    do iat = 1, natom ; do icmp = 1, 3
+      write(iw,'(2x,2i5,3es21.11)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat), de_w(icmp,iat)
+    end do ; end do
+    write(iw,'(2x,a)') '================================================================================='
     close(iw)
 
-    ! full response = transition-2e + orbital(1e+meanfield, P_eff) + rigorous analytic W + M1 alignment
-    de2e_out = de2e + de_orb + de_w + de_m1
+    ! full response = transition-2e (Pulay) + orbital(1e+mean-field, P_eff) + analytic W (NO de_m1; B2≈0)
+    de2e_out = de2e + de_orb + de_w
 
-    deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, dens, brad)
+    deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, xamp, dens, brad)
     deallocate(de2e, de2e_fd, densym)
-    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w, de_m1)
+    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w)
     deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
   end subroutine umrsf_grad_run_gates
+
+!###############################################################################
+!> SMOOTH (converged) corresponding-orbital alignment — clean-room port of the c05 MODEL
+!> (DERIVATIONS/c05_uhf_full_gradient.py:get_jacobi_align), faithful to the energy's get_jacobi
+!> 2×2 angle law + segments (tdhf_mrsf_lib.F90, READ-OK) but run to CONVERGENCE: NO 1e-3 threshold,
+!> NO min-|θ| early exit — cyclic sweeps until max|btt| < tol. RULES §15: the threshold get_jacobi is
+!> non-smooth and was THE contamination of the earlier numerical-RHS Z-vector; the analytic gradient
+!> path needs the converged alignment so the within-segment generalized-Fock blocks vanish (then the
+!> M1 V-transform G^f = V G̃ Vᵀ is exact). seg0 rotates ALPHA columns {1..nocca-1} (closed+O1); seg1
+!> rotates BETA columns {nocca..nbf} (O2+virt). s_mo = vaᵀ S vb (columns normalized once). 2×2 law per
+!> pair (i,j): aa=s(i,i) bb=s(j,j) cc=s(i,j) dd=s(j,i); att=½(aa²+bb²−cc²−dd²); seg0 btt=aa·dd−bb·cc,
+!> seg1 btt=aa·cc−bb·dd; θ=½ atan2(btt,att). seg0 rotates va cols(i,j) + s_mo ROWS(i,j); seg1 rotates
+!> vb cols(i,j) + s_mo COLS(i,j). Sign-fix (flip β column so s_mo(i,i)≥0). Start from the threshold-
+!> aligned va,vb (already in the right basin + sign convention) ⇒ polishing preserves ω (span-invariance)
+!> and reaches the EXACT fixed point. Returns the post-convergence max within-seg |btt| in offmax.
+  subroutine umrsf_jacobi_smooth(va, vb, smat_full, nocca, offmax)
+    implicit none
+    real(kind=dp), intent(inout) :: va(:,:), vb(:,:)
+    real(kind=dp), intent(in) :: smat_full(:,:)
+    integer, intent(in) :: nocca
+    real(kind=dp), intent(out) :: offmax
+    real(kind=dp), allocatable :: s_mo(:,:), ri(:), rj(:)
+    integer :: nbf, i, j, p, sweep, slo, shi, seg
+    integer, parameter :: maxsweep = 500
+    real(kind=dp), parameter :: tol = 1.0e-12_dp
+    real(kind=dp) :: aa, bb, cc, dd, att, btt, th, ct, st, off, nrm
+
+    nbf = size(va,1)
+    allocate(s_mo(nbf,nbf), ri(nbf), rj(nbf))
+    ! s_mo = vaᵀ S vb ; normalize columns once (faithful to get_jacobi)
+    s_mo = matmul(transpose(va), matmul(smat_full, vb))
+    do i = 1, nbf
+      nrm = max(norm2(s_mo(:,i)), 1.0e-10_dp)
+      s_mo(:,i) = s_mo(:,i)/nrm
+    end do
+
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1
+      else               ; slo = nocca ; shi = nbf ; end if
+      do sweep = 1, maxsweep
+        off = 0.0_dp
+        do i = slo, shi-1
+          do j = i+1, shi
+            aa = s_mo(i,i) ; bb = s_mo(j,j) ; cc = s_mo(i,j) ; dd = s_mo(j,i)
+            att = 0.5_dp*(aa*aa + bb*bb - cc*cc - dd*dd)
+            if (seg == 0) then ; btt = aa*dd - bb*cc
+            else               ; btt = aa*cc - bb*dd ; end if
+            off = max(off, abs(btt))
+            th = 0.5_dp*atan2(btt, att)
+            ct = cos(th) ; st = sin(th)
+            if (seg == 0) then
+              ri = va(:,i) ; rj = va(:,j)            ! rotate va columns (i,j)
+              va(:,i) = ct*ri + st*rj ; va(:,j) = -st*ri + ct*rj
+              ri = s_mo(i,:) ; rj = s_mo(j,:)        ! rotate s_mo ROWS (i,j)
+              s_mo(i,:) = ct*ri + st*rj ; s_mo(j,:) = -st*ri + ct*rj
+            else
+              ri = vb(:,i) ; rj = vb(:,j)            ! rotate vb columns (i,j)
+              vb(:,i) = ct*ri + st*rj ; vb(:,j) = -st*ri + ct*rj
+              ri = s_mo(:,i) ; rj = s_mo(:,j)        ! rotate s_mo COLUMNS (i,j)
+              s_mo(:,i) = ct*ri + st*rj ; s_mo(:,j) = -st*ri + ct*rj
+            end if
+          end do
+        end do
+        if (off < tol) exit
+      end do
+    end do
+
+    ! sign fix: flip β column p so s_mo(p,p) ≥ 0 (faithful to check_sign / c05)
+    do p = 1, nbf
+      if (s_mo(p,p) < 0.0_dp) then
+        vb(:,p) = -vb(:,p)
+        s_mo(:,p) = -s_mo(:,p)
+      end if
+    end do
+
+    ! authoritative post-convergence residual: max within-segment |s_mo off-diagonal|
+    offmax = 0.0_dp
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1
+      else               ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi
+        do j = slo, shi
+          if (i /= j) offmax = max(offmax, abs(s_mo(i,j)))
+        end do
+      end do
+    end do
+    deallocate(s_mo, ri, rj)
+  end subroutine umrsf_jacobi_smooth
 
 !###############################################################################
 !> ω_2e = Σ_k s_k ⟨B_k, int2_k(D_k)⟩ at the CURRENT geometry with FIXED AO densities
@@ -1022,6 +1129,66 @@ contains
   end subroutine umrsf_omega2e_explicit
 
 !###############################################################################
+!> Reference UHF mean field of an arbitrary AO density (P_a,P_b full): Y_σ = J[P_a+P_b] − hfscale·K[P_σ]
+!> (one fock_jk build, screening tol from infos). Used for the refrelaxation generalized-Fock blocks
+!> (G̃ uses P^Δ,u; G^z uses ½P_z). fock_jk's own screened driver is fine for the density-cross terms.
+  subroutine umrsf_meanfield(basis, infos, pa_full, pb_full, hfscale, ya_full, yb_full)
+    use scf_addons, only: fock_jk
+    use mathlib, only: pack_matrix, unpack_matrix
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: pa_full(:,:), pb_full(:,:), hfscale
+    real(kind=dp), intent(out) :: ya_full(:,:), yb_full(:,:)
+    real(kind=dp), allocatable :: dens(:,:), fout(:,:)
+    integer :: nbf, nbf2
+    nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2
+    allocate(dens(nbf2,2), fout(nbf2,2), source=0.0_dp)
+    call pack_matrix(pa_full, dens(:,1), 'U') ; call pack_matrix(pb_full, dens(:,2), 'U')
+    call fock_jk(basis, dens, fout, infos, scale_exch=hfscale, scale_coul=1.0_dp)
+    call unpack_matrix(fout(:,1), ya_full) ; call unpack_matrix(fout(:,2), yb_full)
+    deallocate(dens, fout)
+  end subroutine umrsf_meanfield
+
+!###############################################################################
+!> Full ONE-SIDED 2e generalized Fock  G2e_pq = ∂ω_2e/∂U^ispin_pq  in the aligned basis va,vb,
+!> via central FD of the EXACT explicit-bra ω_2e (umrsf_omega2e_explicit; the clean bilinear in C —
+!> valid under non-orthonormal column variation, unlike the umrsfmntoia back-transform). Column
+!> variation dC^ispin_q += th·C^ispin_p (one-sided, NOT symmetric ⇒ the full non-sym gen-Fock that R
+!> needs; W later takes ½sym). This realizes the c04/c05 "2e channel-adjoint" factor to FD precision
+!> (c05 verified analytic == this FD oracle to ~5e-11). th = 1e-5 (FD truncation ~1e-10; int2 clean,
+!> Schwarz off). Cost = 2·nbf² int2 builds/spin — paid once per gradient.
+  subroutine umrsf_g2e_onesided(infos, idrv, va, vb, xamp, scale_exch, ispin, g2e)
+    use int2_compute, only: int2_compute_t
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: va(:,:), vb(:,:), xamp(:), scale_exch
+    integer, intent(in) :: ispin
+    real(kind=dp), intent(out) :: g2e(:,:)
+    real(kind=dp), allocatable :: cwa(:,:), cwb(:,:)
+    integer :: nbf, p, q
+    real(kind=dp) :: th, omp, omm
+    nbf = size(va,1) ; th = 1.0d-5
+    allocate(cwa(nbf,nbf), cwb(nbf,nbf))
+    g2e = 0.0_dp
+    do q = 1, nbf
+      do p = 1, nbf
+        cwa = va ; cwb = vb
+        if (ispin == 1) then ; cwa(:,q) = va(:,q) + th*va(:,p)
+        else                 ; cwb(:,q) = vb(:,q) + th*vb(:,p) ; end if
+        call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xamp, scale_exch, omp)
+        cwa = va ; cwb = vb
+        if (ispin == 1) then ; cwa(:,q) = va(:,q) - th*va(:,p)
+        else                 ; cwb(:,q) = vb(:,q) - th*vb(:,p) ; end if
+        call umrsf_omega2e_explicit(infos, idrv, cwa, cwb, xamp, scale_exch, omm)
+        g2e(p,q) = (omp - omm)/(2.0_dp*th)
+      end do
+    end do
+    deallocate(cwa, cwb)
+  end subroutine umrsf_g2e_onesided
+
+!###############################################################################
 !> Rebuild the UHF reference Fock F^ref_σ = h + J[Dα+Dβ] − scale_exch·K[Dσ] (AO, full) from the
 !> OCCUPIED orbitals of cw_a/cw_b. This is the reference-density-relaxation primitive the rigorous
 !> generalized Fock needs (c03_cis_gradient_W.py): ω_orb = Tr(P^Δ F^ref(C)) with F^ref REBUILT from the
@@ -1331,6 +1498,107 @@ contains
   end subroutine umrsf_w_2e_numerical
 
 !###############################################################################
+!> Spin-flip TDA response matvec  ax = A·xin  in the (aligned) basis vva,vvb, with the MO-basis
+!> reference Fock famo/fbmo ALREADY built (= vᵀ fock v with the frozen-core shift, identical to the
+!> energy path).  ax = 2e [umrsfcbc → int2_umrsf (J/K, mrst sign, SPC) → umrsfmntoia] + orbital
+!> [mrsfesum]. Reused to (i) build the full A column-by-column for the smooth-basis re-diagonalization
+!> and (ii) reconstruct ω = xᵀ A x. Mirrors the inline energy-path matvec exactly (clean-room).
+  subroutine umrsf_response_Ax(infos, idrv, vva, vvb, famo, fbmo, xin, scale_exch, &
+                               hfs, spc_coco, spc_ovov, spc_coov, ax)
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_umrsf_data_t, umrsfcbc, umrsfmntoia, mrsfesum
+    use tdhf_lib, only: iatogen
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: vva(:,:), vvb(:,:), famo(:,:), fbmo(:,:), xin(:)
+    real(kind=dp), intent(in) :: scale_exch, hfs, spc_coco, spc_ovov, spc_coov
+    real(kind=dp), intent(out) :: ax(:)
+    real(kind=dp), allocatable :: xmat(:,:), amo(:,:)
+    real(kind=dp), allocatable, target :: dens(:,:,:,:)
+    real(kind=dp), pointer :: f3(:,:,:,:)
+    type(int2_umrsf_data_t), target :: ud
+    integer :: nbf, nocca, noccb, nvirb, xvec_dim, mrst
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb ; xvec_dim = nocca*nvirb ; mrst = infos%tddft%mult
+    allocate(xmat(nbf,nbf), amo(xvec_dim,1), dens(1,11,nbf,nbf), source=0.0_dp)
+
+    call iatogen(xin, xmat, nocca, noccb)
+    call umrsfcbc(infos, vva, vvb, xmat, dens(1,:,:,:))
+    ud = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
+                           scale_exchange=scale_exch, scale_coulomb=scale_exch)
+    call idrv%run(ud)
+    f3 => ud%f3(:,:,:,:,1)
+    if (mrst == 3) f3(:,1:10,:,:) = -f3(:,1:10,:,:)
+    if (abs(hfs) > epsilon(1.0_dp)) then
+      if (spc_coco /= hfs) f3(:,10,:,:) = f3(:,10,:,:) * (spc_coco/hfs)
+      if (spc_ovov /= hfs) f3(:,9,:,:)  = f3(:,9,:,:)  * (spc_ovov/hfs)
+      if (spc_coov /= hfs) f3(:,1:8,:,:) = f3(:,1:8,:,:) * (spc_coov/hfs)
+    end if
+    amo = 0.0_dp
+    call umrsfmntoia(infos, f3(1,:,:,:), amo, vva, vvb, 1)
+    call iatogen(xin, xmat, nocca, noccb)
+    call mrsfesum(infos, xmat, famo, fbmo, amo, 1)
+    ax = amo(:,1)
+    deallocate(xmat, amo, dens)
+  end subroutine umrsf_response_Ax
+
+!###############################################################################
+!> Re-diagonalize the spin-flip TDA response matrix A in the SMOOTH-aligned basis and overlap-track
+!> to the stored amplitude bvec_ref → the genuine eigenvector xamp (+ eigenvalue omega_eig).
+!> RULES §15 / c05: the ov-only Z-vector + W machinery is exact ONLY when X is a TRUE eigenvector of
+!> A in the alignment basis. The stored bvec is the eigenvector in the ENERGY's THRESHOLD basis and is
+!> non-stationary in the converged-smooth basis (Rayleigh quotient ~1.5e-6 above the eigenvalue),
+!> which would corrupt R. Building A column-by-column via the energy matvec (nia int2 builds, cheap)
+!> and diagonalizing recovers the stationary X. State-following by max |eigenvector·bvec_ref| overlap
+!> (RULES §11), sign-fixed to bvec_ref.
+  subroutine umrsf_track_amplitude(infos, idrv, va, vb, famo, fbmo, bvec_ref, scale_exch, &
+                                   hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+    use eigen, only: diag_symm_full
+    use int2_compute, only: int2_compute_t
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: va(:,:), vb(:,:), famo(:,:), fbmo(:,:), bvec_ref(:)
+    real(kind=dp), intent(in) :: scale_exch, hfs, spc_coco, spc_ovov, spc_coov
+    real(kind=dp), intent(out) :: xamp(:), omega_eig
+    real(kind=dp), allocatable :: amat(:,:), ek(:), axk(:), ev(:)
+    integer :: nbf, nocca, noccb, nvirb, nia, k, ktrack, ierr
+    real(kind=dp) :: ov, ovmax, sgn
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb ; nia = nocca*nvirb
+    allocate(amat(nia,nia), ek(nia), axk(nia), ev(nia), source=0.0_dp)
+
+    do k = 1, nia
+      ek = 0.0_dp ; ek(k) = 1.0_dp
+      call umrsf_response_Ax(infos, idrv, va, vb, famo, fbmo, ek, scale_exch, &
+                             hfs, spc_coco, spc_ovov, spc_coov, axk)
+      amat(:,k) = axk
+    end do
+    block ; use io_constants, only: iw
+      write(iw,'(2x,a,es12.3)') 'response A asymmetry ||A−Aᵀ|| (SOMO-overwrite probe) = ', &
+        maxval(abs(amat - transpose(amat)))
+    end block
+    amat = 0.5_dp*(amat + transpose(amat))     ! symmetrize (TDA A is symmetric; kills matvec noise)
+    call diag_symm_full(1, nia, amat, nia, ev, ierr)   ! columns of amat → eigenvectors
+
+    ! state-following: pick the eigenvector with max |overlap| to the stored bvec_ref; sign-fix to it
+    ovmax = -1.0_dp ; ktrack = 1
+    do k = 1, nia
+      ov = abs(dot_product(amat(:,k), bvec_ref))
+      if (ov > ovmax) then ; ovmax = ov ; ktrack = k ; end if
+    end do
+    sgn = sign(1.0_dp, dot_product(amat(:,ktrack), bvec_ref))
+    xamp = sgn*amat(:,ktrack)
+    omega_eig = ev(ktrack)
+    deallocate(amat, ek, axk, ev)
+  end subroutine umrsf_track_amplitude
+
+!###############################################################################
 !> ω = X^T A X for a given (already get_jacobi-aligned) set of orbitals vva,vvb and amplitude xv.
 !> Replicates the validated response matvec (umrsfcbc->int2->umrsfmntoia[2e] + mrsfesum[orbital]).
 !> Used to build the Z-vector RHS R = ∂ω/∂κ by FD over canonical orbital rotations.
@@ -1567,6 +1835,70 @@ contains
   end subroutine umrsf_bra_density
 
 !###############################################################################
+!> Z-vector via the ANALYTIC RHS (§15 / c05): R^σ = (G^f_σ)_ov antisym in the CANONICAL SCF basis,
+!> with G^f_σ = V_σ G̃_σ V_σᵀ (the M1 V-transform of the aligned-basis raw generalized Fock G̃).
+!> Solve M z = −R via the validated UHF spin-coupled CPHF Hessian (cphf_solve_uhf), feeding the
+!> CANONICAL MOs/energies through tagarray transiently (cphf reads them from there). Ra,Rb are the
+!> ov blocks (Ra(iocc,ivir) = G^f_{ia} − G^f_{ai}; the ∂ω/∂κ convention = the old numerical RHS, so
+!> the cphf call passes −R exactly as the validated numerical path did). Returns AO relaxation
+!> densities pza,pzb (symmetric) + the MO relaxation matrices zmata,zmatb (canonical, ov+vo).
+  subroutine umrsf_zvector_analytic(infos, cac, cbc, epsca, epscb, ra, rb, pza, pzb, zmata, zmatb, zrms)
+    use oqp_tagarray_driver
+    use cphf_mod, only: cphf_solve_uhf
+    implicit none
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), epsca(:), epscb(:)
+    real(kind=dp), intent(in) :: ra(:,:), rb(:,:)      ! ov blocks (nocca,nvira) / (noccb,nvirb)
+    real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms
+    real(kind=dp), contiguous, pointer :: moa(:,:), mob(:,:), ea(:), eb(:)
+    real(kind=dp), allocatable :: rhs(:,:), zsol(:,:), moa_s(:,:), mob_s(:,:), ea_s(:), eb_s(:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, la, lb, ltot, ivir, iocc, iov, amo
+    integer(4) :: status
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    nvira = nbf - nocca ; nvirb = nbf - noccb
+    la = nocca*nvira ; lb = noccb*nvirb ; ltot = la + lb
+    allocate(rhs(ltot,1), zsol(ltot,1), source=0.0_dp)
+
+    ! pack R into the cphf occ-major layout  iov = base + (ivir-1)*nocc + iocc
+    do ivir = 1, nvira ; do iocc = 1, nocca
+      rhs((ivir-1)*nocca + iocc, 1) = ra(iocc, ivir)
+    end do ; end do
+    do ivir = 1, nvirb ; do iocc = 1, noccb
+      rhs(la + (ivir-1)*noccb + iocc, 1) = rb(iocc, ivir)
+    end do ; end do
+
+    ! solve M z = −R with the canonical MOs transiently in tagarray (cphf reads them there)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, moa, status)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mob, status)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, ea, status)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, eb, status)
+    allocate(moa_s, source=moa) ; allocate(mob_s, source=mob)
+    allocate(ea_s, source=ea)   ; allocate(eb_s, source=eb)
+    moa = cac ; mob = cbc ; ea = epsca ; eb = epscb
+    call cphf_solve_uhf(infos, 1, -rhs, zsol, tol=1.0d-10)
+    moa = moa_s ; mob = mob_s ; ea = ea_s ; eb = eb_s
+    zrms = sqrt(sum(zsol(:,1)**2)/max(ltot,1))
+
+    ! AO relaxation densities P_z^σ = Σ_ia z^σ_ia (C_i C_a^T + C_a C_i^T) + MO zmat (ov+vo)
+    pza = 0.0_dp ; pzb = 0.0_dp ; zmata = 0.0_dp ; zmatb = 0.0_dp
+    do ivir = 1, nvira ; amo = nocca + ivir ; do iocc = 1, nocca
+      iov = (ivir-1)*nocca + iocc
+      call add_outer(pza, zsol(iov,1), cac(:,iocc), cac(:,amo))
+      call add_outer(pza, zsol(iov,1), cac(:,amo), cac(:,iocc))
+      zmata(iocc,amo) = zsol(iov,1) ; zmata(amo,iocc) = zsol(iov,1)
+    end do ; end do
+    do ivir = 1, nvirb ; amo = noccb + ivir ; do iocc = 1, noccb
+      iov = la + (ivir-1)*noccb + iocc
+      call add_outer(pzb, zsol(iov,1), cbc(:,iocc), cbc(:,amo))
+      call add_outer(pzb, zsol(iov,1), cbc(:,amo), cbc(:,iocc))
+      zmatb(iocc,amo) = zsol(iov,1) ; zmatb(amo,iocc) = zsol(iov,1)
+    end do ; end do
+    deallocate(rhs, zsol, moa_s, mob_s, ea_s, eb_s)
+  end subroutine umrsf_zvector_analytic
+
+!###############################################################################
 !> Z-vector via NUMERICAL RHS: R^σ_ai = ∂ω/∂κ^σ_ai by central FD of ω over canonical orbital
 !> rotations (get_jacobi re-applied each point ⇒ the M1/two-reference response is INCLUDED), solved
 !> by the validated cphf_solve_uhf (UHF orbital Hessian). Returns AO relaxation densities pza,pzb.
@@ -1719,6 +2051,47 @@ contains
       end do
     end do
   end subroutine add_outer
+
+!###############################################################################
+!> n×n identity matrix (small helper for S-orthonormality probes).
+  pure function id_nbf(n) result(idm)
+    implicit none
+    integer, intent(in) :: n
+    real(kind=dp) :: idm(n,n)
+    integer :: i
+    idm = 0.0_dp
+    do i = 1, n ; idm(i,i) = 1.0_dp ; end do
+  end function id_nbf
+
+!###############################################################################
+!> max within-segment |btt| = the get_jacobi STATIONARITY residual (c05 align_offdiag_btt).
+!> s_mo = vaᵀ S vb (columns normalized); seg0 {1..nocca-1} btt=aa·dd−bb·cc, seg1 {nocca..nbf}
+!> btt=aa·cc−bb·dd with aa=s(i,i) bb=s(j,j) cc=s(i,j) dd=s(j,i). 0 at the converged alignment.
+  function within_seg_btt(va, vb, smat_full, nocca) result(m)
+    implicit none
+    real(kind=dp), intent(in) :: va(:,:), vb(:,:), smat_full(:,:)
+    integer, intent(in) :: nocca
+    real(kind=dp) :: m
+    real(kind=dp), allocatable :: s_mo(:,:)
+    integer :: nbf, i, j, slo, shi, seg
+    real(kind=dp) :: aa, bb, cc, dd, btt
+    nbf = size(va,1)
+    allocate(s_mo(nbf,nbf))
+    s_mo = matmul(transpose(va), matmul(smat_full, vb))
+    do i = 1, nbf ; s_mo(:,i) = s_mo(:,i)/max(norm2(s_mo(:,i)),1.0e-10_dp) ; end do
+    m = 0.0_dp
+    do seg = 0, 1
+      if (seg==0) then ; slo=1 ; shi=nocca-1 ; else ; slo=nocca ; shi=nbf ; end if
+      do i = slo, shi-1
+        do j = i+1, shi
+          aa = s_mo(i,i) ; bb = s_mo(j,j) ; cc = s_mo(i,j) ; dd = s_mo(j,i)
+          if (seg==0) then ; btt = aa*dd - bb*cc ; else ; btt = aa*cc - bb*dd ; end if
+          m = max(m, abs(btt))
+        end do
+      end do
+    end do
+    deallocate(s_mo)
+  end function within_seg_btt
 
 !###############################################################################
 !  Custom grd2 response 2-PDM type-bound procedures
