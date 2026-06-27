@@ -35,18 +35,29 @@ class _SectionProxy:
         object.__setattr__(self, "_section", section)
 
     def __call__(self, **kwargs):
+        if self._section == "optimize":
+            self._owner._set_optimize_options(**kwargs)
+            return self._owner
         self._owner.section(self._section, **kwargs)
         return self._owner
 
     def __getattr__(self, option):
         schema = OQP_CONFIG_SCHEMA.get(self._section, {})
-        if option not in schema:
-            raise AttributeError(f"Unknown OpenQP option '{self._section}.{option}'.")
-        return self._owner.config_typed.get(self._section, {}).get(option)
+        if option in schema:
+            return self._owner.config_typed.get(self._section, {}).get(option)
+        if self._section == "optimize":
+            backend = self._owner._optimizer_backend_section()
+            backend_schema = OQP_CONFIG_SCHEMA.get(backend, {})
+            if option in backend_schema:
+                return self._owner.config_typed.get(backend, {}).get(option)
+        raise AttributeError(f"Unknown OpenQP option '{self._section}.{option}'.")
 
     def __setattr__(self, option, value):
         if option.startswith("_"):
             object.__setattr__(self, option, value)
+            return
+        if self._section == "optimize":
+            self._owner._set_optimize_options(**{option: value})
             return
         self._owner.section(self._section, **{option: value})
 
@@ -185,6 +196,42 @@ class OpenQP:
         updates = {"type": "mrsf", "nstate": nstate}
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
+
+    def _set_optimize_options(self, **kwargs):
+        """Set optimizer options, routing backend-specific keys by lib."""
+        requested = dict(kwargs)
+        lib_value = requested.pop(
+            "lib",
+            self.config_typed.get("optimize", {}).get("lib", "oqp"),
+        )
+        lib_name = str(lib_value).lower()
+        backend = self._optimizer_backend_section(lib_name)
+
+        optimize_schema = OQP_CONFIG_SCHEMA.get("optimize", {})
+        backend_schema = OQP_CONFIG_SCHEMA.get(backend, {})
+
+        updates = {"optimize.lib": lib_name}
+        for option, value in requested.items():
+            if option in optimize_schema:
+                updates[f"optimize.{option}"] = value
+            elif option in backend_schema:
+                updates[f"{backend}.{option}"] = value
+            else:
+                valid = sorted(set(optimize_schema) | set(backend_schema))
+                raise KeyError(
+                    f"Unknown optimizer option '{option}' for lib='{lib_name}'. "
+                    f"Valid options are: {', '.join(valid)}"
+                )
+        return self.set(**updates)
+
+    def _optimizer_backend_section(self, lib_name=None):
+        """Return the backend-specific option section for the selected optimizer."""
+        if lib_name is None:
+            lib_name = self.config_typed.get("optimize", {}).get("lib", "oqp")
+        lib_name = str(lib_name).lower()
+        if lib_name in {"oqp", "geometric"}:
+            return lib_name
+        return None
 
     def section(self, section, **kwargs):
         """Update one OpenQP section using keyword arguments."""

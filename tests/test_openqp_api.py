@@ -33,6 +33,20 @@ SCHEMA = {
         "type": {"type": _string, "default": "rpa"},
         "nstate": {"type": int, "default": "1"},
     },
+    "optimize": {
+        "lib": {"type": _string, "default": "oqp"},
+        "istate": {"type": int, "default": "1"},
+        "maxit": {"type": int, "default": "30"},
+    },
+    "oqp": {
+        "coordsys": {"type": _string, "default": "tric"},
+        "trust": {"type": float, "default": "0.2"},
+    },
+    "geometric": {
+        "coordsys": {"type": _string, "default": "tric"},
+        "trust": {"type": float, "default": "0.1"},
+        "constraints_file": {"type": str, "default": ""},
+    },
 }
 
 
@@ -259,6 +273,40 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "4")
         self.assertEqual(job.tdhf.nstate, 4)
+
+    def test_optimize_helper_routes_native_backend_options(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_opt").molecule(geometry="water", basis="6-31g*")
+
+        job.optimize(lib="oqp", istate=0, maxit=10, coordsys="dlc", trust=0.25)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["istate"], "0")
+        self.assertEqual(config["optimize"]["maxit"], "10")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+        self.assertEqual(job.optimize.coordsys, "dlc")
+
+    def test_optimize_helper_routes_geometric_backend_options(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_geometric").molecule(geometry="water", basis="6-31g*")
+
+        job.optimize(
+            lib="geometric",
+            maxit=8,
+            coordsys="tric",
+            trust=0.12,
+            constraints_file="bond.constraints",
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["optimize"]["lib"], "geometric")
+        self.assertEqual(config["optimize"]["maxit"], "8")
+        self.assertEqual(config["geometric"]["coordsys"], "tric")
+        self.assertEqual(config["geometric"]["trust"], "0.12")
+        self.assertEqual(config["geometric"]["constraints_file"], "bond.constraints")
+        self.assertEqual(job.optimize.constraints_file, "bond.constraints")
 
     def test_run_builds_runner_lazily_and_returns_molecule(self):
         openqp = load_openqp_module()
