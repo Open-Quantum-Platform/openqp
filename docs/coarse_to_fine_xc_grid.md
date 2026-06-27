@@ -1,7 +1,9 @@
 # Coarse-to-fine XC grid schedule for DFT SCF
 
-**Status:** opt-in, default OFF. Environment-variable gated. RHF/UHF/ROHF, pure-DIIS
-converger only.
+**Status:** **default ON**, opt-out via `OQP_XC_C2F=0`. RHF/UHF/ROHF, pure-DIIS
+converger. The schedule never changes the converged result — it only changes the
+early-iteration grid — and disables itself wherever it would not help or could be
+unsafe (see below), so it is safe to leave on.
 
 ## Idea
 
@@ -37,7 +39,7 @@ build.
   functionals (M05/M06/M08/M11/MN1x/SOGGA11 and revM* variants) have large
   coarse-grid errors, so the schedule detects them by name and runs entirely on
   the production grid (printing a notice).
-- **Off by default**, and disabled (with a notice in the log) when the run is
+- **On by default but self-disabling** (with a notice in the log) when the run is
   ineligible. The schedule only activates for a DFT run with the pure-DIIS
   converger, a non-Minnesota functional, `maxit >= 2`, no level shift on a
   non-VDIIS converger, and — checked against the **actual built point counts** —
@@ -48,20 +50,21 @@ build.
 
 ## Usage
 
-Enable via environment variable (nothing changes in the input file):
+The schedule is **on by default** (nothing changes in the input file). Set
+`OQP_XC_C2F=0` to turn it off.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OQP_XC_C2F` | (off) | Master switch. Set to `1`/`yes`/`true`/`on` to enable. |
+| `OQP_XC_C2F` | `on` | Master switch. Set to `0`/`no`/`false`/`off` to disable the schedule. |
 | `OQP_XC_C2F_RAD` | `50` | Coarse grid radial points. |
 | `OQP_XC_C2F_ANG` | `110` | Coarse grid angular (Lebedev) points. |
 | `OQP_XC_C2F_SWITCH` | `1.0e-2` | Switch to the production grid once `|DIIS error|` drops below this. |
-| `OQP_XC_C2F_RESET` | (off) | If set, clear the DIIS subspace at the switch (more defensive; costs ~1 iteration). Default keeps the subspace. |
+| `OQP_XC_C2F_RESET` | (off) | If set, clear the DIIS subspace at the switch (more defensive; costs ~1 iteration). Default keeps the subspace and preserves the selected DIIS scheme. |
 
-Example:
+Disable for a single run:
 
 ```sh
-OQP_XC_C2F=1 python pyoqp/oqp/pyoqp.py mymol.inp
+OQP_XC_C2F=0 python pyoqp/oqp/pyoqp.py mymol.inp
 ```
 
 The schedule prints a banner when active, and a line at the grid switch:
@@ -158,8 +161,21 @@ Observations:
 - Hybrids gain less than pure GGAs at the same grid because their exact-exchange
   J/K build (grid-independent) dominates the per-iteration cost.
 
-Minnesota hazard check: with `OQP_XC_C2F=1`, an **M06-2X** run prints
-`Coarse-to-fine XC grid schedule requested but disabled: grid-sensitive
-(Minnesota) functional` and runs entirely on the production grid.
+Minnesota hazard check: an **M06-2X** (and **M06-L**) run prints
+`Coarse-to-fine XC grid schedule disabled: grid-sensitive (Minnesota)
+functional` and runs entirely on the production grid.
+
+**Default-ON safety.** Because the schedule is on by default, it was checked not
+to perturb results across reference types and functionals:
+
+- Converged energies are bit-identical (ON vs `OQP_XC_C2F=0`) for RHF, UHF and
+  ROHF and for PBE, B3LYPv5, CAM-B3LYP, SCAN and TPSS.
+- The six committed DFT example references (`examples/DFT`, RHF/UHF/ROHF energy
+  **and gradient**) all **PASS** with the schedule on by default.
+- Energy is stationary, so it matches to ~1e-10; the converged *density* differs
+  only at the SCF tolerance, so gradients/properties differ by ~1e-7 — three to
+  four orders of magnitude inside the example suite's comparison tolerance
+  (`round(diff, 4) == 0`, i.e. 5e-5). Set `OQP_XC_C2F=0` for bitwise
+  reproduction of an all-production-grid run.
 
 Raw logs: `/Volumes/External_Storage/claude/sessions/20260627_xc_c2f_grid/`.

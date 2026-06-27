@@ -606,7 +606,7 @@ contains
       if (coarse_grid%nMolPts >= nint(0.9_dp * real(molGrid%nMolPts, dp))) then
         c2f_enabled = .false.
         on_coarse   = .false.
-        write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+        write(IW,'(/5X,"Coarse-to-fine XC grid schedule disabled: ", &
                   &"coarse grid (",I0," pts) is not cheaper than the production ", &
                   &"grid (",I0," pts).")') coarse_grid%nMolPts, molGrid%nMolPts
       else
@@ -1959,17 +1959,20 @@ contains
     do_reset   = c2f_env_true("OQP_XC_C2F_RESET")
     enabled    = .false.
 
-    if (.not. c2f_env_true("OQP_XC_C2F")) return
+    ! Default ON: the schedule runs unless OQP_XC_C2F is explicitly set to a
+    ! negative value (0/no/false/off). The eligibility guards below still keep it
+    ! on the production grid wherever it would not help or could be unsafe.
+    if (c2f_env_false("OQP_XC_C2F")) return
     if (.not. is_dft) return
     if (converger_type /= scf_diis) then
-      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule disabled: ", &
                 &"only the pure-DIIS converger is supported.")')
       return
     end if
     ! Need room for at least one coarse iteration plus one production iteration,
     ! otherwise the schedule could report a coarse-grid energy.
     if (infos%control%maxit < 2) then
-      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule disabled: ", &
                 &"maxit < 2 leaves no room for a production-grid iteration.")')
       return
     end if
@@ -1978,12 +1981,12 @@ contains
     ! suppressed on coarse iterations). That keeps the DIIS error elevated so the
     ! switch threshold never trips; leave such runs on the production grid.
     if (infos%control%vshift /= 0.0_dp .and. infos%control%diis_type /= 5) then
-      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule disabled: ", &
                 &"a level shift with a non-VDIIS converger is not supported.")')
       return
     end if
     if (xc_is_grid_sensitive(infos)) then
-      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule disabled: ", &
                 &"grid-sensitive (Minnesota) functional; using the production ", &
                 &"grid throughout.")')
       return
@@ -2053,6 +2056,29 @@ contains
       tf = .true.
     end select
   end function c2f_env_true
+
+  !> @brief .TRUE. only if environment variable `name` is *explicitly* set to a
+  !>        negative value (0/n/no/f/false/off). An unset variable returns
+  !>        .FALSE. (used for the default-ON opt-out of the C2F schedule).
+  logical function c2f_env_false(name) result(tf)
+    implicit none
+    character(len=*), intent(in) :: name
+    character(len=32) :: v
+    integer :: l, st, i
+    character :: c
+
+    tf = .false.
+    call get_environment_variable(name, v, l, st)
+    if (st /= 0 .or. l == 0) return
+    do i = 1, len_trim(v)
+      c = v(i:i)
+      if (c >= 'A' .and. c <= 'Z') v(i:i) = achar(iachar(c) + 32)
+    end do
+    select case (trim(adjustl(v)))
+    case ('0', 'n', 'no', 'f', 'false', 'off')
+      tf = .true.
+    end select
+  end function c2f_env_false
 
   !> @brief Read a positive integer environment variable, or return `default`.
   integer function c2f_env_int(name, default) result(val)
