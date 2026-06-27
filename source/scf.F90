@@ -64,6 +64,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
+    use mod_dft_incdft, only: incdft_env_enabled, incdft_should_reuse, incdft_reset
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
@@ -94,6 +95,8 @@ contains
     integer :: scf_type                 ! Type of SCF calculation
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
+    logical :: use_incdft               ! Opt 2: incremental-XC reuse enabled
+    logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
 
@@ -322,6 +325,10 @@ contains
                source=0.0_dp)
       if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
     end if
+
+    ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
+    use_incdft = is_dft .and. incdft_env_enabled()
+    if (use_incdft) call incdft_reset()
 
     !==============================================================================
     ! Initialize pFON Parameters
@@ -603,7 +610,16 @@ contains
         end if
       end if
 
-      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      ! Opt 2 (IncDFT): decide whether to reuse the reference XC this iteration.
+      ! diis_error here is the previous iteration's value (set after calc_fock),
+      ! a valid proxy for closeness to convergence; the reuse window forces full
+      ! XC builds again once near convergence (diis_error < incdft_stop, aligned
+      ! with the J/K incremental refresh above) so the fixed point stays exact.
+      xc_reuse_now = .false.
+      if (use_incdft) xc_reuse_now = incdft_should_reuse(diis_error, iter)
+
+      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold, &
+                     xc_reuse=xc_reuse_now)
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
@@ -841,7 +857,13 @@ contains
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
+      ! Opt 2 (IncDFT) guard: never accept convergence on an iteration whose XC
+      ! contribution was reused (stale). xc_reuse_now is always .false. when
+      ! IncDFT is off, so this is a no-op for the default path. When it is set,
+      ! the next iteration has diis_error < incdft_stop, forcing a full XC build,
+      ! so the converged Fock/energy are exact (at most one extra iteration).
+      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
+          .and. (.not. xc_reuse_now)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
