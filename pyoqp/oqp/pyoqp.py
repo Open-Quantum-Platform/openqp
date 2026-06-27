@@ -370,6 +370,11 @@ def main():
                         help='run tests from a specified folder or:\n'
                              '  all    - Run all tests in examples\n'
                              '  other  - Run tests in examples/other')
+    parser.add_argument('--validate_examples', dest='validate_examples',
+                        metavar='dir', nargs='?', const='',
+                        help='validate that every example reference under DIR\n'
+                             '(default: $OPENQP_ROOT/share/examples) carries the\n'
+                             'regression values its runtype requires, then exit')
     parser.add_argument('--silent', action='store_true', help='run silently')
     parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
     parser.add_argument('--omp', metavar='N', type=int,
@@ -377,6 +382,9 @@ def main():
                              "input's omp_threads and OMP_NUM_THREADS; applied\n"
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
+
+    if args.validate_examples is not None:
+        sys.exit(validate_examples_cli(args.validate_examples))
 
     if args.run_tests:
         report, status = run_tests(args.run_tests)
@@ -417,6 +425,29 @@ def main():
     oqp_runner.run()
     oqp_runner.results()
     mpi_manager.finalize_mpi()
+
+
+def validate_examples_cli(examples_dir):
+    """Gate: every example reference must carry the regression values its
+    runtype/method/properties require (per the registry). Returns a process
+    exit code (0 = all good, 1 = at least one reference is missing a value)."""
+    from oqp.utils import regression
+    if not examples_dir:
+        root = os.environ.get('OPENQP_ROOT') or os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir))
+        examples_dir = os.path.join(root, 'share', 'examples')
+        if not os.path.isdir(examples_dir):
+            examples_dir = os.path.join(root, 'examples')
+    failures = regression.validate_examples(examples_dir)
+    if not failures:
+        print(f'PyOQP: all example references under {examples_dir} carry their '
+              f'required regression values.')
+        return 0
+    print(f'PyOQP: {len(failures)} example reference(s) missing required '
+          f'regression values (see the registry in oqp/utils/regression.py):')
+    for inp, miss in failures:
+        print(f'   {inp:<60} missing: {", ".join(miss)}')
+    return 1
 
 
 def run_tests(test_path):
