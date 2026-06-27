@@ -265,6 +265,21 @@ $$$$
         self.assertEqual(config["scf"]["type"], "rhf")
         self.assertEqual(config["scf"]["conv"], "1e-07")
 
+    def test_hf_helper_clears_prior_dft_functional(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="reuse_as_hf")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe")
+            .hf()
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
     def test_mrsf_helper_uses_openqp_defaults(self):
         openqp = load_openqp_module()
         job = openqp.OpenQP(project="h2_mrsf").molecule("H 0 0 0; H 0 0 0.74").mrsf(nstate=4)
@@ -662,7 +677,7 @@ $$$$
             basis = "sto-3g"
             charge = 1
             spin = 1
-            unit = "Bohr"
+            unit = "B"
 
         job = openqp.OpenQP.from_pyscf(PySCFMol())
         config = job.to_input_dict()
