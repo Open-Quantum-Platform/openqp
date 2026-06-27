@@ -131,6 +131,9 @@ contains
     integer :: imax
     integer :: ierr
     logical :: converged
+    real(kind=dp) :: rc_save, rc_new
+    character(len=16) :: rc_env
+    logical :: rc_loosen
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
@@ -399,6 +402,21 @@ contains
     if (mrst==3) write(*,'(  5x,"Davidson algorithm for Triplet response states")')
     if (mrst==5) write(*,'(  5x,"Davidson algorithm for Quintet response states")')
     write(*,'(5x,46("="))')
+
+    ! Opt-in: loosen the 2e integral cutoff for the MRSF RESPONSE build only
+    ! (env OQP_MRSF_RESP_CUTOFF, a.u.). The response is built on converged
+    ! orbitals, so it tolerates a far looser cutoff than the SCF default
+    ! (5e-11): ~1e-7 is essentially exact (<=1 ueV) and removes integrals the
+    ! response cannot resolve, cutting the integral COUNT (eval + digestion) by
+    ! ~9% (small) to ~20%+ (larger systems). Default unset = exact (unchanged).
+    ! Restored after the response so SCF / later steps are unaffected.
+    rc_save = infos%control%int2e_cutoff
+    call get_environment_variable('OQP_MRSF_RESP_CUTOFF', rc_env)
+    rc_loosen = len_trim(rc_env) > 0
+    if (rc_loosen) then
+      read(rc_env,*) rc_new
+      infos%control%int2e_cutoff = max(rc_save, rc_new)
+    end if
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
@@ -749,6 +767,7 @@ contains
     call flush(iw)
 
     call int2_driver%clean()
+    if (rc_loosen) infos%control%int2e_cutoff = rc_save
 
     call measure_time(print_total=1, log_unit=iw)
     close(iw)
