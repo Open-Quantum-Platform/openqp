@@ -11,6 +11,25 @@ name: Build and publish wheels
         description: "Release tag to publish when publishing existing artifacts"
         required: false
         type: string
+  # Run the smoke build on pushes to main so the bundled-externals cache is
+  # populated on the DEFAULT branch. GitHub Actions caches are branch-scoped: a
+  # PR branch can only restore caches from its own branch or from main, and the
+  # wheel build otherwise never ran on main -- so every fresh PR cold-rebuilt all
+  # externals (incl. ~15 min of reference LAPACK). Warming it here lets PRs
+  # restore via the restore-keys prefix instead.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build_wheels.yml"
+      - "CMakeLists.txt"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "pyoqp/**"
+      - "source/**"
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
@@ -55,7 +74,11 @@ jobs:
 
   build_wheel_smoke:
     name: Build Linux wheel smoke
-    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release')
+    # Runs on PRs, and on pushes to main to warm the bundled-externals cache.
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'pull_request'
+          && !contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -68,12 +91,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .cache/openqp/externals
-          key: oqp-wheel-externals-linux-x86_64-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
+          key: oqp-wheel-externals-linux-x86_64-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml') }}
           restore-keys: |
             oqp-wheel-externals-linux-x86_64-
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
+
+      # The externals are built INSIDE the cibuildwheel container; without a
+      # bind mount they live only in the container fs (cibuildwheel copies out
+      # just the wheels), so the host .cache that actions/cache saves stays
+      # empty and the cache never works. Create the host dir (runner-owned) and
+      # bind-mount it into the container below so the externals persist.
+      - name: Prepare externals cache mount
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
 
       - name: Build smoke wheel
         env:
@@ -81,9 +112,14 @@ jobs:
           CIBW_ARCHS: x86_64
           CIBW_BUILD: "cp311-*"
           CIBW_SKIP: "*-musllinux_* pp*"
-          CIBW_BEFORE_ALL: yum install -y gcc-gfortran
+          CIBW_CONTAINER_ENGINE: >-
+            docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+          # No yum install: the manylinux image already ships gcc-toolset
+          # (gfortran included), which the build uses. Installing the AlmaLinux 8
+          # base gcc-gfortran (8.5) just refreshes ~120 MB of repo metadata and
+          # an unused old compiler.
           CIBW_ENVIRONMENT: >-
-            XDG_CACHE_HOME="$(pwd)/.cache"
+            XDG_CACHE_HOME=/host-cache
             CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
             -DLINALG_LIB=auto
             -DLINALG_LIB_INT64=ON"
@@ -107,7 +143,14 @@ jobs:
 
   build_wheels:
     name: Build wheels (${{ matrix.name }})
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')) && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish_artifacts_run_id == '')
+    # Full matrix only for releases / a release-labelled PR / manual dispatch --
+    # NOT for plain pushes to main (those only warm the cache via the smoke job).
+    if: >-
+      github.event_name == 'release'
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'release'))
+      || (github.event_name == 'workflow_dispatch'
+          && github.event.inputs.publish_artifacts_run_id == '')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -118,9 +161,13 @@ jobs:
             platform: linux
             archs: x86_64
             cache_path: .cache/openqp/externals
-            before_all: yum install -y gcc-gfortran
+            # Bind-mount the host cache into the build container so the externals
+            # built inside it persist for actions/cache (see smoke job comment).
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+            before_all: ""   # manylinux gcc-toolset already provides gfortran
             environment: >-
-              XDG_CACHE_HOME="$(pwd)/.cache"
+              XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON"
@@ -133,9 +180,11 @@ jobs:
             platform: linux
             archs: aarch64
             cache_path: .cache/openqp/externals
-            before_all: yum install -y gcc-gfortran
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
+            before_all: ""   # manylinux gcc-toolset already provides gfortran
             environment: >-
-              XDG_CACHE_HOME="$(pwd)/.cache"
+              XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON"
@@ -148,6 +197,7 @@ jobs:
             platform: macos
             archs: x86_64
             cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
@@ -165,6 +215,7 @@ jobs:
             platform: macos
             archs: arm64
             cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
@@ -188,12 +239,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ matrix.cache_path }}
-          key: oqp-wheel-externals-${{ matrix.name }}-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml', '.github/workflows/build_wheels.yml') }}
+          key: oqp-wheel-externals-${{ matrix.name }}-${{ hashFiles('external/CMakeLists.txt', 'CMakeLists.txt', 'pyproject.toml') }}
           restore-keys: |
             oqp-wheel-externals-${{ matrix.name }}-
 
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
+
+      # Linux legs bind-mount the host cache into the build container (see the
+      # smoke job); create the host dir runner-owned first. No-op on macOS.
+      - name: Prepare externals cache mount
+        if: ${{ matrix.platform == 'linux' }}
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
 
       - name: Build wheels
         env:
@@ -201,6 +258,7 @@ jobs:
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_CONTAINER_ENGINE: ${{ matrix.container_engine }}
           CIBW_BEFORE_ALL: ${{ matrix.before_all }}
           CIBW_ENVIRONMENT: ${{ matrix.environment }}
           CIBW_REPAIR_WHEEL_COMMAND: ${{ matrix.repair }}
