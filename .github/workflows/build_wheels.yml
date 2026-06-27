@@ -114,7 +114,10 @@ jobs:
           CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_CONTAINER_ENGINE: >-
             docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
-          CIBW_BEFORE_ALL: yum install -y gcc-gfortran
+          # No yum install: the manylinux image already ships gcc-toolset
+          # (gfortran included), which the build uses. Installing the AlmaLinux 8
+          # base gcc-gfortran (8.5) just refreshes ~120 MB of repo metadata and
+          # an unused old compiler.
           CIBW_ENVIRONMENT: >-
             XDG_CACHE_HOME=/host-cache
             CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
@@ -162,7 +165,7 @@ jobs:
             # built inside it persist for actions/cache (see smoke job comment).
             container_engine: >-
               docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
-            before_all: yum install -y gcc-gfortran
+            before_all: ""   # manylinux gcc-toolset already provides gfortran
             environment: >-
               XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
@@ -179,7 +182,7 @@ jobs:
             cache_path: .cache/openqp/externals
             container_engine: >-
               docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
-            before_all: yum install -y gcc-gfortran
+            before_all: ""   # manylinux gcc-toolset already provides gfortran
             environment: >-
               XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
