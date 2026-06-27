@@ -119,6 +119,30 @@ module types
     real(c_double) :: conv = 1e-6_dp                 !< Convergency criteria of SCF
     integer(c_int64_t) :: scf_incremental = 1        !< Enable/disable incremental Fock build
     real(c_double) :: int2e_cutoff = 5e-11_dp        !< 2e-integrals cutoff
+    ! Progressive (iteration-dependent) integral screening. Default OFF.
+    ! When on, the 2e Schwarz/density cutoff is loosened in early SCF iterations
+    ! (coupled to the DIIS error) and tightened back to int2e_cutoff as the SCF
+    ! converges, so the converged energy is unchanged but early Fock builds are
+    ! cheaper. Composes with the incremental Fock build (full rebuild on the pin).
+    integer(c_int64_t) :: scf_pscreen = 0            !< 0=off (default), 1=on
+    real(c_double) :: pscreen_k = 1e-2_dp            !< tau_iter = pscreen_k * diis_error (safety fraction, <1)
+    real(c_double) :: pscreen_cap = 1e-8_dp          !< loosest allowed cutoff (upper clamp on tau_iter); 1e-8 is
+                                                     !< the validated safe ceiling -- looser derails DIIS on dense
+                                                     !< systems (the err_screen << |SCF update| invariant)
+    real(c_double) :: pscreen_tight = 1e-4_dp        !< pin tau_iter to int2e_cutoff once diis_error < this
+    ! Progressive XC: during the loose phase (diis_error >= pscreen_tight) override the
+    ! DFT grid density cutoff and AO-prune threshold with these looser values, so early
+    ! XC builds prune more AOs / skip more low-density points; restored to baseline (pinned)
+    ! once diis_error < pscreen_tight. 0 = that knob is not ramped. Same scf_pscreen gate.
+    real(c_double) :: pscreen_xc_dcut = 0.0_dp       !< loose grid density cutoff during descent (0=off)
+    real(c_double) :: pscreen_xc_aocut = 0.0_dp      !< loose grid AO-prune threshold during descent (0=off)
+    ! Progressive XC coarse->fine grid ramp: use a coarse (pscreen_grid_rad x
+    ! pscreen_grid_ang Lebedev) grid during the descent, the full grid once pinned.
+    ! 0 = off. The coarse grid is built in hf_energy (dft_initialize needs basis
+    ! intent(inout)) and selected per-iteration in scf_driver. Energy-neutral: the
+    ! tail uses the full grid, and the XC build is non-incremental.
+    integer(c_int64_t) :: pscreen_grid_rad = 0       !< coarse radial points during descent (0=off)
+    integer(c_int64_t) :: pscreen_grid_ang = 0       !< coarse angular (Lebedev) points during descent (0=off)
     integer(c_int64_t) :: esp = 0                    !< (R)ESP charges, 0 - skip, 1 - ESP, 2 - RESP
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
