@@ -217,6 +217,21 @@ endif()
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
 
+# Prebuilt ddX (find_package(DDX) above) created the DDX::ddx imported target in
+# cmake/FindDDX.cmake BEFORE findLinearAlgebra() resolved BLAS/LAPACK, so it
+# could not record ddX's BLAS dependency. Now that the libraries are known,
+# propagate them so the DDX_ROOT path links cleanly on a flat-namespace linker
+# (Linux), exactly as the autobuilt path does via _ddx_interface_libs in
+# external/CMakeLists.txt. Without this a prebuilt-ddX Linux build hits the same
+# "undefined reference to drot_/dtrmm_/..." failure in the smoke tests and oqp.
+if(ENABLE_DDX AND NOT OQP_DDX_AUTOBUILD AND TARGET DDX::ddx)
+  if(_LINALG_LIB_TYPE STREQUAL "NetLib")
+    set_property(TARGET DDX::ddx PROPERTY INTERFACE_LINK_LIBRARIES ${LIBLAPACK} ${LIBBLAS})
+  elseif(DEFINED LAPACK_LIBRARIES OR DEFINED BLAS_LIBRARIES)
+    set_property(TARGET DDX::ddx PROPERTY INTERFACE_LINK_LIBRARIES ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
+  endif()
+endif()
+
 add_subdirectory(external)
 
 add_definitions(-DOQP)
