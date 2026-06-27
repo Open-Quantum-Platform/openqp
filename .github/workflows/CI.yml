@@ -121,6 +121,11 @@ jobs:
             # (max_workers = cpus // omp_threads); the examples are tiny.
             OQP_TEST_OMP_THREADS: 1
            run: |
+            # pipefail: `openqp --run_tests` exits non-zero when any example
+            # fails/errors, but piping to `tee` would otherwise mask that exit
+            # code (the pipeline would report tee's success) and let accuracy
+            # regressions pass CI silently. With pipefail the failure propagates.
+            set -o pipefail
             openqp --run_tests all | tee run_tests.out
             # The tester reports a missing-optional-backend example as SKIPPED
             # (green), not FAILED. Since this build sets ENABLE_DDX=ON, the DDPCM
