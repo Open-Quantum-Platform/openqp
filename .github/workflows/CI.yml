@@ -105,6 +105,15 @@ jobs:
          # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI
          # leg: the suite is the same code path and running it under both MPI legs
          # only doubles wall-clock.
+         - name: Validate example references
+           # Gate: every example reference must carry the regression values its
+           # runtype/method/properties require (the registry in
+           # oqp/utils/regression.py). Fails loudly if a new example or a newly
+           # registered value lands without its reference value. Exits non-zero
+           # (unlike the piped run_tests below), so it actually blocks CI.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --validate_examples
+
          - name: Run example test suite
            if: ${{ matrix.MPI == 'OFF' }}
            env:
