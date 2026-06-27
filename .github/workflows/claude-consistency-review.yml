@@ -1,0 +1,84 @@
+name: Claude consistency & coverage review
+
+# Automated agent review on every PR. Complements the deterministic CI gates
+# (openqp --validate_examples, --run_tests) by checking the things a fixed
+# script cannot: that new computed values are registered + referenced, and that
+# code and the separate user manual stay consistent.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Avoid stacking runs on rapid pushes.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so the agent can diff against the base
+
+      - name: Claude review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model claude-opus-4-8
+            --max-turns 30
+            --allowedTools "Bash(git diff:*),Bash(git log:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(rg:*),Bash(grep:*),Bash(gh repo clone Open-Quantum-Platform/openqp-docs:*),mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*)"
+          prompt: |
+            You are reviewing a pull request to OpenQP (a quantum-chemistry
+            package). Review ONLY the following process/coverage invariants and
+            post a concise PR comment with any violations (file:line). Do not
+            review general code style. If everything is fine, say so briefly.
+
+            Get the diff with `gh pr diff`. The base of comparison is the PR
+            base branch.
+
+            1. NEW COMPUTED VALUES MUST BE REGISTERED AS KEYS.
+               OpenQP regression-tests example references via an allowlist
+               registry: pyoqp/oqp/utils/regression.py (REGISTRY of RegKey
+               rows). A value is only tested if it has a RegKey row.
+               - If this PR makes Molecule.get_results() (pyoqp/oqp/molecule/
+                 molecule.py) emit a NEW result key, or adds a new OQP::
+                 tagarray output in Fortran (source/**, e.g. a new
+                 reserve_data(OQP_...) ), then there MUST be a corresponding
+                 RegKey row in regression.py for it. Flag any new emitted value
+                 that is not registered.
+               - Conversely flag a new RegKey with no code that emits it.
+
+            2. NEW / CHANGED EXAMPLES MUST CARRY THEIR REFERENCES.
+               - If this PR adds an example .inp under examples/** it must add a
+                 matching .json reference, generated with
+                 `openqp --generate_reference <inp>` (lean: registry keys only,
+                 no OQP:: arrays). Flag an example .inp added without a .json,
+                 or a .json that still contains OQP:: keys.
+               - The deterministic gate `openqp --validate_examples` enforces
+                 required values; remind the author to run it if references look
+                 hand-edited.
+
+            3. CODE <-> MANUAL CONSISTENCY.
+               The user manual is a SEPARATE repo: Open-Quantum-Platform/
+               openqp-docs (pages under docs/keywords/*.md and docs/api/*.md).
+               Clone it read-only with
+               `gh repo clone Open-Quantum-Platform/openqp-docs -- --depth 1`.
+               - If this PR changes the input schema OQP_CONFIG_SCHEMA in
+                 pyoqp/oqp/molecule/oqpdata.py (a new keyword, a changed
+                 `default`, or changed allowed values), verify the matching
+                 docs/keywords/<section>.md table is consistent (default value,
+                 allowed values, new keyword documented). Flag mismatches.
+               - If this PR adds a new get_results() key or scf_prop value,
+                 verify docs/api/results.md and docs/keywords/properties.md
+                 mention it. Flag gaps.
+
+            Be specific and actionable. Prefer one summary comment listing each
+            issue as a checkbox with the file path. This review advises; the
+            deterministic CI jobs remain the merge gate.
