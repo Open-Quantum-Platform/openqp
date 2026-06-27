@@ -8,7 +8,7 @@ from urllib.request import urlopen
 from oqp.utils.constants import ANGSTROM_TO_BOHR
 
 
-_BOHR_UNITS = {"bohr", "au", "a.u.", "atomic_unit", "atomic_units"}
+_BOHR_UNITS = {"bohr", "b", "au", "a.u.", "atomic_unit", "atomic_units"}
 _GEOMETRY_ALIASES = {
     "h2": "\nH 0.000000 0.000000 -0.370000\nH 0.000000 0.000000 0.370000",
     "hydrogen": "\nH 0.000000 0.000000 -0.370000\nH 0.000000 0.000000 0.370000",

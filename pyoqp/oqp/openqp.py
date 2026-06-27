@@ -147,7 +147,9 @@ class OpenQP:
 
     def hf(self, reference="rhf", runtype="energy", multiplicity=None, **scf_keywords):
         """Use a compact OpenQP HF setup for ordinary single-reference jobs."""
-        self.input(method="hf", runtype=runtype)
+        # Clear any functional left from a prior DFT setup; OpenQP switches to
+        # DFT whenever input.functional is non-empty, so HF must reset it.
+        self.input(method="hf", functional="", runtype=runtype)
         updates = {}
         if reference is not None:
             updates["type"] = reference
