@@ -19,6 +19,7 @@ SCHEMA = {
         "functional": {"type": _string, "default": ""},
         "method": {"type": _string, "default": "hf"},
         "runtype": {"type": _string, "default": "energy"},
+        "soc_2e": {"type": int, "default": "1"},
         "system": {"type": str, "default": ""},
         "system2": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
@@ -36,6 +37,7 @@ SCHEMA = {
     "optimize": {
         "lib": {"type": _string, "default": "oqp"},
         "istate": {"type": int, "default": "1"},
+        "jstate": {"type": int, "default": "2"},
         "maxit": {"type": int, "default": "30"},
     },
     "oqp": {
@@ -166,6 +168,24 @@ class TestOpenQPNativeAPI(unittest.TestCase):
         self.assertTrue(config["input"]["system"].startswith("\nC "))
         self.assertEqual(config["input"]["basis"], "6-31g*")
 
+    def test_molecule_accepts_second_geometry_and_multiplicity(self):
+        openqp = load_openqp_module()
+
+        system = "H 0 0 0; H 0 0 0.74"
+        system2 = "H 0 0 0; H 0 0 0.80"
+        job = openqp.OpenQP(project="h2_nac").molecule(
+            system,
+            system2,
+            charge=0,
+            multiplicity=3,
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["system"], "\nH 0 0 0\nH 0 0 0.74")
+        self.assertEqual(config["input"]["system2"], "\nH 0 0 0\nH 0 0 0.80")
+        self.assertEqual(config["input"]["charge"], "0")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+
     def test_pubchem_sdf_parser_returns_openqp_geometry(self):
         openqp = load_openqp_module()
         sdf = """water
@@ -257,6 +277,83 @@ $$$$
         config = job.to_input_dict()
         self.assertEqual(config["input"]["functional"], "pbe0")
         self.assertEqual(config["tdhf"]["nstate"], "4")
+
+    def test_theory_helper_sets_basis_and_method(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_theory")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "6")
+
+    def test_control_sets_runtype_threads_and_optimizer_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_opt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .control(
+                runtype="optimize",
+                omp_threads=8,
+                lib="oqp",
+                maxit=12,
+                coordsys="dlc",
+                trust=0.25,
+            )
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["omp_threads"], "8")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["maxit"], "12")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_control_rejects_optimizer_options_for_nonoptimizer_runtype(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="bad_control").molecule(geometry="water")
+
+        with self.assertRaisesRegex(KeyError, "optimization runtypes"):
+            job.control(runtype="energy", maxit=10)
+
+    def test_soc_helper_sets_soc_without_response_multiplicity(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_soc")
+            .molecule(geometry="water", charge=0)
+            .soc(nstate=12, functional="bhhlyp", basis="6-31G(2df,p)", soc_2e=1)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "soc")
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["basis"], "6-31G(2df,p)")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["input"]["soc_2e"], "1")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "12")
+        self.assertNotIn("multiplicity", config["tdhf"])
+
+    def test_soc_helper_rejects_response_multiplicity(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="h2o_soc").molecule(geometry="water")
+
+        with self.assertRaisesRegex(ValueError, "do not set tdhf.multiplicity"):
+            job.soc(nstate=12, functional="bhhlyp", **{"multiplicity": 3})
 
     def test_section_proxy_updates_openqp_keywords(self):
         openqp = load_openqp_module()

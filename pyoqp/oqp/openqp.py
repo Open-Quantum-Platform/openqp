@@ -27,6 +27,9 @@ def dump_strings_from_parser(parser):
     return out
 
 
+OPTIMIZER_RUNTYPES = {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}
+
+
 class _SectionProxy:
     """Attribute/call proxy for a section in the OpenQP input schema."""
 
@@ -136,31 +139,115 @@ class OpenQP:
             job.update(kwargs)
         return job
 
-    def molecule(self, system=None, basis=None, charge=None, unit="Angstrom",
-                 geometry=None, source="auto", timeout=10, **kwargs):
+    def molecule(self, system=None, system2=None, basis=None, charge=None,
+                 multiplicity=None, unit="Angstrom", geometry=None,
+                 geometry2=None, source="auto", timeout=10, **kwargs):
         """Set molecular system data using OpenQP input-section keywords."""
         if system is not None and geometry is not None:
             raise ValueError("Use either system or geometry, not both.")
+        if system2 is not None and geometry2 is not None:
+            raise ValueError("Use either system2 or geometry2, not both.")
+        if system2 is not None and basis is None and self._looks_like_basis(system2):
+            basis = system2
+            system2 = None
         if geometry is not None:
             system = get_geometry(geometry, source=source, timeout=timeout)
+        if geometry2 is not None:
+            system2 = get_geometry(geometry2, source=source, timeout=timeout)
         if system is None:
             raise ValueError("molecule requires a system or geometry value.")
 
         self.unit = unit
         updates = {"input.system": system}
+        if system2 is not None:
+            updates["input.system2"] = system2
         if basis is not None:
             updates["input.basis"] = basis
         if charge is not None:
             updates["input.charge"] = charge
+        if multiplicity is not None:
+            updates["scf.multiplicity"] = multiplicity
         for option, value in kwargs.items():
             updates[f"input.{option}"] = value
         return self.set(**updates)
 
-    def hf(self, reference="rhf", runtype="energy", multiplicity=None, **scf_keywords):
+    @staticmethod
+    def _looks_like_basis(value):
+        if not isinstance(value, str):
+            return False
+        text = value.strip()
+        if text.lower().endswith((".xyz", ".mol", ".sdf", ".pdb")):
+            return False
+        return bool(text and "\n" not in text and ";" not in text and " " not in text)
+
+    def control(self, runtype=None, omp_threads=None, **kwargs):
+        """Set run-level controls such as runtype, OpenMP, and optimization options."""
+        updates = {}
+        if runtype is not None:
+            updates["input.runtype"] = runtype
+        if omp_threads is not None:
+            updates["input.omp_threads"] = omp_threads
+        if updates:
+            self.set(**updates)
+
+        if kwargs:
+            active_runtype = str(
+                runtype if runtype is not None
+                else self.config_typed.get("input", {}).get("runtype", "energy")
+            ).lower()
+            if active_runtype in OPTIMIZER_RUNTYPES:
+                return self._set_optimize_options(**kwargs)
+            raise KeyError(
+                "Extra job.control(...) options are supported for optimization "
+                "runtypes. Use section helpers for other workflow-specific keywords."
+            )
+        return self
+
+    def theory(self, method, functional=None, basis=None, runtype=None,
+               nstate=3, reference=None, **keywords):
+        """Set a compact OpenQP theory model."""
+        method_key = str(method).lower().replace("_", "-")
+        if method_key in {"hf", "hartree-fock"}:
+            return self.hf(
+                reference=reference or "rhf",
+                runtype=runtype,
+                basis=basis,
+                **keywords,
+            )
+        if method_key in {"dft", "ks", "kohn-sham"}:
+            if functional is None:
+                raise ValueError("DFT theory requires functional=...")
+            return self.dft(
+                functional,
+                reference=reference or "rhf",
+                runtype=runtype,
+                basis=basis,
+                **keywords,
+            )
+        if method_key in {"mrsf", "mrsf-tddft", "mrsf-td-dft"}:
+            return self.mrsf(
+                nstate=nstate,
+                reference=reference or "rohf",
+                runtype=runtype,
+                functional=functional,
+                basis=basis,
+                **keywords,
+            )
+        raise ValueError(
+            "Unknown theory method. Use hf, dft, or mrsf-tddft."
+        )
+
+    def hf(self, reference="rhf", runtype=None, multiplicity=None,
+           basis=None, **scf_keywords):
         """Use a compact OpenQP HF setup for ordinary single-reference jobs."""
         # Clear any functional left from a prior DFT setup; OpenQP switches to
         # DFT whenever input.functional is non-empty, so HF must reset it.
-        self.input(method="hf", functional="", runtype=runtype)
+        input_updates = {"method": "hf", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
         updates = {}
         if reference is not None:
             updates["type"] = reference
@@ -171,10 +258,18 @@ class OpenQP:
             self.scf(**updates)
         return self
 
-    def dft(self, functional, reference="rhf", runtype="energy",
-            multiplicity=None, **scf_keywords):
+    def dft(self, functional, reference="rhf", runtype=None,
+            multiplicity=None, basis=None, **scf_keywords):
         """Use a compact OpenQP DFT setup for ordinary Kohn-Sham jobs."""
-        self.input(method="hf", functional=functional, runtype=runtype)
+        input_updates = {
+            "method": "hf",
+            "functional": functional,
+        }
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
         updates = {}
         if reference is not None:
             updates["type"] = reference
@@ -186,13 +281,37 @@ class OpenQP:
         return self
 
     def mrsf(self, nstate=3, reference="rohf", multiplicity=3,
-             runtype="energy", functional=None, **tdhf_keywords):
+             runtype=None, functional=None, basis=None, **tdhf_keywords):
         """Use a compact OpenQP MRSF-TDDFT setup with an optional functional."""
-        input_updates = {"method": "tdhf", "runtype": runtype}
+        input_updates = {"method": "tdhf"}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
         if functional is not None:
             input_updates["functional"] = functional
+        if basis is not None:
+            input_updates["basis"] = basis
         self.input(**input_updates)
         self.scf(type=reference, multiplicity=multiplicity)
+        updates = {"type": "mrsf", "nstate": nstate}
+        updates.update(tdhf_keywords)
+        return self.tdhf(**updates)
+
+    def soc(self, nstate=3, functional=None, reference="rohf",
+            reference_multiplicity=3, soc_2e=1, basis=None, **tdhf_keywords):
+        """Use a compact MRSF-TDDFT SOC setup."""
+        if "multiplicity" in tdhf_keywords:
+            raise ValueError(
+                "SOC computes singlet and triplet response internally; "
+                "do not set tdhf.multiplicity in job.soc()."
+            )
+
+        input_updates = {"method": "tdhf", "runtype": "soc", "soc_2e": soc_2e}
+        if functional is not None:
+            input_updates["functional"] = functional
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
+        self.scf(type=reference, multiplicity=reference_multiplicity)
         updates = {"type": "mrsf", "nstate": nstate}
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
