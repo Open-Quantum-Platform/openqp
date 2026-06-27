@@ -112,10 +112,23 @@ target_include_directories(oqp PUBLIC
         ${DFTD4_INSTALL}/include/mctc-lib/modules
         ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
         ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
-target_link_libraries(oqp
-        ${DFTD4_INSTALL}/lib/libdftd4.a
-        ${DFTD4_INSTALL}/lib/libmulticharge.a
-        ${DFTD4_INSTALL}/lib/libmctc-lib.a)
+# dftd4/multicharge/mctc-lib reference BLAS/LAPACK symbols (e.g. ssytri_) but are
+# linked after the static liblapack/libblas archives. With a static NetLib build
+# the linker has already passed those archives, so the referenced objects are
+# never pulled in and liboqp.so ends up with an undefined symbol that only bites
+# at load time (e.g. `import oqp`). Wrap the dispersion libs together with
+# LAPACK/BLAS in a RESCAN group so the cross-references resolve regardless of
+# order. (For shared BLAS/LAPACK, e.g. macOS Accelerate, LIBLAPACK is unset and
+# symbols resolve dynamically, so the plain link is used.)
+if(LIBLAPACK)
+  target_link_libraries(oqp
+          "$<LINK_GROUP:RESCAN,${DFTD4_INSTALL}/lib/libdftd4.a,${DFTD4_INSTALL}/lib/libmulticharge.a,${DFTD4_INSTALL}/lib/libmctc-lib.a,${LIBLAPACK},${LIBBLAS}>")
+else()
+  target_link_libraries(oqp
+          ${DFTD4_INSTALL}/lib/libdftd4.a
+          ${DFTD4_INSTALL}/lib/libmulticharge.a
+          ${DFTD4_INSTALL}/lib/libmctc-lib.a)
+endif()
 # The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
 # but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
 # mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
