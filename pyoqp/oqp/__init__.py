@@ -4,11 +4,8 @@ import os
 from oqp.utils.mpi_utils import MPIManager
 from oqp.runtime import resolve_oqp_root
 MPIManager()
-# we must import dftd4 ffi lib before oqp to load library correctly
-try:
-    import dftd4.interface
-except ModuleNotFoundError:
-    print('\nPyOQP: dftd4 is not available')
+# DFT-D4 is linked natively into liboqp (source/dftd4_interface.F90); the
+# external `dftd4` Python package is no longer required or imported.
 
 
 try:

@@ -13,14 +13,36 @@ from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
 
-try:
-    from dftd4.interface import DampingParam, DispersionModel
+# DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
+# exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
+# there is no longer a Python <= 3.12 constraint.
+dftd_installed = 'dftd4 (native)' if hasattr(oqp.lib, 'oqp_dftd4_disp') else 'not available'
 
-    dftd_installed = 'dftd4'
-except ModuleNotFoundError:
-    from oqp.utils.matrix import DampingParam, DispersionModel
 
-    dftd_installed = 'not installed'
+def dftd4_native_disp(atoms, coordinates, functional, do_grad):
+    """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
+
+    atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. 'pbe0'.
+    """
+    natom = len(atoms)
+    func = ('bhlyp' if functional.lower() in ('bhhlyp',) else functional).encode('ascii')
+    z = oqp.ffi.new('int[]', [int(a) for a in atoms])
+    xyz = oqp.ffi.new('double[]', np.ascontiguousarray(coordinates, dtype=np.float64).reshape(-1).tolist())
+    energy_ptr = oqp.ffi.new('double*')
+    grad_buf = oqp.ffi.new('double[]', natom * 3)
+    ier = oqp.ffi.new('int*')
+    oqp.lib.oqp_dftd4_disp(natom, z, xyz, func, len(func), int(do_grad),
+                           energy_ptr, grad_buf, ier)
+    if ier[0] != 0:
+        raise RuntimeError(f"dftd4: no D4 damping parameters for functional '{functional}'")
+    energy = energy_ptr[0]
+    if do_grad:
+        grad = np.frombuffer(oqp.ffi.buffer(grad_buf, natom * 3 * 8),
+                             dtype=np.float64).reshape(natom, 3).copy()
+    else:
+        grad = np.zeros((natom, 3))
+    return energy, grad
+
 
 from oqp.library.frequency import normal_mode, thermal_analysis
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
@@ -73,19 +95,10 @@ class LastStep(Calculator):
             do_grad = False
 
         atoms = mol.get_atoms()
-        coordinates = mol.get_system().reshape((-1, 3))
+        coordinates = mol.get_system().reshape((-1, 3))  # Bohr
         natom = len(atoms)
         if self.do_d4:
-            model = DispersionModel(atoms, coordinates)
-            func_for_d4 = 'bhlyp' if self.functional.lower() in ('bhhlyp') else self.functional
-            res = model.get_dispersion(DampingParam(method=func_for_d4),
-                                       grad=do_grad)
-
-            energy = res['energy']
-            if do_grad:
-                grad = res['gradient']
-            else:
-                grad = np.zeros((natom, 3))
+            energy, grad = dftd4_native_disp(atoms, coordinates, self.functional, do_grad)
         else:
             energy = 0.0
             grad = np.zeros((natom, 3))
@@ -1185,17 +1198,13 @@ class Hessian(Calculator):
         if not self.mol.config.get('input', {}).get('d4', False):
             return 0.0
 
-        try:
-            from dftd4.interface import DampingParam, DispersionModel
-        except Exception as exc:  # pragma: no cover - exercised only without dftd4
+        if not hasattr(oqp.lib, 'oqp_dftd4_disp'):
             raise RuntimeError(
-                'hess.type=analytical with input.d4=true requires the dftd4 package; '
-                'install dftd4 or use hess.type=numerical.'
-            ) from exc
+                'hess.type=analytical with input.d4=true requires native dftd4 '
+                'support in liboqp; rebuild OpenQP or use hess.type=numerical.'
+            )
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
-        func_for_d4 = 'bhlyp' if functional in ('bhhlyp',) else functional
-        param = DampingParam(method=func_for_d4)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1203,9 +1212,8 @@ class Hessian(Calculator):
         ncoord = flat.size
 
         def disp_grad(coord_flat):
-            model = DispersionModel(atoms, coord_flat.reshape((-1, 3)))
-            res = model.get_dispersion(param, grad=True)
-            return np.asarray(res['gradient'], dtype=float).reshape(-1)
+            _, grad = dftd4_native_disp(atoms, coord_flat.reshape((-1, 3)), functional, True)
+            return np.asarray(grad, dtype=float).reshape(-1)
 
         hess = np.zeros((ncoord, ncoord))
         for i in range(ncoord):

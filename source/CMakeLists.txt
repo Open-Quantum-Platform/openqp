@@ -103,6 +103,25 @@ add_dependencies(oqp nlopt)
 target_include_directories(oqp PUBLIC ${NLOPT_BUILD_DIR})
 target_link_libraries(oqp ${NLOPT_LIBRARY})
 
+# DFT-D4 dispersion (native, see external/CMakeLists.txt). dftd4_interface.F90
+# (globbed into SOURCES above) `use`s the dftd4/mctc-lib modules, so the module
+# dirs must be on the include path and the ExternalProjects must build first.
+add_dependencies(oqp dftd4)
+set(DFTD4_MODTAG ${CMAKE_Fortran_COMPILER_ID}-${CMAKE_Fortran_COMPILER_VERSION})
+target_include_directories(oqp PUBLIC
+        ${DFTD4_INSTALL}/include/mctc-lib/modules
+        ${DFTD4_INSTALL}/include/multicharge/${DFTD4_MODTAG}
+        ${DFTD4_INSTALL}/include/dftd4/${DFTD4_MODTAG})
+target_link_libraries(oqp
+        ${DFTD4_INSTALL}/lib/libdftd4.a
+        ${DFTD4_INSTALL}/lib/libmulticharge.a
+        ${DFTD4_INSTALL}/lib/libmctc-lib.a)
+# The dftd4 stack is built with default 4-byte integers (see external/CMakeLists.txt),
+# but this file is compiled with OpenQP's -fdefault-integer-8. Tell the shim that
+# mctc-lib's `new` expects a 4-byte `num` so it converts explicitly.
+set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/dftd4_interface.F90
+        APPEND PROPERTY COMPILE_DEFINITIONS OQP_D4_INT_KIND=4)
+
 install(TARGETS oqp
 EXPORT "${PROJECT_NAME}Targets"
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
