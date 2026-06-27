@@ -98,15 +98,25 @@ jobs:
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
 
+      # The externals are built INSIDE the cibuildwheel container; without a
+      # bind mount they live only in the container fs (cibuildwheel copies out
+      # just the wheels), so the host .cache that actions/cache saves stays
+      # empty and the cache never works. Create the host dir (runner-owned) and
+      # bind-mount it into the container below so the externals persist.
+      - name: Prepare externals cache mount
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
+
       - name: Build smoke wheel
         env:
           CIBW_PLATFORM: linux
           CIBW_ARCHS: x86_64
           CIBW_BUILD: "cp311-*"
           CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_CONTAINER_ENGINE: >-
+            docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
           CIBW_BEFORE_ALL: yum install -y gcc-gfortran
           CIBW_ENVIRONMENT: >-
-            XDG_CACHE_HOME="$(pwd)/.cache"
+            XDG_CACHE_HOME=/host-cache
             CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
             -DLINALG_LIB=auto
             -DLINALG_LIB_INT64=ON"
@@ -148,9 +158,13 @@ jobs:
             platform: linux
             archs: x86_64
             cache_path: .cache/openqp/externals
+            # Bind-mount the host cache into the build container so the externals
+            # built inside it persist for actions/cache (see smoke job comment).
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
             before_all: yum install -y gcc-gfortran
             environment: >-
-              XDG_CACHE_HOME="$(pwd)/.cache"
+              XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON"
@@ -163,9 +177,11 @@ jobs:
             platform: linux
             archs: aarch64
             cache_path: .cache/openqp/externals
+            container_engine: >-
+              docker; create_args: --volume ${{ github.workspace }}/.cache:/host-cache
             before_all: yum install -y gcc-gfortran
             environment: >-
-              XDG_CACHE_HOME="$(pwd)/.cache"
+              XDG_CACHE_HOME=/host-cache
               CMAKE_ARGS="-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH
               -DLINALG_LIB=auto
               -DLINALG_LIB_INT64=ON"
@@ -178,6 +194,7 @@ jobs:
             platform: macos
             archs: x86_64
             cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
@@ -195,6 +212,7 @@ jobs:
             platform: macos
             archs: arm64
             cache_path: ~/Library/Caches/openqp/externals
+            container_engine: "docker"
             before_all: brew install gcc@15
             environment: >-
               MACOSX_DEPLOYMENT_TARGET=15.0
@@ -225,12 +243,19 @@ jobs:
       - name: Install cibuildwheel
         run: python -m pip install --upgrade cibuildwheel
 
+      # Linux legs bind-mount the host cache into the build container (see the
+      # smoke job); create the host dir runner-owned first. No-op on macOS.
+      - name: Prepare externals cache mount
+        if: ${{ matrix.platform == 'linux' }}
+        run: mkdir -p "${{ github.workspace }}/.cache/openqp/externals"
+
       - name: Build wheels
         env:
           CIBW_PLATFORM: ${{ matrix.platform }}
           CIBW_ARCHS: ${{ matrix.archs }}
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-musllinux_* pp*"
+          CIBW_CONTAINER_ENGINE: ${{ matrix.container_engine }}
           CIBW_BEFORE_ALL: ${{ matrix.before_all }}
           CIBW_ENVIRONMENT: ${{ matrix.environment }}
           CIBW_REPAIR_WHEEL_COMMAND: ${{ matrix.repair }}
