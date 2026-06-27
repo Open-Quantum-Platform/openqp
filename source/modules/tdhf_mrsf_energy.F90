@@ -132,7 +132,7 @@ contains
     integer :: ierr
     logical :: converged
     real(kind=dp) :: rc_save, rc_new
-    character(len=16) :: rc_env
+    character(len=64) :: rc_env
     logical :: rc_loosen
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
