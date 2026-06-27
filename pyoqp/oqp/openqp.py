@@ -175,9 +175,12 @@ class OpenQP:
         return self
 
     def mrsf(self, nstate=3, reference="rohf", multiplicity=3,
-             runtype="energy", **tdhf_keywords):
-        """Use a compact OpenQP MRSF-TDDFT setup with an open-shell reference."""
-        self.input(method="tdhf", runtype=runtype)
+             runtype="energy", functional=None, **tdhf_keywords):
+        """Use a compact OpenQP MRSF-TDDFT setup with an optional functional."""
+        input_updates = {"method": "tdhf", "runtype": runtype}
+        if functional is not None:
+            input_updates["functional"] = functional
+        self.input(**input_updates)
         self.scf(type=reference, multiplicity=multiplicity)
         updates = {"type": "mrsf", "nstate": nstate}
         updates.update(tdhf_keywords)

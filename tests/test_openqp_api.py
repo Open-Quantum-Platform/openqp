@@ -217,6 +217,33 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "4")
 
+    def test_mrsf_helper_accepts_inline_functional(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_mrsf")
+            .molecule(geometry="water", basis="6-31g*")
+            .mrsf(nstate=5, functional="bhhlyp")
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+
+    def test_mrsf_helper_preserves_existing_functional(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_mrsf")
+            .molecule(geometry="water", basis="6-31g*")
+            .input(functional="pbe0")
+            .mrsf(nstate=4)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["functional"], "pbe0")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
     def test_section_proxy_updates_openqp_keywords(self):
         openqp = load_openqp_module()
         job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
