@@ -233,6 +233,18 @@ Key points:
 
 ---
 
+## Finite-difference anchor
+All levers above are validated as the gradient max-error **vs the tight
+`zvconv=1e-10` analytic baseline** (the correct reference for "did the
+optimization change the gradient"; the default path is additionally proven
+bit-identical). To anchor that baseline absolutely, the analytic MRSF gradient
+was cross-checked against central finite differences of the state-1 total energy
+(h=0.005 Bohr) on a distorted H2O with a clearly non-zero gradient
+(|g|~0.07–0.095 a.u.): **FD vs analytic maxabs = 6.4e-5 a.u. (~0.1% rel)**,
+consistent with FD truncation. The analytic gradient is therefore correct, and
+every lever's perturbation (≤7e-6 a.u.) sits an order of magnitude **below the
+analytic gradient's own FD-confirmed accuracy** — i.e. comfortably in the noise.
+
 ## Bottom line / recommendations
 - **Biggest realistic gradient-use-case win:** `OQP_MRSF_ZV_WARMSTART` in the
   small-step regime (MD / late optimization): ~1 iteration vs 6–12. Proven on
