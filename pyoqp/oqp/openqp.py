@@ -74,7 +74,7 @@ class _SectionProxy:
 
 
 class _WorkflowSectionProxy(_SectionProxy):
-    """Section proxy grouped under job.workflow for the preferred Python API."""
+    """Compatibility section proxy that can also select a workflow runtype."""
 
     def __init__(self, owner, section, runtype=None):
         super().__init__(owner, section)
@@ -194,11 +194,22 @@ class _WorkflowSocProxy:
         return self._owner._soc_control(**kwargs)
 
 
+class _WorkflowEnergyProxy:
+    """Plain single-point energy workflow selector."""
+
+    def __init__(self, owner):
+        self._owner = owner
+
+    def __call__(self):
+        return self._owner._control(runtype="energy")
+
+
 class _WorkflowProxy:
     """Scientific workflow namespace for OpenQP Python scripts."""
 
     def __init__(self, owner):
         object.__setattr__(self, "_owner", owner)
+        object.__setattr__(self, "energy", _WorkflowEnergyProxy(owner))
         object.__setattr__(self, "gradient", _WorkflowGradientProxy(owner))
         object.__setattr__(self, "hess", _WorkflowSectionProxy(owner, "hess", runtype="hess"))
         object.__setattr__(self, "hessian", object.__getattribute__(self, "hess"))
@@ -222,6 +233,27 @@ class _WorkflowProxy:
         if name in OQP_CONFIG_SCHEMA:
             return _WorkflowSectionProxy(self._owner, name)
         raise AttributeError(f"Unknown OpenQP workflow section '{name}'.")
+
+
+class _SettingsProxy:
+    """Raw OpenQP input-section namespace for advanced keyword setup."""
+
+    def __init__(self, owner):
+        object.__setattr__(self, "_owner", owner)
+
+    def __call__(self, **sections):
+        return self._owner.update(sections)
+
+    def basis(self, basis=None, **tags):
+        return self._owner._set_atom_basis(basis, **tags)
+
+    def atom_basis(self, basis=None, **tags):
+        return self.basis(basis, **tags)
+
+    def __getattr__(self, name):
+        if name in OQP_CONFIG_SCHEMA:
+            return _SectionProxy(self._owner, name)
+        raise AttributeError(f"Unknown OpenQP settings section '{name}'.")
 
 
 class _ControlProxy:
@@ -265,6 +297,7 @@ class OpenQP:
         self.runner = None
         self.mol = None
         self.workflow = _WorkflowProxy(self)
+        self.settings = _SettingsProxy(self)
         self.control = _ControlProxy(self)
 
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
@@ -437,6 +470,44 @@ class OpenQP:
                 basis=basis,
                 **keywords,
             )
+        if method_key in {"tdhf", "td-hf"}:
+            multiplicity = keywords.pop("multiplicity", 1)
+            return self._response_theory(
+                functional="",
+                basis=basis,
+                runtype=runtype,
+                nstate=nstate,
+                reference=reference or "rhf",
+                multiplicity=multiplicity,
+                **keywords,
+            )
+        if method_key in {"tddft", "td-dft"}:
+            if functional is None:
+                raise ValueError("TDDFT theory requires functional=...")
+            multiplicity = keywords.pop("multiplicity", 1)
+            return self._response_theory(
+                functional=functional,
+                basis=basis,
+                runtype=runtype,
+                nstate=nstate,
+                reference=reference or "rhf",
+                multiplicity=multiplicity,
+                **keywords,
+            )
+        if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
+            if functional is None:
+                raise ValueError("SF-TDDFT theory requires functional=...")
+            multiplicity = keywords.pop("multiplicity", 3)
+            return self._response_theory(
+                functional=functional,
+                basis=basis,
+                runtype=runtype,
+                nstate=nstate,
+                reference=reference or "rohf",
+                multiplicity=multiplicity,
+                response_type="sf",
+                **keywords,
+            )
         if method_key in {"mrsf", "mrsf-tddft", "mrsf-td-dft"}:
             return self.mrsf(
                 nstate=nstate,
@@ -447,7 +518,8 @@ class OpenQP:
                 **keywords,
             )
         raise ValueError(
-            "Unknown theory method. Use hf, dft, or mrsf-tddft."
+            "Unknown theory method. Use hf, dft, tdhf, tddft, "
+            "sf-tddft, or mrsf-tddft."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -492,6 +564,63 @@ class OpenQP:
         if updates:
             self.scf(**updates)
         return self
+
+    def _response_theory(self, functional="", basis=None, runtype=None,
+                         nstate=3, reference="rhf", multiplicity=1,
+                         response_type=None, **tdhf_keywords):
+        """Use a compact OpenQP TDHF/TDDFT response setup."""
+        input_updates = {"method": "tdhf", "functional": functional or ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
+
+        scf_updates = {}
+        if reference is not None:
+            scf_updates["type"] = reference
+        if multiplicity is not None:
+            scf_updates["multiplicity"] = multiplicity
+        if scf_updates:
+            self.scf(**scf_updates)
+
+        updates = {"nstate": nstate}
+        if response_type is not None:
+            requested_type = tdhf_keywords.pop("type", response_type)
+            if str(requested_type).lower() != str(response_type).lower():
+                raise ValueError(
+                    f"This theory helper requires [tdhf] type={response_type}."
+                )
+            updates["type"] = requested_type
+        updates.update(tdhf_keywords)
+        return self.section("tdhf", **updates)
+
+    def tddft(self, functional, reference="rhf", runtype=None,
+              multiplicity=1, basis=None, nstate=3, **tdhf_keywords):
+        """Use a compact OpenQP TDDFT setup."""
+        return self._response_theory(
+            functional=functional,
+            basis=basis,
+            runtype=runtype,
+            nstate=nstate,
+            reference=reference,
+            multiplicity=multiplicity,
+            **tdhf_keywords,
+        )
+
+    def sf_tddft(self, functional, reference="rohf", runtype=None,
+                 multiplicity=3, basis=None, nstate=3, **tdhf_keywords):
+        """Use a compact OpenQP spin-flip TDDFT setup."""
+        return self._response_theory(
+            functional=functional,
+            basis=basis,
+            runtype=runtype,
+            nstate=nstate,
+            reference=reference,
+            multiplicity=multiplicity,
+            response_type="sf",
+            **tdhf_keywords,
+        )
 
     def mrsf(self, nstate=3, reference="rohf", multiplicity=3,
              runtype=None, functional=None, basis=None, **tdhf_keywords):
@@ -627,6 +756,43 @@ class OpenQP:
                     f"Valid options are: {', '.join(valid)}"
                 )
         return self.set(**updates)
+
+    def _set_atom_basis(self, basis=None, **tags):
+        """Set atom-wise basis assignment as a detailed settings operation."""
+        if tags:
+            if basis is not None:
+                raise ValueError("Use either a basis mapping/list or tag keywords, not both.")
+            basis = tags
+        if basis is None:
+            raise ValueError("settings.basis requires atom-wise basis data.")
+
+        if isinstance(basis, Mapping):
+            if not basis:
+                raise ValueError("settings.basis mapping cannot be empty.")
+            library = "\n".join(f"{tag} {name}" for tag, name in basis.items())
+            return self.section("input", basis="library", library=library)
+
+        if isinstance(basis, str):
+            entries = [entry.strip() for entry in basis.split(";") if entry.strip()]
+            if len(entries) == 1:
+                raise ValueError(
+                    "Use job.theory(..., basis=...) for a single global basis. "
+                    "job.settings.basis(...) is for atom-wise basis assignments."
+                )
+        else:
+            try:
+                entries = [str(entry).strip() for entry in basis]
+            except TypeError as exc:
+                raise TypeError(
+                    "settings.basis expects a mapping of atom tags to basis names "
+                    "or an ordered iterable of per-atom basis names."
+                ) from exc
+
+        if not entries:
+            raise ValueError("settings.basis entries cannot be empty.")
+        if any(not entry for entry in entries):
+            raise ValueError("settings.basis entries must be non-empty basis names.")
+        return self.section("input", basis=";".join(entries))
 
     def _optimizer_backend_section(self, lib_name=None):
         """Return the backend-specific option section for the selected optimizer."""

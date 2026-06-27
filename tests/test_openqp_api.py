@@ -22,6 +22,7 @@ SCHEMA = {
         "soc_2e": {"type": int, "default": "1"},
         "system": {"type": str, "default": ""},
         "system2": {"type": str, "default": ""},
+        "library": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
     },
@@ -336,6 +337,50 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "6")
 
+    def test_theory_helper_sets_response_theories(self):
+        openqp = load_openqp_module()
+
+        tdhf = (
+            openqp.OpenQP(project="h2o_tdhf")
+            .molecule(geometry="water", charge=0)
+            .theory("tdhf", basis="6-31g*", nstate=4)
+        )
+        config = tdhf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+        tddft = (
+            openqp.OpenQP(project="h2o_tddft")
+            .molecule(geometry="water", charge=0)
+            .theory("tddft", functional="b3lyp5", basis="6-31g*", nstate=5)
+        )
+        config = tddft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "b3lyp5")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+
+        sf = (
+            openqp.OpenQP(project="h2o_sf")
+            .molecule(geometry="water", charge=0)
+            .theory("sf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+        config = sf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "sf")
+        self.assertEqual(config["tdhf"]["nstate"], "3")
+
+        with self.assertRaisesRegex(ValueError, "TDDFT theory requires"):
+            openqp.OpenQP(project="bad_tddft").theory("tddft")
+        with self.assertRaisesRegex(ValueError, "SF-TDDFT theory requires"):
+            openqp.OpenQP(project="bad_sf").theory("sf-tddft")
+
     def test_control_sets_runtype_threads_and_optimizer_options(self):
         openqp = load_openqp_module()
         job = (
@@ -384,6 +429,10 @@ $$$$
             .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
         )
+
+        job.workflow.energy()
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
 
         job.workflow.gradient(state=3)
         config = job.to_input_dict()
@@ -615,6 +664,43 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "4")
         self.assertEqual(job.tdhf.nstate, 4)
+
+    def test_settings_proxy_updates_openqp_keywords(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
+
+        job.settings.input(method="tdhf", basis="6-31g*")
+        job.settings.scf(type="rohf", multiplicity=3)
+        job.settings.tdhf(type="sf", nstate=4)
+        job.settings.tdhf.nstate = 5
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "sf")
+        self.assertEqual(config["tdhf"]["nstate"], "5")
+        self.assertEqual(job.settings.tdhf.nstate, 5)
+
+    def test_settings_basis_sets_atom_wise_basis_assignments(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("Br 0 0 0; H 0 0 1.4")
+
+        job.settings.basis(["LANL2DZ", "6-31g*"])
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "LANL2DZ;6-31g*")
+
+        tagged = openqp.OpenQP().molecule(
+            "C 0 0 0 c1; H 0 0 1 h1; H 1 0 0 h1"
+        )
+        tagged.settings.basis(c1="cc-pvdz", h1="6-31g*")
+        config = tagged.to_input_dict()
+        self.assertEqual(config["input"]["basis"], "library")
+        self.assertEqual(config["input"]["library"], "c1 cc-pvdz\nh1 6-31g*")
+
+        with self.assertRaisesRegex(ValueError, "single global basis"):
+            openqp.OpenQP().settings.basis("6-31g*")
 
     def test_optimize_helper_routes_native_backend_options(self):
         openqp = load_openqp_module()
