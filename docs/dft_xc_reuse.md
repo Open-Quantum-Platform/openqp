@@ -8,7 +8,8 @@ everything from the density every iteration.
 | Env var | Default | Effect |
 |---|---|---|
 | `OQP_XC_PHI_CACHE=1` | off | **Opt 1** — cache the collocation matrix Φ across SCF iterations (exact) |
-| `OQP_XC_TIMING=1` | off | per-build `[XCTIME]` timer: geometry-Φ vs density-driven XC (thread-seconds) |
+| `OQP_XC_INCDFT=1` | off | **Opt 2** — incremental XC reuse (experimental; *measured non-improvement*, see below) |
+| `OQP_XC_TIMING=1` | off | per-iteration timers: `[SCFTIME]` (J/K vs XC wall split) and `[XCTIME]` (geom-Φ vs density-driven) |
 
 Measurements: Apple-silicon macOS, gfortran-15, Release, 4 OpenMP threads,
 6-31G(d), default Becke grid. The box was heavily loaded, so **per-iteration
@@ -72,6 +73,45 @@ replay, confirming `compAOs` is eliminated, e.g. C20H42 PBE: 0.81 → 0.15 s.
   and whenever the 2e J/K cost is reduced (it composes with 2e-integral screening
   — as J/K shrinks, XC and this optimization become a larger share of SCF time).
 
+---
+
+## Opt 2 — Incremental XC (IncDFT): experimental, **measured non-improvement**
+
+Implemented as whole-matrix XC reuse: store `V_xc[D_ref]`/`E_xc[D_ref]` from the
+last full build and reuse it on iterations inside a late-SCF DIIS-error window,
+with a periodic forced full rebuild and a return to full builds near convergence
+(tied to the existing `scf.F90` incremental refresh, `diis_error < 1e-4`). The SCF
+convergence test additionally refuses to accept a converged iteration whose XC was
+reused, so the converged Fock/energy always come from a full XC build (exact final).
+Gated `OQP_XC_INCDFT=1` (`source/dftlib/dft_incdft.F90`; plumbed `scf.F90` →
+`calc_fock` → `calc_jk_xc`).
+
+**Result: it does not help — it hurts convergence and is a net loss.** The
+converged energy stays within the 1e-7 gate, but the iteration count blows up:
+
+| system | baseline iters | IncDFT iters | reuses | ΔE (Ha) |
+|---|---|---|---|---|
+| benzene / PBE | 9 | 18 | 7 | 0.0e+00 |
+| C20H42 / PBE | 12 | 31 | 16 | −7e-10 |
+
+**Each reused XC build costs ≈ one extra SCF iteration.** Because XC is nonlinear
+and the reused matrix is *global*, freezing it produces a Fock inconsistent with
+the still-evolving density, which DIIS must work off; and one extra SCF iteration
+(which includes a J/K build — always ≥ the XC build here) costs more than the XC
+build it skipped. So whole-matrix XC reuse can only lose.
+
+**The correct approach is per-batch screening** (Q-Chem-style incremental DFT):
+keep `V_xc[D]` *accurate* by recomputing only the grid batches where `ΔP` is
+significant and reusing the rest, via reference subtraction
+`V = V_ref + Σ_active (V_s[D] − V_s[D_ref])`. Because the assembled Fock stays
+correct to the screening threshold, convergence is **not** penalized, and the
+saving is the screened-out batch fraction (grows late in SCF as `ΔP` sparsifies).
+This needs the engine to evaluate a reference density per active batch (cheap
+given the Opt-1 Φ cache) and per-slice `ΔP` screening — a larger change left as
+future work. The current `OQP_XC_INCDFT` path is retained, off by default and
+clearly experimental, as the gating/reference-store scaffolding for that work and
+to make the negative result reproducible (`[SCFTIME] ... xc_reused=T/F`).
+
 ## Reproduce
 
 ```sh
@@ -82,6 +122,7 @@ cmake -G Ninja -B build -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 \
   -DLINALG_LIB=auto -DLINALG_LIB_INT64=OFF
 ninja -C build oqp
 
-# run with timing:
-OQP_XC_PHI_CACHE=1 OQP_XC_TIMING=1  pyoqp input.inp
+# run with timing, toggling the optimizations:
+OQP_XC_PHI_CACHE=1 OQP_XC_TIMING=1  pyoqp input.inp     # Opt 1
+OQP_XC_INCDFT=1    OQP_XC_TIMING=1  pyoqp input.inp     # Opt 2 (experimental)
 ```
