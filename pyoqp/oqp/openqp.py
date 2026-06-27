@@ -204,6 +204,55 @@ class _WorkflowEnergyProxy:
         return self._owner._control(runtype="energy")
 
 
+class _TheoryProxy:
+    """Quantum-theory namespace for OpenQP Python scripts."""
+
+    def __init__(self, owner):
+        self._owner = owner
+
+    def __call__(self, method, functional=None, basis=None, runtype=None,
+                 nstate=3, reference=None, **keywords):
+        return self._owner._theory(
+            method,
+            functional=functional,
+            basis=basis,
+            runtype=runtype,
+            nstate=nstate,
+            reference=reference,
+            **keywords,
+        )
+
+    def hf(self, **kwargs):
+        return self._owner.hf(**kwargs)
+
+    def dft(self, functional=None, **kwargs):
+        if functional is None:
+            raise ValueError("DFT theory requires functional=...")
+        return self._owner.dft(functional, **kwargs)
+
+    def tdhf(self, **kwargs):
+        return self._owner._theory("tdhf", **kwargs)
+
+    def tddft(self, functional=None, **kwargs):
+        if functional is None:
+            raise ValueError("TDDFT theory requires functional=...")
+        return self._owner.tddft(functional, **kwargs)
+
+    def sf_tddft(self, functional=None, **kwargs):
+        if functional is None:
+            raise ValueError("SF-TDDFT theory requires functional=...")
+        return self._owner.sf_tddft(functional, **kwargs)
+
+    def sf(self, functional=None, **kwargs):
+        return self.sf_tddft(functional=functional, **kwargs)
+
+    def mrsf(self, **kwargs):
+        return self._owner.mrsf(**kwargs)
+
+    def mrsf_tddft(self, **kwargs):
+        return self.mrsf(**kwargs)
+
+
 class _WorkflowProxy:
     """Scientific workflow namespace for OpenQP Python scripts."""
 
@@ -296,6 +345,7 @@ class OpenQP:
         self.unit = "Angstrom"
         self.runner = None
         self.mol = None
+        self.theory = _TheoryProxy(self)
         self.workflow = _WorkflowProxy(self)
         self.settings = _SettingsProxy(self)
         self.control = _ControlProxy(self)
@@ -451,6 +501,19 @@ class OpenQP:
 
     def theory(self, method, functional=None, basis=None, runtype=None,
                nstate=3, reference=None, **keywords):
+        """Backward-compatible direct theory dispatcher."""
+        return self._theory(
+            method,
+            functional=functional,
+            basis=basis,
+            runtype=runtype,
+            nstate=nstate,
+            reference=reference,
+            **keywords,
+        )
+
+    def _theory(self, method, functional=None, basis=None, runtype=None,
+                nstate=3, reference=None, **keywords):
         """Set a compact OpenQP theory model."""
         method_key = str(method).lower().replace("_", "-")
         if method_key in {"hf", "hartree-fock"}:
@@ -639,7 +702,8 @@ class OpenQP:
         return self.tdhf(**updates)
 
     def soc(self, nstate=3, functional=None, reference="rohf",
-            reference_multiplicity=3, soc_2e=1, basis=None, **tdhf_keywords):
+            reference_multiplicity=3, soc_2e=1, scal_rel=2,
+            basis=None, **tdhf_keywords):
         """Use a compact MRSF-TDDFT SOC setup."""
         return self._soc(
             nstate=nstate,
@@ -647,11 +711,12 @@ class OpenQP:
             reference=reference,
             reference_multiplicity=reference_multiplicity,
             soc_2e=soc_2e,
+            scal_rel=scal_rel,
             basis=basis,
             **tdhf_keywords,
         )
 
-    def _soc_control(self, soc_2e=1, **tdhf_keywords):
+    def _soc_control(self, soc_2e=1, scal_rel=2, **tdhf_keywords):
         """Select the SOC workflow after an MRSF-TDDFT theory has been set."""
         self._require_mrsf_theory_for_soc()
         theory_keys = {"basis", "functional", "reference", "reference_multiplicity"}
@@ -668,7 +733,11 @@ class OpenQP:
                 "do not set tdhf.multiplicity in job.workflow.soc()."
             )
 
-        self.set(**{"input.runtype": "soc", "input.soc_2e": soc_2e})
+        self.set(**{
+            "input.runtype": "soc",
+            "input.soc_2e": soc_2e,
+            "scf.scal_rel": scal_rel,
+        })
         if tdhf_keywords:
             self.tdhf(**tdhf_keywords)
         return self
@@ -711,7 +780,8 @@ class OpenQP:
             )
 
     def _soc(self, nstate=3, functional=None, reference="rohf",
-             reference_multiplicity=3, soc_2e=1, basis=None, **tdhf_keywords):
+             reference_multiplicity=3, soc_2e=1, scal_rel=2,
+             basis=None, **tdhf_keywords):
         """Use a compact MRSF-TDDFT SOC setup."""
         if "multiplicity" in tdhf_keywords:
             raise ValueError(
@@ -725,7 +795,7 @@ class OpenQP:
         if basis is not None:
             input_updates["basis"] = basis
         self.input(**input_updates)
-        self.scf(type=reference, multiplicity=reference_multiplicity)
+        self.scf(type=reference, multiplicity=reference_multiplicity, scal_rel=scal_rel)
         updates = {"type": "mrsf", "nstate": nstate}
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)

@@ -30,6 +30,7 @@ SCHEMA = {
         "type": {"type": _string, "default": "rhf"},
         "multiplicity": {"type": int, "default": "1"},
         "conv": {"type": float, "default": "1.0e-6"},
+        "scal_rel": {"type": int, "default": "0"},
     },
     "tdhf": {
         "type": {"type": _string, "default": "rpa"},
@@ -337,6 +338,46 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "6")
 
+    def test_theory_namespace_helpers_set_models(self):
+        openqp = load_openqp_module()
+
+        dft = (
+            openqp.OpenQP(project="h2o_dft_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.dft(functional="pbe0", basis="6-31g*")
+        )
+        config = dft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "pbe0")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["scf"]["type"], "rhf")
+
+        mrsf = (
+            openqp.OpenQP(project="h2o_mrsf_namespace")
+            .molecule(geometry="water", charge=0)
+            .theory.mrsf(functional="bhhlyp", basis="6-31g*", nstate=4)
+        )
+        config = mrsf.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["nstate"], "4")
+
+        tddft = (
+            openqp.OpenQP(project="h2o_tddft_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.tddft(functional="b3lyp5", basis="6-31g*", nstate=2)
+        )
+        config = tddft.to_input_dict()
+        self.assertEqual(config["input"]["method"], "tdhf")
+        self.assertEqual(config["input"]["functional"], "b3lyp5")
+        self.assertEqual(config["tdhf"]["nstate"], "2")
+
+        with self.assertRaisesRegex(ValueError, "DFT theory requires"):
+            openqp.OpenQP(project="bad_dft_namespace").theory.dft()
+
     def test_theory_helper_sets_response_theories(self):
         openqp = load_openqp_module()
 
@@ -616,9 +657,15 @@ $$$$
         self.assertEqual(config["input"]["soc_2e"], "1")
         self.assertEqual(config["scf"]["type"], "rohf")
         self.assertEqual(config["scf"]["multiplicity"], "3")
+        self.assertEqual(config["scf"]["scal_rel"], "2")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "12")
         self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+        job.workflow.soc(soc_2e=0, scal_rel=1)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["soc_2e"], "0")
+        self.assertEqual(config["scf"]["scal_rel"], "1")
 
     def test_workflow_soc_requires_mrsf_theory(self):
         openqp = load_openqp_module()
@@ -648,6 +695,12 @@ $$$$
 
         with self.assertRaisesRegex(ValueError, "do not set tdhf.multiplicity"):
             job.soc(nstate=12, functional="bhhlyp", **{"multiplicity": 3})
+
+        job.soc(nstate=12, functional="bhhlyp", basis="6-31G(2df,p)")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "soc")
+        self.assertEqual(config["input"]["soc_2e"], "1")
+        self.assertEqual(config["scf"]["scal_rel"], "2")
 
     def test_section_proxy_updates_openqp_keywords(self):
         openqp = load_openqp_module()
