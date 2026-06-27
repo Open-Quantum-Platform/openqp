@@ -693,4 +693,156 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
 endif()
 
 
+# ---------------------------------------------------------------------------
+# DFT-D4 dispersion (native): mctc-lib -> multicharge -> dftd4.
+# Replaces the former `dftd4` Python (cffi) package. All three install into one
+# shared prefix so dftd4 finds its deps via find_package(); the static libs are
+# linked into liboqp in source/. Follows the reuse/stand-in pattern above.
+# ---------------------------------------------------------------------------
+if(OQP_REUSE_EXTERNALS)
+    set(DFTD4_INSTALL "${OQP_EXTERNALS_INSTALL_ROOT}/dftd4" CACHE INTERNAL "DFTD4_INSTALL" FORCE)
+else()
+    set(DFTD4_INSTALL "${CMAKE_BINARY_DIR}/external/install/dftd4" CACHE INTERNAL "DFTD4_INSTALL" FORCE)
+endif()
+
+# The dftd4 stack is built with DEFAULT (4-byte) integers, NOT -fdefault-integer-8.
+# dftd4/multicharge get ILP64 BLAS via their own WITH_ILP64 option (which sets
+# -DIK=i8 for the BLAS interface only); forcing -fdefault-integer-8 instead breaks
+# dftd4's bind(c) enum kind (df_enum) vs default-integer consistency. mctc-lib uses
+# no BLAS. Because the stack stays 4-byte, the shim hands mctc-lib's `new` a 4-byte
+# `num` (OQP_D4_INT_KIND=4 in source/CMakeLists.txt), independent of the host width.
+# WITH_OpenMP tracks OpenQP's ENABLE_OPENMP: dftd4/multicharge default WITH_OpenMP
+# ON, but OpenQP only finds/links OpenMP when ENABLE_OPENMP=ON (default OFF), so
+# without this the D4 statics would carry an OpenMP runtime dependency liboqp does
+# not satisfy. WITH_TESTS=OFF is honored by multicharge; dftd4/mctc-lib ignore it
+# and add their test subdir (and dftd4 an unconditional mstore fetch) unconditionally,
+# so those are stripped via PATCH_COMMAND on each ExternalProject below.
+set(DFTD4_COMMON_ARGS
+        -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
+        -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
+        -DCMAKE_INSTALL_LIBDIR=lib
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_SHARED_LIBS=OFF
+        -DWITH_TESTS=OFF
+        -DWITH_OpenMP=${ENABLE_OPENMP}
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+        ${OQP_EXTERNAL_GENERATOR_ARGS}
+)
+
+# dftd4 3.7.0 and mctc-lib 0.4.2 call add_subdirectory("test") unconditionally
+# (they do not honor WITH_TESTS), and dftd4 additionally does an unconditional
+# find_package("mstore") whose fetch method downloads an unpinned mstore purely
+# for its test target. Strip both so a clean/offline build neither needs mstore
+# nor builds tests. Substitutions are idempotent (safe under OQP_REUSE_EXTERNALS).
+# `.` stands in for the literal " to avoid nested-quote escaping.
+set(DFTD4_DROP_TESTS_PERL "s/\\nadd_subdirectory\\(.test.\\)/\\n# test subdir disabled by OpenQP/g")
+set(DFTD4_DROP_MSTORE_PERL "s/if\\(NOT TARGET .mstore..mstore.\\)\\s*\\n\\s*find_package\\(.mstore.\\)\\s*\\nendif\\(\\)/# mstore find disabled by OpenQP (no dftd4 tests)/g")
+
+# Feed dftd4/multicharge the same BLAS+LAPACK choice OpenQP resolved, the same
+# way ddx is fed above. multicharge needs LAPACK (a linear solve), so BOTH
+# BLAS_LIBRARIES and LAPACK_LIBRARIES must be forwarded. WITH_ILP64 selects the
+# 8-byte BLAS interface in dftd4/multicharge to match BLA_SIZEOF_INTEGER.
+set(DFTD4_BLAS_ARGS "")
+if(BLA_SIZEOF_INTEGER EQUAL 8)
+    list(APPEND DFTD4_BLAS_ARGS -DWITH_ILP64=ON)
+endif()
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${LIBBLAS})
+    oqp_external_cmake_list_arg(_d4_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
+    list(APPEND DFTD4_BLAS_ARGS "${_d4_blas_arg}" "${_d4_lapack_arg}")
+elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
+    oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
+    oqp_external_cmake_list_arg(_d4_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
+    list(APPEND DFTD4_BLAS_ARGS "${_d4_blas_arg}" "${_d4_lapack_arg}")
+elseif(DEFINED BLA_VENDOR)
+    list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+endif()
+
+set(DFTD4_MCTC_LIB        ${DFTD4_INSTALL}/lib/libmctc-lib.a     CACHE INTERNAL "DFTD4_MCTC_LIB" FORCE)
+set(DFTD4_MULTICHARGE_LIB ${DFTD4_INSTALL}/lib/libmulticharge.a  CACHE INTERNAL "DFTD4_MULTICHARGE_LIB" FORCE)
+set(DFTD4_DFTD4_LIB       ${DFTD4_INSTALL}/lib/libdftd4.a        CACHE INTERNAL "DFTD4_DFTD4_LIB" FORCE)
+
+oqp_set_external_paths(DFTD4_MCTC mctc-lib
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(mctc-lib "${DFTD4_MCTC_LIB}")
+if(NOT TARGET mctc-lib)
+ExternalProject_Add(mctc-lib
+        PREFIX ${DFTD4_MCTC_PREFIX}
+        URL https://github.com/grimme-lab/mctc-lib/archive/refs/tags/v0.4.2.tar.gz
+        URL_HASH SHA256=c7aa45c0a3e6f96e3316e15fc6cdbe48b15234940d3773927a57bb7bfe9744ac
+        SOURCE_DIR ${DFTD4_MCTC_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_MCTC_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_MCTC_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_MCTC_LIB}
+        UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS}
+        )
+endif()
+
+oqp_set_external_paths(DFTD4_MC multicharge
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(multicharge "${DFTD4_MULTICHARGE_LIB}")
+if(NOT TARGET multicharge)
+ExternalProject_Add(multicharge
+        PREFIX ${DFTD4_MC_PREFIX}
+        URL https://github.com/grimme-lab/multicharge/archive/refs/tags/v0.3.0.tar.gz
+        URL_HASH SHA256=2fcc1f80871f404f005e9db458ffaec95bb28a19516a0245278cd3175b63a6b2
+        LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
+        SOURCE_DIR ${DFTD4_MC_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_MC_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_MC_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_MULTICHARGE_LIB}
+        UPDATE_COMMAND ""
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
+        )
+add_dependencies(multicharge mctc-lib)
+endif()
+
+oqp_set_external_paths(DFTD4_D4 dftd4
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(dftd4 "${DFTD4_DFTD4_LIB}" "${DFTD4_MULTICHARGE_LIB}" "${DFTD4_MCTC_LIB}")
+if(NOT TARGET dftd4)
+ExternalProject_Add(dftd4
+        PREFIX ${DFTD4_D4_PREFIX}
+        URL https://github.com/dftd4/dftd4/archive/refs/tags/v3.7.0.tar.gz
+        URL_HASH SHA256=f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c
+        LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
+        SOURCE_DIR ${DFTD4_D4_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_D4_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_D4_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_DFTD4_LIB}
+        UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
+                COMMAND perl -0pi -e "${DFTD4_DROP_MSTORE_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
+        )
+add_dependencies(dftd4 multicharge)
+endif()
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    if(TARGET mctc-lib)
+        add_dependencies(mctc-lib LAPACK)
+    endif()
+    if(TARGET multicharge)
+        add_dependencies(multicharge LAPACK)
+    endif()
+    if(TARGET dftd4)
+        add_dependencies(dftd4 LAPACK)
+    endif()
+endif()
+
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
