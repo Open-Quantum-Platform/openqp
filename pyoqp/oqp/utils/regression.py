@@ -136,6 +136,11 @@ REGISTRY = (
     RegKey('mrsf_ekt', runtypes=frozenset({'ekt'}), required=True,
            skip_sub=('orbitals_mo', 'dyson_orbitals_mo')),
     RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr'),
+    # SCF property results, each gated on its requested scf_prop value.
+    RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
+    RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
+    RegKey('lowdin_charges', runtypes='*', required=True, needs_prop='lowdin'),
+    RegKey('resp_charges', runtypes='*', required=True, needs_prop='resp'),
 )
 
 _BY_KEY = {e.key: e for e in REGISTRY}

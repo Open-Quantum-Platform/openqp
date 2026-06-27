@@ -1278,6 +1278,25 @@ class Molecule:
             # previous data is not available, return current data to bypass nacme calculation
             return self.get_system(), self.get_data()
 
+    def explicit_scf_props(self):
+        """Lowercased scf_prop values EXPLICITLY set in the input file.
+
+        Distinct from ``config['properties']['scf_prop']``, which is populated
+        with the 'el_mom,mulliken' default for every run. Regression coverage of
+        a property is opt-in: only properties named explicitly in the input are
+        surfaced to the JSON, required by the gate, and compared.
+        """
+        try:
+            with open(self.input_file, 'r') as handle:
+                text = handle.read()
+        except (OSError, AttributeError, TypeError):
+            return []
+        import re
+        m = re.search(r'^\s*scf_prop\s*=\s*([^\n#]+)', text, re.I | re.M)
+        if not m:
+            return []
+        return [p.strip().lower() for p in re.split(r'[,\s]+', m.group(1)) if p.strip()]
+
     def get_results(self):
         """
         Collect computed results to dict
@@ -1316,6 +1335,30 @@ class Molecule:
             data['nmr_shielding'] = sh.tolist()
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
+
+        # SCF properties are surfaced to the JSON only when EXPLICITLY requested
+        # in the input (scf_prop defaults to 'el_mom,mulliken', which every SCF
+        # run computes for the log -- we must not bloat/require those on every
+        # reference). The explicit request is the regression opt-in.
+        props = self.explicit_scf_props()
+        charge_tags = (('mulliken', 'mulliken_charges', 'OQP::mulliken_charges'),
+                       ('lowdin', 'lowdin_charges', 'OQP::lowdin_charges'),
+                       ('resp', 'resp_charges', 'OQP::resp_charges'))
+        for prop, key, tag in charge_tags:
+            if prop not in props:
+                continue
+            try:
+                data[key] = np.array(self.data[tag]).tolist()
+            except (AttributeError, KeyError, TypeError):
+                pass
+        if 'el_mom' in props:
+            try:
+                dip = np.zeros(3, dtype=np.float64)
+                oqp.electric_dipole_au(
+                    self, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dip)))
+                data['dipole'] = dip.tolist()
+            except Exception:
+                pass
 
         # save gradients if available
         data['grad'] = np.array(self.get_grad()).tolist()
@@ -1652,10 +1695,9 @@ class Molecule:
         runtype = self.config['input']['runtype']
         tdhf_type = self.config.get('tdhf', {}).get('type')
         excited = bool(tdhf_type) and str(tdhf_type).lower() not in ('none',)
-        try:
-            props = list(self.config.get('properties', {}).get('scf_prop', []) or [])
-        except (AttributeError, TypeError):
-            props = []
+        # Only EXPLICITLY requested properties are regression targets (the
+        # default el_mom,mulliken is computed for the log but not tested).
+        props = self.explicit_scf_props()
         return runtype, excited, props
 
     def check_ref(self):
