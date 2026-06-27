@@ -60,7 +60,13 @@ jobs:
             # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
             # and runtime deps (numpy/scipy/geometric/...) come from pyproject.
             # USE_LIBINT/ENABLE_OPENMP/LINALG_LIB_INT64 are pyproject defaults; CI
-            # only overrides the build type and the MPI matrix leg.
+            # only overrides the build type, the MPI matrix leg, and ENABLE_DDX.
+            #
+            # ENABLE_DDX=ON builds the optional ddX continuum-solvation backend so
+            # the PCM/ddX (DDPCM) examples actually run below instead of reporting
+            # SKIPPED. Building ddX (and the bundled reference LAPACK it links
+            # against) from source is the expensive part; the bundled-externals
+            # cache above (keyed on external/CMakeLists.txt) pays that cost once.
             #
             # External deps (libxc, nlopt, ...) are fetched via ExternalProject and
             # the upstream hosts intermittently return HTTP 504. The bundled-
@@ -69,6 +75,7 @@ jobs:
             n=0
             until pip install -v . \
                 --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.define.ENABLE_DDX=ON \
                 --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
               n=$((n + 1))
               if [ "$n" -ge 3 ]; then
@@ -90,11 +97,20 @@ jobs:
             # (max_workers = cpus // omp_threads); the examples are tiny.
             OQP_TEST_OMP_THREADS: 1
            run: |
-            openqp --run_tests all
+            openqp --run_tests all | tee run_tests.out
+            # The tester reports a missing-optional-backend example as SKIPPED
+            # (green), not FAILED. Since this build sets ENABLE_DDX=ON, the DDPCM
+            # examples MUST run -- if any hit the OQP_ENABLE_DDX skip sentinel,
+            # ddX silently did not build and the green suite would be a false pass.
+            # Fail explicitly on that sentinel (see oqp_tester.py
+            # _OPTIONAL_FEATURE_SENTINELS / the "build lacks ..." log line).
+            if grep -q 'OQP_ENABLE_DDX' run_tests.out; then
+              echo "::error::ddX-enabled build skipped a DDPCM example (OQP_ENABLE_DDX sentinel); ddX must be built and the PCM examples must run"
+              exit 1
+            fi
 
-# NOTE: the optional ddX continuum-solvation (PCM) backend stays OFF in this CI
-# build to keep it fast (building ddX from source is expensive). "openqp
-# --run_tests all" still walks the PCM/ddX (DDPCM) examples, but the test runner
-# detects that the build lacks ENABLE_DDX and reports them as SKIPPED instead of
-# failing. The ddX-enabled build and the scientific PCM validation gates are run
-# and documented out-of-CI in docs/pcm_ddx_validation.md.
+# NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
+# the inline comment in each input. The energy-only ddPCM Fock coupling is
+# self-consistent only to ~1e-7, so a tighter target would not converge. The
+# deeper scientific PCM validation gate lives in
+# tests/test_pcm_literature_benchmarks.py.
