@@ -138,6 +138,8 @@ OQP_CONFIG_SCHEMA = {
         'pscreen_k': {'type': float, 'default': '1.0e-2'},
         'pscreen_cap': {'type': float, 'default': '1.0e-8'},
         'pscreen_tight': {'type': float, 'default': '1.0e-4'},
+        'pscreen_xc_dcut': {'type': float, 'default': '0.0'},
+        'pscreen_xc_aocut': {'type': float, 'default': '0.0'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -364,6 +366,8 @@ class OQPData:
             "pscreen_k": "set_scf_pscreen_k",
             "pscreen_cap": "set_scf_pscreen_cap",
             "pscreen_tight": "set_scf_pscreen_tight",
+            "pscreen_xc_dcut": "set_scf_pscreen_xc_dcut",
+            "pscreen_xc_aocut": "set_scf_pscreen_xc_aocut",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
@@ -663,6 +667,14 @@ class OQPData:
     def set_scf_pscreen_tight(self, tight):
         """Progressive screening: pin to int2e_cutoff once diis_error < tight"""
         self._data.control.pscreen_tight = tight
+
+    def set_scf_pscreen_xc_dcut(self, dcut):
+        """Progressive XC: loose grid density cutoff during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_dcut = dcut
+
+    def set_scf_pscreen_xc_aocut(self, aocut):
+        """Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_aocut = aocut
 
     def set_scf_converger_type(self, converger_type):
         """Set SCF solver for SCF convergence:

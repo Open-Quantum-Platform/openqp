@@ -132,6 +132,8 @@ struct control_parameters {
     double    pscreen_k;
     double    pscreen_cap;
     double    pscreen_tight;
+    double    pscreen_xc_dcut;
+    double    pscreen_xc_aocut;
     int64_t   esp;
     int64_t   resp_target;
     double    esp_constr;

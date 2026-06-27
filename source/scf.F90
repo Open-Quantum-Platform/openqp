@@ -146,6 +146,11 @@ contains
     character(len=64) :: ps_env       ! scratch for env-var reads
     integer       :: ps_ln            ! env-var length / iostat scratch
     integer(kind=8) :: ps_t0, ps_t1, ps_rate ! Fock-build timer counters
+    logical       :: ps_xc            ! progressive XC-grid threshold ramp active
+    real(kind=dp) :: ps_xc_dcut       ! loose grid density cutoff during descent
+    real(kind=dp) :: ps_xc_aocut      ! loose grid AO-prune threshold during descent
+    real(kind=dp) :: ps_xc_dcut0      ! saved baseline grid density cutoff
+    real(kind=dp) :: ps_xc_aocut0     ! saved baseline grid AO-prune threshold
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -537,6 +542,22 @@ contains
         '  tight=', ps_cut_tight, '  k=', ps_k, '  cap=', ps_cap, '  pin<', ps_tight
     end if
 
+    ! Progressive XC-grid threshold ramp (gated by the same scf_pscreen + ps_pin latch).
+    ! During the descent, loosen the DFT grid density cutoff / AO-prune threshold so early
+    ! XC builds prune more AOs and skip more low-density points; restore to the user's
+    ! baseline (tight) once pinned, so the converged XC energy is unchanged.
+    ps_xc_dcut  = infos%control%pscreen_xc_dcut
+    ps_xc_aocut = infos%control%pscreen_xc_aocut
+    call get_environment_variable("OQP_PSCREEN_XC_DCUT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_xc_dcut
+    call get_environment_variable("OQP_PSCREEN_XC_AOCUT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_xc_aocut
+    ps_xc_dcut0  = infos%dft%grid_density_cutoff
+    ps_xc_aocut0 = infos%dft%grid_ao_threshold
+    ps_xc = ps_on .and. (ps_xc_dcut > 0.0_dp .or. ps_xc_aocut > 0.0_dp)
+    if (ps_xc) write(IW,'(3x,a,es9.2,a,es9.2)') &
+        '  XC ramp: loose grid dcut=', ps_xc_dcut, '  loose grid aocut=', ps_xc_aocut
+
     ! Initialize SCF Convergence Accelerator (single source of truth)
     call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
                             maxdiis, diis_nfocks, soscf_nfocks, &
@@ -655,6 +676,18 @@ contains
           ps_tau = max(ps_cut_tight, min(ps_cap, ps_k*diis_error))
         end if
         infos%control%int2e_cutoff = ps_tau
+      end if
+
+      ! Progressive XC: loosen the grid thresholds during the descent, restore (pin) in
+      ! the tail. Uses the same ps_pin latch set above, so ERI and XC tighten together.
+      if (ps_xc) then
+        if (ps_pin) then
+          infos%dft%grid_density_cutoff = ps_xc_dcut0
+          infos%dft%grid_ao_threshold   = ps_xc_aocut0
+        else
+          if (ps_xc_dcut  > 0.0_dp) infos%dft%grid_density_cutoff = ps_xc_dcut
+          if (ps_xc_aocut > 0.0_dp) infos%dft%grid_ao_threshold   = ps_xc_aocut
+        end if
       end if
 
       ! Incremental-Fock refresh. The incremental build forms F = F_old + G[dD] and
@@ -1067,6 +1100,10 @@ contains
     ! Restore the user's tight 2e cutoff for any downstream builds (gradient,
     ! properties, response) regardless of where the SCF loop exited.
     if (ps_on) infos%control%int2e_cutoff = ps_cut_tight
+    if (ps_xc) then
+      infos%dft%grid_density_cutoff = ps_xc_dcut0
+      infos%dft%grid_ao_threshold   = ps_xc_aocut0
+    end if
 
     !----------------------------------------------------------------------------
     ! Clean Convergence Accelerator (DIIS/SOSCF)

@@ -29,15 +29,28 @@ This is the classic dynamic/variable integral screening of Almlof-Faegri-Korsell
 Haser-Ahlrichs (1989); the continuous DIIS-error coupling mirrors Q-Chem's `VARTHRESH`. It
 composes with (and rides on top of) OpenQP's incremental difference-density Fock build.
 
+## XC-grid ramp (DFT)
+
+The same `diis_error` controller and `pscreen_tight` pin also drive an optional **XC-grid
+threshold ramp**: during the descent the DFT grid density cutoff (`grid_density_cutoff`) and the
+grid AO-prune threshold (`grid_ao_threshold`) are loosened, so early XC builds prune more AOs and
+skip more low-density points; both are restored to the user's baseline once `diis_error <
+pscreen_tight`, so the converged XC energy is unchanged. This is one controller feeding two
+consumers (ERIs + XC). It is **opt-in within `pscreen`** (both knobs default to 0 = not ramped),
+because the safe loose magnitude is more system-dependent than the ERI cap; recommended range
+1e-5 (conservative) to 1e-4 (more aggressive, validated on the systems below).
+
 ## Usage
 
 Input file:
 ```
 [scf]
 pscreen=True            # enable (default False)
-pscreen_k=1.0e-2        # coupling: tau_iter = k * diis_error
-pscreen_cap=1.0e-8      # loosest cutoff allowed early (safe ceiling)
-pscreen_tight=1.0e-4    # pin to int2e_cutoff once diis_error < this
+pscreen_k=1.0e-2        # ERI coupling: tau_iter = k * diis_error
+pscreen_cap=1.0e-8      # ERI loosest cutoff early (safe ceiling)
+pscreen_tight=1.0e-4    # pin both ERI + XC to tight once diis_error < this
+pscreen_xc_dcut=1.0e-4  # XC: loose grid density cutoff during descent (0=off)
+pscreen_xc_aocut=1.0e-4 # XC: loose grid AO-prune threshold during descent (0=off)
 ```
 
 Environment (override, handy for benchmarking; matches the `OQP_FOCK_*` convention):
@@ -46,6 +59,8 @@ OQP_PSCREEN=1            # enable
 OQP_PSCREEN_K=1e-2
 OQP_PSCREEN_CAP=1e-8
 OQP_PSCREEN_TIGHT=1e-4
+OQP_PSCREEN_XC_DCUT=1e-4   # XC grid density cutoff (loose phase)
+OQP_PSCREEN_XC_AOCUT=1e-4  # XC grid AO-prune threshold (loose phase)
 OQP_FOCK_TIMER=1         # print per-iteration Fock-build time, tau, and skip count
 ```
 
@@ -73,9 +88,17 @@ Energy matches the all-tight baseline to 0.0 Ha and iteration counts are unchang
 the total-SCF figure is diluted by diagonalization/DIIS/density steps and is noisy on a loaded
 machine.
 
-**Honest assessment.** The savings are modest for pure HF and negligible for hybrid DFT. Two
-reasons: (1) OpenQP's existing density-weighted **incremental** Fock build already harvests most of
-the ERI screening savings, so the marginal gain from loosening early iterations is small once the
-safe cap is respected; (2) for hybrid DFT the wall-time bottleneck is the **numerical XC grid**,
-which this feature does not touch. A coarse->fine **XC grid** ramp (and faster XC integration:
-BLAS-form rho/Vxc, collocation caching) is the larger DFT opportunity and is left as future work.
+XC-grid ramp (BHHLYP/6-31G\*, `pscreen_xc_dcut=pscreen_xc_aocut=1e-4`), energy exact, iters unchanged:
+
+| system (atoms)        | OFF       | ERI+XC ramp | speedup |
+|-----------------------|-----------|-------------|---------|
+| (H2O)8 BHHLYP (24)    | 30.65 s   | 29.70 s     | ~3%     |
+| (H2O)16 BHHLYP (48)   | 317.9 s   | 296.7 s     | **~7%** |
+
+**Honest assessment.** Savings are modest: ~5-15% for pure HF (ERI ramp), and ~7% for the
+XC-dominated large hybrid-DFT case (ERI+XC ramp), with **exact** converged energy and no extra
+iterations in all cases. The ceiling is real: (1) OpenQP's existing density-weighted **incremental**
+Fock already harvests most ERI savings; (2) the convergence-wall invariant (`err_screen <<
+||SCF update||`) caps how loose early iterations can go. The larger remaining DFT opportunity is
+the **structural** one — matrix/BLAS-form rho+Vxc and collocation caching across iterations
+(the grid is fixed) — which is a bigger rewrite and left as future work.

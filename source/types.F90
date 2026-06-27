@@ -130,6 +130,12 @@ module types
                                                      !< the validated safe ceiling -- looser derails DIIS on dense
                                                      !< systems (the err_screen << |SCF update| invariant)
     real(c_double) :: pscreen_tight = 1e-4_dp        !< pin tau_iter to int2e_cutoff once diis_error < this
+    ! Progressive XC: during the loose phase (diis_error >= pscreen_tight) override the
+    ! DFT grid density cutoff and AO-prune threshold with these looser values, so early
+    ! XC builds prune more AOs / skip more low-density points; restored to baseline (pinned)
+    ! once diis_error < pscreen_tight. 0 = that knob is not ramped. Same scf_pscreen gate.
+    real(c_double) :: pscreen_xc_dcut = 0.0_dp       !< loose grid density cutoff during descent (0=off)
+    real(c_double) :: pscreen_xc_aocut = 0.0_dp      !< loose grid AO-prune threshold during descent (0=off)
     integer(c_int64_t) :: esp = 0                    !< (R)ESP charges, 0 - skip, 1 - ESP, 2 - RESP
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
