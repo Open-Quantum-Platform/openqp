@@ -132,6 +132,14 @@ jobs:
            if: ${{ matrix.MPI == 'OFF' }}
            run: openqp --validate_examples
 
+         - name: Check feature coverage
+           # Gate: every opt-in feature flag in the input schema must be
+           # exercised by at least one example, so a new capability cannot ship
+           # without a test (see EXEMPT_FLAGS / KNOWN_UNCOVERED in
+           # oqp/utils/regression.py). Existing gaps are grandfathered notes.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --check_feature_coverage
+
          - name: Run example test suite
            if: ${{ matrix.MPI == 'OFF' }}
            env:

@@ -260,3 +260,116 @@ def validate_examples(examples_dir):
         if miss:
             failures.append((os.path.relpath(inp, examples_dir), miss))
     return failures
+
+
+# ---------------------------------------------------------------------------
+# Feature-coverage gate -- every opt-in capability must be exercised by an
+# example, so a new feature cannot ship without a test.
+#
+# Mechanism: a feature almost always adds a boolean keyword to
+# OQP_CONFIG_SCHEMA (default False = opt-in). This gate requires every such
+# flag to be set true by at least one committed example .inp, UNLESS it is:
+#   * EXEMPT_FLAGS      -- not a distinct testable capability (IO/restart/
+#                          scratch-cleanup/debug/test-harness/placeholder).
+#   * KNOWN_UNCOVERED   -- a real capability that is grandfathered as a tracked
+#                          gap (TODO: add an example). New flags may NOT be
+#                          added here without review.
+# A new opt-in flag that is neither exercised nor listed fails the gate.
+# Classifications were derived by auditing each flag's code usage.
+# ---------------------------------------------------------------------------
+
+# section.option -> reason. Not a distinct testable capability.
+EXEMPT_FLAGS = {
+    'guess.continue_geom': 'JSON-restart geometry-selection IO convenience',
+    'symmetry.strict': 'validation guard (mismatch -> fatal error), not a capability',
+    'scf.trh_ls': 'TRAH line-search numerical sub-knob',
+    'properties.td_prop': 'unfinished placeholder; input checker warns to disable',
+    'properties.export': 'writes already-computed data to text (pure IO toggle)',
+    'properties.back_door': 'programmatic data-injection hook for external drivers',
+    'hess.read': 'reload cached .hess.json instead of recomputing (IO restart)',
+    'hess.restart': 'resume numerical Hessian from cached scratch (IO restart)',
+    'hess.clean': 'rmtree numerical-Hessian scratch after run (IO cleanup)',
+    'nac.restart': 'reload cached .dcme scratch in numerical NAC (IO restart)',
+    'nac.clean': 'rmtree numerical-NAC scratch after run (IO cleanup)',
+    'tests.exception': 'test-harness toggle (raise vs exit on non-convergence)',
+}
+
+# section.option -> reason. Real capability, tracked gap (needs an example).
+KNOWN_UNCOVERED = {
+    'input.d4': 'native DFT-D4 dispersion (PR #235); add a d4=true example',
+    'symmetry.use_response_symmetry': 'irrep-blocked Davidson TDDFT response solver',
+    'scf.trh_stab': 'TRAH SCF stability-following (escape unstable solutions)',
+    'optimize.init_scf': 'fresh initial-guess SCF each optimization step',
+    'nac.bp': 'branching-plane analysis at conical intersections',
+}
+
+_SCHEMA_FILE = os.path.join(os.path.dirname(__file__), os.pardir,
+                            'molecule', 'oqpdata.py')
+
+
+def _optin_bool_flags(schema_file=None):
+    """{`section.option`: default} for every bool schema keyword default False."""
+    import ast
+    src = schema_file or _SCHEMA_FILE
+    tree = ast.parse(open(src).read())
+    node = next((n.value for n in ast.walk(tree)
+                 if isinstance(n, ast.Assign)
+                 and any(getattr(t, 'id', '') == 'OQP_CONFIG_SCHEMA'
+                         for t in n.targets)), None)
+    out = {}
+    if not isinstance(node, ast.Dict):
+        return out
+    for sk, sv in zip(node.keys, node.values):
+        section = ast.literal_eval(sk)
+        if not isinstance(sv, ast.Dict):
+            continue
+        for ok, ov in zip(sv.keys, sv.values):
+            option = ast.literal_eval(ok)
+            spec = {}
+            for k, v in zip(ov.keys, ov.values):
+                key = ast.literal_eval(k)
+                if isinstance(v, ast.Name):
+                    spec[key] = v.id
+                elif isinstance(v, ast.Constant):
+                    spec[key] = v.value
+            if spec.get('type') == 'bool' and str(spec.get('default')).lower() in ('false',):
+                out['%s.%s' % (section, option)] = spec.get('default')
+    return out
+
+
+def _flag_exercised_true(option, examples_dir):
+    """True if any example .inp sets ``option`` to a truthy value."""
+    pat = re.compile(r'^\s*' + re.escape(option) + r'\s*=\s*'
+                     r'(true|t|1|yes|\.true\.)\s*(#.*)?$', re.I | re.M)
+    for inp in glob.glob(os.path.join(examples_dir, '**', '*.inp'), recursive=True):
+        try:
+            if pat.search(open(inp).read()):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def feature_coverage(examples_dir, schema_file=None):
+    """Check that every opt-in feature flag is exercised by an example.
+
+    Returns ``(failures, grandfathered)``:
+      * ``failures``     -- [(flag, 'no example exercises it')] for flags that
+                            are neither exempt nor known-uncovered -> gate fails.
+      * ``grandfathered``-- [(flag, reason)] tracked gaps that still need a test.
+    """
+    flags = _optin_bool_flags(schema_file)
+    failures, grandfathered = [], []
+    for flag in sorted(flags):
+        _, option = flag.split('.', 1)
+        if flag in EXEMPT_FLAGS:
+            continue
+        if _flag_exercised_true(option, examples_dir):
+            continue
+        if flag in KNOWN_UNCOVERED:
+            grandfathered.append((flag, KNOWN_UNCOVERED[flag]))
+        else:
+            failures.append((flag, 'opt-in feature flag not exercised by any '
+                                   'example (add an example, or classify it in '
+                                   'EXEMPT_FLAGS / KNOWN_UNCOVERED with a reason)'))
+    return failures, grandfathered
