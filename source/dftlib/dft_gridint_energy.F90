@@ -357,6 +357,12 @@ contains
 
     if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight
 
+    ! NB: the Phi cache is deliberately NOT opted-in here. dmatd_blk is reached by
+    ! one-shot callers (e.g. finite-difference Hessian via dftexcor, each at a new
+    ! displaced geometry) where the per-slice cache would be built but never
+    ! replayed -- pure memory/copy overhead. The repeated SCF Fock build reaches
+    ! the grid through dmatd_density_blk, which is where the opt-in lives.
+
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     call run_xc(xc_opts, dat, basis)
@@ -461,6 +467,11 @@ contains
     xc_opts%dft_threshold = dft_threshold
     xc_opts%ao_threshold = infos%dft%grid_ao_threshold
     xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    ! Opt 1: the SCF Fock build reaches the grid through this density-driven path
+    ! (calc_fock passes the packed density as dens_in). Opt in to the
+    ! cross-iteration Phi cache (further gated by env OQP_XC_PHI_CACHE).
+    xc_opts%use_phi_cache = .true.
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call run_xc(xc_opts, dat, basis)
