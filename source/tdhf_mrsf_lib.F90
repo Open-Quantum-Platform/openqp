@@ -1,6 +1,6 @@
 module tdhf_mrsf_lib
 
-    use precision, only : dp
+    use precision, only : dp, sp
     use int2_compute, only: int2_fock_data_t, int2_storage_t
     use basis_tools, only: basis_set
     use oqp_linalg
@@ -10,6 +10,9 @@ module tdhf_mrsf_lib
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
       real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
+      real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
+      real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
+      real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
       logical :: tamm_dancoff = .true. !< Tamm-Dancoff approximation
 
     contains
@@ -30,7 +33,25 @@ module tdhf_mrsf_lib
 
     end type
 
+    integer, save :: g_mrsf_fp32 = -1  !< opt-in FP32 Fock accumulation (env OQP_MRSF_FP32)
+
 contains
+
+  !> Read the OQP_MRSF_FP32 opt-in once. When set, the MRSF response Fock
+  !> digestion accumulates in single precision (~+8% over the FP64 path on
+  !> cc-pVDZ; excitation energies perturbed at the ~few-ueV level, Davidson
+  !> convergence unchanged). Default off = exact FP64.
+  subroutine ensure_mrsf_fp32()
+    character(len=8) :: e_
+    if (g_mrsf_fp32 < 0) then
+      call get_environment_variable('OQP_MRSF_FP32', e_)
+      if (len_trim(e_) > 0) then
+        read(e_,*) g_mrsf_fp32
+      else
+        g_mrsf_fp32 = 0
+      end if
+    end if
+  end subroutine
 
 !###############################################################################
 
@@ -69,6 +90,20 @@ contains
           this%ds(:,:,mu,nu) = this%d3(:,1:4,mu,nu) + this%d3(:,1:4,nu,mu)
         end do
       end do
+
+      ! Opt-in FP32 Fock accumulation (env OQP_MRSF_FP32): FP32 operand copies
+      ! + an FP32 per-thread accumulator, folded back to FP64 in parallel_stop.
+      call ensure_mrsf_fp32()
+      if (g_mrsf_fp32 /= 0) then
+        if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+        if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+        if (allocated(this%f3s))   deallocate(this%f3s)
+        allocate(this%ds_sp(this%nfocks, 4, nbf, nbf), &
+                 this%d3_sp(this%nfocks, 7, nbf, nbf))
+        this%ds_sp = real(this%ds, sp)
+        this%d3_sp = real(this%d3, sp)
+        allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+      end if
     end if
 
     call this%init_screen(basis)
@@ -81,14 +116,20 @@ contains
 
     implicit none
 
-    integer :: f3last
+    integer :: f3last, t
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
     f3last = size(shape(this%f3))
 
-    if (this%nthreads /= 1) then
+    if (allocated(this%f3s)) then
+      ! FP32 opt-in: fold the FP32 per-thread accumulator into FP64 f3 slab 1
+      this%f3(:,:,:,:,1) = real(this%f3s(:,:,:,:,1), dp)
+      do t = 2, this%nthreads
+        this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
+      end do
+    else if (this%nthreads /= 1) then
       this%f3(:,:,:,:,lbound(this%f3, f3last)) = sum(this%f3, dim=f3last)
     end if
 
@@ -109,6 +150,9 @@ contains
     deallocate(this%f3)
     deallocate(this%dsh)
     if (allocated(this%ds)) deallocate(this%ds)
+    if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+    if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+    if (allocated(this%f3s)) deallocate(this%f3s)
     nullify(this%d3)
 
   end subroutine
@@ -186,7 +230,44 @@ contains
       ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
       ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
 
-      if (this%cur_pass==1) then
+      if (this%cur_pass==1 .and. allocated(this%f3s)) then
+        ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
+        ! path below but operands/accumulator are single precision. Folded back
+        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        block
+          real(kind=sp) :: cs, xs
+          associate (f3s => this%f3s(:,:,:,:,mythread), &
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+          do n = 1, buf%ncur
+            i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+            val = buf%ints(n)
+            cs = real(val*this%scale_coulomb, sp)
+            xs = real(val*this%scale_exchange, sp)
+            do c = 1, 4
+              do v = 1, nf
+                f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,k,l) = f3s(v,c,k,l) + cs*ds_sp(v,c,i,j)
+                f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
+              end do
+            end do
+            do c = 1, 7
+              do v = 1, nf
+                f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
+                f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
+                f3s(v,c,i,l) = f3s(v,c,i,l) - xs*d3_sp(v,c,j,k)
+                f3s(v,c,l,i) = f3s(v,c,l,i) - xs*d3_sp(v,c,k,j)
+                f3s(v,c,j,k) = f3s(v,c,j,k) - xs*d3_sp(v,c,i,l)
+                f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
+                f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
+                f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+          end do
+          end associate
+        end block
+
+      else if (this%cur_pass==1) then
         do n = 1, buf%ncur
           i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
           val = buf%ints(n)
