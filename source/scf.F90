@@ -154,6 +154,7 @@ contains
     real(kind=dp) :: ps_xc_aocut0     ! saved baseline grid AO-prune threshold
     logical       :: ps_grid_on       ! coarse->fine XC grid ramp active
     type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
+    logical       :: ps_force_iter    ! force one pinned full-accuracy iteration before converging
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -533,6 +534,10 @@ contains
     if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_cap
     call get_environment_variable("OQP_PSCREEN_TIGHT", ps_env, ps_ln)
     if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_tight
+    ! The pin must trigger at or before convergence, otherwise the loose/coarse phase
+    ! can never reach its (looser) noise floor below pscreen_tight and the SCF stalls.
+    ! Keep pscreen_tight at least an order above the SCF convergence threshold.
+    ps_tight = max(ps_tight, 10.0_dp * infos%control%conv)
     ps_timer = .false.
     call get_environment_variable("OQP_FOCK_TIMER", ps_env, ps_ln)
     if (ps_ln > 0) ps_timer = (ps_env(1:1)=='1' .or. ps_env(1:1)=='y' .or. ps_env(1:1)=='Y' &
@@ -967,9 +972,24 @@ contains
       e_old = energy%etot
 
       !----------------------------------------------------------------------------
+      ! Progressive screening: never accept convergence on a loose/coarse build.
+      ! diis_error can drop from > pscreen_tight to < conv in a single step, which
+      ! would otherwise exit right after a loose-cutoff / coarse-grid Fock and report
+      ! that approximate energy. Force one pinned full-accuracy iteration (tight
+      ! int2e_cutoff + XC thresholds + full grid) before convergence is allowed.
+      !----------------------------------------------------------------------------
+      ps_force_iter = .false.
+      if (ps_on .and. .not. ps_pin .and. (abs(diis_error) < infos%control%conv) &
+          .and. (vshift == 0.0_dp)) then
+        ps_pin = .true.
+        ps_force_iter = .true.
+        write(IW,"(3x,64('-')/10x,'Progressive screening: final tight/full-grid SCF iteration.')")
+      end if
+
+      !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
+      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) .and. (.not. ps_force_iter)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
