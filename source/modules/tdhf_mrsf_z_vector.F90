@@ -1791,6 +1791,14 @@ contains
         if (zv_tmr_on) zv_t_cg = zv_t_cg + (zv_wtime() - t0)
 
       end do
+
+      ! Always leave int2_driver at the tight cutoff on exit. Progressive
+      ! screening ramps it during the loop; if CG exits UNCONVERGED (e.g. the
+      ! AUTO solver then falls back to MINRES/GMRES, which reuse int2_driver via
+      ! apply_z_operator and do not ramp), the fallback must see the tight
+      ! operator -- otherwise it would solve/check convergence against the
+      ! screened one. (On convergence the last step is already pinned tight.)
+      if (zv_prog_on) call int2_driver%set_cutoff(zv_rc_save)
           end subroutine run_mrsf_cg_zvector
 
     ! Lambda wrapper for preconditioner
