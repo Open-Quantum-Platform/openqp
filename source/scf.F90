@@ -43,7 +43,7 @@ contains
   !> @param[inout]  infos    System information and calculation parameters
   !>                         (updated with converged energy and wavefunction).
   !> @param[in]     molGrid  Molecular grid for DFT calculations.
-  subroutine scf_driver(basis, infos, molGrid)
+  subroutine scf_driver(basis, infos, molGrid, coarseGrid)
     USE precision, only: dp
     use oqp_tagarray_driver
     use constants, only: kB_HaK
@@ -76,7 +76,8 @@ contains
     !==============================================================================
     type(basis_set), intent(in) :: basis              ! Basis set information
     type(information), target, intent(inout) :: infos ! System information & parameters
-    type(dft_grid_t), intent(in) :: molGrid           ! Molecular grid for DFT
+    type(dft_grid_t), intent(in), target :: molGrid   ! Molecular grid for DFT (full/fine)
+    type(dft_grid_t), intent(in), target, optional :: coarseGrid ! coarse grid for the SCF descent
 
     !================================================o=o===========================
     ! Matrix Dimensions and Basic Parameters
@@ -151,6 +152,8 @@ contains
     real(kind=dp) :: ps_xc_aocut      ! loose grid AO-prune threshold during descent
     real(kind=dp) :: ps_xc_dcut0      ! saved baseline grid density cutoff
     real(kind=dp) :: ps_xc_aocut0     ! saved baseline grid AO-prune threshold
+    logical       :: ps_grid_on       ! coarse->fine XC grid ramp active
+    type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -557,6 +560,10 @@ contains
     ps_xc = ps_on .and. (ps_xc_dcut > 0.0_dp .or. ps_xc_aocut > 0.0_dp)
     if (ps_xc) write(IW,'(3x,a,es9.2,a,es9.2)') &
         '  XC ramp: loose grid dcut=', ps_xc_dcut, '  loose grid aocut=', ps_xc_aocut
+    ! Coarse->fine grid ramp: coarseGrid is built+passed by hf_energy when requested.
+    ps_grid_on = ps_on .and. present(coarseGrid)
+    ps_cur_grid => molGrid
+    if (ps_grid_on) write(IW,'(3x,a)') '  XC ramp: coarse grid during descent, full grid pinned in the tail'
 
     ! Initialize SCF Convergence Accelerator (single source of truth)
     call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
@@ -690,6 +697,16 @@ contains
         end if
       end if
 
+      ! Coarse->fine grid selection (shares the ps_pin latch): coarse grid during the
+      ! descent, full grid once pinned so the converged XC energy is unchanged.
+      if (ps_grid_on) then
+        if (ps_pin) then
+          ps_cur_grid => molGrid
+        else
+          ps_cur_grid => coarseGrid
+        end if
+      end if
+
       ! Incremental-Fock refresh. The incremental build forms F = F_old + G[dD] and
       ! screens the two-electron contributions on the *shrinking* dD; as dD -> 0 the
       ! int2e_cutoff drops proportionally more terms, so F_old drifts (~1e-8) and the
@@ -708,7 +725,7 @@ contains
       end if
 
       if (ps_timer) call system_clock(ps_t0, ps_rate)
-      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      call calc_fock(basis, infos, ps_cur_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
       if (ps_timer) then
         call system_clock(ps_t1)
         write(IW,'(3x,a,i4,a,f10.4,a,es9.2,a,i0)') 'pscreen iter ', iter, &

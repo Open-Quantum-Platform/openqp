@@ -140,6 +140,8 @@ OQP_CONFIG_SCHEMA = {
         'pscreen_tight': {'type': float, 'default': '1.0e-4'},
         'pscreen_xc_dcut': {'type': float, 'default': '0.0'},
         'pscreen_xc_aocut': {'type': float, 'default': '0.0'},
+        'pscreen_grid_rad': {'type': int, 'default': '0'},
+        'pscreen_grid_ang': {'type': int, 'default': '0'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -368,6 +370,8 @@ class OQPData:
             "pscreen_tight": "set_scf_pscreen_tight",
             "pscreen_xc_dcut": "set_scf_pscreen_xc_dcut",
             "pscreen_xc_aocut": "set_scf_pscreen_xc_aocut",
+            "pscreen_grid_rad": "set_scf_pscreen_grid_rad",
+            "pscreen_grid_ang": "set_scf_pscreen_grid_ang",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
@@ -675,6 +679,14 @@ class OQPData:
     def set_scf_pscreen_xc_aocut(self, aocut):
         """Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)"""
         self._data.control.pscreen_xc_aocut = aocut
+
+    def set_scf_pscreen_grid_rad(self, n):
+        """Progressive XC: coarse radial grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_rad = n
+
+    def set_scf_pscreen_grid_ang(self, n):
+        """Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_ang = n
 
     def set_scf_converger_type(self, converger_type):
         """Set SCF solver for SCF convergence:

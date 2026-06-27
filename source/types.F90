@@ -136,6 +136,13 @@ module types
     ! once diis_error < pscreen_tight. 0 = that knob is not ramped. Same scf_pscreen gate.
     real(c_double) :: pscreen_xc_dcut = 0.0_dp       !< loose grid density cutoff during descent (0=off)
     real(c_double) :: pscreen_xc_aocut = 0.0_dp      !< loose grid AO-prune threshold during descent (0=off)
+    ! Progressive XC coarse->fine grid ramp: use a coarse (pscreen_grid_rad x
+    ! pscreen_grid_ang Lebedev) grid during the descent, the full grid once pinned.
+    ! 0 = off. The coarse grid is built in hf_energy (dft_initialize needs basis
+    ! intent(inout)) and selected per-iteration in scf_driver. Energy-neutral: the
+    ! tail uses the full grid, and the XC build is non-incremental.
+    integer(c_int64_t) :: pscreen_grid_rad = 0       !< coarse radial points during descent (0=off)
+    integer(c_int64_t) :: pscreen_grid_ang = 0       !< coarse angular (Lebedev) points during descent (0=off)
     integer(c_int64_t) :: esp = 0                    !< (R)ESP charges, 0 - skip, 1 - ESP, 2 - RESP
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
