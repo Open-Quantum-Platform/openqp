@@ -633,16 +633,32 @@ contains
       !----------------------------------------------------------------------------
       ! The XC energy/Fock change discontinuously across a grid switch, so the
       ! coarse-grid history would bias the fine extrapolation. Clear it here, on
-      ! the first iteration that builds a production-grid Fock.
+      ! the first iteration that builds a production-grid Fock, rebuilding with
+      ! the SAME DIIS scheme the user selected (mirrors init_scf_converger's DIIS
+      ! branch) so the requested strategy is preserved. No vshift bookkeeping is
+      ! needed: c2f is disabled for a level shift on a non-VDIIS converger, so
+      ! here either diis_type == 5 (VDIIS manages its own shift) or vshift == 0.
       if (c2f_reset_pending) then
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis], &
-                       thresholds   =[ethr_cdiis_big], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=int(infos%control%verbose))
+        if (infos%control%diis_type == 5) then
+          call conv%init(ldim=nbf, &
+                         maxvec=maxdiis, &
+                         subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+                         thresholds   =[ethr_cdiis_big, ethr_ediis, &
+                                        infos%control%cdiis_switch], &
+                         overlap=smat_full, &
+                         overlap_sqrt=qmat, &
+                         num_focks=diis_nfocks, &
+                         verbose=int(infos%control%verbose))
+        else
+          call conv%init(ldim=nbf, &
+                         maxvec=maxdiis, &
+                         subconvergers=[int(infos%control%diis_type)], &
+                         thresholds   =[ethr_cdiis_big], &
+                         overlap=smat_full, &
+                         overlap_sqrt=qmat, &
+                         num_focks=diis_nfocks, &
+                         verbose=int(infos%control%verbose))
+        end if
         c2f_reset_pending = .false.
       end if
 
