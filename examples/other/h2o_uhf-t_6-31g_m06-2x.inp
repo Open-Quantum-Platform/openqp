@@ -15,6 +15,7 @@ type=huckel
 save_mol=False
 
 [scf]
+stability=true
 type=uhf
 maxit=30
 maxdiis=5
