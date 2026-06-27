@@ -235,7 +235,8 @@ $$$$
         openqp = load_openqp_module()
 
         job = (
-            openqp.OpenQP(project="h2", usempi=False)
+            openqp.OpenQP(project="h2")
+            .control(usempi=False)
             .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="6-31g*", charge=0)
             .hf()
         )
@@ -307,7 +308,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="h2o_theory")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
         )
 
@@ -326,7 +327,7 @@ $$$$
             openqp.OpenQP(project="h2o_opt")
             .molecule(geometry="water", charge=0, multiplicity=1)
         )
-        job.control(omp_threads=8)
+        job.control(omp_threads=8, usempi=False)
         job.workflow.optimize(
             lib="oqp",
             maxit=12,
@@ -337,6 +338,7 @@ $$$$
         config = job.to_input_dict()
         self.assertEqual(config["input"]["runtype"], "optimize")
         self.assertEqual(config["input"]["omp_threads"], "8")
+        self.assertFalse(job.usempi)
         self.assertEqual(config["input"]["basis"], "6-31g*")
         self.assertEqual(config["input"]["functional"], "bhhlyp")
         self.assertEqual(config["optimize"]["lib"], "oqp")
@@ -348,7 +350,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="h2o_meci")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
         )
 
@@ -364,14 +366,17 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="h2o_workflows")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
         )
 
-        job.workflow.gradient(grad=3)
+        job.workflow.gradient(state=3)
         config = job.to_input_dict()
         self.assertEqual(config["input"]["runtype"], "grad")
         self.assertEqual(config["properties"]["grad"], "3")
+
+        with self.assertRaisesRegex(ValueError, "either state"):
+            job.workflow.gradient(state=1, grad=1)
 
         job.workflow.hessian(type="analytical", state=0)
         config = job.to_input_dict()
@@ -411,7 +416,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="bad_pcm")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
         )
 
@@ -443,7 +448,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="bad_nmr")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
         )
 
@@ -486,7 +491,7 @@ $$$$
 
         mrsf = (
             openqp.OpenQP(project="bad_ekt_channel")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
         )
         with self.assertRaisesRegex(ValueError, "requires ip=True"):
@@ -566,7 +571,7 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="bad_soc_options")
-            .molecule(geometry="water", charge=0, multiplicity=3)
+            .molecule(geometry="water", charge=0)
             .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=12)
         )
 
@@ -632,7 +637,11 @@ $$$$
 
     def test_run_builds_runner_lazily_and_returns_molecule(self):
         openqp = load_openqp_module()
-        job = openqp.OpenQP(project="h_atom", usempi=False).molecule("H 0 0 0", basis="sto-3g")
+        job = (
+            openqp.OpenQP(project="h_atom")
+            .control(usempi=False)
+            .molecule("H 0 0 0", basis="sto-3g")
+        )
 
         mol = job.run(run_type="grad")
 

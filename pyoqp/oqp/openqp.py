@@ -110,10 +110,13 @@ class _WorkflowGradientProxy(_WorkflowSectionProxy):
     def __init__(self, owner):
         super().__init__(owner, "properties", runtype="grad")
 
-    def __call__(self, grad=None, **kwargs):
-        if grad is not None:
-            kwargs["grad"] = grad
-        return super().__call__(**kwargs)
+    def __call__(self, state=None, grad=None, **kwargs):
+        self._owner._control(runtype="grad")
+        return self._owner._set_gradient_options(
+            state=state,
+            grad=grad,
+            **kwargs,
+        )
 
 
 class _WorkflowPcmProxy(_WorkflowSectionProxy):
@@ -227,10 +230,11 @@ class _ControlProxy:
     def __init__(self, owner):
         object.__setattr__(self, "_owner", owner)
 
-    def __call__(self, runtype=None, omp_threads=None, **kwargs):
+    def __call__(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
         return self._owner._control(
             runtype=runtype,
             omp_threads=omp_threads,
+            usempi=usempi,
             **kwargs,
         )
 
@@ -352,7 +356,7 @@ class OpenQP:
             return False
         return bool(text and "\n" not in text and ";" not in text and " " not in text)
 
-    def _control(self, runtype=None, omp_threads=None, **kwargs):
+    def _control(self, runtype=None, omp_threads=None, usempi=None, **kwargs):
         """Set run-level controls such as runtype, OpenMP, and optimization options."""
         updates = {}
         section_runtype = runtype
@@ -363,6 +367,8 @@ class OpenQP:
             updates["input.runtype"] = runtype
         if omp_threads is not None:
             updates["input.omp_threads"] = omp_threads
+        if usempi is not None:
+            self.usempi = self._as_bool(usempi, option="usempi")
         if updates:
             self.set(**updates)
 
@@ -377,6 +383,8 @@ class OpenQP:
                 return self._soc_control(**kwargs)
             if active_runtype == "pcm":
                 return self.section("pcm", **kwargs)
+            if active_runtype == "grad":
+                return self._set_gradient_options(**kwargs)
             if active_runtype in RUNTYPE_SECTIONS:
                 return self.section(RUNTYPE_SECTIONS[active_runtype], **kwargs)
             raise KeyError(
@@ -385,6 +393,28 @@ class OpenQP:
                 "workflow-specific keywords."
             )
         return self
+
+    @staticmethod
+    def _as_bool(value, option):
+        """Parse common Python/string booleans for runtime-only controls."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+            raise ValueError(f"{option} must be a boolean value.")
+        return bool(value)
+
+    def _set_gradient_options(self, state=None, grad=None, **kwargs):
+        """Set gradient state controls while keeping legacy grad= accepted."""
+        if state is not None and grad is not None:
+            raise ValueError("Use either state=... or legacy grad=..., not both.")
+        if state is not None:
+            kwargs["grad"] = state
+        elif grad is not None:
+            kwargs["grad"] = grad
+        return self.section("properties", **kwargs)
 
     def theory(self, method, functional=None, basis=None, runtype=None,
                nstate=3, reference=None, **keywords):
