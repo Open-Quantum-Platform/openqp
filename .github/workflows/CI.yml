@@ -20,13 +20,20 @@ jobs:
             cache-dependency-path: pyoqp/requirements.txt
          # Persist the reusable bundled-externals cache (see external/CMakeLists.txt)
          # across CI runs. The cache content is keyed internally by toolchain,
-         # compiler flags, build type, and bundled versions, so a stale restore is
-         # never reused for an incompatible build -- it just falls back to a cold
-         # externals build. The externals do not depend on MPI, so both MPI matrix
-         # legs share one cache entry per OS. The full compiler version must be in
-         # the outer key: when a runner image update bumps gcc, the internal key
-         # changes but an unchanged outer key would match exactly and actions/cache
-         # would never save the rebuilt externals, leaving CI permanently cold.
+         # compiler flags, build type, BLAS choice, and bundled versions, so a
+         # stale restore is never reused for an incompatible build -- it just
+         # falls back to a cold externals build. The externals do not depend on
+         # MPI, so both MPI matrix legs share one cache entry per OS.
+         #
+         # Any variable that changes the internal externals key MUST also appear
+         # in the outer key, otherwise an unchanged outer key would match exactly
+         # and actions/cache would never SAVE the rebuilt externals, leaving CI
+         # permanently cold. Two such variables: the full compiler version (a
+         # runner image bumping gcc changes the internal key) and the BLAS backend
+         # -- LINALG_LIB=OpenBLAS makes the internal key say "other"/openblas
+         # instead of "NetLib", so the `openblas64` marker below gives those
+         # externals their own cache entry. The restore-keys stay scoped to that
+         # marker so a stale NetLib cache is never dragged back in and re-saved.
          - name: Get toolchain version for the externals cache key
            id: toolchain
            run: echo "gcc=$(gfortran-${{ matrix.version }} -dumpfullversion)" >> "$GITHUB_OUTPUT"
@@ -34,10 +41,9 @@ jobs:
            uses: actions/cache@v4
            with:
             path: ~/.cache/openqp/externals
-            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-${{ hashFiles('external/CMakeLists.txt') }}
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ hashFiles('external/CMakeLists.txt') }}
             restore-keys: |
-               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-
-               oqp-externals-${{ matrix.os }}-
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
