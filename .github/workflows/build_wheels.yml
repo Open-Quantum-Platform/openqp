@@ -11,6 +11,25 @@ name: Build and publish wheels
         description: "Release tag to publish when publishing existing artifacts"
         required: false
         type: string
+  # Run the smoke build on pushes to main so the bundled-externals cache is
+  # populated on the DEFAULT branch. GitHub Actions caches are branch-scoped: a
+  # PR branch can only restore caches from its own branch or from main, and the
+  # wheel build otherwise never ran on main -- so every fresh PR cold-rebuilt all
+  # externals (incl. ~15 min of reference LAPACK). Warming it here lets PRs
+  # restore via the restore-keys prefix instead.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build_wheels.yml"
+      - "CMakeLists.txt"
+      - "MANIFEST.in"
+      - "pyproject.toml"
+      - "basis_sets/**"
+      - "cmake/**"
+      - "external/**"
+      - "include/**"
+      - "pyoqp/**"
+      - "source/**"
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
@@ -55,7 +74,11 @@ jobs:
 
   build_wheel_smoke:
     name: Build Linux wheel smoke
-    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'release')
+    # Runs on PRs, and on pushes to main to warm the bundled-externals cache.
+    if: >-
+      github.event_name == 'push'
+      || (github.event_name == 'pull_request'
+          && !contains(github.event.pull_request.labels.*.name, 'release'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +130,14 @@ jobs:
 
   build_wheels:
     name: Build wheels (${{ matrix.name }})
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')) && (github.event_name != 'workflow_dispatch' || github.event.inputs.publish_artifacts_run_id == '')
+    # Full matrix only for releases / a release-labelled PR / manual dispatch --
+    # NOT for plain pushes to main (those only warm the cache via the smoke job).
+    if: >-
+      github.event_name == 'release'
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'release'))
+      || (github.event_name == 'workflow_dispatch'
+          && github.event.inputs.publish_artifacts_run_id == '')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
