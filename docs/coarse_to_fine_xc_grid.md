@@ -115,6 +115,21 @@ This change was reviewed with a multi-agent adversarial pass; the gating guards
 above (maxit, level-shift, and the point-count cheapness check) close the edge
 cases it surfaced.
 
+### Composition with the Φ-cache / IncDFT (#242)
+
+The schedule composes with the opt-in XC-reuse features added in #242:
+
+- **IncDFT** (`OQP_XC_INCDFT`): the grid switch forces `xc_reuse = .false.` on the
+  first production-grid iteration (`on_coarse .neqv. prev_on_coarse`), so the
+  reused reference XC is never carried across grids. The convergence test already
+  refuses both a coarse-grid Fock and a reused-XC Fock.
+- **Φ-cache** (`OQP_XC_PHI_CACHE`): the cache validity signature includes the grid
+  slice count, and the coarse grid is required to have meaningfully fewer points
+  than the production grid, so the cache rebuilds automatically at the switch.
+
+Verified: with the schedule on, enabling either or both of `OQP_XC_INCDFT` and
+`OQP_XC_PHI_CACHE` still converges to the bit-identical production-grid energy.
+
 ## Results
 
 Hardware: 32-core Apple Silicon, gfortran-15, Release build, `OMP_NUM_THREADS=4`,

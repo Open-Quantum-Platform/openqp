@@ -64,6 +64,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
+    use mod_dft_incdft, only: incdft_env_enabled, incdft_should_reuse, incdft_reset
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
@@ -94,6 +95,8 @@ contains
     integer :: scf_type                 ! Type of SCF calculation
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
+    logical :: use_incdft               ! Opt 2: incremental-XC reuse enabled
+    logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
 
@@ -125,6 +128,7 @@ contains
     logical :: c2f_enabled       ! schedule active for this run
     logical :: c2f_do_reset      ! clear DIIS history at the grid switch
     logical :: on_coarse         ! coarse grid in use for the *next* Fock build
+    logical :: prev_on_coarse    ! grid used by the previous iteration (IncDFT guard)
     logical :: coarse_this_iter  ! this iteration's Fock used the coarse grid
     logical :: c2f_reset_pending ! clear DIIS history at the next iteration top
     integer :: c2f_rad, c2f_ang  ! coarse grid radial / angular point counts
@@ -339,6 +343,10 @@ contains
                source=0.0_dp)
       if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
     end if
+
+    ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
+    use_incdft = is_dft .and. incdft_env_enabled()
+    if (use_incdft) call incdft_reset()
 
     !==============================================================================
     ! Initialize pFON Parameters
@@ -587,7 +595,7 @@ contains
     call flush(IW)
 
     !==============================================================================
-    ! Configure the coarse-to-fine XC grid schedule (env-gated, default OFF)
+    ! Configure the coarse-to-fine XC grid schedule (env-gated, default ON)
     !==============================================================================
     c2f_enabled       = .false.
     on_coarse         = .false.
@@ -619,6 +627,7 @@ contains
       end if
       call flush(IW)
     end if
+    prev_on_coarse = on_coarse   ! grid tracker for the IncDFT reuse guard
 
     !==============================================================================
     ! Begin Main SCF Iteration Loop
@@ -688,13 +697,28 @@ contains
         end if
       end if
 
-      ! Coarse-to-fine: use the coarse grid for early cycles, the production
-      ! grid once switched. on_coarse holds the choice for *this* Fock build; it
-      ! is flipped to .false. by the grid-switch block once DIIS nears convergence.
+      ! Opt 2 (IncDFT): decide whether to reuse the reference XC this iteration.
+      ! diis_error here is the previous iteration's value (set after calc_fock),
+      ! a valid proxy for closeness to convergence; the reuse window forces full
+      ! XC builds again once near convergence (diis_error < incdft_stop, aligned
+      ! with the J/K incremental refresh above) so the fixed point stays exact.
+      xc_reuse_now = .false.
+      if (use_incdft) xc_reuse_now = incdft_should_reuse(diis_error, iter)
+      ! Coarse-to-fine x IncDFT: never reuse the reference XC across a grid
+      ! switch -- the first production-grid iteration must rebuild XC on the new
+      ! grid (the coarse reference is stale for the production grid).
+      if (c2f_enabled .and. (on_coarse .neqv. prev_on_coarse)) xc_reuse_now = .false.
+      prev_on_coarse = on_coarse
+
+      ! Coarse-to-fine: use the coarse grid for early cycles, the production grid
+      ! once switched. on_coarse holds the choice for *this* Fock build; it is
+      ! flipped to .false. by the grid-switch block once DIIS nears convergence.
       if (on_coarse) then
-        call calc_fock(basis, infos, coarse_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+        call calc_fock(basis, infos, coarse_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold, &
+                       xc_reuse=xc_reuse_now)
       else
-        call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+        call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold, &
+                       xc_reuse=xc_reuse_now)
       end if
 
       !----------------------------------------------------------------------------
@@ -960,9 +984,11 @@ contains
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      ! Never declare convergence on a coarse-grid Fock: coarse_this_iter forces
-      ! at least one production-grid iteration (the switch) before exit.
-      if ((.not. coarse_this_iter) .and. &
+      ! Never declare convergence on a coarse-grid Fock (coarse_this_iter forces
+      ! at least one production-grid iteration before exit) nor on an iteration
+      ! whose XC was reused/stale (Opt 2 IncDFT; xc_reuse_now is .false. when
+      ! IncDFT is off, so a no-op for the default path).
+      if ((.not. coarse_this_iter) .and. (.not. xc_reuse_now) .and. &
           (abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
         ! Fully converged - exit loop
         if (do_pfon) then
