@@ -48,9 +48,15 @@ if(OQP_REUSE_EXTERNALS)
     string(APPEND _oqp_external_generator "-${CMAKE_GENERATOR_INSTANCE}")
   endif()
   if(CMAKE_MAKE_PROGRAM)
-    string(MD5 _oqp_external_make_program_hash "${CMAKE_MAKE_PROGRAM}")
-    string(SUBSTRING "${_oqp_external_make_program_hash}" 0 12 _oqp_external_make_program_hash)
-    string(APPEND _oqp_external_generator "-make${_oqp_external_make_program_hash}")
+    # Key on the make program's BASENAME (e.g. "ninja"), NOT its absolute path.
+    # scikit-build-core / pip place ninja in a per-build temporary isolated env
+    # (/tmp/build-env-XXXX/.../ninja), so the absolute path -- and thus an MD5 of
+    # it -- changes on EVERY build. Hashing the path made the externals cache key
+    # unique per run, so the cached externals (libecpint, LAPACK, ...) never
+    # matched and were recompiled every single time. The basename still
+    # distinguishes ninja vs make/gmake, which is all that affects the build.
+    get_filename_component(_oqp_external_make_name "${CMAKE_MAKE_PROGRAM}" NAME_WE)
+    string(APPEND _oqp_external_generator "-${_oqp_external_make_name}")
   endif()
   if(CMAKE_CONFIGURATION_TYPES)
     string(REPLACE ";" "+" _oqp_external_configurations "${CMAKE_CONFIGURATION_TYPES}")
