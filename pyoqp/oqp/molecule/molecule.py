@@ -1275,6 +1275,18 @@ class Molecule:
         except AttributeError:
             data['td_energies'] = np.array([0]).tolist()
 
+        # Surface the spin-resolved excitation ladders as public regression
+        # keys when present (a SOC run computes both). The public td_energies
+        # mirrors only one ladder, so without these the SOC singlet excitation
+        # energies would no longer be compared once the internal OQP:: arrays
+        # are trimmed from the references.
+        for key, tag in (('td_singlet_energies', 'OQP::td_singlet_energies'),
+                         ('td_triplet_energies', 'OQP::td_triplet_energies')):
+            try:
+                data[key] = np.array(self.data[tag]).tolist()
+            except (AttributeError, KeyError, TypeError):
+                pass
+
         # save NMR isotropic shielding if available (CGO or GIAO).
         # Flat atom-major array -> (natom, 5) in ppm; columns =
         # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].
