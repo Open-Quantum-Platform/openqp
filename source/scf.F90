@@ -50,7 +50,7 @@ contains
     use types, only: information
     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
                             int2_rhf_data_t, int2_urohf_data_t
-    use dft, only: dftexcor
+    use dft, only: dftexcor, dft_build_grid_sized
     use mod_dft_molgrid, only: dft_grid_t
     use messages, only: show_message, WITH_ABORT
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
@@ -115,6 +115,23 @@ contains
     !==============================================================================
     real(kind=dp) :: e_old    ! Energy from previous iteration
     type(scf_energy_t) :: energy
+
+    !==============================================================================
+    ! Coarse-to-fine XC grid schedule (env-gated, default OFF)
+    !==============================================================================
+    ! Early SCF cycles run on a cheap coarse XC grid; the run switches to the
+    ! production grid as DIIS approaches convergence and re-converges there, so
+    ! the reported energy/gradient are production-grid quality. See c2f_get_config.
+    logical :: c2f_enabled       ! schedule active for this run
+    logical :: c2f_do_reset      ! clear DIIS history at the grid switch
+    logical :: on_coarse         ! coarse grid in use for the *next* Fock build
+    logical :: coarse_this_iter  ! this iteration's Fock used the coarse grid
+    logical :: c2f_reset_pending ! clear DIIS history at the next iteration top
+    integer :: c2f_rad, c2f_ang  ! coarse grid radial / angular point counts
+    real(kind=dp) :: c2f_switch  ! DIIS-error threshold to switch to the fine grid
+    type(dft_grid_t) :: coarse_grid                  ! the coarse grid (built if enabled)
+    integer, parameter :: C2F_MIN_FINE_ITERS = 4     ! fail-safe: force switch this
+                                                     ! many iters before maxit
 
     !==============================================================================
     ! DIIS Convergence Acceleration Parameters
@@ -570,6 +587,40 @@ contains
     call flush(IW)
 
     !==============================================================================
+    ! Configure the coarse-to-fine XC grid schedule (env-gated, default OFF)
+    !==============================================================================
+    c2f_enabled       = .false.
+    on_coarse         = .false.
+    coarse_this_iter  = .false.
+    c2f_reset_pending = .false.
+    call c2f_get_config(infos, is_dft, int(infos%control%converger_type), &
+                        c2f_enabled, c2f_rad, c2f_ang, c2f_switch, c2f_do_reset)
+    if (c2f_enabled) then
+      ! Build the coarse grid once; it lives only inside this driver and never
+      ! escapes, so post-SCF properties/gradients always use the production grid.
+      call dft_build_grid_sized(infos, basis, coarse_grid, c2f_rad, c2f_ang)
+      ! The schedule only pays off if the coarse grid has meaningfully fewer
+      ! points than the production grid. Compare the TRUE built point counts so
+      ! this works for any production grid (a sparse pruned grid such as SG-0 can
+      ! be cheaper than the requested dense coarse grid -> would be a slowdown).
+      if (coarse_grid%nMolPts >= nint(0.9_dp * real(molGrid%nMolPts, dp))) then
+        c2f_enabled = .false.
+        on_coarse   = .false.
+        write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+                  &"coarse grid (",I0," pts) is not cheaper than the production ", &
+                  &"grid (",I0," pts).")') coarse_grid%nMolPts, molGrid%nMolPts
+      else
+        on_coarse = .true.
+        write(IW,'(/5X,"Coarse-to-fine XC grid schedule: ON"/&
+                  &5X,"  coarse grid     = ",I0," x ",I0," (radial x angular), ",I0," pts"/&
+                  &5X,"  production grid  = ",I0," pts"/&
+                  &5X,"  switch to production grid when |DIIS error| < ",ES9.2)') &
+                  c2f_rad, c2f_ang, coarse_grid%nMolPts, molGrid%nMolPts, c2f_switch
+      end if
+      call flush(IW)
+    end if
+
+    !==============================================================================
     ! Begin Main SCF Iteration Loop
     !==============================================================================
     do iter = 1, maxit
@@ -577,6 +628,24 @@ contains
         mo_energy_a_for_rstctmo = mo_energy_a
         mo_a_for_rstctmo = mo_a
       end if
+      !----------------------------------------------------------------------------
+      ! Coarse-to-fine: start the fine phase with a clean DIIS subspace
+      !----------------------------------------------------------------------------
+      ! The XC energy/Fock change discontinuously across a grid switch, so the
+      ! coarse-grid history would bias the fine extrapolation. Clear it here, on
+      ! the first iteration that builds a production-grid Fock.
+      if (c2f_reset_pending) then
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=int(infos%control%verbose))
+        c2f_reset_pending = .false.
+      end if
+
       !----------------------------------------------------------------------------
       ! Update pFON Temperature (if enabled)
       !----------------------------------------------------------------------------
@@ -603,7 +672,14 @@ contains
         end if
       end if
 
-      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      ! Coarse-to-fine: use the coarse grid for early cycles, the production
+      ! grid once switched. on_coarse holds the choice for *this* Fock build; it
+      ! is flipped to .false. by the grid-switch block once DIIS nears convergence.
+      if (on_coarse) then
+        call calc_fock(basis, infos, coarse_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      else
+        call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      end if
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
@@ -799,6 +875,32 @@ contains
       call flush(IW)
 
       !----------------------------------------------------------------------------
+      ! Coarse-to-fine XC grid switch
+      !----------------------------------------------------------------------------
+      ! The diis_error/energy just reported were produced with the grid selected
+      ! at the top of this iteration (coarse_this_iter). While still on the coarse
+      ! grid, decide whether to hand off to the production grid: switch once the
+      ! error drops below the threshold (a few iterations before convergence), or
+      ! as a fail-safe a handful of iterations before maxit, so the converged
+      ! energy is always production-grid quality. The J/K incremental reference
+      ! (fold/dold) is grid-independent and is intentionally NOT reset here; only
+      ! the (fully rebuilt every cycle) XC contribution changes with the grid.
+      coarse_this_iter = on_coarse
+      if (c2f_enabled .and. on_coarse) then
+        if (diis_error < c2f_switch .or. iter >= maxit - C2F_MIN_FINE_ITERS) then
+          on_coarse = .false.
+          c2f_reset_pending = c2f_do_reset .and. &
+                              (infos%control%converger_type == scf_diis)
+          ! Restart the stall watchdog for the fresh production-grid descent.
+          stall_best  = huge(1.0_dp)
+          stall_count = 0
+          write(IW,"(3x,64('-')/10x,'Switching XC grid: coarse -> production ', &
+               &'(DIIS error ',ES9.2,').')") diis_error
+          call flush(IW)
+        end if
+      end if
+
+      !----------------------------------------------------------------------------
       ! Orchestration: detect converger stagnation and hand off early
       !----------------------------------------------------------------------------
       ! A converger that stops reducing its error for many iterations while still
@@ -807,7 +909,8 @@ contains
       ! the escalation ladder (DIIS -> SOSCF -> TRAH) hands the residual gradient
       ! to a higher-order method. Skipped for TRAH (the last-resort solver) and
       ! while a level shift / pFON anneal is still ramping the error artificially.
-      if (.not. use_trah .and. vshift == 0.0_dp .and. .not. do_pfon) then
+      if (.not. use_trah .and. vshift == 0.0_dp .and. .not. do_pfon &
+          .and. .not. coarse_this_iter) then
         if (diis_error < 0.5_dp * stall_best) then
           stall_best  = diis_error
           stall_count = 0
@@ -841,7 +944,10 @@ contains
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
+      ! Never declare convergence on a coarse-grid Fock: coarse_this_iter forces
+      ! at least one production-grid iteration (the switch) before exit.
+      if ((.not. coarse_this_iter) .and. &
+          (abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
@@ -858,11 +964,12 @@ contains
                                       dens_prev, pdmat)
           exit
         end if
-      elseif ((abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
+      elseif ((.not. coarse_this_iter) .and. &
+              (abs(diis_error) < infos%control%conv) .and. (vshift /= 0.0_dp)) then
         ! Converged but need one more iteration with vshift=0
         write(IW,"(3x,64('-')/10x,'Performing a last SCF with zero VSHIFT.')")
         vshift_last_iter = .true.
-      elseif (vshift_last_iter) then
+      elseif ((.not. coarse_this_iter) .and. vshift_last_iter) then
         ! Only for ROHF case the final iteration with vshift=0 complete - exit loop
         call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
         exit
@@ -1791,4 +1898,175 @@ contains
       write(str, '(es14.5e3)') val
     end if
   end function fmt_real14
+
+  !==============================================================================
+  ! Coarse-to-fine XC grid schedule helpers (env-gated, default OFF)
+  !==============================================================================
+  !> @brief Read the coarse-to-fine XC grid schedule configuration and decide
+  !>        whether it is enabled for this run.
+  !>
+  !> @detail Default OFF. The schedule is enabled only when the master switch
+  !>         OQP_XC_C2F is set to an affirmative value AND the run is eligible:
+  !>           - it is a DFT run (a coarse XC grid is only meaningful for DFT),
+  !>           - the converger is pure DIIS (the coarse->fine DIIS handoff is
+  !>             implemented for the DIIS subspace; SOSCF/TRAH are left untouched),
+  !>           - the functional is not grid-sensitive (Minnesota family: a coarse
+  !>             grid gives large errors there -- see xc_is_grid_sensitive),
+  !>           - the requested coarse grid is actually coarser than the production
+  !>             grid (otherwise the schedule would only add overhead).
+  !> Tunables (all optional, sensible defaults):
+  !>   OQP_XC_C2F_RAD    coarse radial points    (default 50)
+  !>   OQP_XC_C2F_ANG    coarse angular points   (default 110)
+  !>   OQP_XC_C2F_SWITCH switch when |DIIS error| < this (default 1.0e-2)
+  subroutine c2f_get_config(infos, is_dft, converger_type, &
+                            enabled, coarse_rad, coarse_ang, switch_thr, do_reset)
+    use types, only: information
+    use scf_addons, only: scf_diis
+    use io_constants, only: IW
+    implicit none
+    type(information), intent(in) :: infos
+    logical, intent(in)  :: is_dft
+    integer, intent(in)  :: converger_type
+    logical, intent(out) :: enabled
+    integer, intent(out) :: coarse_rad, coarse_ang
+    real(kind=dp), intent(out) :: switch_thr
+    logical, intent(out) :: do_reset
+
+    ! Defaults (returned even when disabled so callers see valid values).
+    ! The DIIS subspace is kept across the grid switch by default: the XC
+    ! discontinuity is tiny near convergence and C-DIIS absorbs it in one step,
+    ! which converges faster than discarding the subspace. OQP_XC_C2F_RESET=1
+    ! forces a clean DIIS restart at the switch (more defensive, costs ~1 iter).
+    coarse_rad = c2f_env_int("OQP_XC_C2F_RAD", 50)
+    coarse_ang = c2f_env_int("OQP_XC_C2F_ANG", 110)
+    switch_thr = c2f_env_real("OQP_XC_C2F_SWITCH", 1.0e-2_dp)
+    do_reset   = c2f_env_true("OQP_XC_C2F_RESET")
+    enabled    = .false.
+
+    if (.not. c2f_env_true("OQP_XC_C2F")) return
+    if (.not. is_dft) return
+    if (converger_type /= scf_diis) then
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+                &"only the pure-DIIS converger is supported.")')
+      return
+    end if
+    ! Need room for at least one coarse iteration plus one production iteration,
+    ! otherwise the schedule could report a coarse-grid energy.
+    if (infos%control%maxit < 2) then
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+                &"maxit < 2 leaves no room for a production-grid iteration.")')
+      return
+    end if
+    ! A nonzero level shift with a non-VDIIS converger stays on through the whole
+    ! coarse phase (its shut-off is tied to the convergence test, which is
+    ! suppressed on coarse iterations). That keeps the DIIS error elevated so the
+    ! switch threshold never trips; leave such runs on the production grid.
+    if (infos%control%vshift /= 0.0_dp .and. infos%control%diis_type /= 5) then
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+                &"a level shift with a non-VDIIS converger is not supported.")')
+      return
+    end if
+    if (xc_is_grid_sensitive(infos)) then
+      write(IW,'(/5X,"Coarse-to-fine XC grid schedule requested but disabled: ", &
+                &"grid-sensitive (Minnesota) functional; using the production ", &
+                &"grid throughout.")')
+      return
+    end if
+
+    ! The coarse grid must actually be cheaper than the production grid. That is
+    ! verified against the true built point counts in scf_driver (it handles
+    ! pruned SG-0..SG-3 and dense grids uniformly), once both grids exist.
+    enabled = .true.
+  end subroutine c2f_get_config
+
+  !> @brief Detect grid-sensitive (Minnesota-family) functionals, for which a
+  !>        coarse integration grid produces large errors and must be avoided.
+  !> @detail Matches the functional name (case- and separator-insensitive)
+  !>         against the Minnesota families M05/M06/M08/M11/MN1x/SOGGA11 and
+  !>         their revised (revM*) variants.
+  logical function xc_is_grid_sensitive(infos) result(sensitive)
+    use types, only: information
+    use strings, only: c_f_char
+    implicit none
+    type(information), intent(in) :: infos
+    character(len=:), allocatable :: nm
+    character(len=40) :: u
+    integer :: i, k
+    character :: c
+
+    nm = c_f_char(infos%dft%xc_functional_name)
+    ! Uppercase, drop '-', '_' and spaces so "M06-2X", "m06_2x", "M06 2X" all
+    ! collapse to "M062X".
+    u = ''
+    k = 0
+    do i = 1, len_trim(nm)
+      c = nm(i:i)
+      if (c == '-' .or. c == '_' .or. c == ' ') cycle
+      if (c >= 'a' .and. c <= 'z') c = achar(iachar(c) - 32)
+      k = k + 1
+      if (k <= len(u)) u(k:k) = c
+    end do
+
+    sensitive = index(u, 'M05')     == 1 .or. &
+                index(u, 'M06')     == 1 .or. &
+                index(u, 'M08')     == 1 .or. &
+                index(u, 'M11')     == 1 .or. &
+                index(u, 'MN1')     == 1 .or. &
+                index(u, 'SOGGA11') == 1 .or. &
+                index(u, 'REVM')    == 1
+  end function xc_is_grid_sensitive
+
+  !> @brief .TRUE. if environment variable `name` is set to an affirmative value
+  !>        (1/y/yes/t/true/on, case-insensitive).
+  logical function c2f_env_true(name) result(tf)
+    implicit none
+    character(len=*), intent(in) :: name
+    character(len=32) :: v
+    integer :: l, st, i
+    character :: c
+
+    tf = .false.
+    call get_environment_variable(name, v, l, st)
+    if (st /= 0 .or. l == 0) return
+    do i = 1, len_trim(v)
+      c = v(i:i)
+      if (c >= 'A' .and. c <= 'Z') v(i:i) = achar(iachar(c) + 32)
+    end do
+    select case (trim(adjustl(v)))
+    case ('1', 'y', 'yes', 't', 'true', 'on')
+      tf = .true.
+    end select
+  end function c2f_env_true
+
+  !> @brief Read a positive integer environment variable, or return `default`.
+  integer function c2f_env_int(name, default) result(val)
+    implicit none
+    character(len=*), intent(in) :: name
+    integer, intent(in) :: default
+    character(len=32) :: v
+    integer :: l, st, ios, tmp
+
+    val = default
+    call get_environment_variable(name, v, l, st)
+    if (st /= 0 .or. l == 0) return
+    read(v, *, iostat=ios) tmp
+    if (ios == 0 .and. tmp > 0) val = tmp
+  end function c2f_env_int
+
+  !> @brief Read a positive real environment variable, or return `default`.
+  real(kind=dp) function c2f_env_real(name, default) result(val)
+    implicit none
+    character(len=*), intent(in) :: name
+    real(kind=dp), intent(in) :: default
+    character(len=32) :: v
+    integer :: l, st, ios
+    real(kind=dp) :: tmp
+
+    val = default
+    call get_environment_variable(name, v, l, st)
+    if (st /= 0 .or. l == 0) return
+    read(v, *, iostat=ios) tmp
+    if (ios == 0 .and. tmp > 0.0_dp) val = tmp
+  end function c2f_env_real
+
 end module scf

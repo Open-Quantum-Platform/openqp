@@ -12,6 +12,7 @@ module dft
 
   private
   public dft_initialize
+  public dft_build_grid_sized
   public dftclean
   public dftexcor
   public dftder
@@ -421,6 +422,66 @@ contains
     call dft_prepare_grid(infos, basis, molGrid, pruned, verbose)
 
   end subroutine
+
+!>  @brief Build a DFT integration grid with an explicit, single (unpruned)
+!>         radial/angular size, WITHOUT touching the libxc functional setup.
+!>
+!>  @detail Used by the coarse-to-fine SCF grid schedule (see scf_driver): early
+!>          SCF cycles run on this cheaper grid and switch to the production grid
+!>          as DIIS approaches convergence. Every grid parameter other than the
+!>          point count (radial grid type, partition function, fuzzy-cell
+!>          algorithm, density cutoff, Bragg-Slater radii) is inherited from
+!>          infos%dft, so the coarse grid is consistent with the production grid
+!>          apart from being sparser. The production grid sizes held in infos%dft
+!>          are saved and restored, so infos is unchanged on return.
+!>
+!>  @param[inout] infos    System/control info (grid sizes restored on exit).
+!>  @param[in]    basis    Basis set (screening already set by dft_initialize).
+!>  @param[inout] molGrid  Grid object to (re)build at the requested size.
+!>  @param[in]    nrad     Number of radial points for the coarse grid.
+!>  @param[in]    nang     Number of angular (Lebedev) points for the coarse grid.
+  subroutine dft_build_grid_sized(infos, basis, molGrid, nrad, nang)
+    use basis_tools, only: basis_set
+    use types, only: information
+    implicit none
+    type(information), intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    type(dft_grid_t), intent(inout) :: molGrid
+    integer, intent(in) :: nrad, nang
+
+    type(dft_grid_pruned_t) :: pruned
+    integer :: nat
+    integer :: save_rad, save_ang
+    logical :: save_pruned
+
+    ! Save the production grid sizes
+    save_rad    = int(infos%dft%grid_rad_size)
+    save_ang    = int(infos%dft%grid_ang_size)
+    save_pruned = infos%dft%grid_pruned
+
+    ! Install the coarse sizes (dft_prepare_grid reads these from infos%dft)
+    infos%dft%grid_rad_size = nrad
+    infos%dft%grid_ang_size = nang
+    infos%dft%grid_pruned   = .false.
+
+    ! Single, unpruned Lebedev grid of the requested size; mirrors the
+    ! ".not. grid_pruned" branch of dft_set_options, minus the libxc setup.
+    nat = ubound(infos%atoms%zn, 1)
+    pruned%ngrids     = 1
+    pruned%nrad       = 0          ! 0 => use infos%dft%grid_rad_size (coarse)
+    pruned%nrad_types = 1
+    allocate(pruned%nang(1,1), pruned%radii(1,1))
+    pruned%nang(1,1)  = nang
+    pruned%radii(1,1) = 1.0d+30
+    allocate(pruned%rad_id(nat), source=1)
+
+    call dft_prepare_grid(infos, basis, molGrid, pruned, verbose=.false.)
+
+    ! Restore the production grid sizes
+    infos%dft%grid_rad_size = save_rad
+    infos%dft%grid_ang_size = save_ang
+    infos%dft%grid_pruned   = save_pruned
+  end subroutine dft_build_grid_sized
 
 !>  @brief Calculates atomic distances
   subroutine get_atomic_distances(xyz, rij)
