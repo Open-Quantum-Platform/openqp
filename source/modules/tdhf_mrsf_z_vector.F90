@@ -62,6 +62,13 @@ module tdhf_mrsf_z_vector_mod
   real(kind=dp), save :: zv_prog_cap = 1.0e-6_dp  !< loosest tau (upper clamp)
   real(kind=dp), save :: zv_prog_pin = 1.0e-6_dp  !< pin tau=tight once error(=||r||^2) < this
 
+  ! Cold-start initial guess: Jacobi x0 = M^-1 rhs instead of x0 = 0. The cold CG
+  ! already spends one sigma build on A*x0 (=0 when x0=0), so this is free and
+  ! puts the solve ~1 iteration ahead. DEFAULT ON; disable with OQP_MRSF_ZV_DIAGGUESS=0.
+  ! Accuracy-safe (linear solve converges to the same A^-1 rhs) and protected by
+  ! the CG safeguard (falls back to zero if it doesn't reduce the residual).
+  logical, save :: zv_diag_guess = .true.
+
   ! Warm-start store (module-level; persists across the geometry/MD steps that
   ! share one process). The converged z-vector varies smoothly along a path, so
   ! the previous step's solution is a strong initial guess for the LINEAR CPHF
@@ -72,6 +79,12 @@ module tdhf_mrsf_z_vector_mod
   real(kind=dp), allocatable, save :: zv_warm(:,:)
   logical,       allocatable, save :: zv_warm_has(:)
   integer, save :: zv_warm_lzdim = 0
+  ! Old MO coefficients from the step that filled the cache, for MO-basis
+  ! projection of the warm guess (handles MO rotation between steps so warm-start
+  ! also helps large optimizer steps, not just small MD steps).
+  real(kind=dp), allocatable, save :: zv_warm_moa(:,:), zv_warm_mob(:,:)
+  logical, save :: zv_warm_have_mo = .false.
+  integer, save :: zv_warm_nbf = 0
 
 contains
 
@@ -155,6 +168,10 @@ contains
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_cap
     call get_environment_variable('OQP_MRSF_ZV_PROG_PIN', e_)
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_pin
+    ! Jacobi cold-start guess: default ON; disable with OQP_MRSF_ZV_DIAGGUESS=0/n/f.
+    call get_environment_variable('OQP_MRSF_ZV_DIAGGUESS', e_)
+    if (len_trim(e_) > 0) zv_diag_guess = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
+        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
     zv_cfg_init = .true.
   end subroutine zv_read_config
 
@@ -173,33 +190,13 @@ contains
     if (tau > zv_prog_cap) tau = zv_prog_cap
   end function zv_prog_tau
 
-  !> Seed xk from the warm-start store for `state`, or zero it out. `used` is
-  !> .true. only when a finite, dimension-matching previous solution was loaded.
-  !> No effect unless warm-start is enabled and such a guess exists.
-  subroutine zv_seed_guess(xk, lzdim, state, iw, used)
-    real(kind=dp), intent(out) :: xk(:)
-    integer, intent(in) :: lzdim, state, iw
-    logical, intent(out), optional :: used
-    if (present(used)) used = .false.
-    xk = 0.0_dp
-    if (.not. zv_warm_on) return
-    if (.not. allocated(zv_warm) .or. .not. allocated(zv_warm_has)) return
-    if (zv_warm_lzdim /= lzdim) return
-    if (state < 1 .or. state > size(zv_warm_has)) return
-    if (.not. zv_warm_has(state)) return
-    if (any(.not. ieee_is_finite(zv_warm(:,state)))) return
-    xk = zv_warm(:,state)
-    if (present(used)) used = .true.
-    write(iw,'(" MRSF z-vector warm-start: seeded state ",i0, &
-             &" from previous step")') state
-    call flush(iw)
-  end subroutine zv_seed_guess
-
-  !> Store a converged xk into the warm-start store for `state`. Reallocates the
-  !> store if the problem dimension changed (e.g. a different basis/molecule).
-  subroutine zv_store_guess(xk, lzdim, state, nstate)
+  !> Store a converged xk (and the current MOs, for later MO-basis projection)
+  !> into the warm-start store for `state`. Reallocates if the problem dimension
+  !> changed (e.g. a different basis/molecule).
+  subroutine zv_store_guess(xk, lzdim, state, nstate, mo_a, mo_b, nbf)
     real(kind=dp), intent(in) :: xk(:)
-    integer, intent(in) :: lzdim, state, nstate
+    integer, intent(in) :: lzdim, state, nstate, nbf
+    real(kind=dp), intent(in) :: mo_a(:,:), mo_b(:,:)
     integer :: ncol
     if (.not. zv_warm_on) return
     if (any(.not. ieee_is_finite(xk))) return
@@ -216,7 +213,44 @@ contains
     end if
     zv_warm(:,state) = xk
     zv_warm_has(state) = .true.
+    ! Cache the current MOs (shared across states this step) for MO projection.
+    if (zv_warm_nbf /= nbf .or. .not. allocated(zv_warm_moa)) then
+      if (allocated(zv_warm_moa)) deallocate(zv_warm_moa)
+      if (allocated(zv_warm_mob)) deallocate(zv_warm_mob)
+      allocate(zv_warm_moa(nbf,nbf), zv_warm_mob(nbf,nbf))
+      zv_warm_nbf = nbf
+    end if
+    zv_warm_moa(:,:) = mo_a(1:nbf,1:nbf)
+    zv_warm_mob(:,:) = mo_b(1:nbf,1:nbf)
+    zv_warm_have_mo = .true.
   end subroutine zv_store_guess
+
+  !> Inverse of sfrogen: gather the z-vector amplitudes from MO-basis matrices
+  !> ava (alpha) / avb (beta) at the same index positions sfrogen scatters to.
+  !> The doc-virt block (which sfrogen writes to both spins) is averaged.
+  subroutine zv_sfrogen_gather(ava, avb, xk, nocca, noccb)
+    real(kind=dp), intent(in)  :: ava(:,:), avb(:,:)
+    real(kind=dp), intent(out) :: xk(:)
+    integer, intent(in) :: nocca, noccb
+    integer :: ij, i, j, k, nbf
+    nbf = ubound(ava,1)
+    ij = 0
+    do i = noccb+1, nocca        ! doc-socc  (beta)
+      do j = 1, noccb
+        ij = ij+1; xk(ij) = avb(j,i)
+      end do
+    end do
+    do k = nocca+1, nbf          ! doc-virt  (sfrogen wrote both spins)
+      do j = 1, noccb
+        ij = ij+1; xk(ij) = 0.5_dp*(ava(j,k)+avb(j,k))
+      end do
+    end do
+    do k = nocca+1, nbf          ! socc-virt (alpha)
+      do i = noccb+1, nocca
+        ij = ij+1; xk(ij) = ava(i,k)
+      end do
+    end do
+  end subroutine zv_sfrogen_gather
 
   ! Initialize GMRES work arrays
   subroutine init_gmres_work(nbf, nocca, noccb)
@@ -1370,7 +1404,8 @@ contains
              &/3x,24("-")/)')
        ! Cache the converged solution for warm-starting the next step (no-op
        ! unless OQP_MRSF_ZV_WARMSTART is set).
-       call zv_store_guess(xk, lzdim, target_state, int(infos%tddft%nstate))
+       call zv_store_guess(xk, lzdim, target_state, int(infos%tddft%nstate), &
+                           mo_a, mo_b, nbf)
     endif
 
     call flush(iw)
@@ -1400,7 +1435,7 @@ contains
     ! GMRES z-vector solve.  Reports breakdown via mrsf_zvector_breakdown so the
     ! auto driver can detect failure uniformly across solvers.
     subroutine run_mrsf_gmres_zvector()
-      call zv_seed_guess(xk, lzdim, target_state, iw)
+      call zv_warm_seed()
       call gmres_solve( &
           apply_operator = apply_z_operator, &
           apply_precond = lambda_precond, &
@@ -1434,7 +1469,7 @@ contains
       ! NOTE: this MINRES wrapper solves A x = rhs starting from the zero vector
       ! (mr%init seeds from rhs), so warm-start has no effect here; seeding is a
       ! no-op kept for uniformity. Warm-start benefits CG (default) and GMRES.
-      call zv_seed_guess(xk, lzdim, target_state, iw)
+      call zv_warm_seed()
       call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
                    dat=minres_dummy, tol=cnvtol)
       minres_iter = 0
@@ -1508,7 +1543,7 @@ contains
       ! Initial guess: zero (cold) or the previous step's solution (warm-start).
       ! With a warm xk the initial residual machinery below stays correct -- it
       ! builds A*xk and r0 = rhs - A*xk exactly as for the cold start.
-      call zv_seed_guess(xk, lzdim, target_state, iw, warm_used)
+      call zv_warm_seed(warm_used)
 
       if (zv_tmr_on) t0 = zv_wtime()
       call sfrogen(wrk1, wrk2, xk, nocca, noccb)
@@ -1733,6 +1768,84 @@ contains
       real(kind=dp), intent(out) :: x_out(:)
       call apply_z_precond(x_in, x_out, xminv)
     end subroutine lambda_precond
+
+    ! Seed xk for the solver: zero (cold), the raw previous solution, or — when
+    ! the MOs have rotated between steps — the previous solution PROJECTED into
+    ! the current MO basis via the geometry-stable AO z-density:
+    !   xk_old -> av_old(MO,old) -> Pz = C_old av_old C_old^T (AO)
+    !          -> C_new^T S Pz S C_new (MO,new) -> gather -> xk.
+    ! Same-geometry round-trip is exact (C^T S C = I). The CG safeguard still
+    ! rejects the guess if it doesn't beat the cold residual, so this can only
+    ! help (large steps) or be ignored — never corrupt the gradient.
+    subroutine zv_warm_seed(used)
+      use mathlib, only: unpack_matrix
+      logical, intent(out), optional :: used
+      real(kind=dp), contiguous, pointer :: smptr(:)
+      real(kind=dp), allocatable :: smat(:,:), ava(:,:), avb(:,:), pz(:,:), &
+                                    tmp(:,:), avn1(:,:), avn2(:,:)
+      integer :: st, ok
+      logical :: have, got_warm
+      if (present(used)) used = .false.
+      xk = 0.0_dp
+      got_warm = .false.
+      st = target_state
+
+      ! ---- try a warm-start guess from the previous step (short-circuit guards) ----
+      have = zv_warm_on .and. allocated(zv_warm) .and. allocated(zv_warm_has) &
+             .and. zv_warm_lzdim == lzdim
+      if (have) have = (st >= 1 .and. st <= size(zv_warm_has))
+      if (have) have = zv_warm_has(st)
+      if (have) have = .not. any(.not. ieee_is_finite(zv_warm(:,st)))
+      if (have) then
+        if (zv_warm_have_mo .and. zv_warm_nbf == nbf) then
+          ! MO-projected seed: xk_old -> Pz(AO,old) -> C_new^T S Pz S C_new -> gather
+          allocate(smat(nbf,nbf), ava(nbf,nbf), avb(nbf,nbf), pz(nbf,nbf), &
+                   tmp(nbf,nbf), avn1(nbf,nbf), avn2(nbf,nbf), stat=ok)
+          if (ok == 0) then
+            call tagarray_get_data(infos%dat, OQP_SM, smptr)
+            call unpack_matrix(smptr, smat, nbf, 'U')
+            call sfrogen(ava, avb, zv_warm(:,st), nocca, noccb)
+            call orthogonal_transform('t', nbf, zv_warm_moa, ava, pz, wrk3)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,smat,nbf,pz,nbf,0.0_dp,tmp,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmp,nbf,smat,nbf,0.0_dp,pz,nbf)
+            call orthogonal_transform('n', nbf, mo_a, pz, avn1, wrk3)
+            call orthogonal_transform('t', nbf, zv_warm_mob, avb, pz, wrk3)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,smat,nbf,pz,nbf,0.0_dp,tmp,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmp,nbf,smat,nbf,0.0_dp,pz,nbf)
+            call orthogonal_transform('n', nbf, mo_b, pz, avn2, wrk3)
+            call zv_sfrogen_gather(avn1, avn2, xk, nocca, noccb)
+            if (any(.not. ieee_is_finite(xk))) xk = zv_warm(:,st)
+            deallocate(smat, ava, avb, pz, tmp, avn1, avn2)
+            got_warm = .true.
+            write(iw,'(" MRSF z-vector warm-start: MO-projected seed (state ",i0,")")') st
+          end if
+        else
+          xk = zv_warm(:,st); got_warm = .true.
+          write(iw,'(" MRSF z-vector warm-start: raw seed (state ",i0,")")') st
+        end if
+      end if
+
+      if (got_warm) then
+        if (present(used)) used = .true.
+        call flush(iw)
+        return
+      end if
+
+      ! ---- cold start: Jacobi (diagonal) guess x0 = M^-1 rhs, else zero ----
+      ! Free (the cold initial Fock build runs regardless) and ~1 iteration ahead.
+      ! Marked "used" so the CG safeguard validates it and falls back to zero if
+      ! it does not reduce the residual.
+      if (zv_diag_guess) then
+        xk = xminv * rhs
+        if (any(.not. ieee_is_finite(xk))) then
+          xk = 0.0_dp
+        else
+          if (present(used)) used = .true.
+          write(iw,'(" MRSF z-vector: Jacobi (diagonal) initial guess")')
+          call flush(iw)
+        end if
+      end if
+    end subroutine zv_warm_seed
 
     ! minres_matvec(y, x, dat) wrappers: y is the output, x the input, dat is
     ! unused (the solver context is reached by host association).
