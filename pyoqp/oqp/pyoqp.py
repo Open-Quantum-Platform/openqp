@@ -431,10 +431,17 @@ def run_tests(test_path):
     """
     from oqp.utils.oqp_tester import OQPTester
     mpi_manager = MPIManager()
+    # OMP threads per test. Fewer threads -> more tests run concurrently
+    # (max_workers = total_cpus // omp_threads), which is much faster on the
+    # small CI examples; override with OQP_TEST_OMP_THREADS.
+    try:
+        omp_threads = max(1, int(os.environ.get("OQP_TEST_OMP_THREADS", "4")))
+    except ValueError:
+        omp_threads = 4
     tester = OQPTester(base_test_dir=None,
                        output_dir='openqp_test_tmp',
                        total_cpus=None,
-                       omp_threads=4, mpi_manager=mpi_manager)
+                       omp_threads=omp_threads, mpi_manager=mpi_manager)
     return tester.run(test_path), tester.status
 
 
