@@ -134,6 +134,14 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
+        'pscreen': {'type': bool, 'default': 'False'},
+        'pscreen_k': {'type': float, 'default': '1.0e-2'},
+        'pscreen_cap': {'type': float, 'default': '1.0e-8'},
+        'pscreen_tight': {'type': float, 'default': '1.0e-4'},
+        'pscreen_xc_dcut': {'type': float, 'default': '0.0'},
+        'pscreen_xc_aocut': {'type': float, 'default': '0.0'},
+        'pscreen_grid_rad': {'type': int, 'default': '0'},
+        'pscreen_grid_ang': {'type': int, 'default': '0'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -359,6 +367,14 @@ class OQPData:
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
+            "pscreen": "set_scf_pscreen",
+            "pscreen_k": "set_scf_pscreen_k",
+            "pscreen_cap": "set_scf_pscreen_cap",
+            "pscreen_tight": "set_scf_pscreen_tight",
+            "pscreen_xc_dcut": "set_scf_pscreen_xc_dcut",
+            "pscreen_xc_aocut": "set_scf_pscreen_xc_aocut",
+            "pscreen_grid_rad": "set_scf_pscreen_grid_rad",
+            "pscreen_grid_ang": "set_scf_pscreen_grid_ang",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
@@ -642,6 +658,38 @@ class OQPData:
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
+
+    def set_scf_pscreen(self, flag):
+        """Enable progressive (iteration-dependent) integral screening"""
+        self._data.control.scf_pscreen = 1 if flag else 0
+
+    def set_scf_pscreen_k(self, k):
+        """Progressive screening coupling: tau_iter = k * diis_error"""
+        self._data.control.pscreen_k = k
+
+    def set_scf_pscreen_cap(self, cap):
+        """Progressive screening loosest cutoff (upper clamp on tau_iter)"""
+        self._data.control.pscreen_cap = cap
+
+    def set_scf_pscreen_tight(self, tight):
+        """Progressive screening: pin to int2e_cutoff once diis_error < tight"""
+        self._data.control.pscreen_tight = tight
+
+    def set_scf_pscreen_xc_dcut(self, dcut):
+        """Progressive XC: loose grid density cutoff during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_dcut = dcut
+
+    def set_scf_pscreen_xc_aocut(self, aocut):
+        """Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_aocut = aocut
+
+    def set_scf_pscreen_grid_rad(self, n):
+        """Progressive XC: coarse radial grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_rad = n
+
+    def set_scf_pscreen_grid_ang(self, n):
+        """Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_ang = n
 
     def set_scf_converger_type(self, converger_type):
         """Set SCF solver for SCF convergence:
