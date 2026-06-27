@@ -338,12 +338,35 @@ class OQPTester:
             print(f"Invalid test path: {test_path}")
             return []
 
-        return [
+        input_files = [
             os.path.join(root, file)
             for root, _, files in os.walk(test_dir)
             for file in files
             if file.endswith('.inp')
         ]
+        # The full-suite run ('all') skips numerical Hessians. Each runs ~3N
+        # displaced gradient evaluations (and the MRSF one runs excited-state
+        # gradients at every displacement), so a single H2O numerical Hessian
+        # costs ~20-25x a normal example and dominates CI wall-clock. They still
+        # run when selected explicitly (a directory or a .inp path), and the
+        # analytical-Hessian examples (type=analytical) are unaffected.
+        if test_path == 'all':
+            input_files = [
+                f for f in input_files if not self._is_numerical_hessian(f)
+            ]
+        return input_files
+
+    @staticmethod
+    def _is_numerical_hessian(input_file: str) -> bool:
+        """True for a numerical-Hessian example: runtype=hess without the
+        opt-in type=analytical flag in the [hess] section (numerical is the
+        default). Used to exclude these slow tests from `run_tests all`."""
+        try:
+            with open(input_file, 'r', encoding='utf-8') as fh:
+                text = fh.read().lower().replace(' ', '')
+        except OSError:
+            return False
+        return 'runtype=hess' in text and 'type=analytical' not in text
 
     def format_time(self, seconds: float) -> str:
         hours, rem = divmod(seconds, 3600)
