@@ -33,6 +33,31 @@ SCHEMA = {
     "tdhf": {
         "type": {"type": _string, "default": "rpa"},
         "nstate": {"type": int, "default": "1"},
+        "multiplicity": {"type": int, "default": "1"},
+    },
+    "properties": {
+        "grad": {"type": int, "default": "0"},
+        "scf_prop": {"type": _string, "default": ""},
+        "nmr_gauge": {"type": _string, "default": "cgo"},
+    },
+    "hess": {
+        "type": {"type": _string, "default": "numerical"},
+        "state": {"type": int, "default": "0"},
+    },
+    "nac": {
+        "type": {"type": _string, "default": "nacme"},
+        "states": {"type": str, "default": ""},
+    },
+    "ekt": {
+        "ip": {"type": bool, "default": "False"},
+        "ea": {"type": bool, "default": "False"},
+    },
+    "pcm": {
+        "enabled": {"type": bool, "default": "False"},
+        "backend": {"type": _string, "default": "ddx"},
+        "mode": {"type": _string, "default": "reference_scf"},
+        "model": {"type": _string, "default": "ddpcm"},
+        "epsilon": {"type": float, "default": "78.3553"},
     },
     "optimize": {
         "lib": {"type": _string, "default": "oqp"},
@@ -300,6 +325,178 @@ $$$$
         job = (
             openqp.OpenQP(project="h2o_opt")
             .molecule(geometry="water", charge=0, multiplicity=1)
+        )
+        job.control(omp_threads=8)
+        job.workflow.optimize(
+            lib="oqp",
+            maxit=12,
+            coordsys="dlc",
+            trust=0.25,
+        ).theory("dft", functional="bhhlyp", basis="6-31g*")
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "optimize")
+        self.assertEqual(config["input"]["omp_threads"], "8")
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+        self.assertEqual(config["input"]["functional"], "bhhlyp")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["maxit"], "12")
+        self.assertEqual(config["oqp"]["coordsys"], "dlc")
+        self.assertEqual(config["oqp"]["trust"], "0.25")
+
+    def test_control_meci_sets_crossing_runtype_and_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_meci")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
+        )
+
+        job.workflow.meci(lib="oqp", istate=1, jstate=2)
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "meci")
+        self.assertEqual(config["optimize"]["lib"], "oqp")
+        self.assertEqual(config["optimize"]["istate"], "1")
+        self.assertEqual(config["optimize"]["jstate"], "2")
+
+    def test_workflow_sublevels_set_runtype_and_sections(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_workflows")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=6)
+        )
+
+        job.workflow.gradient(grad=3)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["properties"]["grad"], "3")
+
+        job.workflow.hessian(type="analytical", state=0)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "hess")
+        self.assertEqual(config["hess"]["type"], "analytical")
+        self.assertEqual(config["hess"]["state"], "0")
+
+        job.workflow.nacme(states="1,2")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "nacme")
+        self.assertEqual(config["nac"]["states"], "1,2")
+
+        job.workflow.ekt(ip=True, ea=False)
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "ekt")
+        self.assertEqual(config["ekt"]["ip"], "True")
+        self.assertEqual(config["ekt"]["ea"], "False")
+
+        pcm_job = (
+            openqp.OpenQP(project="h2o_pcm")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("hf", basis="6-31g*")
+        )
+        pcm_job.workflow.pcm(
+            enabled=True,
+            backend="ddx",
+            mode="reference_scf",
+            model="ddpcm",
+            epsilon=78.3553,
+        )
+        config = pcm_job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["pcm"]["enabled"], "True")
+        self.assertEqual(config["pcm"]["epsilon"], "78.3553")
+
+    def test_workflow_pcm_requires_reference_scf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_pcm")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+
+        with self.assertRaisesRegex(ValueError, "HF/DFT reference-SCF"):
+            job.workflow.pcm(enabled=True, backend="ddx")
+
+    def test_workflow_pcm_blocks_unsupported_scope(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_pcm_scope")
+            .molecule(geometry="water", charge=0, multiplicity=2)
+            .theory("hf", reference="uhf", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "RHF/ROHF"):
+            job.workflow.pcm(enabled=True, backend="ddx")
+
+        job = (
+            openqp.OpenQP(project="bad_pcm_backend")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("hf", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "backend='ddx'"):
+            job.workflow.pcm(enabled=True, backend="pcmsolver")
+        with self.assertRaisesRegex(ValueError, "mode='reference_scf'"):
+            job.workflow.pcm(enabled=True, backend="ddx", mode="post_state_correction")
+
+    def test_workflow_nmr_requires_reference_scf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_nmr")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=3)
+        )
+
+        with self.assertRaisesRegex(ValueError, "HF/DFT reference-SCF"):
+            job.workflow.nmr(gauge="cgo")
+
+    def test_workflow_nmr_sets_properties_and_blocks_cgo_open_shell(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_nmr")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+        job.workflow.nmr(gauge="cgo")
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["properties"]["scf_prop"], "nmr")
+        self.assertEqual(config["properties"]["nmr_gauge"], "cgo")
+
+        open_shell = (
+            openqp.OpenQP(project="bad_open_shell_nmr")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("hf", reference="rohf", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "CGO NMR"):
+            open_shell.workflow.nmr(gauge="cgo")
+        open_shell.workflow.nmr(gauge="giao")
+
+    def test_workflow_ekt_requires_mrsf_and_channel(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_ekt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "MRSF-TDDFT"):
+            job.workflow.ekt(ip=True)
+
+        mrsf = (
+            openqp.OpenQP(project="bad_ekt_channel")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=5)
+        )
+        with self.assertRaisesRegex(ValueError, "requires ip=True"):
+            mrsf.workflow.ekt()
+
+    def test_control_call_remains_compatible_for_explicit_runtype(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="h2o_opt")
+            .molecule(geometry="water", charge=0, multiplicity=1)
             .control(
                 runtype="optimize",
                 omp_threads=8,
@@ -325,7 +522,7 @@ $$$$
         openqp = load_openqp_module()
         job = openqp.OpenQP(project="bad_control").molecule(geometry="water")
 
-        with self.assertRaisesRegex(KeyError, "optimization runtypes"):
+        with self.assertRaisesRegex(KeyError, "known workflow"):
             job.control(runtype="energy", maxit=10)
 
     def test_soc_helper_sets_soc_without_response_multiplicity(self):
@@ -333,8 +530,14 @@ $$$$
         job = (
             openqp.OpenQP(project="h2o_soc")
             .molecule(geometry="water", charge=0)
-            .soc(nstate=12, functional="bhhlyp", basis="6-31G(2df,p)", soc_2e=1)
+            .theory(
+                "mrsf-tddft",
+                functional="bhhlyp",
+                basis="6-31G(2df,p)",
+                nstate=12,
+            )
         )
+        job.workflow.soc(soc_2e=1)
 
         config = job.to_input_dict()
         self.assertEqual(config["input"]["runtype"], "soc")
@@ -346,7 +549,29 @@ $$$$
         self.assertEqual(config["scf"]["multiplicity"], "3")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "12")
-        self.assertNotIn("multiplicity", config["tdhf"])
+        self.assertEqual(config["tdhf"]["multiplicity"], "1")
+
+    def test_workflow_soc_requires_mrsf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_soc")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+
+        with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
+            job.workflow.soc(soc_2e=1)
+
+    def test_workflow_soc_rejects_theory_options(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_soc_options")
+            .molecule(geometry="water", charge=0, multiplicity=3)
+            .theory("mrsf-tddft", functional="bhhlyp", basis="6-31g*", nstate=12)
+        )
+
+        with self.assertRaisesRegex(ValueError, "Move these options"):
+            job.workflow.soc(functional="bhhlyp")
 
     def test_soc_helper_rejects_response_multiplicity(self):
         openqp = load_openqp_module()

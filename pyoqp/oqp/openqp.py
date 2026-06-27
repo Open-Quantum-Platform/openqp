@@ -28,6 +28,14 @@ def dump_strings_from_parser(parser):
 
 
 OPTIMIZER_RUNTYPES = {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}
+RUNTYPE_SECTIONS = {
+    "grad": "properties",
+    "hess": "hess",
+    "nac": "nac",
+    "nacme": "nac",
+    "ekt": "ekt",
+    "prop": "properties",
+}
 
 
 class _SectionProxy:
@@ -65,6 +73,168 @@ class _SectionProxy:
         self._owner.section(self._section, **{option: value})
 
 
+class _WorkflowSectionProxy(_SectionProxy):
+    """Section proxy grouped under job.workflow for the preferred Python API."""
+
+    def __init__(self, owner, section, runtype=None):
+        super().__init__(owner, section)
+        object.__setattr__(self, "_runtype", runtype)
+
+    def __call__(self, **kwargs):
+        runtype = object.__getattribute__(self, "_runtype")
+        if runtype is not None:
+            self._owner._control(runtype=runtype)
+        return super().__call__(**kwargs)
+
+
+class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
+    """Optimization workflow proxy with runtype-aware backend routing."""
+
+    def __init__(self, owner, default_runtype="optimize"):
+        super().__init__(owner, "optimize")
+        object.__setattr__(self, "_default_runtype", default_runtype)
+
+    def __call__(self, runtype=None, **kwargs):
+        if runtype is None:
+            runtype = object.__getattribute__(self, "_default_runtype")
+        if runtype is not None:
+            self._owner._control(runtype=runtype)
+        if kwargs:
+            self._owner._set_optimize_options(**kwargs)
+        return self._owner
+
+
+class _WorkflowGradientProxy(_WorkflowSectionProxy):
+    """Gradient workflow proxy that stores state selection in [properties]."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "properties", runtype="grad")
+
+    def __call__(self, grad=None, **kwargs):
+        if grad is not None:
+            kwargs["grad"] = grad
+        return super().__call__(**kwargs)
+
+
+class _WorkflowPcmProxy(_WorkflowSectionProxy):
+    """PCM workflow proxy for the current energy-only PCM/ddX path."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "pcm", runtype="energy")
+
+    def __call__(self, **kwargs):
+        self._owner._require_reference_scf_theory_for("PCM/ddX")
+        backend = str(kwargs.get("backend", "ddx")).lower()
+        mode = str(kwargs.get("mode", "reference_scf")).lower()
+        scf_type = str(self._owner.config_typed.get("scf", {}).get("type", "rhf")).lower()
+        if backend != "ddx":
+            raise ValueError("PCM/ddX currently supports backend='ddx' only.")
+        if mode != "reference_scf":
+            raise ValueError("PCM/ddX currently supports mode='reference_scf' only.")
+        if scf_type not in {"rhf", "rohf"}:
+            raise ValueError("PCM/ddX currently supports RHF/ROHF reference SCF only.")
+        return super().__call__(**kwargs)
+
+
+class _WorkflowNmrProxy:
+    """NMR shielding workflow proxy for HF/DFT reference-SCF theory."""
+
+    def __init__(self, owner):
+        self._owner = owner
+
+    def __call__(self, gauge=None, **kwargs):
+        self._owner._require_reference_scf_theory_for("NMR")
+        if gauge is not None:
+            kwargs["nmr_gauge"] = gauge
+        nmr_gauge = str(kwargs.get("nmr_gauge", "cgo")).lower()
+        scf_type = str(self._owner.config_typed.get("scf", {}).get("type", "rhf")).lower()
+        if nmr_gauge not in {"cgo", "giao"}:
+            raise ValueError("NMR gauge must be 'cgo' or 'giao'.")
+        if nmr_gauge == "cgo" and scf_type != "rhf":
+            raise ValueError("CGO NMR shielding supports closed-shell RHF references only.")
+        self._owner._reject_nmr_unsupported_functionals()
+        kwargs["scf_prop"] = "nmr"
+        return self._owner.section("properties", **kwargs)
+
+
+class _WorkflowMrsfSectionProxy(_WorkflowSectionProxy):
+    """Workflow section proxy for features currently limited to MRSF-TDDFT."""
+
+    def __init__(self, owner, section, runtype, workflow_name):
+        super().__init__(owner, section, runtype=runtype)
+        object.__setattr__(self, "_workflow_name", workflow_name)
+
+    def __call__(self, **kwargs):
+        self._owner._require_mrsf_theory_for(object.__getattribute__(self, "_workflow_name"))
+        return super().__call__(**kwargs)
+
+
+class _WorkflowEktProxy(_WorkflowMrsfSectionProxy):
+    """MRSF-EKT workflow proxy."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "ekt", runtype="ekt", workflow_name="EKT")
+
+    def __call__(self, **kwargs):
+        if not kwargs.get("ip") and not kwargs.get("ea"):
+            raise ValueError("EKT requires ip=True, ea=True, or both.")
+        return super().__call__(**kwargs)
+
+
+class _WorkflowSocProxy:
+    """SOC workflow proxy grouped under job.workflow."""
+
+    def __init__(self, owner):
+        self._owner = owner
+
+    def __call__(self, **kwargs):
+        return self._owner._soc_control(**kwargs)
+
+
+class _WorkflowProxy:
+    """Scientific workflow namespace for OpenQP Python scripts."""
+
+    def __init__(self, owner):
+        object.__setattr__(self, "_owner", owner)
+        object.__setattr__(self, "gradient", _WorkflowGradientProxy(owner))
+        object.__setattr__(self, "hess", _WorkflowSectionProxy(owner, "hess", runtype="hess"))
+        object.__setattr__(self, "hessian", object.__getattribute__(self, "hess"))
+        object.__setattr__(self, "optimize", _WorkflowOptimizeProxy(owner))
+        for runtype in ("meci", "mecp", "tci", "mep", "ts", "irc", "neb"):
+            object.__setattr__(self, runtype, _WorkflowOptimizeProxy(owner, runtype))
+        object.__setattr__(self, "nac", _WorkflowMrsfSectionProxy(owner, "nac", "nac", "NAC"))
+        object.__setattr__(self, "nacme", _WorkflowMrsfSectionProxy(owner, "nac", "nacme", "NACME"))
+        object.__setattr__(self, "ekt", _WorkflowEktProxy(owner))
+        object.__setattr__(self, "pcm", _WorkflowPcmProxy(owner))
+        object.__setattr__(self, "nmr", _WorkflowNmrProxy(owner))
+        object.__setattr__(self, "soc", _WorkflowSocProxy(owner))
+
+    def __call__(self, runtype=None, **kwargs):
+        return self._owner._control(
+            runtype=runtype,
+            **kwargs,
+        )
+
+    def __getattr__(self, name):
+        if name in OQP_CONFIG_SCHEMA:
+            return _WorkflowSectionProxy(self._owner, name)
+        raise AttributeError(f"Unknown OpenQP workflow section '{name}'.")
+
+
+class _ControlProxy:
+    """Hardware/runtime control namespace for OpenQP Python scripts."""
+
+    def __init__(self, owner):
+        object.__setattr__(self, "_owner", owner)
+
+    def __call__(self, runtype=None, omp_threads=None, **kwargs):
+        return self._owner._control(
+            runtype=runtype,
+            omp_threads=omp_threads,
+            **kwargs,
+        )
+
+
 class OpenQP:
     """
     OpenQP-native convenience layer over the OpenQP input schema.
@@ -90,6 +260,8 @@ class OpenQP:
         self.unit = "Angstrom"
         self.runner = None
         self.mol = None
+        self.workflow = _WorkflowProxy(self)
+        self.control = _ControlProxy(self)
 
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         self.config_str = dump_strings_from_parser(parser)
@@ -180,9 +352,13 @@ class OpenQP:
             return False
         return bool(text and "\n" not in text and ";" not in text and " " not in text)
 
-    def control(self, runtype=None, omp_threads=None, **kwargs):
+    def _control(self, runtype=None, omp_threads=None, **kwargs):
         """Set run-level controls such as runtype, OpenMP, and optimization options."""
         updates = {}
+        section_runtype = runtype
+        if runtype is not None and str(runtype).lower() == "pcm":
+            section_runtype = "pcm"
+            runtype = "energy"
         if runtype is not None:
             updates["input.runtype"] = runtype
         if omp_threads is not None:
@@ -192,14 +368,21 @@ class OpenQP:
 
         if kwargs:
             active_runtype = str(
-                runtype if runtype is not None
+                section_runtype if section_runtype is not None
                 else self.config_typed.get("input", {}).get("runtype", "energy")
             ).lower()
             if active_runtype in OPTIMIZER_RUNTYPES:
                 return self._set_optimize_options(**kwargs)
+            if active_runtype == "soc":
+                return self._soc_control(**kwargs)
+            if active_runtype == "pcm":
+                return self.section("pcm", **kwargs)
+            if active_runtype in RUNTYPE_SECTIONS:
+                return self.section(RUNTYPE_SECTIONS[active_runtype], **kwargs)
             raise KeyError(
-                "Extra job.control(...) options are supported for optimization "
-                "runtypes. Use section helpers for other workflow-specific keywords."
+                "Extra job.control(...) options are supported for known "
+                "workflow runtypes. Use job.workflow.<name>(...) for "
+                "workflow-specific keywords."
             )
         return self
 
@@ -298,6 +481,78 @@ class OpenQP:
 
     def soc(self, nstate=3, functional=None, reference="rohf",
             reference_multiplicity=3, soc_2e=1, basis=None, **tdhf_keywords):
+        """Use a compact MRSF-TDDFT SOC setup."""
+        return self._soc(
+            nstate=nstate,
+            functional=functional,
+            reference=reference,
+            reference_multiplicity=reference_multiplicity,
+            soc_2e=soc_2e,
+            basis=basis,
+            **tdhf_keywords,
+        )
+
+    def _soc_control(self, soc_2e=1, **tdhf_keywords):
+        """Select the SOC workflow after an MRSF-TDDFT theory has been set."""
+        self._require_mrsf_theory_for_soc()
+        theory_keys = {"basis", "functional", "reference", "reference_multiplicity"}
+        misplaced = sorted(theory_keys & set(tdhf_keywords))
+        if misplaced:
+            raise ValueError(
+                "Set SOC theory with job.theory('mrsf-tddft', ...) before "
+                "job.workflow.soc(...). Move these options to job.theory: "
+                f"{', '.join(misplaced)}."
+            )
+        if "multiplicity" in tdhf_keywords:
+            raise ValueError(
+                "SOC computes singlet and triplet response internally; "
+                "do not set tdhf.multiplicity in job.workflow.soc()."
+            )
+
+        self.set(**{"input.runtype": "soc", "input.soc_2e": soc_2e})
+        if tdhf_keywords:
+            self.tdhf(**tdhf_keywords)
+        return self
+
+    def _require_mrsf_theory_for_soc(self):
+        self._require_mrsf_theory_for("SOC")
+
+    def _require_mrsf_theory_for(self, workflow_name):
+        method = str(self.config_typed.get("input", {}).get("method", "")).lower()
+        response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
+        if method != "tdhf" or response != "mrsf":
+            raise ValueError(
+                f"{workflow_name} is currently supported only with MRSF-TDDFT. "
+                "Call job.theory('mrsf-tddft', ...) before selecting this workflow."
+            )
+
+    def _require_reference_scf_theory_for(self, workflow_name):
+        method = str(self.config_typed.get("input", {}).get("method", "")).lower()
+        if method != "hf":
+            raise ValueError(
+                f"{workflow_name} is currently supported only with HF/DFT "
+                "reference-SCF theory. Call job.theory('hf', ...) or "
+                "job.theory('dft', ...) before selecting this workflow."
+            )
+
+    def _reject_nmr_unsupported_functionals(self):
+        functional = str(
+            self.config_typed.get("input", {}).get("functional", "")
+        ).lower()
+        if functional.startswith(("cam-", "dtcam-", "lc-", "lrc-", "wb97", "hse")):
+            raise ValueError(
+                "NMR shielding with range-separated functionals is not implemented."
+            )
+        if functional.startswith((
+            "m06", "m08", "m11", "mn12", "mn15", "tpss",
+            "scan", "rscan", "r2scan", "b97m", "revm06",
+        )):
+            raise ValueError(
+                "NMR shielding with meta-GGA functionals is not implemented."
+            )
+
+    def _soc(self, nstate=3, functional=None, reference="rohf",
+             reference_multiplicity=3, soc_2e=1, basis=None, **tdhf_keywords):
         """Use a compact MRSF-TDDFT SOC setup."""
         if "multiplicity" in tdhf_keywords:
             raise ValueError(
