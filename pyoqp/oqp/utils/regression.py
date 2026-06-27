@@ -129,6 +129,10 @@ REGISTRY = (
     # state run stores the placeholder [0].
     RegKey('td_energies', runtypes='*', required=True, needs_excited=True),
     RegKey('soc', runtypes=frozenset({'soc'}), required=True),
+    # A SOC run computes both spin-resolved excitation ladders; the public
+    # td_energies mirrors only one, so test the singlet and triplet explicitly.
+    RegKey('td_singlet_energies', runtypes=frozenset({'soc'}), required=True),
+    RegKey('td_triplet_energies', runtypes=frozenset({'soc'}), required=True),
     # Non-adiabatic / derivative couplings are sign/phase ambiguous between
     # runs, so compare magnitudes.
     RegKey('nac', runtypes=frozenset({'nac', 'nacme'}), required=True,
