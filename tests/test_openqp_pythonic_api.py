@@ -27,6 +27,7 @@ SCHEMA = {
     "scf": {
         "type": {"type": _string, "default": "rhf"},
         "multiplicity": {"type": int, "default": "1"},
+        "conv": {"type": float, "default": "1.0e-6"},
     },
     "tdhf": {
         "type": {"type": _string, "default": "rpa"},
@@ -185,6 +186,22 @@ $$$$
         self.assertEqual(config["input"]["method"], "hf")
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["scf"]["type"], "rhf")
+
+    def test_dft_helper_sets_functional_separately_from_hf(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_pbe")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe", reference="rhf", runtype="grad", conv=1.0e-7)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "hf")
+        self.assertEqual(config["input"]["functional"], "pbe")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["scf"]["type"], "rhf")
+        self.assertEqual(config["scf"]["conv"], "1e-07")
 
     def test_mrsf_helper_uses_openqp_defaults(self):
         openqp = load_openqp_module()

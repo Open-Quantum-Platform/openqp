@@ -347,6 +347,20 @@ class OpenQP:
             self.scf(**updates)
         return self
 
+    def dft(self, functional, reference="rhf", runtype="energy",
+            multiplicity=None, **scf_keywords):
+        """Use a compact OpenQP DFT setup for ordinary Kohn-Sham jobs."""
+        self.input(method="hf", functional=functional, runtype=runtype)
+        updates = {}
+        if reference is not None:
+            updates["type"] = reference
+        if multiplicity is not None:
+            updates["multiplicity"] = multiplicity
+        updates.update(scf_keywords)
+        if updates:
+            self.scf(**updates)
+        return self
+
     def mrsf(self, nstate=3, reference="rohf", multiplicity=3,
              runtype="energy", **tdhf_keywords):
         """Use a compact OpenQP MRSF-TDDFT setup with an open-shell reference."""
