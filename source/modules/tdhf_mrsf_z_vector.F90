@@ -69,6 +69,14 @@ module tdhf_mrsf_z_vector_mod
   ! the CG safeguard (falls back to zero if it doesn't reduce the residual).
   logical, save :: zv_diag_guess = .true.
 
+  ! Coarser DFT grid for the z-vector XC kernel than the SCF grid (the response
+  ! tolerates a coarser grid). Shrinks the dominant per-iteration utddft_fxc cost.
+  ! The grid is selected by the pruned-grid NAME (SG0 < SG1 < SG2(default) < SG3);
+  ! the lever swaps to a coarser named grid for the z-vector only. DEFAULT OFF
+  ! (env OQP_MRSF_ZV_COARSEGRID=1); grid choice via OQP_MRSF_ZV_GRID (default SG1).
+  logical, save :: zv_coarse_on = .false.
+  character(len=8), save :: zv_grid_name = 'SG1'
+
   ! Warm-start store (module-level; persists across the geometry/MD steps that
   ! share one process). The converged z-vector varies smoothly along a path, so
   ! the previous step's solution is a strong initial guess for the LINEAR CPHF
@@ -172,6 +180,12 @@ contains
     call get_environment_variable('OQP_MRSF_ZV_DIAGGUESS', e_)
     if (len_trim(e_) > 0) zv_diag_guess = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
         e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
+    ! Coarser response grid (default OFF; new feature, validate before defaulting).
+    call get_environment_variable('OQP_MRSF_ZV_COARSEGRID', e_)
+    zv_coarse_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    call get_environment_variable('OQP_MRSF_ZV_GRID', e_)
+    if (len_trim(e_) > 0) zv_grid_name = trim(adjustl(e_))
     zv_cfg_init = .true.
   end subroutine zv_read_config
 
@@ -1127,6 +1141,8 @@ contains
     real(kind=dp) :: t0_zv
     real(kind=dp) :: zv_rc_save
     logical :: zv_rc_loosen
+    character :: zv_gname_save(16)
+    integer :: ig
     character(len=10) :: solver_name
 
     logical :: dft, mrsf_zvector_breakdown
@@ -1175,7 +1191,22 @@ contains
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    ! Build the z-vector's DFT grid -- optionally coarser than the SCF grid
+    ! (env OQP_MRSF_ZV_COARSEGRID). The grid params are restored immediately; the
+    ! built molGrid carries the coarse grid through all of the z-vector's XC calls.
+    if (dft) then
+      zv_gname_save = infos%dft%grid_pruned_name
+      if (zv_coarse_on) then
+        infos%dft%grid_pruned = .true.
+        infos%dft%grid_pruned_name = ' '
+        do ig = 1, min(len_trim(zv_grid_name), 16)
+          infos%dft%grid_pruned_name(ig) = zv_grid_name(ig:ig)
+        end do
+        write(iw,'(" MRSF z-vector coarse response grid: ",a)') trim(zv_grid_name)
+      end if
+      call dft_initialize(infos, basis, molGrid)
+      if (zv_coarse_on) infos%dft%grid_pruned_name = zv_gname_save
+    end if
 
   ! Parameter it should be inputed later
     mrst = infos%tddft%mult
