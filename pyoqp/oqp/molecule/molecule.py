@@ -12,6 +12,27 @@ from .oqpdata import OQPData, OQP_CONFIG_SCHEMA
 from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
+
+# Environment variable that opts JSON dumps into "lean" mode: internal
+# ``OQP::`` arrays (density/Fock/MO matrices, etc.) are dropped before the
+# bundle is written. Used when (re)generating committed example *test
+# references*, which never read those arrays back -- they are stored but
+# never compared (see ``check_ref`` ``skip_keys``). The full bundle is still
+# written by default so the ``guess=json`` restart workflow keeps working.
+LEAN_JSON_ENV = 'OQP_LEAN_JSON'
+
+
+def _is_internal_array_key(key):
+    """Return True for internal ``OQP::`` keys that a lean JSON dump omits."""
+    return isinstance(key, str) and key.startswith('OQP::')
+
+
+def _env_wants_lean_json():
+    """True when ``OQP_LEAN_JSON`` is set to a truthy value."""
+    return os.environ.get(LEAN_JSON_ENV, '').strip().lower() not in (
+        '', '0', 'false', 'no', 'off')
+
+
 class Molecule:
     """
     OQP molecule representation in python
@@ -1442,9 +1463,19 @@ class Molecule:
         return data
 
     @mpi_dump
-    def save_data(self):
+    def save_data(self, lean=None):
         """
         Save mol data and computed results to json
+
+        Args:
+            lean: When True, drop internal ``OQP::`` arrays (density, Fock,
+                MO coefficients, overlap/kinetic, SOC/TD/MRSF scratch, etc.)
+                before writing. These are never compared by ``check_ref`` and
+                are not consumed by any example, so test references can omit
+                them to stay ~99% smaller. When None (default) the behaviour
+                follows the ``OQP_LEAN_JSON`` environment variable; otherwise
+                the full bundle is written so the ``guess=json`` restart
+                workflow (``load_data``/``put_data``) keeps its DM/Fock/MO data.
         """
         if self.idx != 1:
             jsonfile = self.log.replace('.log', f'_{self.idx}.json')
@@ -1453,6 +1484,12 @@ class Molecule:
         data = self.get_data()
         data.update(self.get_results())
         data.update(self.set_config_json())
+
+        if lean is None:
+            lean = _env_wants_lean_json()
+        if lean:
+            data = {k: v for k, v in data.items()
+                    if not _is_internal_array_key(k)}
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
@@ -1643,7 +1680,10 @@ class Molecule:
                 message += f'   PyOQP checking {key:<20} ... {flag} ({diff:.8f})\n'
         else:
             message += '   PyOQP reference data is not found (skip and save data)\n'
-            self.save_data()
+            # A freshly generated test reference never needs the internal
+            # OQP:: arrays (they are skipped by skip_keys above), so write the
+            # lean bundle to keep committed references ~99% smaller.
+            self.save_data(lean=True)
 
         return message, total_diff
 
