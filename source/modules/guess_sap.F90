@@ -99,8 +99,6 @@ contains
     if (ok /= 0) call show_message('Guess_SAP: cannot allocate memory', WITH_ABORT)
 
     ! clean previous data
-    call infos%dat%remove_records(tags_alpha)
-    call infos%dat%remove_records(tags_beta)
 
     ! load general data (overlap and kinetic-energy matrices are built by int1e).
     ! SAP uses the kinetic matrix T (not Hcore): the screened potential
@@ -110,23 +108,15 @@ contains
     call tagarray_get_data(infos%dat, OQP_TM, tmat)
 
     ! allocate alpha
-    call infos%dat%reserve_data(OQP_DM_A, TA_TYPE_REAL64, nbf2, comment=OQP_DM_A_comment)
-    call infos%dat%reserve_data(OQP_E_MO_A, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_A_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_A, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_A_comment)
-    call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
-    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
-    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call infos%dat%alloc_or_die(OQP_DM_A, (/ nbf2 /), dmat_a, description=OQP_DM_A_comment)
+    call infos%dat%alloc_or_die(OQP_E_MO_A, (/ nbf /), mo_energy_a, description=OQP_E_MO_A_comment)
+    call infos%dat%alloc_or_die(OQP_VEC_MO_A, (/ nbf, nbf /), mo_a, description=OQP_VEC_MO_A_comment)
 
     ! UHF/ROHF
     if (infos%control%scftype >= 2) then
-      call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
-      call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
-      call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_B_comment)
-      call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
-      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
-      call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
-      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+      call infos%dat%alloc_or_die(OQP_DM_B, (/ nbf2 /), dmat_b, description=OQP_DM_B_comment)
+      call infos%dat%alloc_or_die(OQP_E_MO_B, (/ nbf /), mo_energy_b, description=OQP_E_MO_B_comment)
+      call infos%dat%alloc_or_die(OQP_VEC_MO_B, (/ nbf, nbf /), mo_b, description=OQP_VEC_MO_B_comment)
     end if
 
   ! Build the DFT molecular grid. The XC functional name is not yet set at

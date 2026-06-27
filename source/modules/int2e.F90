@@ -92,9 +92,11 @@ contains
 
 !   Allocate and zero the destination tag. Screened (negligible) integrals are
 !   left at zero, matching standard quantum-chemistry practice.
-    call infos%dat%remove_records([character(len=80) :: OQP_ERI_AO])
-    call infos%dat%reserve_data(OQP_ERI_AO, TA_TYPE_REAL64, nbf4, &
-                                comment=OQP_ERI_AO_comment)
+!   nbf4 is integer(8), so the int64-shape low-level create is used here (the
+!   high-level alloc_or_die only accepts default-integer shapes).
+    if (infos%dat%create(OQP_ERI_AO, TA_TYPE_REAL64, [nbf4], &
+                         description=OQP_ERI_AO_comment, override=.true.) /= TA_OK) &
+      call show_message("int2e: failed to allocate OQP::ERI_AO", WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_ERI_AO, eri_flat)
     eri_flat = 0.0d0
 

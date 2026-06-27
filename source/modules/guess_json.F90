@@ -94,16 +94,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
     ! allocate beta
-    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
-    call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
-    call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_B_comment)
-
-   ! load beta
-    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
-    call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
-    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call infos%dat%alloc_or_die(OQP_DM_B, (/ nbf2 /), dmat_b, description=OQP_DM_B_comment)
+    call infos%dat%alloc_or_die(OQP_E_MO_B, (/ nbf /), mo_energy_b, description=OQP_E_MO_B_comment)
+    call infos%dat%alloc_or_die(OQP_VEC_MO_B, (/ nbf, nbf /), mo_b, description=OQP_VEC_MO_B_comment)
 
 
   !  For ROHF/UHF

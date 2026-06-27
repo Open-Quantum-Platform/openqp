@@ -4,7 +4,7 @@ set(_OQP_EXTERNALS_CACHE_REVISION "1")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_NLOPT_VERSION "2.9.1")
 set(_OQP_LIBXC_VERSION "7.0.0")
-set(_OQP_TAGARRAY_VERSION "0.0.6")
+set(_OQP_TAGARRAY_VERSION "1.0.0")
 set(_OQP_LIBECPINT_VERSION "1.0.7")
 set(_OQP_LAPACK_VERSION "3.10.0")
 set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
@@ -293,18 +293,18 @@ oqp_reuse_or_build(libtagarray
 if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
         PREFIX ${TAGARRAY_PREFIX}
-        URL https://github.com/foxtran/libtagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
-        URL_HASH SHA256=9c844092f123276bb461e37e3451068c097b5a1fec9d65514ad3018baaeb2b32
-#        GIT_REPOSITORY https://github.com/foxtran/libtagarray.git
+        URL https://github.com/Open-Quantum-Platform/tagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
+        URL_HASH SHA256=590896bcdaadca4c3466474d35eff06ed4090c42d37a3f8ddda0def83833c6c5
+#        GIT_REPOSITORY https://github.com/Open-Quantum-Platform/tagarray.git
 #        GIT_TAG master
         SOURCE_DIR ${TAGARRAY_SOURCE_DIR}
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
-        PATCH_COMMAND sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
+                   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
                    ${OQP_EXTERNAL_GENERATOR_ARGS}

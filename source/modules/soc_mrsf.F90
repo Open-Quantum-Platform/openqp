@@ -295,22 +295,11 @@ contains
       call print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energies, e_ref, ns, nt)
       call print_soc_decomposition(iw, eval, evec, ns, nt)
 
-      call infos%dat%reserve_data(OQP_soc_eval, TA_TYPE_REAL64, &
-          nstate_soc, (/nstate_soc/), comment=OQP_soc_eval_comment)
-      call infos%dat%reserve_data(OQP_soc_evec_re, TA_TYPE_REAL64, &
-          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_re_comment)
-      call infos%dat%reserve_data(OQP_soc_evec_im, TA_TYPE_REAL64, &
-          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_evec_im_comment)
-      call infos%dat%reserve_data(OQP_soc_hsoc_re, TA_TYPE_REAL64, &
-          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_re_comment)
-      call infos%dat%reserve_data(OQP_soc_hsoc_im, TA_TYPE_REAL64, &
-          nstate_soc*nstate_soc, (/nstate_soc, nstate_soc/), comment=OQP_soc_hsoc_im_comment)
-
-      call tagarray_get_data(infos%dat, OQP_soc_eval,    eval_out)
-      call tagarray_get_data(infos%dat, OQP_soc_evec_re, evec_re_out)
-      call tagarray_get_data(infos%dat, OQP_soc_evec_im, evec_im_out)
-      call tagarray_get_data(infos%dat, OQP_soc_hsoc_re, hsoc_re_out)
-      call tagarray_get_data(infos%dat, OQP_soc_hsoc_im, hsoc_im_out)
+      call infos%dat%alloc_or_die(OQP_soc_eval, (/nstate_soc/), eval_out, description=OQP_soc_eval_comment)
+      call infos%dat%alloc_or_die(OQP_soc_evec_re, (/nstate_soc, nstate_soc/), evec_re_out, description=OQP_soc_evec_re_comment)
+      call infos%dat%alloc_or_die(OQP_soc_evec_im, (/nstate_soc, nstate_soc/), evec_im_out, description=OQP_soc_evec_im_comment)
+      call infos%dat%alloc_or_die(OQP_soc_hsoc_re, (/nstate_soc, nstate_soc/), hsoc_re_out, description=OQP_soc_hsoc_re_comment)
+      call infos%dat%alloc_or_die(OQP_soc_hsoc_im, (/nstate_soc, nstate_soc/), hsoc_im_out, description=OQP_soc_hsoc_im_comment)
 
       eval_out    = eval
       evec_re_out = real(evec, kind=dp)

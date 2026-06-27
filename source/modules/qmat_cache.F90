@@ -41,12 +41,10 @@ contains
 
     character(len=*), parameter :: tags_qmat(1) = (/ character(len=80) :: OQP_QMAT /)
     real(kind=dp), contiguous, pointer :: q_st(:,:)
-    integer(c_int32_t) :: status, tag_id
+    integer(c_int32_t) :: tag_id
     integer :: j
 
-    status = infos%dat%has_records(tags_qmat, tag_id)
-
-    if (status == TA_OK) then
+    if (infos%dat%contains(tags_qmat, tag_id)) then
       call tagarray_get_data(infos%dat, OQP_QMAT, q_st)
       if (size(q_st,1) == nbf .and. size(q_st,2) == nbf) then
         qmat(:,1:nbf) = q_st
@@ -60,14 +58,11 @@ contains
         return
       end if
 !     dimension mismatch (e.g. stale record): recompute below
-      call infos%dat%remove_records(tags_qmat)
     end if
 
     call matrix_invsqrt(smat, qmat, nbf, qrnk=qrnk)
 
-    call infos%dat%reserve_data(OQP_QMAT, TA_TYPE_REAL64, nbf*nbf, &
-            (/ nbf, nbf /), comment=OQP_QMAT_comment)
-    call tagarray_get_data(infos%dat, OQP_QMAT, q_st)
+    call infos%dat%alloc_or_die(OQP_QMAT, (/ nbf, nbf /), q_st, description=OQP_QMAT_comment)
     q_st = qmat(:,1:nbf)
 
  end subroutine get_qmat_cached

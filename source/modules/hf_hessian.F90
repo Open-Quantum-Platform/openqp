@@ -511,9 +511,8 @@ contains
       call gcomp%clean()
     end block
 
-    call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
-      comment='Native OpenQP HF/DFT analytic Hessian matrix')
-    call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
+    call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
+      description='Native OpenQP HF/DFT analytic Hessian matrix')
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP HF/DFT Hessian matrix stored'
     close(iw)
@@ -1076,9 +1075,8 @@ contains
       call gcomp%clean()
     end block
 
-    call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
-      comment='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
-    call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
+    call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
+      description='Native OpenQP open-shell (UHF) HF analytic Hessian matrix')
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (UHF) HF Hessian matrix stored'
 
@@ -1474,9 +1472,8 @@ contains
     hess_native = 0.5_dp*(hresp + transpose(hresp))
     call hess_nn(basis%atoms, basis%ecp_zn_num, hess_native)
 
-    call infos%dat%reserve_data(OQP_hf_hessian, TA_TYPE_REAL64, ncart*ncart, (/ ncart, ncart /), &
-      comment='Native OpenQP open-shell (ROHF) HF analytic Hessian matrix')
-    call tagarray_get_data(infos%dat, OQP_hf_hessian, hess_store)
+    call infos%dat%alloc_or_die(OQP_hf_hessian, (/ ncart, ncart /), hess_store, &
+      description='Native OpenQP open-shell (ROHF) HF analytic Hessian matrix')
     hess_store = hess_native
     write(iw,'(A)') 'PyOQP: Native OpenQP open-shell (ROHF) HF Hessian matrix stored'
 
