@@ -370,6 +370,23 @@ def main():
                         help='run tests from a specified folder or:\n'
                              '  all    - Run all tests in examples\n'
                              '  other  - Run tests in examples/other')
+    parser.add_argument('--validate_examples', dest='validate_examples',
+                        metavar='dir', nargs='?', const='',
+                        help='validate that every example reference under DIR\n'
+                             '(default: $OPENQP_ROOT/share/examples) carries the\n'
+                             'regression values its runtype requires, then exit')
+    parser.add_argument('--check_feature_coverage', dest='check_feature_coverage',
+                        metavar='dir', nargs='?', const='',
+                        help='check that every opt-in feature flag in the input\n'
+                             'schema is exercised by at least one example under DIR\n'
+                             '(default: $OPENQP_ROOT/share/examples); fails if a new\n'
+                             'feature ships without a test')
+    parser.add_argument('--generate_reference', dest='generate_reference',
+                        metavar='input.inp', nargs='+',
+                        help='run each INPUT and (re)write its lean .json test\n'
+                             'reference next to it -- only the regression-registry\n'
+                             'keys are kept (internal OQP:: arrays dropped). This\n'
+                             'is the supported way to add/refresh example references.')
     parser.add_argument('--silent', action='store_true', help='run silently')
     parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
     parser.add_argument('--omp', metavar='N', type=int,
@@ -377,6 +394,15 @@ def main():
                              "input's omp_threads and OMP_NUM_THREADS; applied\n"
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
+
+    if args.generate_reference:
+        sys.exit(generate_reference_cli(args.generate_reference))
+
+    if args.check_feature_coverage is not None:
+        sys.exit(feature_coverage_cli(args.check_feature_coverage))
+
+    if args.validate_examples is not None:
+        sys.exit(validate_examples_cli(args.validate_examples))
 
     if args.run_tests:
         report, status = run_tests(args.run_tests)
@@ -417,6 +443,112 @@ def main():
     oqp_runner.run()
     oqp_runner.results()
     mpi_manager.finalize_mpi()
+
+
+def generate_reference_cli(inputs):
+    """(Re)generate lean JSON test references for the given input files.
+
+    Runs each input and writes only the regression-registry keys (physics +
+    identity/metadata) next to the .inp, dropping internal OQP:: arrays. This is
+    the supported, repeatable way to add or refresh example references so the
+    committed set stays clean, small, and consistent with the registry. The
+    written references are validated against the registry before returning.
+    """
+    import tempfile
+    from oqp.utils import regression
+
+    rc = 0
+    for inp in inputs:
+        inp = os.path.abspath(inp)
+        if not os.path.exists(inp):
+            print(f'   PyOQP generate_reference: input {inp} not found')
+            rc = 1
+            continue
+        project = os.path.splitext(os.path.basename(inp))[0]
+        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Runner(project=project, input_file=inp,
+                            log=os.path.join(tmp, project + '.log'),
+                            silent=1, usempi=False)
+            runner.run(test_mod=True)
+            # Point save_data at the example location and write the lean bundle.
+            runner.mol.log = ref.replace('.json', '.log')
+            runner.mol.save_data(lean=True)
+        print(f'   PyOQP wrote lean reference {ref}')
+
+    # Validate what we just wrote.
+    failures = []
+    for inp in inputs:
+        inp = os.path.abspath(inp)
+        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        if not os.path.exists(ref):
+            continue
+        runtype, excited, props = regression._context_from_input(inp)
+        miss = regression.missing_required(
+            regression._present_nonempty(ref, inp), runtype, excited, props)
+        if miss:
+            failures.append((inp, miss))
+    for inp, miss in failures:
+        print(f'   PyOQP WARNING: {inp} reference still missing: {", ".join(miss)}')
+        rc = 1
+    return rc
+
+
+def _default_examples_dir():
+    """$OPENQP_ROOT/share/examples (the installed runtime examples)."""
+    root = os.environ.get('OPENQP_ROOT') or getattr(
+        oqp, 'oqp_root', os.path.dirname(os.path.abspath(__file__)))
+    examples_dir = os.path.join(root, 'share', 'examples')
+    if not os.path.isdir(examples_dir):
+        examples_dir = os.path.join(root, 'examples')
+    return examples_dir
+
+
+def feature_coverage_cli(examples_dir):
+    """Gate: every opt-in feature flag in the input schema must be exercised by
+    at least one example, so a new feature cannot ship without a test. Exit 0
+    if covered (grandfathered gaps are warnings), 1 if a new flag is untested."""
+    from oqp.utils import regression
+    examples_dir = examples_dir or _default_examples_dir()
+    failures, grandfathered = regression.feature_coverage(examples_dir)
+    for flag, why in grandfathered:
+        print(f'   PyOQP NOTE: feature {flag} has no example yet (tracked gap): {why}')
+    if not failures:
+        print(f'PyOQP: every opt-in feature flag under {examples_dir} is '
+              f'exercised by an example (or classified).')
+        return 0
+    print(f'PyOQP: {len(failures)} feature flag(s) ship without a test '
+          f'(add an example, or classify in oqp/utils/regression.py):')
+    for flag, why in failures:
+        print(f'   {flag:<34} {why}')
+    return 1
+
+
+def validate_examples_cli(examples_dir):
+    """Gate: every example reference must carry the regression values its
+    runtype/method/properties require (per the registry). Returns a process
+    exit code (0 = all good, 1 = at least one reference is missing a value)."""
+    from oqp.utils import regression
+    if not examples_dir:
+        # Default to the installed runtime root's examples -- the same location
+        # OQPTester uses (oqp.oqp_root/share/examples). NB: pyoqp.py lives inside
+        # the oqp package, so do NOT go up a level (that lands on site-packages
+        # and the gate then scans nothing).
+        root = os.environ.get('OPENQP_ROOT') or getattr(
+            oqp, 'oqp_root', os.path.dirname(os.path.abspath(__file__)))
+        examples_dir = os.path.join(root, 'share', 'examples')
+        if not os.path.isdir(examples_dir):
+            examples_dir = os.path.join(root, 'examples')
+    failures = regression.validate_examples(examples_dir)
+    if not failures:
+        print(f'PyOQP: all example references under {examples_dir} carry their '
+              f'required regression values.')
+        return 0
+    print(f'PyOQP: {len(failures)} example reference(s) missing required '
+          f'regression values (see the registry in oqp/utils/regression.py):')
+    for inp, miss in failures:
+        print(f'   {inp:<60} missing: {", ".join(miss)}')
+    return 1
 
 
 def run_tests(test_path):
