@@ -608,18 +608,28 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         list(APPEND DDX_CMAKE_ARGS "${_ddx_prefix_path_arg}")
     endif()
     # Forward the same BLAS/LAPACK choice OpenQP resolved (findLinearAlgebra()).
+    # _ddx_interface_libs captures the *same* libraries so they can be re-exported
+    # as INTERFACE_LINK_LIBRARIES on the DDX::ddx imported target below: the shared
+    # libddx.so leaves its BLAS/LAPACK symbols (drot_, dtrmm_, dswap_, ...)
+    # undefined, and on a flat-namespace linker (Linux) every executable that links
+    # DDX::ddx must resolve them itself. macOS' two-level namespace records the dep
+    # inside libddx.dylib, so this only bites on Linux -- but exporting it is
+    # correct everywhere. LAPACK precedes BLAS so LAPACK's own BLAS calls resolve.
+    set(_ddx_interface_libs "")
     if(_LINALG_LIB_TYPE STREQUAL NetLib)
         oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${LIBBLAS})
         oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
         list(APPEND DDX_CMAKE_ARGS
             "${_ddx_blas_arg}"
             "${_ddx_lapack_arg}")
+        set(_ddx_interface_libs ${LIBLAPACK} ${LIBBLAS})
     elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
         oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
         oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
         list(APPEND DDX_CMAKE_ARGS
             "${_ddx_blas_arg}"
             "${_ddx_lapack_arg}")
+        set(_ddx_interface_libs ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
     elseif(DEFINED BLA_VENDOR)
         list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
         if(DEFINED BLA_PREFER_PKGCONFIG)
@@ -630,6 +640,15 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         endif()
         if(DEFINED BLA_PKGCONFIG_LAPACK)
             list(APPEND DDX_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
+        endif()
+        # No explicit library paths in the BLA_VENDOR branch; re-export whatever
+        # find_package() did resolve so the consumer can still satisfy libddx's
+        # BLAS/LAPACK symbols on a flat-namespace linker.
+        if(DEFINED LAPACK_LIBRARIES)
+            list(APPEND _ddx_interface_libs ${LAPACK_LIBRARIES})
+        endif()
+        if(DEFINED BLAS_LIBRARIES)
+            list(APPEND _ddx_interface_libs ${BLAS_LIBRARIES})
         endif()
     endif()
 
@@ -662,6 +681,14 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     set_target_properties(DDX::ddx PROPERTIES
         IMPORTED_LOCATION ${DDX_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
+    # Propagate ddX's own BLAS/LAPACK dependency to every consumer. Without this,
+    # linking DDX::ddx on Linux fails with "undefined reference to drot_/dtrmm_/
+    # dswap_/..." because libddx.so does not record its BLAS dependency the way a
+    # macOS two-level-namespace dylib does. See _ddx_interface_libs above.
+    if(_ddx_interface_libs)
+        set_target_properties(DDX::ddx PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_ddx_interface_libs}")
+    endif()
     message(STATUS "ddX will be built with ${BLA_SIZEOF_INTEGER}-byte BLAS integers from source: ${DDX_LIBRARY}")
 endif()
 
