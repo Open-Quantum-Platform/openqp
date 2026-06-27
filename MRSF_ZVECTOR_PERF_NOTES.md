@@ -260,6 +260,18 @@ analytic gradient's own FD-confirmed accuracy** — i.e. comfortably in the nois
   response kernel (`utddft_fxc`), 65–75% of the per-iteration cost; and a
   true-residual replacement to let progressive screening use a looser cap.
 
+### Combined (full playbook together) — capstone
+All three iteration-cutters on at once (`OQP_MRSF_ZV_WARMSTART` +
+`OQP_MRSF_ZV_CONV=1e-8` + `OQP_MRSF_ZV_PROG`), tetracene (30 atoms), vs the tight
+cold baseline (10 iters):
+- **cold step: 10 → 7 iters** (zvconv) with cheaper progressive-screened iters;
+- **warm step (typical MD/opt step): 10 → 1 iter (−90%)**;
+- gradient vs tight baseline: **4.0e-6 a.u.** (within the ≤1e-5 gate).
+
+So along a trajectory the first/hard step gets the zvconv+progressive discount and
+every subsequent (small-step) solve collapses to ~1 iteration — the levers compose
+with no accuracy loss.
+
 ### Quick reference — env opt-ins (all default OFF)
 ```
 OQP_MRSF_ZV_TIMERS=1                 # per-section profile
