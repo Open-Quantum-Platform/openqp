@@ -684,6 +684,12 @@ endif()
 # dftd4's bind(c) enum kind (df_enum) vs default-integer consistency. mctc-lib uses
 # no BLAS. Because the stack stays 4-byte, the shim hands mctc-lib's `new` a 4-byte
 # `num` (OQP_D4_INT_KIND=4 in source/CMakeLists.txt), independent of the host width.
+# WITH_OpenMP tracks OpenQP's ENABLE_OPENMP: dftd4/multicharge default WITH_OpenMP
+# ON, but OpenQP only finds/links OpenMP when ENABLE_OPENMP=ON (default OFF), so
+# without this the D4 statics would carry an OpenMP runtime dependency liboqp does
+# not satisfy. WITH_TESTS=OFF is honored by multicharge; dftd4/mctc-lib ignore it
+# and add their test subdir (and dftd4 an unconditional mstore fetch) unconditionally,
+# so those are stripped via PATCH_COMMAND on each ExternalProject below.
 set(DFTD4_COMMON_ARGS
         -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
         -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
@@ -691,11 +697,21 @@ set(DFTD4_COMMON_ARGS
         -DCMAKE_BUILD_TYPE=Release
         -DBUILD_SHARED_LIBS=OFF
         -DWITH_TESTS=OFF
+        -DWITH_OpenMP=${ENABLE_OPENMP}
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
         -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
         ${OQP_EXTERNAL_GENERATOR_ARGS}
 )
+
+# dftd4 3.7.0 and mctc-lib 0.4.2 call add_subdirectory("test") unconditionally
+# (they do not honor WITH_TESTS), and dftd4 additionally does an unconditional
+# find_package("mstore") whose fetch method downloads an unpinned mstore purely
+# for its test target. Strip both so a clean/offline build neither needs mstore
+# nor builds tests. Substitutions are idempotent (safe under OQP_REUSE_EXTERNALS).
+# `.` stands in for the literal " to avoid nested-quote escaping.
+set(DFTD4_DROP_TESTS_PERL "s/\\nadd_subdirectory\\(.test.\\)/\\n# test subdir disabled by OpenQP/g")
+set(DFTD4_DROP_MSTORE_PERL "s/if\\(NOT TARGET .mstore..mstore.\\)\\s*\\n\\s*find_package\\(.mstore.\\)\\s*\\nendif\\(\\)/# mstore find disabled by OpenQP (no dftd4 tests)/g")
 
 # Feed dftd4/multicharge the same BLAS+LAPACK choice OpenQP resolved, the same
 # way ddx is fed above. multicharge needs LAPACK (a linear solve), so BOTH
@@ -738,6 +754,7 @@ ExternalProject_Add(mctc-lib
         STAMP_DIR  ${DFTD4_MCTC_STAMP_DIR}
         BUILD_BYPRODUCTS ${DFTD4_MCTC_LIB}
         UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt
         CMAKE_ARGS ${DFTD4_COMMON_ARGS}
         )
 endif()
@@ -783,6 +800,8 @@ ExternalProject_Add(dftd4
         STAMP_DIR  ${DFTD4_D4_STAMP_DIR}
         BUILD_BYPRODUCTS ${DFTD4_DFTD4_LIB}
         UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
+                COMMAND perl -0pi -e "${DFTD4_DROP_MSTORE_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
         CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
         )
 add_dependencies(dftd4 multicharge)
