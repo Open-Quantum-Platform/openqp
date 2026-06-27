@@ -42,6 +42,17 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
     "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
     "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
+  character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
+    "Mulliken atomic partial charges (e), one per atom"
+  character(len=*), parameter, public :: OQP_lowdin_charges = OQP_prefix // "lowdin_charges"
+  character(len=*), parameter, public :: OQP_lowdin_charges_comment = &
+    "Lowdin atomic partial charges (e), one per atom"
+  ! NB: identifier differs from the subroutine oqp_resp_charges (Fortran is
+  ! case-insensitive); the JSON key is still "resp_charges".
+  character(len=*), parameter, public :: OQP_resp_chg = OQP_prefix // "resp_charges"
+  character(len=*), parameter, public :: OQP_resp_chg_comment = &
+    "RESP/ESP-fitted atomic partial charges (e), one per atom"
   character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
   character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
   character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
