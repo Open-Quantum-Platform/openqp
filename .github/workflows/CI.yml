@@ -105,6 +105,24 @@ jobs:
          # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI
          # leg: the suite is the same code path and running it under both MPI legs
          # only doubles wall-clock.
+         - name: Locate ddX runtime library
+           # The ENABLE_DDX=ON build links libddx.so, which is installed in the
+           # bundled-externals dir, not next to the installed liboqp.so. For a
+           # plain `pip install .` build the runtime loader cannot find it, so
+           # `import oqp` (hence every `openqp` invocation) fails with
+           # "libddx.so: cannot open shared object file". Put its directory on
+           # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: |
+            lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            if [ -n "$lib" ]; then
+              echo "LD_LIBRARY_PATH=$(dirname "$lib"):${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+              echo "ddX runtime library: $lib"
+            else
+              echo "::error::libddx.so not found under ~/.cache/openqp; ddX build is broken"
+              exit 1
+            fi
+
          - name: Validate example references
            # Gate: every example reference must carry the regression values its
            # runtype/method/properties require (the registry in

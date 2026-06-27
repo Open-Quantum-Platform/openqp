@@ -491,8 +491,12 @@ def validate_examples_cli(examples_dir):
     exit code (0 = all good, 1 = at least one reference is missing a value)."""
     from oqp.utils import regression
     if not examples_dir:
-        root = os.environ.get('OPENQP_ROOT') or os.path.abspath(
-            os.path.join(os.path.dirname(__file__), os.pardir))
+        # Default to the installed runtime root's examples -- the same location
+        # OQPTester uses (oqp.oqp_root/share/examples). NB: pyoqp.py lives inside
+        # the oqp package, so do NOT go up a level (that lands on site-packages
+        # and the gate then scans nothing).
+        root = os.environ.get('OPENQP_ROOT') or getattr(
+            oqp, 'oqp_root', os.path.dirname(os.path.abspath(__file__)))
         examples_dir = os.path.join(root, 'share', 'examples')
         if not os.path.isdir(examples_dir):
             examples_dir = os.path.join(root, 'examples')
