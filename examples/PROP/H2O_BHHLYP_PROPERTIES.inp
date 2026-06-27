@@ -1,0 +1,25 @@
+# DFT/6-31G*/BHHLYP/RHF/ENERGY of H2O with SCF property analysis.
+# Covers the DFT path for the electric dipole and Mulliken/Lowdin/RESP charges.
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=0
+runtype=energy
+functional=bhhlyp
+basis=6-31g*
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=1
+type=rhf
+
+[dftgrid]
+rad_type=becke
+
+[properties]
+scf_prop=el_mom,mulliken,lowdin,resp

@@ -212,7 +212,10 @@ OQP_CONFIG_SCHEMA = {
         'ea': {'type': bool, 'default': 'False'},
     },
     'properties': {
-        'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
+        # Opt-in: properties are computed (and regression-tested) only when
+        # explicitly requested, so they are not surfaced to every reference and
+        # do not become cross-platform regression targets on every SCF run.
+        'scf_prop': {'type': sarray, 'default': ''},
         # NMR shielding gauge formulation.  CGO is the validated default;
         # GIAO is recognized explicitly but gated until the integral/response
         # implementation and benchmarks are complete.

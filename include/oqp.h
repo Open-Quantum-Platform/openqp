@@ -263,6 +263,12 @@ void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
+
+/* Native DFT-D4 dispersion (source/dftd4_interface.F90). Self-contained:
+   takes atomic numbers + coordinates (Bohr), not the oqp handle. */
+void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
+                    const char *func, int lfunc, int do_grad,
+                    double *energy, double *grad, int *ier);
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);
