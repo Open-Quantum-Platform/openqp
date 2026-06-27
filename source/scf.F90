@@ -64,6 +64,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
+    use mod_dft_incdft, only: incdft_env_enabled, incdft_should_reuse, incdft_reset
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
@@ -95,6 +96,8 @@ contains
     integer :: scf_type                 ! Type of SCF calculation
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
+    logical :: use_incdft               ! Opt 2: incremental-XC reuse enabled
+    logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
 
@@ -346,6 +349,10 @@ contains
                source=0.0_dp)
       if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
     end if
+
+    ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
+    use_incdft = is_dft .and. incdft_env_enabled()
+    if (use_incdft) call incdft_reset()
 
     !==============================================================================
     ! Initialize pFON Parameters
@@ -729,8 +736,22 @@ contains
         end if
       end if
 
+      ! Opt 2 (IncDFT): decide whether to reuse the reference XC this iteration.
+      ! diis_error here is the previous iteration's value (set after calc_fock),
+      ! a valid proxy for closeness to convergence; the reuse window forces full
+      ! XC builds again once near convergence (diis_error < incdft_stop, aligned
+      ! with the J/K incremental refresh above) so the fixed point stays exact.
+      xc_reuse_now = .false.
+      if (use_incdft) xc_reuse_now = incdft_should_reuse(diis_error, iter)
+      ! The progressive coarse->fine grid ramp and IncDFT's collocation-Phi cache are
+      ! incompatible while the grid is coarse (the cache is grid-specific): never reuse
+      ! XC during the loose/coarse phase. Once pinned the grid is the full grid again
+      ! and reuse is valid. (Both default off, so this is a no-op on the default path.)
+      if (ps_grid_on .and. .not. ps_pin) xc_reuse_now = .false.
+
       if (ps_timer) call system_clock(ps_t0, ps_rate)
-      call calc_fock(basis, infos, ps_cur_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      call calc_fock(basis, infos, ps_cur_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold, &
+                     xc_reuse=xc_reuse_now)
       if (ps_timer) then
         call system_clock(ps_t1)
         write(IW,'(3x,a,i4,a,f10.4,a,es9.2,a,i0)') 'pscreen iter ', iter, &
@@ -989,7 +1010,12 @@ contains
       !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) .and. (.not. ps_force_iter)) then
+      ! Convergence guards (both .false. on the default path, so a no-op there):
+      !  - ps_force_iter (progressive screening): never converge on a loose/coarse build.
+      !  - xc_reuse_now (IncDFT): never converge on an iteration whose XC was reused
+      !    (stale); the next iteration forces a full XC build so the fixed point is exact.
+      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
+          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then

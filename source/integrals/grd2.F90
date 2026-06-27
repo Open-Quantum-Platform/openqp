@@ -173,6 +173,12 @@ contains
 
     real(kind=dp) :: rtol, dtol
 
+    integer :: itmp
+    character(len=64) :: sval
+    integer :: ln
+    real(kind=dp) :: cutval
+    logical :: lstats
+
     type(grd2_int_data_t) :: gdat
 
     type(int2_pair_storage) :: ppairs
@@ -190,7 +196,25 @@ contains
 
 !    `cutoff` is the Schwarz screening cutoff
 !    `dabcut` is the two particle density cutoff
+!
+!   The gradient is evaluated at the CONVERGED density, so the derivative-ERI
+!   screening may be loosened relative to the SCF Fock build without changing
+!   the converged gradient beyond a controllable tolerance.  Opt-in, default-OFF
+!   (env unset => byte-identical to the historic 1.0d-10):
+!     OQP_GRAD_CUTOFF - Schwarz block cutoff (default 1.0d-10).  1.0d-8 is the
+!                       size-robust opt-in (max|dG| <= ~1e-6 a.u. through the
+!                       36-atom systems tested).  1.0d-7 is more aggressive but
+!                       max|dG| GROWS with system size and exceeds 1e-5 past
+!                       ~18-atom HF (DFT/MRSF, HF-exchange scale <=0.5, tolerate
+!                       it to larger sizes).  Looser still is unsafe: derivative
+!                       integrals amplify the dropped contributions.  See
+!                       GRAD_SCREENING_NOTES.md for the per-size/method table.
     cutoff = 1.0d-10
+    call get_environment_variable("OQP_GRAD_CUTOFF", sval, ln)
+    if (ln > 0) then
+      read(sval,*,iostat=itmp) cutval
+      if (itmp == 0 .and. cutval > 0.0_dp) cutoff = cutval
+    end if
     cutoff2 = cutoff/2.0d+00
 
     zbig = maxval(basis%ex)
@@ -200,6 +224,12 @@ contains
 
     dtol = 10.0d0**(-tol_int)
     rtol = log(10.0_dp)*tol_int
+
+!   Opt-in screening diagnostics (auto-enabled when the lever is active).
+    lstats = (cutoff /= 1.0d-10)
+    call get_environment_variable("OQP_GRAD_STATS", sval, ln)
+    if (ln > 0) lstats = (sval(1:1)=='1' .or. sval(1:1)=='y' .or. sval(1:1)=='Y' &
+                          .or. sval(1:1)=='t' .or. sval(1:1)=='T')
 
     call cutoffs%set(&
             cutoff_integral_value=dabcut,&
@@ -332,6 +362,13 @@ contains
 !   Project rotational contaminant from gradients
 !   call dfinal(1)
 
+    if (lstats) then
+      write(iw, fmt="(&
+        &/1X,'[grd2] screening: cutoff=',ES9.2,'  pass=',I1,&
+        &/1X,'[grd2] blocks coarse/fine skipped ',I12,'/',I12,&
+        &'  computed ',I12)") &
+        cutoff, gcomp%cur_pass, skip1, skip2, numint
+    end if
 
   end subroutine grd2_driver_gen
 
