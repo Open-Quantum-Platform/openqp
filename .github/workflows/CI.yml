@@ -41,7 +41,11 @@ jobs:
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
-            sudo apt-get install libopenblas-dev
+            # ILP64 OpenBLAS (provides openblas64.pc). The build requests ILP64
+            # (LINALG_LIB_INT64=ON), so LINALG_LIB=OpenBLAS resolves this system
+            # library and OpenQP (and ddX) link it directly -- no reference LAPACK
+            # is compiled from source.
+            sudo apt-get install libopenblas64-dev
          - name: Install MPI (ubuntu)
            if: ${{ contains(matrix.os, 'ubuntu') }}
            run: |
@@ -60,13 +64,17 @@ jobs:
             # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
             # and runtime deps (numpy/scipy/geometric/...) come from pyproject.
             # USE_LIBINT/ENABLE_OPENMP/LINALG_LIB_INT64 are pyproject defaults; CI
-            # only overrides the build type, the MPI matrix leg, and ENABLE_DDX.
+            # overrides the build type, the MPI matrix leg, ENABLE_DDX, and the
+            # BLAS/LAPACK choice.
+            #
+            # LINALG_LIB=OpenBLAS links the system ILP64 OpenBLAS installed above
+            # (it bundles LAPACK), so neither OpenQP nor ddX compiles the reference
+            # NetLib LAPACK from source -- that was the slow part of the build.
             #
             # ENABLE_DDX=ON builds the optional ddX continuum-solvation backend so
             # the PCM/ddX (DDPCM) examples actually run below instead of reporting
-            # SKIPPED. Building ddX (and the bundled reference LAPACK it links
-            # against) from source is the expensive part; the bundled-externals
-            # cache above (keyed on external/CMakeLists.txt) pays that cost once.
+            # SKIPPED. ddX is still built from source; the bundled-externals cache
+            # above (keyed on external/CMakeLists.txt) pays that cost once.
             #
             # External deps (libxc, nlopt, ...) are fetched via ExternalProject and
             # the upstream hosts intermittently return HTTP 504. The bundled-
@@ -75,6 +83,7 @@ jobs:
             n=0
             until pip install -v . \
                 --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \
                 --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
               n=$((n + 1))
