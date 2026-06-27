@@ -375,6 +375,12 @@ def main():
                         help='validate that every example reference under DIR\n'
                              '(default: $OPENQP_ROOT/share/examples) carries the\n'
                              'regression values its runtype requires, then exit')
+    parser.add_argument('--generate_reference', dest='generate_reference',
+                        metavar='input.inp', nargs='+',
+                        help='run each INPUT and (re)write its lean .json test\n'
+                             'reference next to it -- only the regression-registry\n'
+                             'keys are kept (internal OQP:: arrays dropped). This\n'
+                             'is the supported way to add/refresh example references.')
     parser.add_argument('--silent', action='store_true', help='run silently')
     parser.add_argument('--nompi', action='store_true', help='disable mpi functions')
     parser.add_argument('--omp', metavar='N', type=int,
@@ -382,6 +388,9 @@ def main():
                              "input's omp_threads and OMP_NUM_THREADS; applied\n"
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
+
+    if args.generate_reference:
+        sys.exit(generate_reference_cli(args.generate_reference))
 
     if args.validate_examples is not None:
         sys.exit(validate_examples_cli(args.validate_examples))
@@ -425,6 +434,55 @@ def main():
     oqp_runner.run()
     oqp_runner.results()
     mpi_manager.finalize_mpi()
+
+
+def generate_reference_cli(inputs):
+    """(Re)generate lean JSON test references for the given input files.
+
+    Runs each input and writes only the regression-registry keys (physics +
+    identity/metadata) next to the .inp, dropping internal OQP:: arrays. This is
+    the supported, repeatable way to add or refresh example references so the
+    committed set stays clean, small, and consistent with the registry. The
+    written references are validated against the registry before returning.
+    """
+    import tempfile
+    from oqp.utils import regression
+
+    rc = 0
+    for inp in inputs:
+        inp = os.path.abspath(inp)
+        if not os.path.exists(inp):
+            print(f'   PyOQP generate_reference: input {inp} not found')
+            rc = 1
+            continue
+        project = os.path.splitext(os.path.basename(inp))[0]
+        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        with tempfile.TemporaryDirectory() as tmp:
+            runner = Runner(project=project, input_file=inp,
+                            log=os.path.join(tmp, project + '.log'),
+                            silent=1, usempi=False)
+            runner.run(test_mod=True)
+            # Point save_data at the example location and write the lean bundle.
+            runner.mol.log = ref.replace('.json', '.log')
+            runner.mol.save_data(lean=True)
+        print(f'   PyOQP wrote lean reference {ref}')
+
+    # Validate what we just wrote.
+    failures = []
+    for inp in inputs:
+        inp = os.path.abspath(inp)
+        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        if not os.path.exists(ref):
+            continue
+        runtype, excited, props = regression._context_from_input(inp)
+        miss = regression.missing_required(
+            regression._present_nonempty(ref, inp), runtype, excited, props)
+        if miss:
+            failures.append((inp, miss))
+    for inp, miss in failures:
+        print(f'   PyOQP WARNING: {inp} reference still missing: {", ".join(miss)}')
+        rc = 1
+    return rc
 
 
 def validate_examples_cli(examples_dir):

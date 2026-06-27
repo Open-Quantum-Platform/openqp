@@ -1279,23 +1279,19 @@ class Molecule:
             return self.get_system(), self.get_data()
 
     def explicit_scf_props(self):
-        """Lowercased scf_prop values EXPLICITLY set in the input file.
+        """Lowercased scf_prop values requested for this calculation.
 
-        Distinct from ``config['properties']['scf_prop']``, which is populated
-        with the 'el_mom,mulliken' default for every run. Regression coverage of
-        a property is opt-in: only properties named explicitly in the input are
-        surfaced to the JSON, required by the gate, and compared.
+        ``scf_prop`` defaults to empty, so its config value is exactly the set of
+        properties the user asked for -- works identically for file-based and
+        scripting-API (input_dict) runs. Regression coverage of a property is
+        opt-in: only requested properties are surfaced to the JSON, required by
+        the gate, and compared.
         """
         try:
-            with open(self.input_file, 'r') as handle:
-                text = handle.read()
-        except (OSError, AttributeError, TypeError):
+            requested = self.config.get('properties', {}).get('scf_prop', []) or []
+        except (AttributeError, TypeError):
             return []
-        import re
-        m = re.search(r'^\s*scf_prop\s*=\s*([^\n#]+)', text, re.I | re.M)
-        if not m:
-            return []
-        return [p.strip().lower() for p in re.split(r'[,\s]+', m.group(1)) if p.strip()]
+        return [str(p).strip().lower() for p in requested if str(p).strip()]
 
     def get_results(self):
         """
