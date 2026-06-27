@@ -3,6 +3,9 @@
 from copy import deepcopy
 import os
 from collections.abc import Mapping
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import urlopen
 
 from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
 from oqp.pyoqp import Runner
@@ -12,10 +15,112 @@ from oqp.utils.kword_map import resolve_param_key
 
 
 _BOHR_UNITS = {"bohr", "au", "a.u.", "atomic_unit", "atomic_units"}
+_GEOMETRY_ALIASES = {
+    "h2": "\nH 0.000000 0.000000 -0.370000\nH 0.000000 0.000000 0.370000",
+    "hydrogen": "\nH 0.000000 0.000000 -0.370000\nH 0.000000 0.000000 0.370000",
+    "water": "\nO 0.000000 0.000000 0.000000\nH 0.758602 0.000000 0.504284\nH -0.758602 0.000000 0.504284",
+    "h2o": "\nO 0.000000 0.000000 0.000000\nH 0.758602 0.000000 0.504284\nH -0.758602 0.000000 0.504284",
+    "methane": "\nC 0.000000 0.000000 0.000000\nH 0.629118 0.629118 0.629118\nH -0.629118 -0.629118 0.629118\nH -0.629118 0.629118 -0.629118\nH 0.629118 -0.629118 -0.629118",
+    "ch4": "\nC 0.000000 0.000000 0.000000\nH 0.629118 0.629118 0.629118\nH -0.629118 -0.629118 0.629118\nH -0.629118 0.629118 -0.629118\nH 0.629118 -0.629118 -0.629118",
+    "ammonia": "\nN 0.000000 0.000000 0.116000\nH 0.000000 0.939000 -0.271000\nH 0.813000 -0.469500 -0.271000\nH -0.813000 -0.469500 -0.271000",
+    "nh3": "\nN 0.000000 0.000000 0.116000\nH 0.000000 0.939000 -0.271000\nH 0.813000 -0.469500 -0.271000\nH -0.813000 -0.469500 -0.271000",
+    "co2": "\nO 0.000000 0.000000 -1.160000\nC 0.000000 0.000000 0.000000\nO 0.000000 0.000000 1.160000",
+    "carbon dioxide": "\nO 0.000000 0.000000 -1.160000\nC 0.000000 0.000000 0.000000\nO 0.000000 0.000000 1.160000",
+}
+
+
+class GeometryLookupError(ValueError):
+    """Raised when a named geometry cannot be resolved."""
 
 
 def _is_bohr(unit):
     return str(unit).strip().lower() in _BOHR_UNITS
+
+
+def _geometry_key(query):
+    return " ".join(str(query).strip().lower().replace("_", " ").split())
+
+
+def builtin_geometry(query):
+    """Return a built-in approximate Angstrom geometry for common small molecules."""
+    key = _geometry_key(query)
+    try:
+        return _GEOMETRY_ALIASES[key]
+    except KeyError as exc:
+        raise GeometryLookupError(f"No built-in geometry is available for '{query}'.") from exc
+
+
+def pubchem_geometry(query, timeout=10):
+    """Fetch a 3D conformer from PubChem PUG-REST and return OpenQP geometry text."""
+    encoded = quote(str(query).strip(), safe="")
+    url = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
+        f"{encoded}/SDF?record_type=3d"
+    )
+    try:
+        with urlopen(url, timeout=timeout) as response:
+            sdf = response.read().decode("utf-8", errors="replace")
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        raise GeometryLookupError(f"PubChem geometry lookup failed for '{query}'.") from exc
+    return _geometry_from_sdf(sdf, query)
+
+
+def get_geometry(query, source="auto", timeout=10):
+    """
+    Resolve a named molecular geometry to OpenQP inline geometry text.
+
+    source="auto" tries OpenQP's small built-in table first, then PubChem.
+    source="builtin" only uses the local table.
+    source="pubchem" only uses PubChem PUG-REST.
+    """
+    mode = str(source).strip().lower()
+    if mode in ("builtin", "local", "generator"):
+        return builtin_geometry(query)
+    if mode == "pubchem":
+        return pubchem_geometry(query, timeout=timeout)
+    if mode != "auto":
+        raise ValueError("geometry source must be auto, builtin, or pubchem.")
+
+    try:
+        return builtin_geometry(query)
+    except GeometryLookupError:
+        return pubchem_geometry(query, timeout=timeout)
+
+
+def _geometry_from_sdf(sdf, query):
+    lines = sdf.splitlines()
+    counts_index = None
+    atom_count = None
+    for idx, line in enumerate(lines):
+        if "V2000" not in line and "V3000" not in line:
+            continue
+        fields = line.split()
+        try:
+            atom_count = int(fields[0])
+        except (IndexError, ValueError) as exc:
+            raise GeometryLookupError(f"Could not read PubChem atom count for '{query}'.") from exc
+        counts_index = idx
+        break
+
+    if counts_index is None or atom_count is None:
+        raise GeometryLookupError(f"PubChem did not return a readable SDF geometry for '{query}'.")
+
+    rows = []
+    for line in lines[counts_index + 1:counts_index + 1 + atom_count]:
+        fields = line.split()
+        if len(fields) < 4:
+            raise GeometryLookupError(f"PubChem returned an incomplete atom row for '{query}'.")
+        try:
+            x = float(fields[0])
+            y = float(fields[1])
+            z = float(fields[2])
+        except ValueError as exc:
+            raise GeometryLookupError(f"PubChem returned nonnumeric coordinates for '{query}'.") from exc
+        rows.append(f"{fields[3]} {x:.10g} {y:.10g} {z:.10g}")
+
+    if not rows:
+        raise GeometryLookupError(f"PubChem returned an empty geometry for '{query}'.")
+    return "\n" + "\n".join(rows)
 
 
 def _format_coord(value, unit):
@@ -209,8 +314,16 @@ class OpenQP:
             job.update(kwargs)
         return job
 
-    def molecule(self, system, basis=None, charge=None, unit="Angstrom", **kwargs):
+    def molecule(self, system=None, basis=None, charge=None, unit="Angstrom",
+                 geometry=None, source="auto", timeout=10, **kwargs):
         """Set molecular system data using OpenQP input-section keywords."""
+        if system is not None and geometry is not None:
+            raise ValueError("Use either system or geometry, not both.")
+        if geometry is not None:
+            system = get_geometry(geometry, source=source, timeout=timeout)
+        if system is None:
+            raise ValueError("molecule requires a system or geometry value.")
+
         self.unit = unit
         updates = {"input.system": system}
         if basis is not None:

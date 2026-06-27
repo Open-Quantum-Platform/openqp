@@ -131,6 +131,44 @@ def load_openqp_module():
 
 
 class TestOpenQPNativeAPI(unittest.TestCase):
+    def test_builtin_geometry_resolves_common_names(self):
+        openqp = load_openqp_module()
+
+        geometry = openqp.get_geometry("water", source="builtin")
+
+        self.assertIn("\nO ", geometry)
+        self.assertEqual(len(geometry.strip().splitlines()), 3)
+
+    def test_molecule_accepts_named_geometry(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="methane").molecule(geometry="ch4", basis="6-31g*")
+        config = job.to_input_dict()
+
+        self.assertEqual(len(config["input"]["system"].strip().splitlines()), 5)
+        self.assertTrue(config["input"]["system"].startswith("\nC "))
+        self.assertEqual(config["input"]["basis"], "6-31g*")
+
+    def test_pubchem_sdf_parser_returns_openqp_geometry(self):
+        openqp = load_openqp_module()
+        sdf = """water
+  OpenQP
+
+  3  2  0  0  0  0            999 V2000
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0
+    0.7586    0.0000    0.5043 H   0  0  0  0  0  0
+   -0.7586    0.0000    0.5043 H   0  0  0  0  0  0
+M  END
+$$$$
+"""
+
+        geometry = openqp._geometry_from_sdf(sdf, "water")
+
+        self.assertEqual(
+            geometry,
+            "\nO 0 0 0\nH 0.7586 0 0.5043\nH -0.7586 0 0.5043",
+        )
+
     def test_molecule_and_hf_helpers_build_openqp_input(self):
         openqp = load_openqp_module()
 
