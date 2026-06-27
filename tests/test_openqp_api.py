@@ -54,6 +54,7 @@ def load_openqp_module():
         "oqp.pyoqp",
         "oqp.utils",
         "oqp.utils.constants",
+        "oqp.utils.geometry",
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
         "openqp_under_test",
@@ -81,6 +82,7 @@ def load_openqp_module():
         setattr(constants, "ANGSTROM_TO_BOHR", 0.529177210903)
         sys.modules["oqp.utils.constants"] = constants
 
+        _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
 
@@ -163,7 +165,7 @@ M  END
 $$$$
 """
 
-        geometry = openqp._geometry_from_sdf(sdf, "water")
+        geometry = openqp.geometry_from_sdf(sdf, "water")
 
         self.assertEqual(
             geometry,
