@@ -93,16 +93,22 @@ contains
 
       ! Opt-in FP32 Fock accumulation (env OQP_MRSF_FP32): FP32 operand copies
       ! + an FP32 per-thread accumulator, folded back to FP64 in parallel_stop.
+      ! Only for the base (non-UMRSF) MRSF type: UMRSF's d3 carries more matrix
+      ! components and its own update routine does not use the FP32 accumulator,
+      ! so FP32 is left inert (exact FP64) on the UMRSF path.
       call ensure_mrsf_fp32()
       if (g_mrsf_fp32 /= 0) then
-        if (allocated(this%ds_sp)) deallocate(this%ds_sp)
-        if (allocated(this%d3_sp)) deallocate(this%d3_sp)
-        if (allocated(this%f3s))   deallocate(this%f3s)
-        allocate(this%ds_sp(this%nfocks, 4, nbf, nbf), &
-                 this%d3_sp(this%nfocks, 7, nbf, nbf))
-        this%ds_sp = real(this%ds, sp)
-        this%d3_sp = real(this%d3, sp)
-        allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+        select type (this)
+        type is (int2_mrsf_data_t)
+          if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+          if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+          if (allocated(this%f3s))   deallocate(this%f3s)
+          allocate(this%ds_sp(this%nfocks, 4, nbf, nbf), &
+                   this%d3_sp(this%nfocks, nmatrix, nbf, nbf))
+          this%ds_sp = real(this%ds, sp)
+          this%d3_sp = real(this%d3, sp)
+          allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+        end select
       end if
     end if
 
@@ -123,14 +129,17 @@ contains
 
     f3last = size(shape(this%f3))
 
+    ! Reduce the FP64 accumulator across threads first. This holds the pass-2
+    ! (CAM short-range exchange) contributions, and is zero in the FP32
+    ! pass-1-only case -- so the subsequent add is exact in both cases.
+    if (this%nthreads /= 1) then
+      this%f3(:,:,:,:,1) = sum(this%f3, dim=f3last)
+    end if
+    ! Then add the FP32 per-thread accumulator (folded to FP64) when present.
     if (allocated(this%f3s)) then
-      ! FP32 opt-in: fold the FP32 per-thread accumulator into FP64 f3 slab 1
-      this%f3(:,:,:,:,1) = real(this%f3s(:,:,:,:,1), dp)
-      do t = 2, this%nthreads
+      do t = 1, this%nthreads
         this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
       end do
-    else if (this%nthreads /= 1) then
-      this%f3(:,:,:,:,lbound(this%f3, f3last)) = sum(this%f3, dim=f3last)
     end if
 
     call this%pe%allreduce(this%f3(:,:,:,:,1), &
