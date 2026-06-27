@@ -10,13 +10,31 @@ Email: constlike@gmail.com
 Created: Aug 2024
 """
 import os
+import sys
+import json
 import time
 import subprocess
 from typing import List, Dict, Any
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from oqp.pyoqp import Runner
+from oqp.runtime import resolve_oqp_root
+
+# Marker that the isolated single-test subprocess prints so the parent can
+# recover the structured result from the child's (otherwise noisy) stdout.
+_RESULT_MARKER = "__OQP_TEST_RESULT__"
+
+# Per-test wall-clock ceiling for the isolated subprocess runner. A wedged or
+# pathologically slow test is reported as a failure instead of hanging CI
+# forever. Override with OQP_TEST_TIMEOUT (seconds); 0/empty disables it.
+def _test_timeout():
+    raw = os.environ.get("OQP_TEST_TIMEOUT", "1800").strip()
+    try:
+        val = float(raw)
+    except ValueError:
+        return 1800.0
+    return val if val > 0 else None
 
 class OQPTester:
     """
@@ -34,6 +52,14 @@ class OQPTester:
         max_workers (int): Maximum number of parallel workers.
         results (List[Dict[str, Any]]): List to store test results.
     """
+
+    # Substrings a crashed test's output may contain that mean "this example
+    # needs an optional backend this build was not configured with" -> SKIPPED,
+    # not ERROR. Keep these specific to capability gates, never generic errors.
+    _OPTIONAL_FEATURE_SENTINELS = (
+        "OQP_ENABLE_DDX",  # ddX / PCM continuum solvation built off
+    )
+
     def __init__(self,
                  base_test_dir: str = None,
                  output_dir: str = None,
@@ -44,21 +70,20 @@ class OQPTester:
         Initialize the OQPTester.
 
         Args:
-            base_test_dir (str): Base directory for test files.
-                                 If None, uses $OPENQP_ROOT/examples.
+            base_test_dir (str): Base directory for test files. If None, uses
+                                 the runtime root's share/examples.
             output_dir (str): Directory for storing test output files.
             total_cpus (int): Total number of CPUs to use.
             omp_threads (int): Number of OMP threads per test.
         """
-        try:
-            oqp_root = os.environ["OPENQP_ROOT"]
-        except KeyError:
-            oqp_root =  os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-        if not oqp_root:
-            raise EnvironmentError("OPENQP_ROOT environment variable is not set")
-
-        self.base_test_dir = base_test_dir or os.path.join(oqp_root,
-                                                           'share/examples')
+        if base_test_dir is None:
+            # Examples live under the resolved runtime root's share/ tree. Use
+            # the package location via resolve_oqp_root(); OPENQP_ROOT is only a
+            # compatibility fallback there (see pyoqp/README.md: a normal install
+            # self-locates, "do not set OPENQP_ROOT").
+            oqp_root, _ = resolve_oqp_root()
+            base_test_dir = os.path.join(oqp_root, "share", "examples")
+        self.base_test_dir = base_test_dir
         self.mpi_manager = mpi_manager
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.output_dir = os.path.abspath(f"{output_dir}_{timestamp}")
@@ -177,6 +202,80 @@ class OQPTester:
         result["execution_time"] = time.perf_counter() - start_time
         return result
 
+    def _run_isolated(self, input_file: str) -> Dict[str, Any]:
+        """
+        Run a single test in a dedicated subprocess and recover its result.
+
+        Running the Fortran/C backend in a child process means a hard failure
+        in one test (Fortran ERROR STOP, segfault, MKL/abort) terminates only
+        that child. We translate a non-zero exit (or a timeout) into an ERROR
+        result for that one test rather than letting it crash the whole run.
+        """
+        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        log = os.path.join(self.output_dir, f"{project_name}.log")
+        self.log(f"Running test for {project_name}")
+
+        cmd = [
+            sys.executable, "-m", "oqp.utils.oqp_tester",
+            "--isolated", input_file,
+            "--output-dir", self.output_dir,
+            "--omp", str(self.omp_threads),
+        ]
+        start_time = time.perf_counter()
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=_test_timeout(),
+            )
+            stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
+        except subprocess.TimeoutExpired as err:
+            return {
+                "project": project_name, "input_file": input_file,
+                "log_file": log, "status": "ERROR",
+                "message": f"PyOQP test exceeded time limit "
+                           f"({_test_timeout()} s); see OQP_TEST_TIMEOUT",
+                "execution_time": time.perf_counter() - start_time,
+            }
+
+        # The child prints exactly one marker line carrying the JSON result.
+        for line in reversed((stdout or "").splitlines()):
+            if line.startswith(_RESULT_MARKER):
+                try:
+                    return json.loads(line[len(_RESULT_MARKER):])
+                except json.JSONDecodeError:
+                    break
+
+        # No result marker => the child died before reporting (ERROR STOP,
+        # segfault, ...). If it ERROR STOPped only because the build lacks an
+        # optional feature the example needs (e.g. the ddX/PCM backend when
+        # ENABLE_DDX is OFF), report SKIPPED rather than ERROR so an
+        # intentionally-trimmed build still produces a green suite.
+        combined = (stdout or "") + (stderr or "")
+        try:
+            with open(log, "r", encoding="utf-8", errors="ignore") as fh:
+                combined += fh.read()
+        except OSError:
+            pass
+        for feature in self._OPTIONAL_FEATURE_SENTINELS:
+            if feature in combined:
+                self.log(f"Skipping test {project_name}: build lacks {feature}")
+                return {
+                    "project": project_name, "input_file": input_file,
+                    "log_file": log, "status": "SKIPPED",
+                    "message": f"requires a build feature not enabled "
+                               f"({feature}); skipped",
+                    "execution_time": time.perf_counter() - start_time,
+                }
+
+        tail = combined.strip().splitlines()[-3:]
+        self.log(f"Error in test {project_name}: subprocess exit {rc}")
+        return {
+            "project": project_name, "input_file": input_file,
+            "log_file": log, "status": "ERROR",
+            "message": f"PyOQP test crashed (subprocess exit {rc}): "
+                       + " | ".join(tail),
+            "execution_time": time.perf_counter() - start_time,
+        }
+
     def run_tests(self, test_path: str = 'all'):
         """
         Run OpenQP tests based on the specified test path.
@@ -205,14 +304,17 @@ class OQPTester:
             # tests can leak state between independent inputs; in particular,
             # running a TRAH SCF test before an ECP/MRSF energy test in the
             # same worker can make the later SCF exit after 0 iterations.
-            # Use one calculation per child process to preserve test isolation
-            # while still allowing tests to run concurrently.
-            with ProcessPoolExecutor(
-                max_workers=self.max_workers,
-                max_tasks_per_child=1,
-            ) as executor:
+            #
+            # Each test therefore runs in its own short-lived subprocess (see
+            # _run_isolated). Besides isolating that process-global state, this
+            # contains hard failures: a Fortran ERROR STOP or a segfault kills
+            # only that child, so it is reported as a single ERROR instead of
+            # tearing down a shared worker pool (BrokenProcessPool) and aborting
+            # every still-pending test. A thread pool just supervises the child
+            # processes, so the GIL is irrelevant here.
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_file = {
-                    executor.submit(self.run_single_test, input_file): input_file
+                    executor.submit(self._run_isolated, input_file): input_file
                     for input_file in input_files
                 }
                 for future in as_completed(future_to_file):
@@ -261,6 +363,10 @@ class OQPTester:
             1 for result in self.results
             if result['status'] == 'ERROR'
         )
+        skipped = sum(
+            1 for result in self.results
+            if result['status'] == 'SKIPPED'
+        )
         self.status = 1 if failed > 0 or errors > 0 else 0
 
         total_time = self.end_time - self.start_time
@@ -279,6 +385,7 @@ Total tests: {len(self.results)}
 Passed: {passed}
 Failed: {failed}
 Errors: {errors}
+Skipped: {skipped}
 
 Total CPUs: MPI Processors = {self.mpi_manager.size}, OpenMp Threads = {self.omp_threads}
 Max parallel tests: {self.max_workers}
@@ -327,3 +434,40 @@ Total execution time: {self.format_time(total_time)}
             return report
         else:
             return 1
+
+
+def _run_isolated_main(argv=None):
+    """
+    Entry point for the per-test subprocess (``python -m oqp.utils.oqp_tester
+    --isolated <input> --output-dir <dir> --omp <n>``).
+
+    Runs exactly one test in this fresh process and prints the structured
+    result as a single marker line. If the Fortran backend ERROR STOPs or
+    crashes, this process simply dies with a non-zero exit and the parent
+    records an ERROR for this test alone.
+    """
+    import argparse
+    from oqp.pyoqp import MPIManager
+
+    parser = argparse.ArgumentParser(description="Run one OpenQP test in isolation")
+    parser.add_argument("--isolated", required=True, help="input .inp file")
+    parser.add_argument("--output-dir", required=True, help="shared output dir")
+    parser.add_argument("--omp", type=int, default=1, help="OMP threads")
+    args = parser.parse_args(argv)
+
+    os.environ["OMP_NUM_THREADS"] = str(args.omp)
+
+    # Build a tester shell without re-creating a timestamped output dir: the
+    # parent already created the shared one and passes it in.
+    tester = OQPTester.__new__(OQPTester)
+    tester.output_dir = args.output_dir
+    tester.mpi_manager = MPIManager()
+
+    result = tester.run_single_test(args.isolated)
+    sys.stdout.flush()
+    print(_RESULT_MARKER + json.dumps(result))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(_run_isolated_main())
