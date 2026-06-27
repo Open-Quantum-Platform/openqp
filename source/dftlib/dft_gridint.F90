@@ -1,6 +1,6 @@
 module mod_dft_gridint
 
-  use precision, only: fp
+  use precision, only: fp, i8b
 !  use params, only: dft_wt_der
   use basis_tools, only: basis_set
   use io_constants, only: iw
@@ -10,6 +10,7 @@ module mod_dft_gridint
   use oqp_linalg
   use blas_wrap, only: oqp_ddot => oqp_ddot_i64
   use parallel, only: par_env_t
+  use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash, phi_cache_env_enabled
   implicit none
 
 !###############################################################################
@@ -89,6 +90,10 @@ module mod_dft_gridint
     real(kind=fp) :: dft_threshold = 0.0d0
     real(kind=fp) :: ao_threshold = 0.0d0
     real(kind=fp) :: ao_sparsity_ratio = 0.0d0
+
+    !< Opt-in to the cross-iteration collocation-Phi cache (Opt 1). Only the
+    !< repeated SCF energy/Fock build sets this; gated further by env at runtime.
+    logical :: use_phi_cache = .false.
 
     !< alpha spin wavefunction
     real(KIND=fp), contiguous, pointer :: wfAlpha(:, :) => null()
@@ -802,10 +807,18 @@ contains
 !> @brief Adjust XC memory storage for a given
 !>  number of pruned grid points
 !> @author Konstantin Komarov
-  subroutine resetPrunedPointers(self)
+  subroutine resetPrunedPointers(self, gather)
     class(xc_engine_t), target :: self
+    !> When .false. (Phi-cache replay), skip the geometry-only AO gather/compaction
+    !> -- the cached Phi block is already in pruned layout -- but still recompute
+    !> the density-dependent wavefunction compression and (re)set all pointers.
+    logical, intent(in), optional :: gather
 
     real(kind=fp), pointer, dimension(:,:,:) :: reorderable_data
+    logical :: do_gather
+
+    do_gather = .true.
+    if (present(gather)) do_gather = gather
 
     associate(  numAOs    => self%numAOs &
               , numAOs_p  => self%numAOs_p &
@@ -816,8 +829,8 @@ contains
               , numTmpVec => self%numTmpVec &
               , indices   => self%indices_p &
       )
-      ! Setup the pointer for reorderable data
-      reorderable_data => self%aoMem(:, :, :)
+      ! Setup the pointer for reorderable data (source of the AO gather)
+      if (do_gather) reorderable_data => self%aoMem(:, :, :)
 
       ! Update pointers with pruned AOs
       self%aoMem(1:numAOs_p, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
@@ -863,7 +876,8 @@ contains
       select case (self%nAODer)
       case (0)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -873,7 +887,8 @@ contains
 
       case (1)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -887,7 +902,8 @@ contains
 
       case (2)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -2304,7 +2320,7 @@ contains
     use blas_thread, only: blas_thread_count, blas_thread_set
     use, intrinsic :: iso_c_binding, only: c_int64_t
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
-!$                     omp_get_max_threads, omp_get_num_procs
+!$                     omp_get_max_threads, omp_get_num_procs, omp_get_wtime
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2334,6 +2350,21 @@ contains
     integer :: myThread, numThreads
 
     integer(c_int64_t) :: nBlasThreads
+
+    ! Opt 1: collocation-Phi cache (geometry-only reuse across SCF iterations)
+    integer, parameter :: nAOVecs_tbl(0:3) = [1, 4, 10, 20]
+    logical :: cache_on, cache_replay
+    integer :: nAODer_c, numAOVecs_c, naop_c
+    logical :: skip_p_c
+    integer(i8b) :: ghash
+    ! Env-gated phase timing (OQP_XC_TIMING): geometry/Phi vs density-driven XC
+    logical :: do_timing
+    character(len=8) :: tenv
+    integer :: tst, tln
+    real(KIND=fp) :: t_geom, t_xc, tic
+    t_geom = 0.0_fp
+    t_xc   = 0.0_fp
+    tic    = 0.0_fp
 
 
 !   The slice loop below issues many small BLAS calls from inside the
@@ -2369,6 +2400,26 @@ contains
     totgradxyz = 0
     totkin = 0
 
+    ! --- Opt 1: configure the collocation-Phi cache for this build ------------
+    ! Only the repeated SCF energy/Fock build opts in (use_phi_cache); gated
+    ! further by the env var. The same numAOVecs formula as xc_engine_t%init.
+    nAODer_c = xc_opts%nDer
+    if (xc_opts%isGGA .or. xc_opts%needTau) nAODer_c = nAODer_c + 1
+    numAOVecs_c = nAOVecs_tbl(nAODer_c)
+    cache_on = xc_opts%use_phi_cache .and. phi_cache_env_enabled()
+    ghash = 0_i8b
+    if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
+    call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, xc_opts%numAOs, &
+             numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
+    cache_replay = g_phi_cache%active .and. g_phi_cache%replay
+
+    ! --- Env-gated per-build phase timing ------------------------------------
+    call get_environment_variable('OQP_XC_TIMING', tenv, length=tln, status=tst)
+    do_timing = (tst == 0 .and. tln > 0 .and. &
+        (tenv(1:1) == '1' .or. tenv(1:1) == 't' .or. tenv(1:1) == 'T' .or. &
+         tenv(1:1) == 'y' .or. tenv(1:1) == 'Y' .or. &
+         tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
+
 !$omp parallel &
 !$omp   private(iChunk, chunkSize, numThreads, done) &
 !$omp   private(iSlice, numNzPts, xce) &
@@ -2376,7 +2427,8 @@ contains
 !$omp   private(i), &
 !$omp   private(iAtom, symw), &
 !$omp   private(skip), &
-!$omp   reduction(+:exc, totele, totgradxyz, totkin)
+!$omp   private(naop_c, skip_p_c, tic) &
+!$omp   reduction(+:exc, totele, totgradxyz, totkin, t_geom, t_xc)
 
     numThreads = 1
     myThread = 1
@@ -2402,33 +2454,74 @@ contains
 !$omp do schedule(dynamic)
       slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
 
+!$      if (do_timing) tic = omp_get_wtime()
+
         iAtom = xc_opts%molGrid%idOrigin(iSlice)
 
         ! Symmetry reduction: integrate only unique atoms' slices, with
-        ! quadrature weights scaled by the atom-orbit size.
+        ! quadrature weights scaled by the atom-orbit size. Geometry-only, so
+        ! it is recomputed identically on a cache replay (the cached weights
+        ! already include the symw scaling baked in during the build pass).
         symw = 1.0_fp
         if (associated(xc_opts%symAtomWeight)) then
           symw = xc_opts%symAtomWeight(iAtom)
           if (symw == 0.0_fp) CYCLE
         end if
 
-        call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
-        if (numNzPts==0) CYCLE
+        if (cache_replay) then
+          ! ---- Opt 1 REPLAY: restore the cached geometry-only Phi block -----
+          call g_phi_cache%get_meta(iSlice, skip, numNzPts, naop_c, skip_p_c)
+          if (skip) CYCLE
+          call xce%resetPointers(numNzPts)
+          xce%numAOs_p = naop_c
+          xce%skip_p   = skip_p_c
+          call g_phi_cache%get_bulk(iSlice, xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+          if (skip_p_c) then
+            ! dense slice: full AO layout from resetPointers; wf is uncompressed
+            xce%wfAlpha_p => xce%wfAlpha
+            if (xce%hasBeta) xce%wfBeta_p => xce%wfBeta
+          else
+            ! sparse slice: cached Phi already pruned; recompute wf compression
+            ! and (re)set pruned pointers, but skip the geometry-only AO gather
+            call xce%resetPrunedPointers(gather=.false.)
+          end if
+        else
+          ! ---- BUILD: compute Phi as usual (and store it when caching) ------
+          call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
+          if (numNzPts==0) then
+            if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
+                              xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+            CYCLE
+          end if
 
-        if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
+          if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
 
-        call xce%resetPointers(numNzPts)
+          call xce%resetPointers(numNzPts)
 
-        do i = 1, numNzPts
-          xce%xyzw(i,:3) = &
-            xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
-        end do
+          do i = 1, numNzPts
+            xce%xyzw(i,:3) = &
+              xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
+          end do
 
-        call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+          call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
 
-        call xce%pruneAOs(skip)
+          call xce%pruneAOs(skip)
 
-        IF (skip) CYCLE
+          IF (skip) then
+            if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
+                              xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+            CYCLE
+          end if
+
+          if (cache_on) call g_phi_cache%store(iSlice, .false., xce%numPts, &
+                            xce%numAOs_p, xce%skip_p, xce%indices_p, &
+                            xce%aoMem_, xce%xyzw(:,4))
+        end if
+
+!$      if (do_timing) then
+!$        t_geom = t_geom + omp_get_wtime() - tic
+!$        tic = omp_get_wtime()
+!$      end if
 
         xce%currAtom = iAtom
 
@@ -2439,6 +2532,8 @@ contains
         call xc_dat%update(xce, myThread)
 
         call xc_dat%postUpdate(xce, myThread)
+
+!$      if (do_timing) t_xc = t_xc + omp_get_wtime() - tic
 
       end do slc
 !$omp end do nowait
@@ -2452,6 +2547,21 @@ contains
 
     deallocate (xce)
 !$omp end parallel
+
+    ! Finalize the Phi cache build pass (mark ready, tally footprint).
+    call g_phi_cache%finish_run()
+
+    if (do_timing) then
+      ! Phase times below are aggregate THREAD-seconds (summed over threads),
+      ! used to show the geomPhi(build)->geomPhi(replay) drop and the
+      ! geom-vs-density composition. The authoritative per-build WALL time is
+      ! the serial [SCFTIME] wall_XCbuild printed by calc_jk_xc.
+      write(iw,'(1x,a,a8,a,i7,a,f9.4,a,f9.4,a,f9.4,a,f8.1,a)') &
+        '[XCTIME] phi-cache=', merge('replay', merge('build ', 'off   ', cache_on), cache_replay), &
+        ' nz_pts=', npt, &
+        '  thrS_geomPhi=', t_geom, 's  thrS_xc=', t_xc, &
+        's  thrS_xcbuild=', t_geom+t_xc, 's  cacheMB=', real(g_phi_cache%nbytes,fp)/1.048576d6, ' '
+    end if
 
     call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
 

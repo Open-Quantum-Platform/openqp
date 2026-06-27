@@ -1633,13 +1633,14 @@ contains
   !> @author Mohsen Mazaherifar
   !> @date August 2025
   subroutine calc_jk_xc(basis, infos, d, hcore, nfocks, f, E, &
-                               molgrid, mo_a, mo_b, nschwz, f_old, d_old, density_xc)
+                               molgrid, mo_a, mo_b, nschwz, f_old, d_old, density_xc, xc_reuse)
     use precision,       only : dp
     use basis_tools,     only : basis_set
     use types,           only : information
     use mod_dft_molgrid, only : dft_grid_t
     use mathlib,          only : traceprod_sym_packed
     use solvent_pcm,      only : add_pcm_reaction_field
+    use mod_dft_incdft,  only : g_xc_ref, incdft_store, incdft_env_enabled
     implicit none
 
     type(basis_set),   intent(in)    :: basis
@@ -1655,6 +1656,9 @@ contains
     logical, intent(in), optional :: density_xc
     integer,  intent(inout)    :: nschwz
     integer, intent(in) :: nfocks
+    !> Opt 2 (IncDFT): when present and .true., reuse the stored reference XC
+    !> matrix/energy instead of rebuilding from the density this iteration.
+    logical, intent(in), optional :: xc_reuse
 
     real(dp) :: scale_factor
 
@@ -1662,6 +1666,20 @@ contains
     integer :: ii
     real(dp), allocatable :: pfxc(:,:)
     logical :: is_dft = .false., use_density_xc
+    logical :: xc_reused
+    ! Env-gated (OQP_XC_TIMING) per-iteration wall split: J/K vs XC build.
+    logical :: do_t
+    character(len=8) :: tenv
+    integer :: tst, tln
+    integer(8) :: clk0, clk1, clkr
+    real(dp) :: wall_jk, wall_xc
+
+    call get_environment_variable('OQP_XC_TIMING', tenv, length=tln, status=tst)
+    do_t = (tst == 0 .and. tln > 0 .and. &
+        (tenv(1:1) == '1' .or. tenv(1:1) == 't' .or. tenv(1:1) == 'T' .or. &
+         tenv(1:1) == 'y' .or. tenv(1:1) == 'Y' .or. tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
+    wall_jk = 0.0_dp; wall_xc = 0.0_dp
+    call system_clock(count_rate=clkr)
 
     is_dft = infos%control%hamilton >= 20
     use_density_xc = .false.
@@ -1673,6 +1691,7 @@ contains
     end if
 
     nbf      = basis%nbf
+    if (do_t) call system_clock(count=clk0)
     if(present(d_old) .and. present(f_old)) then
       d = d - d_old
       call fock_jk(basis, d, f, infos, scale_factor, nschwz , f_old, petite=.true.)
@@ -1680,6 +1699,10 @@ contains
       d_old = d
     else
       call fock_jk(basis, d, f, infos, scale_factor, nschwz, petite=.true.)
+    end if
+    if (do_t) then
+      call system_clock(count=clk1)
+      wall_jk = real(clk1-clk0, dp)/real(clkr, dp)
     end if
     ii = 0
     do ii = 1, nfocks
@@ -1722,10 +1745,36 @@ contains
     allocate(pfxc(nbf*(nbf+1)/2, nfocks))
     pfxc = 0.0_dp
 
-    if (use_density_xc) then
-      call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+    if (do_t) call system_clock(count=clk0)
+
+    ! Opt 2 (IncDFT): reuse the reference XC matrix/energy when the caller signals
+    ! the density has effectively stopped changing (controlled, late-SCF window).
+    xc_reused = .false.
+    if (present(xc_reuse)) xc_reused = xc_reuse .and. g_xc_ref%valid &
+                            .and. g_xc_ref%ntri == nbf*(nbf+1)/2 .and. g_xc_ref%nf == nfocks
+    if (xc_reused) then
+      pfxc      = g_xc_ref%vxc
+      E%eexc    = g_xc_ref%eexc
+      E%totele  = g_xc_ref%totele
+      E%totkin  = g_xc_ref%totkin
+      g_xc_ref%reuse_run = g_xc_ref%reuse_run + 1
+      g_xc_ref%n_reuse   = g_xc_ref%n_reuse + 1
     else
-      call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+      if (use_density_xc) then
+        call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+      else
+        call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+      end if
+      ! Refresh the IncDFT reference from this full build (only when IncDFT is on).
+      if (incdft_env_enabled()) call incdft_store(pfxc, E%eexc, E%totele, E%totkin)
+    end if
+
+    if (do_t) then
+      call system_clock(count=clk1)
+      wall_xc = real(clk1-clk0, dp)/real(clkr, dp)
+      write(*,'(1x,a,f9.4,a,f9.4,a,f6.1,a,l2)') '[SCFTIME] wall_JK=', wall_jk, &
+        's  wall_XCbuild=', wall_xc, 's  XC_frac=', &
+        100.0_dp*wall_xc/max(1.0d-12, wall_jk+wall_xc), '%  xc_reused=', xc_reused
     end if
 
     f = f + pfxc
@@ -1757,7 +1806,7 @@ contains
   !>       single infos%control%pcm_enabled gate; calc_fock takes no PCM argument.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
-  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old)
+  subroutine calc_fock(basis, infos, molgrid, fock_ao, E, mo_a_in, dens_in, mo_b_in, nschwz, f_old, dens_old, xc_reuse)
     use precision,       only : dp
     use oqp_tagarray_driver
     use types,           only : information
@@ -1780,6 +1829,8 @@ contains
     real(dp), intent(inout), optional        :: dens_old(:,:)
     real(dp), intent(inout), optional        :: f_old(:,:)
     integer,  intent(inout), optional        :: nschwz
+    !> Opt 2 (IncDFT): reuse the reference XC matrix this iteration (caller-decided)
+    logical,  intent(in),    optional        :: xc_reuse
 
     ! locals
     integer :: nbf, nbf_tri, nfocks, nelec, scf_type, ii
@@ -1823,10 +1874,12 @@ contains
     fock_ao = 0.0_dp
     if (present(dens_old)) then
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old, density_xc=present(dens_in))
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, f_old, dens_old, density_xc=present(dens_in), &
+                    xc_reuse=xc_reuse)
     else
       call calc_jk_xc(basis, infos, pdmat, hcore, nfocks, &
-                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, density_xc=present(dens_in))
+                    fock_ao, E, molgrid, mo_a, mo_b, nschwz, density_xc=present(dens_in), &
+                    xc_reuse=xc_reuse)
     end if
 
     E%psinrm    = 0.0_dp
