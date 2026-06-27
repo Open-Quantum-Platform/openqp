@@ -133,6 +133,21 @@ contains
     logical :: diis_reset_condition                      ! Flag for DIIS reset condition
 
     !==============================================================================
+    ! Progressive (iteration-dependent) integral screening
+    !==============================================================================
+    logical       :: ps_on            ! progressive screening enabled this run
+    logical       :: ps_timer         ! env-gated per-iteration Fock-build timer
+    real(kind=dp) :: ps_cut_tight     ! the user's tight (final) int2e_cutoff
+    real(kind=dp) :: ps_k             ! coupling: tau_iter = ps_k * diis_error
+    real(kind=dp) :: ps_cap           ! loosest allowed cutoff (upper clamp)
+    real(kind=dp) :: ps_tight         ! pin to ps_cut_tight once diis_error < ps_tight
+    real(kind=dp) :: ps_tau           ! this iteration's effective cutoff
+    logical       :: ps_pin           ! true once we have pinned to the tight cutoff
+    character(len=64) :: ps_env       ! scratch for env-var reads
+    integer       :: ps_ln            ! env-var length / iostat scratch
+    integer(kind=8) :: ps_t0, ps_t1, ps_rate ! Fock-build timer counters
+
+    !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
     !==============================================================================
     logical :: use_soscf            ! Flag to use SOSCF method
@@ -488,6 +503,40 @@ contains
     diis_name = [character(len=6) :: "none", "c-DIIS", "e-DIIS", "a-DIIS", "v-DIIS"]
     diis_reset = infos%control%diis_reset_mod
 
+    !==============================================================================
+    ! Progressive (iteration-dependent) integral screening setup. Default OFF.
+    ! tau_iter = clamp(ps_k*diis_error, ps_cut_tight, ps_cap) while diis_error
+    ! >= ps_tight; pinned to ps_cut_tight (with a full incremental rebuild) once
+    ! diis_error < ps_tight, so the converged energy matches the all-tight run.
+    ! Env vars override the control fields for quick experimentation.
+    !==============================================================================
+    ps_cut_tight = infos%control%int2e_cutoff
+    ps_on    = (infos%control%scf_pscreen /= 0)
+    ps_k     = infos%control%pscreen_k
+    ps_cap   = infos%control%pscreen_cap
+    ps_tight = infos%control%pscreen_tight
+    ps_pin   = .false.
+    call get_environment_variable("OQP_PSCREEN", ps_env, ps_ln)
+    if (ps_ln > 0) ps_on = (ps_env(1:1)=='1' .or. ps_env(1:1)=='y' .or. ps_env(1:1)=='Y' &
+                            .or. ps_env(1:1)=='t' .or. ps_env(1:1)=='T')
+    call get_environment_variable("OQP_PSCREEN_K", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_k
+    call get_environment_variable("OQP_PSCREEN_CAP", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_cap
+    call get_environment_variable("OQP_PSCREEN_TIGHT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_tight
+    ps_timer = .false.
+    call get_environment_variable("OQP_FOCK_TIMER", ps_env, ps_ln)
+    if (ps_ln > 0) ps_timer = (ps_env(1:1)=='1' .or. ps_env(1:1)=='y' .or. ps_env(1:1)=='Y' &
+                               .or. ps_env(1:1)=='t' .or. ps_env(1:1)=='T')
+    ! keep the loose cap from ever being tighter than the final cutoff
+    ps_cap = max(ps_cap, ps_cut_tight)
+    if (ps_on) then
+      write(IW,'(/3x,a)') 'Progressive integral screening ENABLED (iteration-dependent int2e_cutoff)'
+      write(IW,'(3x,a,es9.2,a,es9.2,a,es9.2,a,es9.2)') &
+        '  tight=', ps_cut_tight, '  k=', ps_k, '  cap=', ps_cap, '  pin<', ps_tight
+    end if
+
     ! Initialize SCF Convergence Accelerator (single source of truth)
     call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
                             maxdiis, diis_nfocks, soscf_nfocks, &
@@ -588,6 +637,26 @@ contains
       !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
+      !----------------------------------------------------------------------------
+      ! Progressive screening: pick this iteration's 2e cutoff. Loose early
+      ! (coupled to the previous iteration's DIIS error), pinned to the user's
+      ! tight cutoff in the convergence tail. fock_jk re-reads
+      ! infos%control%int2e_cutoff on every build, so setting it here suffices.
+      !----------------------------------------------------------------------------
+      if (ps_on) then
+        if (ps_pin) then
+          ps_tau = ps_cut_tight            ! latched: tight for the rest of the SCF
+        else if (iter == 1) then
+          ps_tau = ps_cap                  ! loosest cutoff for the first build
+        else if (diis_error < ps_tight) then
+          ps_pin = .true.                  ! entered the convergence tail: pin to tight (sticky)
+          ps_tau = ps_cut_tight
+        else
+          ps_tau = max(ps_cut_tight, min(ps_cap, ps_k*diis_error))
+        end if
+        infos%control%int2e_cutoff = ps_tau
+      end if
+
       ! Incremental-Fock refresh. The incremental build forms F = F_old + G[dD] and
       ! screens the two-electron contributions on the *shrinking* dD; as dD -> 0 the
       ! int2e_cutoff drops proportionally more terms, so F_old drifts (~1e-8) and the
@@ -595,15 +664,24 @@ contains
       ! and every iteration once in the tight tail, rebuild the FULL Fock by zeroing
       ! the incremental history -- this clears the accumulated drift (so DIIS converges
       ! cleanly, matching a from-scratch build) while keeping incremental's per-cycle
-      ! savings during the global descent.
+      ! savings during the global descent. With progressive screening, ALSO rebuild
+      ! whenever we pin to the tight cutoff, so contributions dropped during the loose
+      ! phase are recaptured and the converged energy matches the all-tight run.
       if (infos%control%scf_incremental /= 0 .and. iter > 1) then
-        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp) then
+        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp .or. (ps_on .and. ps_pin)) then
           fold = 0.0_dp
           dold = 0.0_dp
         end if
       end if
 
+      if (ps_timer) call system_clock(ps_t0, ps_rate)
       call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      if (ps_timer) then
+        call system_clock(ps_t1)
+        write(IW,'(3x,a,i4,a,f10.4,a,es9.2,a,i0)') 'pscreen iter ', iter, &
+          '  Fock(s)=', real(ps_t1-ps_t0,dp)/real(max(1_8,ps_rate),dp), &
+          '  tau=', infos%control%int2e_cutoff, '  skip=', nschwz
+      end if
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
@@ -985,6 +1063,10 @@ contains
                                 H_U_gap, modify_vshift=.false., do_print=.true.)
     ! End of Main SCF Iteration Loop
     end do
+
+    ! Restore the user's tight 2e cutoff for any downstream builds (gradient,
+    ! properties, response) regardless of where the SCF loop exited.
+    if (ps_on) infos%control%int2e_cutoff = ps_cut_tight
 
     !----------------------------------------------------------------------------
     ! Clean Convergence Accelerator (DIIS/SOSCF)
