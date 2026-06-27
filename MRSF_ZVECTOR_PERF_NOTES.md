@@ -1,10 +1,17 @@
 # MRSF Z-vector (CPHF/CPKS) performance work — notes & results
 
 Target: the MRSF-TDDFT analytic excited-state **gradient** Z-vector solve
-(`source/modules/tdhf_mrsf_z_vector.F90`). Everything here is **default-OFF**,
-gated by environment variables, and validated against the **gradient**
+(`source/modules/tdhf_mrsf_z_vector.F90`). Validated against the **gradient**
 (max-component error in a.u. vs the tight `zvconv=1e-10` baseline), which is far
 stricter than the excitation-energy criterion.
+
+**Defaults:** `OQP_MRSF_ZV_WARMSTART` and `OQP_MRSF_ZV_PROG` are **ON by default**
+(disable with `=0`). Warm-start cannot change a converged result (only the
+iteration count). Progressive screening perturbs the default gradient by
+**<~1e-8 (small systems, e.g. H2O bit-identical) to ~7e-6 a.u. (30 atoms)** —
+within the gradient gate but **not bit-identical** to a pure-tight build.
+`OQP_MRSF_ZV_CONV` (convergence tol) stays at the 1e-10 default; the static
+`OQP_MRSF_ZV_CUTOFF` stays off.
 
 Companion to the response-side work (PR #236, `perf/mrsf-fock-digestion`).
 

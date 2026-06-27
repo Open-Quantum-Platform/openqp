@@ -35,11 +35,16 @@ module tdhf_mrsf_z_vector_mod
   integer, save       :: zv_n_iter  = 0       !< iterations performed by the chosen solver
 
   ! ----------------------------------------------------------------------------
-  ! Optional, default-OFF performance opt-ins for the MRSF z-vector solve.
-  !   OQP_MRSF_ZV_CONV       : override the z-vector convergence tol (cnvtol).
-  !   OQP_MRSF_ZV_WARMSTART  : seed the solver with the previous step's solution.
-  !   OQP_MRSF_ZV_CUTOFF     : loosen the 2e integral cutoff for the z-vector build.
-  ! All are read once; everything stays at the input/default behaviour when unset.
+  ! Performance controls for the MRSF z-vector solve (read once from env).
+  !   OQP_MRSF_ZV_WARMSTART  : seed from the previous step's solution. DEFAULT ON
+  !                            (=0/n/f to disable). Cannot change a converged
+  !                            result -- only the iteration count.
+  !   OQP_MRSF_ZV_PROG       : progressive (iteration-dependent) screening.
+  !                            DEFAULT ON (=0/n/f to disable). Perturbs the
+  !                            gradient by <~1e-8 (small systems) to ~7e-6 (large),
+  !                            within the gradient gate but NOT bit-identical.
+  !   OQP_MRSF_ZV_CONV       : override the convergence tol (default 1e-10 kept).
+  !   OQP_MRSF_ZV_CUTOFF     : static loose 2e cutoff (off; superseded by _PROG).
   ! ----------------------------------------------------------------------------
   logical, save :: zv_cfg_init   = .false.
   logical, save :: zv_warm_on    = .false.
@@ -124,8 +129,11 @@ contains
     character(len=32) :: e_
     integer :: ios
     if (zv_cfg_init) return
+    ! Warm-start is ON by default; disable with OQP_MRSF_ZV_WARMSTART=0/n/f/off.
     call get_environment_variable('OQP_MRSF_ZV_WARMSTART', e_)
-    zv_warm_on = len_trim(e_) > 0
+    zv_warm_on = .true.
+    if (len_trim(e_) > 0) zv_warm_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
+        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
     call get_environment_variable('OQP_MRSF_ZV_CONV', e_)
     if (len_trim(e_) > 0) then
       read(e_,*,iostat=ios) zv_conv_user
@@ -136,9 +144,11 @@ contains
       read(e_,*,iostat=ios) zv_cutoff_user
       if (ios /= 0) zv_cutoff_user = -1.0_dp
     end if
+    ! Progressive screening is ON by default; disable with OQP_MRSF_ZV_PROG=0/n/f.
     call get_environment_variable('OQP_MRSF_ZV_PROG', e_)
-    zv_prog_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
-                 e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    zv_prog_on = .true.
+    if (len_trim(e_) > 0) zv_prog_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
+        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
     call get_environment_variable('OQP_MRSF_ZV_PROG_K', e_)
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_k
     call get_environment_variable('OQP_MRSF_ZV_PROG_CAP', e_)
