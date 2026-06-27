@@ -134,9 +134,22 @@ Measured regimes (iters; warm vs cold; safeguard on):
 Takeaway: warm-start's payoff scales with how little the MOs move — large for
 near-stationary MOs (MD with small `dt`, late-stage optimization, repeated solves
 at one geometry), marginal for big steps or near-degenerate manifolds. The
-safeguard makes it safe to leave on. (A rigorous MO-basis projection of the
-stored `xk` into the new MO basis — via the MO overlap — would extend the benefit
-to large steps; left as a future enhancement.)
+safeguard makes it safe to leave on.
+
+**MO-basis projection (implemented).** To extend the benefit to large optimizer
+steps, the stored `xk` is now projected through the geometry-stable AO z-density
+into the current MO basis before reseeding:
+`xk_old → av_old(MO,old) → Pz = C_old av_old C_oldᵀ (AO) → C_newᵀ S Pz S C_new →
+gather`. The same-geometry round-trip is exact (`CᵀSC=I`), verified: benzene 6→1
+and tetracene 10→1 with the projected seed (grad Δ 9.4e-8 / 4.9e-8). The CG
+safeguard still guards it, so a poor projection only falls back to cold.
+
+### A5 — Jacobi cold-start guess (default on; measured ~0)
+`OQP_MRSF_ZV_DIAGGUESS` (default on): the cold start uses `x0 = M⁻¹ rhs` instead
+of zero. Free — the cold CG already spends one Fock build on `A·x0` (=0 when
+`x0=0`). Measured: halves the initial residual (1.85e-2→7.8e-3 on benzene) but
+CG's ~1.5-order/iter geometric convergence absorbs the 2× head start → ~0
+iteration change. Kept on (harmless, occasionally crosses an iteration boundary).
 
 ### A3 — Preconditioner / initial guess (measured low-value)
 - **Perturbative initial guess** (`x0 = M⁻¹ rhs`): with PCG from `x0=0`, the
@@ -222,6 +235,32 @@ Key points:
   would lift this limit and allow a looser cap — future work.)
 - benzene (114 BF): grad 2.0e-8, no speedup (int2 negligible at this size).
 
+### B3 — Coarser response grid (env `OQP_MRSF_ZV_COARSEGRID`)
+The per-iteration cost is XC-dominated, and the XC cost scales with the number of
+DFT grid points. The response tolerates a coarser grid than the SCF, so this
+swaps the **named pruned grid** (SG0<SG1<**SG2 default**<SG3) to a coarser one
+(default SG1, env `OQP_MRSF_ZV_GRID`) for the z-vector only — `grid_pruned_name`
+is changed before `dft_initialize` and restored after. Default OFF.
+
+Measured (SG1 vs SG2): **per-iter XC 13.3→10.4 s (−22%)** at unchanged iterations.
+Gradient error vs SG2 is **system-dependent**: benzene 1.8e-6 (safe), thymine
+1.76e-5 (just over the strict 1e-5 gate). SG1 is the discrete coarse step, so for
+the strict gate a **coarse-iterations / fine-back-projection** two-grid split
+(future work) is needed; kept default OFF as an opt-in. This is a larger and
+simpler XC win than the kernel-reuse cache (which an investigation estimated at
+only ~10–15%), so the cache was not pursued.
+
+### C — RHF/SF z-vector port
+The progressive screening + zvconv-override levers are ported to the **RHF**
+(`tdhf_z_vector`, rpa/tda) and **SF** (`tdhf_sf_z_vector`) z-vector solvers via
+shared, method-agnostic helpers in `zvector_common` (`zv_opts_t`, `zv_read_opts`,
+`zv_prog_tau`, a per-method warm-start store). Env: `OQP_{TDHF,SF}_ZV_PROG`
+(default on), `OQP_{TDHF,SF}_ZV_CONV`. Validated: RHF (rpa) and SF H2O gradients
+bit-identical progressive ON vs OFF (small systems pin tight immediately).
+Warm-start wiring for RHF/SF (the store helpers exist) is a clean follow-up — each
+driver needs its own `A·x0` initial-residual build (MRSF already had one; SF/RHF
+skip it for the cold `x0=0` case).
+
 ### B2 — Digestion port + FP32 (audit result)
 - The Z-vector **per-iteration** sigma is built with `int2_tdgrd_data_t`
   (`int2_tdgrd_data_t_update` in `source/tdhf_lib.F90`), **not** the
@@ -263,9 +302,16 @@ analytic gradient's own FD-confirmed accuracy** — i.e. comfortably in the nois
   scale (30 atoms) at gradient error ~7e-6 — the accuracy-safe way to use loose
   screening; ~10× more accurate than a static loose cutoff. (`OQP_MRSF_ZV_CUTOFF`
   static loosen exists too but is accuracy-bounded at scale.)
-- **Highest-value future target (out of scope here):** the per-iteration XC
-  response kernel (`utddft_fxc`), 65–75% of the per-iteration cost; and a
-  true-residual replacement to let progressive screening use a looser cap.
+- **Per-iteration cost:** progressive screening (int2) + the coarse response grid
+  (`OQP_MRSF_ZV_COARSEGRID`, −22% XC, opt-in) attack the dominant XC term; the XC
+  kernel-reuse cache was dropped (coarse grid is a bigger, simpler win).
+- **Beyond MRSF:** progressive screening + zvconv override are ported to the
+  RHF (rpa/tda) and SF z-vector solvers (`OQP_TDHF_ZV_*`, `OQP_SF_ZV_*`).
+- **Solver choice:** CG is optimal here — diagnostic on thymine gave CG 12 vs
+  MINRES 25 vs GMRES 36 matvecs; a different solver / deflation is not worth it
+  (warm-start already collapses post-first MD/opt steps to ~1 iteration).
+- **Future:** warm-start wiring for RHF/SF; a coarse-iterations/fine-back-projection
+  two-grid split to make the coarse grid strict-gate-safe.
 
 ### Combined (full playbook together) — capstone
 All three iteration-cutters on at once (`OQP_MRSF_ZV_WARMSTART` +
@@ -279,12 +325,20 @@ So along a trajectory the first/hard step gets the zvconv+progressive discount a
 every subsequent (small-step) solve collapses to ~1 iteration — the levers compose
 with no accuracy loss.
 
-### Quick reference — env opt-ins (all default OFF)
+### Quick reference — env controls
+Defaults: warm-start, progressive screening, and the Jacobi guess are **ON**
+(MRSF and RHF/SF); set the flag to `0` to disable. zvconv stays 1e-10.
 ```
-OQP_MRSF_ZV_TIMERS=1                 # per-section profile
-OQP_MRSF_ZV_CONV=1e-8               # right-size convergence (recommended)
-OQP_MRSF_ZV_WARMSTART=1            # warm-start across MD/opt steps (+safeguard)
-OQP_MRSF_ZV_PROG=1                  # progressive screening (cap 1e-6 default)
-  OQP_MRSF_ZV_PROG_K / _CAP / _PIN   #   tuning (1e-2 / 1e-6 / 1e-6)
-OQP_MRSF_ZV_CUTOFF=1e-7            # static loose cutoff (accuracy-bounded)
+# MRSF (source/modules/tdhf_mrsf_z_vector.F90)
+OQP_MRSF_ZV_WARMSTART=0            # disable warm-start (default ON; MO-projected)
+OQP_MRSF_ZV_PROG=0                 # disable progressive screening (default ON)
+OQP_MRSF_ZV_DIAGGUESS=0           # disable Jacobi cold guess (default ON)
+OQP_MRSF_ZV_CONV=1e-8             # override convergence tol (default off; recommended 1e-8)
+OQP_MRSF_ZV_PROG_K / _CAP / _PIN  # progressive tuning (1e-2 / 1e-6 / 1e-6)
+OQP_MRSF_ZV_COARSEGRID=1          # coarser response grid (default OFF)
+  OQP_MRSF_ZV_GRID=SG1            #   grid choice (SG0/SG1/SG2/SG3)
+OQP_MRSF_ZV_CUTOFF=1e-7          # static loose cutoff (default off; superseded by _PROG)
+OQP_MRSF_ZV_TIMERS=1             # per-section profiler
+# RHF/SF (tdhf_z_vector / tdhf_sf_z_vector): OQP_TDHF_ZV_* and OQP_SF_ZV_*
+OQP_TDHF_ZV_PROG=0  OQP_SF_ZV_PROG=0   OQP_{TDHF,SF}_ZV_CONV=1e-8
 ```
