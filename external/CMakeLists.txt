@@ -290,6 +290,21 @@ oqp_reuse_or_build(libtagarray
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray_f${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/include/tagarray")
+# tagarray's high-level helpers (c%alloc / alloc_or_die) take default-INTEGER
+# shapes and a default-LOGICAL override, so the library must be built with the
+# same default integer kind as OpenQP. OpenQP promotes its default integer (and
+# logical) to 8 bytes for ILP64 via add_compile_options(-fdefault-integer-8 /
+# -i8), which ExternalProject does NOT inherit; forward it explicitly here so
+# the kinds match (otherwise alloc_or_die / create(override=...) fail to resolve
+# in ILP64 builds).
+set(_TAGARRAY_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}")
+if(LINALG_LIB_INT64)
+  if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -fdefault-integer-8")
+  elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -i8")
+  endif()
+endif()
 if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
         PREFIX ${TAGARRAY_PREFIX}
@@ -307,6 +322,7 @@ ExternalProject_Add(libtagarray
                    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   "-DCMAKE_Fortran_FLAGS=${_TAGARRAY_Fortran_FLAGS}"
                    ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
 endif()

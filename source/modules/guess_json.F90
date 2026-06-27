@@ -93,10 +93,13 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    ! allocate beta
-    call infos%dat%alloc_or_die(OQP_DM_B, (/ nbf2 /), dmat_b, description=OQP_DM_B_comment)
-    call infos%dat%alloc_or_die(OQP_E_MO_B, (/ nbf /), mo_energy_b, description=OQP_E_MO_B_comment)
-    call infos%dat%alloc_or_die(OQP_VEC_MO_B, (/ nbf, nbf /), mo_b, description=OQP_VEC_MO_B_comment)
+    ! Load beta orbitals from the JSON guess. For ROHF/UHF (scftype >= 2) these
+    ! are the supplied beta guess read by get_ab_initio_density below, so they
+    ! must be retrieved, NOT reallocated (alloc_or_die would discard the guess).
+    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
 
 
   !  For ROHF/UHF

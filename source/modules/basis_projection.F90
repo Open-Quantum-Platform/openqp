@@ -145,13 +145,17 @@ contains
             Dmat_a(nbf2), &
             Dmat_b(nbf2))
 
-    ! allocate alpha
-    call infos%dat%alloc_or_die(OQP_DM_A, (/ nbf2_alt /), dmat_a_alt, description=OQP_DM_A_comment)
-    call infos%dat%alloc_or_die(OQP_E_MO_A, (/ nbf_alt /), mo_energy_a_alt, description=OQP_E_MO_A_comment)
-    call infos%dat%alloc_or_die(OQP_VEC_MO_A, (/ nbf_alt, nbf_alt /), mo_a_alt, description=OQP_VEC_MO_A_comment)
-    call infos%dat%alloc_or_die(OQP_DM_B, (/ nbf2_alt /), dmat_b_alt, description=OQP_DM_B_comment)
-    call infos%dat%alloc_or_die(OQP_E_MO_B, (/ nbf_alt /), mo_energy_b_alt, description=OQP_E_MO_B_comment)
-    call infos%dat%alloc_or_die(OQP_VEC_MO_B, (/ nbf_alt, nbf_alt /), mo_b_alt, description=OQP_VEC_MO_B_comment)
+    ! Load the converged initial-basis orbitals/densities. These are INPUTS --
+    ! the projection source, read below through the *_alt pointers -- so they
+    ! must be retrieved, NOT reallocated (alloc_or_die would erase them).
+    call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a_alt)
+    call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a_alt)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a_alt)
+    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b_alt)
+    call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b_alt)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b_alt)
     ! allocate alpha_tmp
     call infos%dat%alloc_or_die("OQP::DM_A_tmp", (/ nbf2 /), dmat_a, description=OQP_DM_A_comment)
     call infos%dat%alloc_or_die("OQP::E_MO_A_tmp", (/ nbf /), mo_energy_a, description=OQP_E_MO_A_comment)
