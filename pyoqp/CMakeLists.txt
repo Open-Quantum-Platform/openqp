@@ -30,7 +30,7 @@ execute_process(
 
 execute_process(
     COMMAND
-        ${Python3_EXECUTABLE} "-c" "from distutils.sysconfig import get_config_var; print(get_config_var('EXT_SUFFIX'))"
+        ${Python3_EXECUTABLE} "-c" "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     OUTPUT_VARIABLE _cffi_ext_suffix
     ERROR_QUIET
     OUTPUT_STRIP_TRAILING_WHITESPACE
