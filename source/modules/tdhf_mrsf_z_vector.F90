@@ -46,6 +46,17 @@ module tdhf_mrsf_z_vector_mod
   real(kind=dp), save :: zv_conv_user   = -1.0_dp  !< <0 => not set
   real(kind=dp), save :: zv_cutoff_user = -1.0_dp  !< <0 => not set
 
+  ! Progressive (iteration-dependent) integral screening for the CG solve.
+  ! Loose cutoff while the residual is large (the search direction is inexact
+  ! anyway), tightened toward the tight floor and PINNED exact once the residual
+  ! is small, so the converged z-vector / gradient matches the all-tight run.
+  ! tau(k) = clamp(prog_k * ||r_{k-1}||, tight_floor, prog_cap); tau=tight once
+  ! ||r||^2 < prog_pin. Same coupling idea as feat/progressive-screening-scf.
+  logical, save :: zv_prog_on  = .false.
+  real(kind=dp), save :: zv_prog_k   = 1.0e-2_dp  !< tau = k*residual_norm
+  real(kind=dp), save :: zv_prog_cap = 1.0e-6_dp  !< loosest tau (upper clamp)
+  real(kind=dp), save :: zv_prog_pin = 1.0e-6_dp  !< pin tau=tight once error(=||r||^2) < this
+
   ! Warm-start store (module-level; persists across the geometry/MD steps that
   ! share one process). The converged z-vector varies smoothly along a path, so
   ! the previous step's solution is a strong initial guess for the LINEAR CPHF
@@ -125,8 +136,32 @@ contains
       read(e_,*,iostat=ios) zv_cutoff_user
       if (ios /= 0) zv_cutoff_user = -1.0_dp
     end if
+    call get_environment_variable('OQP_MRSF_ZV_PROG', e_)
+    zv_prog_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+                 e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    call get_environment_variable('OQP_MRSF_ZV_PROG_K', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_k
+    call get_environment_variable('OQP_MRSF_ZV_PROG_CAP', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_cap
+    call get_environment_variable('OQP_MRSF_ZV_PROG_PIN', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_pin
     zv_cfg_init = .true.
   end subroutine zv_read_config
+
+  !> Progressive screening threshold for a CG step given the current squared
+  !> residual `error` and the tight floor. Returns the tight floor once pinned.
+  function zv_prog_tau(error, tight) result(tau)
+    real(kind=dp), intent(in) :: error, tight
+    real(kind=dp) :: tau, resid
+    if (.not. ieee_is_finite(error) .or. error < zv_prog_pin) then
+      tau = tight
+      return
+    end if
+    resid = sqrt(max(error, 0.0_dp))
+    tau = zv_prog_k * resid
+    if (tau < tight) tau = tight
+    if (tau > zv_prog_cap) tau = zv_prog_cap
+  end function zv_prog_tau
 
   !> Seed xk from the warm-start store for `state`, or zero it out. `used` is
   !> .true. only when a finite, dimension-matching previous solution was loaded.
@@ -1007,7 +1042,6 @@ contains
     real(kind=dp), allocatable :: ab1_mo_a(:,:)
     real(kind=dp), allocatable :: ab1_mo_b(:,:)
     real(kind=dp), allocatable :: xm(:)
-    real(kind=dp), pointer :: ab2(:,:,:)
     real(kind=dp), pointer :: ab1(:,:,:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:)
     real(kind=dp), pointer :: bvec(:,:,:)
@@ -1230,10 +1264,16 @@ contains
   ! tighter than the response's; find it empirically. Restored before return so
   ! the next step's SCF/response is unaffected. Default unset = exact (unchanged).
     zv_rc_save = infos%control%int2e_cutoff
-    zv_rc_loosen = zv_cutoff_user > 0.0_dp
+    ! Progressive screening (below) keeps init at the TIGHT cutoff so the pair
+    ! list is a full superset; it ramps the run-time threshold per iteration.
+    ! The static loosen and progressive are therefore mutually exclusive.
+    zv_rc_loosen = zv_cutoff_user > 0.0_dp .and. .not. zv_prog_on
     if (zv_rc_loosen) infos%control%int2e_cutoff = max(zv_rc_save, zv_cutoff_user)
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
+    if (zv_prog_on) write(iw,'(" MRSF z-vector progressive screening ON: ", &
+        &"tau=clamp(",1p,e8.1,"*||r||, ",e8.1," , ",e8.1,"), pin@||r||^2<",e8.1)') &
+        zv_prog_k, zv_rc_save, zv_prog_cap, zv_prog_pin
 
     write(*,'(/1x,71("-")&
              &/19x,"MRSF-DFT ENERGY GRADIENT CALCULATION"&
@@ -1283,6 +1323,11 @@ contains
     case default
       call run_mrsf_cg_zvector()
     end select
+
+    ! Progressive screening ramps the cutoff during the CG loop; restore the
+    ! tight floor so the relaxed-density/W back-projection (which sets the
+    ! gradient) is computed exactly.
+    if (zv_prog_on) call int2_driver%set_cutoff(zv_rc_save)
 
 ! -----------------------------------------------
     if (mrsf_zvector_breakdown) then
@@ -1555,6 +1600,12 @@ contains
         !     Beta
         call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
         if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0)
+
+        ! Progressive screening: loosen the cutoff for this sigma build based on
+        ! the residual carried in from the previous step (the initial residual on
+        ! iter 1). Pinned to the tight floor once the residual is small, so the
+        ! converged solution is exact.
+        if (zv_prog_on) call int2_driver%set_cutoff(zv_prog_tau(error, zv_rc_save))
 
         !     (A+B)*PK
         call int2_data%clean()

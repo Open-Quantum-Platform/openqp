@@ -30,18 +30,24 @@ Per-section wall-clock (seconds), default solver = preconditioned CG, BHHLYP.
 
 | system | iters | RHS build | per-iter int2 | per-iter **XC** | transforms | CG algebra | back-proj |
 |---|---|---|---|---|---|---|---|
-| benzene (114 BF) |  6 | 1.36 | 1.47 | **4.38** | 0.02 | 0.0003 | 0.87 |
-| thymine (156 BF) | 12 | 3.33 | 7.23 | **14.14** | 0.09 | 0.0009 | 1.64 |
+| benzene  (12 atom, 114 BF) |  6 | 1.36 | 1.47 | **4.38** | 0.02 | 0.0003 | 0.87 |
+| thymine  (15 atom, 156 BF) | 12 | 3.33 | 7.23 | **14.14** | 0.09 | 0.0009 | 1.64 |
+| tetracene (30 atom, 312 BF)| 10 | 16.16 | 36.38 | **68.16** | 0.56 | 0.0013 | 9.41 |
+
+(Per-section seconds are summed over all iterations; the benzene/thymine rows
+were taken under light load and tetracene under heavy load — read the *ratios*,
+not absolute seconds.)
 
 **Key findings**
 1. **The per-iteration cost is XC-kernel-dominated** for hybrid-DFT MRSF
-   (`utddft_fxc`): 75% (benzene) / 66% (thymine) of the sigma build. The 2e
-   digestion is only 25–33%; the linear-solver vector algebra is negligible
-   (<0.01%); AO/MO transforms are negligible.
-2. **Iteration count scales with system size / floppiness** (benzene 6 → thymine
-   12 at `zvconv=1e-10`); larger and excited-state-distorted geometries are more
-   iteration-heavy, so **cutting iterations is the dominant lever** because it
-   scales down *both* XC and int2 linearly.
+   (`utddft_fxc`): **75% / 66% / 65%** of the sigma build for benzene / thymine /
+   tetracene. The 2e digestion is the rest (**25% / 33% / 35%**); the
+   linear-solver vector algebra is negligible (<0.01%); AO/MO transforms are
+   negligible. This ratio is stable across system size.
+2. **Iteration count is set by conditioning, not raw size** (benzene 6, thymine
+   12, tetracene 10 at `zvconv=1e-10`): excited-state-distorted / less-symmetric
+   geometries are more iteration-heavy. Either way, **cutting iterations is the
+   dominant lever** because it scales down *both* XC and int2 linearly.
 3. CG converges ~1.3–1.5 orders of magnitude (squared residual) per iteration.
 
 Consequence for the playbook: the int2-focused levers (digestion port, looser
@@ -60,16 +66,18 @@ The criterion is on the **squared** residual; default `1e-10` ⇒ residual norm
 ~1e-5, which is over-converged for gradients. Sweep (gradient max-error vs the
 `1e-10` baseline):
 
-| zvconv | benzene iters | benzene grad err | thymine iters | thymine grad err |
-|---|---|---|---|---|
-| 1e-10 | 6 | (ref) | 12 | (ref) |
-| 1e-8  | 5 (−17%) | 1.9e-6 ✓ | 10 (−17%) | 6.5e-6 ✓ |
-| 1e-6  | 4 (−33%) | 1.5e-5 ✗ | 6 (−50%) | 1.4e-4 ✗ |
-| 1e-5  | 3 (−50%) | 9.8e-5 ✗ | 5 (−58%) | 2.1e-4 ✗ |
-| 1e-4  |  — | — | 3 (−75%) | 5.6e-4 ✗ |
+| zvconv | benzene | thymine | tetracene |
+|---|---|---|---|
+| 1e-10 | 6 (ref) | 12 (ref) | 10 (ref) |
+| 1e-8  | 5 (−17%), 1.9e-6 ✓ | 10 (−17%), 6.5e-6 ✓ | 7 (−30%), 6.8e-6 ✓ |
+| 1e-6  | 4 (−33%), 1.5e-5 ✗ | 6 (−50%), 1.4e-4 ✗ | — |
+| 1e-5  | 3 (−50%), 9.8e-5 ✗ | 5 (−58%), 2.1e-4 ✗ | — |
+| 1e-4  | — | 3 (−75%), 5.6e-4 ✗ | — |
 
-**Recommendation:** `zvconv = 1e-8` keeps the gradient max-error ≤ ~6e-6 a.u. on
-both systems while removing ~17% of iterations. Looser values (1e-6 …) give big
+(cell = iters (Δ), gradient max-error a.u.)
+
+**Recommendation:** `zvconv = 1e-8` keeps the gradient max-error ≤ ~7e-6 a.u. on
+all three systems while removing 17–30% of iterations (more on the larger one). Looser values (1e-6 …) give big
 iteration cuts (−50…−75%) but break the ≤1e-5 a.u. gradient gate, so they are
 **not** safe as a default. (The default is left unchanged at 1e-10 per accuracy
 policy; `OQP_MRSF_ZV_CONV` is the opt-in.) `env == input zvconv` verified
@@ -135,6 +143,14 @@ to large steps; left as a future enhancement.)
   iterations — consistent with the response-side finding that Olsen gave ~0.
   Not pursued; the iteration-count budget is better spent on warm-start + zvconv.
 
+### A4 — DIIS / subspace acceleration (already present)
+The default solver is **already a Krylov method** — preconditioned conjugate
+gradient — not a plain fixed-point iteration. Upstream additionally provides
+GMRES (`z_solver=1`), MINRES (`z_solver=2`) and an AUTO escalation
+(`z_solver=3`: CG→MINRES→GMRES) with breakdown handling. So the "add a
+DIIS/Krylov solver" lever is already realized; no change needed. (Warm-start and
+the operator-consistency fix benefit all of these paths.)
+
 ---
 
 ## B. Cutting per-iteration cost
@@ -151,9 +167,53 @@ restore on return. Benzene gradient error vs baseline:
 | 1e-7 | 5.5e-7 | safe |
 | 1e-6 | 7.8e-6 | safe (≤1e-5) |
 
-Gradients tolerate a cutoff up to ~1e-6 (err 7.8e-6). **But** the speedup is
-small for ≤156 BF (few integrals are screened out at these thresholds); the
-benefit grows with system size (consistent with the response-side observation).
+Gradients tolerate a cutoff up to ~1e-6 (err 7.8e-6) **for benzene**. **But** two
+caveats emerged at scale (tetracene, 312 BF):
+- the **speedup grows** with system size: int2 digestion time drops ~32% at
+  cutoff=1e-6 (vs ~0 for benzene);
+- the **safe cutoff tightens** with system size: at cutoff=1e-6 the tetracene
+  gradient error is **6.7e-5 a.u.** — *over* the 1e-5 gate (vs benzene's 7.8e-6).
+  A static cutoff must be ~1e-7 for a 30-atom gradient, eating into the speedup.
+
+So a *static* loose cutoff trades speed against accuracy unfavourably at scale.
+This motivates B1b.
+
+### B1b — Progressive (iteration-dependent) cutoff (env `OQP_MRSF_ZV_PROG`)
+Loose screening while the CG residual is large (the search direction is inexact
+anyway), tightened toward the tight floor and **pinned exact** once the residual
+is small, so the converged z-vector and the back-projection (which set the
+gradient) use the full cutoff. Same coupling idea as
+`feat/progressive-screening-scf`, applied to the CG residual:
+
+```
+tau(k) = clamp( prog_k * ||r_{k-1}|| , int2e_cutoff , prog_cap )   while ||r||^2 >= prog_pin
+tau(k) = int2e_cutoff   (pinned, exact)                            once  ||r||^2 <  prog_pin
+```
+Implementation: the driver is initialised at the **tight** cutoff (full pair
+list); a new `int2_compute_t%set_cutoff` updates only the run-time screening
+threshold per iteration (zero rebuild — Schwarz bounds and the pair list are
+cutoff-independent / superset-safe). Knobs: `OQP_MRSF_ZV_PROG_K` (default 1e-2),
+`OQP_MRSF_ZV_PROG_CAP` (1e-6), `OQP_MRSF_ZV_PROG_PIN` (1e-6 on ‖r‖²).
+
+Results (tetracene, 312 BF, vs the tight baseline; iters unchanged at 10):
+
+| setting | grad err a.u. | int2 time | verdict |
+|---|---|---|---|
+| static cutoff 1e-6 | 6.7e-5 | −32% | ✗ over the gate |
+| **progressive cap=1e-6** | **7.0e-6** | **−17%** | ✓ safe, ~10× more accurate than static 1e-6 |
+| progressive cap=1e-5 | 6.5e-5 | −22% | ✗ recurrence drift dominates |
+
+Key points:
+- progressive at cap=1e-6 is **~10× more accurate than the static cutoff at the
+  same nominal cutoff**, because the pinned tail is exact — it shifts the
+  speed/accuracy frontier favourably and **never adds iterations**;
+- accuracy is ultimately limited by **inexact-Krylov recurrence drift**: the
+  recurrence residual `errv` is updated with the per-iteration (loosened)
+  operator, so an over-loose early `cap` (1e-5) leaves the *true* tight residual
+  above tolerance even after pinning. Hence `cap≈1e-6` is the safe aggressive
+  setting for the ≤1e-5 gradient gate. (A periodic true-residual replacement
+  would lift this limit and allow a looser cap — future work.)
+- benzene (114 BF): grad 2.0e-8, no speedup (int2 negligible at this size).
 
 ### B2 — Digestion port + FP32 (audit result)
 - The Z-vector **per-iteration** sigma is built with `int2_tdgrd_data_t`
@@ -175,9 +235,25 @@ benefit grows with system size (consistent with the response-side observation).
 
 ## Bottom line / recommendations
 - **Biggest realistic gradient-use-case win:** `OQP_MRSF_ZV_WARMSTART` in the
-  small-step regime (MD / late optimization): up to ~1 iteration vs ~6–12.
-- **Always-safe modest win:** `OQP_MRSF_ZV_CONV=1e-8` (~17% fewer iterations,
-  gradient error ≤ ~6e-6 a.u.).
-- **Cutoff** is safe to ~1e-6 but only pays off on large systems.
+  small-step regime (MD / late optimization): ~1 iteration vs 6–12. Proven on
+  benzene (6→1), tetracene (10→1); gradient correct to <5e-8. The safeguard
+  makes it never-worse for large steps / degenerate systems.
+- **Always-safe modest win:** `OQP_MRSF_ZV_CONV=1e-8` (17–30% fewer iterations,
+  gradient error ≤ ~7e-6 a.u.; larger systems benefit more).
+- **Progressive cutoff** (`OQP_MRSF_ZV_PROG`, cap 1e-6): ~17% int2 reduction at
+  scale (30 atoms) at gradient error ~7e-6 — the accuracy-safe way to use loose
+  screening; ~10× more accurate than a static loose cutoff. (`OQP_MRSF_ZV_CUTOFF`
+  static loosen exists too but is accuracy-bounded at scale.)
 - **Highest-value future target (out of scope here):** the per-iteration XC
-  response kernel (`utddft_fxc`), which is 66–75% of the per-iteration cost.
+  response kernel (`utddft_fxc`), 65–75% of the per-iteration cost; and a
+  true-residual replacement to let progressive screening use a looser cap.
+
+### Quick reference — env opt-ins (all default OFF)
+```
+OQP_MRSF_ZV_TIMERS=1                 # per-section profile
+OQP_MRSF_ZV_CONV=1e-8               # right-size convergence (recommended)
+OQP_MRSF_ZV_WARMSTART=1            # warm-start across MD/opt steps (+safeguard)
+OQP_MRSF_ZV_PROG=1                  # progressive screening (cap 1e-6 default)
+  OQP_MRSF_ZV_PROG_K / _CAP / _PIN   #   tuning (1e-2 / 1e-6 / 1e-6)
+OQP_MRSF_ZV_CUTOFF=1e-7            # static loose cutoff (accuracy-bounded)
+```
