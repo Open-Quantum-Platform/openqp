@@ -9,6 +9,7 @@ module tdhf_mrsf_lib
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
+      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
       logical :: tamm_dancoff = .true. !< Tamm-Dancoff approximation
 
     contains
@@ -40,7 +41,7 @@ contains
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
     integer, intent(in) :: nthreads
-    integer :: nbf, nsh, nmatrix
+    integer :: nbf, nsh, nmatrix, mu, nu
 
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
@@ -56,6 +57,18 @@ contains
       allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), &
                this%dsh(nsh,nsh), &
                source=0.0d0)
+
+      ! Precompute the symmetrized Coulomb density ds(:,c,mu,nu)=d3(mu,nu)+d3(nu,mu)
+      ! for the Coulomb components (1:4) once per run. d3 is constant over the
+      ! Davidson sigma build, so this lets the digestion kernel read a single
+      ! (symmetric) slab per integral instead of summing two scattered d3 reads.
+      if (allocated(this%ds)) deallocate(this%ds)
+      allocate(this%ds(this%nfocks, 4, nbf, nbf))
+      do nu = 1, nbf
+        do mu = 1, nbf
+          this%ds(:,:,mu,nu) = this%d3(:,1:4,mu,nu) + this%d3(:,1:4,nu,mu)
+        end do
+      end do
     end if
 
     call this%init_screen(basis)
@@ -95,6 +108,7 @@ contains
 
     deallocate(this%f3)
     deallocate(this%dsh)
+    if (allocated(this%ds)) deallocate(this%ds)
     nullify(this%d3)
 
   end subroutine
@@ -154,7 +168,7 @@ contains
 
     class(int2_mrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    integer :: i, j, k, l, n
+    integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
     integer :: mythread
 
@@ -164,51 +178,64 @@ contains
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
+                ds => this%ds, &
                 nf => this%nfocks &
       )
 
-      do n = 1, buf%ncur
-        i = buf%ids(1,n)
-        j = buf%ids(2,n)
-        k = buf%ids(3,n)
-        l = buf%ids(4,n)
-        val = buf%ints(n)
+      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
+      ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
 
-        xval = val * this%scale_exchange
-        cval = val * this%scale_coulomb
+      if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
 
-        ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
-        ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
-        if (this%cur_pass==1) then
-          f3(:nf,:4,i,j) = f3(:nf,:4,i,j) + cval*d3(:nf,:4,k,l)! (ij|lk)
-          f3(:nf,:4,k,l) = f3(:nf,:4,k,l) + cval*d3(:nf,:4,i,j)! (kl|ji)
-          f3(:nf,:4,i,j) = f3(:nf,:4,i,j) + cval*d3(:nf,:4,l,k)! (ij|kl)
-          f3(:nf,:4,l,k) = f3(:nf,:4,l,k) + cval*d3(:nf,:4,i,j)! (lk|ji)
-          f3(:nf,:4,j,i) = f3(:nf,:4,j,i) + cval*d3(:nf,:4,k,l)! (ji|lk)
-          f3(:nf,:4,k,l) = f3(:nf,:4,k,l) + cval*d3(:nf,:4,j,i)! (kl|ij)
-          f3(:nf,:4,j,i) = f3(:nf,:4,j,i) + cval*d3(:nf,:4,l,k)! (ji|kl)
-          f3(:nf,:4,l,k) = f3(:nf,:4,l,k) + cval*d3(:nf,:4,j,i)! (lk|ij)
+          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab.
+          ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
+          do c = 1, 4
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
+          do c = 1, 7
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
 
-          f3(:nf,:7,i,k) = f3(:nf,:7,i,k) - xval*d3(:nf,:7,j,l)
-          f3(:nf,:7,k,i) = f3(:nf,:7,k,i) - xval*d3(:nf,:7,l,j)
-          f3(:nf,:7,i,l) = f3(:nf,:7,i,l) - xval*d3(:nf,:7,j,k)
-          f3(:nf,:7,l,i) = f3(:nf,:7,l,i) - xval*d3(:nf,:7,k,j)
-          f3(:nf,:7,j,k) = f3(:nf,:7,j,k) - xval*d3(:nf,:7,i,l)
-          f3(:nf,:7,k,j) = f3(:nf,:7,k,j) - xval*d3(:nf,:7,l,i)
-          f3(:nf,:7,j,l) = f3(:nf,:7,j,l) - xval*d3(:nf,:7,i,k)
-          f3(:nf,:7,l,j) = f3(:nf,:7,l,j) - xval*d3(:nf,:7,k,i)
-        else if (this%cur_pass==2) then
-          f3(1:nf,7,i,k) = f3(1:nf,7,i,k) - xval*d3(1:nf,7,j,l)
-          f3(1:nf,7,k,i) = f3(1:nf,7,k,i) - xval*d3(1:nf,7,l,j)
-          f3(1:nf,7,i,l) = f3(1:nf,7,i,l) - xval*d3(1:nf,7,j,k)
-          f3(1:nf,7,l,i) = f3(1:nf,7,l,i) - xval*d3(1:nf,7,k,j)
-          f3(1:nf,7,j,k) = f3(1:nf,7,j,k) - xval*d3(1:nf,7,i,l)
-          f3(1:nf,7,k,j) = f3(1:nf,7,k,j) - xval*d3(1:nf,7,l,i)
-          f3(1:nf,7,j,l) = f3(1:nf,7,j,l) - xval*d3(1:nf,7,i,k)
-          f3(1:nf,7,l,j) = f3(1:nf,7,l,j) - xval*d3(1:nf,7,k,i)
-        end if
+      else if (this%cur_pass==2) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
+            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
+            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
+            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
+            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
+            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
+            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
+            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+          end do
+        end do
+      end if
 
-      end do
     end associate
 
     buf%ncur = 0
