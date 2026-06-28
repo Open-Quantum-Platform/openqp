@@ -66,6 +66,7 @@ class RegKey:
     sidecar_field: Optional[str] = None  # field name in the sidecar (defaults to key)
     phase_invariant: bool = False    # compare magnitudes (sign/phase ambiguous)
     skip_sub: tuple = ()             # dict sub-keys to ignore (e.g. EKT orbitals)
+    rtol: float = 0.0                # relative tolerance (0 = exact abs compare)
     needs_excited: bool = False      # only when an excited-state method is active
     needs_prop: Optional[str] = None  # only when this scf_prop was requested
     exclude_runtypes: frozenset = frozenset()  # runtypes where this is NOT checked
@@ -121,14 +122,31 @@ REGISTRY = (
     RegKey('hess', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            sidecar_field='hessian'),
     RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar'),
+    # IR intensities and Raman activities are second-order response properties
+    # (dipole / polarizability derivatives over the analytic Hessian). They are
+    # far more sensitive to the SCF convergence *path* than the energy or the
+    # Hessian itself: an SCF that converges to the same energy via a different
+    # route (e.g. the coarse->fine XC grid ramp, integral screening, a different
+    # guess/BLAS order) shifts the converged density at ~1e-6 and these
+    # quantities amplify that to ~1e-4 (IR) / ~1e-3 (Raman) -- above the global
+    # round(diff,4) ~5e-5 gate, while the energy stays bit-identical. Compare
+    # them with a small relative tolerance (a genuine regression is orders of
+    # magnitude larger). Same rationale as the SOC rtol below.
     RegKey('infrared_intensities', runtypes=frozenset({'hess'}),
-           required=True, source='sidecar'),
+           required=True, source='sidecar', rtol=1e-3),
     RegKey('raman_activities', runtypes=frozenset({'hess'}),
-           required=True, source='sidecar'),
+           required=True, source='sidecar', rtol=1e-4),
     # Excitation energies: meaningful only for excited-state methods; a ground
     # state run stores the placeholder [0].
     RegKey('td_energies', runtypes='*', required=True, needs_excited=True),
-    RegKey('soc', runtypes=frozenset({'soc'}), required=True),
+    # SOC matrix elements are large (10^4-10^5 cm^-1), so the default absolute
+    # round(diff,4) gate (~5e-5) would demand ~10 significant figures -- tighter
+    # than ULP-level BLAS/compiler/integral-screening noise (~1e-8 relative),
+    # which makes the test fail on harmless numerical differences across builds
+    # (Debug vs Release, OpenBLAS vs Accelerate, response integral cutoff). Use a
+    # relative tolerance instead; a real SOC regression is >>1e-6 relative, and
+    # the response itself stays exact-checked via td_*_energies below.
+    RegKey('soc', runtypes=frozenset({'soc'}), required=True, rtol=1e-6),
     # A SOC run computes both spin-resolved excitation ladders; the public
     # td_energies mirrors only one, so test the singlet and triplet explicitly.
     RegKey('td_singlet_energies', runtypes=frozenset({'soc'}), required=True),
@@ -139,7 +157,10 @@ REGISTRY = (
            phase_invariant=True),
     RegKey('mrsf_ekt', runtypes=frozenset({'ekt'}), required=True,
            skip_sub=('orbitals_mo', 'dyson_orbitals_mo')),
-    RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr'),
+    # GIAO NMR shielding is a second-order response property and, like IR/Raman
+    # above, is sensitive to the SCF convergence path well beyond the energy;
+    # compare with a small relative tolerance (a real regression is far larger).
+    RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),

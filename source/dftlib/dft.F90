@@ -12,6 +12,9 @@ module dft
 
   private
   public dft_initialize
+  public dft_build_grid_sized
+  public dft_setup_descent_grid
+  public xc_is_grid_sensitive
   public dftclean
   public dftexcor
   public dftder
@@ -421,6 +424,207 @@ contains
     call dft_prepare_grid(infos, basis, molGrid, pruned, verbose)
 
   end subroutine
+
+!>  @brief Build a DFT integration grid with an explicit, single (unpruned)
+!>         radial/angular size, WITHOUT touching the libxc functional setup.
+!>
+!>  @detail Used by the coarse-to-fine SCF grid schedule (see scf_driver): early
+!>          SCF cycles run on this cheaper grid and switch to the production grid
+!>          as DIIS approaches convergence. Every grid parameter other than the
+!>          point count (radial grid type, partition function, fuzzy-cell
+!>          algorithm, density cutoff, Bragg-Slater radii) is inherited from
+!>          infos%dft, so the coarse grid is consistent with the production grid
+!>          apart from being sparser. The production grid sizes held in infos%dft
+!>          are saved and restored, so infos is unchanged on return.
+!>
+!>  @param[inout] infos    System/control info (grid sizes restored on exit).
+!>  @param[in]    basis    Basis set (screening already set by dft_initialize).
+!>  @param[inout] molGrid  Grid object to (re)build at the requested size.
+!>  @param[in]    nrad     Number of radial points for the coarse grid.
+!>  @param[in]    nang     Number of angular (Lebedev) points for the coarse grid.
+  subroutine dft_build_grid_sized(infos, basis, molGrid, nrad, nang)
+    use basis_tools, only: basis_set
+    use types, only: information
+    implicit none
+    type(information), intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    type(dft_grid_t), intent(inout) :: molGrid
+    integer, intent(in) :: nrad, nang
+
+    type(dft_grid_pruned_t) :: pruned
+    integer :: nat
+    integer :: save_rad, save_ang
+    logical :: save_pruned
+
+    ! Save the production grid sizes
+    save_rad    = int(infos%dft%grid_rad_size)
+    save_ang    = int(infos%dft%grid_ang_size)
+    save_pruned = infos%dft%grid_pruned
+
+    ! Install the coarse sizes (dft_prepare_grid reads these from infos%dft)
+    infos%dft%grid_rad_size = nrad
+    infos%dft%grid_ang_size = nang
+    infos%dft%grid_pruned   = .false.
+
+    ! Single, unpruned Lebedev grid of the requested size; mirrors the
+    ! ".not. grid_pruned" branch of dft_set_options, minus the libxc setup.
+    nat = ubound(infos%atoms%zn, 1)
+    pruned%ngrids     = 1
+    pruned%nrad       = 0          ! 0 => use infos%dft%grid_rad_size (coarse)
+    pruned%nrad_types = 1
+    allocate(pruned%nang(1,1), pruned%radii(1,1))
+    pruned%nang(1,1)  = nang
+    pruned%radii(1,1) = 1.0d+30
+    allocate(pruned%rad_id(nat), source=1)
+
+    call dft_prepare_grid(infos, basis, molGrid, pruned, verbose=.false.)
+
+    ! Restore the production grid sizes
+    infos%dft%grid_rad_size = save_rad
+    infos%dft%grid_ang_size = save_ang
+    infos%dft%grid_pruned   = save_pruned
+  end subroutine dft_build_grid_sized
+
+!>  @brief Decide (single unified policy) whether to build a coarse "descent"
+!>         grid for the coarse->fine SCF grid ramp, and build it if so.
+!>
+!>  @detail One entry point shared by both grid-ramp activation paths:
+!>            - progressive screening (scf_pscreen / OQP_PSCREEN) with
+!>              pscreen_grid_rad/ang > 0  -> use those sizes (opt-in, as in #238); or
+!>            - the coarse-to-fine schedule, ON by default unless OQP_XC_C2F=0
+!>              -> default sizes (OQP_XC_C2F_RAD/ANG, 50x110), gated by the safety
+!>              guards in c2f_grid_eligible (DFT + pure-DIIS + non-Minnesota +
+!>              maxit>=2 + no level-shift-on-non-VDIIS).
+!>          In both cases the coarse grid is kept only if it is genuinely cheaper
+!>          than the production grid (by built point count). The grid ramp itself
+!>          (coarse during the descent, production pinned in the convergence tail)
+!>          lives in scf_driver; this routine only constructs the coarse grid.
+!>
+!>  @param[inout] infos    System/control info (grid sizes restored by the build).
+!>  @param[inout] basis    Basis set.
+!>  @param[in]    molGrid  Production grid (already built).
+!>  @param[inout] coarseGrid  Receives the coarse grid when have_coarse=.true.
+!>  @param[out]   have_coarse  .true. iff a useful coarse grid was built.
+  subroutine dft_setup_descent_grid(infos, basis, molGrid, coarseGrid, have_coarse)
+    use basis_tools, only: basis_set
+    use types, only: information
+    implicit none
+    type(information), intent(inout) :: infos
+    type(basis_set),  intent(inout) :: basis
+    type(dft_grid_t), intent(in)    :: molGrid
+    type(dft_grid_t), intent(inout) :: coarseGrid
+    logical, intent(out) :: have_coarse
+
+    logical :: ps_on, c2f_off, requested
+    integer :: rad, ang, ps_grid_rad, ps_grid_ang
+    character(len=64) :: ev
+    integer :: el
+
+    have_coarse = .false.
+    if (infos%control%hamilton < 20) return    ! DFT only
+
+    ! --- progressive-screening grid request (opt-in; sizes from input/env) ---
+    ps_on = infos%control%scf_pscreen /= 0
+    call get_environment_variable("OQP_PSCREEN", ev, el)
+    if (el > 0) ps_on = (ev(1:1)=='1' .or. ev(1:1)=='t' .or. ev(1:1)=='T' &
+                         .or. ev(1:1)=='y' .or. ev(1:1)=='Y')
+    ps_grid_rad = int(infos%control%pscreen_grid_rad)
+    ps_grid_ang = int(infos%control%pscreen_grid_ang)
+    call get_environment_variable("OQP_PSCREEN_GRID_RAD", ev, el)
+    if (el > 0) read(ev,*,iostat=el) ps_grid_rad
+    call get_environment_variable("OQP_PSCREEN_GRID_ANG", ev, el)
+    if (el > 0) read(ev,*,iostat=el) ps_grid_ang
+
+    requested = .false.
+    if (ps_on .and. ps_grid_rad > 0 .and. ps_grid_ang > 0) then
+      rad = ps_grid_rad; ang = ps_grid_ang
+      requested = .true.
+    else
+      ! --- coarse-to-fine, ON by default (opt out with OQP_XC_C2F=0) ---
+      c2f_off = .false.
+      call get_environment_variable("OQP_XC_C2F", ev, el)
+      if (el > 0) c2f_off = (ev(1:1)=='0' .or. ev(1:1)=='n' .or. ev(1:1)=='N' &
+                             .or. ev(1:1)=='f' .or. ev(1:1)=='F')
+      if (.not. c2f_off .and. c2f_grid_eligible(infos)) then
+        rad = 50; ang = 110
+        call get_environment_variable("OQP_XC_C2F_RAD", ev, el)
+        if (el > 0) read(ev,*,iostat=el) rad
+        call get_environment_variable("OQP_XC_C2F_ANG", ev, el)
+        if (el > 0) read(ev,*,iostat=el) ang
+        requested = (rad > 0 .and. ang > 0)
+      end if
+    end if
+    if (.not. requested) return
+
+    ! Build the coarse grid; keep it only if it is genuinely cheaper (by true
+    ! built point count, so a sparse pruned production grid such as SG-0 -- which
+    ! can be cheaper than the requested dense coarse grid -- correctly opts out).
+    call dft_build_grid_sized(infos, basis, coarseGrid, rad, ang)
+    if (coarseGrid%nMolPts >= nint(0.9_dp * real(molGrid%nMolPts, dp))) then
+      write(iw,'(5x,a,i0,a,i0,a)') &
+        'Coarse-to-fine XC grid: disabled, coarse (', coarseGrid%nMolPts, &
+        ' pts) not cheaper than production (', molGrid%nMolPts, ' pts)'
+      return
+    end if
+    have_coarse = .true.
+    write(iw,'(5x,a,i0,a,i0,a,i0,a,i0,a)') &
+      'Coarse-to-fine XC grid: coarse ', rad, ' x ', ang, ' (', coarseGrid%nMolPts, &
+      ' pts) during descent, production (', molGrid%nMolPts, ' pts) in the tail'
+  end subroutine dft_setup_descent_grid
+
+!>  @brief Safety guards for the default-on coarse-to-fine grid ramp.
+!>  @detail Returns .true. only when the coarse stage is safe for an unattended,
+!>          default-on run: a pure-DIIS converger (converger_type==0=scf_diis),
+!>          at least two SCF iterations, no level shift on a non-VDIIS converger
+!>          (its shut-off is tied to the convergence test), and a non-Minnesota
+!>          functional. Explicit progressive-screening requests bypass this (the
+!>          user opted in) -- see dft_setup_descent_grid.
+  logical function c2f_grid_eligible(infos) result(ok)
+    use types, only: information
+    implicit none
+    type(information), intent(in) :: infos
+    ok = .false.
+    if (infos%control%converger_type /= 0) return     ! pure DIIS only (scf_diis=0)
+    if (infos%control%maxit < 2) return                ! need a coarse + a production iter
+    if (infos%control%vshift /= 0.0_dp .and. infos%control%diis_type /= 5) return
+    if (xc_is_grid_sensitive(infos)) return            ! Minnesota family
+    ok = .true.
+  end function c2f_grid_eligible
+
+!>  @brief Detect grid-sensitive (Minnesota-family) functionals, for which a
+!>         coarse integration grid produces large errors and must be avoided.
+!>  @detail Matches the functional name (case- and separator-insensitive) against
+!>          the Minnesota families M05/M06/M08/M11/MN1x/SOGGA11 and revised (revM*)
+!>          variants.
+  logical function xc_is_grid_sensitive(infos) result(sensitive)
+    use types, only: information
+    use strings, only: c_f_char
+    implicit none
+    type(information), intent(in) :: infos
+    character(len=:), allocatable :: nm
+    character(len=40) :: u
+    integer :: i, k
+    character :: c
+
+    nm = c_f_char(infos%dft%xc_functional_name)
+    u = ''
+    k = 0
+    do i = 1, len_trim(nm)
+      c = nm(i:i)
+      if (c == '-' .or. c == '_' .or. c == ' ') cycle
+      if (c >= 'a' .and. c <= 'z') c = achar(iachar(c) - 32)
+      k = k + 1
+      if (k <= len(u)) u(k:k) = c
+    end do
+
+    sensitive = index(u, 'M05')     == 1 .or. &
+                index(u, 'M06')     == 1 .or. &
+                index(u, 'M08')     == 1 .or. &
+                index(u, 'M11')     == 1 .or. &
+                index(u, 'MN1')     == 1 .or. &
+                index(u, 'SOGGA11') == 1 .or. &
+                index(u, 'REVM')    == 1
+  end function xc_is_grid_sensitive
 
 !>  @brief Calculates atomic distances
   subroutine get_atomic_distances(xyz, rij)

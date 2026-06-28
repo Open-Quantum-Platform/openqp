@@ -2409,7 +2409,8 @@ contains
     cache_on = xc_opts%use_phi_cache .and. phi_cache_env_enabled()
     ghash = 0_i8b
     if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
-    call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, xc_opts%numAOs, &
+    call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
+             xc_opts%molGrid%nMolPts, xc_opts%numAOs, &
              numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
     cache_replay = g_phi_cache%active .and. g_phi_cache%replay
 
