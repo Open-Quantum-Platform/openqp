@@ -243,18 +243,9 @@ contains
 
     nvec = min(max(nstates,6), mxvec)
 
-    call infos%dat%remove_records(tags_alloc)
-
-    call infos%dat%reserve_data(OQP_td_bvec_mo, TA_TYPE_REAL64, &
-        xvec_dim*nstates, (/xvec_dim, nstates/), comment=OQP_td_bvec_mo_comment)
-    call infos%dat%reserve_data(OQP_td_t, TA_TYPE_REAL64, nbf2*2, (/ nbf2, 2 /), comment=OQP_td_t_comment)
-    call infos%dat%reserve_data(OQP_td_energies, TA_TYPE_REAL64, nstates, comment=OQP_td_energies_comment)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo_out)
-
-    call tagarray_get_data(infos%dat, OQP_td_t, td_t)
-    call tagarray_get_data(infos%dat, OQP_td_energies, mrsf_energies)
+    call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
+    call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
+    call infos%dat%alloc_or_die(OQP_td_energies, (/ nstates /), mrsf_energies, description=OQP_td_energies_comment)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)

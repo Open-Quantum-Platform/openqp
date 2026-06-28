@@ -362,35 +362,20 @@ contains
         vro(:,ist) = vro(:,ist) * norm
     end do
 
-    call infos%dat%remove_records(tags_alloc)
+    call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 1 /), td_t, description=OQP_td_t_comment)
 
-    call infos%dat%reserve_data(OQP_td_t, &
-            TA_TYPE_REAL64, &
-            nbf2, [nbf2, 1], &
-            comment=OQP_td_t_comment)
+    call infos%dat%alloc_or_die(OQP_td_xpy, (/ lexc, nstates /), xpy, &
+            description="(X+Y) vector for target state in TD-DFT calculations")
 
-    call infos%dat%reserve_data(OQP_td_xpy, &
-            TA_TYPE_REAL64, &
-            lexc*nstates, [lexc, nstates], &
-            comment="(X+Y) vector for target state in TD-DFT calculations")
+    call infos%dat%alloc_or_die(OQP_td_xmy, (/ lexc, nstates /), xmy, &
+            description="(X-Y) vector for target state in TD-DFT calculations")
 
-    call infos%dat%reserve_data(OQP_td_xmy, &
-            TA_TYPE_REAL64, &
-            lexc*nstates, [lexc, nstates], &
-            comment="(X-Y) vector for target state in TD-DFT calculations")
+    call infos%dat%alloc_or_die(OQP_td_energies, (/ nstates /), td_energies, &
+            description=OQP_td_energies_comment)
 
-    call infos%dat%reserve_data(OQP_td_energies, &
-            TA_TYPE_REAL64, &
-            nstates, [nstates], &
-            comment=OQP_td_energies_comment)
-
-    call tagarray_get_data(infos%dat, OQP_td_t, td_t)
-    call tagarray_get_data(infos%dat, OQP_td_xpy, xpy)
-    call tagarray_get_data(infos%dat, OQP_td_xmy, xmy)
     xpy = vro(:,:nstates)
     xmy = vlo(:,:nstates)
 
-    call tagarray_get_data(infos%dat, OQP_td_energies, td_energies)
     td_energies = eex(:nstates)
     infos%mol_energy%excited_energy = td_energies(infos%tddft%target_state)
 

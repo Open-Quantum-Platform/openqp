@@ -263,26 +263,19 @@ contains
          ekt_occ_tol, eig, orbitals, strengths, metric_norms, dom_mo_idx, &
          dom_mo_coeff, dom_no_idx, dom_no_coeff, dom_no_occ, nactive, iw)
 
-    call infos%dat%remove_records(tags_alloc)
-    call infos%dat%reserve_data(OQP_mrsf_ekt_density_mo, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), &
-        comment='MRSF-EKT metric density P in MO basis')
-    call infos%dat%reserve_data(OQP_mrsf_ekt_lagrangian_mo, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), &
-        comment='MRSF-EKT Lagrangian W in MO basis')
-    call infos%dat%reserve_data(OQP_mrsf_ekt_fock_mo, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), &
-        comment='MRSF-EKT Fock matrix in MO basis')
-    call infos%dat%reserve_data(OQP_mrsf_ekt_orbitals_mo, TA_TYPE_REAL64, nbf*nroot, (/ nbf, nroot /), &
-        comment='MRSF-EKT Dyson-like orbital coefficients in MO basis')
-    call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues, TA_TYPE_REAL64, nroot, &
-        comment='MRSF-EKT generalized-eigenproblem eigenvalues in Hartree')
-    call infos%dat%reserve_data(OQP_mrsf_ekt_strengths, TA_TYPE_REAL64, nroot, &
-        comment='MRSF-EKT pole strengths')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_density_mo, (/ nbf, nbf /), density_store, &
+        description='MRSF-EKT metric density P in MO basis')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_lagrangian_mo, (/ nbf, nbf /), lagrangian_store, &
+        description='MRSF-EKT Lagrangian W in MO basis')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_fock_mo, (/ nbf, nbf /), fock_store, &
+        description='MRSF-EKT Fock matrix in MO basis')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_orbitals_mo, (/ nbf, nroot /), orbital_store, &
+        description='MRSF-EKT Dyson-like orbital coefficients in MO basis')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_eigenvalues, (/ nroot /), eig_store, &
+        description='MRSF-EKT generalized-eigenproblem eigenvalues in Hartree')
+    call infos%dat%alloc_or_die(OQP_mrsf_ekt_strengths, (/ nroot /), strength_store, &
+        description='MRSF-EKT pole strengths')
 
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_density_mo, density_store)
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_lagrangian_mo, lagrangian_store)
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_fock_mo, fock_store)
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_orbitals_mo, orbital_store)
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues, eig_store)
-    call tagarray_get_data(infos%dat, OQP_mrsf_ekt_strengths, strength_store)
     density_store = density_mo
     lagrangian_store = lagrangian_mo
     fock_store = fock_mo

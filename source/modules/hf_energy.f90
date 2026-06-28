@@ -30,6 +30,7 @@ contains
     use strings, only: Cstring, fstring
     use mod_dft_molgrid, only: dft_grid_t
     use printing, only: print_module_info
+    use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t
 
     implicit none
 
@@ -38,6 +39,7 @@ contains
     type(information), target, intent(inout) :: infos
 
     integer :: nbf2, nbf, nsh2
+    integer(c_int32_t) :: ierr
     logical :: urohf, dft
     type(basis_set), pointer :: basis
     type(dft_grid_t) :: molGrid
@@ -65,14 +67,10 @@ contains
     nsh2 = (basis%nshell**2+basis%nshell)/2
 
     ! clean data
-    call infos%dat%remove_records((/ character(len=80) :: OQP_FOCK_A, OQP_FOCK_B /))
-
-    call infos%dat%reserve_data(OQP_FOCK_A, TA_TYPE_REAL64, nbf2, comment=OQP_FOCK_A_comment)
-    call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_FOCK_A)
+    ierr = infos%dat%create(OQP_FOCK_A, TA_TYPE_REAL64, int([nbf2], c_int64_t), description=OQP_FOCK_A_comment, override=.true.)
 
     if (urohf) then
-      call infos%dat%reserve_data(OQP_FOCK_B, TA_TYPE_REAL64, nbf2, comment=OQP_FOCK_B_comment)
-      call check_status(infos%dat%get_status(), module_name, subroutine_name, OQP_FOCK_B)
+      ierr = infos%dat%create(OQP_FOCK_B, TA_TYPE_REAL64, int([nbf2], c_int64_t), description=OQP_FOCK_B_comment, override=.true.)
     end if
 
 !   Prepare dft grid

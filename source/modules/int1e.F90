@@ -84,18 +84,13 @@ contains
 !   Allocate H, S and T matrices
     nbf2 = basis%nbf*(basis%nbf+1)/2
 
-    call infos%dat%remove_records(tags_general)
 !   The overlap matrix changes, so the cached Q = S^(-1/2) is stale
-    call infos%dat%remove_records(tags_stale)
+    call infos%dat%erase(tags_stale)
 
-    call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
-    call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)
-    call infos%dat%reserve_data(OQP_Hcore, TA_TYPE_REAL64, nbf2, comment=OQP_Hcore_comment)
-
-    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_SM, smat)
-    call tagarray_get_data(infos%dat, OQP_TM, tmat)
-    call tagarray_get_data(infos%dat, OQP_Hcore, Hcore)
+!   Allocate H, S and T and bind typed pointers (one call each)
+    call infos%dat%alloc_or_die(OQP_SM,    (/ nbf2 /), smat,  description=OQP_SM_comment)
+    call infos%dat%alloc_or_die(OQP_TM,    (/ nbf2 /), tmat,  description=OQP_TM_comment)
+    call infos%dat%alloc_or_die(OQP_Hcore, (/ nbf2 /), hcore, description=OQP_Hcore_comment)
 
 !   Create arrays of atomic coordinates and charges for one-electron code
     nbf = basis%nbf

@@ -4,7 +4,7 @@ set(_OQP_EXTERNALS_CACHE_REVISION "1")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_NLOPT_VERSION "2.9.1")
 set(_OQP_LIBXC_VERSION "7.0.0")
-set(_OQP_TAGARRAY_VERSION "0.0.6")
+set(_OQP_TAGARRAY_VERSION "1.0.0")
 set(_OQP_LIBECPINT_VERSION "1.0.7")
 set(_OQP_LAPACK_VERSION "3.10.0")
 set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
@@ -296,23 +296,39 @@ oqp_reuse_or_build(libtagarray
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray_f${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/include/tagarray")
+# tagarray's high-level helpers (c%alloc / alloc_or_die) take default-INTEGER
+# shapes and a default-LOGICAL override, so the library must be built with the
+# same default integer kind as OpenQP. OpenQP promotes its default integer (and
+# logical) to 8 bytes for ILP64 via add_compile_options(-fdefault-integer-8 /
+# -i8), which ExternalProject does NOT inherit; forward it explicitly here so
+# the kinds match (otherwise alloc_or_die / create(override=...) fail to resolve
+# in ILP64 builds).
+set(_TAGARRAY_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}")
+if(LINALG_LIB_INT64)
+  if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -fdefault-integer-8")
+  elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -i8")
+  endif()
+endif()
 if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
         PREFIX ${TAGARRAY_PREFIX}
-        URL https://github.com/foxtran/libtagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
-        URL_HASH SHA256=9c844092f123276bb461e37e3451068c097b5a1fec9d65514ad3018baaeb2b32
-#        GIT_REPOSITORY https://github.com/foxtran/libtagarray.git
+        URL https://github.com/Open-Quantum-Platform/tagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
+        URL_HASH SHA256=590896bcdaadca4c3466474d35eff06ed4090c42d37a3f8ddda0def83833c6c5
+#        GIT_REPOSITORY https://github.com/Open-Quantum-Platform/tagarray.git
 #        GIT_TAG master
         SOURCE_DIR ${TAGARRAY_SOURCE_DIR}
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
-        PATCH_COMMAND sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
+                   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   "-DCMAKE_Fortran_FLAGS=${_TAGARRAY_Fortran_FLAGS}"
                    ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
 endif()

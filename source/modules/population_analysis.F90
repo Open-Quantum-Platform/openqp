@@ -190,8 +190,7 @@ contains
     integer :: nat
 
     nat = size(chg)
-    call infos%dat%reserve_data(tag, TA_TYPE_REAL64, nat, comment=comment)
-    call tagarray_get_data(infos%dat, tag, chgout)
+    call infos%dat%alloc_or_die(tag, (/ nat /), chgout, description=comment)
     chgout(1:nat) = chg(1:nat)
   end subroutine store_atom_charges
 

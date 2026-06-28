@@ -180,16 +180,9 @@ contains
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    call infos%dat%remove_records(tags_alloc)
-
-    call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf_tri, comment=OQP_WAO_comment)
-    call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf_tri*2, (/ nbf_tri, 2 /), comment=OQP_td_p_comment)
-    call infos%dat%reserve_data(OQP_td_abxc, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_td_abxc)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_WAO, wao)
-    call tagarray_get_data(infos%dat, OQP_td_p, td_p)
-    call tagarray_get_data(infos%dat, OQP_td_abxc, td_abxc)
+    call infos%dat%alloc_or_die(OQP_WAO, (/ nbf_tri /), wao, description=OQP_WAO_comment)
+    call infos%dat%alloc_or_die(OQP_td_p, (/ nbf_tri, 2 /), td_p, description=OQP_td_p_comment)
+    call infos%dat%alloc_or_die(OQP_td_abxc, (/ nbf, nbf /), td_abxc, description=OQP_td_abxc)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
