@@ -1,12 +1,16 @@
 !> UMRSF-TDDFT analytic nuclear gradient — clean-room implementation (branch uhf-grad-plan).
 !>
-!> VALIDATED SCOPE (2026-06-28): PURE-HF response gradient (no XC). S1 gate PASS (≤1e-5, RULES §11) at
-!> EQUILIBRIUM geometries — CH2 4.3e-7, SiH2 2.5e-7, H2CO 4.0e-6, butadiene 4.6e-6. S3 effectively passes;
-!> S2 is analytic-EXACT (clean internals) but alignment/tracking-limited at the FD. KNOWN-OPEN (see
-!> ../../RULES.md §17/§18 and PROGRESS.md): (A) distorted/diradical geometries + S2 are limited by the
-!> TRUSTED ENERGY's get_jacobi gauge under-convergence — fix = unify energy get_jacobi onto the cyclic
-!> umrsf_jacobi_smooth (MILESTONE A, validate vs GAMESS); (B) functionals are NOT implemented — the response
-!> is missing the XC kernel + grid-weight derivatives (MILESTONE B, after A).
+!> VALIDATED SCOPE (2026-06-28, post-MILESTONE-A): PURE-HF response gradient (no XC). S1 gate PASS
+!> (≤1e-5, RULES §11) EVERYWHERE — CH2(eq) 1.4e-7, SiH2 2.5e-8, H2CO 5.6e-7, C2H4-MEP(diradical) 4.6e-7,
+!> stretched-CH2 5.7e-8. S3 also passes (CH2 1.5e-7). MILESTONE A (RULES §17) DONE: the energy's
+!> get_jacobi (tdhf_mrsf_lib.F90) was unified onto the SAME cyclic+converged algorithm as umrsf_jacobi_smooth
+!> (max|btt|<1e-12), so energy and analytic share ONE basin by construction (|δ vs td|→1e-15, smooth polish
+!> a no-op). This CLOSED the distorted/diradical geometries that were gauge-limited (C2H4 1.19e-5→4.6e-7,
+!> stretched-CH2 1.89e-4→5.7e-8) with NO regression (GAMESS-cross-checked; SCF ref unchanged). S2 remains
+!> 1.3e-2 — NOT a gauge issue (analytic internally EXACT ≤1e-11): a confirmed STATE-TRACKING root-flip
+!> (FD energy-rank vs analytic amplitude; sign-flip on the symmetry-breaking component) ⇒ §9-EXCLUDED,
+!> pending the §11 character-following FD harness (independent of A/B). KNOWN-OPEN: (B) functionals NOT
+!> implemented — the response is missing the XC kernel + grid-weight derivatives (MILESTONE B, after A).
 !>
 !> The C entry computes the reference (UHF-triplet) gradient via the reusable hf_gradient primitive
 !> (grd1/grd2 with the converged DM_A/DM_B) — already FD-certified to 1.46e-7 — plus the response:
@@ -199,11 +203,12 @@ contains
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 0)
     call get_jacobi(infos, va, ea, vb, eb, smat_full, nocca, wrk1, wrk2, 1)
 
-    ! ---- MILESTONE (RULES §15 step 2.1): SMOOTH/converged get_jacobi alignment ----
-    ! The energy's get_jacobi stops at a 1e-3 threshold (+ min-|θ| early exit), leaving within-segment
-    ! cross-overlaps up to ~1e-3 — THE contamination of the earlier numerical-RHS z. The analytic
-    ! gradient needs the converged fixed point (within-seg off-diags → 0) so G^f = V G̃ Vᵀ is exact.
-    ! Polish va,vb (already threshold-aligned ⇒ correct basin + sign convention) to convergence.
+    ! ---- SMOOTH/converged get_jacobi alignment (RULES §15 step 2.1; §17 aligner unification) ----
+    ! POST-MILESTONE-A: get_jacobi (above) is now itself cyclic+converged (max|btt|<1e-12), so va,vb
+    ! arrive ALREADY at the converged fixed point and this umrsf_jacobi_smooth call is a CONFIRMING
+    ! NO-OP (polish size → ~1e-13). Kept as a defensive re-convergence + the authoritative residual/
+    ! S-orthonormality gate. The analytic gradient needs the converged fixed point (within-seg btt → 0)
+    ! so G^f = V G̃ Vᵀ is exact; by §17 the energy uses the SAME aligner ⇒ same basin by construction.
     block
       real(kind=dp), allocatable :: va_thr(:,:), vb_thr(:,:)
       real(kind=dp) :: off_thr, off_smooth, dva, orthoa, orthob
@@ -218,9 +223,9 @@ contains
       orthob = maxval(abs(matmul(transpose(vb), matmul(smat_full, vb)) - id_nbf(nbf)))
       ! iw is already open (line above) — write directly; do NOT close (G1 gate below shares the bracket).
       write(iw,'(/2x,a)') '========= UMRSF gradient: SMOOTH get_jacobi alignment (§15 step 2.1) ========='
-      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) THRESHOLD (1e-3+minθ) = ', off_thr
-      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) SMOOTH (converged)    = ', off_smooth
-      write(iw,'(2x,a,es12.3)') '||va_smooth - va_thr||_1 (within-seg polish size)        = ', dva
+      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) get_jacobi (§17 cyclic) = ', off_thr
+      write(iw,'(2x,a,es12.3)') 'within-seg max|btt| (stationarity) SMOOTH (re-converged)   = ', off_smooth
+      write(iw,'(2x,a,es12.3)') '||va_smooth - va_thr||_1 (polish size; →0 post-§17)        = ', dva
       write(iw,'(2x,a,2es12.3)') 'S-orthonormality max|CᵀSC−I| alpha/beta (smooth)        = ', orthoa, orthob
       if (off_smooth <= 1.0e-10_dp .and. max(orthoa,orthob) <= 1.0e-9_dp) then
         write(iw,'(2x,a)') 'VERDICT: smooth alignment CONVERGED (max|btt| → 0; S-orthonormal). '// &
