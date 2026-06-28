@@ -700,6 +700,13 @@ contains
           .and. diis_error < ps_tight) then
         ps_pin = .true.
       end if
+      ! Fail-safe: also pin in the final iterations, so a run that exhausts maxit
+      ! without converging still reports a full-accuracy (full-grid, tight-cutoff)
+      ! state -- and hands a full-grid warm-start to any convergence-escalation
+      ! restart -- rather than a loose/coarse one.
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin .and. iter >= maxit - 2) then
+        ps_pin = .true.
+      end if
 
       ! Progressive screening: pick this iteration's 2e cutoff. Loose early
       ! (coupled to the previous iteration's DIIS error), pinned to the user's
@@ -989,12 +996,21 @@ contains
         end if
         if (stall_count >= 12 .and. iter >= 20 .and. &
             diis_error > infos%control%conv) then
-          write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
-               &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
-               diis_error, stall_count
-          infos%mol_energy%SCF_converged = .false.
-          stalled_exit = .true.
-          exit
+          if (ps_grid_on .and. .not. ps_pin) then
+            ! Stalled while still on the coarse descent grid: pin to the full grid
+            ! and give it a chance before handing off, so the reported state (and
+            ! any escalation warm-start) comes from the full grid, not the coarse one.
+            ps_pin = .true.
+            stall_best  = huge(1.0_dp)
+            stall_count = 0
+          else
+            write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
+                 &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
+                 diis_error, stall_count
+            infos%mol_energy%SCF_converged = .false.
+            stalled_exit = .true.
+            exit
+          end if
         end if
       end if
 
