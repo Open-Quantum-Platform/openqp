@@ -116,11 +116,14 @@ target_include_directories(oqp PUBLIC
 # linked after the static liblapack/libblas archives. With a static NetLib build
 # the linker has already passed those archives, so the referenced objects are
 # never pulled in and liboqp.so ends up with an undefined symbol that only bites
-# at load time (e.g. `import oqp`). Wrap the dispersion libs together with
-# LAPACK/BLAS in a RESCAN group so the cross-references resolve regardless of
-# order. (For shared BLAS/LAPACK, e.g. macOS Accelerate, LIBLAPACK is unset and
-# symbols resolve dynamically, so the plain link is used.)
-if(LIBLAPACK)
+# at load time (e.g. `import oqp`). On GNU ld, wrap the dispersion libs together
+# with LAPACK/BLAS in a RESCAN group (--start-group/--end-group) so the
+# cross-references resolve regardless of order. This is NOT used on Apple: ld64
+# does not support --start-group, and it resolves cross-archive references by a
+# global symbol scan anyway, so the plain link is correct there. (For shared
+# BLAS/LAPACK, e.g. macOS Accelerate, LIBLAPACK is unset and symbols resolve
+# dynamically, so the plain link is used too.)
+if(LIBLAPACK AND NOT APPLE)
   target_link_libraries(oqp
           "$<LINK_GROUP:RESCAN,${DFTD4_INSTALL}/lib/libdftd4.a,${DFTD4_INSTALL}/lib/libmulticharge.a,${DFTD4_INSTALL}/lib/libmctc-lib.a,${LIBLAPACK},${LIBBLAS}>")
 else()
