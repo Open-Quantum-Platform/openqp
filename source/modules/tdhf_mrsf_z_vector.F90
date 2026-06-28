@@ -150,10 +150,13 @@ contains
     character(len=32) :: e_
     integer :: ios
     if (zv_cfg_init) return
-    ! Opt-in, DEFAULT OFF (upstream convention; enable with OQP_MRSF_ZV_WARMSTART=1).
+    ! Warm-start DEFAULT ON: it is result-neutral (a CG initial guess only; the
+    ! solve still converges to the same tolerance), so it cannot change a
+    ! converged single-point gradient. Disable with OQP_MRSF_ZV_WARMSTART=0.
     call get_environment_variable('OQP_MRSF_ZV_WARMSTART', e_)
-    zv_warm_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
-        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    zv_warm_on = .true.
+    if (len_trim(e_) > 0) zv_warm_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
+        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
     call get_environment_variable('OQP_MRSF_ZV_CONV', e_)
     if (len_trim(e_) > 0) then
       read(e_,*,iostat=ios) zv_conv_user

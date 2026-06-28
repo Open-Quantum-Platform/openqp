@@ -5,15 +5,17 @@ Target: the MRSF-TDDFT analytic excited-state **gradient** Z-vector solve
 (max-component error in a.u. vs the tight `zvconv=1e-10` baseline), which is far
 stricter than the excitation-energy criterion.
 
-**Defaults: every lever is opt-in, DEFAULT OFF** (enable with `=1`), matching the
-upstream convention for performance features (cf. `docs/progressive_screening.md`
-for SCF, PRs #236/#238/#242/#244) and keeping the default path **bit-identical**
-so the registry-driven golden references (#237) pass unchanged. The whole
-example test suite passes with all levers off (235/235, 2 skipped). At the
-shipped default `zvconv=1e-6` the levers *do* change the loosely-converged result
-(that is why they are not default-on); enable them per-run for the speedups
-documented below — ideally together with a tighter `OQP_MRSF_ZV_CONV` so the
-converged gradient is well-defined.
+**Defaults:** **warm-start is ON by default** (`OQP_*_ZV_WARMSTART`, disable with
+`=0`); it is a result-neutral CG initial guess, so single-point gradients are
+bit-identical. The remaining levers (progressive screening, Jacobi guess, coarse
+grid, static cutoff, zvconv override) are **opt-in, DEFAULT OFF** (enable with
+`=1`), matching the upstream convention for accuracy-changing performance
+features (cf. `docs/progressive_screening.md`, PRs #236/#238/#242/#244) and
+keeping the default path bit-identical so the registry golden references (#237)
+pass. Caveat: at the shipped loose `zvconv=1e-6`, warm-start nudges two sensitive
+saddle-point optimizations (MECP/TS) within the loose z-vector precision (coord
+≤2.6e-3); those two references were regenerated. Enabling the opt-in levers
+pairs best with a tighter `OQP_*_ZV_CONV` so the converged result is well-defined.
 
 Companion to the response-side work (PR #236, `perf/mrsf-fock-digestion`).
 
