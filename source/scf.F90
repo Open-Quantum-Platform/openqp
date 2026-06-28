@@ -64,7 +64,7 @@ contains
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
-    use mod_dft_incdft, only: incdft_env_enabled, incdft_should_reuse, incdft_reset
+    use mod_dft_incdft, only: incdft_should_reuse, incdft_reset
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
@@ -351,7 +351,8 @@ contains
     end if
 
     ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
-    use_incdft = is_dft .and. incdft_env_enabled()
+    ! Controlled by [scf] xc_incdft (infos%control%xc_incdft).
+    use_incdft = is_dft .and. (infos%control%xc_incdft /= 0)
     if (use_incdft) call incdft_reset()
 
     !==============================================================================
@@ -579,12 +580,10 @@ contains
     ! coarse grid was provided.
     ps_grid_on = present(coarseGrid)
     ! When the grid ramp runs without integral screening, it still needs a pin
-    ! threshold: use the coarse-to-fine switch threshold (OQP_XC_C2F_SWITCH,
-    ! default 1e-2). With integral screening on, ps_tight (above) governs both.
+    ! threshold: the coarse-to-fine switch threshold (fixed 1e-2, floored at
+    ! 10*conv). With integral screening on, ps_tight (above) governs both.
     if (ps_grid_on .and. .not. ps_on) then
       ps_tight = 1.0e-2_dp
-      call get_environment_variable("OQP_XC_C2F_SWITCH", ps_env, ps_ln)
-      if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_tight
       ps_tight = max(ps_tight, 10.0_dp * infos%control%conv)
     end if
     ps_cur_grid => molGrid

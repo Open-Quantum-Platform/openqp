@@ -10,7 +10,7 @@ module mod_dft_gridint
   use oqp_linalg
   use blas_wrap, only: oqp_ddot => oqp_ddot_i64
   use parallel, only: par_env_t
-  use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash, phi_cache_env_enabled
+  use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash
   implicit none
 
 !###############################################################################
@@ -2406,7 +2406,7 @@ contains
     nAODer_c = xc_opts%nDer
     if (xc_opts%isGGA .or. xc_opts%needTau) nAODer_c = nAODer_c + 1
     numAOVecs_c = nAOVecs_tbl(nAODer_c)
-    cache_on = xc_opts%use_phi_cache .and. phi_cache_env_enabled()
+    cache_on = xc_opts%use_phi_cache
     ghash = 0_i8b
     if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
     call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &

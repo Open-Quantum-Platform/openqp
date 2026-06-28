@@ -160,6 +160,14 @@ struct control_parameters {
     bool      sd_scf;
     bool      pcm_enabled;
     double    pcm_epsilon;
+    /* Performance knobs -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   xc_c2f;
+    int64_t   xc_phi_cache;
+    int64_t   xc_incdft;
+    double    grad_cutoff;
+    double    mrsf_resp_cutoff;
+    int64_t   mrsf_fp32;
+    int64_t   mrsf_zv_warmstart;
 };
 
 struct mpi_communicator {

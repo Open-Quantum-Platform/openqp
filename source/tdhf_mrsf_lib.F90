@@ -42,15 +42,15 @@ contains
   !> cc-pVDZ; excitation energies perturbed at the ~few-ueV level, Davidson
   !> convergence unchanged). Default off = exact FP64.
   subroutine ensure_mrsf_fp32()
-    character(len=8) :: e_
-    if (g_mrsf_fp32 < 0) then
-      call get_environment_variable('OQP_MRSF_FP32', e_)
-      if (len_trim(e_) > 0) then
-        read(e_,*) g_mrsf_fp32
-      else
-        g_mrsf_fp32 = 0
-      end if
-    end if
+    ! g_mrsf_fp32 is set from [tdhf] fp32 via mrsf_set_fp32() before the response;
+    ! default to off (0) if it was never set.
+    if (g_mrsf_fp32 < 0) g_mrsf_fp32 = 0
+  end subroutine
+
+  !> Set the FP32 response-digestion flag from the control struct ([tdhf] fp32).
+  subroutine mrsf_set_fp32(v)
+    integer, intent(in) :: v
+    g_mrsf_fp32 = v
   end subroutine
 
 !###############################################################################

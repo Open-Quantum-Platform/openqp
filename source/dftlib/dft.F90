@@ -540,17 +540,11 @@ contains
       rad = ps_grid_rad; ang = ps_grid_ang
       requested = .true.
     else
-      ! --- coarse-to-fine, ON by default (opt out with OQP_XC_C2F=0) ---
-      c2f_off = .false.
-      call get_environment_variable("OQP_XC_C2F", ev, el)
-      if (el > 0) c2f_off = (ev(1:1)=='0' .or. ev(1:1)=='n' .or. ev(1:1)=='N' &
-                             .or. ev(1:1)=='f' .or. ev(1:1)=='F')
+      ! --- coarse-to-fine, controlled by [scf] xc_c2f (infos%control%xc_c2f,
+      !     1=on default; opt out with xc_c2f=off). Coarse grid fixed at 50x110. ---
+      c2f_off = (infos%control%xc_c2f == 0)
       if (.not. c2f_off .and. c2f_grid_eligible(infos)) then
         rad = 50; ang = 110
-        call get_environment_variable("OQP_XC_C2F_RAD", ev, el)
-        if (el > 0) read(ev,*,iostat=el) rad
-        call get_environment_variable("OQP_XC_C2F_ANG", ev, el)
-        if (el > 0) read(ev,*,iostat=el) ang
         requested = (rad > 0 .and. ang > 0)
       end if
     end if

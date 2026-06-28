@@ -175,6 +175,16 @@ module types
     ! PCM implicit solvent (energy-only, ddX backend; off by default)
     logical(c_bool) :: pcm_enabled = .false.     !< Enable PCM reaction-field contribution to SCF
     real(c_double)  :: pcm_epsilon = 78.3553_dp  !< Solvent dielectric constant (water default)
+    ! Performance knobs -- set from input keys via the control struct (see
+    ! pyoqp utils/perf_levels.py and the `perf` preset). Defaults reproduce the
+    ! historic behaviour. Kept in sync with struct control_parameters in include/oqp.h.
+    integer(c_int64_t) :: xc_c2f            = 1         !< coarse-to-fine XC grid (1=on, default)
+    integer(c_int64_t) :: xc_phi_cache      = 0         !< cache collocation Phi across SCF iters
+    integer(c_int64_t) :: xc_incdft         = 0         !< incremental DFT (experimental)
+    real(c_double)     :: grad_cutoff       = 1.0d-10   !< 2e-derivative Schwarz cutoff (gradient)
+    real(c_double)     :: mrsf_resp_cutoff  = 1.0d-8    !< MRSF response 2e cutoff
+    integer(c_int64_t) :: mrsf_fp32         = 0         !< FP32 MRSF response digestion
+    integer(c_int64_t) :: mrsf_zv_warmstart = 1         !< MRSF z-vector warm-start (1=on, default)
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

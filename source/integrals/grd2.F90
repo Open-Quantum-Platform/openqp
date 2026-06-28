@@ -173,10 +173,8 @@ contains
 
     real(kind=dp) :: rtol, dtol
 
-    integer :: itmp
     character(len=64) :: sval
     integer :: ln
-    real(kind=dp) :: cutval
     logical :: lstats
 
     type(grd2_int_data_t) :: gdat
@@ -209,12 +207,10 @@ contains
 !                       it to larger sizes).  Looser still is unsafe: derivative
 !                       integrals amplify the dropped contributions.  See
 !                       GRAD_SCREENING_NOTES.md for the per-size/method table.
-    cutoff = 1.0d-10
-    call get_environment_variable("OQP_GRAD_CUTOFF", sval, ln)
-    if (ln > 0) then
-      read(sval,*,iostat=itmp) cutval
-      if (itmp == 0 .and. cutval > 0.0_dp) cutoff = cutval
-    end if
+    ! Schwarz block cutoff for the 2e-derivative build, from [scf] grad_cutoff
+    ! (infos%control%grad_cutoff; default 1.0d-10 = historic exact baseline).
+    cutoff = infos%control%grad_cutoff
+    if (cutoff <= 0.0_dp) cutoff = 1.0d-10
     cutoff2 = cutoff/2.0d+00
 
     zbig = maxval(basis%ex)

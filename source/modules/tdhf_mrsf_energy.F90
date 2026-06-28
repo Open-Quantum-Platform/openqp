@@ -84,7 +84,7 @@ contains
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
-      get_mrsf_transition_density, get_jacobi, umrsfssqu
+      get_mrsf_transition_density, get_jacobi, umrsfssqu, mrsf_set_fp32
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -132,7 +132,6 @@ contains
     integer :: ierr
     logical :: converged
     real(kind=dp) :: rc_save, rc_new
-    character(len=64) :: rc_env
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
@@ -404,11 +403,16 @@ contains
     ! the SCF cutoff (5e-11) to recover the previous exact-tight behavior.
     ! max(SCF cutoff, requested) never goes tighter than the SCF integrals.
     ! Restored after the response so SCF / later steps are unaffected.
+    ! Response 2e cutoff from [tdhf] resp_cutoff (infos%control%mrsf_resp_cutoff,
+    ! default 1e-8). max(SCF cutoff, requested) never goes tighter than SCF.
     rc_save = infos%control%int2e_cutoff
-    rc_new = 1.0e-8_dp
-    call get_environment_variable('OQP_MRSF_RESP_CUTOFF', rc_env)
-    if (len_trim(rc_env) > 0) read(rc_env,*) rc_new
+    rc_new = infos%control%mrsf_resp_cutoff
+    if (rc_new <= 0.0_dp) rc_new = 1.0e-8_dp
     infos%control%int2e_cutoff = max(rc_save, rc_new)
+
+    ! FP32 response digestion from [tdhf] fp32 (infos%control%mrsf_fp32). Also
+    ! reaches the z-vector gradient, which reuses the same process-global flag.
+    call mrsf_set_fp32(int(infos%control%mrsf_fp32))
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
