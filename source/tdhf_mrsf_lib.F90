@@ -1,6 +1,6 @@
 module tdhf_mrsf_lib
 
-    use precision, only : dp
+    use precision, only : dp, sp
     use int2_compute, only: int2_fock_data_t, int2_storage_t
     use basis_tools, only: basis_set
     use oqp_linalg
@@ -9,6 +9,10 @@ module tdhf_mrsf_lib
 
       real(kind=dp), allocatable :: f3(:,:,:,:,:)
       real(kind=dp), pointer :: d3(:,:,:,:) => null()
+      real(kind=dp), allocatable :: ds(:,:,:,:) !< symmetrized Coulomb density (comps 1:4), precomputed once
+      real(kind=sp), allocatable :: ds_sp(:,:,:,:) !< FP32 copy of ds (opt-in OQP_MRSF_FP32)
+      real(kind=sp), allocatable :: d3_sp(:,:,:,:) !< FP32 copy of d3 (opt-in OQP_MRSF_FP32)
+      real(kind=sp), allocatable :: f3s(:,:,:,:,:) !< FP32 Fock accumulator (opt-in OQP_MRSF_FP32)
       logical :: tamm_dancoff = .true. !< Tamm-Dancoff approximation
 
     contains
@@ -29,7 +33,25 @@ module tdhf_mrsf_lib
 
     end type
 
+    integer, save :: g_mrsf_fp32 = -1  !< opt-in FP32 Fock accumulation (env OQP_MRSF_FP32)
+
 contains
+
+  !> Read the OQP_MRSF_FP32 opt-in once. When set, the MRSF response Fock
+  !> digestion accumulates in single precision (~+8% over the FP64 path on
+  !> cc-pVDZ; excitation energies perturbed at the ~few-ueV level, Davidson
+  !> convergence unchanged). Default off = exact FP64.
+  subroutine ensure_mrsf_fp32()
+    character(len=8) :: e_
+    if (g_mrsf_fp32 < 0) then
+      call get_environment_variable('OQP_MRSF_FP32', e_)
+      if (len_trim(e_) > 0) then
+        read(e_,*) g_mrsf_fp32
+      else
+        g_mrsf_fp32 = 0
+      end if
+    end if
+  end subroutine
 
 !###############################################################################
 
@@ -40,7 +62,7 @@ contains
     class(int2_mrsf_data_t), target, intent(inout) :: this
     type(basis_set), intent(in) :: basis
     integer, intent(in) :: nthreads
-    integer :: nbf, nsh, nmatrix
+    integer :: nbf, nsh, nmatrix, mu, nu
 
     nbf = basis%nbf
     this%fockdim = nbf*(nbf+1) / 2
@@ -56,6 +78,38 @@ contains
       allocate(this%f3(this%nfocks, nmatrix, nbf, nbf, nthreads), &
                this%dsh(nsh,nsh), &
                source=0.0d0)
+
+      ! Precompute the symmetrized Coulomb density ds(:,c,mu,nu)=d3(mu,nu)+d3(nu,mu)
+      ! for the Coulomb components (1:4) once per run. d3 is constant over the
+      ! Davidson sigma build, so this lets the digestion kernel read a single
+      ! (symmetric) slab per integral instead of summing two scattered d3 reads.
+      if (allocated(this%ds)) deallocate(this%ds)
+      allocate(this%ds(this%nfocks, 4, nbf, nbf))
+      do nu = 1, nbf
+        do mu = 1, nbf
+          this%ds(:,:,mu,nu) = this%d3(:,1:4,mu,nu) + this%d3(:,1:4,nu,mu)
+        end do
+      end do
+
+      ! Opt-in FP32 Fock accumulation (env OQP_MRSF_FP32): FP32 operand copies
+      ! + an FP32 per-thread accumulator, folded back to FP64 in parallel_stop.
+      ! Only for the base (non-UMRSF) MRSF type: UMRSF's d3 carries more matrix
+      ! components and its own update routine does not use the FP32 accumulator,
+      ! so FP32 is left inert (exact FP64) on the UMRSF path.
+      call ensure_mrsf_fp32()
+      if (g_mrsf_fp32 /= 0) then
+        select type (this)
+        type is (int2_mrsf_data_t)
+          if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+          if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+          if (allocated(this%f3s))   deallocate(this%f3s)
+          allocate(this%ds_sp(this%nfocks, 4, nbf, nbf), &
+                   this%d3_sp(this%nfocks, nmatrix, nbf, nbf))
+          this%ds_sp = real(this%ds, sp)
+          this%d3_sp = real(this%d3, sp)
+          allocate(this%f3s(this%nfocks, nmatrix, nbf, nbf, nthreads), source=0.0_sp)
+        end select
+      end if
     end if
 
     call this%init_screen(basis)
@@ -68,15 +122,24 @@ contains
 
     implicit none
 
-    integer :: f3last
+    integer :: f3last, t
     class(int2_mrsf_data_t), intent(inout) :: this
 
     if (this%cur_pass /= this%num_passes) return
 
     f3last = size(shape(this%f3))
 
+    ! Reduce the FP64 accumulator across threads first. This holds the pass-2
+    ! (CAM short-range exchange) contributions, and is zero in the FP32
+    ! pass-1-only case -- so the subsequent add is exact in both cases.
     if (this%nthreads /= 1) then
-      this%f3(:,:,:,:,lbound(this%f3, f3last)) = sum(this%f3, dim=f3last)
+      this%f3(:,:,:,:,1) = sum(this%f3, dim=f3last)
+    end if
+    ! Then add the FP32 per-thread accumulator (folded to FP64) when present.
+    if (allocated(this%f3s)) then
+      do t = 1, this%nthreads
+        this%f3(:,:,:,:,1) = this%f3(:,:,:,:,1) + real(this%f3s(:,:,:,:,t), dp)
+      end do
     end if
 
     call this%pe%allreduce(this%f3(:,:,:,:,1), &
@@ -95,6 +158,10 @@ contains
 
     deallocate(this%f3)
     deallocate(this%dsh)
+    if (allocated(this%ds)) deallocate(this%ds)
+    if (allocated(this%ds_sp)) deallocate(this%ds_sp)
+    if (allocated(this%d3_sp)) deallocate(this%d3_sp)
+    if (allocated(this%f3s)) deallocate(this%f3s)
     nullify(this%d3)
 
   end subroutine
@@ -154,7 +221,7 @@ contains
 
     class(int2_mrsf_data_t), intent(inout) :: this
     type(int2_storage_t), intent(inout) :: buf
-    integer :: i, j, k, l, n
+    integer :: i, j, k, l, n, v, c
     real(kind=dp) :: val, xval, cval
     integer :: mythread
 
@@ -164,51 +231,101 @@ contains
 
     associate ( f3 => this%f3(:,:,:,:,mythread), &
                 d3 => this%d3, &
+                ds => this%ds, &
                 nf => this%nfocks &
       )
 
-      do n = 1, buf%ncur
-        i = buf%ids(1,n)
-        j = buf%ids(2,n)
-        k = buf%ids(3,n)
-        l = buf%ids(4,n)
-        val = buf%ints(n)
+      ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
+      ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
+      ! ds(nF,1:4,:,:) !> symmetrized Coulomb density (d3+d3^T), precomputed once
 
-        xval = val * this%scale_exchange
-        cval = val * this%scale_coulomb
+      if (this%cur_pass==1 .and. allocated(this%f3s)) then
+        ! Opt-in FP32 accumulation (OQP_MRSF_FP32): same algebra as the FP64
+        ! path below but operands/accumulator are single precision. Folded back
+        ! to FP64 in parallel_stop. ~few-ueV perturbation, convergence unchanged.
+        block
+          real(kind=sp) :: cs, xs
+          associate (f3s => this%f3s(:,:,:,:,mythread), &
+                     ds_sp => this%ds_sp, d3_sp => this%d3_sp)
+          do n = 1, buf%ncur
+            i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+            val = buf%ints(n)
+            cs = real(val*this%scale_coulomb, sp)
+            xs = real(val*this%scale_exchange, sp)
+            do c = 1, 4
+              do v = 1, nf
+                f3s(v,c,i,j) = f3s(v,c,i,j) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,j,i) = f3s(v,c,j,i) + cs*ds_sp(v,c,k,l)
+                f3s(v,c,k,l) = f3s(v,c,k,l) + cs*ds_sp(v,c,i,j)
+                f3s(v,c,l,k) = f3s(v,c,l,k) + cs*ds_sp(v,c,i,j)
+              end do
+            end do
+            do c = 1, 7
+              do v = 1, nf
+                f3s(v,c,i,k) = f3s(v,c,i,k) - xs*d3_sp(v,c,j,l)
+                f3s(v,c,k,i) = f3s(v,c,k,i) - xs*d3_sp(v,c,l,j)
+                f3s(v,c,i,l) = f3s(v,c,i,l) - xs*d3_sp(v,c,j,k)
+                f3s(v,c,l,i) = f3s(v,c,l,i) - xs*d3_sp(v,c,k,j)
+                f3s(v,c,j,k) = f3s(v,c,j,k) - xs*d3_sp(v,c,i,l)
+                f3s(v,c,k,j) = f3s(v,c,k,j) - xs*d3_sp(v,c,l,i)
+                f3s(v,c,j,l) = f3s(v,c,j,l) - xs*d3_sp(v,c,i,k)
+                f3s(v,c,l,j) = f3s(v,c,l,j) - xs*d3_sp(v,c,k,i)
+              end do
+            end do
+          end do
+          end associate
+        end block
 
-        ! f3(nF,1:7,:,:) !> 1=ado2v, 2=ado1v, 3=adco1, 4=adco2, 5=ao21v, 6=aco12, 7=agdlr
-        ! d3(nF,1:7,:,:) !> 1= bo2v, 2= bo1v, 3= bco1, 4= bco2, 5= o21v, 6= co12, 7= ball
-        if (this%cur_pass==1) then
-          f3(:nf,:4,i,j) = f3(:nf,:4,i,j) + cval*d3(:nf,:4,k,l)! (ij|lk)
-          f3(:nf,:4,k,l) = f3(:nf,:4,k,l) + cval*d3(:nf,:4,i,j)! (kl|ji)
-          f3(:nf,:4,i,j) = f3(:nf,:4,i,j) + cval*d3(:nf,:4,l,k)! (ij|kl)
-          f3(:nf,:4,l,k) = f3(:nf,:4,l,k) + cval*d3(:nf,:4,i,j)! (lk|ji)
-          f3(:nf,:4,j,i) = f3(:nf,:4,j,i) + cval*d3(:nf,:4,k,l)! (ji|lk)
-          f3(:nf,:4,k,l) = f3(:nf,:4,k,l) + cval*d3(:nf,:4,j,i)! (kl|ij)
-          f3(:nf,:4,j,i) = f3(:nf,:4,j,i) + cval*d3(:nf,:4,l,k)! (ji|kl)
-          f3(:nf,:4,l,k) = f3(:nf,:4,l,k) + cval*d3(:nf,:4,j,i)! (lk|ij)
+      else if (this%cur_pass==1) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          val = buf%ints(n)
+          xval = val * this%scale_exchange
+          cval = val * this%scale_coulomb
 
-          f3(:nf,:7,i,k) = f3(:nf,:7,i,k) - xval*d3(:nf,:7,j,l)
-          f3(:nf,:7,k,i) = f3(:nf,:7,k,i) - xval*d3(:nf,:7,l,j)
-          f3(:nf,:7,i,l) = f3(:nf,:7,i,l) - xval*d3(:nf,:7,j,k)
-          f3(:nf,:7,l,i) = f3(:nf,:7,l,i) - xval*d3(:nf,:7,k,j)
-          f3(:nf,:7,j,k) = f3(:nf,:7,j,k) - xval*d3(:nf,:7,i,l)
-          f3(:nf,:7,k,j) = f3(:nf,:7,k,j) - xval*d3(:nf,:7,l,i)
-          f3(:nf,:7,j,l) = f3(:nf,:7,j,l) - xval*d3(:nf,:7,i,k)
-          f3(:nf,:7,l,j) = f3(:nf,:7,l,j) - xval*d3(:nf,:7,k,i)
-        else if (this%cur_pass==2) then
-          f3(1:nf,7,i,k) = f3(1:nf,7,i,k) - xval*d3(1:nf,7,j,l)
-          f3(1:nf,7,k,i) = f3(1:nf,7,k,i) - xval*d3(1:nf,7,l,j)
-          f3(1:nf,7,i,l) = f3(1:nf,7,i,l) - xval*d3(1:nf,7,j,k)
-          f3(1:nf,7,l,i) = f3(1:nf,7,l,i) - xval*d3(1:nf,7,k,j)
-          f3(1:nf,7,j,k) = f3(1:nf,7,j,k) - xval*d3(1:nf,7,i,l)
-          f3(1:nf,7,k,j) = f3(1:nf,7,k,j) - xval*d3(1:nf,7,l,i)
-          f3(1:nf,7,j,l) = f3(1:nf,7,j,l) - xval*d3(1:nf,7,i,k)
-          f3(1:nf,7,l,j) = f3(1:nf,7,l,j) - xval*d3(1:nf,7,k,i)
-        end if
+          ! Coulomb (components 1:4): the 8 permutational contributions collapse
+          ! to 4 distinct Fock targets, each reading one symmetric ds slab.
+          ! Explicit loops (stride-1 v inner) vectorize and avoid array temporaries.
+          do c = 1, 4
+            do v = 1, nf
+              f3(v,c,i,j) = f3(v,c,i,j) + cval*ds(v,c,k,l)
+              f3(v,c,j,i) = f3(v,c,j,i) + cval*ds(v,c,k,l)
+              f3(v,c,k,l) = f3(v,c,k,l) + cval*ds(v,c,i,j)
+              f3(v,c,l,k) = f3(v,c,l,k) + cval*ds(v,c,i,j)
+            end do
+          end do
+          ! Exchange (components 1:7): 8 distinct targets (no symmetry to fold).
+          do c = 1, 7
+            do v = 1, nf
+              f3(v,c,i,k) = f3(v,c,i,k) - xval*d3(v,c,j,l)
+              f3(v,c,k,i) = f3(v,c,k,i) - xval*d3(v,c,l,j)
+              f3(v,c,i,l) = f3(v,c,i,l) - xval*d3(v,c,j,k)
+              f3(v,c,l,i) = f3(v,c,l,i) - xval*d3(v,c,k,j)
+              f3(v,c,j,k) = f3(v,c,j,k) - xval*d3(v,c,i,l)
+              f3(v,c,k,j) = f3(v,c,k,j) - xval*d3(v,c,l,i)
+              f3(v,c,j,l) = f3(v,c,j,l) - xval*d3(v,c,i,k)
+              f3(v,c,l,j) = f3(v,c,l,j) - xval*d3(v,c,k,i)
+            end do
+          end do
+        end do
 
-      end do
+      else if (this%cur_pass==2) then
+        do n = 1, buf%ncur
+          i = buf%ids(1,n); j = buf%ids(2,n); k = buf%ids(3,n); l = buf%ids(4,n)
+          xval = buf%ints(n) * this%scale_exchange
+          do v = 1, nf
+            f3(v,7,i,k) = f3(v,7,i,k) - xval*d3(v,7,j,l)
+            f3(v,7,k,i) = f3(v,7,k,i) - xval*d3(v,7,l,j)
+            f3(v,7,i,l) = f3(v,7,i,l) - xval*d3(v,7,j,k)
+            f3(v,7,l,i) = f3(v,7,l,i) - xval*d3(v,7,k,j)
+            f3(v,7,j,k) = f3(v,7,j,k) - xval*d3(v,7,i,l)
+            f3(v,7,k,j) = f3(v,7,k,j) - xval*d3(v,7,l,i)
+            f3(v,7,j,l) = f3(v,7,j,l) - xval*d3(v,7,i,k)
+            f3(v,7,l,j) = f3(v,7,l,j) - xval*d3(v,7,k,i)
+          end do
+        end do
+      end if
+
     end associate
 
     buf%ncur = 0

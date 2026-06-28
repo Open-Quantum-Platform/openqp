@@ -128,6 +128,14 @@ struct control_parameters {
     double    conv;
     int64_t   scf_incremental;
     double    int2e_cutoff;
+    int64_t   scf_pscreen;
+    double    pscreen_k;
+    double    pscreen_cap;
+    double    pscreen_tight;
+    double    pscreen_xc_dcut;
+    double    pscreen_xc_aocut;
+    int64_t   pscreen_grid_rad;
+    int64_t   pscreen_grid_ang;
     int64_t   esp;
     int64_t   resp_target;
     double    esp_constr;

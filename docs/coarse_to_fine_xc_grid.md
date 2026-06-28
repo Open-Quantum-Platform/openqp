@@ -55,11 +55,14 @@ The schedule is **on by default** (nothing changes in the input file). Set
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `OQP_XC_C2F` | `on` | Master switch. Set to `0`/`no`/`false`/`off` to disable the schedule. |
+| `OQP_XC_C2F` | `on` | Master switch. Set to `0`/`no`/`false`/`off` to disable the default-on ramp. |
 | `OQP_XC_C2F_RAD` | `50` | Coarse grid radial points. |
 | `OQP_XC_C2F_ANG` | `110` | Coarse grid angular (Lebedev) points. |
-| `OQP_XC_C2F_SWITCH` | `1.0e-2` | Switch to the production grid once `|DIIS error|` drops below this. |
-| `OQP_XC_C2F_RESET` | (off) | If set, clear the DIIS subspace at the switch (more defensive; costs ~1 iteration). Default keeps the subspace and preserves the selected DIIS scheme. |
+| `OQP_XC_C2F_SWITCH` | `1.0e-2` | Pin to the production grid once `|DIIS error|` drops below this (standalone path). |
+
+The same engine is also driven by progressive screening (upstream #238): with
+`scf_pscreen` + `pscreen_grid_rad/ang` (or `OQP_PSCREEN` + `OQP_PSCREEN_GRID_RAD/ANG`)
+the grid ramp shares the integral-screening pin threshold (`pscreen_tight`).
 
 Disable for a single run:
 
@@ -67,14 +70,13 @@ Disable for a single run:
 OQP_XC_C2F=0 python pyoqp/oqp/pyoqp.py mymol.inp
 ```
 
-The schedule prints a banner when active, and a line at the grid switch:
+When active the log shows the coarse grid (built in `hf_energy`) and the pin in
+the convergence tail:
 
 ```
-     Coarse-to-fine XC grid schedule: ON
-       coarse grid  = 50 x 110 (radial x angular)
-       switch to production grid when |DIIS error| <  1.00E-02
+     Coarse-to-fine XC grid: coarse 50 x 110 (5500 pts) during descent, production (29000 pts) in the tail
    ...
-          Switching XC grid: coarse -> production (DIIS error  3.43E-03).
+          Coarse-to-fine / progressive screening: final full-accuracy SCF iteration.
 ```
 
 ## When it helps
@@ -89,46 +91,59 @@ when XC dominates the per-iteration cost:
 - **Hybrids** benefit less, because the (grid-independent) exact-exchange J/K
   build dominates and is not sped up.
 
-## Implementation
+## Implementation — one unified grid-ramp engine
 
-- `source/dftlib/dft.F90`: `dft_build_grid_sized(infos, basis, molGrid, nrad, nang)`
-  builds a single unpruned Lebedev grid of the requested size without touching
-  the libxc functional setup (saves/restores `infos%dft` grid sizes).
-- `source/scf.F90`:
-  - `c2f_get_config` reads the environment, checks eligibility, returns the
-    coarse sizes / switch threshold / reset flag.
-  - `xc_is_grid_sensitive` detects Minnesota-family functionals.
-  - The SCF loop builds the coarse grid once, compares `coarse_grid%nMolPts`
-    against `molGrid%nMolPts` (disabling the schedule if the coarse grid is not
-    cheaper), uses the coarse grid via the `on_coarse` branch of the `calc_fock`
-    call, and switches to the production grid (`molgrid`) once
-    `|DIIS error| < OQP_XC_C2F_SWITCH` (or, as a fail-safe, a few iterations
-    before `maxit`). `coarse_this_iter` guards the convergence/stall checks so a
-    coarse-grid Fock can never be accepted as converged.
+The coarse→fine XC-grid ramp is a **single engine**, shared by this default-on
+schedule and the opt-in progressive-screening lever (`scf_pscreen`, upstream
+#238). There is exactly one coarse-grid construction path and one grid-selection
+path; the two features only differ in *how the engine is activated*.
 
-> **Note (cosmetic):** the "Delta E" column on the first production-grid row
-> after the switch spans the coarse→production grid change, so that single value
-> is not a true SCF energy step (the energy column itself is correct). The
-> "Switching XC grid" banner is printed immediately above it as a cue.
+- `source/dftlib/dft.F90`:
+  - `dft_build_grid_sized(infos, basis, molGrid, nrad, nang)` builds a single
+    unpruned Lebedev grid of the requested size without touching the libxc setup
+    (saves/restores `infos%dft` grid sizes).
+  - `dft_setup_descent_grid(...)` is the **single unified policy**: it decides
+    whether to build a coarse "descent" grid and at what size, then builds it via
+    `dft_build_grid_sized` and keeps it only if it is genuinely cheaper than the
+    production grid (by built `nMolPts`). Activation is either a progressive-
+    screening request (`scf_pscreen` + `pscreen_grid_rad/ang`) or the default-on
+    coarse-to-fine path (unless `OQP_XC_C2F=0`), the latter gated by
+    `c2f_grid_eligible` (pure-DIIS, `maxit >= 2`, no level-shift-on-non-VDIIS,
+    non-Minnesota via `xc_is_grid_sensitive`).
+- `source/modules/hf_energy.f90`: calls `dft_setup_descent_grid` and passes the
+  resulting coarse grid to `scf_driver` as the optional `coarseGrid` argument.
+- `source/scf.F90` (the engine, from #238, decoupled so it runs for the grid
+  ramp independently of integral screening):
+  - `ps_grid_on = present(coarseGrid)` — the grid ramp runs whenever a coarse
+    grid was provided.
+  - A single sticky **pin latch** (`ps_pin`) flips once `|DIIS error|` drops
+    below the pin threshold (`pscreen_tight` under integral screening, else
+    `OQP_XC_C2F_SWITCH`, default 1e-2), driving the grid ramp, the 2e-cutoff ramp
+    and the XC-threshold ramp together.
+  - `ps_cur_grid => coarseGrid` during the descent, `=> molGrid` once pinned;
+    one `calc_fock(..., ps_cur_grid, ...)` call.
+  - `ps_force_iter` forces one pinned, full-accuracy iteration before
+    convergence, so a coarse-grid (or loose-cutoff, or reused-XC) Fock is never
+    accepted as converged.
 
-This change was reviewed with a multi-agent adversarial pass; the gating guards
-above (maxit, level-shift, and the point-count cheapness check) close the edge
-cases it surfaced.
+This unification was reached after #238 landed upstream with its own grid ramp;
+rather than ship a second mechanism, c2f became an activation policy + safety
+guards on top of the shared engine.
 
 ### Composition with the Φ-cache / IncDFT (#242)
 
-The schedule composes with the opt-in XC-reuse features added in #242:
+The shared engine composes with the opt-in XC-reuse features from #242:
 
-- **IncDFT** (`OQP_XC_INCDFT`): the grid switch forces `xc_reuse = .false.` on the
-  first production-grid iteration (`on_coarse .neqv. prev_on_coarse`), so the
-  reused reference XC is never carried across grids. The convergence test already
-  refuses both a coarse-grid Fock and a reused-XC Fock.
+- **IncDFT** (`OQP_XC_INCDFT`): `xc_reuse` is forced `.false.` while on the coarse
+  grid (`ps_grid_on .and. .not. ps_pin`), so reused reference XC is never carried
+  across grids; convergence is refused on a reused-XC Fock.
 - **Φ-cache** (`OQP_XC_PHI_CACHE`): the cache validity signature includes the grid
-  slice count, and the coarse grid is required to have meaningfully fewer points
-  than the production grid, so the cache rebuilds automatically at the switch.
+  slice count and the coarse grid has fewer points, so the cache rebuilds
+  automatically at the switch.
 
-Verified: with the schedule on, enabling either or both of `OQP_XC_INCDFT` and
-`OQP_XC_PHI_CACHE` still converges to the bit-identical production-grid energy.
+Verified: with the ramp on, enabling either/both of `OQP_XC_INCDFT` and
+`OQP_XC_PHI_CACHE`, or progressive screening (`OQP_PSCREEN`), still converges to
+the bit-identical production-grid energy.
 
 ## Results
 
