@@ -66,6 +66,7 @@ class RegKey:
     sidecar_field: Optional[str] = None  # field name in the sidecar (defaults to key)
     phase_invariant: bool = False    # compare magnitudes (sign/phase ambiguous)
     skip_sub: tuple = ()             # dict sub-keys to ignore (e.g. EKT orbitals)
+    rtol: float = 0.0                # relative tolerance (0 = exact abs compare)
     needs_excited: bool = False      # only when an excited-state method is active
     needs_prop: Optional[str] = None  # only when this scf_prop was requested
     exclude_runtypes: frozenset = frozenset()  # runtypes where this is NOT checked
@@ -128,7 +129,14 @@ REGISTRY = (
     # Excitation energies: meaningful only for excited-state methods; a ground
     # state run stores the placeholder [0].
     RegKey('td_energies', runtypes='*', required=True, needs_excited=True),
-    RegKey('soc', runtypes=frozenset({'soc'}), required=True),
+    # SOC matrix elements are large (10^4-10^5 cm^-1), so the default absolute
+    # round(diff,4) gate (~5e-5) would demand ~10 significant figures -- tighter
+    # than ULP-level BLAS/compiler/integral-screening noise (~1e-8 relative),
+    # which makes the test fail on harmless numerical differences across builds
+    # (Debug vs Release, OpenBLAS vs Accelerate, response integral cutoff). Use a
+    # relative tolerance instead; a real SOC regression is >>1e-6 relative, and
+    # the response itself stays exact-checked via td_*_energies below.
+    RegKey('soc', runtypes=frozenset({'soc'}), required=True, rtol=1e-6),
     # A SOC run computes both spin-resolved excitation ladders; the public
     # td_energies mirrors only one, so test the singlet and triplet explicitly.
     RegKey('td_singlet_energies', runtypes=frozenset({'soc'}), required=True),
