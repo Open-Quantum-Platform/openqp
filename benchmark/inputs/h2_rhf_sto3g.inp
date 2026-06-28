@@ -1,0 +1,18 @@
+# H2 RHF/STO-3G closed-shell reference for the FCIDUMP -> PySCF FCI cross-check.
+# Geometry from task brief Appendix A (Angstrom).
+[input]
+system=
+   H   0.000000   0.000000   0.000000
+   H   0.000000   0.000000   0.741000
+charge=0
+runtype=energy
+basis=sto-3g
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+type=rhf
+multiplicity=1
+conv=1.0e-9
