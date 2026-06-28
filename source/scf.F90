@@ -572,8 +572,21 @@ contains
     ps_xc = ps_on .and. (ps_xc_dcut > 0.0_dp .or. ps_xc_aocut > 0.0_dp)
     if (ps_xc) write(IW,'(3x,a,es9.2,a,es9.2)') &
         '  XC ramp: loose grid dcut=', ps_xc_dcut, '  loose grid aocut=', ps_xc_aocut
-    ! Coarse->fine grid ramp: coarseGrid is built+passed by hf_energy when requested.
-    ps_grid_on = ps_on .and. present(coarseGrid)
+    ! Coarse->fine XC grid ramp (single engine). coarseGrid is built+passed by
+    ! hf_energy under the unified policy: it covers BOTH the opt-in progressive-
+    ! screening request and the default-on coarse-to-fine schedule. The ramp is
+    ! therefore independent of integral screening (ps_on) -- it runs whenever a
+    ! coarse grid was provided.
+    ps_grid_on = present(coarseGrid)
+    ! When the grid ramp runs without integral screening, it still needs a pin
+    ! threshold: use the coarse-to-fine switch threshold (OQP_XC_C2F_SWITCH,
+    ! default 1e-2). With integral screening on, ps_tight (above) governs both.
+    if (ps_grid_on .and. .not. ps_on) then
+      ps_tight = 1.0e-2_dp
+      call get_environment_variable("OQP_XC_C2F_SWITCH", ps_env, ps_ln)
+      if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_tight
+      ps_tight = max(ps_tight, 10.0_dp * infos%control%conv)
+    end if
     ps_cur_grid => molGrid
     if (ps_grid_on) write(IW,'(3x,a)') '  XC ramp: coarse grid during descent, full grid pinned in the tail'
 
@@ -678,19 +691,32 @@ contains
       pfock = 0.0_dp
 
       !----------------------------------------------------------------------------
+      ! Unified pin latch: enter the convergence tail (pin to full accuracy) once
+      ! the DIIS error drops below ps_tight. Shared by the 2e-cutoff ramp (ps_on),
+      ! the XC-threshold ramp (ps_xc) and the coarse->fine grid ramp (ps_grid_on)
+      ! so they all tighten together. Sticky; never fires on iteration 1.
+      !----------------------------------------------------------------------------
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin .and. iter > 1 &
+          .and. diis_error < ps_tight) then
+        ps_pin = .true.
+      end if
+      ! Fail-safe: also pin in the final iterations, so a run that exhausts maxit
+      ! without converging still reports a full-accuracy (full-grid, tight-cutoff)
+      ! state -- and hands a full-grid warm-start to any convergence-escalation
+      ! restart -- rather than a loose/coarse one.
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin .and. iter >= maxit - 2) then
+        ps_pin = .true.
+      end if
+
       ! Progressive screening: pick this iteration's 2e cutoff. Loose early
       ! (coupled to the previous iteration's DIIS error), pinned to the user's
       ! tight cutoff in the convergence tail. fock_jk re-reads
       ! infos%control%int2e_cutoff on every build, so setting it here suffices.
-      !----------------------------------------------------------------------------
       if (ps_on) then
         if (ps_pin) then
           ps_tau = ps_cut_tight            ! latched: tight for the rest of the SCF
         else if (iter == 1) then
           ps_tau = ps_cap                  ! loosest cutoff for the first build
-        else if (diis_error < ps_tight) then
-          ps_pin = .true.                  ! entered the convergence tail: pin to tight (sticky)
-          ps_tau = ps_cut_tight
         else
           ps_tau = max(ps_cut_tight, min(ps_cap, ps_k*diis_error))
         end if
@@ -730,7 +756,7 @@ contains
       ! whenever we pin to the tight cutoff, so contributions dropped during the loose
       ! phase are recaptured and the converged energy matches the all-tight run.
       if (infos%control%scf_incremental /= 0 .and. iter > 1) then
-        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp .or. (ps_on .and. ps_pin)) then
+        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp .or. ((ps_on .or. ps_grid_on) .and. ps_pin)) then
           fold = 0.0_dp
           dold = 0.0_dp
         end if
@@ -970,12 +996,21 @@ contains
         end if
         if (stall_count >= 12 .and. iter >= 20 .and. &
             diis_error > infos%control%conv) then
-          write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
-               &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
-               diis_error, stall_count
-          infos%mol_energy%SCF_converged = .false.
-          stalled_exit = .true.
-          exit
+          if (ps_grid_on .and. .not. ps_pin) then
+            ! Stalled while still on the coarse descent grid: pin to the full grid
+            ! and give it a chance before handing off, so the reported state (and
+            ! any escalation warm-start) comes from the full grid, not the coarse one.
+            ps_pin = .true.
+            stall_best  = huge(1.0_dp)
+            stall_count = 0
+          else
+            write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
+                 &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
+                 diis_error, stall_count
+            infos%mol_energy%SCF_converged = .false.
+            stalled_exit = .true.
+            exit
+          end if
         end if
       end if
 
@@ -1000,11 +1035,11 @@ contains
       ! int2e_cutoff + XC thresholds + full grid) before convergence is allowed.
       !----------------------------------------------------------------------------
       ps_force_iter = .false.
-      if (ps_on .and. .not. ps_pin .and. (abs(diis_error) < infos%control%conv) &
-          .and. (vshift == 0.0_dp)) then
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin &
+          .and. (abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
         ps_pin = .true.
         ps_force_iter = .true.
-        write(IW,"(3x,64('-')/10x,'Progressive screening: final tight/full-grid SCF iteration.')")
+        write(IW,"(3x,64('-')/10x,'Coarse-to-fine / progressive screening: final full-accuracy SCF iteration.')")
       end if
 
       !----------------------------------------------------------------------------

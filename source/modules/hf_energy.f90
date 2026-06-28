@@ -24,13 +24,12 @@ contains
     use basis_tools, only: basis_set
     use messages, only: show_message
     use scf, only: scf_driver
-    use dft, only: dft_initialize, dftclean
+    use dft, only: dft_initialize, dftclean, dft_setup_descent_grid
     use types, only: information
     use oqp_tagarray_driver
     use strings, only: Cstring, fstring
     use mod_dft_molgrid, only: dft_grid_t
     use printing, only: print_module_info
-    use iso_c_binding, only: c_char, c_null_char, c_bool
 
     implicit none
 
@@ -42,14 +41,11 @@ contains
     logical :: urohf, dft
     type(basis_set), pointer :: basis
     type(dft_grid_t) :: molGrid
-    ! Progressive coarse->fine XC grid ramp (optional)
+    ! Coarse->fine XC grid ramp: optional coarse "descent" grid (built by the
+    ! unified policy in dft_setup_descent_grid; scf_driver ramps it to the
+    ! production grid in the convergence tail).
     type(dft_grid_t) :: coarseGrid
-    logical :: ps_have_coarse, ps_on_env
-    integer :: ps_grid_rad, ps_grid_ang, ps_el
-    integer(8) :: ps_rad0, ps_ang0
-    logical(c_bool) :: ps_pruned0
-    character(kind=c_char) :: ps_xcname0(20)
-    character(len=64) :: ps_ev
+    logical :: have_coarse
 
     urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
     dft = infos%control%hamilton == 20
@@ -82,42 +78,15 @@ contains
 !   Prepare dft grid
     if (dft) call dft_initialize(infos, basis, molGrid, verbose=.true.)
 
-!   Optional progressive coarse grid for the SCF descent (gated by scf_pscreen +
-!   pscreen_grid_rad/ang, env-overridable). Built here because dft_initialize needs
-!   basis intent(inout); the functional name is blanked so libxc is NOT re-initialised
-!   (need_functional=.false. plus an empty name). scf_driver picks coarse vs full grid
-!   per iteration and pins to the full grid in the convergence tail.
-    ps_grid_rad = int(infos%control%pscreen_grid_rad)
-    ps_grid_ang = int(infos%control%pscreen_grid_ang)
-    call get_environment_variable("OQP_PSCREEN_GRID_RAD", ps_ev, ps_el)
-    if (ps_el > 0) read(ps_ev,*,iostat=ps_el) ps_grid_rad
-    call get_environment_variable("OQP_PSCREEN_GRID_ANG", ps_ev, ps_el)
-    if (ps_el > 0) read(ps_ev,*,iostat=ps_el) ps_grid_ang
-    ps_on_env = infos%control%scf_pscreen /= 0
-    call get_environment_variable("OQP_PSCREEN", ps_ev, ps_el)
-    if (ps_el > 0) ps_on_env = (ps_ev(1:1)=='1' .or. ps_ev(1:1)=='t' .or. ps_ev(1:1)=='T' &
-                                .or. ps_ev(1:1)=='y' .or. ps_ev(1:1)=='Y')
-    ps_have_coarse = dft .and. ps_on_env .and. ps_grid_rad > 0 .and. ps_grid_ang > 0
-    if (ps_have_coarse) then
-      ps_rad0 = infos%dft%grid_rad_size
-      ps_ang0 = infos%dft%grid_ang_size
-      ps_pruned0 = infos%dft%grid_pruned
-      ps_xcname0 = infos%dft%XC_functional_name
-      infos%dft%grid_rad_size = ps_grid_rad
-      infos%dft%grid_ang_size = ps_grid_ang
-      infos%dft%grid_pruned   = .false.
-      infos%dft%XC_functional_name = c_null_char
-      call dft_initialize(infos, basis, coarseGrid, verbose=.false., need_functional=.false.)
-      infos%dft%grid_rad_size = ps_rad0
-      infos%dft%grid_ang_size = ps_ang0
-      infos%dft%grid_pruned   = ps_pruned0
-      infos%dft%XC_functional_name = ps_xcname0
-      write(iw,'(5x,a,i0,a,i0)') &
-        'Progressive XC coarse grid (descent): NRAD=', ps_grid_rad, '  NLEB=', ps_grid_ang
-    end if
+!   Coarse->fine XC grid ramp: build the optional coarse "descent" grid under the
+!   single unified policy (default-on coarse-to-fine, or an opt-in progressive-
+!   screening request). scf_driver picks coarse vs production per iteration and
+!   pins to the production grid in the convergence tail.
+    have_coarse = .false.
+    if (dft) call dft_setup_descent_grid(infos, basis, molGrid, coarseGrid, have_coarse)
 
 !   Run HF/DFT calculation
-    if (ps_have_coarse) then
+    if (have_coarse) then
       call scf_driver(basis, infos, molGrid, coarseGrid)
     else
       call scf_driver(basis, infos, molGrid)
