@@ -7,8 +7,12 @@ MRSF-TDDFT excited state) by tolerating looser settings on work that is
 recomputed at the **converged** density, validated against gradient accuracy
 (Hartree/Bohr), which is stricter than energy.
 
-All changes are **default-OFF** (env-gated). With no env set the code path is
-byte-identical to baseline.
+**Default `OQP_GRAD_CUTOFF = 1.0d-8`** (the historic Schwarz cutoff was an
+unusually tight `1.0d-10`). The env var overrides it; **`=1.0d-10` restores the
+historic tight screening byte-for-byte**. `1e-8` is the size-robust choice
+(max|ΔG| ≤ ~1e-6 a.u. through the 36-atom systems tested) and sits well below
+the regression-suite tolerance (≈5e-5, max-element deviation rounded to 4
+decimals), so it does not perturb the small-molecule example references.
 
 ## STEP 0 — where the gradient time goes (cc-pVDZ, `OMP_NUM_THREADS=8`)
 
@@ -39,9 +43,10 @@ work item (Z-vector chip), not this task.
 ## The lever — `OQP_GRAD_CUTOFF`
 
 `source/integrals/grd2.F90:grd2_driver_gen` screens shell quartets with a
-hard-coded Schwarz block cutoff `cutoff = 1.0d-10` (and density-weighted fine
-screen `cutoff2 = cutoff/2`). The converged-density gradient tolerates a looser
-cutoff. `OQP_GRAD_CUTOFF=<value>` overrides it (default 1e-10 = baseline).
+Schwarz block cutoff (and density-weighted fine screen `cutoff2 = cutoff/2`),
+now **defaulting to `1.0d-8`** (was a hard-coded, unusually tight `1.0d-10`).
+The converged-density gradient tolerates the looser cutoff. `OQP_GRAD_CUTOFF`
+overrides it; **`=1.0d-10` restores the historic tight screening exactly**.
 
 ## Accuracy (max |Δgradient| vs the tight 1e-10 baseline, Hartree/Bohr)
 
@@ -58,9 +63,10 @@ HF is the most sensitive (full exact exchange):
 
 The error grows steeply past 1e-7 (derivative integrals amplify the dropped
 contributions by ~exponent, so the integral-magnitude Schwarz bound
-under-protects the gradient). **Recommended opt-in: `OQP_GRAD_CUTOFF=1e-7`**
-(≤3.5e-6, comfortably within the 1e-5 budget; ~3× the 1e-6 ideal).
-`1e-8` for a ≤1e-6 conservative setting.
+under-protects the gradient). The **default is `1e-8`** (size-robust, ≤~1e-6);
+`OQP_GRAD_CUTOFF=1e-7` is an aggressive override (~3.5e-6 on small systems but
+growing past 1e-5 for larger HF — see below); `=1e-10` restores the tight
+baseline.
 
 ## Speedup — scales with system size
 
@@ -83,12 +89,14 @@ at cut1e-7, naphthalene HF 1.16× / DFT 1.16× / MRSF 1.13×. DFT/MRSF are also
 slightly *less* error-sensitive (HF-exchange scale ≤0.5), so cut1e-7 stays within
 1e-5 for them up to ~18 atoms where HF already breaches it.
 
-**Recommendation:**
-- `OQP_GRAD_CUTOFF=1e-8` — universally safe (max\|ΔG\| ≤ ~1.3e-6 a.u. across all
-  sizes & methods), **~5–12 %** faster (grows with size). Good default opt-in.
+**Settings:**
+- **Default `1e-8`** — size-robust (max\|ΔG\| ≤ ~1.3e-6 a.u. across all sizes &
+  methods), **~5–12 %** faster (grows with size). Below the regression-suite
+  tolerance (≈5e-5), so the small-molecule example references are unaffected.
 - `OQP_GRAD_CUTOFF=1e-7` — **~10–25 %** faster, but max\|ΔG\| reaches ~2.5e-5 on
   ~36-atom HF (exceeds the 1e-5 target). Safe within 1e-5 only for ≲18-atom HF;
   DFT/MRSF (HF-exchange scale ≤0.5) tolerate it better (≤~7e-6 at naphthalene).
+- `OQP_GRAD_CUTOFF=1e-10` — restore the historic tight screening exactly.
 
 ## Ceiling / honest limits
 

@@ -198,18 +198,16 @@ contains
 !    `dabcut` is the two particle density cutoff
 !
 !   The gradient is evaluated at the CONVERGED density, so the derivative-ERI
-!   screening may be loosened relative to the SCF Fock build without changing
-!   the converged gradient beyond a controllable tolerance.  Opt-in, default-OFF
-!   (env unset => byte-identical to the historic 1.0d-10):
-!     OQP_GRAD_CUTOFF - Schwarz block cutoff (default 1.0d-10).  1.0d-8 is the
-!                       size-robust opt-in (max|dG| <= ~1e-6 a.u. through the
-!                       36-atom systems tested).  1.0d-7 is more aggressive but
-!                       max|dG| GROWS with system size and exceeds 1e-5 past
-!                       ~18-atom HF (DFT/MRSF, HF-exchange scale <=0.5, tolerate
-!                       it to larger sizes).  Looser still is unsafe: derivative
-!                       integrals amplify the dropped contributions.  See
-!                       GRAD_SCREENING_NOTES.md for the per-size/method table.
-    cutoff = 1.0d-10
+!   screening is loosened relative to the SCF Fock build.  The default block
+!   Schwarz cutoff is 1.0d-8 (vs the historic, unusually tight 1.0d-10): it is
+!   size-robust (max|dG| <= ~1e-6 a.u. through the 36-atom systems tested) and
+!   trims ~5-12% off the dominant 2e-derivative build, growing with size.
+!     OQP_GRAD_CUTOFF - override the cutoff.  Set 1.0d-10 to restore the historic
+!                       tight screening (byte-for-byte).  1.0d-7 is more
+!                       aggressive (~10-25%) but max|dG| GROWS with size and
+!                       exceeds 1e-5 past ~18-atom HF (DFT/MRSF tolerate it
+!                       further).  See GRAD_SCREENING_NOTES.md for the table.
+    cutoff = 1.0d-8
     call get_environment_variable("OQP_GRAD_CUTOFF", sval, ln)
     if (ln > 0) then
       read(sval,*,iostat=itmp) cutval
@@ -225,8 +223,8 @@ contains
     dtol = 10.0d0**(-tol_int)
     rtol = log(10.0_dp)*tol_int
 
-!   Opt-in screening diagnostics (auto-enabled when the lever is active).
-    lstats = (cutoff /= 1.0d-10)
+!   Opt-in screening diagnostics (OQP_GRAD_STATS=1; off by default).
+    lstats = .false.
     call get_environment_variable("OQP_GRAD_STATS", sval, ln)
     if (ln > 0) lstats = (sval(1:1)=='1' .or. sval(1:1)=='y' .or. sval(1:1)=='Y' &
                           .or. sval(1:1)=='t' .or. sval(1:1)=='T')
