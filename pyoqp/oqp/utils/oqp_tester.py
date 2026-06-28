@@ -298,6 +298,7 @@ class OQPTester:
             for input_file in input_files:
                 result = self.run_single_test(input_file)
                 self.results.append(result)
+                self._log_result_status(result)
         else:
             # Each OpenQP calculation loads a Fortran/C backend with some
             # process-global state.  Reusing a Python worker for multiple
@@ -318,7 +319,9 @@ class OQPTester:
                     for input_file in input_files
                 }
                 for future in as_completed(future_to_file):
-                    self.results.append(future.result())
+                    result = future.result()
+                    self.results.append(result)
+                    self._log_result_status(result)
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
@@ -384,6 +387,25 @@ class OQPTester:
         minutes, seconds = divmod(rem, 60)
         return f"{int(hours):02d}:{int(minutes):02d}:{seconds:06.3f}"
 
+    @staticmethod
+    def _failure_reason(result) -> str:
+        """One-line reason a test did not pass: the failing check(s) for a
+        FAILED numeric mismatch, otherwise the last line of its message."""
+        msg = str(result.get('message', '') or '')
+        fails = [ln.strip() for ln in msg.splitlines() if 'failed' in ln.lower()]
+        if fails:
+            return ' | '.join(fails)
+        lines = [ln.strip() for ln in msg.splitlines() if ln.strip()]
+        return lines[-1] if lines else result.get('status', '')
+
+    def _log_result_status(self, result) -> None:
+        """Emit a live line naming any test that did not pass, so a CI log
+        identifies the offending example as it happens (not just a count)."""
+        status = result.get('status')
+        if status and status != 'PASSED':
+            self.log(f"{status}: {result.get('project')} "
+                     f"-- {self._failure_reason(result)}")
+
     def generate_report(self) -> str:
         passed = sum(
             1 for result in self.results
@@ -403,6 +425,25 @@ class OQPTester:
         )
         self.status = 1 if failed > 0 or errors > 0 else 0
 
+        # List the offending examples by name in the returned (console-visible)
+        # summary. The full per-test detail goes only to test_report.txt in the
+        # output dir, which CI does not upload -- so without this a red CI shows
+        # "Failed: 1" with no clue which example failed.
+        nonpassed = [r for r in self.results
+                     if r['status'] in ('FAILED', 'ERROR')]
+        skipped_list = [r for r in self.results if r['status'] == 'SKIPPED']
+        nonpassed_block = ""
+        if nonpassed:
+            nonpassed_block += "Failing tests:\n"
+            for r in nonpassed:
+                nonpassed_block += (f"  {r['status']:7} {r['project']}\n"
+                                    f"          {self._failure_reason(r)}\n")
+            nonpassed_block += "\n"
+        if skipped_list:
+            nonpassed_block += ("Skipped tests: "
+                                + ", ".join(r['project'] for r in skipped_list)
+                                + "\n\n")
+
         total_time = self.end_time - self.start_time
         execution_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         git_commit_info = self.get_git_commit_info()
@@ -421,7 +462,7 @@ Failed: {failed}
 Errors: {errors}
 Skipped: {skipped}
 
-Total CPUs: MPI Processors = {self.mpi_manager.size}, OpenMp Threads = {self.omp_threads}
+{nonpassed_block}Total CPUs: MPI Processors = {self.mpi_manager.size}, OpenMp Threads = {self.omp_threads}
 Max parallel tests: {self.max_workers}
 
 Total execution time: {self.format_time(total_time)}
