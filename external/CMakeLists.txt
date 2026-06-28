@@ -322,6 +322,9 @@ ExternalProject_Add(libtagarray
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
+        # tagarray v1.0.0 ships a 144-char iso_c_binding USE line that its own
+        # -std=f2018 build truncates under gfortran>=12; wrap it (idempotent).
+        PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_linelen.py ${TAGARRAY_SOURCE_DIR}
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
