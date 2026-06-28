@@ -47,10 +47,11 @@ module mod_dft_gridint_phi_cache
     integer :: numAOVecs = 0
     integer :: numAOs    = 0
     ! validity signature
-    integer(i8b) :: sig_geom   = 0_i8b
-    integer      :: sig_vecs   = 0
-    integer      :: sig_natoms = 0
-    real(fp)     :: sig_thr    = -1.0_fp
+    integer(i8b) :: sig_geom    = 0_i8b
+    integer      :: sig_vecs    = 0
+    integer      :: sig_natoms  = 0
+    integer      :: sig_nmolpts = 0       !< grid identity: total quadrature points
+    real(fp)     :: sig_thr     = -1.0_fp
     integer(i8b) :: nbytes     = 0_i8b
     type(phi_slice_t), allocatable :: slices(:)
   contains
@@ -110,15 +111,22 @@ contains
 !> @brief Decide build/replay mode for the current run and (re)allocate as needed.
 !> @param[in] enable      master on/off (env AND opt-in caller)
 !> @param[in] nSlices     number of grid slices
+!> @param[in] nMolPts     total quadrature points (grid-identity discriminator)
 !> @param[in] numAOs      number of basis functions
 !> @param[in] numAOVecs   AO vectors per point (1=val, 4=+grad, 10=+2nd der)
 !> @param[in] natoms      number of atoms
 !> @param[in] geom_hash   geometry hash (see phi_cache_geom_hash)
 !> @param[in] thr         DFT integration threshold (affects nonzero-point set)
-  subroutine begin_run(self, enable, nSlices, numAOs, numAOVecs, natoms, geom_hash, thr)
+!>
+!> @note nMolPts is an explicit grid-identity key so a mid-run grid swap (e.g.
+!>   the coarse->fine XC ramp, OQP_XC_C2F) can never be mistaken for a cache hit:
+!>   with a user-fixed dft_threshold the thr/AO/atom/geom signatures are identical
+!>   across the coarse and fine grids, leaving nSlices as the only other guard;
+!>   the two grids' point counts differ even if their slice counts collide.
+  subroutine begin_run(self, enable, nSlices, nMolPts, numAOs, numAOVecs, natoms, geom_hash, thr)
     class(phi_cache_t), intent(inout) :: self
     logical,      intent(in) :: enable
-    integer,      intent(in) :: nSlices, numAOs, numAOVecs, natoms
+    integer,      intent(in) :: nSlices, nMolPts, numAOs, numAOVecs, natoms
     integer(i8b), intent(in) :: geom_hash
     real(fp),     intent(in) :: thr
     logical :: match
@@ -128,12 +136,13 @@ contains
     if (.not. enable) return
 
     match = self%ready &
-      .and. self%nSlices   == nSlices  &
-      .and. self%numAOs    == numAOs   &
-      .and. self%numAOVecs == numAOVecs &
-      .and. self%sig_natoms == natoms  &
-      .and. self%sig_geom  == geom_hash &
-      .and. self%sig_thr   == thr
+      .and. self%nSlices    == nSlices  &
+      .and. self%sig_nmolpts == nMolPts &
+      .and. self%numAOs     == numAOs   &
+      .and. self%numAOVecs  == numAOVecs &
+      .and. self%sig_natoms == natoms   &
+      .and. self%sig_geom   == geom_hash &
+      .and. self%sig_thr    == thr
 
     if (match) then
       self%replay = .true.
@@ -142,12 +151,13 @@ contains
 
     ! (Re)build: drop any stale cache and prepare fresh per-slice storage.
     call self%free()
-    self%nSlices   = nSlices
-    self%numAOs    = numAOs
-    self%numAOVecs = numAOVecs
+    self%nSlices    = nSlices
+    self%sig_nmolpts = nMolPts
+    self%numAOs     = numAOs
+    self%numAOVecs  = numAOVecs
     self%sig_natoms = natoms
-    self%sig_geom  = geom_hash
-    self%sig_thr   = thr
+    self%sig_geom   = geom_hash
+    self%sig_thr    = thr
     allocate(self%slices(nSlices))
     self%ready  = .false.
     self%replay = .false.
