@@ -1640,7 +1640,7 @@ contains
     use mod_dft_molgrid, only : dft_grid_t
     use mathlib,          only : traceprod_sym_packed
     use solvent_pcm,      only : add_pcm_reaction_field
-    use mod_dft_incdft,  only : g_xc_ref, incdft_store, incdft_env_enabled
+    use mod_dft_incdft,  only : g_xc_ref, incdft_store
     implicit none
 
     type(basis_set),   intent(in)    :: basis
@@ -1766,7 +1766,7 @@ contains
         call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
       end if
       ! Refresh the IncDFT reference from this full build (only when IncDFT is on).
-      if (incdft_env_enabled()) call incdft_store(pfxc, E%eexc, E%totele, E%totkin)
+      if (infos%control%xc_incdft /= 0) call incdft_store(pfxc, E%eexc, E%totele, E%totkin)
     end if
 
     if (do_t) then

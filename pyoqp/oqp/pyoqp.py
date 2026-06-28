@@ -219,6 +219,9 @@ class Runner:
         else:
             self.mol.load_config(input_file)
 
+        # (The `perf` preset is resolved inside mol.load_config, before the config is
+        #  pushed to the control struct; mol.perf_report holds the resolution for logging.)
+
         # Apply the parsed `omp_threads` at runtime. The pre-import hook only sees
         # a CLI flag or an input *file*, so this also covers the programmatic
         # Runner(input_dict=...) path. omp_set_num_threads takes effect for the
@@ -249,6 +252,26 @@ class Runner:
         dump_log(self.mol, title='', section='start',
                  info={"build": _openqp_build_label()})
         dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
+        self._log_perf_settings()
+
+    def _log_perf_settings(self):
+        """Append the resolved performance settings + warnings to the log."""
+        report = getattr(self.mol, "perf_report", None)
+        if not report:
+            return
+        from oqp.utils import perf_levels
+        block = perf_levels.format_report(getattr(self.mol, "perf_level", perf_levels.UNSET),
+                                          report, getattr(self.mol, "perf_warns", []))
+        if not block:
+            return
+        if getattr(self.mol, "log", None):
+            try:
+                with open(self.mol.log, 'a', encoding='utf-8') as fout:
+                    fout.write(block + "\n")
+            except OSError:
+                pass
+        if not getattr(self.mol, "silent", False):
+            print(block)
 
     def run(self, test_mod=False):
         """

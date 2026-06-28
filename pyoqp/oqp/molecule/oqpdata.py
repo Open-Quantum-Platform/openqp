@@ -64,6 +64,22 @@ def path(strng):
     return Path(strng)
 
 
+def _perf_parse_bool(v):
+    """Parse a perf input-key boolean; return None for 'auto'/empty (= leave default)."""
+    s = str(v).strip().lower()
+    if s in ("", "auto"):
+        return None
+    return s in ("1", "y", "yes", "t", "true", "on")
+
+
+def _perf_parse_float(v):
+    """Parse a perf input-key float (Fortran 'd' exponents ok); None for 'auto'/empty."""
+    s = str(v).strip().lower()
+    if s in ("", "auto"):
+        return None
+    return float(s.replace("d", "e"))
+
+
 OQP_CONFIG_SCHEMA = {
     'input': {
         'charge': {'type': int, 'default': '0'},
@@ -72,6 +88,11 @@ OQP_CONFIG_SCHEMA = {
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
         'runtype': {'type': string, 'default': 'energy'},
+        # perf: performance preset, default 1 (recommended production; exact). 0..3
+        # resolve to a validated bundle of the performance input keys in
+        # utils/perf_levels.py; explicit input keys override the preset. Set perf=-1
+        # to disable the preset entirely (leave every knob at its control default).
+        'perf': {'type': int, 'default': '1'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
         'ispher': {'type': ispher_mode, 'default': 'auto'},
@@ -142,6 +163,12 @@ OQP_CONFIG_SCHEMA = {
         'pscreen_xc_aocut': {'type': float, 'default': '0.0'},
         'pscreen_grid_rad': {'type': int, 'default': '0'},
         'pscreen_grid_ang': {'type': int, 'default': '0'},
+        # performance knobs (see utils/perf_levels.py). 'auto' defers to the [input]
+        # perf preset; an explicit value overrides it. Translated to OQP_* env vars.
+        'xc_c2f': {'type': string, 'default': 'auto'},
+        'xc_phi_cache': {'type': string, 'default': 'auto'},
+        'xc_incdft': {'type': string, 'default': 'auto'},
+        'grad_cutoff': {'type': string, 'default': 'auto'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -206,6 +233,11 @@ OQP_CONFIG_SCHEMA = {
         'ixcore': {'type': string, 'default': '-1'},
         'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES (legacy), 2: MINRES, 3: AUTO
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+        # MRSF performance knobs (see utils/perf_levels.py). 'auto' defers to the
+        # [input] perf preset; an explicit value overrides it.
+        'resp_cutoff': {'type': string, 'default': 'auto'},
+        'fp32': {'type': string, 'default': 'auto'},
+        'zv_warmstart': {'type': string, 'default': 'auto'},
     },
     'ekt': {
         'ip': {'type': bool, 'default': 'True'},
@@ -375,6 +407,10 @@ class OQPData:
             "pscreen_xc_aocut": "set_scf_pscreen_xc_aocut",
             "pscreen_grid_rad": "set_scf_pscreen_grid_rad",
             "pscreen_grid_ang": "set_scf_pscreen_grid_ang",
+            "xc_c2f": "set_scf_xc_c2f",
+            "xc_phi_cache": "set_scf_xc_phi_cache",
+            "xc_incdft": "set_scf_xc_incdft",
+            "grad_cutoff": "set_scf_grad_cutoff",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
             "scal_rel": "set_scf_scal_rel",
@@ -429,6 +465,9 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+            "resp_cutoff": "set_tdhf_resp_cutoff",
+            "fp32": "set_tdhf_fp32",
+            "zv_warmstart": "set_tdhf_zv_warmstart",
         },
     }
     _typemap = [np.void,
@@ -690,6 +729,50 @@ class OQPData:
     def set_scf_pscreen_grid_ang(self, n):
         """Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)"""
         self._data.control.pscreen_grid_ang = n
+
+    # --- Performance knobs (input keys; 'auto' defers to the perf preset / leaves
+    #     the control default untouched). See utils/perf_levels.py. ---
+    def set_scf_xc_c2f(self, v):
+        """Coarse-to-fine XC grid during SCF descent (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_c2f = 1 if b else 0
+
+    def set_scf_xc_phi_cache(self, v):
+        """Cache collocation Phi across SCF iterations (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_phi_cache = 1 if b else 0
+
+    def set_scf_xc_incdft(self, v):
+        """Incremental DFT (experimental; on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_incdft = 1 if b else 0
+
+    def set_scf_grad_cutoff(self, v):
+        """Schwarz cutoff for the 2e-derivative gradient build (number or auto)."""
+        f = _perf_parse_float(v)
+        if f is not None:
+            self._data.control.grad_cutoff = f
+
+    def set_tdhf_resp_cutoff(self, v):
+        """MRSF response 2e-integral cutoff (number or auto)."""
+        f = _perf_parse_float(v)
+        if f is not None:
+            self._data.control.mrsf_resp_cutoff = f
+
+    def set_tdhf_fp32(self, v):
+        """FP32 MRSF response digestion (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.mrsf_fp32 = 1 if b else 0
+
+    def set_tdhf_zv_warmstart(self, v):
+        """MRSF z-vector warm-start across geometry steps (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.mrsf_zv_warmstart = 1 if b else 0
 
     def set_scf_converger_type(self, converger_type):
         """Set SCF solver for SCF convergence:

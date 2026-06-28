@@ -1442,6 +1442,7 @@ class Molecule:
         """
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
+        self._resolve_perf(input_source)
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -1451,6 +1452,17 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    def _resolve_perf(self, input_source):
+        """Apply the `perf` preset to self.config before it is pushed to the control
+        struct: fill the performance input keys left at the sentinel 'auto' (an explicit
+        value always wins). Env-var free. Stores the resolution report for logging."""
+        from oqp.utils import perf_levels
+        self.perf_level = self.config.get("input", {}).get("perf", perf_levels.UNSET)
+        self.perf_report, self.perf_warns = perf_levels.apply(
+            self.config, self.perf_level,
+            scf_conv=self.config.get("scf", {}).get("conv"),
+            zv_conv=self.config.get("tdhf", {}).get("zvconv"))
 
     @mpi_dump
     def write_molden(self, filename):

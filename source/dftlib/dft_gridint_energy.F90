@@ -469,9 +469,9 @@ contains
     xc_opts%ao_sparsity_ratio = 0.0_fp
 
     ! Opt 1: the SCF Fock build reaches the grid through this density-driven path
-    ! (calc_fock passes the packed density as dens_in). Opt in to the
-    ! cross-iteration Phi cache (further gated by env OQP_XC_PHI_CACHE).
-    xc_opts%use_phi_cache = .true.
+    ! (calc_fock passes the packed density as dens_in). Enable the cross-iteration
+    ! Phi cache from [scf] xc_phi_cache (infos%control%xc_phi_cache).
+    xc_opts%use_phi_cache = (infos%control%xc_phi_cache /= 0)
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call run_xc(xc_opts, dat, basis)

@@ -145,18 +145,20 @@ contains
     call flush(log_unit)
   end subroutine zv_timers_report
 
-  !> Read the z-vector opt-in environment variables once.
-  subroutine zv_read_config()
+  !> Read the z-vector config once: warm-start from the control struct ([tdhf]
+  !> zv_warmstart); the remaining opt-in levers from their env vars (advanced).
+  subroutine zv_read_config(infos)
+    use types, only: information
+    type(information), intent(in) :: infos
     character(len=32) :: e_
     integer :: ios
+    ! Warm-start is control-backed ([tdhf] zv_warmstart): refresh it on EVERY call so a
+    ! per-calculation override applies in long-lived (e.g. Python) workflows. It is
+    ! result-neutral (a CG initial guess only; the solve still converges to the same
+    ! tolerance), so it cannot change a converged single-point gradient.
+    zv_warm_on = (infos%control%mrsf_zv_warmstart /= 0)
+    ! The remaining levers are env-only and read once.
     if (zv_cfg_init) return
-    ! Warm-start DEFAULT ON: it is result-neutral (a CG initial guess only; the
-    ! solve still converges to the same tolerance), so it cannot change a
-    ! converged single-point gradient. Disable with OQP_MRSF_ZV_WARMSTART=0.
-    call get_environment_variable('OQP_MRSF_ZV_WARMSTART', e_)
-    zv_warm_on = .true.
-    if (len_trim(e_) > 0) zv_warm_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
-        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
     call get_environment_variable('OQP_MRSF_ZV_CONV', e_)
     if (len_trim(e_) > 0) then
       read(e_,*,iostat=ios) zv_conv_user
@@ -1174,8 +1176,8 @@ contains
 
   ! Optional per-iteration profiler (env OQP_MRSF_ZV_TIMERS; default off)
     call zv_timers_begin()
-  ! Optional performance opt-ins (env-gated; default off)
-    call zv_read_config()
+  ! Warm-start from [tdhf] zv_warmstart; remaining levers env-gated (advanced)
+    call zv_read_config(infos)
 
   ! Files open
   ! 3. LOG: Write: Main output file
