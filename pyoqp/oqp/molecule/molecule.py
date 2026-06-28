@@ -1751,20 +1751,26 @@ class Molecule:
             a, b = rtv, refv
             if e.phase_invariant:   # sign/phase ambiguous -> compare magnitudes
                 a, b = _abs_nested(a), _abs_nested(b)
-            flag, diff = compare_data(a, b, skip_sub=e.skip_sub)
+            flag, diff = compare_data(a, b, skip_sub=e.skip_sub, rtol=e.rtol)
             total_diff += diff
             message += f'   PyOQP checking {e.key:<20} ... {flag} ({diff:.8f})\n'
 
         return message, total_diff
 
 
-def compare_data(data_1, data_2, skip_sub=()):
+def compare_data(data_1, data_2, skip_sub=(), rtol=0.0):
     """
     Compute the numerical differences between two arrays
 
     ``skip_sub`` names dict sub-keys to ignore during comparison (e.g. the
     phase/sign-ambiguous EKT orbital vectors); the registry supplies these per
     quantity so they are declared in one place.
+
+    ``rtol`` (0 = exact absolute compare) sets a relative tolerance: a value is
+    counted as matching when ``|a-b| <= rtol*|b|``, and only the excess beyond
+    that tolerance contributes to the reported diff. Used for large-magnitude
+    quantities (e.g. SOC, ~1e5 cm^-1) where the absolute round(diff,4) gate
+    would otherwise demand far more significant figures than ULP-level noise.
     """
     if isinstance(data_1, dict) or isinstance(data_2, dict):
         if not isinstance(data_1, dict) or not isinstance(data_2, dict):
@@ -1776,7 +1782,8 @@ def compare_data(data_1, data_2, skip_sub=()):
             if key not in data_1:
                 diff += 1.0
                 continue
-            _, subdiff = compare_data(data_1[key], data_2[key], skip_sub=skip_sub)
+            _, subdiff = compare_data(data_1[key], data_2[key],
+                                      skip_sub=skip_sub, rtol=rtol)
             diff += subdiff
         if np.round(diff, 4) > 0:
             return 'failed', diff
@@ -1814,7 +1821,13 @@ def compare_data(data_1, data_2, skip_sub=()):
         # Use the maximum element-wise deviation instead of an L1 sum so
         # vector-valued references are judged by per-value numerical drift,
         # not by the number of states/components in the vector.
-        diff = float(np.max(np.abs(arr_1 - arr_2)))
+        absdiff = np.abs(arr_1 - arr_2)
+        if rtol > 0:
+            # Count only the deviation in excess of the per-element relative
+            # tolerance, so noise within rtol*|ref| passes while a genuine
+            # regression still shows up in the reported diff.
+            absdiff = np.maximum(0.0, absdiff - rtol * np.abs(arr_2))
+        diff = float(np.max(absdiff))
     if np.round(diff, 4) > 0:
         return 'failed', diff
 
