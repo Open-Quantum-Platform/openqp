@@ -122,10 +122,20 @@ REGISTRY = (
     RegKey('hess', runtypes=frozenset({'hess'}), required=True, source='sidecar',
            sidecar_field='hessian'),
     RegKey('freqs', runtypes=frozenset({'hess'}), required=True, source='sidecar'),
+    # IR intensities and Raman activities are second-order response properties
+    # (dipole / polarizability derivatives over the analytic Hessian). They are
+    # far more sensitive to the SCF convergence *path* than the energy or the
+    # Hessian itself: an SCF that converges to the same energy via a different
+    # route (e.g. the coarse->fine XC grid ramp, integral screening, a different
+    # guess/BLAS order) shifts the converged density at ~1e-6 and these
+    # quantities amplify that to ~1e-4 (IR) / ~1e-3 (Raman) -- above the global
+    # round(diff,4) ~5e-5 gate, while the energy stays bit-identical. Compare
+    # them with a small relative tolerance (a genuine regression is orders of
+    # magnitude larger). Same rationale as the SOC rtol below.
     RegKey('infrared_intensities', runtypes=frozenset({'hess'}),
-           required=True, source='sidecar'),
+           required=True, source='sidecar', rtol=1e-3),
     RegKey('raman_activities', runtypes=frozenset({'hess'}),
-           required=True, source='sidecar'),
+           required=True, source='sidecar', rtol=1e-4),
     # Excitation energies: meaningful only for excited-state methods; a ground
     # state run stores the placeholder [0].
     RegKey('td_energies', runtypes='*', required=True, needs_excited=True),
@@ -147,7 +157,10 @@ REGISTRY = (
            phase_invariant=True),
     RegKey('mrsf_ekt', runtypes=frozenset({'ekt'}), required=True,
            skip_sub=('orbitals_mo', 'dyson_orbitals_mo')),
-    RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr'),
+    # GIAO NMR shielding is a second-order response property and, like IR/Raman
+    # above, is sensitive to the SCF convergence path well beyond the energy;
+    # compare with a small relative tolerance (a real regression is far larger).
+    RegKey('nmr_shielding', runtypes='*', required=True, needs_prop='nmr', rtol=1e-4),
     # SCF property results, each gated on its requested scf_prop value.
     RegKey('dipole', runtypes='*', required=True, needs_prop='el_mom'),
     RegKey('mulliken_charges', runtypes='*', required=True, needs_prop='mulliken'),
