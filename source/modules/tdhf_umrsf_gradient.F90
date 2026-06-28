@@ -1,11 +1,18 @@
 !> UMRSF-TDDFT analytic nuclear gradient — clean-room implementation (branch uhf-grad-plan).
-!> STAGE: response build-up, gates-first (G1 -> G2 -> G3) per DERIVATIONS/stage1_hf_gradient_spec.md.
+!>
+!> VALIDATED SCOPE (2026-06-28): PURE-HF response gradient (no XC). S1 gate PASS (≤1e-5, RULES §11) at
+!> EQUILIBRIUM geometries — CH2 4.3e-7, SiH2 2.5e-7, H2CO 4.0e-6, butadiene 4.6e-6. S3 effectively passes;
+!> S2 is analytic-EXACT (clean internals) but alignment/tracking-limited at the FD. KNOWN-OPEN (see
+!> ../../RULES.md §17/§18 and PROGRESS.md): (A) distorted/diradical geometries + S2 are limited by the
+!> TRUSTED ENERGY's get_jacobi gauge under-convergence — fix = unify energy get_jacobi onto the cyclic
+!> umrsf_jacobi_smooth (MILESTONE A, validate vs GAMESS); (B) functionals are NOT implemented — the response
+!> is missing the XC kernel + grid-weight derivatives (MILESTONE B, after A).
+!>
 !> The C entry computes the reference (UHF-triplet) gradient via the reusable hf_gradient primitive
-!> (grd1/grd2 with the converged DM_A/DM_B) — already FD-certified to 1.46e-7 — and additionally runs
-!> the NON-FD isolation gates (energy reconstruction from the converged amplitude) so the response
-!> 2-PDM / matvec routing is validated before any derivative-integral code is wired. Reuses the
-!> clean-room energy/response lib (umrsfcbc/int2_umrsf/umrsfmntoia/mrsfesum/get_jacobi); never reads
-!> the guarded RO-MRSF gradient.
+!> (grd1/grd2 with the converged DM_A/DM_B) — already FD-certified to 1.46e-7 — plus the response:
+!> full-block Z-vector (oo+ov+vv) + full G^f (re-align, carries the dV/dC alignment Jacobian) +
+!> W=½sym(G^f+G^z) + de_m1 (alignment overlap-Pulay). Reuses the clean-room energy/response lib
+!> (umrsfcbc/int2_umrsf/umrsfmntoia/mrsfesum/get_jacobi); never reads the guarded RO-MRSF gradient.
 module tdhf_umrsf_gradient_mod
 
   use precision, only: dp
