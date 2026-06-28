@@ -18,7 +18,254 @@ module tdhf_mrsf_z_vector_mod
   integer :: gmres_nocca = 0
   integer :: gmres_noccb = 0
 
+  ! ----------------------------------------------------------------------------
+  ! Optional per-iteration profiling of the MRSF z-vector (CPHF/CPKS) solve.
+  ! Default OFF; enabled by setting env OQP_MRSF_ZV_TIMERS to a non-empty value.
+  ! Wall-clock seconds are accumulated per section and reported at the end of
+  ! each tdhf_mrsf_z_vector call (reset at the start of every call).
+  ! ----------------------------------------------------------------------------
+  logical, save :: zv_tmr_on   = .false.
+  logical, save :: zv_tmr_init = .false.
+  real(kind=dp), save :: zv_t_rhs   = 0.0_dp  !< RHS assembly
+  real(kind=dp), save :: zv_t_int2  = 0.0_dp  !< per-iter 2e digestion (int2_driver%run)
+  real(kind=dp), save :: zv_t_xc    = 0.0_dp  !< per-iter XC kernel (utddft_fxc)
+  real(kind=dp), save :: zv_t_trans = 0.0_dp  !< per-iter AO/MO transforms + operator apply
+  real(kind=dp), save :: zv_t_cg    = 0.0_dp  !< per-iter linear-solver vector algebra
+  real(kind=dp), save :: zv_t_back  = 0.0_dp  !< relaxed-density / W back-projection
+  integer, save       :: zv_n_iter  = 0       !< iterations performed by the chosen solver
+
+  ! ----------------------------------------------------------------------------
+  ! Performance controls for the MRSF z-vector solve (read once from env).
+  !   OQP_MRSF_ZV_WARMSTART  : seed from the previous step's solution. DEFAULT ON
+  !                            (=0/n/f to disable). Cannot change a converged
+  !                            result -- only the iteration count.
+  !   OQP_MRSF_ZV_PROG       : progressive (iteration-dependent) screening.
+  !                            DEFAULT ON (=0/n/f to disable). Perturbs the
+  !                            gradient by <~1e-8 (small systems) to ~7e-6 (large),
+  !                            within the gradient gate but NOT bit-identical.
+  !   OQP_MRSF_ZV_CONV       : override the convergence tol (default 1e-10 kept).
+  !   OQP_MRSF_ZV_CUTOFF     : static loose 2e cutoff (off; superseded by _PROG).
+  ! ----------------------------------------------------------------------------
+  logical, save :: zv_cfg_init   = .false.
+  logical, save :: zv_warm_on    = .false.
+  real(kind=dp), save :: zv_conv_user   = -1.0_dp  !< <0 => not set
+  real(kind=dp), save :: zv_cutoff_user = -1.0_dp  !< <0 => not set
+
+  ! Progressive (iteration-dependent) integral screening for the CG solve.
+  ! Loose cutoff while the residual is large (the search direction is inexact
+  ! anyway), tightened toward the tight floor and PINNED exact once the residual
+  ! is small, so the converged z-vector / gradient matches the all-tight run.
+  ! tau(k) = clamp(prog_k * ||r_{k-1}||, tight_floor, prog_cap); tau=tight once
+  ! ||r||^2 < prog_pin. Same coupling idea as feat/progressive-screening-scf.
+  logical, save :: zv_prog_on  = .false.
+  real(kind=dp), save :: zv_prog_k   = 1.0e-2_dp  !< tau = k*residual_norm
+  real(kind=dp), save :: zv_prog_cap = 1.0e-6_dp  !< loosest tau (upper clamp)
+  real(kind=dp), save :: zv_prog_pin = 1.0e-6_dp  !< pin tau=tight once error(=||r||^2) < this
+
+  ! Cold-start initial guess: Jacobi x0 = M^-1 rhs instead of x0 = 0. The cold CG
+  ! already spends one sigma build on A*x0 (=0 when x0=0), so this is free and
+  ! puts the solve ~1 iteration ahead. DEFAULT ON; disable with OQP_MRSF_ZV_DIAGGUESS=0.
+  ! Accuracy-safe (linear solve converges to the same A^-1 rhs) and protected by
+  ! the CG safeguard (falls back to zero if it doesn't reduce the residual).
+  logical, save :: zv_diag_guess = .false.
+
+  ! Coarser DFT grid for the z-vector XC kernel than the SCF grid (the response
+  ! tolerates a coarser grid). Shrinks the dominant per-iteration utddft_fxc cost.
+  ! The grid is selected by the pruned-grid NAME (SG0 < SG1 < SG2(default) < SG3);
+  ! the lever swaps to a coarser named grid for the z-vector only. DEFAULT OFF
+  ! (env OQP_MRSF_ZV_COARSEGRID=1); grid choice via OQP_MRSF_ZV_GRID (default SG1).
+  logical, save :: zv_coarse_on = .false.
+  character(len=8), save :: zv_grid_name = 'SG1'
+
+  ! Warm-start store (module-level; persists across the geometry/MD steps that
+  ! share one process). The converged z-vector varies smoothly along a path, so
+  ! the previous step's solution is a strong initial guess for the LINEAR CPHF
+  ! solve. Correctness is unconditional: the iterative solver still converges to
+  ! the same residual tolerance, so only the iteration count changes -- the
+  ! guess can never bias the gradient. Keyed by target state; reset when the
+  ! problem dimension (basis/occupation) changes.
+  real(kind=dp), allocatable, save :: zv_warm(:,:)
+  logical,       allocatable, save :: zv_warm_has(:)
+  integer, save :: zv_warm_lzdim = 0
+  ! Old MO coefficients from the step that filled the cache, for MO-basis
+  ! projection of the warm guess (handles MO rotation between steps so warm-start
+  ! also helps large optimizer steps, not just small MD steps).
+  real(kind=dp), allocatable, save :: zv_warm_moa(:,:), zv_warm_mob(:,:)
+  logical, save :: zv_warm_have_mo = .false.
+  integer, save :: zv_warm_nbf = 0
+
 contains
+
+  !> Wall-clock seconds (monotonic), for the optional z-vector profiler.
+  function zv_wtime() result(t)
+    real(kind=dp) :: t
+    integer(kind=8) :: c, r
+    call system_clock(c, r)
+    if (r > 0_8) then
+      t = real(c, dp) / real(r, dp)
+    else
+      t = 0.0_dp
+    end if
+  end function zv_wtime
+
+  !> Read the OQP_MRSF_ZV_TIMERS opt-in once and reset the accumulators.
+  subroutine zv_timers_begin()
+    character(len=8) :: e_
+    if (.not. zv_tmr_init) then
+      call get_environment_variable('OQP_MRSF_ZV_TIMERS', e_)
+      zv_tmr_on = len_trim(e_) > 0
+      zv_tmr_init = .true.
+    end if
+    zv_t_rhs = 0.0_dp; zv_t_int2 = 0.0_dp; zv_t_xc = 0.0_dp
+    zv_t_trans = 0.0_dp; zv_t_cg = 0.0_dp; zv_t_back = 0.0_dp
+    zv_n_iter = 0
+  end subroutine zv_timers_begin
+
+  !> Emit the accumulated per-section breakdown (no-op unless timers are on).
+  subroutine zv_timers_report(log_unit, solver_name)
+    integer, intent(in) :: log_unit
+    character(len=*), intent(in) :: solver_name
+    real(kind=dp) :: tot, sigma
+    if (.not. zv_tmr_on) return
+    sigma = zv_t_int2 + zv_t_xc + zv_t_trans
+    tot = zv_t_rhs + sigma + zv_t_cg + zv_t_back
+    write(log_unit,'(/1x,"==== MRSF Z-VECTOR PROFILE (",a,") ====")') trim(solver_name)
+    write(log_unit,'(1x,"Iterations                 : ",i8)') zv_n_iter
+    write(log_unit,'(1x,"RHS build            (s)   : ",f12.4)') zv_t_rhs
+    write(log_unit,'(1x,"Per-iter 2e digestion(s)   : ",f12.4)') zv_t_int2
+    write(log_unit,'(1x,"Per-iter XC kernel   (s)   : ",f12.4)') zv_t_xc
+    write(log_unit,'(1x,"Per-iter transforms  (s)   : ",f12.4)') zv_t_trans
+    write(log_unit,'(1x,"  -> sigma/Fock build(s)   : ",f12.4)') sigma
+    write(log_unit,'(1x,"Per-iter CG algebra  (s)   : ",f12.4)') zv_t_cg
+    write(log_unit,'(1x,"Back-projection      (s)   : ",f12.4)') zv_t_back
+    write(log_unit,'(1x,"Sum of sections      (s)   : ",f12.4)') tot
+    if (zv_n_iter > 0) &
+      write(log_unit,'(1x,"Avg sigma / iteration(s)   : ",f12.4)') sigma/real(zv_n_iter,dp)
+    write(log_unit,'(1x,"=========================================")')
+    call flush(log_unit)
+  end subroutine zv_timers_report
+
+  !> Read the z-vector opt-in environment variables once.
+  subroutine zv_read_config()
+    character(len=32) :: e_
+    integer :: ios
+    if (zv_cfg_init) return
+    ! Warm-start DEFAULT ON: it is result-neutral (a CG initial guess only; the
+    ! solve still converges to the same tolerance), so it cannot change a
+    ! converged single-point gradient. Disable with OQP_MRSF_ZV_WARMSTART=0.
+    call get_environment_variable('OQP_MRSF_ZV_WARMSTART', e_)
+    zv_warm_on = .true.
+    if (len_trim(e_) > 0) zv_warm_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
+        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
+    call get_environment_variable('OQP_MRSF_ZV_CONV', e_)
+    if (len_trim(e_) > 0) then
+      read(e_,*,iostat=ios) zv_conv_user
+      if (ios /= 0) zv_conv_user = -1.0_dp
+    end if
+    call get_environment_variable('OQP_MRSF_ZV_CUTOFF', e_)
+    if (len_trim(e_) > 0) then
+      read(e_,*,iostat=ios) zv_cutoff_user
+      if (ios /= 0) zv_cutoff_user = -1.0_dp
+    end if
+    ! Opt-in, DEFAULT OFF (upstream convention; enable with OQP_MRSF_ZV_PROG=1).
+    call get_environment_variable('OQP_MRSF_ZV_PROG', e_)
+    zv_prog_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    call get_environment_variable('OQP_MRSF_ZV_PROG_K', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_k
+    call get_environment_variable('OQP_MRSF_ZV_PROG_CAP', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_cap
+    call get_environment_variable('OQP_MRSF_ZV_PROG_PIN', e_)
+    if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_pin
+    ! Jacobi cold-start guess: opt-in, DEFAULT OFF (enable with OQP_MRSF_ZV_DIAGGUESS=1).
+    call get_environment_variable('OQP_MRSF_ZV_DIAGGUESS', e_)
+    zv_diag_guess = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    ! Coarser response grid (default OFF; new feature, validate before defaulting).
+    call get_environment_variable('OQP_MRSF_ZV_COARSEGRID', e_)
+    zv_coarse_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
+    call get_environment_variable('OQP_MRSF_ZV_GRID', e_)
+    if (len_trim(e_) > 0) zv_grid_name = trim(adjustl(e_))
+    zv_cfg_init = .true.
+  end subroutine zv_read_config
+
+  !> Progressive screening threshold for a CG step given the current squared
+  !> residual `error` and the tight floor. Returns the tight floor once pinned.
+  function zv_prog_tau(error, tight) result(tau)
+    real(kind=dp), intent(in) :: error, tight
+    real(kind=dp) :: tau, resid
+    if (.not. ieee_is_finite(error) .or. error < zv_prog_pin) then
+      tau = tight
+      return
+    end if
+    resid = sqrt(max(error, 0.0_dp))
+    tau = zv_prog_k * resid
+    if (tau < tight) tau = tight
+    if (tau > zv_prog_cap) tau = zv_prog_cap
+  end function zv_prog_tau
+
+  !> Store a converged xk (and the current MOs, for later MO-basis projection)
+  !> into the warm-start store for `state`. Reallocates if the problem dimension
+  !> changed (e.g. a different basis/molecule).
+  subroutine zv_store_guess(xk, lzdim, state, nstate, mo_a, mo_b, nbf)
+    real(kind=dp), intent(in) :: xk(:)
+    integer, intent(in) :: lzdim, state, nstate, nbf
+    real(kind=dp), intent(in) :: mo_a(:,:), mo_b(:,:)
+    integer :: ncol
+    if (.not. zv_warm_on) return
+    if (any(.not. ieee_is_finite(xk))) return
+    ncol = max(nstate, state)
+    if (zv_warm_lzdim /= lzdim .or. .not. allocated(zv_warm) .or. &
+        .not. allocated(zv_warm_has)) then
+      if (allocated(zv_warm))     deallocate(zv_warm)
+      if (allocated(zv_warm_has)) deallocate(zv_warm_has)
+      allocate(zv_warm(lzdim, ncol), source=0.0_dp)
+      allocate(zv_warm_has(ncol), source=.false.)
+      zv_warm_lzdim = lzdim
+    else if (size(zv_warm_has) < state) then
+      return
+    end if
+    zv_warm(:,state) = xk
+    zv_warm_has(state) = .true.
+    ! Cache the current MOs (shared across states this step) for MO projection.
+    if (zv_warm_nbf /= nbf .or. .not. allocated(zv_warm_moa)) then
+      if (allocated(zv_warm_moa)) deallocate(zv_warm_moa)
+      if (allocated(zv_warm_mob)) deallocate(zv_warm_mob)
+      allocate(zv_warm_moa(nbf,nbf), zv_warm_mob(nbf,nbf))
+      zv_warm_nbf = nbf
+    end if
+    zv_warm_moa(:,:) = mo_a(1:nbf,1:nbf)
+    zv_warm_mob(:,:) = mo_b(1:nbf,1:nbf)
+    zv_warm_have_mo = .true.
+  end subroutine zv_store_guess
+
+  !> Inverse of sfrogen: gather the z-vector amplitudes from MO-basis matrices
+  !> ava (alpha) / avb (beta) at the same index positions sfrogen scatters to.
+  !> The doc-virt block (which sfrogen writes to both spins) is averaged.
+  subroutine zv_sfrogen_gather(ava, avb, xk, nocca, noccb)
+    real(kind=dp), intent(in)  :: ava(:,:), avb(:,:)
+    real(kind=dp), intent(out) :: xk(:)
+    integer, intent(in) :: nocca, noccb
+    integer :: ij, i, j, k, nbf
+    nbf = ubound(ava,1)
+    ij = 0
+    do i = noccb+1, nocca        ! doc-socc  (beta)
+      do j = 1, noccb
+        ij = ij+1; xk(ij) = avb(j,i)
+      end do
+    end do
+    do k = nocca+1, nbf          ! doc-virt  (sfrogen wrote both spins)
+      do j = 1, noccb
+        ij = ij+1; xk(ij) = 0.5_dp*(ava(j,k)+avb(j,k))
+      end do
+    end do
+    do k = nocca+1, nbf          ! socc-virt (alpha)
+      do i = noccb+1, nocca
+        ij = ij+1; xk(ij) = ava(i,k)
+      end do
+    end do
+  end subroutine zv_sfrogen_gather
 
   ! Initialize GMRES work arrays
   subroutine init_gmres_work(nbf, nocca, noccb)
@@ -682,7 +929,8 @@ contains
     real(kind=dp), pointer :: ab1(:,:,:)
     type(int2_tdgrd_data_t), allocatable, target :: int2_data
     integer :: nvira, nvirb
-    
+    real(kind=dp) :: t0_op
+
     nvira = nbf - nocca
     nvirb = nbf - noccb
 
@@ -709,12 +957,17 @@ contains
     gmres_ab1_mo_b = 0.0_dp
     
     ! Generate density matrices from x_in
+    if (zv_tmr_on) then
+      t0_op = zv_wtime()
+      zv_n_iter = zv_n_iter + 1
+    end if
     call sfrogen(gmres_wrk1, gmres_wrk2, x_in, nocca, noccb)
-    
+
     ! Transform to AO basis
     call orthogonal_transform('t', nbf, mo_a, gmres_wrk1, gmres_pa(:,:,1), gmres_wrk3)
     call orthogonal_transform('t', nbf, mo_b, gmres_wrk2, gmres_pa(:,:,2), gmres_wrk3)
-    
+    if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
+
     ! Initialize ERI calculation with proper allocation
     allocate(int2_data)
     int2_data = int2_tdgrd_data_t( &
@@ -723,18 +976,21 @@ contains
         int_amb = .false., &
         tamm_dancoff = .false., &
         scale_exchange = scale_exch)
-    
+
+    if (zv_tmr_on) t0_op = zv_wtime()
     call int2_driver%run(int2_data, &
           cam=dft.and.infos%dft%cam_flag, &
           alpha=infos%dft%cam_alpha, &
           beta=infos%dft%cam_beta,&
           mu=infos%dft%cam_mu)
+    if (zv_tmr_on) zv_t_int2 = zv_t_int2 + (zv_wtime() - t0_op)
     ab1 => int2_data%apb(:,:,:,1)
-    
+
     call symmetrize_matrix(gmres_pa(:,:,1), nbf)
     call symmetrize_matrix(gmres_pa(:,:,2), nbf)
-    
+
     if (dft) then
+      if (zv_tmr_on) t0_op = zv_wtime()
       call utddft_fxc( &
           basis = basis, &
           molGrid = molGrid, &
@@ -748,6 +1004,7 @@ contains
           nmtx = 1, &
           threshold = 1.0d-15, &
           infos = infos)
+      if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0_op)
     end if
 
     if (any(.not. ieee_is_finite(ab1))) then
@@ -759,13 +1016,15 @@ contains
     end if
     
     ! Transform to MO basis - Fixed to use correct mo_b for beta
+    if (zv_tmr_on) t0_op = zv_wtime()
     call mntoia(ab1(:,:,1), gmres_ab1_mo_a, mo_a, mo_a, nocca, nocca)
     call mntoia(ab1(:,:,2), gmres_ab1_mo_b, mo_b, mo_b, noccb, noccb)
-    
+
     ! Apply the operator
     call sfrolhs(x_out, x_in, mo_energy_a, fa, fb, gmres_ab1_mo_a, gmres_ab1_mo_b, &
                  nocca, noccb)
-    
+    if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0_op)
+
     call int2_data%clean()
     deallocate(int2_data)
     
@@ -842,7 +1101,6 @@ contains
     real(kind=dp), allocatable :: ab1_mo_a(:,:)
     real(kind=dp), allocatable :: ab1_mo_b(:,:)
     real(kind=dp), allocatable :: xm(:)
-    real(kind=dp), pointer :: ab2(:,:,:)
     real(kind=dp), pointer :: ab1(:,:,:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:)
     real(kind=dp), pointer :: bvec(:,:,:)
@@ -881,6 +1139,11 @@ contains
 
   ! General data
     real(kind=dp) :: alpha, error, pap
+    real(kind=dp) :: t0_zv
+    real(kind=dp) :: zv_rc_save
+    logical :: zv_rc_loosen
+    character :: zv_gname_save(16)
+    integer :: ig
     character(len=10) :: solver_name
 
     logical :: dft, mrsf_zvector_breakdown
@@ -909,6 +1172,11 @@ contains
     dft = infos%control%hamilton == 20
     mrsf_zvector_breakdown = .false.
 
+  ! Optional per-iteration profiler (env OQP_MRSF_ZV_TIMERS; default off)
+    call zv_timers_begin()
+  ! Optional performance opt-ins (env-gated; default off)
+    call zv_read_config()
+
   ! Files open
   ! 3. LOG: Write: Main output file
     open (unit=iw, file=infos%log_filename, position="append")
@@ -924,11 +1192,30 @@ contains
     nbf = basis%nbf
     nbf_tri = nbf*(nbf+1)/2
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    ! Build the z-vector's DFT grid -- optionally coarser than the SCF grid
+    ! (env OQP_MRSF_ZV_COARSEGRID). The grid params are restored immediately; the
+    ! built molGrid carries the coarse grid through all of the z-vector's XC calls.
+    if (dft) then
+      zv_gname_save = infos%dft%grid_pruned_name
+      if (zv_coarse_on) then
+        infos%dft%grid_pruned = .true.
+        infos%dft%grid_pruned_name = ' '
+        do ig = 1, min(len_trim(zv_grid_name), 16)
+          infos%dft%grid_pruned_name(ig) = zv_grid_name(ig:ig)
+        end do
+        write(iw,'(" MRSF z-vector coarse response grid: ",a)') trim(zv_grid_name)
+      end if
+      call dft_initialize(infos, basis, molGrid)
+      if (zv_coarse_on) infos%dft%grid_pruned_name = zv_gname_save
+    end if
 
   ! Parameter it should be inputed later
     mrst = infos%tddft%mult
     cnvtol = infos%tddft%zvconv
+  ! Opt-in: override the z-vector convergence tolerance (env OQP_MRSF_ZV_CONV).
+  ! Default 1e-10 is on the SQUARED residual and is typically over-converged for
+  ! gradients; right-sizing it cuts iterations. Default unset = input zvconv.
+    if (zv_conv_user > 0.0_dp) cnvtol = zv_conv_user
 
     nocca = infos%mol_prop%nelec_A
     nvira = nbf-noccA
@@ -1047,8 +1334,22 @@ contains
     bvec(1:nbf,1:nbf,1:1) => td_abxc
 
   ! Initialize ERI calculations
+  ! Opt-in: loosen the 2e integral cutoff for the WHOLE z-vector build (RHS,
+  ! per-iteration sigma, and relaxed-density tail) via env OQP_MRSF_ZV_CUTOFF.
+  ! Gradients are more cutoff-sensitive than energies, so the safe value is
+  ! tighter than the response's; find it empirically. Restored before return so
+  ! the next step's SCF/response is unaffected. Default unset = exact (unchanged).
+    zv_rc_save = infos%control%int2e_cutoff
+    ! Progressive screening (below) keeps init at the TIGHT cutoff so the pair
+    ! list is a full superset; it ramps the run-time threshold per iteration.
+    ! The static loosen and progressive are therefore mutually exclusive.
+    zv_rc_loosen = zv_cutoff_user > 0.0_dp .and. .not. zv_prog_on
+    if (zv_rc_loosen) infos%control%int2e_cutoff = max(zv_rc_save, zv_cutoff_user)
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
+    if (zv_prog_on) write(iw,'(" MRSF z-vector progressive screening ON: ", &
+        &"tau=clamp(",1p,e8.1,"*||r||, ",e8.1," , ",e8.1,"), pin@||r||^2<",e8.1)') &
+        zv_prog_k, zv_rc_save, zv_prog_cap, zv_prog_pin
 
     write(*,'(/1x,71("-")&
              &/19x,"MRSF-DFT ENERGY GRADIENT CALCULATION"&
@@ -1072,7 +1373,9 @@ contains
     ! ======================================================================
     ! Step 1: assemble the z-vector right-hand side and Fock/density pieces.
     ! ======================================================================
+    if (zv_tmr_on) t0_zv = zv_wtime()
     call build_mrsf_zvector_rhs()
+    if (zv_tmr_on) zv_t_rhs = zv_t_rhs + (zv_wtime() - t0_zv)
 
     write(*,'(/3x,25("-")&
              &/6x,"START Z-VECTOR LOOP (",A,")"&
@@ -1097,6 +1400,11 @@ contains
       call run_mrsf_cg_zvector()
     end select
 
+    ! Progressive screening ramps the cutoff during the CG loop; restore the
+    ! tight floor so the relaxed-density/W back-projection (which sets the
+    ! gradient) is computed exactly.
+    if (zv_prog_on) call int2_driver%set_cutoff(zv_rc_save)
+
 ! -----------------------------------------------
     if (mrsf_zvector_breakdown) then
        infos%mol_energy%Z_Vector_converged=.false.
@@ -1106,6 +1414,7 @@ contains
        call flush(iw)
        call int2_data%clean()
        call int2_driver%clean()
+       if (zv_rc_loosen) infos%control%int2e_cutoff = zv_rc_save
        if (dft) call dftclean(infos)
        call measure_time(print_total=1, log_unit=iw)
        call cleanup_gmres_work()
@@ -1125,6 +1434,10 @@ contains
        write(*,'(/3x,24("-")&
              &/6x,"Z-Vector converged"&
              &/3x,24("-")/)')
+       ! Cache the converged solution for warm-starting the next step (no-op
+       ! unless OQP_MRSF_ZV_WARMSTART is set).
+       call zv_store_guess(xk, lzdim, target_state, int(infos%tddft%nstate), &
+                           mo_a, mo_b, nbf)
     endif
 
     call flush(iw)
@@ -1132,9 +1445,14 @@ contains
     ! ======================================================================
     ! Step 3: build the relaxed density (td_p) and energy-weighted density (wao).
     ! ======================================================================
+    if (zv_tmr_on) t0_zv = zv_wtime()
     call build_mrsf_relaxed_density_and_w()
+    if (zv_tmr_on) zv_t_back = zv_t_back + (zv_wtime() - t0_zv)
+
+    call zv_timers_report(iw, solver_name)
 
     call int2_driver%clean()
+    if (zv_rc_loosen) infos%control%int2e_cutoff = zv_rc_save
 
     if (dft) call dftclean(infos)
 
@@ -1149,7 +1467,7 @@ contains
     ! GMRES z-vector solve.  Reports breakdown via mrsf_zvector_breakdown so the
     ! auto driver can detect failure uniformly across solvers.
     subroutine run_mrsf_gmres_zvector()
-      xk = 0.0_dp
+      call zv_warm_seed()
       call gmres_solve( &
           apply_operator = apply_z_operator, &
           apply_precond = lambda_precond, &
@@ -1180,7 +1498,10 @@ contains
     ! that stays stable when (A+B) turns indefinite, at CG-like cost.  Uses the
     ! same apply_z_operator / apply_z_precond as CG and GMRES.
     subroutine run_mrsf_minres_zvector()
-      xk = 0.0_dp
+      ! NOTE: this MINRES wrapper solves A x = rhs starting from the zero vector
+      ! (mr%init seeds from rhs), so warm-start has no effect here; seeding is a
+      ! no-op kept for uniformity. Warm-start benefits CG (default) and GMRES.
+      call zv_warm_seed()
       call mr%init(b=rhs, update=minres_apply_op, precond=minres_apply_pc, &
                    dat=minres_dummy, tol=cnvtol)
       minres_iter = 0
@@ -1244,40 +1565,54 @@ contains
     ! Preconditioned CG z-vector solve (default path).  All state is
     ! reached by host association, matching the inline version exactly.
     subroutine run_mrsf_cg_zvector()
+      real(kind=dp) :: t0, rhs_norm2
+      logical :: warm_used
 
       ! ============================================
       ! ORIGINAL CONJUGATE GRADIENT SOLVER
       ! ============================================
 
-      ! Initial guess with same strategy as CG
-      xk = 0.0_dp
+      ! Initial guess: zero (cold) or the previous step's solution (warm-start).
+      ! With a warm xk the initial residual machinery below stays correct -- it
+      ! builds A*xk and r0 = rhs - A*xk exactly as for the cold start.
+      call zv_warm_seed(warm_used)
 
+      if (zv_tmr_on) t0 = zv_wtime()
       call sfrogen(wrk1, wrk2, xk, nocca, noccb)
       ! Alpha
       call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
       ! Beta
       call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+      if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0)
 
-      !****** INITIAL (A+B)*PK *************************************************
-      ! Initialize ERI calculations
+      !****** INITIAL (A+B)*xk : residual r0 = rhs - A*xk **********************
+      ! IMPORTANT: this MUST apply the SAME operator the CG loop iterates with
+      ! (int2_tdgrd_data_t, int_amb=.false., beta channel = apb(:,:,2)), or the
+      ! recurrence residual `errv` drifts from the true residual and CG converges
+      ! to the wrong xk. For the cold start (xk=0) the density and hence lhs are
+      ! zero regardless, so this is bit-identical to the previous code; it only
+      ! matters once a warm-start guess (xk/=0) is used.
       call int2_data%clean()
       deallocate(int2_data)
-      int2_data = int2_td_data_t( &
+      int2_data = int2_tdgrd_data_t( &
           d2 = pa, &
           int_apb = .true., &
-          int_amb = .true., &
+          int_amb = .false., &
           tamm_dancoff = .false., &
           scale_exchange = scale_exch)
 
+      if (zv_tmr_on) t0 = zv_wtime()
       call int2_driver%run(int2_data, &
               cam=dft.and.infos%dft%cam_flag, &
               alpha=infos%dft%cam_alpha, &
               beta=infos%dft%cam_beta,&
               mu=infos%dft%cam_mu)
+      if (zv_tmr_on) zv_t_int2 = zv_t_int2 + (zv_wtime() - t0)
       ab1 => int2_data%apb(:,:,:,1)
-      ab2 => int2_data%amb(:,:,:,1)
 
-      pa = pa*2
+      if (zv_tmr_on) t0 = zv_wtime()
+      call symmetrize_matrix(pa(:,:,1), nbf)
+      call symmetrize_matrix(pa(:,:,2), nbf)
       call utddft_fxc( &
           basis = basis, &
           molGrid = molGrid, &
@@ -1291,17 +1626,35 @@ contains
           nmtx = 1, &
           threshold = 1.0d-15, &
           infos = infos)
+      if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
+      if (zv_tmr_on) t0 = zv_wtime()
       !   ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
       call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
 
-      wrk1 = 2*ab1(:,:,2) + ab2(:,:,2)
-      call mntoia(wrk1, ab1_mo_b, mo_b, mo_b, noccb, noccb)
+      call mntoia(ab1(:,:,2), ab1_mo_b, mo_b, mo_b, noccb, noccb)
 
       call sfrolhs(lhs, xk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                    nocca, noccb)
+      if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0)
 
       call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+      ! Warm-start safeguard: if the seeded guess did not reduce the residual
+      ! below the cold-start value ||rhs||^2 (e.g. large MO rotation between
+      ! steps, as in degenerate systems), discard it and restart from zero. The
+      ! cold residual is exact (A*0 = 0 => r0 = rhs), so the fallback needs no
+      ! extra Fock build -- it just reuses rhs.
+      if (warm_used) then
+        rhs_norm2 = dot_product(rhs, rhs)
+        if (.not. ieee_is_finite(error) .or. error >= rhs_norm2) then
+          write(iw,'(" MRSF z-vector warm-start: guess rejected (r0^2 ",1p,e10.3, &
+                   &" >= cold ",e10.3,"); restarting from zero")') error, rhs_norm2
+          call flush(iw)
+          xk = 0.0_dp
+          lhs = 0.0_dp
+          call pcgrbpini(errv, pk, error, rhs, xminv, lhs)
+        end if
+      end if
       if (.not. ieee_is_finite(error) .or. any(.not. ieee_is_finite(errv)) .or. &
           any(.not. ieee_is_finite(pk)) .or. any(.not. ieee_is_finite(lhs))) then
         write(iw,'(" MRSF CG Z-Vector breakdown: non-finite initial PCG state")')
@@ -1315,12 +1668,21 @@ contains
       ! -----------------------------------------------
 
       do iter = 1, infos%control%maxit_zv
+        zv_n_iter = iter
 
+        if (zv_tmr_on) t0 = zv_wtime()
         call sfrogen(wrk1, wrk2, pk, nocca, noccb)
         !     Alpha
         call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
         !     Beta
         call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+        if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0)
+
+        ! Progressive screening: loosen the cutoff for this sigma build based on
+        ! the residual carried in from the previous step (the initial residual on
+        ! iter 1). Pinned to the tight floor once the residual is small, so the
+        ! converged solution is exact.
+        if (zv_prog_on) call int2_driver%set_cutoff(zv_prog_tau(error, zv_rc_save))
 
         !     (A+B)*PK
         call int2_data%clean()
@@ -1332,16 +1694,19 @@ contains
             tamm_dancoff = .false., &
             scale_exchange = scale_exch)
 
+        if (zv_tmr_on) t0 = zv_wtime()
         call int2_driver%run(int2_data, &
               cam=dft.and.infos%dft%cam_flag, &
               alpha=infos%dft%cam_alpha, &
               beta=infos%dft%cam_beta,&
               mu=infos%dft%cam_mu)
+        if (zv_tmr_on) zv_t_int2 = zv_t_int2 + (zv_wtime() - t0)
         ab1 => int2_data%apb(:,:,:,1)
 
         !ab1 = ab1/2
         call symmetrize_matrix(pa(:,:,1), nbf)
         call symmetrize_matrix(pa(:,:,2), nbf)
+        if (zv_tmr_on) t0 = zv_wtime()
         call utddft_fxc( &
             basis = basis, &
             molGrid = molGrid, &
@@ -1355,7 +1720,9 @@ contains
             nmtx = 1, &
             threshold = 1.0d-15, &
             infos = infos)
+        if (zv_tmr_on) zv_t_xc = zv_t_xc + (zv_wtime() - t0)
 
+        if (zv_tmr_on) t0 = zv_wtime()
         !     ALPHA: AO(M,N) -> MO(IA+) ... LPTMOA
         call mntoia(ab1(:,:,1), ab1_mo_a, mo_a, mo_a, nocca, nocca)
 
@@ -1363,6 +1730,7 @@ contains
 
         call sfrolhs(lhs, pk, mo_energy_a, fa, fb, ab1_mo_a, ab1_mo_b, &
                      nocca, noccb)
+        if (zv_tmr_on) zv_t_trans = zv_t_trans + (zv_wtime() - t0)
 
         if (any(.not. ieee_is_finite(lhs)) .or. any(.not. ieee_is_finite(pk))) then
           write(iw,'(" MRSF CG Z-Vector breakdown: non-finite lhs/search direction")')
@@ -1371,6 +1739,7 @@ contains
           exit
         end if
 
+        if (zv_tmr_on) t0 = zv_wtime()
         pap = dot_product(pk, lhs)
         if (.not. ieee_is_finite(pap) .or. abs(pap) < MRSF_ZVEC_DENOMINATOR_FLOOR) then
           write(iw,'(" MRSF CG Z-Vector breakdown: unsafe p^T A p denominator")')
@@ -1408,7 +1777,10 @@ contains
                 iter, error, cnvtol
         call flush(iw)
 
-        if (error<cnvtol) exit
+        if (error<cnvtol) then
+          if (zv_tmr_on) zv_t_cg = zv_t_cg + (zv_wtime() - t0)
+          exit
+        end if
 
         call pcgb(pk, errv, xminv)
         if (any(.not. ieee_is_finite(pk))) then
@@ -1417,8 +1789,17 @@ contains
           error = huge(1.0_dp)
           exit
         end if
+        if (zv_tmr_on) zv_t_cg = zv_t_cg + (zv_wtime() - t0)
 
       end do
+
+      ! Always leave int2_driver at the tight cutoff on exit. Progressive
+      ! screening ramps it during the loop; if CG exits UNCONVERGED (e.g. the
+      ! AUTO solver then falls back to MINRES/GMRES, which reuse int2_driver via
+      ! apply_z_operator and do not ramp), the fallback must see the tight
+      ! operator -- otherwise it would solve/check convergence against the
+      ! screened one. (On convergence the last step is already pinned tight.)
+      if (zv_prog_on) call int2_driver%set_cutoff(zv_rc_save)
           end subroutine run_mrsf_cg_zvector
 
     ! Lambda wrapper for preconditioner
@@ -1427,6 +1808,84 @@ contains
       real(kind=dp), intent(out) :: x_out(:)
       call apply_z_precond(x_in, x_out, xminv)
     end subroutine lambda_precond
+
+    ! Seed xk for the solver: zero (cold), the raw previous solution, or — when
+    ! the MOs have rotated between steps — the previous solution PROJECTED into
+    ! the current MO basis via the geometry-stable AO z-density:
+    !   xk_old -> av_old(MO,old) -> Pz = C_old av_old C_old^T (AO)
+    !          -> C_new^T S Pz S C_new (MO,new) -> gather -> xk.
+    ! Same-geometry round-trip is exact (C^T S C = I). The CG safeguard still
+    ! rejects the guess if it doesn't beat the cold residual, so this can only
+    ! help (large steps) or be ignored — never corrupt the gradient.
+    subroutine zv_warm_seed(used)
+      use mathlib, only: unpack_matrix
+      logical, intent(out), optional :: used
+      real(kind=dp), contiguous, pointer :: smptr(:)
+      real(kind=dp), allocatable :: smat(:,:), ava(:,:), avb(:,:), pz(:,:), &
+                                    tmp(:,:), avn1(:,:), avn2(:,:)
+      integer :: st, ok
+      logical :: have, got_warm
+      if (present(used)) used = .false.
+      xk = 0.0_dp
+      got_warm = .false.
+      st = target_state
+
+      ! ---- try a warm-start guess from the previous step (short-circuit guards) ----
+      have = zv_warm_on .and. allocated(zv_warm) .and. allocated(zv_warm_has) &
+             .and. zv_warm_lzdim == lzdim
+      if (have) have = (st >= 1 .and. st <= size(zv_warm_has))
+      if (have) have = zv_warm_has(st)
+      if (have) have = .not. any(.not. ieee_is_finite(zv_warm(:,st)))
+      if (have) then
+        if (zv_warm_have_mo .and. zv_warm_nbf == nbf) then
+          ! MO-projected seed: xk_old -> Pz(AO,old) -> C_new^T S Pz S C_new -> gather
+          allocate(smat(nbf,nbf), ava(nbf,nbf), avb(nbf,nbf), pz(nbf,nbf), &
+                   tmp(nbf,nbf), avn1(nbf,nbf), avn2(nbf,nbf), stat=ok)
+          if (ok == 0) then
+            call tagarray_get_data(infos%dat, OQP_SM, smptr)
+            call unpack_matrix(smptr, smat, nbf, 'U')
+            call sfrogen(ava, avb, zv_warm(:,st), nocca, noccb)
+            call orthogonal_transform('t', nbf, zv_warm_moa, ava, pz, wrk3)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,smat,nbf,pz,nbf,0.0_dp,tmp,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmp,nbf,smat,nbf,0.0_dp,pz,nbf)
+            call orthogonal_transform('n', nbf, mo_a, pz, avn1, wrk3)
+            call orthogonal_transform('t', nbf, zv_warm_mob, avb, pz, wrk3)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,smat,nbf,pz,nbf,0.0_dp,tmp,nbf)
+            call dgemm('n','n',nbf,nbf,nbf,1.0_dp,tmp,nbf,smat,nbf,0.0_dp,pz,nbf)
+            call orthogonal_transform('n', nbf, mo_b, pz, avn2, wrk3)
+            call zv_sfrogen_gather(avn1, avn2, xk, nocca, noccb)
+            if (any(.not. ieee_is_finite(xk))) xk = zv_warm(:,st)
+            deallocate(smat, ava, avb, pz, tmp, avn1, avn2)
+            got_warm = .true.
+            write(iw,'(" MRSF z-vector warm-start: MO-projected seed (state ",i0,")")') st
+          end if
+        else
+          xk = zv_warm(:,st); got_warm = .true.
+          write(iw,'(" MRSF z-vector warm-start: raw seed (state ",i0,")")') st
+        end if
+      end if
+
+      if (got_warm) then
+        if (present(used)) used = .true.
+        call flush(iw)
+        return
+      end if
+
+      ! ---- cold start: Jacobi (diagonal) guess x0 = M^-1 rhs, else zero ----
+      ! Free (the cold initial Fock build runs regardless) and ~1 iteration ahead.
+      ! Marked "used" so the CG safeguard validates it and falls back to zero if
+      ! it does not reduce the residual.
+      if (zv_diag_guess) then
+        xk = xminv * rhs
+        if (any(.not. ieee_is_finite(xk))) then
+          xk = 0.0_dp
+        else
+          if (present(used)) used = .true.
+          write(iw,'(" MRSF z-vector: Jacobi (diagonal) initial guess")')
+          call flush(iw)
+        end if
+      end if
+    end subroutine zv_warm_seed
 
     ! minres_matvec(y, x, dat) wrappers: y is the output, x the input, dat is
     ! unused (the solver context is reached by host association).
