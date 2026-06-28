@@ -23,6 +23,7 @@ module tdhf_umrsf_gradient_mod
   use types, only: information
   use grd2, only: grd2_compute_data_t
   use basis_tools, only: basis_set
+  use mod_dft_molgrid, only: dft_grid_t
 
   implicit none
 
@@ -30,6 +31,18 @@ module tdhf_umrsf_gradient_mod
 
   private
   public :: tdhf_umrsf_gradient_C
+
+  !> ------- Stage-2 XC context (MILESTONE B / RULES §18) -------
+  !> Set ONCE per gradient in umrsf_grad_run_gates (DFT runs only). The reference UKS XC kernel
+  !> f_xc[ρ_ref] enters the response gradient ONLY through the reference-orbital relaxation (the
+  !> MRSF response A-matrix has NO grid f_xc — energy is int2-only, so the f_xc·(X+Y)(X+Y) term is
+  !> ABSENT). xc_meanfield_on toggles umrsf_meanfield's f_xc·P add-on (T3, propagates to the
+  !> Z-vector Hessian / refrelax G^f / G^z / W). xc_refa/refb = reference density (defines the
+  !> kernel). See DERIVATIONS/M2_xc_response.md.
+  logical,                  save :: xc_meanfield_on = .false.
+  type(dft_grid_t),         save :: xc_molgrid
+  real(kind=dp), allocatable, save :: xc_refa(:,:), xc_refb(:,:)
+  real(kind=dp),            save :: xc_thresh = 0.0_dp
 
   !> Custom grd2 2-PDM for the UMRSF response (amplitude transition density).
   !> Emits, per shell-quartet, the certified (B_k,D_k) channel 2-PDM (G1) with the
@@ -103,6 +116,8 @@ contains
     use grd1, only: grad_ee_overlap
     use constants, only: tol_int
     use oqp_linalg
+    use dft, only: dft_initialize, dftclean
+    use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use iso_c_binding, only: c_int, c_f_pointer
 
     implicit none
@@ -119,10 +134,11 @@ contains
     ! unrelaxed difference density P^Δ,u + orbital-part gradient
     real(kind=dp), allocatable :: talpha(:,:), tbeta(:,:), pda(:,:), pdb(:,:)
     real(kind=dp), allocatable :: peffa(:,:), peffb(:,:)        ! P_eff = P^Δ,u + ½ P_z (c03/c04 split)
-    real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:), de_m1(:,:)
+    real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:), de_m1(:,:), de_xc(:,:)
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
+    logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
     real(kind=dp), allocatable :: cac(:,:), cbc(:,:), epsca(:), epscb(:), pza(:,:), pzb(:,:)
@@ -429,7 +445,8 @@ contains
     int2_driver%schwarz = .false.
 
     allocate(pza(nbf,nbf), pzb(nbf,nbf), zmata(nbf,nbf), zmatb(nbf,nbf), source=0.0_dp)
-    allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), de_m1(3,natom), source=0.0_dp)
+    allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), de_m1(3,natom), &
+             de_xc(3,natom), source=0.0_dp)
 
     ! Toggles: UMRSF_ZW (z weight in P_eff, default 0.5 = the c03/c04 split prefactor); UMRSF_W2E /
     ! UMRSF_WRR (include the 2e / refrelax pieces of the raw aligned G̃, default on). Ablations for the
@@ -446,6 +463,31 @@ contains
       call get_environment_variable("UMRSF_GVT", e, status=ios) ; if (ios==0) l_gvt = (trim(e)=="1")
       call get_environment_variable("UMRSF_M1",  e, status=ios) ; if (ios==0) l_m1  = (trim(e)/="0")
     end block
+
+    ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
+    ! DFT runs only. UMRSF_XCK (T3): add f_xc[ρ_ref]·P to the reference mean field ⇒ Z-vector Hessian /
+    ! refrelax G^f / G^z / W. UMRSF_XCG (T2): add the difference-density XC gradient d/dR Tr(V_xc[ρ_ref]·P_eff).
+    ! Both default ON for DFT (the response is otherwise missing all XC ⇒ the ~3.5e-2 BHHLYP S1 gap). The grid
+    ! f_xc·(X+Y)(X+Y) term is ABSENT for MRSF (the energy A-matrix has no grid f_xc). Set the module XC context
+    ! ONCE here (reference density + molGrid at the BASE geometry) for umrsf_meanfield (T3) + de_xc (T2).
+    dft_run = (infos%control%hamilton == 20)
+    l_xck = dft_run ; l_xcg = dft_run
+    block
+      character(len=16) :: e ; integer :: ios
+      call get_environment_variable("UMRSF_XCK", e, status=ios) ; if (ios==0) l_xck = (trim(e)/="0")
+      call get_environment_variable("UMRSF_XCG", e, status=ios) ; if (ios==0) l_xcg = (trim(e)/="0")
+    end block
+    xc_meanfield_on = .false.
+    if (dft_run .and. (l_xck .or. l_xcg)) then
+      call dft_initialize(infos, basis, xc_molgrid, verbose=.false.)
+      if (allocated(xc_refa)) deallocate(xc_refa)
+      if (allocated(xc_refb)) deallocate(xc_refb)
+      allocate(xc_refa(nbf,nbf), xc_refb(nbf,nbf))
+      call unpack_matrix(dmat_a, xc_refa, nbf, 'U')
+      call unpack_matrix(dmat_b, xc_refb, nbf, 'U')
+      xc_thresh = 0.0_dp
+      xc_meanfield_on = l_xck       ! T3 inside umrsf_meanfield (refrelax / Z-Hessian / G^z / W)
+    end if
 
     ! ============ c06 §16 closed form: G̃ → FULL G^f (re-align) → FULL-BLOCK Z → W ============
     ! THE FIX (both parts required; either alone leaves the ~1e-3 wall):
@@ -551,19 +593,44 @@ contains
     peffb = pdb + dbg_zw*pzb
     call umrsf_orbital_grad(infos, basis, peffa, peffb, dmat_a, dmat_b, hfscale_ref, de_orb)
 
-    write(iw,'(2x,a)') '   atom  comp        de_2e               de_orb               de_w                de_m1'
+    ! de_xc (T2, RULES §18): difference-density XC skeleton gradient  d/dR Tr(V_xc[ρ_ref]·P_eff)  — the XC
+    ! analogue of de_orb's 2e mean-field (J−cK) part, with the SAME P_eff. utddft_xc_gradient with
+    ! do_ground_state=.false. (reference XC grad already in hf_gradient/dftder ⇒ no double counting) and
+    ! do_fxc=.false. (no transition-density term: MRSF A has no grid f_xc). dedft sign convention matches
+    ! the energy (validated by per-term OQP-FD). Reuses the validated dftlib TD-XC gradient consumer.
+    if (dft_run .and. l_xcg) then
+      block
+        real(kind=dp), allocatable :: pxa(:,:,:), pxb(:,:,:)
+        allocate(pxa(nbf,nbf,1), pxb(nbf,nbf,1))
+        pxa(:,:,1) = peffa ; pxb(:,:,1) = peffb
+        call utddft_xc_gradient(basis, xc_molgrid, de_xc, xc_refa, xc_refb, pxa, pxb, &
+                                nMtx=1, threshold=xc_thresh, infos=infos, do_ground_state=.false.)
+        deallocate(pxa, pxb)
+      end block
+    end if
+
+    write(iw,'(2x,a)') '   atom  comp        de_2e               de_orb               de_w                de_m1                de_xc'
     do iat = 1, natom ; do icmp = 1, 3
-      write(iw,'(2x,2i5,4es21.11)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat), de_w(icmp,iat), de_m1(icmp,iat)
+      write(iw,'(2x,2i5,5es21.11)') iat, icmp, de2e(icmp,iat), de_orb(icmp,iat), de_w(icmp,iat), &
+                                    de_m1(icmp,iat), de_xc(icmp,iat)
     end do ; end do
     write(iw,'(2x,a)') '================================================================================='
     close(iw)
 
     ! full response = transition-2e (Pulay) + orbital(1e+mean-field, P_eff) + W + M1 (alignment-S Pulay)
-    de2e_out = de2e + de_orb + de_w + de_m1
+    !                 + de_xc (Stage-2: XC kernel response; T3 folded into de_orb/de_w via umrsf_meanfield)
+    de2e_out = de2e + de_orb + de_w + de_m1 + de_xc
+
+    if (xc_meanfield_on .or. (dft_run .and. l_xcg)) then
+      call dftclean(infos)
+      if (allocated(xc_refa)) deallocate(xc_refa)
+      if (allocated(xc_refb)) deallocate(xc_refb)
+      xc_meanfield_on = .false.
+    end if
 
     deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, xamp, dens, brad)
     deallocate(de2e, de2e_fd, densym)
-    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w, de_m1)
+    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
     deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
   end subroutine umrsf_grad_run_gates
@@ -1094,6 +1161,7 @@ contains
   subroutine umrsf_meanfield(basis, infos, pa_full, pb_full, hfscale, ya_full, yb_full)
     use scf_addons, only: fock_jk
     use mathlib, only: pack_matrix, unpack_matrix
+    use mod_dft_gridint_fxc, only: utddft_fxc
     implicit none
     type(basis_set), intent(inout) :: basis
     type(information), target, intent(inout) :: infos
@@ -1107,6 +1175,20 @@ contains
     call fock_jk(basis, dens, fout, infos, scale_exch=hfscale, scale_coul=1.0_dp)
     call unpack_matrix(fout(:,1), ya_full) ; call unpack_matrix(fout(:,2), yb_full)
     deallocate(dens, fout)
+    ! Stage-2 (RULES §18): add the reference UKS XC kernel response f_xc[ρ_ref]·P (T3). The reference
+    ! mean field becomes G_σ[P] = J[P] − hfscale·K[P_σ] + (f_xc·P)_σ (collinear UKS f_xc, spin-conserving
+    ! P). One grid pass per call; propagates to the Z-vector Hessian, refrelax G^f, G^z and W.
+    if (xc_meanfield_on) then
+      block
+        real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:), dxa(:,:,:), dxb(:,:,:)
+        allocate(fxa(nbf,nbf,1), fxb(nbf,nbf,1), dxa(nbf,nbf,1), dxb(nbf,nbf,1), source=0.0_dp)
+        dxa(:,:,1) = pa_full ; dxb(:,:,1) = pb_full
+        call utddft_fxc(basis, xc_molgrid, .false., xc_refa, xc_refb, &
+                        fxa, fxb, dxa, dxb, 1, xc_thresh, infos)
+        ya_full = ya_full + fxa(:,:,1) ; yb_full = yb_full + fxb(:,:,1)
+        deallocate(fxa, fxb, dxa, dxb)
+      end block
+    end if
   end subroutine umrsf_meanfield
 
 !###############################################################################
@@ -2059,6 +2141,11 @@ contains
     real(kind=dp) :: th, dum
 
     nbf = size(cac,1) ; th = 1.0d-4
+    block   ! UMRSF_TH: re-align FD step for G^f (diagnostic — S2's large within-seg antisym stresses it)
+      character(len=24) :: e ; integer :: ios ; real(kind=dp) :: thv
+      call get_environment_variable("UMRSF_TH", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) thv ; if (ios==0 .and. thv>0.0_dp) th = thv ; end if
+    end block
     allocate(cwa(nbf,nbf), cwb(nbf,nbf), ctap(nbf,nbf), ctbp(nbf,nbf), dua(nbf,nbf), dub(nbf,nbf), &
              source=0.0_dp)
     gfa = 0.0_dp ; gfb = 0.0_dp

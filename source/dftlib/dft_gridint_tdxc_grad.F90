@@ -891,7 +891,7 @@ contains
 !> @author Vladimir Mironov
   subroutine utddft_xc_gradient(basis, molGrid, dedft, &
                   da, db, pa, pb, xa, xb, &
-                  nMtx, threshold, infos)
+                  nMtx, threshold, infos, do_ground_state)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -911,6 +911,11 @@ contains
     real(kind=fp), intent(inout), optional, target :: &
             xa(:,:,:), xb(:,:,:)
     real(kind=fp), intent(in) :: threshold
+    !> If present and .false., omit the ground-state XC gradient fold-in (grad_d+=grad_p),
+    !> returning ONLY the difference-density (pa/pb) contribution. Default .true. (unchanged
+    !> behaviour for existing callers). Used by the UMRSF gradient where the reference XC grad
+    !> is supplied separately (avoids double counting). MILESTONE B / RULES §18.
+    logical, intent(in), optional :: do_ground_state
 
     type(xc_consumer_tdg_t) :: dat
     type(xc_options_t) :: xc_opts
@@ -985,6 +990,7 @@ contains
     end if
     dat%nMtx = nMtx
     dat%do_fxc = doFxc
+    if (present(do_ground_state)) dat%do_ground_state = do_ground_state
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
