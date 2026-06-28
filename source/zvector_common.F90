@@ -19,9 +19,9 @@ module zvector_common
   !> Shared performance opt-ins for the (RHF/SF) z-vector CG solvers, mirroring
   !> the MRSF implementation. Read once per solve from env OQP_<PREFIX>_ZV_*.
   type :: zv_opts_t
-    logical :: warm_on = .true.    !< warm-start across geometry/MD steps
-    logical :: prog_on = .true.    !< progressive (iteration-dependent) screening
-    logical :: diag_on = .true.    !< Jacobi cold-start guess x0 = M^-1 rhs
+    logical :: warm_on = .false.   !< warm-start across geometry/MD steps (opt-in)
+    logical :: prog_on = .false.   !< progressive (iteration-dependent) screening (opt-in)
+    logical :: diag_on = .false.   !< Jacobi cold-start guess x0 = M^-1 rhs (opt-in)
     logical :: timers  = .false.   !< per-section profiler
     real(dp) :: conv_user = -1.0_dp   !< override cnvtol (<0 => use input)
     real(dp) :: prog_k    = 1.0e-2_dp !< tau = prog_k * ||r||

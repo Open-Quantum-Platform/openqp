@@ -5,13 +5,15 @@ Target: the MRSF-TDDFT analytic excited-state **gradient** Z-vector solve
 (max-component error in a.u. vs the tight `zvconv=1e-10` baseline), which is far
 stricter than the excitation-energy criterion.
 
-**Defaults:** `OQP_MRSF_ZV_WARMSTART` and `OQP_MRSF_ZV_PROG` are **ON by default**
-(disable with `=0`). Warm-start cannot change a converged result (only the
-iteration count). Progressive screening perturbs the default gradient by
-**<~1e-8 (small systems, e.g. H2O bit-identical) to ~7e-6 a.u. (30 atoms)** —
-within the gradient gate but **not bit-identical** to a pure-tight build.
-`OQP_MRSF_ZV_CONV` (convergence tol) stays at the 1e-10 default; the static
-`OQP_MRSF_ZV_CUTOFF` stays off.
+**Defaults: every lever is opt-in, DEFAULT OFF** (enable with `=1`), matching the
+upstream convention for performance features (cf. `docs/progressive_screening.md`
+for SCF, PRs #236/#238/#242/#244) and keeping the default path **bit-identical**
+so the registry-driven golden references (#237) pass unchanged. The whole
+example test suite passes with all levers off (235/235, 2 skipped). At the
+shipped default `zvconv=1e-6` the levers *do* change the loosely-converged result
+(that is why they are not default-on); enable them per-run for the speedups
+documented below — ideally together with a tighter `OQP_MRSF_ZV_CONV` so the
+converged gradient is well-defined.
 
 Companion to the response-side work (PR #236, `perf/mrsf-fock-digestion`).
 
@@ -326,19 +328,19 @@ every subsequent (small-step) solve collapses to ~1 iteration — the levers com
 with no accuracy loss.
 
 ### Quick reference — env controls
-Defaults: warm-start, progressive screening, and the Jacobi guess are **ON**
-(MRSF and RHF/SF); set the flag to `0` to disable. zvconv stays 1e-10.
+**All opt-in, DEFAULT OFF** (MRSF and RHF/SF); enable with `=1`. Default behavior
+is unchanged/bit-identical.
 ```
 # MRSF (source/modules/tdhf_mrsf_z_vector.F90)
-OQP_MRSF_ZV_WARMSTART=0            # disable warm-start (default ON; MO-projected)
-OQP_MRSF_ZV_PROG=0                 # disable progressive screening (default ON)
-OQP_MRSF_ZV_DIAGGUESS=0           # disable Jacobi cold guess (default ON)
-OQP_MRSF_ZV_CONV=1e-8             # override convergence tol (default off; recommended 1e-8)
-OQP_MRSF_ZV_PROG_K / _CAP / _PIN  # progressive tuning (1e-2 / 1e-6 / 1e-6)
-OQP_MRSF_ZV_COARSEGRID=1          # coarser response grid (default OFF)
-  OQP_MRSF_ZV_GRID=SG1            #   grid choice (SG0/SG1/SG2/SG3)
-OQP_MRSF_ZV_CUTOFF=1e-7          # static loose cutoff (default off; superseded by _PROG)
-OQP_MRSF_ZV_TIMERS=1             # per-section profiler
+OQP_MRSF_ZV_WARMSTART=1           # enable warm-start (MO-projected, safeguarded)
+OQP_MRSF_ZV_PROG=1                # enable progressive screening
+OQP_MRSF_ZV_DIAGGUESS=1          # enable Jacobi cold guess
+OQP_MRSF_ZV_CONV=1e-8            # override convergence tol (recommended with the levers)
+OQP_MRSF_ZV_PROG_K / _CAP / _PIN # progressive tuning (1e-2 / 1e-6 / 1e-6)
+OQP_MRSF_ZV_COARSEGRID=1         # coarser response grid
+  OQP_MRSF_ZV_GRID=SG1           #   grid choice (SG0/SG1/SG2/SG3)
+OQP_MRSF_ZV_CUTOFF=1e-7         # static loose cutoff (superseded by _PROG)
+OQP_MRSF_ZV_TIMERS=1            # per-section profiler
 # RHF/SF (tdhf_z_vector / tdhf_sf_z_vector): OQP_TDHF_ZV_* and OQP_SF_ZV_*
-OQP_TDHF_ZV_PROG=0  OQP_SF_ZV_PROG=0   OQP_{TDHF,SF}_ZV_CONV=1e-8
+OQP_TDHF_ZV_PROG=1  OQP_SF_ZV_PROG=1   OQP_{TDHF,SF}_ZV_CONV=1e-8
 ```

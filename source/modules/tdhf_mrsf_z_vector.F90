@@ -67,7 +67,7 @@ module tdhf_mrsf_z_vector_mod
   ! puts the solve ~1 iteration ahead. DEFAULT ON; disable with OQP_MRSF_ZV_DIAGGUESS=0.
   ! Accuracy-safe (linear solve converges to the same A^-1 rhs) and protected by
   ! the CG safeguard (falls back to zero if it doesn't reduce the residual).
-  logical, save :: zv_diag_guess = .true.
+  logical, save :: zv_diag_guess = .false.
 
   ! Coarser DFT grid for the z-vector XC kernel than the SCF grid (the response
   ! tolerates a coarser grid). Shrinks the dominant per-iteration utddft_fxc cost.
@@ -150,11 +150,10 @@ contains
     character(len=32) :: e_
     integer :: ios
     if (zv_cfg_init) return
-    ! Warm-start is ON by default; disable with OQP_MRSF_ZV_WARMSTART=0/n/f/off.
+    ! Opt-in, DEFAULT OFF (upstream convention; enable with OQP_MRSF_ZV_WARMSTART=1).
     call get_environment_variable('OQP_MRSF_ZV_WARMSTART', e_)
-    zv_warm_on = .true.
-    if (len_trim(e_) > 0) zv_warm_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
-        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
+    zv_warm_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
     call get_environment_variable('OQP_MRSF_ZV_CONV', e_)
     if (len_trim(e_) > 0) then
       read(e_,*,iostat=ios) zv_conv_user
@@ -165,21 +164,20 @@ contains
       read(e_,*,iostat=ios) zv_cutoff_user
       if (ios /= 0) zv_cutoff_user = -1.0_dp
     end if
-    ! Progressive screening is ON by default; disable with OQP_MRSF_ZV_PROG=0/n/f.
+    ! Opt-in, DEFAULT OFF (upstream convention; enable with OQP_MRSF_ZV_PROG=1).
     call get_environment_variable('OQP_MRSF_ZV_PROG', e_)
-    zv_prog_on = .true.
-    if (len_trim(e_) > 0) zv_prog_on = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
-        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
+    zv_prog_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
     call get_environment_variable('OQP_MRSF_ZV_PROG_K', e_)
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_k
     call get_environment_variable('OQP_MRSF_ZV_PROG_CAP', e_)
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_cap
     call get_environment_variable('OQP_MRSF_ZV_PROG_PIN', e_)
     if (len_trim(e_) > 0) read(e_,*,iostat=ios) zv_prog_pin
-    ! Jacobi cold-start guess: default ON; disable with OQP_MRSF_ZV_DIAGGUESS=0/n/f.
+    ! Jacobi cold-start guess: opt-in, DEFAULT OFF (enable with OQP_MRSF_ZV_DIAGGUESS=1).
     call get_environment_variable('OQP_MRSF_ZV_DIAGGUESS', e_)
-    if (len_trim(e_) > 0) zv_diag_guess = .not. (e_(1:1)=='0' .or. e_(1:1)=='n' .or. &
-        e_(1:1)=='N' .or. e_(1:1)=='f' .or. e_(1:1)=='F')
+    zv_diag_guess = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
+        e_(1:1)=='Y' .or. e_(1:1)=='t' .or. e_(1:1)=='T')
     ! Coarser response grid (default OFF; new feature, validate before defaulting).
     call get_environment_variable('OQP_MRSF_ZV_COARSEGRID', e_)
     zv_coarse_on = len_trim(e_) > 0 .and. (e_(1:1)=='1' .or. e_(1:1)=='y' .or. &
