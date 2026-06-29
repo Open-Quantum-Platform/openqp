@@ -140,6 +140,7 @@ contains
     real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
+    logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
@@ -472,6 +473,7 @@ contains
     block
       character(len=16) :: e ; integer :: ios
       dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false. ; l_m1 = .true.
+      l_zdense = .false. ; l_zcmp = .false.
       call get_environment_variable("UMRSF_ZW", e, status=ios)
       if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
       call get_environment_variable("UMRSF_W2E", e, status=ios) ; if (ios==0) dbg_w2e = (trim(e)/="0")
@@ -479,6 +481,11 @@ contains
       call get_environment_variable("UMRSF_ZOV", e, status=ios) ; if (ios==0) l_zov = (trim(e)=="1")
       call get_environment_variable("UMRSF_GVT", e, status=ios) ; if (ios==0) l_gvt = (trim(e)=="1")
       call get_environment_variable("UMRSF_M1",  e, status=ios) ; if (ios==0) l_m1  = (trim(e)/="0")
+      ! Z-vector solver: default = matrix-free iterative GMRES (umrsf_zvector_iter). UMRSF_ZDENSE=1 →
+      ! the dense dgelss oracle (umrsf_zvector_fullblock, rank-deficient-safe). UMRSF_ZCMP=1 → run BOTH
+      ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
+      call get_environment_variable("UMRSF_ZDENSE", e, status=ios) ; if (ios==0) l_zdense = (trim(e)=="1")
+      call get_environment_variable("UMRSF_ZCMP",   e, status=ios) ; if (ios==0) l_zcmp   = (trim(e)=="1")
     end block
 
     ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
@@ -551,8 +558,30 @@ contains
       end if
 
       ! ---- FULL-BLOCK Z-vector: M z = −R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
-      call umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
-                                   hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+      ! Default = matrix-free iterative GMRES (umrsf_zvector_iter, ~tens of Fock builds). UMRSF_ZDENSE=1
+      ! = the dense dgelss oracle (~ndof Fock builds, rank-deficient-safe). UMRSF_ZCMP=1 = run BOTH and
+      ! print max|z_iter − z_dense| (the perf-port GATE; the gradient uses the iterative z).
+      if (l_zcmp) then
+        block
+          real(kind=dp), allocatable :: pzad(:,:), pzbd(:,:), zmad(:,:), zmbd(:,:)
+          real(kind=dp) :: zrd, std, dza, dzb
+          allocate(pzad(nbf,nbf), pzbd(nbf,nbf), zmad(nbf,nbf), zmbd(nbf,nbf))
+          call umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                       hfscale_ref, l_zov, pzad, pzbd, zmad, zmbd, zrd, std)
+          call umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                  hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+          dza = maxval(abs(zmata - zmad)) ; dzb = maxval(abs(zmatb - zmbd))
+          write(iw,'(2x,a,2es12.3)') 'Z-solver GATE max|z_iter − z_dense| α/β (must ≤1e-9)   = ', dza, dzb
+          write(iw,'(2x,a,2es12.3)') 'Z-solver      dense statio / iter statio              = ', std, statio
+          deallocate(pzad, pzbd, zmad, zmbd)
+        end block
+      else if (l_zdense) then
+        call umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                     hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+      else
+        call umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+      end if
 
       ! ---- G^z (full-block) and W_ao = Σ_σ C_σ ½sym(G^f+G^z)_σ C_σᵀ ; de_w = −Tr(W S^x) ----
       call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
@@ -2405,6 +2434,183 @@ contains
 
     deallocate(dsp, dpr, dqr, mmat, rhs, za1, zb1, gza, gzb)
   end subroutine umrsf_zvector_fullblock
+
+!###############################################################################
+!> MATRIX-FREE iterative full-block Z-vector — the perf replacement for umrsf_zvector_fullblock.
+!> Solves the IDENTICAL system M z = −R (M = the spin-coupled orbital Hessian = antisym of the
+!> z-coupling gen-Fock umrsf_genfock_z over the p>q DOFs; R = antisym(G^f)) but WITHOUT forming M
+!> densely. The dense path needs ndof (=Σ_sp Σ_{p>q}, ≈5112 at nbf=72) Fock builds — ONE per column —
+!> i.e. ~7 h/state at nbf=72, infeasible for thymine (nbf≈147). Here M·z is applied MATRIX-FREE via a
+!> single umrsf_genfock_z per iteration (the same validated reference mean-field matvec the energy
+!> Z-Hessian uses; one fock_jk + one f_xc grid pass for DFT), and the system is solved by
+!> right-preconditioned restarted GMRES.
+!>   WHY GMRES (not CG/MINRES): M is NONSYMMETRIC. tmp = C̃ᵀ G[½P_z] C̃ is symmetric (ya symmetric,
+!>   same C both sides), so the refrelax (occ-column) part contracts to ZERO antisym on the oo and vv
+!>   readouts ⇒ the oo/vv DOF rows of M are PURE DIAGONAL ε_p−ε_q, while the ov rows DO couple to
+!>   oo/vv via the density (M_{ov,oo}≠0 but M_{oo,ov}=0). One-way coupling ⇒ M≠Mᵀ ⇒ CG/MINRES invalid.
+!>   PRECONDITIONER = the floored diagonal ε_p−ε_q (sanitize_zvector_preconditioner): with right
+!>   preconditioning the oo/vv DOFs become EXACT eigenvalue-1 eigenvectors of M·P⁻¹ and the symmetric
+!>   SPD ov block clusters tightly near 1 ⇒ convergence in ~tens of iterations independent of ndof.
+!> Reproduces the dense dgelss z to the GMRES tolerance for full-rank M (CH2/butadiene/thymine; the
+!> SOMO-degenerate rank-deficient case — linear diradicals — still wants the dense SVD min-norm path,
+!> UMRSF_ZDENSE=1). Outputs are IDENTICAL to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms,
+!> statio = ||antisym(G^f+G^z(z))|| = the M z = −R residual). Tunable: UMRSF_ZTOL (rel-resid, 1e-11),
+!> UMRSF_ZKRY (restart length, 120), UMRSF_ZMAXIT (max restarts, 60).
+  subroutine umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
+                                hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio)
+    use io_constants, only: iw
+    use zvector_common, only: sanitize_zvector_preconditioner
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), epsca(:), epscb(:), gfa(:,:), gfb(:,:)
+    real(kind=dp), intent(in) :: hfscale_ref
+    logical, intent(in) :: ovonly
+    real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms, statio
+    integer, allocatable :: dsp(:), dpr(:), dqr(:)
+    real(kind=dp), allocatable :: bvec(:), zvec(:), diagm(:), pcinv(:)
+    real(kind=dp), allocatable :: za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)
+    ! GMRES workspace
+    real(kind=dp), allocatable :: vk(:,:), hmat(:,:), cs(:), sn(:), gg(:), yy(:), wvec(:), pvec(:), rvec(:)
+    integer :: nbf, nocca, noccb, ndof, k, p, q, sp, nocc, i, j, jc, outer, niter
+    logical :: keep
+    real(kind=dp) :: bnorm, beta, rtol, denom, h1, relres
+    integer :: mkry, maxout
+
+    nbf = basis%nbf ; nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+
+    ! ---- enumerate the rotation DOFs (sp, p>q): full-block, or ov-only if ovonly (identical to dense) ----
+    ndof = 0
+    do sp = 1, 2
+      nocc = nocca ; if (sp == 2) nocc = noccb
+      do p = 1, nbf ; do q = 1, p-1
+        keep = .true. ; if (ovonly) keep = (p > nocc .and. q <= nocc)
+        if (keep) ndof = ndof + 1
+      end do ; end do
+    end do
+    allocate(dsp(ndof), dpr(ndof), dqr(ndof), source=0)
+    allocate(bvec(ndof), zvec(ndof), diagm(ndof), pcinv(ndof), source=0.0_dp)
+    allocate(za1(nbf,nbf), zb1(nbf,nbf), gza(nbf,nbf), gzb(nbf,nbf), source=0.0_dp)
+    k = 0
+    do sp = 1, 2
+      nocc = nocca ; if (sp == 2) nocc = noccb
+      do p = 1, nbf ; do q = 1, p-1
+        keep = .true. ; if (ovonly) keep = (p > nocc .and. q <= nocc)
+        if (keep) then ; k = k + 1 ; dsp(k) = sp ; dpr(k) = p ; dqr(k) = q ; end if
+      end do ; end do
+    end do
+
+    ! ---- RHS b = −R = −antisym(G^f) ; preconditioner diagonal = ε_p − ε_q (the frozen part of M) ----
+    do k = 1, ndof
+      if (dsp(k) == 1) then
+        bvec(k)  = -(gfa(dpr(k),dqr(k)) - gfa(dqr(k),dpr(k)))
+        diagm(k) =   epsca(dpr(k)) - epsca(dqr(k))
+      else
+        bvec(k)  = -(gfb(dpr(k),dqr(k)) - gfb(dqr(k),dpr(k)))
+        diagm(k) =   epscb(dpr(k)) - epscb(dqr(k))
+      end if
+    end do
+    call sanitize_zvector_preconditioner(diagm, pcinv, iw, 1.0e-12_dp, 'UMRSF-Z')
+
+    ! ---- solver controls ----
+    rtol = 1.0e-11_dp ; mkry = min(ndof, 120) ; maxout = 60
+    block
+      character(len=24) :: e ; integer :: ios ; real(kind=dp) :: rv ; integer :: iv
+      call get_environment_variable("UMRSF_ZTOL", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) rv ; if (ios==0 .and. rv>0.0_dp) rtol = rv ; end if
+      call get_environment_variable("UMRSF_ZKRY", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) mkry = min(ndof, iv) ; end if
+      call get_environment_variable("UMRSF_ZMAXIT", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) maxout = iv ; end if
+    end block
+
+    ! ---- right-preconditioned restarted GMRES(mkry):  M z = b  (z0 = 0) ----
+    allocate(vk(ndof,mkry+1), hmat(mkry+1,mkry), cs(mkry), sn(mkry), gg(mkry+1), yy(mkry), &
+             wvec(ndof), pvec(ndof), rvec(ndof), source=0.0_dp)
+    zvec = 0.0_dp
+    bnorm = sqrt(sum(bvec**2))
+    niter = 0 ; relres = 0.0_dp
+    if (bnorm > tiny(1.0_dp)) then
+      relres = 1.0_dp
+      outer_loop: do outer = 1, maxout
+        call apply_mz(zvec, wvec)            ! w = M z
+        rvec = bvec - wvec                   ! r0 = b − M z
+        beta = sqrt(sum(rvec**2))
+        relres = beta/bnorm
+        if (relres <= rtol) exit outer_loop
+        vk(:,1) = rvec/beta
+        gg = 0.0_dp ; gg(1) = beta ; jc = 0
+        arnoldi: do j = 1, mkry
+          pvec = pcinv*vk(:,j)               ! right precond: P⁻¹ v_j
+          call apply_mz(pvec, wvec)          ! w = M P⁻¹ v_j   (ONE matrix-free matvec)
+          niter = niter + 1
+          do i = 1, j                        ! modified Gram–Schmidt
+            hmat(i,j) = sum(wvec*vk(:,i)) ; wvec = wvec - hmat(i,j)*vk(:,i)
+          end do
+          hmat(j+1,j) = sqrt(sum(wvec**2))
+          if (hmat(j+1,j) > 1.0e-300_dp) vk(:,j+1) = wvec/hmat(j+1,j)
+          do i = 1, j-1                       ! apply previous Givens rotations to column j
+            h1          =  cs(i)*hmat(i,j) + sn(i)*hmat(i+1,j)
+            hmat(i+1,j) = -sn(i)*hmat(i,j) + cs(i)*hmat(i+1,j)
+            hmat(i,j)   =  h1
+          end do
+          denom = sqrt(hmat(j,j)**2 + hmat(j+1,j)**2)   ! new Givens to zero hmat(j+1,j)
+          if (denom <= 1.0e-300_dp) then ; cs(j) = 1.0_dp ; sn(j) = 0.0_dp
+          else ; cs(j) = hmat(j,j)/denom ; sn(j) = hmat(j+1,j)/denom ; end if
+          hmat(j,j)   = cs(j)*hmat(j,j) + sn(j)*hmat(j+1,j) ; hmat(j+1,j) = 0.0_dp
+          gg(j+1) = -sn(j)*gg(j) ; gg(j) = cs(j)*gg(j)
+          jc = j ; relres = abs(gg(j+1))/bnorm
+          if (relres <= rtol) exit arnoldi
+        end do arnoldi
+        do i = jc, 1, -1                     ! back-substitution H y = g  (upper-triangular)
+          yy(i) = gg(i)
+          do k = i+1, jc ; yy(i) = yy(i) - hmat(i,k)*yy(k) ; end do
+          yy(i) = yy(i)/hmat(i,i)
+        end do
+        wvec = 0.0_dp                        ! z += P⁻¹ (V y)
+        do i = 1, jc ; wvec = wvec + yy(i)*vk(:,i) ; end do
+        zvec = zvec + pcinv*wvec
+        if (relres <= rtol) exit outer_loop
+      end do outer_loop
+    end if
+
+    ! ---- unpack z → symmetric MO matrices + AO relaxation densities (identical to dense) ----
+    zmata = 0.0_dp ; zmatb = 0.0_dp
+    do k = 1, ndof
+      if (dsp(k) == 1) then ; zmata(dpr(k),dqr(k)) = zvec(k) ; zmata(dqr(k),dpr(k)) = zvec(k)
+      else                  ; zmatb(dpr(k),dqr(k)) = zvec(k) ; zmatb(dqr(k),dpr(k)) = zvec(k) ; end if
+    end do
+    pza = matmul(cac, matmul(zmata, transpose(cac)))
+    pzb = matmul(cbc, matmul(zmatb, transpose(cbc)))
+    zrms = sqrt(sum(zvec**2)/max(ndof,1))
+
+    ! ---- stationarity residual ||antisym(G^f + G^z(z))|| = max|M z − b| (→ 0 ⇒ M z = −R solved) ----
+    call apply_mz(zvec, wvec)
+    statio = maxval(abs(wvec - bvec))
+    write(iw,'(2x,a,i0,a,i0,a,es10.2)') 'iterative Z (GMRES): ndof = ', ndof, ', matvecs = ', niter, &
+                                        ', final rel-resid = ', relres
+
+    deallocate(dsp, dpr, dqr, bvec, zvec, diagm, pcinv, za1, zb1, gza, gzb)
+    deallocate(vk, hmat, cs, sn, gg, yy, wvec, pvec, rvec)
+
+  contains
+    !> M·xin over the DOF space: unpack xin → symmetric MO z, ONE umrsf_genfock_z, read antisym back.
+    subroutine apply_mz(xin, xout)
+      real(kind=dp), intent(in)  :: xin(:)
+      real(kind=dp), intent(out) :: xout(:)
+      integer :: kk
+      za1 = 0.0_dp ; zb1 = 0.0_dp
+      do kk = 1, ndof
+        if (dsp(kk) == 1) then ; za1(dpr(kk),dqr(kk)) = xin(kk) ; za1(dqr(kk),dpr(kk)) = xin(kk)
+        else                   ; zb1(dpr(kk),dqr(kk)) = xin(kk) ; zb1(dqr(kk),dpr(kk)) = xin(kk) ; end if
+      end do
+      call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, za1, zb1, hfscale_ref, gza, gzb)
+      do kk = 1, ndof
+        if (dsp(kk) == 1) then ; xout(kk) = gza(dpr(kk),dqr(kk)) - gza(dqr(kk),dpr(kk))
+        else                   ; xout(kk) = gzb(dpr(kk),dqr(kk)) - gzb(dqr(kk),dpr(kk)) ; end if
+      end do
+    end subroutine apply_mz
+  end subroutine umrsf_zvector_iter
 
 !###############################################################################
 !> B(mu,nu) += c * u(mu) * w(nu)
