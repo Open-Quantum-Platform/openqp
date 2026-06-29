@@ -133,9 +133,11 @@ contains
     real(kind=dp) :: omega_p, omega_m, hfd, omega_base, maxd2e
     ! unrelaxed difference density P^Δ,u + orbital-part gradient
     real(kind=dp), allocatable :: talpha(:,:), tbeta(:,:), pda(:,:), pdb(:,:)
+    real(kind=dp), allocatable :: tua(:,:), tub(:,:)            ! standard-CIS T_u (SOMO-gate diagnostic only)
     real(kind=dp), allocatable :: peffa(:,:), peffb(:,:)        ! P_eff = P^Δ,u + ½ P_z (c03/c04 split)
     real(kind=dp), allocatable :: de_orb(:,:), de_w(:,:), de_m1(:,:), de_xc(:,:)
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
+    real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
@@ -401,21 +403,34 @@ contains
     close(iw)
     call gcomp%clean()
 
-    ! ===== unrelaxed difference density T_u / P^Δ,u (aligned C̃ basis) + canonical SCF orbitals =====
-    ! Spin-flip TDA difference density from the genuine eigenvector xamp: occ_α-occ_α T_α(i,j)=−Σ_a X_ia X_ja,
-    ! virt_β-virt_β T_β(a,b)=+Σ_i X_ia X_ib. P^Δ,u_σ = C̃_σ T_u_σ C̃_σᵀ (aligned). ω_orb gate Tr(T_u F̃)=ω_orb.
+    ! ===== SOMO-corrected unrelaxed difference density P_eff = sym(∂omega_orb/∂F̃) (MILESTONE C / M3) =====
+    ! The MRSF orbital energy (mrsfesum, mrst=1/3) carries SOMO terms ∝ xlr=X(O1,O1) that the standard-CIS
+    ! T_u OMITS ⇒ Tr(T_u F̃) ≠ omega_orb for SOMO-mixed (S2) states (gate gap ∝ xlr²; the S2 ~8e-3 error).
+    ! omega_orb is LINEAR in F̃, so the correct unrelaxed difference density is P_eff = ∂omega_orb/∂F̃ (built
+    ! by probing umrsf_orb_matvec with unit Focks; α occ-occ, β virt-virt like T_u; reduces to T_u when the
+    ! SOMO-SOMO amplitudes vanish ⇒ S1/S3/non-SOMO untouched). P_eff REPLACES T_u as talpha/tbeta and
+    ! propagates to pda/pdb (de_orb, refrelax), the frozen G̃ (gta=2 F̃ P_eff), G^f, the full-block Z, W.
+    ! Model: DERIVATIONS/M3_s2_somo_diffdens.md, c09_peff_closure.py (≤1e-9), CAS c09_cas_peff.py.
     omega_orb = omega_recon - omega_2e_mv
-    allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), source=0.0_dp)
+    allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), &
+             tua(nbf,nbf), tub(nbf,nbf), source=0.0_dp)
     call iatogen(xamp, xmat, nocca, noccb)
+    ! standard-CIS T_u (DIAGNOSTIC ONLY — its gate Tr(T_u F̃)−omega_orb is the SOMO tell: ~0 S1, ~2.4e-4 S2)
     do j = 1, nocca ; do i = 1, nocca ; do ia = noccb+1, nbf
-      talpha(i,j) = talpha(i,j) - xmat(i,ia)*xmat(j,ia)
+      tua(i,j) = tua(i,j) - xmat(i,ia)*xmat(j,ia)
     end do ; end do ; end do
     do ib = noccb+1, nbf ; do ia = noccb+1, nbf ; do i = 1, nocca
-      tbeta(ia,ib) = tbeta(ia,ib) + xmat(i,ia)*xmat(i,ib)
+      tub(ia,ib) = tub(ia,ib) + xmat(i,ia)*xmat(i,ib)
     end do ; end do ; end do
+    omega_orb_tu = sum(tua*fa) + sum(tub*fb)
+    ! SOMO-corrected difference density P_eff (the FIX) → talpha/tbeta
+    call umrsf_build_peff(nbf, nocca, noccb, mrst, xmat, talpha, tbeta)
     omega_orb_chk = sum(talpha*fa) + sum(tbeta*fb)
-    pda = matmul(matmul(va, talpha), transpose(va))     ! AO P^Δ,u_α = C̃_α T_α C̃_αᵀ
-    pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P^Δ,u_β = C̃_β T_β C̃_βᵀ
+    ! cross-check: my clean-room orbital matvec reproduces omega_orb (== the energy-path mrsfesum)
+    call umrsf_orb_matvec(nbf, nocca, noccb, mrst, fa, fb, xmat, wrk1)
+    omega_orb_mine = sum(xmat*wrk1)
+    pda = matmul(matmul(va, talpha), transpose(va))     ! AO P_eff,α = C̃_α P_eff_α C̃_αᵀ
+    pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P_eff,β = C̃_β P_eff_β C̃_βᵀ
 
     ! Canonical SCF orbitals cac,cbc (= c05 Ca,Cb; the Z-vector frame) by diagonalizing the aligned
     ! MO-Fock fa,fb. These are occ/virt block-diagonal (SCF F_ai=0; the smooth get_jacobi only mixes
@@ -436,7 +451,9 @@ contains
 
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/2x,a)') '====== UMRSF response: c06 §16 CLOSED FORM (full G^f + FULL-BLOCK Z + W) ======'
-    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u F̃) − omega_orb|        = ', abs(omega_orb_chk-omega_orb)
+    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u  F̃) − omega_orb| (SOMO tell; S1~0, S2~2.4e-4) = ', abs(omega_orb_tu-omega_orb)
+    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(P_eff F̃) − omega_orb| (the FIX; must → ~0)        = ', abs(omega_orb_chk-omega_orb)
+    write(iw,'(2x,a,es12.3)') 'orbital matvec |X·esum_mine − omega_orb|  (clean-room == mrsfesum)    = ', abs(omega_orb_mine-omega_orb)
 
     ! Re-init int2 at the BASE geometry (the frozen-density 2e FD self-test left it displaced).
     call int2_driver%clean()
@@ -630,10 +647,103 @@ contains
 
     deallocate(va, vb, fa, fb, smat_full, ea, eb, wrk1, wrk2, scr, xmat, amo, amo2e, xamp, dens, brad)
     deallocate(de2e, de2e_fd, densym)
-    deallocate(talpha, tbeta, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
+    deallocate(talpha, tbeta, tua, tub, pda, pdb, peffa, peffb, de_orb, de_w, de_m1, de_xc)
     deallocate(cac, cbc, epsca, epscb, pza, pzb, zmata, zmatb)
 
   end subroutine umrsf_grad_run_gates
+
+!###############################################################################
+!> @brief Orbital part of the UMRSF response matvec (A_orb·X)[i,j] on the occα×virβ block — clean-room
+!>        transcription of the energy's mrsfesum (mrst=1/3; tdhf_mrsf_lib.F90 READ-OK, re-derived as
+!>        DERIVATIONS/c09_somo_diffdens.py:mrsf_orb_matvec). LINEAR in the aligned-MO Fock (fij=F̃α occ-occ,
+!>        fab=F̃β virt-virt) and in the amplitude wrk=X. umrsf_build_peff probes this with UNIT Focks to
+!>        get P_eff = ∂omega_orb/∂F̃; calling it with the real F̃ reproduces omega_orb (== mrsfesum) — a gate.
+!>        The SOMO terms (∝ xlr=X(O1,O1), O1=nocca-1 O2=nocca) are exactly what the standard-CIS T_u omits.
+  subroutine umrsf_orb_matvec(nbf, nocca, noccb, mrst, fij, fab, wrk, w)
+    implicit none
+    integer, intent(in) :: nbf, nocca, noccb, mrst
+    real(kind=dp), intent(in) :: fij(nbf,nbf), fab(nbf,nbf), wrk(nbf,nbf)
+    real(kind=dp), intent(out) :: w(nbf,nbf)
+    real(kind=dp), allocatable :: scr(:,:), tmp1(:,:)
+    real(kind=dp) :: dumn, xlr
+    real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
+    integer :: lr1, lr2, i, j
+
+    allocate(scr(nbf,nbf), tmp1(nbf,nbf), source=0.0_dp)
+    lr1 = nocca-1 ; lr2 = nocca                       ! SOMOs (1-based, ⊂ both occα and virβ)
+    scr = wrk ; scr(lr1,lr1) = 0.0_dp ; scr(lr2,lr2) = 0.0_dp
+    xlr = wrk(lr1,lr1)
+    w = 0.0_dp
+    ! standard CIS on scr:  Σ_a scr(i,a)F̃β(a,j) − Σ_k F̃α(i,k)scr(k,j)   (i∈occα, j∈virβ)
+    tmp1(1:nocca,noccb+1:nbf) = &
+        matmul(scr(1:nocca,noccb+1:nbf), fab(noccb+1:nbf,noccb+1:nbf)) &
+      - matmul(fij(1:nocca,1:nocca),     scr(1:nocca,noccb+1:nbf))
+    if (mrst == 1) then
+      do j = noccb+1, nbf ; do i = 1, nocca
+        w(i,j) = tmp1(i,j)
+        if (i==lr1) w(i,j) = w(i,j) + fab(j,lr1)*xlr*sqrt2
+        if (i==lr2) w(i,j) = w(i,j) - fab(j,lr2)*xlr*sqrt2
+        if (j==lr1) w(i,j) = w(i,j) - fij(i,lr1)*xlr*sqrt2
+        if (j==lr2) w(i,j) = w(i,j) + fij(i,lr2)*xlr*sqrt2
+      end do ; end do
+      dumn = - dot_product(fij(lr1,1:nocca), scr(1:nocca,lr1)) &
+             + dot_product(fij(lr2,1:nocca), scr(1:nocca,lr2)) &
+             + dot_product(fab(lr1,noccb+1:nbf), scr(lr1,noccb+1:nbf)) &
+             - dot_product(fab(lr2,noccb+1:nbf), scr(lr2,noccb+1:nbf))
+      w(lr1,lr1) = dumn*sqrt2 + xlr*(fab(lr1,lr1)+fab(lr2,lr2)-fij(lr1,lr1)-fij(lr2,lr2))*0.5_dp
+      w(lr2,lr2) = 0.0_dp
+    else                                              ! mrst == 3 (triplet response)
+      do j = noccb+1, nbf ; do i = 1, nocca
+        w(i,j) = tmp1(i,j)
+        if (i==lr1) w(i,j) = w(i,j) + fab(j,lr1)*xlr*sqrt2
+        if (i==lr2) w(i,j) = w(i,j) + fab(j,lr2)*xlr*sqrt2
+        if (j==lr1) w(i,j) = w(i,j) - fij(i,lr1)*xlr*sqrt2
+        if (j==lr2) w(i,j) = w(i,j) - fij(i,lr2)*xlr*sqrt2
+      end do ; end do
+      dumn = - dot_product(fij(lr1,1:nocca), scr(1:nocca,lr1)) &
+             - dot_product(fij(lr2,1:nocca), scr(1:nocca,lr2)) &
+             + dot_product(fab(lr1,noccb+1:nbf), scr(lr1,noccb+1:nbf)) &
+             + dot_product(fab(lr2,noccb+1:nbf), scr(lr2,noccb+1:nbf))
+      w(lr1,lr1) = dumn*sqrt2 + xlr*(fab(lr1,lr1)+fab(lr2,lr2)-fij(lr1,lr1)-fij(lr2,lr2))*0.5_dp
+      w(lr2,lr1) = 0.0_dp ; w(lr1,lr2) = 0.0_dp ; w(lr2,lr2) = 0.0_dp
+    end if
+    deallocate(scr, tmp1)
+  end subroutine umrsf_orb_matvec
+
+!###############################################################################
+!> @brief P_eff = sym(∂omega_orb/∂F̃) — the SOMO-corrected unrelaxed difference density that REPLACES the
+!>        standard-CIS T_u (talpha/tbeta) for SOMO-mixed states (closes S2). omega_orb = Σ X·orb_matvec(F̃,X)
+!>        is LINEAR in F̃, so P_raw_σ[p,q] = omega_orb evaluated with F̃_σ = unit E_pq (the only blocks F̃
+!>        enters: α occ-occ p,q∈1:nocca; β virt-virt p,q∈noccb+1:nbf). P_eff = sym(P_raw) (physical density;
+!>        Tr(sym(P)·F̃)=Tr(P·F̃) for symmetric F̃ ⇒ gate Tr(P_eff F̃)=omega_orb preserved). Reduces to T_u
+!>        when X(O1,O1)=X(O2,O2)=0. Model: DERIVATIONS/c09_peff_closure.py:Praw (≤1e-9), CAS c09_cas_peff.py.
+  subroutine umrsf_build_peff(nbf, nocca, noccb, mrst, xmat, peffa, peffb)
+    implicit none
+    integer, intent(in) :: nbf, nocca, noccb, mrst
+    real(kind=dp), intent(in) :: xmat(nbf,nbf)
+    real(kind=dp), intent(out) :: peffa(nbf,nbf), peffb(nbf,nbf)
+    real(kind=dp), allocatable :: epq(:,:), zero(:,:), w(:,:)
+    integer :: p, q
+
+    allocate(epq(nbf,nbf), zero(nbf,nbf), w(nbf,nbf), source=0.0_dp)
+    peffa = 0.0_dp ; peffb = 0.0_dp
+    ! α: ∂omega_orb/∂F̃α[p,q], nonzero only on the occ-occ block
+    do q = 1, nocca ; do p = 1, nocca
+      epq = 0.0_dp ; epq(p,q) = 1.0_dp
+      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, epq, zero, xmat, w)
+      peffa(p,q) = sum(xmat*w)
+    end do ; end do
+    ! β: ∂omega_orb/∂F̃β[p,q], nonzero only on the virt-virt block
+    do q = noccb+1, nbf ; do p = noccb+1, nbf
+      epq = 0.0_dp ; epq(p,q) = 1.0_dp
+      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, zero, epq, xmat, w)
+      peffb(p,q) = sum(xmat*w)
+    end do ; end do
+    ! symmetrize → physical difference density (block structure preserved: α occ-occ, β virt-virt)
+    peffa = 0.5_dp*(peffa + transpose(peffa))
+    peffb = 0.5_dp*(peffb + transpose(peffb))
+    deallocate(epq, zero, w)
+  end subroutine umrsf_build_peff
 
 !###############################################################################
 !> SMOOTH (converged) corresponding-orbital alignment — clean-room port of the c05 MODEL
@@ -2182,7 +2292,9 @@ contains
 !> to oo/vv rotations (canonical-C G^f antisym: α-oo, β-vv ≠ 0), so the standard ov-only Z-vector
 !> leaves the ~1e-3 wall. R = antisym(G^f) over the p>q pairs. M = the spin-coupled orbital Hessian =
 !> the antisym of the z-coupling gen-Fock (umrsf_genfock_z), built DENSE column-by-column and solved
-!> by dgesv (M is indefinite over oo/vv ⇒ LU, not CG). ovonly=.true. restricts the DOFs to ov pairs
+!> by dgelss (SVD least-squares: M is indefinite over oo/vv, and RANK-DEFICIENT for SOMO-degenerate
+!> systems like linear molecules' π_x/π_y ⇒ min-norm; reduces to the exact dgesv solve when full-rank).
+!> ovonly=.true. restricts the DOFs to ov pairs
 !> (the ablation that reproduces the wall). Returns AO relaxation densities pza/pzb and symmetric MO
 !> z-matrices zmata/zmatb (canonical basis), zrms, and statio = ||antisym(G^f+G^z(z))|| (the solve
 !> residual; → 0 confirms M z = −R, i.e. the full-block stationarity the ov-only Z cannot reach).
@@ -2195,12 +2307,12 @@ contains
     real(kind=dp), intent(in) :: hfscale_ref
     logical, intent(in) :: ovonly
     real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms, statio
-    integer, allocatable :: dsp(:), dpr(:), dqr(:), ipiv(:)
+    integer, allocatable :: dsp(:), dpr(:), dqr(:)
     real(kind=dp), allocatable :: mmat(:,:), rhs(:,:), za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)
     integer :: nbf, nocca, noccb, ndof, k, j, p, q, sp, nocc, info
     logical :: keep
     real(kind=dp) :: rr
-    external :: dgesv      ! ILP64 LAPACK: OQP_BLAS_INT=8 ⇒ default integer matches; call directly (cf. resp.F90)
+    external :: dgelss     ! ILP64 LAPACK: OQP_BLAS_INT=8 ⇒ default integer matches; call directly (cf. resp.F90)
 
     nbf = basis%nbf ; nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
 
@@ -2213,7 +2325,7 @@ contains
         if (keep) ndof = ndof + 1
       end do ; end do
     end do
-    allocate(dsp(ndof), dpr(ndof), dqr(ndof), ipiv(ndof), source=0)
+    allocate(dsp(ndof), dpr(ndof), dqr(ndof), source=0)
     allocate(mmat(ndof,ndof), rhs(ndof,1), za1(nbf,nbf), zb1(nbf,nbf), &
              gza(nbf,nbf), gzb(nbf,nbf), source=0.0_dp)
     k = 0
@@ -2243,13 +2355,28 @@ contains
       end do
     end do
 
-    ! ---- solve M z = −R (LU; M indefinite over oo/vv) ----
-    call dgesv(ndof, 1, mmat, ndof, ipiv, rhs, ndof, info)
-    if (info /= 0) then
-      block ; use io_constants, only: iw
-        write(iw,'(2x,a,i0)') 'umrsf_zvector_fullblock: dgesv info = ', info
-      end block
-    end if
+    ! ---- solve M z = −R via SVD least-squares (dgelss): rank-revealing + minimum-norm ----
+    ! M is indefinite over oo/vv (so not CG) and can be RANK-DEFICIENT for SOMO-degenerate systems
+    ! (e.g. linear molecules whose two SOMOs are the degenerate π_x/π_y pair: rotating one into the
+    ! other is a zero-energy mode ⇒ a null direction; a plain LU/dgesv blows up). The null space is
+    ! pure symmetry gauge (R has no component along it), so the min-norm SVD solution is the physical
+    ! relaxation. For full-rank M (CH2, butadiene, …) dgelss returns the exact dgesv solution.
+    block
+      use io_constants, only: iw
+      real(kind=dp), allocatable :: svals(:), work(:)
+      real(kind=dp) :: wq(1), rcond
+      integer :: rank, lwork
+      allocate(svals(ndof))
+      rcond = 1.0e-9_dp                                   ! drop σ ≤ rcond·σ_max (the degenerate null space)
+      call dgelss(ndof, ndof, 1, mmat, ndof, rhs, ndof, svals, rcond, rank, wq, -1, info)
+      lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
+      call dgelss(ndof, ndof, 1, mmat, ndof, rhs, ndof, svals, rcond, rank, work, lwork, info)
+      if (info /= 0) write(iw,'(2x,a,i0)') 'umrsf_zvector_fullblock: dgelss info = ', info
+      if (rank < ndof) write(iw,'(2x,a,i0,a,i0,a,es10.2)') &
+        'umrsf_zvector_fullblock: M rank-deficient (SOMO degeneracy) rank ', rank, ' / ', ndof, &
+        '; σ_min(kept)/σ_max = ', svals(rank)/max(svals(1), tiny(1.0_dp))
+      deallocate(svals, work)
+    end block
 
     ! ---- unpack z → symmetric MO matrices + AO relaxation densities ----
     zmata = 0.0_dp ; zmatb = 0.0_dp
@@ -2276,7 +2403,7 @@ contains
       statio = max(statio, abs(rr))
     end do
 
-    deallocate(dsp, dpr, dqr, ipiv, mmat, rhs, za1, zb1, gza, gzb)
+    deallocate(dsp, dpr, dqr, mmat, rhs, za1, zb1, gza, gzb)
   end subroutine umrsf_zvector_fullblock
 
 !###############################################################################
