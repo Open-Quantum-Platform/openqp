@@ -407,46 +407,55 @@ contains
       densym(1,k,:,:) = gcomp%dden(k,:,:)
     end do
 
-    ! analytic 2e response gradient (base geometry)
+    ! analytic 2e response gradient (base geometry) — this is the PRODUCTION term (added to the gradient)
     call grd2_driver(infos, basis, de2e, gcomp)
 
-    ! frozen-density central FD of ω_2e
-    call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_base)
-    hfd = 1.0e-3_dp
-    do iat = 1, natom
-      do icmp = 1, 3
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
-        call basis%init_shell_centers()
-        call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_p)
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) - 2.0_dp*hfd
-        call basis%init_shell_centers()
-        call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_m)
-        infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
-        call basis%init_shell_centers()
-        de2e_fd(icmp,iat) = (omega_p - omega_m)/(2.0_dp*hfd)
-      end do
-    end do
-    maxd2e = maxval(abs(de2e - de2e_fd))
-
-    open(unit=iw, file=infos%log_filename, position="append")
-    write(iw,'(/2x,a)') '========= UMRSF 2e response gradient (G1b: frozen-density FD) ========='
-    write(iw,'(2x,a,f18.10)') 'omega_2e (frozen-density, base) = ', omega_base
-    write(iw,'(2x,a,f18.10)') '  (cf. back-transform omega_2e)  = ', omega_2e_mv
-    write(iw,'(2x,a)') '   atom  comp     analytic dω2e/dx        frozen-FD          |Δ|'
-    do iat = 1, natom
-      do icmp = 1, 3
-        write(iw,'(2x,2i5,3es20.10)') iat, icmp, de2e(icmp,iat), de2e_fd(icmp,iat), &
-                                      abs(de2e(icmp,iat)-de2e_fd(icmp,iat))
-      end do
-    end do
-    write(iw,'(2x,a,es12.3)') 'max|analytic - frozen-FD| 2e    = ', maxd2e
-    if (maxd2e <= 1.0e-6_dp) then
-      write(iw,'(2x,a)') 'VERDICT: 2e response gradient PASS (custom grd2 2-PDM validated)'
-    else
-      write(iw,'(2x,a)') 'VERDICT: 2e response gradient CHECK (see |Δ| above)'
-    end if
-    write(iw,'(2x,a)') '======================================================================'
-    close(iw)
+    ! frozen-density central FD self-test of ω_2e (G1b): validates the analytic de2e above. 6·natom int2
+    ! builds, DIAGNOSTIC ONLY (de2e_fd is NOT added to the gradient). Pure production overhead ⇒ default
+    ! OFF; set UMRSF_SELFTEST=1 to run it. (The term it checks is analytic; the gate already proved it.)
+    block
+      character(len=8) :: e ; integer :: ios ; logical :: l_selftest
+      l_selftest = .false.
+      call get_environment_variable("UMRSF_SELFTEST", e, status=ios)
+      if (ios==0) l_selftest = (trim(e)=="1")
+      if (l_selftest) then
+        call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_base)
+        hfd = 1.0e-3_dp
+        do iat = 1, natom
+          do icmp = 1, 3
+            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
+            call basis%init_shell_centers()
+            call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_p)
+            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) - 2.0_dp*hfd
+            call basis%init_shell_centers()
+            call umrsf_frozen_omega2e(infos, int2_driver, densym, gcomp, scale_exch, omega_m)
+            infos%atoms%xyz(icmp,iat) = infos%atoms%xyz(icmp,iat) + hfd
+            call basis%init_shell_centers()
+            de2e_fd(icmp,iat) = (omega_p - omega_m)/(2.0_dp*hfd)
+          end do
+        end do
+        maxd2e = maxval(abs(de2e - de2e_fd))
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/2x,a)') '========= UMRSF 2e response gradient (G1b: frozen-density FD) ========='
+        write(iw,'(2x,a,f18.10)') 'omega_2e (frozen-density, base) = ', omega_base
+        write(iw,'(2x,a,f18.10)') '  (cf. back-transform omega_2e)  = ', omega_2e_mv
+        write(iw,'(2x,a)') '   atom  comp     analytic dω2e/dx        frozen-FD          |Δ|'
+        do iat = 1, natom
+          do icmp = 1, 3
+            write(iw,'(2x,2i5,3es20.10)') iat, icmp, de2e(icmp,iat), de2e_fd(icmp,iat), &
+                                          abs(de2e(icmp,iat)-de2e_fd(icmp,iat))
+          end do
+        end do
+        write(iw,'(2x,a,es12.3)') 'max|analytic - frozen-FD| 2e    = ', maxd2e
+        if (maxd2e <= 1.0e-6_dp) then
+          write(iw,'(2x,a)') 'VERDICT: 2e response gradient PASS (custom grd2 2-PDM validated)'
+        else
+          write(iw,'(2x,a)') 'VERDICT: 2e response gradient CHECK (see |Δ| above)'
+        end if
+        write(iw,'(2x,a)') '======================================================================'
+        close(iw)
+      end if
+    end block
     call gcomp%clean()
 
     ! ===== SOMO-corrected unrelaxed difference density P_eff = sym(∂omega_orb/∂F̃) (MILESTONE C / M3) =====
@@ -618,6 +627,20 @@ contains
         gfb = matmul(tmp, matmul(gtb, transpose(tmp)))
       else
         call umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
+        ! UMRSF_GFCMP=1: byte-identity gate — recompute G^f SERIALLY on the SAME inputs and compare
+        ! (isolates the OMP loop from int2's run-to-run thread-reduction noise; must be EXACTLY 0).
+        block
+          character(len=8) :: e ; integer :: ios
+          real(kind=dp), allocatable :: gfas(:,:), gfbs(:,:)
+          call get_environment_variable("UMRSF_GFCMP", e, status=ios)
+          if (ios==0 .and. trim(e)=="1") then
+            allocate(gfas(nbf,nbf), gfbs(nbf,nbf))
+            call umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfas, gfbs, serial=.true.)
+            write(iw,'(/2x,a,2es12.3)') 'G^f OMP byte-identity gate max|parallel − serial| α/β (must = 0) = ', &
+                                        maxval(abs(gfa-gfas)), maxval(abs(gfb-gfbs))
+            deallocate(gfas, gfbs)
+          end if
+        end block
       end if
 
       ! ---- FULL-BLOCK Z-vector: M z = −R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
@@ -2553,15 +2576,23 @@ contains
 !>   G^f_pq = Σ_rs G̃a_rs dUa_rs + Σ_rs G̃b_rs dUb_rs       (both spins respond to one spin's rotation).
 !> Central difference (th=1e-4). Returns G^f in the CANONICAL (cac/cbc) basis. (In-model: unseeded
 !> smooth re-align reproduces the FD-oracle G^f and closes the gradient to ~5e-9.)
-  subroutine umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
+!> PERF: the (isp,q,p) iterations are INDEPENDENT — each writes a unique gfa(p,q)/gfb(p,q) with no
+!> cross-iteration accumulation, and umrsf_jacobi_smooth/m1_sign_fix touch only their args + locally-
+!> allocated scratch ⇒ the (isp,q) loops are OMP-parallelized with per-thread private scratch. The
+!> result is BYTE-IDENTICAL to serial (no reduction reordering; each element's two sums are computed
+!> wholly within one iteration). This removes the last O(nbf²) serial bottleneck (4·nbf² re-aligns).
+  subroutine umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, serial)
+!$  use omp_lib, only: omp_get_max_threads
     implicit none
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
     real(kind=dp), intent(in) :: gta(:,:), gtb(:,:)
     integer, intent(in) :: nocca
     real(kind=dp), intent(out) :: gfa(:,:), gfb(:,:)
+    logical, intent(in), optional :: serial   ! force this loop serial (byte-identity gate)
     real(kind=dp), allocatable :: cwa(:,:), cwb(:,:), ctap(:,:), ctbp(:,:), dua(:,:), dub(:,:)
-    integer :: nbf, p, q, isp
+    integer :: nbf, p, q, isp, nthr
+
     real(kind=dp) :: th, dum
 
     nbf = size(cac,1) ; th = 1.0d-4
@@ -2570,9 +2601,18 @@ contains
       call get_environment_variable("UMRSF_TH", e, status=ios)
       if (ios==0) then ; read(e,*,iostat=ios) thv ; if (ios==0 .and. thv>0.0_dp) th = thv ; end if
     end block
-    allocate(cwa(nbf,nbf), cwb(nbf,nbf), ctap(nbf,nbf), ctbp(nbf,nbf), dua(nbf,nbf), dub(nbf,nbf), &
-             source=0.0_dp)
+    nthr = 1
+!$  nthr = omp_get_max_threads()
+    block   ! UMRSF_GFSERIAL=1 (or serial=.true.) forces this loop serial (byte-identity gate: serial≡parallel)
+      character(len=8) :: e ; integer :: ios
+      call get_environment_variable("UMRSF_GFSERIAL", e, status=ios)
+      if (ios==0 .and. trim(e)=="1") nthr = 1
+    end block
+    if (present(serial)) then ; if (serial) nthr = 1 ; end if
     gfa = 0.0_dp ; gfb = 0.0_dp
+    !$omp parallel default(shared) private(isp,q,p,cwa,cwb,ctap,ctbp,dua,dub,dum) num_threads(nthr)
+    allocate(cwa(nbf,nbf), cwb(nbf,nbf), ctap(nbf,nbf), ctbp(nbf,nbf), dua(nbf,nbf), dub(nbf,nbf))
+    !$omp do collapse(2) schedule(dynamic)
     do isp = 1, 2
       do q = 1, nbf
         do p = 1, nbf
@@ -2597,7 +2637,9 @@ contains
         end do
       end do
     end do
+    !$omp end do
     deallocate(cwa, cwb, ctap, ctbp, dua, dub)
+    !$omp end parallel
   end subroutine umrsf_genfock_full
 
 !###############################################################################
