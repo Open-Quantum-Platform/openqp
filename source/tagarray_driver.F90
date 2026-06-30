@@ -82,6 +82,21 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_hsoc_re = OQP_prefix // "soc_hsoc_re"
   character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
 
+  ! misc-excited-analysis: MRSF state-interaction transition/state densities and
+  ! dipole intermediates exposed for downstream Python excited-state analysis
+  ! (NTOs / attach-detach / cubes / descriptors). Written at the end of the MRSF
+  ! energy driver; read read-only from Python via the tagarray bridge.
+  character(len=*), parameter, public :: OQP_td_trans_density_mo = OQP_prefix // "td_trans_density_mo"
+  character(len=*), parameter, public :: OQP_td_trans_dipole = OQP_prefix // "td_trans_dipole"
+  character(len=*), parameter, public :: OQP_td_dip_ao = OQP_prefix // "td_dip_ao"
+  character(len=*), parameter, public :: OQP_td_trans_density_mo_comment = &
+    "MRSF state-interaction 1-TDM (off-diag) / difference 1-RDM (diag) in the "// &
+    "alpha-MO basis; shape (nbf,nbf,nstates*nstates), pair k=ist+(jst-1)*nstates"
+  character(len=*), parameter, public :: OQP_td_trans_dipole_comment = &
+    "MRSF transition dipoles (a.u.) at center of mass; shape (3,nstates,nstates)"
+  character(len=*), parameter, public :: OQP_td_dip_ao_comment = &
+    "AO electric-dipole integrals (a.u.) at center of mass; packed L-triangle (nbf*(nbf+1)/2,3)"
+
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
   ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
   character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
