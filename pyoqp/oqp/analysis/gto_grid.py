@@ -51,6 +51,21 @@ class AOBasis:
         self.shells = []          # (atom_xyz, L, exps, dcoef)
         self.ao_index = []        # (shell_id, (lx,ly,lz), scomp)
         self.ao_atom = []         # atom index per AO
+        # This evaluator iterates Cartesian components; bail out with a clear
+        # message on pure spherical-harmonic bases (e.g. cc-pVDZ / def2 with the
+        # default ispher=auto), where a d shell is 5 AOs, not 6.
+        n_cart = int(sum((int(L) + 1) * (int(L) + 2) // 2 for L in angs))
+        n_sph = int(sum(2 * int(L) + 1 for L in angs))
+        if self.nbf != n_cart:
+            if self.nbf == n_sph:
+                raise NotImplementedError(
+                    "AOBasis supports only Cartesian shells; this basis is pure "
+                    f"spherical-harmonic (nbf={self.nbf}; Cartesian would be {n_cart}). "
+                    "Use a Cartesian basis (e.g. 6-31G*), set [input] ispher=false, "
+                    "or evaluate on OQP's own grid.")
+            raise ValueError(
+                f"AOBasis: nbf={self.nbf} matches neither the Cartesian ({n_cart}) "
+                f"nor spherical ({n_sph}) shell count for this basis.")
         p0 = 0
         for sh in range(int(basis["nsh"])):
             L = int(angs[sh]); nc = int(ncontr[sh]); at = int(centers[sh])
@@ -64,7 +79,9 @@ class AOBasis:
                 self.ao_index.append((sh_id, (lx, ly, lz), scomp))
                 self.ao_atom.append(at)
         self.ao_atom = np.asarray(self.ao_atom, dtype=int)
-        assert len(self.ao_index) == self.nbf, (len(self.ao_index), self.nbf)
+        if len(self.ao_index) != self.nbf:   # defensive; spherical handled above
+            raise ValueError(
+                f"AOBasis built {len(self.ao_index)} AOs but nbf={self.nbf}.")
 
     def eval_orbitals(self, mo_coeff_ao, points):
         """Evaluate orbitals (columns of ``mo_coeff_ao``, AO basis) on points."""

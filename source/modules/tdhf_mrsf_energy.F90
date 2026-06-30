@@ -764,24 +764,45 @@ contains
     ! --- misc-excited-analysis: expose the MRSF state-interaction transition /
     !     state-difference densities (alpha-MO basis), the transition dipoles,
     !     and the AO electric-dipole integrals for downstream Python analysis.
-    !     This is a pure write-out; no physics above is altered.
-    !     (ported to the alloc_or_die tagarray API used by current main.)
-    call infos%dat%alloc_or_die(OQP_td_trans_density_mo, &
-      (/ nbf, nbf, nstates*nstates /), trden_store, &
-      description=OQP_td_trans_density_mo_comment)
-    trden_store = reshape(trden(:,:,1:nstates,1:nstates), (/ nbf, nbf, nstates*nstates /))
+    !     Pure write-out; no physics above is altered (ported to the alloc_or_die
+    !     tagarray API of current main).
+    !     Skipped for UMRSF: there trden is set identically to zero above, so no
+    !     genuine state-interaction densities exist and exposing them would
+    !     publish misleading all-zero tags.
+    if (.not. umrsf) then
+      ! get_mrsf_transition_density / get_transition_dipole only populate the
+      ! upper triangle (ist<=jst). Mirror it into the stored copies so reverse
+      ! state pairs are correct: gamma^{j->i} = (gamma^{i->j})^T and the (real)
+      ! transition dipole mu^{j->i} = mu^{i->j}. The live `dip`/`trden` arrays
+      ! handed to print_results are left untouched.
+      do jst = 1, nstates
+        do ist = jst+1, nstates
+          trden(:,:,ist,jst) = transpose(trden(:,:,jst,ist))
+        end do
+      end do
 
-    call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
-      dip_store, description=OQP_td_trans_dipole_comment)
-    dip_store = dip(:,1:nstates,1:nstates)
+      call infos%dat%alloc_or_die(OQP_td_trans_density_mo, &
+        (/ nbf, nbf, nstates*nstates /), trden_store, &
+        description=OQP_td_trans_density_mo_comment)
+      trden_store = reshape(trden(:,:,1:nstates,1:nstates), (/ nbf, nbf, nstates*nstates /))
 
-    allocate(mints_exp(nbf2,3), source=0.0_dp)
-    com_exp = basis%atoms%center(weight='mass')
-    call multipole_integrals(basis, mints_exp, com_exp, 1)
-    call infos%dat%alloc_or_die(OQP_td_dip_ao, (/ nbf2, 3 /), dipao_store, &
-      description=OQP_td_dip_ao_comment)
-    dipao_store = mints_exp
-    deallocate(mints_exp)
+      call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
+        dip_store, description=OQP_td_trans_dipole_comment)
+      dip_store = dip(:,1:nstates,1:nstates)
+      do jst = 1, nstates
+        do ist = jst+1, nstates
+          dip_store(:,ist,jst) = dip_store(:,jst,ist)
+        end do
+      end do
+
+      allocate(mints_exp(nbf2,3), source=0.0_dp)
+      com_exp = basis%atoms%center(weight='mass')
+      call multipole_integrals(basis, mints_exp, com_exp, 1)
+      call infos%dat%alloc_or_die(OQP_td_dip_ao, (/ nbf2, 3 /), dipao_store, &
+        description=OQP_td_dip_ao_comment)
+      dipao_store = mints_exp
+      deallocate(mints_exp)
+    end if
 
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)

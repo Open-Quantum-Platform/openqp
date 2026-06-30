@@ -65,6 +65,17 @@ class MRSFExcitedStates:
             self.mult = 1
 
         nbf = self.nbf
+        # The state-interaction densities are exposed only by genuine MRSF runs;
+        # UMRSF sets trden=0 and the energy driver skips the tags, so fail with a
+        # clear message rather than handing back all-zero "densities".
+        try:
+            _probe = mol.data["OQP::td_trans_density_mo"]
+        except Exception:
+            raise RuntimeError(
+                "MRSFExcitedStates requires the MRSF state-interaction densities "
+                "(tag OQP::td_trans_density_mo). They are produced by an MRSF "
+                "energy run ([tdhf] type=mrsf) but not by UMRSF. Re-run with MRSF, "
+                "or extend the Fortran exposure for UMRSF before analysing it.")
         # AO <-> MO machinery (alpha MOs; ROHF shares them with beta).
         self.C = np.asarray(mol.data["OQP::VEC_MO_A"]).reshape(nbf, nbf).T  # C[ao, mo]
         self.S = _unpack_lt(np.asarray(mol.data["OQP::SM"]).ravel(), nbf)

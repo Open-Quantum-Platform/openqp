@@ -65,20 +65,33 @@ def to_qcschema(mol, states=None, driver="energy"):
     if enuc is not None:
         properties["nuclear_repulsion_energy"] = enuc
 
-    extras = {"oqp": {"scf_total_energy": scf_energy}}
+    extras = {"oqp": {"scf_reference_energy_hartree": scf_energy}}
     if states is not None:
-        de_ev = ((states.energies - states.energies[0]) * _HARTREE2EV).tolist()
-        osc = []
-        tdip = []
-        for j in range(1, states.nstates):
-            osc.append(states.oscillator_strength(0, j))
-            tdip.append(states.transition_dipole(0, j).tolist())
+        # OQP::td_energies are response energies relative to the SCF (ROHF)
+        # reference, so the absolute total state energy is scf + response.
+        te = np.asarray(states.energies, dtype=float)
+        total_state = (scf_energy + te).tolist()
+        # All excited-state arrays are aligned to S0 -> Sn (n = 1..nstates-1),
+        # i.e. same length and same meaning (no S0 entry mixed in).
+        transitions = []
+        exc_ev, osc, tdip = [], [], []
+        for n in range(1, states.nstates):
+            e = float((te[n] - te[0]) * _HARTREE2EV)
+            f = float(states.oscillator_strength(0, n))
+            mu = states.transition_dipole(0, n).tolist()
+            exc_ev.append(e); osc.append(f); tdip.append(mu)
+            transitions.append({"from_state": 0, "to_state": n,
+                                "excitation_energy_ev": e,
+                                "oscillator_strength": f,
+                                "transition_dipole_au": mu})
         extras["oqp"].update({
-            "state_energies_hartree": states.energies.tolist(),
-            "excitation_energies_ev": de_ev,
-            "oscillator_strengths": osc,            # S0 -> Sn, n=1..
-            "transition_dipoles_au": tdip,
             "n_states": int(states.nstates),
+            "total_state_energies_hartree": total_state,   # absolute, length nstates
+            "transitions": transitions,                    # S0->Sn, length nstates-1
+            # convenience parallel arrays (all length nstates-1, all S0->Sn)
+            "excitation_energies_ev": exc_ev,
+            "oscillator_strengths": osc,
+            "transition_dipoles_au": tdip,
         })
 
     payload = {
