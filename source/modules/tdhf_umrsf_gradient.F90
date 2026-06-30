@@ -159,6 +159,7 @@ contains
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
     logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
     logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
+    logical :: l_g2efd, l_g2ecmp                                ! G̃ 2e: FD oracle (UMRSF_G2EFD) ; analytic-vs-FD compare (UMRSF_G2ECMP)
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
@@ -517,7 +518,7 @@ contains
     block
       character(len=16) :: e ; integer :: ios
       dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false. ; l_m1 = .true.
-      l_zdense = .false. ; l_zcmp = .false.
+      l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false.
       call get_environment_variable("UMRSF_ZW", e, status=ios)
       if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
       call get_environment_variable("UMRSF_W2E", e, status=ios) ; if (ios==0) dbg_w2e = (trim(e)/="0")
@@ -530,6 +531,11 @@ contains
       ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
       call get_environment_variable("UMRSF_ZDENSE", e, status=ios) ; if (ios==0) l_zdense = (trim(e)=="1")
       call get_environment_variable("UMRSF_ZCMP",   e, status=ios) ; if (ios==0) l_zcmp   = (trim(e)=="1")
+      ! G̃ 2e gen-Fock: default = analytic (umrsf_g2e_analytic, 2 int2 builds). UMRSF_G2EFD=1 →
+      ! the FD oracle umrsf_g2e_onesided (4·nbf² builds). UMRSF_G2ECMP=1 → run BOTH and print
+      ! max|analytic − FD| per spin (the perf-port GATE: reproduce the FD g2e to ≤1e-9).
+      call get_environment_variable("UMRSF_G2EFD",  e, status=ios) ; if (ios==0) l_g2efd  = (trim(e)=="1")
+      call get_environment_variable("UMRSF_G2ECMP", e, status=ios) ; if (ios==0) l_g2ecmp = (trim(e)=="1")
     end block
 
     ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
@@ -565,13 +571,14 @@ contains
     ! P_eff = P^Δu + ½P_z orbital gradient (with the full-block P_z). Ablations: l_zov / l_gvt.
     block
       real(kind=dp), allocatable :: famoa(:,:), famob(:,:), ya(:,:), yb(:,:), tmp(:,:)
-      real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:)
+      real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:), g2ea(:,:), g2eb(:,:)
       real(kind=dp), allocatable :: gfa(:,:), gfb(:,:), gza(:,:), gzb(:,:), wao(:,:), wpack(:)
       real(kind=dp) :: zrms, statio, tolw, wsa, wsb
       integer :: ij, ii, si, sj
       tolw = tol_int*log(10.0_dp)
       allocate(famoa(nbf,nbf), famob(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), &
-               gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), gfa(nbf,nbf), gfb(nbf,nbf), &
+               gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), g2ea(nbf,nbf), g2eb(nbf,nbf), &
+               gfa(nbf,nbf), gfb(nbf,nbf), &
                gza(nbf,nbf), gzb(nbf,nbf), wao(nbf,nbf), wpack(nbf2), source=0.0_dp)
 
       ! ---- G̃_σ (raw aligned-basis generalized Fock = c04 factors, va/vb basis) ----
@@ -580,13 +587,25 @@ contains
       call orthogonal_transform_sym(nbf, nbf, fock_b, vb, nbf, scr) ; call unpack_matrix(scr, famob)
       call umrsf_meanfield(basis, infos, pda, pdb, hfscale_ref, ya, yb)
       gta = 2.0_dp*matmul(famoa, talpha)
-      if (dbg_w2e) then ; call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2e)
-        gta = gta + g2e ; end if
+      gtb = 2.0_dp*matmul(famob, tbeta)
+      ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 2 int2 builds) / FD oracle / GATE ----
+      if (dbg_w2e) then
+        if (l_g2ecmp) then       ! GATE: analytic vs FD oracle (reproduce ≤1e-9), use analytic
+          call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
+          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2e)
+          write(iw,'(/2x,a,es12.3)') 'G2e GATE max|analytic − FD| α (must ≤1e-9) = ', maxval(abs(g2ea-g2e))
+          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2e)
+          write(iw,'(2x,a,es12.3)')  'G2e GATE max|analytic − FD| β (must ≤1e-9) = ', maxval(abs(g2eb-g2e))
+        else if (l_g2efd) then   ! FD oracle fallback (4·nbf² builds)
+          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2ea)
+          call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2eb)
+        else                     ! production: analytic, both spins one call
+          call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
+        end if
+        gta = gta + g2ea ; gtb = gtb + g2eb
+      end if
       if (dbg_wrr) then ; tmp = matmul(transpose(va), matmul(ya, va))
         gta(:,1:nocca) = gta(:,1:nocca) + 2.0_dp*tmp(:,1:nocca) ; end if
-      gtb = 2.0_dp*matmul(famob, tbeta)
-      if (dbg_w2e) then ; call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 2, g2e)
-        gtb = gtb + g2e ; end if
       if (dbg_wrr) then ; tmp = matmul(transpose(vb), matmul(yb, vb))
         gtb(:,1:noccb) = gtb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb) ; end if
 
@@ -1411,6 +1430,128 @@ contains
     end do
     deallocate(cwa, cwb)
   end subroutine umrsf_g2e_onesided
+
+!###############################################################################
+!> ANALYTIC 11-channel 2e generalized Fock  g2e^σ_pq = ∂ω_2e/∂U^σ_pq  (BOTH spins, one call),
+!> replacing the FD oracle umrsf_g2e_onesided (4·nbf² int2 builds → 2 builds). Derivation +
+!> CAS/FD gate: DERIVATIONS/{c10_g2e_analytic.py,M4_g2e_analytic.md} (worst 5.25e-12 ≤1e-9).
+!>   ω_2e = Σ_k ⟨B_k, F_k⟩,  F_k = s_k int2[D]_k,  D=umrsfcbc, B=umrsf_bra_density,  int2_umrsf
+!>   is CHANNEL-DIAGONAL & SELF-ADJOINT (J/K of 8-fold-sym ERIs) ⇒ for the ket-derivative term
+!>   ⟨B_k, s_k int2[∂D_k]⟩ = ⟨GB_k, ∂D_k⟩ with GB_k = s_k int2[B]_k (precomputed once).
+!>   g2e = V_σᵀ Γ_σ ,  Γ_σ = Σ_k [⟨F_k,∂B_k/∂V_σ⟩ + ⟨GB_k,∂D_k/∂V_σ⟩].
+!> Each channel density is V_l A_k V_rᵀ (sparse amplitude core A_k; ket core A, bra core AB;
+!> spin pairing aa=1,3,5,7 / bb=2,4,6,8 / ab=9,10,11). Gradient of ⟨M,V_l A V_rᵀ⟩:
+!>   ab: Γa += M Vb Aᵀ, Γb += Mᵀ Va A ;  aa: Γa += M Va Aᵀ + Mᵀ Va A ;  bb: analogous.
+!> s_k = mrst sign (fmrst2(:,1:10) flip for mrst==3); scale_exchange=scale_coulomb=scale_exch
+!> (mirrors umrsf_omega2e_explicit exactly — the FD oracle's integrand).
+  subroutine umrsf_g2e_analytic(infos, idrv, va, vb, xamp, scale_exch, g2ea, g2eb)
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_umrsf_data_t, umrsfcbc
+    use tdhf_lib, only: iatogen
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: va(:,:), vb(:,:), xamp(:), scale_exch
+    real(kind=dp), intent(out) :: g2ea(:,:), g2eb(:,:)
+    real(kind=dp), allocatable :: xmat(:,:), fk(:,:,:), gbk(:,:,:)
+    real(kind=dp), allocatable :: acore(:,:,:), abcore(:,:,:), ga(:,:), gb(:,:)
+    real(kind=dp), allocatable :: mc(:,:), vacc(:,:)
+    real(kind=dp), allocatable, target :: densd(:,:,:,:), densb(:,:,:,:)
+    type(int2_umrsf_data_t), target :: udd, udb
+    real(kind=dp), parameter :: isqrt2 = 1.0_dp/sqrt(2.0_dp)
+    integer :: nbf, nocca, noccb, mrst, o1, o2, i, j, k, pass, ls, rs
+    integer :: lspin(11), rspin(11)
+    !                   ch:  1  2  3  4  5  6  7  8  9 10 11
+    lspin = (/ 1,2,1,2,1,2,1,2,1,1,1 /)   ! 1=α 2=β  (left  spin)
+    rspin = (/ 1,2,1,2,1,2,1,2,2,2,2 /)   !          (right spin)
+
+    nbf = size(va,1)
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    mrst = infos%tddft%mult ; o1 = nocca-1 ; o2 = nocca
+    allocate(xmat(nbf,nbf), fk(nbf,nbf,11), gbk(nbf,nbf,11), &
+             acore(nbf,nbf,11), abcore(nbf,nbf,11), ga(nbf,nbf), gb(nbf,nbf), &
+             mc(nbf,nbf), vacc(nbf,nbf), &
+             densd(1,11,nbf,nbf), densb(1,11,nbf,nbf), source=0.0_dp)
+
+    ! ---- channel densities D=umrsfcbc(ket), B=umrsf_bra_density(bra) ----
+    call iatogen(xamp, xmat, nocca, noccb)
+    call umrsfcbc(infos, va, vb, xmat, densd(1,:,:,:))
+    call umrsf_bra_density(infos, va, vb, xmat, densb(1,:,:,:))
+
+    ! ---- F_k = s_k int2[D]_k  and  GB_k = s_k int2[B]_k  (2 int2 builds) ----
+    udd = int2_umrsf_data_t(d3=densd(1:1,:,:,:), tamm_dancoff=.true., &
+                            scale_exchange=scale_exch, scale_coulomb=scale_exch)
+    call idrv%run(udd)
+    do k = 1, 11 ; fk(:,:,k) = udd%f3(1,k,:,:,1) ; end do
+    if (mrst == 3) fk(:,:,1:10) = -fk(:,:,1:10)
+    udb = int2_umrsf_data_t(d3=densb(1:1,:,:,:), tamm_dancoff=.true., &
+                            scale_exchange=scale_exch, scale_coulomb=scale_exch)
+    call idrv%run(udb)
+    do k = 1, 11 ; gbk(:,:,k) = udb%f3(1,k,:,:,1) ; end do
+    if (mrst == 3) gbk(:,:,1:10) = -gbk(:,:,1:10)
+
+    ! ---- amplitude cores A_k (ket), AB_k (bra) : density_k = V_l A_k V_rᵀ ----
+    do j = nocca+1, nbf                                   ! virt-row channels
+      acore(o2,j,1)=xmat(o2,j) ; acore(o1,j,3)=xmat(o1,j)               ! aa  bo2va/bo1va
+      acore(o2,j,2)=xmat(o2,j) ; acore(o1,j,4)=xmat(o1,j)               ! bb
+      acore(o1,j,9)=xmat(o2,j) ; acore(o2,j,9)=-xmat(o1,j)              ! ab  o21v
+      abcore(o2,j,5)=0.5_dp*xmat(o2,j) ; abcore(o1,j,7)=0.5_dp*xmat(o1,j)   ! aa  adco1a/adco2a
+      abcore(o2,j,6)=0.5_dp*xmat(o2,j) ; abcore(o1,j,8)=0.5_dp*xmat(o1,j)   ! bb
+      abcore(o2,j,9)=xmat(o1,j) ; abcore(o1,j,9)=-xmat(o2,j)            ! ab  ao21v
+    end do
+    do i = 1, nocca-2                                     ! closed-col channels
+      acore(i,o1,5)=xmat(i,o1) ; acore(i,o2,7)=xmat(i,o2)              ! aa  bco1a/bco2a
+      acore(i,o1,6)=xmat(i,o1) ; acore(i,o2,8)=xmat(i,o2)              ! bb
+      acore(i,o2,10)=xmat(i,o1) ; acore(i,o1,10)=-xmat(i,o2)           ! ab  co12
+      abcore(i,o1,1)=0.5_dp*xmat(i,o1) ; abcore(i,o2,3)=0.5_dp*xmat(i,o2)   ! aa  ado2va/ado1va
+      abcore(i,o1,2)=0.5_dp*xmat(i,o1) ; abcore(i,o2,4)=0.5_dp*xmat(i,o2)   ! bb
+      abcore(i,o1,10)=xmat(i,o2) ; abcore(i,o2,10)=-xmat(i,o1)         ! ab  aco12
+    end do
+    ! channel 11 (ab): SF block; ket A11 excludes the SOMO 2×2, bra AB11 is full then corrected
+    do j = noccb+1, nbf ; do i = 1, nocca
+      abcore(i,j,11) = xmat(i,j)
+      if (.not. ((i==o1 .or. i==o2) .and. (j==o1 .or. j==o2))) acore(i,j,11) = xmat(i,j)
+    end do ; end do
+    abcore(o1,o1,11) = abcore(o1,o1,11) - xmat(o1,o1)
+    abcore(o2,o2,11) = abcore(o2,o2,11) - xmat(o2,o2)
+    if (mrst == 1) then
+      acore(o2,o1,11)=xmat(o2,o1) ; acore(o1,o2,11)=xmat(o1,o2)
+      acore(o1,o1,11)=isqrt2*xmat(o1,o1) ; acore(o2,o2,11)=-isqrt2*xmat(o1,o1)
+      abcore(o1,o1,11)=abcore(o1,o1,11)+isqrt2*xmat(o1,o1)
+      abcore(o2,o2,11)=abcore(o2,o2,11)-isqrt2*xmat(o1,o1)
+    else if (mrst == 3) then
+      acore(o1,o1,11)=isqrt2*xmat(o1,o1) ; acore(o2,o2,11)=isqrt2*xmat(o1,o1)
+      abcore(o1,o2,11)=abcore(o1,o2,11)-xmat(o1,o2)
+      abcore(o2,o1,11)=abcore(o2,o1,11)-xmat(o2,o1)
+      abcore(o1,o1,11)=abcore(o1,o1,11)+isqrt2*xmat(o1,o1)
+      abcore(o2,o2,11)=abcore(o2,o2,11)+isqrt2*xmat(o1,o1)
+    end if
+
+    ! ---- Γa, Γb = Σ_k [bra pass (M=F_k, core=AB_k) + ket pass (M=GB_k, core=A_k)] ----
+    ga = 0.0_dp ; gb = 0.0_dp
+    do k = 1, 11
+      ls = lspin(k) ; rs = rspin(k)
+      do pass = 1, 2
+        if (pass == 1) then ; mc = fk(:,:,k) ; vacc = abcore(:,:,k)   ! bra
+        else                ; mc = gbk(:,:,k) ; vacc = acore(:,:,k)   ! ket
+        end if
+        if (ls==1 .and. rs==1) then          ! aa
+          ga = ga + matmul(mc, matmul(va, transpose(vacc))) &
+                  + matmul(transpose(mc), matmul(va, vacc))
+        else if (ls==2 .and. rs==2) then     ! bb
+          gb = gb + matmul(mc, matmul(vb, transpose(vacc))) &
+                  + matmul(transpose(mc), matmul(vb, vacc))
+        else                                 ! ab
+          ga = ga + matmul(mc, matmul(vb, transpose(vacc)))
+          gb = gb + matmul(transpose(mc), matmul(va, vacc))
+        end if
+      end do
+    end do
+
+    g2ea = matmul(transpose(va), ga)
+    g2eb = matmul(transpose(vb), gb)
+    deallocate(xmat, fk, gbk, acore, abcore, ga, gb, mc, vacc, densd, densb)
+  end subroutine umrsf_g2e_analytic
 
 !###############################################################################
 !> Rebuild the UHF reference Fock F^ref_σ = h + J[Dα+Dβ] − scale_exch·K[Dσ] (AO, full) from the
