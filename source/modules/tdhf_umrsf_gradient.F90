@@ -296,8 +296,34 @@ contains
     ! ---- RE-DIAGONALIZE A in the SMOOTH basis → genuine eigenvector xamp (§15 / c05) ----
     ! The stored bvec is the eigenvector in the energy's THRESHOLD basis (non-stationary here ~1.5e-6).
     ! The ov-only Z-vector + W machinery needs X to be a TRUE eigenvector of A in the SMOOTH basis.
-    call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
-                               hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+    ! Dispatch: default = matrix-free Davidson (umrsf_track_amplitude_dav, ~tens of matvecs); UMRSF_TRKDENSE=1
+    ! = the dense column-by-column oracle (umrsf_track_amplitude, nia matvecs + full diag); UMRSF_TRKCMP=1 =
+    ! run BOTH and print the GATE max|x_dav - x_dense| + |dOmega| (must reproduce the dense xamp/omega <=1e-9).
+    block
+      character(len=24) :: e ; integer :: ios
+      logical :: trk_dense, trk_cmp
+      real(kind=dp), allocatable :: xamp_d(:) ; real(kind=dp) :: om_d, sgn_al
+      trk_dense = .false. ; trk_cmp = .false.
+      call get_environment_variable("UMRSF_TRKDENSE", e, status=ios) ; if (ios==0) trk_dense = (trim(e)=="1")
+      call get_environment_variable("UMRSF_TRKCMP",   e, status=ios) ; if (ios==0) trk_cmp   = (trim(e)=="1")
+      if (trk_cmp) then
+        allocate(xamp_d(size(xamp)))
+        call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
+                                   hfs, spc_coco, spc_ovov, spc_coov, xamp_d, om_d)
+        call umrsf_track_amplitude_dav(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
+                                       hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+        sgn_al = sign(1.0_dp, dot_product(xamp, xamp_d))     ! align global sign (both fixed to bvec_ref)
+        write(iw,'(2x,a,2es12.3)') 'TRK GATE max|x_dav - x_dense| / |dOmega| (must <=1e-9) = ', &
+          maxval(abs(sgn_al*xamp - xamp_d)), abs(omega_eig - om_d)
+        deallocate(xamp_d)
+      else if (trk_dense) then
+        call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
+                                   hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+      else
+        call umrsf_track_amplitude_dav(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
+                                       hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+      end if
+    end block
     write(iw,'(/2x,a)') '----- smooth-basis amplitude re-diagonalization (genuine eigenvector) -----'
     write(iw,'(2x,a,f18.10)') 'omega (smooth-basis eigenvalue) = ', omega_eig
     write(iw,'(2x,a,f18.10)') 'omega stored (td_energies)      = ', td_en(tstate)
@@ -1795,6 +1821,106 @@ contains
     omega_eig = ev(ktrack)
     deallocate(amat, ek, axk, ev)
   end subroutine umrsf_track_amplitude
+
+!###############################################################################
+!> MATRIX-FREE Davidson replacement for umrsf_track_amplitude — the perf fix for the thymine wall.
+!> The dense path builds A by nia=nocca*nvirb umrsf_response_Ax calls + a full diag_symm_full (nia~3910
+!> at thymine, the wall). Here the SAME response A is diagonalized matrix-free: seed the subspace with
+!> bvec_ref (the energy eigenvector, ~1.5e-6 from the smooth-basis one) and converge the SINGLE nearest
+!> root by Davidson, applying A via ONE umrsf_response_Ax per new subspace vector (~tens, not nia).
+!> STATE-FOLLOW: each iteration picks the Ritz pair whose Ritz vector has max |overlap with bvec_ref|
+!> (= max |g.Y(:,j)|, g = V^T bvec_ref) — the SAME criterion as the dense path (lines ~1788-1794),
+!> restricted to the converged subspace. Returns the genuine smooth-basis eigenvector xamp (sign-fixed
+!> to bvec_ref) + eigenvalue omega_eig, reproducing the dense result to the Davidson tolerance. Jacobi
+!> preconditioner = (theta - (eps_b - eps_i))^-1 (orbital gap; DOF k packed column-major over
+!> i=1..nocca, a=noccb+1..nbf, per iatogen). Tunables: UMRSF_TRKTOL (residual norm, 1e-10),
+!> UMRSF_TRKMAXSUB (max subspace before thick-restart, default min(nia,60)).
+  subroutine umrsf_track_amplitude_dav(infos, idrv, va, vb, famo, fbmo, bvec_ref, scale_exch, &
+                                       hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
+    use io_constants, only: iw
+    use eigen, only: diag_symm_full
+    use int2_compute, only: int2_compute_t
+    implicit none
+    type(information), target, intent(inout) :: infos
+    type(int2_compute_t), intent(inout) :: idrv
+    real(kind=dp), intent(in) :: va(:,:), vb(:,:), famo(:,:), fbmo(:,:), bvec_ref(:)
+    real(kind=dp), intent(in) :: scale_exch, hfs, spc_coco, spc_ovov, spc_coov
+    real(kind=dp), intent(out) :: xamp(:), omega_eig
+    real(kind=dp), allocatable :: vsub(:,:), avsub(:,:), hsub(:,:), hcopy(:,:), theta(:), yy(:,:)
+    real(kind=dp), allocatable :: adiag(:), xr(:), axr(:), rr(:), tt(:), gg(:)
+    integer :: nbf, nocca, noccb, nvirb, nia, i, a, k, j, m, mmax, jsel, ierr, iter, maxit
+    real(kind=dp) :: rtol, nrm, rnorm, theta_sel, ov, ovmax, denom, sgn
+    real(kind=dp), parameter :: pcfloor = 1.0e-3_dp
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb ; nia = nocca*nvirb
+
+    ! orbital-gap diagonal of A (preconditioner); DOF k packed column-major over (i=1..nocca, a=noccb+1..nbf)
+    allocate(adiag(nia))
+    k = 0
+    do a = noccb+1, nbf ; do i = 1, nocca
+      k = k + 1 ; adiag(k) = fbmo(a,a) - famo(i,i)
+    end do ; end do
+
+    rtol = 1.0e-10_dp ; mmax = min(nia, 60) ; maxit = 300
+    block
+      character(len=24) :: e ; integer :: ios ; real(kind=dp) :: rv ; integer :: iv
+      call get_environment_variable("UMRSF_TRKTOL", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) rv ; if (ios==0 .and. rv>0.0_dp) rtol = rv ; end if
+      call get_environment_variable("UMRSF_TRKMAXSUB", e, status=ios)
+      if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>1) mmax = min(nia, iv) ; end if
+    end block
+
+    allocate(vsub(nia,mmax), avsub(nia,mmax), hsub(mmax,mmax), hcopy(mmax,mmax), theta(mmax), &
+             yy(mmax,mmax), xr(nia), axr(nia), rr(nia), tt(nia), gg(mmax), source=0.0_dp)
+
+    ! seed the subspace with the (normalized) stored amplitude
+    nrm = sqrt(sum(bvec_ref**2)) ; vsub(:,1) = bvec_ref / nrm
+    call umrsf_response_Ax(infos, idrv, va, vb, famo, fbmo, vsub(:,1), scale_exch, &
+                           hfs, spc_coco, spc_ovov, spc_coov, avsub(:,1))
+    m = 1 ; theta_sel = 0.0_dp ; rnorm = huge(1.0_dp) ; iter = 0
+    davidson: do iter = 1, maxit
+      ! subspace matrix H = V^T A V (symmetric)
+      do j = 1, m ; do i = 1, m ; hsub(i,j) = dot_product(vsub(:,i), avsub(:,j)) ; end do ; end do
+      hcopy = 0.0_dp ; hcopy(1:m,1:m) = 0.5_dp*(hsub(1:m,1:m) + transpose(hsub(1:m,1:m)))
+      call diag_symm_full(1, m, hcopy, mmax, theta, ierr)     ! cols of hcopy(1:m,1:m) -> eigvecs
+      yy(1:m,1:m) = hcopy(1:m,1:m)
+      ! state-follow: ritz pair with max |overlap to bvec_ref| = max |g.Y(:,j)|, g = V^T bvec_ref
+      do i = 1, m ; gg(i) = dot_product(vsub(:,i), bvec_ref) ; end do
+      ovmax = -1.0_dp ; jsel = 1
+      do j = 1, m
+        ov = abs(dot_product(gg(1:m), yy(1:m,j)))
+        if (ov > ovmax) then ; ovmax = ov ; jsel = j ; end if
+      end do
+      theta_sel = theta(jsel)
+      ! Ritz vector x = V Y(:,jsel) ; A x = AV Y(:,jsel) ; residual r = A x - theta x
+      xr = 0.0_dp ; axr = 0.0_dp
+      do i = 1, m ; xr = xr + yy(i,jsel)*vsub(:,i) ; axr = axr + yy(i,jsel)*avsub(:,i) ; end do
+      rr = axr - theta_sel*xr ; rnorm = sqrt(sum(rr**2))
+      if (rnorm <= rtol) exit davidson
+      ! thick-restart: subspace full -> collapse to the tracked Ritz vector
+      if (m == mmax) then ; vsub(:,1) = xr ; avsub(:,1) = axr ; m = 1 ; end if
+      ! preconditioned correction t = r / (theta - adiag) (floored)
+      do k = 1, nia
+        denom = theta_sel - adiag(k) ; if (abs(denom) < pcfloor) denom = sign(pcfloor, denom)
+        tt(k) = rr(k) / denom
+      end do
+      ! orthonormalize t against V(:,1:m) (modified Gram-Schmidt, twice)
+      do j = 1, 2 ; do i = 1, m ; tt = tt - dot_product(tt, vsub(:,i))*vsub(:,i) ; end do ; end do
+      nrm = sqrt(sum(tt**2))
+      if (nrm < 1.0e-12_dp) exit davidson     ! correction exhausted -> converged in subspace
+      tt = tt / nrm ; m = m + 1 ; vsub(:,m) = tt
+      call umrsf_response_Ax(infos, idrv, va, vb, famo, fbmo, vsub(:,m), scale_exch, &
+                             hfs, spc_coco, spc_ovov, spc_coov, avsub(:,m))
+    end do davidson
+
+    ! sign-fix to bvec_ref (matches the dense path)
+    sgn = sign(1.0_dp, dot_product(xr, bvec_ref)) ; xamp = sgn*xr ; omega_eig = theta_sel
+    write(iw,'(2x,a,i0,a,es10.2,a,es10.2)') 'track Davidson: iters = ', iter, &
+      ', resid = ', rnorm, ', overlap deficit 1-|x.bvec| = ', 1.0_dp - abs(dot_product(xamp, bvec_ref))
+    deallocate(vsub, avsub, hsub, hcopy, theta, yy, adiag, xr, axr, rr, tt, gg)
+  end subroutine umrsf_track_amplitude_dav
 
 !###############################################################################
 !> ω = X^T A X for a given (already get_jacobi-aligned) set of orbitals vva,vvb and amplitude xv.
