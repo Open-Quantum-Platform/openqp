@@ -759,6 +759,11 @@ contains
       ! floor). Both give the same full gradient (the alignment gauge cancels in assembly); the analytic
       ! is O(nbf³) matmuls (no int2, no per-(p,q) re-align). D1 model closure DERIVATIONS/c06_exp4/c06_exp5.
       call get_environment_variable("UMRSF_GFFD",   e, status=ios) ; if (ios==0) l_gffd   = (trim(e)=="1")
+      ! de_m1 (M1 alignment explicit-overlap Pulay): default = ANALYTIC −Tr(W_m1·S^x) (umrsf_m1_analytic,
+      ! D2; W_m1 = cac Tbar cbcᵀ, the reverse-mode S-VJP of Φ=μ·r(s_align) — SAME μ/Tbar/gauge as the D1
+      ! ΔG^f). UMRSF_M1FD=1 → the numerical geometry central-FD oracle umrsf_m1_overlap_grad (6·natom
+      ! re-aligns, ~1e-6 floor). D2 model closure DERIVATIONS/c11_dem1_analytic.py (3.8e-12, 7/7 seeds).
+      call get_environment_variable("UMRSF_M1FD",   e, status=ios) ; if (ios==0) l_m1fd   = (trim(e)=="1")
     end block
 
     ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
@@ -926,6 +931,18 @@ contains
       call grad_ee_overlap(basis, wpack, de_w, logtol=tolw)
       call umrsf_timing_log(iw, 'W overlap term', twall, tcpu)
 
+      ! ---- de_m1 (D2): ANALYTIC alignment explicit-overlap Pulay −Tr(W_m1·S^x). Done HERE (inside the
+      ! block) because it reuses the SAME raw aligned gen-Fock G̃ (gta,gtb) as umrsf_genfock_analytic ⇒
+      ! the SAME μ/Tbar and hence the SAME unseeded gauge as the ΔG^f above (D1/D2 must share the gauge).
+      ! UMRSF_M1FD=1 defers to the numerical geometry-FD oracle umrsf_m1_overlap_grad (called after the block).
+      if (l_m1 .and. .not. l_m1fd) then
+        write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
+        call flush(iw)
+        call umrsf_clock_start(twall, tcpu)
+        call umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
+        call umrsf_timing_log(iw, 'analytic M1 overlap term', twall, tcpu)
+      end if
+
       ! ---- diagnostics (c06 cross-checks) ----
       ! within-segment antisym of G̃ — the c06 phenomenon (c05 toy ≈0; real MRSF ≈ 1e-3).
       wsa = 0.0_dp ; wsb = 0.0_dp
@@ -981,13 +998,6 @@ contains
         write(iw,'(2x,a,2es12.3)') 'alpha/beta Z stationarity                        = ', stat_a, stat_b
       end block
       write(iw,'(2x,a,es12.3)') '||W_ao||                                       = ', sqrt(sum(wao**2))
-      if (l_m1 .and. .not. l_m1fd) then
-        write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
-        call flush(iw)
-        call umrsf_clock_start(twall, tcpu)
-        call umrsf_m1_overlap_grad_adjoint(infos, basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, de_m1)
-        call umrsf_timing_log(iw, 'analytic M1 overlap term', twall, tcpu)
-      end if
       write(iw,'(2x,a,i0,a,f10.3,a,f10.3,a,f10.3)') &
         'UMRSF timing: mean-field calls = ', umrsf_mf_calls, &
         ' total wall = ', umrsf_mf_wall, ' fock_jk wall = ', umrsf_mf_fock_wall, &
@@ -996,11 +1006,11 @@ contains
       deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, g2ea, g2eb, gfa, gfb, gza, gzb, wao, wpack)
     end block
 
-    ! de_m1 = the alignment's EXPLICIT-S response −∂(ω∘align)/∂S·∂S/∂x (the overlap-Pulay of the
-    ! get_jacobi alignment): re-align the canonical orbitals at S(x±θ) (orbitals/ERIs/F^ref frozen at
-    ! base; D^ref get_jacobi-invariant), central-difference ω. SMOOTH (converged) re-alignment, faithful
-    ! to the model's de_explicit (which re-aligns). c06: NONZERO (~the residual after the fixed-alignment
-    ! de2e+de_orb), unlike the c05 toy (within-seg invariant ⇒ de_m1≈0). Done while int2_driver is live.
+    ! de_m1 ORACLE (UMRSF_M1FD=1): the numerical geometry central-FD of the alignment's EXPLICIT-S response
+    ! −∂(ω∘align)/∂S·∂S/∂x — re-align the canonical orbitals at S(x±θ) (orbitals/ERIs/F^ref frozen at base;
+    ! D^ref get_jacobi-invariant), central-difference ω. Needs int2_driver live (umrsf_omega_eval). The
+    ! DEFAULT analytic de_m1 (umrsf_m1_analytic) was already computed inside the block above; this is the
+    ! ~1e-6-floor oracle the analytic is gated against (D2). c06: NONZERO, unlike the c05 within-seg-invariant toy.
     if (l_m1 .and. l_m1fd) then
       call flush(iw)
       close(iw)
@@ -3183,6 +3193,130 @@ contains
     deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
                sbar, nbar, tbar, ya, yb)
   end subroutine umrsf_genfock_analytic
+
+!###############################################################################
+!> ANALYTIC de_m1 = −Tr(W_m1·S^x)  (D2 — replaces the 6·natom numerical geometry re-align in
+!> umrsf_m1_overlap_grad).  de_m1 is the response of ω to the get_jacobi alignment's EXPLICIT dependence
+!> on the AO overlap S (canonical orbitals + Fock + ERIs FROZEN; only S moves with the nuclei).  ω has NO
+!> explicit S-dependence (S enters ONLY through C̃=align(C,S)), so de_m1 is a PURE alignment-response term
+!> — the adjoint IFT with the SAME Hessian H, λ=within-seg antisym G̃ and μ=H⁻ᵀλ as the D1 ΔG^f:
+!>   de_m1 = −μ·(∂r/∂S·dS/dx) = −Σ_μν (W_m1)_μν dS_μν/dx ,   W_m1 = ∂Φ/∂S = cac T̄ cbcᵀ ,
+!> Φ(S)=μ·r(s_align(C,S)).  The forward pass (T=cacᵀ S cbc, N, s), Sbar, Nbar and T̄ are IDENTICAL to
+!> umrsf_genfock_analytic's reverse mode (which contracts T̄ to C for ΔG^f); D2 ONLY contracts T̄ to S.
+!> Computing it here — from the SAME gta/gtb/va/vb — GUARANTEES the same unseeded gauge as the ΔG^f.
+!> −Tr(W_m1·S^x) via grd1 grad_ee_overlap (eijden: negate + half-diagonal pack), as de_w/de2e do.
+!> Model closure DERIVATIONS/c11_dem1_analytic.py: analytic −Σ W_m1·dS ≡ numerical noseed re-align to
+!> 3.8e-12 (7/7 seeds ≤4.2e-12); reverse-mode ≡ complex-step ∂Φ/∂S to 1.9e-19 (CAS c06_cas_chain.py).
+  subroutine umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
+    use grd1, only: grad_ee_overlap
+    use mathlib, only: pack_matrix
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
+    real(kind=dp), intent(in) :: gta(:,:), gtb(:,:), tolw
+    integer, intent(in) :: nocca
+    real(kind=dp), intent(out) :: de_m1(:,:)
+    real(kind=dp), allocatable :: rota(:,:), rotb(:,:), tcan(:,:), ncan(:,:), sstar(:,:)
+    real(kind=dp), allocatable :: hmat(:,:), muvec(:,:), sbar(:,:), nbar(:,:), tbar(:,:)
+    real(kind=dp), allocatable :: wm1(:,:), gcol(:), wpack(:)
+    integer, allocatable :: pri(:), prj(:), prseg(:)
+    integer :: nbf, nbf2, npair, k, m, i, j, a, b, seg, slo, shi, info, ii, ij
+    real(kind=dp) :: dotv, w, nrm
+    external :: dgelss
+
+    nbf = size(cac,1) ; nbf2 = nbf*(nbf+1)/2
+
+    ! ---- within-segment pairs (i<j): seg0 α {1..nocca-1}, seg1 β {nocca..nbf} (as umrsf_genfock_analytic) ----
+    npair = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi ; npair = npair + 1 ; end do ; end do
+    end do
+    allocate(pri(npair), prj(npair), prseg(npair))
+    k = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi
+        k = k + 1 ; pri(k) = i ; prj(k) = j ; prseg(k) = seg
+      end do ; end do
+    end do
+
+    ! ---- base rotations + column-normalized canonical α-β overlap ; sstar = s_align base value ----
+    allocate(rota(nbf,nbf), rotb(nbf,nbf), tcan(nbf,nbf), ncan(nbf,nbf), sstar(nbf,nbf), gcol(nbf))
+    rota = matmul(transpose(cac), matmul(smat_full, va))
+    rotb = matmul(transpose(cbc), matmul(smat_full, vb))
+    tcan = matmul(transpose(cac), matmul(smat_full, cbc))
+    do j = 1, nbf
+      nrm = max(norm2(tcan(:,j)), 1.0d-10) ; gcol(j) = nrm ; ncan(:,j) = tcan(:,j)/nrm
+    end do
+    sstar = matmul(transpose(rota), matmul(ncan, rotb))
+
+    ! ---- λ = within-seg antisym G̃ (into muvec RHS) ; H(m,k)=∂r_m/∂angle_k (exact bilinear, block-diag) ----
+    allocate(muvec(npair,1), hmat(npair,npair))
+    do k = 1, npair
+      i = pri(k) ; j = prj(k)
+      if (prseg(k) == 0) then ; muvec(k,1) = gta(i,j) - gta(j,i)
+      else                    ; muvec(k,1) = gtb(i,j) - gtb(j,i) ; end if
+    end do
+    hmat = 0.0_dp
+    do k = 1, npair
+      a = pri(k) ; b = prj(k) ; seg = prseg(k)
+      do m = 1, npair
+        i = pri(m) ; j = prj(m)
+        if (prseg(m) == 0) then
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(j,i) + sstar(i,i)*ds_at(seg,a,b,sstar,j,i) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(i,j) - sstar(j,j)*ds_at(seg,a,b,sstar,i,j)
+        else
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(i,j) + sstar(i,i)*ds_at(seg,a,b,sstar,i,j) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(j,i) - sstar(j,j)*ds_at(seg,a,b,sstar,j,i)
+        end if
+      end do
+    end do
+
+    ! ---- μ : solve Hᵀ μ = λ (dgelss, rank-deficient-safe) ----
+    block
+      real(kind=dp), allocatable :: ht(:,:), svals(:), work(:)
+      real(kind=dp) :: wq(1), rcond
+      integer :: rank, lwork
+      allocate(ht(npair,npair), svals(npair))
+      ht = transpose(hmat) ; rcond = 1.0d-9
+      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, wq, -1, info)
+      lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
+      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, work, lwork, info)
+      deallocate(ht, svals, work)
+    end block
+
+    ! ---- Sbar = ∂(μ·r)/∂s ; Nbar = RotA Sbar RotBᵀ ; column-normalize VJP → Tbar ----
+    allocate(sbar(nbf,nbf), nbar(nbf,nbf), tbar(nbf,nbf)) ; sbar = 0.0_dp
+    do k = 1, npair
+      i = pri(k) ; j = prj(k) ; w = muvec(k,1)
+      if (prseg(k) == 0) then
+        sbar(i,i) = sbar(i,i) + w*sstar(j,i) ; sbar(j,i) = sbar(j,i) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(i,j) ; sbar(i,j) = sbar(i,j) - w*sstar(j,j)
+      else
+        sbar(i,i) = sbar(i,i) + w*sstar(i,j) ; sbar(i,j) = sbar(i,j) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(j,i) ; sbar(j,i) = sbar(j,i) - w*sstar(j,j)
+      end if
+    end do
+    nbar = matmul(rota, matmul(sbar, transpose(rotb)))
+    do j = 1, nbf
+      dotv = dot_product(ncan(:,j), nbar(:,j)) ; tbar(:,j) = (nbar(:,j) - ncan(:,j)*dotv)/gcol(j)
+    end do
+
+    ! ---- W_m1 = ∂Φ/∂S = cac T̄ cbcᵀ (the S-VJP) ; symmetrize (only sym part contracts symmetric S^x) ----
+    allocate(wm1(nbf,nbf), wpack(nbf2))
+    wm1 = matmul(cac, matmul(tbar, transpose(cbc)))
+    wm1 = 0.5_dp*(wm1 + transpose(wm1))
+
+    ! ---- de_m1 = −Tr(W_m1·S^x) via grad_ee_overlap (eijden: negate + half-diagonal pack) ----
+    de_m1 = 0.0_dp
+    call pack_matrix(-wm1, wpack, 'U')
+    ij = 0 ; do ii = 1, nbf ; ij = ij + ii ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
+    call grad_ee_overlap(basis, wpack, de_m1, logtol=tolw)
+
+    deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
+               sbar, nbar, tbar, wm1, wpack)
+  end subroutine umrsf_m1_analytic
 
 !###############################################################################
 !> ds_at: entry (p,q) of the angle-generator response ∂s/∂angle for the get_jacobi generator (a,b) in
