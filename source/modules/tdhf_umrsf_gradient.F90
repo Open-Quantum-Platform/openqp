@@ -102,6 +102,15 @@ module tdhf_umrsf_gradient_mod
     real(kind=dp), allocatable :: za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)  ! matvec scratch
   end type
 
+  !> Context for the matrix-free MINRES solve of a dense SYMMETRIC alignment-adjoint segment block
+  !> H_block·x = λ (H is a Hessian ∂²Φ/∂θ² ⇒ symmetric, verified max|H−Hᵀ|~1e-14). Replaces the
+  !> O(nb³) dense LU with O(niter·nb²) dgemv iterations for the large β SOMO/virtual segment.
+  type :: umrsf_align_ctx_t
+    real(kind=dp), allocatable :: hb(:,:)    ! dense symmetric block
+    real(kind=dp), allocatable :: pcinv(:)   ! SPD Jacobi preconditioner 1/max(|H_ii|,floor)
+    integer :: nb = 0
+  end type
+
 contains
 
   subroutine umrsf_clock_start(w0, c0)
@@ -273,6 +282,9 @@ contains
     ! Z-vector (relaxation): canonical MOs + relaxation density
     real(kind=dp), allocatable :: cac(:,:), cbc(:,:), epsca(:), epscb(:), pza(:,:), pzb(:,:)
     real(kind=dp), allocatable :: zmata(:,:), zmatb(:,:)
+    ! alignment-adjoint VJP T̄ shared from umrsf_genfock_analytic to the de_m1 (M1) term (dedup)
+    real(kind=dp), allocatable :: tbar_shared(:,:)
+    logical :: have_tbar
 
     type(basis_set), pointer :: basis
     ! tagarray pointers
@@ -424,19 +436,25 @@ contains
     ! ---- RE-DIAGONALIZE A in the SMOOTH basis → genuine eigenvector xamp (§15 / c05) ----
     ! The stored bvec is the eigenvector in the energy's THRESHOLD basis (non-stationary here ~1.5e-6).
     ! The ov-only Z-vector + W machinery needs X to be a TRUE eigenvector of A in the SMOOTH basis.
-    ! Dispatch: default = matrix-free Davidson (umrsf_track_amplitude_dav, ~tens of matvecs); UMRSF_TRKDENSE=1
-    ! = the dense column-by-column oracle (umrsf_track_amplitude, nia matvecs + full diag); UMRSF_TRKCMP=1 =
-    ! run BOTH and print the GATE max|x_dav - x_dense| + |dOmega| (must reproduce the dense xamp/omega <=1e-9).
+    ! Amplitude in the SMOOTH basis. Per §17 the energy step uses the SAME aligner, so the stored bvec is
+    ! ALREADY the smooth-basis eigenvector to convergence: the within-seg btt residual above is ~1e-6 and
+    ! a re-diagonalization seeded with bvec returns xamp = bvec/‖bvec‖ (overlap deficit → 0, and the
+    ! resulting gradient is byte-identical). The DEFAULT therefore takes the stored amplitude directly —
+    ! NO re-diagonalization, NO response matvecs — which removes the whole tracking-Davidson cost.
+    ! The re-diagonalization oracles stay opt-in: UMRSF_TRACK=dav (matrix-free Davidson), =dense (dense
+    ! column oracle), =cmp (dav-vs-dense gate); the legacy UMRSF_TRKDENSE/UMRSF_TRKCMP=1 map to =dense/=cmp.
     block
       character(len=24) :: e ; integer :: ios
       integer :: twall
-      logical :: trk_dense, trk_cmp
-      real(kind=dp), allocatable :: xamp_d(:) ; real(kind=dp) :: om_d, sgn_al, tcpu
-      trk_dense = .false. ; trk_cmp = .false.
-      call get_environment_variable("UMRSF_TRKDENSE", e, status=ios) ; if (ios==0) trk_dense = (trim(e)=="1")
-      call get_environment_variable("UMRSF_TRKCMP",   e, status=ios) ; if (ios==0) trk_cmp   = (trim(e)=="1")
+      character(len=8) :: trkmode
+      real(kind=dp), allocatable :: xamp_d(:) ; real(kind=dp) :: om_d, sgn_al, tcpu, bnrm_amp
+      trkmode = 'none'
+      call get_environment_variable("UMRSF_TRACK",    e, status=ios) ; if (ios==0 .and. len_trim(e)>0) trkmode = trim(e)
+      call get_environment_variable("UMRSF_TRKDENSE", e, status=ios) ; if (ios==0 .and. trim(e)=="1") trkmode = 'dense'
+      call get_environment_variable("UMRSF_TRKCMP",   e, status=ios) ; if (ios==0 .and. trim(e)=="1") trkmode = 'cmp'
       call umrsf_clock_start(twall, tcpu)
-      if (trk_cmp) then
+      select case (trim(trkmode))
+      case ('cmp')
         allocate(xamp_d(size(xamp)))
         call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
                                    hfs, spc_coco, spc_ovov, spc_coov, xamp_d, om_d)
@@ -446,13 +464,18 @@ contains
         write(iw,'(2x,a,2es12.3)') 'TRK GATE max|x_dav - x_dense| / |dOmega| (must <=1e-9) = ', &
           maxval(abs(sgn_al*xamp - xamp_d)), abs(omega_eig - om_d)
         deallocate(xamp_d)
-      else if (trk_dense) then
+      case ('dense')
         call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
                                    hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
-      else
+      case ('dav')
         call umrsf_track_amplitude_dav(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
                                        hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
-      end if
+      case default
+        ! DEFAULT: stored amplitude used directly as the smooth-basis eigenvector (no matvecs).
+        bnrm_amp = sqrt(sum(bvec(:,tstate)**2)) ; if (bnrm_amp <= tiny(1.0_dp)) bnrm_amp = 1.0_dp
+        xamp = bvec(:,tstate) / bnrm_amp
+        omega_eig = td_en(tstate)
+      end select
       call umrsf_timing_log(iw, 'smooth-basis amplitude tracking', twall, tcpu)
     end block
     write(iw,'(/2x,a)') '----- smooth-basis amplitude re-diagonalization (genuine eigenvector) -----'
@@ -810,7 +833,7 @@ contains
       tolw = tol_int*log(10.0_dp)
       allocate(famoa(nbf,nbf), famob(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), &
                gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), g2ea(nbf,nbf), g2eb(nbf,nbf), &
-               gfa(nbf,nbf), gfb(nbf,nbf), &
+               gfa(nbf,nbf), gfb(nbf,nbf), tbar_shared(nbf,nbf), &
                gza(nbf,nbf), gzb(nbf,nbf), wao(nbf,nbf), wpack(nbf2), source=0.0_dp)
       call umrsf_clock_start(twall_response, tcpu_response)
 
@@ -854,6 +877,7 @@ contains
       write(iw,'(2x,a)') 'UMRSF response stage: aligned-to-canonical generalized Fock'
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
+      have_tbar = .false.
       if (l_gvt) then
         ! ABLATION: G^f = V G̃ Vᵀ only (drop ΔG^f) — reproduces the wall.  V_σ = C_can,σᵀ S C̃_σ.
         tmp = matmul(transpose(cac), matmul(smat_full, va))     ! V_α
@@ -879,7 +903,9 @@ contains
         end block
       else
         ! DEFAULT (D1): analytic adjoint-IFT ΔG^f (reverse-mode of Φ=μ·r(s_align); O(nbf³), no int2).
-        call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
+        ! Also exports T̄ so the de_m1 (M1) term below skips its redundant alignment-adjoint block solve.
+        call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, tbar_shared)
+        have_tbar = .true.
       end if
       call umrsf_timing_log(iw, 'aligned-to-canonical generalized Fock', twall, tcpu)
 
@@ -939,7 +965,15 @@ contains
         write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
         call flush(iw)
         call umrsf_clock_start(twall, tcpu)
-        call umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
+        ! The DEFAULT ΔG^f path (umrsf_genfock_analytic) already produced the alignment-adjoint VJP T̄
+        ! from the SAME hmat/μ that de_m1 needs, so reuse it and skip the (dominant) redundant block
+        ! solve. The G^f oracle/ablation branches (l_gffd / l_gvt) do not produce T̄ ⇒ fall back to the
+        ! standalone analytic M1 (which rebuilds hmat/μ/T̄ itself).
+        if (have_tbar) then
+          call umrsf_m1_from_tbar(basis, cac, cbc, tbar_shared, tolw, de_m1)
+        else
+          call umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
+        end if
         call umrsf_timing_log(iw, 'analytic M1 overlap term', twall, tcpu)
       end if
 
@@ -1141,27 +1175,40 @@ contains
     integer, intent(in) :: nbf, nocca, noccb, mrst
     real(kind=dp), intent(in) :: xmat(nbf,nbf)
     real(kind=dp), intent(out) :: peffa(nbf,nbf), peffb(nbf,nbf)
-    real(kind=dp), allocatable :: epq(:,:), zero(:,:), w(:,:)
+    real(kind=dp), allocatable :: zero(:,:)
     integer :: p, q
 
-    allocate(epq(nbf,nbf), zero(nbf,nbf), w(nbf,nbf), source=0.0_dp)
+    allocate(zero(nbf,nbf), source=0.0_dp)
     peffa = 0.0_dp ; peffb = 0.0_dp
-    ! α: ∂omega_orb/∂F̃α[p,q], nonzero only on the occ-occ block
-    do q = 1, nocca ; do p = 1, nocca
-      epq = 0.0_dp ; epq(p,q) = 1.0_dp
-      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, epq, zero, xmat, w)
-      peffa(p,q) = sum(xmat*w)
-    end do ; end do
-    ! β: ∂omega_orb/∂F̃β[p,q], nonzero only on the virt-virt block
-    do q = noccb+1, nbf ; do p = noccb+1, nbf
-      epq = 0.0_dp ; epq(p,q) = 1.0_dp
-      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, zero, epq, xmat, w)
-      peffb(p,q) = sum(xmat*w)
-    end do ; end do
+    ! Each (p,q) probe of ∂omega_orb/∂F̃ is INDEPENDENT — it writes a unique peff element and
+    ! umrsf_orb_matvec touches only its args + locally-allocated scratch (zero/xmat are read-only) —
+    ! so OMP-parallelize the probes with per-thread private epq/w. The work is ~n⁴ (n² probes × n²
+    ! each); the β virt-virt block (nvirb² probes) dominates. Byte-identical to serial (unique writes).
+    !$omp parallel default(shared)
+    block
+      real(kind=dp) :: epq_l(nbf,nbf), w_l(nbf,nbf)
+      ! α: ∂omega_orb/∂F̃α[p,q], nonzero only on the occ-occ block
+      !$omp do collapse(2) schedule(dynamic)
+      do q = 1, nocca ; do p = 1, nocca
+        epq_l = 0.0_dp ; epq_l(p,q) = 1.0_dp
+        call umrsf_orb_matvec(nbf, nocca, noccb, mrst, epq_l, zero, xmat, w_l)
+        peffa(p,q) = sum(xmat*w_l)
+      end do ; end do
+      !$omp end do nowait
+      ! β: ∂omega_orb/∂F̃β[p,q], nonzero only on the virt-virt block
+      !$omp do collapse(2) schedule(dynamic)
+      do q = noccb+1, nbf ; do p = noccb+1, nbf
+        epq_l = 0.0_dp ; epq_l(p,q) = 1.0_dp
+        call umrsf_orb_matvec(nbf, nocca, noccb, mrst, zero, epq_l, xmat, w_l)
+        peffb(p,q) = sum(xmat*w_l)
+      end do ; end do
+      !$omp end do
+    end block
+    !$omp end parallel
     ! symmetrize → physical difference density (block structure preserved: α occ-occ, β virt-virt)
     peffa = 0.5_dp*(peffa + transpose(peffa))
     peffb = 0.5_dp*(peffb + transpose(peffb))
-    deallocate(epq, zero, w)
+    deallocate(zero)
   end subroutine umrsf_build_peff
 
 !###############################################################################
@@ -2972,14 +3019,16 @@ contains
     real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), epsca(:), epscb(:)
     real(kind=dp), intent(in) :: zmata(:,:), zmatb(:,:), hfscale_ref
     real(kind=dp), intent(out) :: gza(:,:), gzb(:,:)
-    real(kind=dp), allocatable :: pza(:,:), pzb(:,:), ya(:,:), yb(:,:), tmp(:,:)
+    real(kind=dp), allocatable :: pza(:,:), pzb(:,:), ya(:,:), yb(:,:), tmp(:,:), tmp2(:,:)
     integer :: nbf, nocca, noccb, pp, qq
+    real(kind=dp), parameter :: one = 1.0_dp, zero = 0.0_dp
+    external :: dgemm
 
     nbf = basis%nbf ; nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
-    allocate(pza(nbf,nbf), pzb(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), source=0.0_dp)
-    ! AO relaxation density P_z,σ = C_σ z^σ C_σᵀ  (z symmetric off-diagonal in the MO basis)
-    pza = matmul(cac, matmul(zmata, transpose(cac)))
-    pzb = matmul(cbc, matmul(zmatb, transpose(cbc)))
+    allocate(pza(nbf,nbf), pzb(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), tmp2(nbf,nbf), source=0.0_dp)
+    ! AO relaxation density P_z,σ = C_σ z^σ C_σᵀ  (z symmetric off-diagonal in the MO basis; BLAS gemm)
+    call dgemm('n','t', nbf, nbf, nbf, one, zmata, nbf, cac, nbf, zero, tmp2, nbf) ; call dgemm('n','n', nbf, nbf, nbf, one, cac, nbf, tmp2, nbf, zero, pza, nbf)
+    call dgemm('n','t', nbf, nbf, nbf, one, zmatb, nbf, cbc, nbf, zero, tmp2, nbf) ; call dgemm('n','n', nbf, nbf, nbf, one, cbc, nbf, tmp2, nbf, zero, pzb, nbf)
     ! reference mean field G_σ[P_z] (one fock_jk build); 2·G[½P_z] = G[P_z]
     call umrsf_meanfield(basis, infos, 0.5_dp*pza, 0.5_dp*pzb, hfscale_ref, ya, yb)
     ! frozen orbital-energy part ε_p z_pq (canonical F^MO = diag ε)
@@ -2987,10 +3036,12 @@ contains
       gza(pp,qq) = epsca(pp)*zmata(pp,qq)
       gzb(pp,qq) = epscb(pp)*zmatb(pp,qq)
     end do ; end do
-    ! reference-density-relaxation mean field, occupied columns only
-    tmp = matmul(transpose(cac), matmul(ya, cac)) ; gza(:,1:nocca) = gza(:,1:nocca) + 2.0_dp*tmp(:,1:nocca)
-    tmp = matmul(transpose(cbc), matmul(yb, cbc)) ; gzb(:,1:noccb) = gzb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb)
-    deallocate(pza, pzb, ya, yb, tmp)
+    ! reference-density-relaxation mean field C_σᵀ G_σ C_σ, occupied columns only (BLAS gemm)
+    call dgemm('n','n', nbf, nbf, nbf, one, ya, nbf, cac, nbf, zero, tmp2, nbf) ; call dgemm('t','n', nbf, nbf, nbf, one, cac, nbf, tmp2, nbf, zero, tmp, nbf)
+    gza(:,1:nocca) = gza(:,1:nocca) + 2.0_dp*tmp(:,1:nocca)
+    call dgemm('n','n', nbf, nbf, nbf, one, yb, nbf, cbc, nbf, zero, tmp2, nbf) ; call dgemm('t','n', nbf, nbf, nbf, one, cbc, nbf, tmp2, nbf, zero, tmp, nbf)
+    gzb(:,1:noccb) = gzb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb)
+    deallocate(pza, pzb, ya, yb, tmp, tmp2)
   end subroutine umrsf_genfock_z
 
 !###############################################################################
@@ -3082,24 +3133,27 @@ contains
 !>   Sbar=∂(μ·r)/∂s ; Nbar=RotA Sbar RotBᵀ ; Tbar=colnorm_vjp(Nbar,N,g) ; Ya=S cbc Tbarᵀ ; Yb=S cac Tbar
 !>   ΔG^f_a=−cacᵀ Ya ; ΔG^f_b=−cbcᵀ Yb ; G^f_a=RotA G̃a RotAᵀ+ΔG^f_a ; G^f_b=RotB G̃b RotBᵀ+ΔG^f_b.
 !> Reverse-mode ≡ complex-step dGf_analytic to 9e-19 (DERIVATIONS/c06_exp5_reverse_mode.py).  Only
-!> O(nbf³) matmuls + one small npair×npair dgelss for μ — NO int2, NO per-(p,q) re-align.  Segments:
+!> O(nbf³) matmuls + one symmetric npair×npair adjoint solve for μ (CG/MINRES) — NO int2, no re-align.  Segments:
 !> α cols {1..nocca-1} (closed+O1), β cols {nocca..nbf} (O2+virt), faithful to umrsf_jacobi_smooth.
 !> GAUGE: uses the same unseeded aligned va/vb as the noseed de_m1 (umrsf_m1_overlap_grad) ⇒ the
 !> alignment gauge cancels in the assembled gradient (element-wise ΔG^f differs from the numerical
 !> oracle by that gauge; the GRADIENT is exact — gate on the full gradient, not element-wise).
-  subroutine umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
+  subroutine umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb, tbar_out)
     implicit none
     real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
     real(kind=dp), intent(in) :: gta(:,:), gtb(:,:)
     integer, intent(in) :: nocca
     real(kind=dp), intent(out) :: gfa(:,:), gfb(:,:)
+    ! OPTIONAL: return the column-normalized alignment-adjoint VJP T̄. The de_m1 (M1) overlap-Pulay term
+    ! is built from the SAME hmat/μ/Sbar/Nbar/T̄ as this ΔG^f (identical inputs, identical formulas), so
+    ! exporting T̄ here lets the M1 term skip a full redundant hmat build + block solve (see run_gates).
+    real(kind=dp), intent(out), optional :: tbar_out(:,:)
     real(kind=dp), allocatable :: rota(:,:), rotb(:,:), tcan(:,:), ncan(:,:), sstar(:,:)
     real(kind=dp), allocatable :: hmat(:,:), muvec(:,:), sbar(:,:), nbar(:,:), tbar(:,:)
     real(kind=dp), allocatable :: ya(:,:), yb(:,:), gcol(:)
     integer, allocatable :: pri(:), prj(:), prseg(:)
-    integer :: nbf, npair, k, m, i, j, a, b, seg, slo, shi, info
+    integer :: nbf, npair, k, m, i, j, a, b, seg, slo, shi
     real(kind=dp) :: dotv, w, nrm
-    external :: dgelss
 
     nbf = size(cac,1)
 
@@ -3158,7 +3212,7 @@ contains
       end do
     end do
 
-    ! ---- μ : solve Hᵀ μ = λ (dgelss, rank-deficient-safe for SOMO-degenerate refs) ----
+    ! ---- μ : solve Hᵀ μ = λ (symmetric H ⇒ CG/MINRES for the large block; rank-deficient-safe fallback) ----
     call umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, 'Gf analytic alignment response')
 
     ! ---- Sbar = ∂(μ·r)/∂s ----
@@ -3180,6 +3234,7 @@ contains
     do j = 1, nbf
       dotv = dot_product(ncan(:,j), nbar(:,j)) ; tbar(:,j) = (nbar(:,j) - ncan(:,j)*dotv)/gcol(j)
     end do
+    if (present(tbar_out)) tbar_out = tbar   ! share T̄ with the M1 overlap-Pulay term (see run_gates)
 
     ! ---- Ya = S cbc Tbarᵀ ; Yb = S cac Tbar ; ΔG^f_a = −cacᵀ Ya ; ΔG^f_b = −cbcᵀ Yb ----
     allocate(ya(nbf,nbf), yb(nbf,nbf))
@@ -3208,8 +3263,6 @@ contains
 !> Model closure DERIVATIONS/c11_dem1_analytic.py: analytic −Σ W_m1·dS ≡ numerical noseed re-align to
 !> 3.8e-12 (7/7 seeds ≤4.2e-12); reverse-mode ≡ complex-step ∂Φ/∂S to 1.9e-19 (CAS c06_cas_chain.py).
   subroutine umrsf_m1_analytic(basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, tolw, de_m1)
-    use grd1, only: grad_ee_overlap
-    use mathlib, only: pack_matrix
     implicit none
     type(basis_set), intent(inout) :: basis
     real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
@@ -3218,13 +3271,12 @@ contains
     real(kind=dp), intent(out) :: de_m1(:,:)
     real(kind=dp), allocatable :: rota(:,:), rotb(:,:), tcan(:,:), ncan(:,:), sstar(:,:)
     real(kind=dp), allocatable :: hmat(:,:), muvec(:,:), sbar(:,:), nbar(:,:), tbar(:,:)
-    real(kind=dp), allocatable :: wm1(:,:), gcol(:), wpack(:)
+    real(kind=dp), allocatable :: gcol(:)
     integer, allocatable :: pri(:), prj(:), prseg(:)
-    integer :: nbf, nbf2, npair, k, m, i, j, a, b, seg, slo, shi, info, ii, ij
+    integer :: nbf, npair, k, m, i, j, a, b, seg, slo, shi
     real(kind=dp) :: dotv, w, nrm
-    external :: dgelss
 
-    nbf = size(cac,1) ; nbf2 = nbf*(nbf+1)/2
+    nbf = size(cac,1)
 
     ! ---- within-segment pairs (i<j): seg0 α {1..nocca-1}, seg1 β {nocca..nbf} (as umrsf_genfock_analytic) ----
     npair = 0
@@ -3273,18 +3325,12 @@ contains
       end do
     end do
 
-    ! ---- μ : solve Hᵀ μ = λ (dgelss, rank-deficient-safe) ----
-    block
-      real(kind=dp), allocatable :: ht(:,:), svals(:), work(:)
-      real(kind=dp) :: wq(1), rcond
-      integer :: rank, lwork
-      allocate(ht(npair,npair), svals(npair))
-      ht = transpose(hmat) ; rcond = 1.0d-9
-      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, wq, -1, info)
-      lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
-      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, work, lwork, info)
-      deallocate(ht, svals, work)
-    end block
+    ! ---- μ : solve Hᵀ μ = λ, exploiting the EXACT per-segment block structure of H (α closed/SOMO
+    ! and β SOMO/virtual segments are decoupled). The full dense dgelss SVD over the whole npair system
+    ! wastes cubic work (O(npair³) with the large SVD constant); the block solver uses a dgesv LU solve
+    ! per segment with an SVD fallback, and is already the production path for the reverse-mode adjoint
+    ! (umrsf_m1_overlap_grad_adjoint) and Gf alignment (umrsf_genfock_analytic). ----
+    call umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, 'M1 analytic overlap response')
 
     ! ---- Sbar = ∂(μ·r)/∂s ; Nbar = RotA Sbar RotBᵀ ; column-normalize VJP → Tbar ----
     allocate(sbar(nbf,nbf), nbar(nbf,nbf), tbar(nbf,nbf)) ; sbar = 0.0_dp
@@ -3303,20 +3349,38 @@ contains
       dotv = dot_product(ncan(:,j), nbar(:,j)) ; tbar(:,j) = (nbar(:,j) - ncan(:,j)*dotv)/gcol(j)
     end do
 
-    ! ---- W_m1 = ∂Φ/∂S = cac T̄ cbcᵀ (the S-VJP) ; symmetrize (only sym part contracts symmetric S^x) ----
+    ! ---- W_m1 = ∂Φ/∂S = cac T̄ cbcᵀ and de_m1 = −Tr(W_m1·S^x) (shared tail; see umrsf_m1_from_tbar) ----
+    call umrsf_m1_from_tbar(basis, cac, cbc, tbar, tolw, de_m1)
+
+    deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
+               sbar, nbar, tbar)
+  end subroutine umrsf_m1_analytic
+
+!###############################################################################
+!> M1 overlap-Pulay tail: given the column-normalized alignment-adjoint VJP T̄, form the S-VJP
+!> W_m1 = ∂Φ/∂S = C_α T̄ C_βᵀ (symmetrized — only the symmetric part contracts the symmetric Sˣ) and
+!> return de_m1 = −Tr(W_m1·Sˣ) via grad_ee_overlap (eijden convention: negate + half the diagonal).
+!> Split out so the DEFAULT gradient can reuse the T̄ already produced by umrsf_genfock_analytic
+!> (identical hmat/μ/T̄) instead of paying a second full alignment-adjoint block solve.
+  subroutine umrsf_m1_from_tbar(basis, cac, cbc, tbar, tolw, de_m1)
+    use grd1, only: grad_ee_overlap
+    use mathlib, only: pack_matrix
+    implicit none
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), tbar(:,:), tolw
+    real(kind=dp), intent(out) :: de_m1(:,:)
+    real(kind=dp), allocatable :: wm1(:,:), wpack(:)
+    integer :: nbf, nbf2, ii, ij
+    nbf = size(cac,1) ; nbf2 = nbf*(nbf+1)/2
     allocate(wm1(nbf,nbf), wpack(nbf2))
     wm1 = matmul(cac, matmul(tbar, transpose(cbc)))
     wm1 = 0.5_dp*(wm1 + transpose(wm1))
-
-    ! ---- de_m1 = −Tr(W_m1·S^x) via grad_ee_overlap (eijden: negate + half-diagonal pack) ----
     de_m1 = 0.0_dp
     call pack_matrix(-wm1, wpack, 'U')
     ij = 0 ; do ii = 1, nbf ; ij = ij + ii ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
     call grad_ee_overlap(basis, wpack, de_m1, logtol=tolw)
-
-    deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
-               sbar, nbar, tbar, wm1, wpack)
-  end subroutine umrsf_m1_analytic
+    deallocate(wm1, wpack)
+  end subroutine umrsf_m1_from_tbar
 
 !###############################################################################
 !> ds_at: entry (p,q) of the angle-generator response ∂s/∂angle for the get_jacobi generator (a,b) in
@@ -3338,35 +3402,83 @@ contains
   end function ds_at
 
 !###############################################################################
+!> Dense symmetric matvec y = H_block·x for the MINRES alignment-adjoint solve (minres_matvec callback).
+  subroutine umrsf_align_matvec(y, x, dat)
+    use iso_c_binding, only: c_ptr, c_f_pointer
+    real(kind=dp) :: y(:)
+    real(kind=dp) :: x(:)
+    type(c_ptr) :: dat
+    type(umrsf_align_ctx_t), pointer :: c
+    external :: dgemv
+    call c_f_pointer(dat, c)
+    call dgemv('N', c%nb, c%nb, 1.0_dp, c%hb, c%nb, x, 1, 0.0_dp, y, 1)
+  end subroutine umrsf_align_matvec
+
+!> SPD Jacobi preconditioner y = M^{-1}·x = |diag(H)|^{-1}·x (minres_matvec callback; M must be SPD).
+  subroutine umrsf_align_precond(y, x, dat)
+    use iso_c_binding, only: c_ptr, c_f_pointer
+    real(kind=dp) :: y(:)
+    real(kind=dp) :: x(:)
+    type(c_ptr) :: dat
+    type(umrsf_align_ctx_t), pointer :: c
+    call c_f_pointer(dat, c)
+    y(1:c%nb) = c%pcinv(1:c%nb) * x(1:c%nb)
+  end subroutine umrsf_align_precond
+
+!###############################################################################
 !> Solve the alignment adjoint system H^T mu=lambda by the two independent get_jacobi segments.
-!> H is exactly block-diagonal (alpha closed/SOMO segment and beta SOMO/virtual segment), so solving
-!> one large dense least-squares system wastes cubic work.  This keeps the same rank-deficient-safe
-!> dgelss solve, just applied to each independent block.
+!> H is exactly block-diagonal (alpha closed/SOMO segment and beta SOMO/virtual segment). H is also
+!> SYMMETRIC (a Hessian ∂²Φ/∂θ²; verified max|H−Hᵀ|~1e-14), so each block is solved with whichever is
+!> cheaper: a dense LU (dgesv, exact) for small blocks, or matrix-free CG→MINRES (dense dgemv matvec +
+!> |diag| Jacobi precond, O(niter·nb²)) for the large β SOMO/virtual block where the dense O(nb³) LU
+!> dominates the whole UMRSF gradient. MINRES returns the min-norm solution for the rank-deficient
+!> (SOMO-degenerate) case, matching the dgelss fallback; a residual check drops back to the dense
+!> dgesv→dgelss path if MINRES ever fails to converge. UMRSF_ALIGN_DENSE=1 forces the dense oracle.
   subroutine umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, label)
     use io_constants, only: iw
+    use iso_c_binding, only: c_ptr
+    use minres_mod, only: minres_optimize
+    use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
     implicit none
     real(kind=dp), intent(in) :: hmat(:,:)
     integer, intent(in) :: prseg(:)
     real(kind=dp), intent(inout) :: muvec(:,:)
     character(len=*), intent(in) :: label
-    integer :: npair, seg, nb, i, j, k, info, ios
+    integer :: npair, seg, nb, i, j, k, info, ios, kk
     integer, allocatable :: idx(:), ipiv(:)
     real(kind=dp), allocatable :: hb(:,:), hsolve(:,:), rhs(:,:), svals(:), work(:)
     real(kind=dp) :: wq(1), rcond
     integer :: rank, lwork
-    logical :: force_svd
-    character(len=8) :: e
-    external :: dgelss, dgesv
+    logical :: force_svd, force_dense, use_iter, iter_ok, use_cg
+    integer :: itermin, mxit, iters, itw0
+    real(kind=dp) :: itol, bnrm, relres, itc0, itwall, itcpu
+    real(kind=dp), allocatable :: xit(:), axit(:)
+    type(umrsf_align_ctx_t), target :: actx
+    type(pcg_t) :: cg
+    character(len=16) :: e, solvername
+    external :: dgelss, dgesv, dgemv
 
     npair = size(prseg)
     rcond = 1.0d-9
-    force_svd = .false.
+    force_svd = .false. ; force_dense = .false. ; itermin = 512 ; itol = 1.0d-10
     call get_environment_variable("UMRSF_ALIGN_SVD", e, status=ios)
     if (ios == 0 .and. trim(e) == "1") force_svd = .true.
+    call get_environment_variable("UMRSF_ALIGN_DENSE", e, status=ios)
+    if (ios == 0 .and. trim(e) == "1") force_dense = .true.
+    call get_environment_variable("UMRSF_ALIGN_ITERMIN", e, status=ios)
+    if (ios == 0) then ; read(e,*,iostat=ios) i ; if (ios == 0 .and. i > 0) itermin = i ; end if
+    call get_environment_variable("UMRSF_ALIGN_ITOL", e, status=ios)
+    if (ios == 0) then ; read(e,*,iostat=ios) itol ; if (itol <= 0.0d0) itol = 1.0d-10 ; end if
+    ! Alignment adjoint solver: default = CG primary with MINRES fallback (AUTO), matching the MRSF /
+    ! UMRSF z-vector convention (CG is cheap when H is SPD; MINRES is the robust symmetric-indefinite
+    ! fallback). UMRSF_ALIGN_CG=0 forces MINRES-only.
+    use_cg = .true.
+    call get_environment_variable("UMRSF_ALIGN_CG", e, status=ios)
+    if (ios == 0 .and. trim(e) == "0") use_cg = .false.
     do seg = 0, 1
       nb = count(prseg == seg)
       if (nb <= 0) cycle
-      allocate(idx(nb), hb(nb,nb), hsolve(nb,nb), rhs(nb,1), ipiv(nb), svals(nb))
+      allocate(idx(nb), rhs(nb,1))
       k = 0
       do i = 1, npair
         if (prseg(i) == seg) then
@@ -3374,33 +3486,99 @@ contains
           idx(k) = i
         end if
       end do
-      do j = 1, nb
-        do i = 1, nb
-          hb(i,j) = hmat(idx(j), idx(i))   ! transpose of this block: solve H_block^T mu=lambda
-        end do
-      end do
       rhs(:,1) = muvec(idx,1)
-      info = 0
-      if (.not. force_svd) then
-        hsolve = hb
-        call dgesv(nb, 1, hsolve, nb, ipiv, rhs, nb, info)
-        if (info /= 0) then
-          write(iw,'(2x,2a,i0,a,i0,a)') trim(label), ': dgesv failed in segment ', seg, &
-                                        ' (info=', info, '); falling back to SVD'
+
+      ! Large SYMMETRIC block ⇒ matrix-free CG→MINRES (dense dgemv matvec + |diag| Jacobi precond).
+      use_iter = (nb >= itermin) .and. (.not. force_dense) .and. (.not. force_svd)
+      iter_ok = .false.
+      if (use_iter) then
+        actx%nb = nb
+        allocate(actx%hb(nb,nb), actx%pcinv(nb), xit(nb), axit(nb))
+        do j = 1, nb ; do i = 1, nb
+          actx%hb(i,j) = hmat(idx(i), idx(j))     ! H is symmetric ⇒ block is symmetric
+        end do ; end do
+        do i = 1, nb
+          actx%pcinv(i) = 1.0d0 / max(abs(actx%hb(i,i)), 1.0d-12)
+        end do
+        bnrm = sqrt(sum(rhs(:,1)**2))
+        if (bnrm <= tiny(1.0d0)) then
+          rhs(:,1) = 0.0d0 ; iter_ok = .true. ; iters = 0 ; relres = 0.0d0 ; solvername = 'ZERO-RHS'
+        else
+          mxit = min(nb, 4000)
+          call umrsf_clock_start(itw0, itc0)
+          ! Primary = CG (matches the MRSF/UMRSF z-vector default; cheap when H is SPD). Both solvers
+          ! reuse the same dense dgemv matvec + |diag| Jacobi precond.
+          if (use_cg) then
+            call cg%init(b=rhs(:,1), update=umrsf_align_matvec, precond=umrsf_align_precond, &
+                         dat=actx, tol=itol*bnrm)
+            iters = 0
+            if (cg%errcode == PCG_OK) then
+              do kk = 1, mxit
+                iters = kk ; call cg%step()
+                if (cg%errcode /= PCG_OK) exit
+              end do
+            end if
+            xit = cg%x ; call cg%clean()
+            call dgemv('N', nb, nb, 1.0d0, actx%hb, nb, xit, 1, 0.0d0, axit, 1)
+            relres = sqrt(sum((axit - rhs(:,1))**2)) / bnrm
+            solvername = 'CG'
+            if (relres <= 1.0d-7) then ; rhs(:,1) = xit ; iter_ok = .true. ; end if
+          end if
+          ! Fallback = MINRES (robust for symmetric-INDEFINITE H, where CG can break down).
+          if (.not. iter_ok) then
+            xit = rhs(:,1)
+            call minres_optimize(xit, umrsf_align_matvec, umrsf_align_precond, actx, mxit, &
+                                 tol=itol*bnrm, iters=iters)
+            call dgemv('N', nb, nb, 1.0d0, actx%hb, nb, xit, 1, 0.0d0, axit, 1)
+            relres = sqrt(sum((axit - rhs(:,1))**2)) / bnrm
+            if (use_cg) then ; solvername = 'AUTO(CG->MINRES)' ; else ; solvername = 'MINRES' ; end if
+            if (relres <= 1.0d-7) then ; rhs(:,1) = xit ; iter_ok = .true. ; end if
+          end if
+          call umrsf_clock_elapsed(itw0, itc0, itwall, itcpu)
+        end if
+        if (iter_ok) then
+          write(iw,'(2x,4a,i0,a,i0,a,i0,a,es9.2,a,f8.4)') trim(label), ': ', trim(solvername), ' seg ', seg, &
+            ' nb = ', nb, ', iters = ', iters, ', rel-resid = ', relres, ', solve wall = ', itwall
+        else
+          write(iw,'(2x,4a,i0,a,es9.2,a)') trim(label), ': ', trim(solvername), ' seg ', seg, &
+            ' did not converge (rel-resid = ', relres, '); falling back to dense'
           rhs(:,1) = muvec(idx,1)
         end if
+        deallocate(actx%hb, actx%pcinv, xit, axit)
       end if
-      if (force_svd .or. info /= 0) then
-        call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, wq, -1, info)
-        lwork = max(int(wq(1)), 1)
-        allocate(work(lwork))
-        call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, work, lwork, info)
-        if (info /= 0) write(iw,'(2x,2a,i0,a,i0)') trim(label), ': dgelss info = ', info, ' segment ', seg
-        if (rank < nb) write(iw,'(2x,2a,i0,a,i0,a,i0)') trim(label), ': rank ', rank, ' / ', nb, ' segment ', seg
-        deallocate(work)
+
+      ! Dense path: small blocks, forced dense/SVD, or MINRES fallback.
+      if (.not. iter_ok) then
+        allocate(hb(nb,nb), hsolve(nb,nb), ipiv(nb), svals(nb))
+        do j = 1, nb
+          do i = 1, nb
+            hb(i,j) = hmat(idx(j), idx(i))   ! transpose of this block: solve H_block^T mu=lambda
+          end do
+        end do
+        info = 0
+        if (.not. force_svd) then
+          hsolve = hb
+          call dgesv(nb, 1, hsolve, nb, ipiv, rhs, nb, info)
+          if (info /= 0) then
+            write(iw,'(2x,2a,i0,a,i0,a)') trim(label), ': dgesv failed in segment ', seg, &
+                                          ' (info=', info, '); falling back to SVD'
+            rhs(:,1) = muvec(idx,1)
+          end if
+        end if
+        if (force_svd .or. info /= 0) then
+          call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, wq, -1, info)
+          lwork = max(int(wq(1)), 1)
+          allocate(work(lwork))
+          call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, work, lwork, info)
+          if (info /= 0) write(iw,'(2x,2a,i0,a,i0)') trim(label), ': dgelss info = ', info, ' segment ', seg
+          if (rank < nb) write(iw,'(2x,2a,i0,a,i0,a,i0)') trim(label), ': rank ', rank, ' / ', nb, ' segment ', seg
+          deallocate(work)
+        end if
+        deallocate(hb, hsolve, ipiv, svals)
       end if
+
       muvec(idx,1) = rhs(:,1)
-      deallocate(idx, hb, hsolve, rhs, ipiv, svals)
+      deallocate(idx, rhs)
     end do
   end subroutine umrsf_solve_alignment_adjoint_blocks
 
