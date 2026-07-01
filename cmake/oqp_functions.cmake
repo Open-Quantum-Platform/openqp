@@ -46,20 +46,17 @@ endfunction()
 
 macro(findBlasLapack)
     cleanBlasVars()
-    set(BLA_SIZEOF_INTEGER 8)
     find_package(BLAS)
     find_package(LAPACK)
-    if(BLAS_FOUND AND DEFINED BLAS_SIZEOF_INTEGER AND NOT BLAS_SIZEOF_INTEGER EQUAL 8)
-        message(FATAL_ERROR "Selected BLAS reports ${BLAS_SIZEOF_INTEGER}-byte integers; OpenQP requires ILP64 BLAS with 8-byte integers.")
+    if(BLAS_FOUND AND DEFINED BLAS_SIZEOF_INTEGER AND NOT BLAS_SIZEOF_INTEGER EQUAL ${BLA_SIZEOF_INTEGER})
+        message(FATAL_ERROR "Selected BLAS reports ${BLAS_SIZEOF_INTEGER}-byte integers; OpenQP configured for ${BLA_SIZEOF_INTEGER}-byte BLAS integers.")
     endif()
-    if(LAPACK_FOUND AND DEFINED LAPACK_SIZEOF_INTEGER AND NOT LAPACK_SIZEOF_INTEGER EQUAL 8)
-        message(FATAL_ERROR "Selected LAPACK reports ${LAPACK_SIZEOF_INTEGER}-byte integers; OpenQP requires ILP64 LAPACK with 8-byte integers.")
+    if(LAPACK_FOUND AND DEFINED LAPACK_SIZEOF_INTEGER AND NOT LAPACK_SIZEOF_INTEGER EQUAL ${BLA_SIZEOF_INTEGER})
+        message(FATAL_ERROR "Selected LAPACK reports ${LAPACK_SIZEOF_INTEGER}-byte integers; OpenQP configured for ${BLA_SIZEOF_INTEGER}-byte LAPACK integers.")
     endif()
 endmacro()
 
 macro(findLinearAlgebra)
-
-    set(BLA_SIZEOF_INTEGER 8)
 
     set(linalg_lib "${LINALG_LIB}")
 

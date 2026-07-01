@@ -9,13 +9,15 @@
 !> stretched-CH2 1.89e-4→5.7e-8) with NO regression (GAMESS-cross-checked; SCF ref unchanged). S2 remains
 !> 1.3e-2 — NOT a gauge issue (analytic internally EXACT ≤1e-11): a confirmed STATE-TRACKING root-flip
 !> (FD energy-rank vs analytic amplitude; sign-flip on the symmetry-breaking component) ⇒ §9-EXCLUDED,
-!> pending the §11 character-following FD harness (independent of A/B). KNOWN-OPEN: (B) functionals NOT
-!> implemented — the response is missing the XC kernel + grid-weight derivatives (MILESTONE B, after A).
+!> pending the §11 character-following FD harness (independent of A/B). KNOWN-OPEN: DFT/XC response
+!> terms are wired but still show a small H2O/BHHLYP finite-difference residual; treat the HF limit as
+!> validated and DFT gradients as experimental until that residual is closed.
 !>
-!> The C entry computes the reference (UHF-triplet) gradient via the reusable hf_gradient primitive
-!> (grd1/grd2 with the converged DM_A/DM_B) — already FD-certified to 1.46e-7 — plus the response:
+!> The z-vector entry computes and caches the UMRSF response contribution:
 !> full-block Z-vector (oo+ov+vv) + full G^f (re-align, carries the dV/dC alignment Jacobian) +
-!> W=½sym(G^f+G^z) + de_m1 (alignment overlap-Pulay). Reuses the clean-room energy/response lib
+!> W=½sym(G^f+G^z) + de_m1 (alignment overlap-Pulay).  The gradient entry then computes the
+!> reference (UHF-triplet) gradient via the reusable hf_gradient primitive and adds that cached
+!> response.  Reuses the clean-room energy/response lib
 !> (umrsfcbc/int2_umrsf/umrsfmntoia/mrsfesum/get_jacobi); never reads the guarded RO-MRSF gradient.
 module tdhf_umrsf_gradient_mod
 
@@ -30,7 +32,7 @@ module tdhf_umrsf_gradient_mod
   character(len=*), parameter :: module_name = "tdhf_umrsf_gradient_mod"
 
   private
-  public :: tdhf_umrsf_gradient_C
+  public :: tdhf_umrsf_gradient_C, tdhf_umrsf_gradient, tdhf_umrsf_build_response_gradient
 
   !> ------- Stage-2 XC context (MILESTONE B / RULES §18) -------
   !> Set ONCE per gradient in umrsf_grad_run_gates (DFT runs only). The reference UKS XC kernel
@@ -38,11 +40,22 @@ module tdhf_umrsf_gradient_mod
   !> MRSF response A-matrix has NO grid f_xc — energy is int2-only, so the f_xc·(X+Y)(X+Y) term is
   !> ABSENT). xc_meanfield_on toggles umrsf_meanfield's f_xc·P add-on (T3, propagates to the
   !> Z-vector Hessian / refrelax G^f / G^z / W). xc_refa/refb = reference density (defines the
-  !> kernel). See DERIVATIONS/M2_xc_response.md.
+  !> kernel).  xc_moa/xc_mob keep this on the same reference-MO kernel path used by
+  !> the standard UHF CPHF response code.
+  !> See DERIVATIONS/M2_xc_response.md.
   logical,                  save :: xc_meanfield_on = .false.
   type(dft_grid_t),         save :: xc_molgrid
   real(kind=dp), allocatable, save :: xc_refa(:,:), xc_refb(:,:)
+  real(kind=dp), allocatable, save :: xc_moa(:,:), xc_mob(:,:)
   real(kind=dp),            save :: xc_thresh = 0.0_dp
+
+  integer, save :: umrsf_mf_calls = 0
+  real(kind=dp), save :: umrsf_mf_wall = 0.0_dp, umrsf_mf_cpu = 0.0_dp
+  real(kind=dp), save :: umrsf_mf_fock_wall = 0.0_dp, umrsf_mf_fock_cpu = 0.0_dp
+  real(kind=dp), save :: umrsf_mf_xc_wall = 0.0_dp, umrsf_mf_xc_cpu = 0.0_dp
+  real(kind=dp), allocatable, save :: umrsf_mf_dens(:,:), umrsf_mf_fout(:,:)
+  real(kind=dp), allocatable, save :: umrsf_mf_fxa(:,:,:), umrsf_mf_fxb(:,:,:)
+  real(kind=dp), allocatable, save :: umrsf_mf_dxa(:,:,:), umrsf_mf_dxb(:,:,:)
 
   !> Custom grd2 2-PDM for the UMRSF response (amplitude transition density).
   !> Emits, per shell-quartet, the certified (B_k,D_k) channel 2-PDM (G1) with the
@@ -60,6 +73,9 @@ module tdhf_umrsf_gradient_mod
     real(kind=dp), allocatable :: dden_s(:,:,:) ! (nchan,nbf,nbf) sym(D_k)      (Coulomb only)
     real(kind=dp), allocatable :: sgn(:)        ! (nchan) s_k
     logical,       allocatable :: has_coul(:)   ! (nchan) channel carries Coulomb
+    integer :: n_coul = 0, n_exch = 0
+    integer, allocatable :: coul_ch(:), exch_ch(:)
+    real(kind=dp), allocatable :: coul_coef(:), exch_coef(:)
     real(kind=dp) :: sc = 1.0_dp                ! scale_coulomb
     real(kind=dp) :: sx = 1.0_dp                ! scale_exchange
   contains
@@ -88,30 +104,120 @@ module tdhf_umrsf_gradient_mod
 
 contains
 
+  subroutine umrsf_clock_start(w0, c0)
+    implicit none
+    integer, intent(out) :: w0
+    real(kind=dp), intent(out) :: c0
+    call system_clock(count=w0)
+    call cpu_time(c0)
+  end subroutine umrsf_clock_start
+
+  subroutine umrsf_clock_elapsed(w0, c0, wall, cpu)
+    implicit none
+    integer, intent(in) :: w0
+    real(kind=dp), intent(in) :: c0
+    real(kind=dp), intent(out) :: wall, cpu
+    integer :: w1, rate
+    real(kind=dp) :: c1
+    call system_clock(count=w1, count_rate=rate)
+    call cpu_time(c1)
+    wall = real(w1 - w0, kind=dp) / real(max(rate, 1), kind=dp)
+    cpu = c1 - c0
+  end subroutine umrsf_clock_elapsed
+
+  subroutine umrsf_timing_log(unit, label, w0, c0)
+    implicit none
+    integer, intent(in) :: unit, w0
+    character(len=*), intent(in) :: label
+    real(kind=dp), intent(in) :: c0
+    real(kind=dp) :: wall, cpu
+    call umrsf_clock_elapsed(w0, c0, wall, cpu)
+    write(unit,'(2x,a,1x,a,1x,a,f10.3,1x,a,f10.3)') &
+      'UMRSF timing:', trim(label), 'wall', wall, 'cpu', cpu
+  end subroutine umrsf_timing_log
+
+  subroutine umrsf_timing_accum(w0, c0, wall_acc, cpu_acc)
+    implicit none
+    integer, intent(in) :: w0
+    real(kind=dp), intent(in) :: c0
+    real(kind=dp), intent(inout) :: wall_acc, cpu_acc
+    real(kind=dp) :: wall, cpu
+    call umrsf_clock_elapsed(w0, c0, wall, cpu)
+    wall_acc = wall_acc + wall
+    cpu_acc = cpu_acc + cpu
+  end subroutine umrsf_timing_accum
+
+  subroutine umrsf_timing_reset()
+    implicit none
+    umrsf_mf_calls = 0
+    umrsf_mf_wall = 0.0_dp ; umrsf_mf_cpu = 0.0_dp
+    umrsf_mf_fock_wall = 0.0_dp ; umrsf_mf_fock_cpu = 0.0_dp
+    umrsf_mf_xc_wall = 0.0_dp ; umrsf_mf_xc_cpu = 0.0_dp
+  end subroutine umrsf_timing_reset
+
+  subroutine umrsf_meanfield_scratch(nbf, nbf2, need_xc)
+    implicit none
+    integer, intent(in) :: nbf, nbf2
+    logical, intent(in) :: need_xc
+    if (.not. allocated(umrsf_mf_dens) .or. size(umrsf_mf_dens,1) /= nbf2) then
+      if (allocated(umrsf_mf_dens)) deallocate(umrsf_mf_dens, umrsf_mf_fout)
+      allocate(umrsf_mf_dens(nbf2,2), umrsf_mf_fout(nbf2,2))
+    end if
+    if (need_xc) then
+      if (.not. allocated(umrsf_mf_fxa) .or. size(umrsf_mf_fxa,1) /= nbf) then
+        if (allocated(umrsf_mf_fxa)) deallocate(umrsf_mf_fxa, umrsf_mf_fxb, umrsf_mf_dxa, umrsf_mf_dxb)
+        allocate(umrsf_mf_fxa(nbf,nbf,1), umrsf_mf_fxb(nbf,nbf,1), &
+                 umrsf_mf_dxa(nbf,nbf,1), umrsf_mf_dxb(nbf,nbf,1))
+      end if
+    end if
+  end subroutine umrsf_meanfield_scratch
+
   subroutine tdhf_umrsf_gradient_C(c_handle) bind(C, name="tdhf_umrsf_gradient")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
-    use io_constants, only: iw
-    use hf_gradient_mod, only: hf_gradient
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
-    real(kind=dp), allocatable :: de2e_resp(:,:)
     inf => oqp_handle_get_info(c_handle)
+    call tdhf_umrsf_gradient(inf)
+  end subroutine tdhf_umrsf_gradient_C
 
-    ! Gate: reconstruct the excited-state energy from the converged amplitude (G1), assemble the
-    ! response 2-PDM, and validate the 2e response gradient via a frozen-density FD self-test (G1b).
-    ! Returns the validated 2e response gradient dω_2e/dx (densities-fixed / "Pulay" part).
-    call umrsf_grad_run_gates(inf, de2e_resp)
+  subroutine tdhf_umrsf_gradient(infos)
+    use io_constants, only: iw
+    use oqp_tagarray_driver, only: OQP_umrsf_response_gradient, tagarray_get_data, data_has_tags
+    use messages, only: WITH_ABORT
+    use hf_gradient_mod, only: hf_gradient
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), contiguous, pointer :: response_grad(:,:)
+    real(kind=dp), allocatable :: response_copy(:,:)
+    character(len=*), parameter :: subroutine_name = "tdhf_umrsf_gradient"
+    character(len=*), parameter :: tags_response(1) = (/ character(len=80) :: &
+      OQP_umrsf_response_gradient /)
 
-    open(unit=iw, file=inf%log_filename, position="append")
-    write(iw,'(/2x,a)') 'UMRSF gradient [Stage1]: reference UHF-triplet gradient + 2e response '// &
-                        '(P^Delta 1e/mean-field + Z-vector + M1 still to add)'
+    call data_has_tags(infos%dat, tags_response, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_umrsf_response_gradient, response_grad)
+    allocate(response_copy, source=response_grad)
+    call infos%dat%remove_records(tags_response)
+
+    open(unit=iw, file=infos%log_filename, position="append")
+    write(iw,'(/2x,a)') &
+      'UMRSF gradient: reference UHF-triplet gradient + cached alpha/beta z-vector response'
     close(iw)
     ! Reference (UHF triplet) nuclear gradient via the reusable HF/DFT gradient primitive
     ! (zeros the gradient, then fills the reference part).
-    call hf_gradient(inf)
-    ! Add the validated 2e response (transition-density Pulay) contribution.
-    if (allocated(de2e_resp)) inf%atoms%grad = inf%atoms%grad + de2e_resp
-  end subroutine tdhf_umrsf_gradient_C
+    call hf_gradient(infos)
+    infos%atoms%grad = infos%atoms%grad + response_copy
+    deallocate(response_copy)
+  end subroutine tdhf_umrsf_gradient
+
+  subroutine tdhf_umrsf_build_response_gradient(infos, response_grad)
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), allocatable, intent(out) :: response_grad(:,:)
+
+    ! Reconstruct the excited-state energy from the converged amplitude (G1),
+    ! assemble the response 2-PDM, solve the coupled alpha/beta UMRSF orbital
+    ! response, and return the complete response-gradient contribution for the
+    ! requested root.
+    call umrsf_grad_run_gates(infos, response_grad)
+  end subroutine tdhf_umrsf_build_response_gradient
 
 !###############################################################################
 !> @brief NON-FD isolation gates. Reconstructs the excited-state response energy
@@ -157,10 +263,11 @@ contains
     real(kind=dp) :: omega_orb_chk, omega_orb, hfscale_ref
     real(kind=dp) :: omega_orb_tu, omega_orb_mine              ! SOMO gates: Tr(T_u F̃) / clean-room matvec
     real(kind=dp) :: dbg_zw                                     ! z weight in P_eff (c03/c04 split = 0.5)
-    logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
+    logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1, l_m1fd     ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
     logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
     logical :: l_g2efd, l_g2ecmp                                ! G̃ 2e: FD oracle (UMRSF_G2EFD) ; analytic-vs-FD compare (UMRSF_G2ECMP)
     logical :: l_gffd                                           ! ΔG^f: numerical re-align oracle (UMRSF_GFFD) ; default = analytic adjoint-IFT (D1)
+    logical :: l_2e_split, l_g1_diag, l_orb_diag                 ! response 2e gradient diagnostic; opt-in response-energy/orbital gates
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
@@ -235,6 +342,19 @@ contains
     allocate(dens(1,11,nbf,nbf), brad(11,nbf,nbf), source=0.0_dp)
 
     open(unit=iw, file=infos%log_filename, position="append")
+    block
+      character(len=8) :: e
+      integer :: ios
+      l_g1_diag = .false.
+      l_orb_diag = .false.
+      call get_environment_variable("UMRSF_G1", e, status=ios)
+      if (ios == 0 .and. trim(e) == "1") then
+        l_g1_diag = .true.
+        l_orb_diag = .true.
+      end if
+      call get_environment_variable("UMRSF_ORBGATE", e, status=ios)
+      if (ios == 0) l_orb_diag = (trim(e) == "1")
+    end block
 
     va = mo_a ; vb = mo_b ; ea = mo_energy_a ; eb = mo_energy_b
     call unpack_matrix(smat, smat_full, nbf, 'U')
@@ -268,7 +388,7 @@ contains
       write(iw,'(2x,a,2es12.3)') 'S-orthonormality max|CᵀSC−I| alpha/beta (smooth)        = ', orthoa, orthob
       if (off_smooth <= 1.0e-10_dp .and. max(orthoa,orthob) <= 1.0e-9_dp) then
         write(iw,'(2x,a)') 'VERDICT: smooth alignment CONVERGED (max|btt| → 0; S-orthonormal). '// &
-                           'ω-reproduction = G1 gate below (omega_recon vs td_energies).'
+                           'production uses the smooth-basis amplitude.'
       else
         write(iw,'(2x,a)') 'VERDICT: smooth alignment CHECK (see residuals above)'
       end if
@@ -293,7 +413,13 @@ contains
 
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
-    int2_driver%schwarz = .false.         ! validation: disable Schwarz screening (RULES sec.9)
+    int2_driver%schwarz = .false.         ! tracking/G1 validation path: old no-screen mode is faster here
+    block
+      character(len=8) :: e
+      integer :: ios
+      call get_environment_variable("UMRSF_TRACK_SCREEN", e, status=ios)
+      if (ios==0 .and. trim(e)=="1") int2_driver%schwarz = .true.
+    end block
 
     ! ---- RE-DIAGONALIZE A in the SMOOTH basis → genuine eigenvector xamp (§15 / c05) ----
     ! The stored bvec is the eigenvector in the energy's THRESHOLD basis (non-stationary here ~1.5e-6).
@@ -303,11 +429,13 @@ contains
     ! run BOTH and print the GATE max|x_dav - x_dense| + |dOmega| (must reproduce the dense xamp/omega <=1e-9).
     block
       character(len=24) :: e ; integer :: ios
+      integer :: twall
       logical :: trk_dense, trk_cmp
-      real(kind=dp), allocatable :: xamp_d(:) ; real(kind=dp) :: om_d, sgn_al
+      real(kind=dp), allocatable :: xamp_d(:) ; real(kind=dp) :: om_d, sgn_al, tcpu
       trk_dense = .false. ; trk_cmp = .false.
       call get_environment_variable("UMRSF_TRKDENSE", e, status=ios) ; if (ios==0) trk_dense = (trim(e)=="1")
       call get_environment_variable("UMRSF_TRKCMP",   e, status=ios) ; if (ios==0) trk_cmp   = (trim(e)=="1")
+      call umrsf_clock_start(twall, tcpu)
       if (trk_cmp) then
         allocate(xamp_d(size(xamp)))
         call umrsf_track_amplitude(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
@@ -325,6 +453,7 @@ contains
         call umrsf_track_amplitude_dav(infos, int2_driver, va, vb, fa, fb, bvec(:,tstate), scale_exch, &
                                        hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
       end if
+      call umrsf_timing_log(iw, 'smooth-basis amplitude tracking', twall, tcpu)
     end block
     write(iw,'(/2x,a)') '----- smooth-basis amplitude re-diagonalization (genuine eigenvector) -----'
     write(iw,'(2x,a,f18.10)') 'omega (smooth-basis eigenvalue) = ', omega_eig
@@ -344,55 +473,65 @@ contains
     call iatogen(xamp, xmat, nocca, noccb)
     call umrsfcbc(infos, va, vb, xmat, dens(1,:,:,:))
 
-    int2_udata = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
-                                   scale_exchange=scale_exch, scale_coulomb=scale_exch)
-    call int2_driver%run(int2_udata)
-    fmrst2 => int2_udata%f3(:,:,:,:,1)
-
-    if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
-    ! Spin-pair coupling (no-op for the HF defaults spc==hfscale).
-    if (abs(hfs) > epsilon(1.0_dp)) then
-      if (spc_coco /= hfs) fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * (spc_coco/hfs)
-      if (spc_ovov /= hfs) fmrst2(:,9,:,:)  = fmrst2(:,9,:,:)  * (spc_ovov/hfs)
-      if (spc_coov /= hfs) fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * (spc_coov/hfs)
-    end if
-
-    ! 2e part of A.X via the back-transform (the energy path)
-    amo2e = 0.0_dp
-    call umrsfmntoia(infos, fmrst2(1,:,:,:), amo2e, va, vb, 1)
-    omega_2e_mv = dot_product(xamp, amo2e(:,1))
-
-    ! 2e part via the response 2-PDM bra densities B_k = adjoint(umrsfmntoia).X :
-    ! omega_2e = sum_k <B_k, F_k>  with  F_k = int2_k(D_k),  D_k = umrsfcbc(X).
-    ! This is the contraction the analytic 2e gradient differentiates (B_k vs D_k pair).
     call umrsf_bra_density(infos, va, vb, xmat, brad)
-    omega_2e_tr = 0.0_dp
-    do k = 1, 11
-      omega_2e_tr = omega_2e_tr + sum(brad(k,:,:)*fmrst2(1,k,:,:))
-    end do
 
-    ! full omega = 2e part + orbital-energy (Fock-diagonal) part
-    amo(:,1) = amo2e(:,1)
-    call iatogen(xamp, xmat, nocca, noccb)
-    call mrsfesum(infos, xmat, fa, fb, amo, 1)
-    omega_recon = dot_product(xamp, amo(:,1))
+    if (l_g1_diag) then
+      int2_udata = int2_umrsf_data_t(d3=dens(1:1,:,:,:), tamm_dancoff=.true., &
+                                     scale_exchange=scale_exch, scale_coulomb=scale_exch)
+      call int2_driver%run(int2_udata)
+      fmrst2 => int2_udata%f3(:,:,:,:,1)
 
-    write(iw,'(/2x,a)') '================ UMRSF gradient NON-FD gate G1 ================'
-    write(iw,'(2x,a,i0,a,i0)') 'target_state = ', tstate, '   mrst = ', mrst
-    write(iw,'(2x,a,f18.12)')  'X^T X (amplitude norm)          = ', dot_product(xamp,xamp)
-    write(iw,'(2x,a,f18.10)')  'omega reconstructed (X^T A X)   = ', omega_recon
-    write(iw,'(2x,a,f18.10)')  'omega stored      (td_energies) = ', td_en(tstate)
-    write(iw,'(2x,a,es12.3)')  '  |delta| omega                 = ', abs(omega_recon-td_en(tstate))
-    write(iw,'(2x,a,f18.10)')  'omega_2e (back-transform)       = ', omega_2e_mv
-    write(iw,'(2x,a,f18.10)')  'omega_orb (X.esum)              = ', omega_recon-omega_2e_mv
-    write(iw,'(2x,a,f18.10)')  'omega_2e via bra-density 2-PDM  = ', omega_2e_tr
-    write(iw,'(2x,a,es12.3)')  '  |delta| 2e (G1 2-PDM routing) = ', abs(omega_2e_mv-omega_2e_tr)
-    if (abs(omega_recon-td_en(tstate)) <= 1.0e-9_dp .and. abs(omega_2e_mv-omega_2e_tr) <= 1.0e-9_dp) then
-      write(iw,'(2x,a)')       'VERDICT: G1 PASS (matvec + response 2-PDM routing validated)'
+      if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
+      ! Spin-pair coupling (no-op for the HF defaults spc==hfscale).
+      if (abs(hfs) > epsilon(1.0_dp)) then
+        if (spc_coco /= hfs) fmrst2(:,10,:,:) = fmrst2(:,10,:,:) * (spc_coco/hfs)
+        if (spc_ovov /= hfs) fmrst2(:,9,:,:)  = fmrst2(:,9,:,:)  * (spc_ovov/hfs)
+        if (spc_coov /= hfs) fmrst2(:,1:8,:,:) = fmrst2(:,1:8,:,:) * (spc_coov/hfs)
+      end if
+
+      ! 2e part of A.X via the back-transform (the energy path)
+      amo2e = 0.0_dp
+      call umrsfmntoia(infos, fmrst2(1,:,:,:), amo2e, va, vb, 1)
+      omega_2e_mv = dot_product(xamp, amo2e(:,1))
+
+      ! 2e part via the response 2-PDM bra densities B_k = adjoint(umrsfmntoia).X :
+      ! omega_2e = sum_k <B_k, F_k>  with  F_k = int2_k(D_k),  D_k = umrsfcbc(X).
+      ! This is the contraction the analytic 2e gradient differentiates (B_k vs D_k pair).
+      omega_2e_tr = 0.0_dp
+      do k = 1, 11
+        omega_2e_tr = omega_2e_tr + sum(brad(k,:,:)*fmrst2(1,k,:,:))
+      end do
+
+      ! full omega = 2e part + orbital-energy (Fock-diagonal) part
+      amo(:,1) = amo2e(:,1)
+      call iatogen(xamp, xmat, nocca, noccb)
+      call mrsfesum(infos, xmat, fa, fb, amo, 1)
+      omega_recon = dot_product(xamp, amo(:,1))
+
+      write(iw,'(/2x,a)') '================ UMRSF gradient NON-FD gate G1 ================'
+      write(iw,'(2x,a,i0,a,i0)') 'target_state = ', tstate, '   mrst = ', mrst
+      write(iw,'(2x,a,f18.12)')  'X^T X (amplitude norm)          = ', dot_product(xamp,xamp)
+      write(iw,'(2x,a,f18.10)')  'omega reconstructed (X^T A X)   = ', omega_recon
+      write(iw,'(2x,a,f18.10)')  'omega smooth-basis eigenvalue   = ', omega_eig
+      write(iw,'(2x,a,f18.10)')  'omega stored      (td_energies) = ', td_en(tstate)
+      write(iw,'(2x,a,es12.3)')  '  |delta| omega vs smooth eig   = ', abs(omega_recon-omega_eig)
+      write(iw,'(2x,a,es12.3)')  '  |delta| omega vs stored td    = ', abs(omega_recon-td_en(tstate))
+      write(iw,'(2x,a,f18.10)')  'omega_2e (back-transform)       = ', omega_2e_mv
+      write(iw,'(2x,a,f18.10)')  'omega_orb (X.esum)              = ', omega_recon-omega_2e_mv
+      write(iw,'(2x,a,f18.10)')  'omega_2e via bra-density 2-PDM  = ', omega_2e_tr
+      write(iw,'(2x,a,es12.3)')  '  |delta| 2e (G1 2-PDM routing) = ', abs(omega_2e_mv-omega_2e_tr)
+      if (abs(omega_recon-omega_eig) <= 1.0e-9_dp .and. abs(omega_2e_mv-omega_2e_tr) <= 1.0e-9_dp) then
+        write(iw,'(2x,a)')       'VERDICT: G1 PASS (matvec + response 2-PDM routing validated)'
+      else
+        write(iw,'(2x,a)')       'VERDICT: G1 CHECK (see deltas above)'
+      end if
+      write(iw,'(2x,a)')         '=============================================================='
     else
-      write(iw,'(2x,a)')       'VERDICT: G1 CHECK (see deltas above)'
+      omega_recon = td_en(tstate)
+      omega_2e_mv = 0.0_dp
+      omega_2e_tr = 0.0_dp
+      write(iw,'(/2x,a)') 'UMRSF production mode: skipped G1 response-energy diagnostic (set UMRSF_G1=1 to run it)'
     end if
-    write(iw,'(2x,a)')         '=============================================================='
     close(iw)
 
     ! ================= 2e RESPONSE GRADIENT + frozen-density FD self-test =================
@@ -408,8 +547,45 @@ contains
       densym(1,k,:,:) = gcomp%dden(k,:,:)
     end do
 
-    ! analytic 2e response gradient (base geometry) — this is the PRODUCTION term (added to the gradient)
-    call grd2_driver(infos, basis, de2e, gcomp)
+    ! analytic 2e response gradient (base geometry) - this is the PRODUCTION term (added to the gradient).
+    ! Default follows the mature MRSF pattern: one screened grd2 pass with a lean callback.  The
+    ! split-channel path is kept only as a diagnostic because it repeats the shell-quartet walk.
+    block
+      character(len=8) :: e
+      integer :: ios
+      l_2e_split = .false.
+      call get_environment_variable("UMRSF_2E_SPLIT", e, status=ios)
+      if (ios==0 .and. trim(e)=="1") l_2e_split = .true.
+      call get_environment_variable("UMRSF_2E_FUSED", e, status=ios)
+      if (ios==0 .and. trim(e)=="1") l_2e_split = .false.
+    end block
+    open(unit=iw, file=infos%log_filename, position="append")
+    if (l_2e_split) then
+      write(iw,'(/2x,a,i0,a,i0,a)') 'UMRSF 2e response gradient: split-channel grd2 start (', &
+        gcomp%n_coul, ' Coulomb, ', gcomp%n_exch, ' exchange channels)'
+    else
+      write(iw,'(/2x,a,i0,a)') 'UMRSF 2e response gradient: fused grd2 start (', &
+        gcomp%nchan, ' channels)'
+    end if
+    call flush(iw)
+    close(iw)
+    block
+      integer :: twall
+      real(kind=dp) :: tcpu
+      call umrsf_clock_start(twall, tcpu)
+      if (l_2e_split) then
+        call umrsf_resp_2e_grad_split(infos, basis, gcomp, de2e)
+      else
+        call grd2_driver(infos, basis, de2e, gcomp)
+      end if
+      open(unit=iw, file=infos%log_filename, position="append")
+      call umrsf_timing_log(iw, '2e response gradient', twall, tcpu)
+      close(iw)
+    end block
+    open(unit=iw, file=infos%log_filename, position="append")
+    write(iw,'(2x,a)') 'UMRSF 2e response gradient: grd2 done'
+    call flush(iw)
+    close(iw)
 
     ! frozen-density central FD self-test of ω_2e (G1b): validates the analytic de2e above. 6·natom int2
     ! builds, DIAGNOSTIC ONLY (de2e_fd is NOT added to the gradient). Pure production overhead ⇒ default
@@ -439,7 +615,7 @@ contains
         open(unit=iw, file=infos%log_filename, position="append")
         write(iw,'(/2x,a)') '========= UMRSF 2e response gradient (G1b: frozen-density FD) ========='
         write(iw,'(2x,a,f18.10)') 'omega_2e (frozen-density, base) = ', omega_base
-        write(iw,'(2x,a,f18.10)') '  (cf. back-transform omega_2e)  = ', omega_2e_mv
+        if (l_g1_diag) write(iw,'(2x,a,f18.10)') '  (cf. back-transform omega_2e)  = ', omega_2e_mv
         write(iw,'(2x,a)') '   atom  comp     analytic dω2e/dx        frozen-FD          |Δ|'
         do iat = 1, natom
           do icmp = 1, 3
@@ -467,24 +643,44 @@ contains
     ! SOMO-SOMO amplitudes vanish ⇒ S1/S3/non-SOMO untouched). P_eff REPLACES T_u as talpha/tbeta and
     ! propagates to pda/pdb (de_orb, refrelax), the frozen G̃ (gta=2 F̃ P_eff), G^f, the full-block Z, W.
     ! Model: DERIVATIONS/M3_s2_somo_diffdens.md, c09_peff_closure.py (≤1e-9), CAS c09_cas_peff.py.
-    omega_orb = omega_recon - omega_2e_mv
     allocate(talpha(nbf,nbf), tbeta(nbf,nbf), pda(nbf,nbf), pdb(nbf,nbf), &
              tua(nbf,nbf), tub(nbf,nbf), source=0.0_dp)
     call iatogen(xamp, xmat, nocca, noccb)
-    ! standard-CIS T_u (DIAGNOSTIC ONLY — its gate Tr(T_u F̃)−omega_orb is the SOMO tell: ~0 S1, ~2.4e-4 S2)
-    do j = 1, nocca ; do i = 1, nocca ; do ia = noccb+1, nbf
-      tua(i,j) = tua(i,j) - xmat(i,ia)*xmat(j,ia)
-    end do ; end do ; end do
-    do ib = noccb+1, nbf ; do ia = noccb+1, nbf ; do i = 1, nocca
-      tub(ia,ib) = tub(ia,ib) + xmat(i,ia)*xmat(i,ib)
-    end do ; end do ; end do
-    omega_orb_tu = sum(tua*fa) + sum(tub*fb)
+    if (l_orb_diag) then
+      ! standard-CIS T_u (DIAGNOSTIC ONLY — its gate Tr(T_u F̃)−omega_orb is the SOMO tell: ~0 S1, ~2.4e-4 S2)
+      do j = 1, nocca ; do i = 1, nocca ; do ia = noccb+1, nbf
+        tua(i,j) = tua(i,j) - xmat(i,ia)*xmat(j,ia)
+      end do ; end do ; end do
+      do ib = noccb+1, nbf ; do ia = noccb+1, nbf ; do i = 1, nocca
+        tub(ia,ib) = tub(ia,ib) + xmat(i,ia)*xmat(i,ib)
+      end do ; end do ; end do
+      omega_orb_tu = sum(tua*fa) + sum(tub*fb)
+    else
+      omega_orb_tu = 0.0_dp
+    end if
     ! SOMO-corrected difference density P_eff (the FIX) → talpha/tbeta
-    call umrsf_build_peff(nbf, nocca, noccb, mrst, xmat, talpha, tbeta)
+    block
+      integer :: twall
+      real(kind=dp) :: tcpu
+      call umrsf_clock_start(twall, tcpu)
+      call umrsf_build_peff(nbf, nocca, noccb, mrst, xmat, talpha, tbeta)
+      open(unit=iw, file=infos%log_filename, position="append")
+      call umrsf_timing_log(iw, 'P_eff orbital response density', twall, tcpu)
+      close(iw)
+    end block
     omega_orb_chk = sum(talpha*fa) + sum(tbeta*fb)
-    ! cross-check: my clean-room orbital matvec reproduces omega_orb (== the energy-path mrsfesum)
-    call umrsf_orb_matvec(nbf, nocca, noccb, mrst, fa, fb, xmat, wrk1)
-    omega_orb_mine = sum(xmat*wrk1)
+    if (l_g1_diag) then
+      omega_orb = omega_recon - omega_2e_mv
+    else
+      omega_orb = omega_orb_chk
+    end if
+    if (l_orb_diag) then
+      ! cross-check: my clean-room orbital matvec reproduces omega_orb (== the energy-path mrsfesum)
+      call umrsf_orb_matvec(nbf, nocca, noccb, mrst, fa, fb, xmat, wrk1)
+      omega_orb_mine = sum(xmat*wrk1)
+    else
+      omega_orb_mine = omega_orb
+    end if
     pda = matmul(matmul(va, talpha), transpose(va))     ! AO P_eff,α = C̃_α P_eff_α C̃_αᵀ
     pdb = matmul(matmul(vb, tbeta),  transpose(vb))     ! AO P_eff,β = C̃_β P_eff_β C̃_βᵀ
 
@@ -507,15 +703,25 @@ contains
 
     open(unit=iw, file=infos%log_filename, position="append")
     write(iw,'(/2x,a)') '====== UMRSF response: c06 §16 CLOSED FORM (full G^f + FULL-BLOCK Z + W) ======'
-    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u  F̃) − omega_orb| (SOMO tell; S1~0, S2~2.4e-4) = ', abs(omega_orb_tu-omega_orb)
-    write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(P_eff F̃) − omega_orb| (the FIX; must → ~0)        = ', abs(omega_orb_chk-omega_orb)
-    write(iw,'(2x,a,es12.3)') 'orbital matvec |X·esum_mine − omega_orb|  (clean-room == mrsfesum)    = ', abs(omega_orb_mine-omega_orb)
+    if (l_orb_diag) then
+      write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(T_u  F̃) − omega_orb| (SOMO tell; S1~0, S2~2.4e-4) = ', abs(omega_orb_tu-omega_orb)
+      write(iw,'(2x,a,es12.3)') 'omega_orb gate |Tr(P_eff F̃) − omega_orb| (the FIX; must → ~0)        = ', abs(omega_orb_chk-omega_orb)
+      write(iw,'(2x,a,es12.3)') 'orbital matvec |X·esum_mine − omega_orb|  (clean-room == mrsfesum)    = ', abs(omega_orb_mine-omega_orb)
+    else
+      write(iw,'(2x,a)') 'UMRSF production mode: skipped orbital consistency gates (set UMRSF_ORBGATE=1 to run them)'
+    end if
+    call umrsf_timing_reset()
 
     ! Re-init int2 at the BASE geometry (the frozen-density 2e FD self-test left it displaced).
     call int2_driver%clean()
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
-    int2_driver%schwarz = .false.
+    block
+      character(len=8) :: e
+      integer :: ios
+      call get_environment_variable("UMRSF_INT2_NOSCREEN", e, status=ios)
+      if (ios==0 .and. trim(e)=="1") int2_driver%schwarz = .false.
+    end block
 
     allocate(pza(nbf,nbf), pzb(nbf,nbf), zmata(nbf,nbf), zmatb(nbf,nbf), source=0.0_dp)
     allocate(peffa(nbf,nbf), peffb(nbf,nbf), de_orb(3,natom), de_w(3,natom), de_m1(3,natom), &
@@ -527,7 +733,8 @@ contains
     ! only (drops the dV/dC alignment Jacobian ΔG^f → the wall). Both off ⇒ the full c06 closed form.
     block
       character(len=16) :: e ; integer :: ios
-      dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false. ; l_m1 = .true.
+      dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false.
+      l_m1 = .true. ; l_m1fd = .false.
       l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false. ; l_gffd = .false.
       call get_environment_variable("UMRSF_ZW", e, status=ios)
       if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
@@ -536,6 +743,7 @@ contains
       call get_environment_variable("UMRSF_ZOV", e, status=ios) ; if (ios==0) l_zov = (trim(e)=="1")
       call get_environment_variable("UMRSF_GVT", e, status=ios) ; if (ios==0) l_gvt = (trim(e)=="1")
       call get_environment_variable("UMRSF_M1",  e, status=ios) ; if (ios==0) l_m1  = (trim(e)/="0")
+      call get_environment_variable("UMRSF_M1FD", e, status=ios) ; if (ios==0) l_m1fd = (trim(e)=="1")
       ! Z-vector solver: default = matrix-free reduce+PCG (umrsf_zvector_iter). UMRSF_ZDENSE=1 →
       ! the dense dgelss oracle (umrsf_zvector_fullblock, rank-deficient-safe). UMRSF_ZCMP=1 → run BOTH
       ! and print max|z_iter − z_dense| (the perf-port GATE: reproduce the dense z to ≤1e-9).
@@ -571,9 +779,13 @@ contains
       call dft_initialize(infos, basis, xc_molgrid, verbose=.false.)
       if (allocated(xc_refa)) deallocate(xc_refa)
       if (allocated(xc_refb)) deallocate(xc_refb)
-      allocate(xc_refa(nbf,nbf), xc_refb(nbf,nbf))
+      if (allocated(xc_moa)) deallocate(xc_moa)
+      if (allocated(xc_mob)) deallocate(xc_mob)
+      allocate(xc_refa(nbf,nbf), xc_refb(nbf,nbf), xc_moa(nbf,nbf), xc_mob(nbf,nbf))
       call unpack_matrix(dmat_a, xc_refa, nbf, 'U')
       call unpack_matrix(dmat_b, xc_refb, nbf, 'U')
+      xc_moa = cac
+      xc_mob = cbc
       xc_thresh = 0.0_dp
       xc_meanfield_on = l_xck       ! T3 inside umrsf_meanfield (refrelax / Z-Hessian / G^z / W)
     end if
@@ -588,23 +800,31 @@ contains
       real(kind=dp), allocatable :: famoa(:,:), famob(:,:), ya(:,:), yb(:,:), tmp(:,:)
       real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:), g2ea(:,:), g2eb(:,:)
       real(kind=dp), allocatable :: gfa(:,:), gfb(:,:), gza(:,:), gzb(:,:), wao(:,:), wpack(:)
-      real(kind=dp) :: zrms, statio, tolw, wsa, wsb
-      integer :: ij, ii, si, sj
+      real(kind=dp) :: zrms, statio, tolw, wsa, wsb, tcpu, tcpu_response
+      integer :: ij, ii, si, sj, twall, twall_response
       tolw = tol_int*log(10.0_dp)
       allocate(famoa(nbf,nbf), famob(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), &
                gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), g2ea(nbf,nbf), g2eb(nbf,nbf), &
                gfa(nbf,nbf), gfb(nbf,nbf), &
                gza(nbf,nbf), gzb(nbf,nbf), wao(nbf,nbf), wpack(nbf2), source=0.0_dp)
+      call umrsf_clock_start(twall_response, tcpu_response)
 
       ! ---- G̃_σ (raw aligned-basis generalized Fock = c04 factors, va/vb basis) ----
       ! frozen 2 F̃ T_u (F̃ = C̃ᵀ F^ref C̃) + 2e one-sided + refrelax 2(C̃ᵀ Y C̃)|occ, Y_σ = J[P^Δu]−hfscale·K[P^Δu_σ]
+      write(iw,'(2x,a)') 'UMRSF response stage: build raw generalized Fock'
+      call flush(iw)
+      call umrsf_clock_start(twall, tcpu)
       call orthogonal_transform_sym(nbf, nbf, fock_a, va, nbf, scr) ; call unpack_matrix(scr, famoa)
       call orthogonal_transform_sym(nbf, nbf, fock_b, vb, nbf, scr) ; call unpack_matrix(scr, famob)
       call umrsf_meanfield(basis, infos, pda, pdb, hfscale_ref, ya, yb)
       gta = 2.0_dp*matmul(famoa, talpha)
       gtb = 2.0_dp*matmul(famob, tbeta)
+      call umrsf_timing_log(iw, 'raw generalized Fock', twall, tcpu)
       ! ---- G̃ 2e channel-adjoint: ANALYTIC (default, 2 int2 builds) / FD oracle / GATE ----
       if (dbg_w2e) then
+        write(iw,'(2x,a)') 'UMRSF response stage: 2e generalized Fock'
+        call flush(iw)
+        call umrsf_clock_start(twall, tcpu)
         if (l_g2ecmp) then       ! GATE: analytic vs FD oracle (reproduce ≤1e-9), use analytic
           call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
           call umrsf_g2e_onesided(infos, int2_driver, va, vb, xamp, scale_exch, 1, g2e)
@@ -618,6 +838,7 @@ contains
           call umrsf_g2e_analytic(infos, int2_driver, va, vb, xamp, scale_exch, g2ea, g2eb)
         end if
         gta = gta + g2ea ; gtb = gtb + g2eb
+        call umrsf_timing_log(iw, '2e generalized Fock', twall, tcpu)
       end if
       if (dbg_wrr) then ; tmp = matmul(transpose(va), matmul(ya, va))
         gta(:,1:nocca) = gta(:,1:nocca) + 2.0_dp*tmp(:,1:nocca) ; end if
@@ -625,6 +846,9 @@ contains
         gtb(:,1:noccb) = gtb(:,1:noccb) + 2.0_dp*tmp(:,1:noccb) ; end if
 
       ! ---- FULL G^f (canonical basis), carrying the dV/dC alignment Jacobian (M1) ----
+      write(iw,'(2x,a)') 'UMRSF response stage: aligned-to-canonical generalized Fock'
+      call flush(iw)
+      call umrsf_clock_start(twall, tcpu)
       if (l_gvt) then
         ! ABLATION: G^f = V G̃ Vᵀ only (drop ΔG^f) — reproduces the wall.  V_σ = C_can,σᵀ S C̃_σ.
         tmp = matmul(transpose(cac), matmul(smat_full, va))     ! V_α
@@ -652,11 +876,18 @@ contains
         ! DEFAULT (D1): analytic adjoint-IFT ΔG^f (reverse-mode of Φ=μ·r(s_align); O(nbf³), no int2).
         call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
       end if
+      call umrsf_timing_log(iw, 'aligned-to-canonical generalized Fock', twall, tcpu)
 
-      ! ---- FULL-BLOCK Z-vector: M z = −R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
+      ! ---- FULL-BLOCK Z-vector: M z = -R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
+      ! The unknown is one coupled super-vector, but its entries are independent alpha and beta
+      ! MO-rotation amplitudes. The Fock/XC response couples the two spin blocks, so solving them
+      ! as two uncoupled equations would miss cross-spin response.
       ! Default = matrix-free reduce+PCG (umrsf_zvector_iter, ~tens of Fock builds). UMRSF_ZDENSE=1
       ! = the dense dgelss oracle (~ndof Fock builds, rank-deficient-safe). UMRSF_ZCMP=1 = run BOTH and
       ! print max|z_iter − z_dense| (the perf-port GATE; the gradient uses the iterative z).
+      write(iw,'(2x,a)') 'UMRSF response stage: coupled alpha/beta z-vector'
+      call flush(iw)
+      call umrsf_clock_start(twall, tcpu)
       if (l_zcmp) then
         block
           real(kind=dp), allocatable :: pzad(:,:), pzbd(:,:), zmad(:,:), zmbd(:,:)
@@ -676,10 +907,14 @@ contains
                                      hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
       else
         call umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
-                                hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
+                                hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio, skip_check=.true.)
       end if
+      call umrsf_timing_log(iw, 'coupled alpha/beta z-vector', twall, tcpu)
 
       ! ---- G^z (full-block) and W_ao = Σ_σ C_σ ½sym(G^f+G^z)_σ C_σᵀ ; de_w = −Tr(W S^x) ----
+      write(iw,'(2x,a)') 'UMRSF response stage: W overlap term'
+      call flush(iw)
+      call umrsf_clock_start(twall, tcpu)
       call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
       wao = matmul(cac, matmul(0.25_dp*(gfa+transpose(gfa)), transpose(cac))) &
           + matmul(cbc, matmul(0.25_dp*(gfb+transpose(gfb)), transpose(cbc))) &
@@ -689,6 +924,7 @@ contains
       call pack_matrix(-wao, wpack, 'U')
       ij = 0 ; do ii = 1, nbf ; ij = ij + ii ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
       call grad_ee_overlap(basis, wpack, de_w, logtol=tolw)
+      call umrsf_timing_log(iw, 'W overlap term', twall, tcpu)
 
       ! ---- diagnostics (c06 cross-checks) ----
       ! within-segment antisym of G̃ — the c06 phenomenon (c05 toy ≈0; real MRSF ≈ 1e-3).
@@ -714,9 +950,50 @@ contains
         write(iw,'(2x,a,2es12.3)') '          (α vv / β oo, ≈0 for canonical CIS)             = ', avv, boo
       end block
       write(iw,'(2x,a,es12.3)') 'full-block z RMS                               = ', zrms
-      write(iw,'(2x,a,es12.3)') 'Z-vector stationarity ||antisym(G^f+G^z)||      = ', statio
+      block
+        real(kind=dp) :: za_rms, zb_rms, stat_a, stat_b, ra, rb
+        integer :: pp, qq, na, nb
+        logical :: keep_a, keep_b
+        za_rms = 0.0_dp ; zb_rms = 0.0_dp
+        stat_a = 0.0_dp ; stat_b = 0.0_dp
+        na = 0 ; nb = 0
+        do pp = 1, nbf ; do qq = 1, pp-1
+          keep_a = (.not. l_zov) .or. (pp > nocca .and. qq <= nocca)
+          keep_b = (.not. l_zov) .or. (pp > noccb .and. qq <= noccb)
+          if (keep_a) then
+            na = na + 1
+            za_rms = za_rms + zmata(pp,qq)**2
+            ra = (gfa(pp,qq) - gfa(qq,pp)) + (gza(pp,qq) - gza(qq,pp))
+            stat_a = max(stat_a, abs(ra))
+          end if
+          if (keep_b) then
+            nb = nb + 1
+            zb_rms = zb_rms + zmatb(pp,qq)**2
+            rb = (gfb(pp,qq) - gfb(qq,pp)) + (gzb(pp,qq) - gzb(qq,pp))
+            stat_b = max(stat_b, abs(rb))
+          end if
+        end do ; end do
+        za_rms = sqrt(za_rms / real(max(na, 1), kind=dp))
+        zb_rms = sqrt(zb_rms / real(max(nb, 1), kind=dp))
+        statio = max(stat_a, stat_b)
+        write(iw,'(2x,a,es12.3)') 'Z-vector stationarity ||antisym(G^f+G^z)||      = ', statio
+        write(iw,'(2x,a,2es12.3)') 'alpha/beta z-vector RMS                         = ', za_rms, zb_rms
+        write(iw,'(2x,a,2es12.3)') 'alpha/beta Z stationarity                        = ', stat_a, stat_b
+      end block
       write(iw,'(2x,a,es12.3)') '||W_ao||                                       = ', sqrt(sum(wao**2))
-      deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, gfa, gfb, gza, gzb, wao, wpack)
+      if (l_m1 .and. .not. l_m1fd) then
+        write(iw,'(2x,a)') 'UMRSF response stage: analytic M1 overlap term'
+        call flush(iw)
+        call umrsf_clock_start(twall, tcpu)
+        call umrsf_m1_overlap_grad_adjoint(infos, basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, de_m1)
+        call umrsf_timing_log(iw, 'analytic M1 overlap term', twall, tcpu)
+      end if
+      write(iw,'(2x,a,i0,a,f10.3,a,f10.3,a,f10.3)') &
+        'UMRSF timing: mean-field calls = ', umrsf_mf_calls, &
+        ' total wall = ', umrsf_mf_wall, ' fock_jk wall = ', umrsf_mf_fock_wall, &
+        ' xc wall = ', umrsf_mf_xc_wall
+      call umrsf_timing_log(iw, 'closed-form response total', twall_response, tcpu_response)
+      deallocate(famoa, famob, ya, yb, tmp, gta, gtb, g2e, g2ea, g2eb, gfa, gfb, gza, gzb, wao, wpack)
     end block
 
     ! de_m1 = the alignment's EXPLICIT-S response −∂(ω∘align)/∂S·∂S/∂x (the overlap-Pulay of the
@@ -724,8 +1001,13 @@ contains
     ! base; D^ref get_jacobi-invariant), central-difference ω. SMOOTH (converged) re-alignment, faithful
     ! to the model's de_explicit (which re-aligns). c06: NONZERO (~the residual after the fixed-alignment
     ! de2e+de_orb), unlike the c05 toy (within-seg invariant ⇒ de_m1≈0). Done while int2_driver is live.
-    if (l_m1) call umrsf_m1_overlap_grad(infos, int2_driver, basis, cac, cbc, va, vb, &
-                                         fock_a, fock_b, smat_full, xamp, scale_exch, de_m1)
+    if (l_m1 .and. l_m1fd) then
+      call flush(iw)
+      close(iw)
+      call umrsf_m1_overlap_grad(infos, int2_driver, basis, cac, cbc, va, vb, &
+                                 fock_a, fock_b, smat_full, xamp, scale_exch, de_m1)
+      open(unit=iw, file=infos%log_filename, position="append")
+    end if
 
     call int2_driver%clean()
 
@@ -767,6 +1049,8 @@ contains
       call dftclean(infos)
       if (allocated(xc_refa)) deallocate(xc_refa)
       if (allocated(xc_refb)) deallocate(xc_refb)
+      if (allocated(xc_moa)) deallocate(xc_moa)
+      if (allocated(xc_mob)) deallocate(xc_mob)
       xc_meanfield_on = .false.
     end if
 
@@ -1027,6 +1311,123 @@ contains
     call grad_ee_overlap(basis, wpack, de_w, logtol=tol)
     deallocate(tmo, wtot, wpack)
   end subroutine umrsf_w_overlap_grad
+
+!###############################################################################
+!> Analytic M1 overlap-Pulay term.  This replaces the old default finite-difference loop over every
+!> nuclear coordinate in umrsf_m1_overlap_grad.  The alignment conditions r(S,theta)=0 are the same
+!> smooth get_jacobi stationarity equations used by umrsf_genfock_analytic.  With
+!> lambda = antisym(Gtilde) and H = dr/dtheta, solve H^T mu=lambda once, reverse the scalar
+!> Phi=mu.r back to the canonical alpha/beta overlap T=Ca^T S Cb, then contract
+!> -dPhi/dS with S^x through the normal overlap-gradient driver.
+  subroutine umrsf_m1_overlap_grad_adjoint(infos, basis, cac, cbc, va, vb, smat_full, gta, gtb, nocca, de_m1)
+    use io_constants, only: iw
+    use grd1, only: grad_ee_overlap
+    use mathlib, only: pack_matrix
+    use constants, only: tol_int
+    implicit none
+    type(information), intent(in) :: infos
+    type(basis_set), intent(inout) :: basis
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
+    real(kind=dp), intent(in) :: gta(:,:), gtb(:,:)
+    integer, intent(in) :: nocca
+    real(kind=dp), intent(out) :: de_m1(:,:)
+    real(kind=dp), allocatable :: rota(:,:), rotb(:,:), tcan(:,:), ncan(:,:), sstar(:,:)
+    real(kind=dp), allocatable :: hmat(:,:), muvec(:,:), sbar(:,:), nbar(:,:), tbar(:,:)
+    real(kind=dp), allocatable :: gcol(:), sao(:,:), wmat(:,:), wpack(:)
+    integer, allocatable :: pri(:), prj(:), prseg(:)
+    integer :: nbf, nbf2, npair, k, m, i, j, a, b, seg, slo, shi, info, ij
+    real(kind=dp) :: dotv, w, nrm, tol
+    external :: dgelss
+
+    nbf = size(cac,1)
+    nbf2 = nbf*(nbf+1)/2
+    tol = tol_int*log(10.0_dp)
+    de_m1 = 0.0_dp
+
+    npair = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi ; npair = npair + 1 ; end do ; end do
+    end do
+    if (npair <= 0) return
+
+    allocate(pri(npair), prj(npair), prseg(npair))
+    k = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi
+        k = k + 1 ; pri(k) = i ; prj(k) = j ; prseg(k) = seg
+      end do ; end do
+    end do
+
+    allocate(rota(nbf,nbf), rotb(nbf,nbf), tcan(nbf,nbf), ncan(nbf,nbf), sstar(nbf,nbf), gcol(nbf))
+    rota = matmul(transpose(cac), matmul(smat_full, va))
+    rotb = matmul(transpose(cbc), matmul(smat_full, vb))
+    tcan = matmul(transpose(cac), matmul(smat_full, cbc))
+    do j = 1, nbf
+      nrm = max(norm2(tcan(:,j)), 1.0d-10)
+      gcol(j) = nrm
+      ncan(:,j) = tcan(:,j)/nrm
+    end do
+    sstar = matmul(transpose(rota), matmul(ncan, rotb))
+
+    allocate(muvec(npair,1))
+    do k = 1, npair
+      i = pri(k) ; j = prj(k)
+      if (prseg(k) == 0) then ; muvec(k,1) = gta(i,j) - gta(j,i)
+      else                    ; muvec(k,1) = gtb(i,j) - gtb(j,i) ; end if
+    end do
+
+    allocate(hmat(npair,npair))
+    hmat = 0.0_dp
+    do k = 1, npair
+      a = pri(k) ; b = prj(k) ; seg = prseg(k)
+      do m = 1, npair
+        i = pri(m) ; j = prj(m)
+        if (prseg(m) == 0) then
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(j,i) + sstar(i,i)*ds_at(seg,a,b,sstar,j,i) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(i,j) - sstar(j,j)*ds_at(seg,a,b,sstar,i,j)
+        else
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(i,j) + sstar(i,i)*ds_at(seg,a,b,sstar,i,j) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(j,i) - sstar(j,j)*ds_at(seg,a,b,sstar,j,i)
+        end if
+      end do
+    end do
+
+    call umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, 'M1 analytic overlap response')
+
+    allocate(sbar(nbf,nbf)) ; sbar = 0.0_dp
+    do k = 1, npair
+      i = pri(k) ; j = prj(k) ; w = muvec(k,1)
+      if (prseg(k) == 0) then
+        sbar(i,i) = sbar(i,i) + w*sstar(j,i) ; sbar(j,i) = sbar(j,i) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(i,j) ; sbar(i,j) = sbar(i,j) - w*sstar(j,j)
+      else
+        sbar(i,i) = sbar(i,i) + w*sstar(i,j) ; sbar(i,j) = sbar(i,j) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(j,i) ; sbar(j,i) = sbar(j,i) - w*sstar(j,j)
+      end if
+    end do
+
+    allocate(nbar(nbf,nbf), tbar(nbf,nbf))
+    nbar = matmul(rota, matmul(sbar, transpose(rotb)))
+    do j = 1, nbf
+      dotv = dot_product(ncan(:,j), nbar(:,j))
+      tbar(:,j) = (nbar(:,j) - ncan(:,j)*dotv)/gcol(j)
+    end do
+
+    allocate(sao(nbf,nbf), wmat(nbf,nbf), wpack(nbf2))
+    sao = matmul(cac, matmul(tbar, transpose(cbc)))
+    wmat = -0.5_dp*(sao + transpose(sao))
+    call pack_matrix(wmat, wpack, 'U')
+    ij = 0
+    do i = 1, nbf ; ij = ij + i ; wpack(ij) = 0.5_dp*wpack(ij) ; end do
+    call grad_ee_overlap(basis, wpack, de_m1, logtol=tol)
+    write(iw,'(2x,a,es12.3)') 'M1 analytic overlap response ||dPhi/dS|| = ', sqrt(sum(sao**2))
+    call flush(iw)
+
+    deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
+               sbar, nbar, tbar, sao, wmat, wpack)
+  end subroutine umrsf_m1_overlap_grad_adjoint
 
 !###############################################################################
 !> RIGOROUS analytic energy-weighted density W (c03 recipe; CAS-verified in c04_uhf_W_factors.py):
@@ -1402,28 +1803,36 @@ contains
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in) :: pa_full(:,:), pb_full(:,:), hfscale
     real(kind=dp), intent(out) :: ya_full(:,:), yb_full(:,:)
-    real(kind=dp), allocatable :: dens(:,:), fout(:,:)
     integer :: nbf, nbf2
+    integer :: wall0, wall1
+    real(kind=dp) :: cpu0, cpu1
     nbf = basis%nbf ; nbf2 = nbf*(nbf+1)/2
-    allocate(dens(nbf2,2), fout(nbf2,2), source=0.0_dp)
-    call pack_matrix(pa_full, dens(:,1), 'U') ; call pack_matrix(pb_full, dens(:,2), 'U')
-    call fock_jk(basis, dens, fout, infos, scale_exch=hfscale, scale_coul=1.0_dp)
-    call unpack_matrix(fout(:,1), ya_full) ; call unpack_matrix(fout(:,2), yb_full)
-    deallocate(dens, fout)
+    call umrsf_clock_start(wall0, cpu0)
+    call umrsf_meanfield_scratch(nbf, nbf2, xc_meanfield_on)
+    umrsf_mf_dens = 0.0_dp ; umrsf_mf_fout = 0.0_dp
+    call pack_matrix(pa_full, umrsf_mf_dens(:,1), 'U')
+    call pack_matrix(pb_full, umrsf_mf_dens(:,2), 'U')
+    call umrsf_clock_start(wall1, cpu1)
+    call fock_jk(basis, umrsf_mf_dens, umrsf_mf_fout, infos, scale_exch=hfscale, scale_coul=1.0_dp)
+    call umrsf_timing_accum(wall1, cpu1, umrsf_mf_fock_wall, umrsf_mf_fock_cpu)
+    call unpack_matrix(umrsf_mf_fout(:,1), ya_full)
+    call unpack_matrix(umrsf_mf_fout(:,2), yb_full)
     ! Stage-2 (RULES §18): add the reference UKS XC kernel response f_xc[ρ_ref]·P (T3). The reference
     ! mean field becomes G_σ[P] = J[P] − hfscale·K[P_σ] + (f_xc·P)_σ (collinear UKS f_xc, spin-conserving
     ! P). One grid pass per call; propagates to the Z-vector Hessian, refrelax G^f, G^z and W.
     if (xc_meanfield_on) then
-      block
-        real(kind=dp), allocatable :: fxa(:,:,:), fxb(:,:,:), dxa(:,:,:), dxb(:,:,:)
-        allocate(fxa(nbf,nbf,1), fxb(nbf,nbf,1), dxa(nbf,nbf,1), dxb(nbf,nbf,1), source=0.0_dp)
-        dxa(:,:,1) = pa_full ; dxb(:,:,1) = pb_full
-        call utddft_fxc(basis, xc_molgrid, .false., xc_refa, xc_refb, &
-                        fxa, fxb, dxa, dxb, 1, xc_thresh, infos)
-        ya_full = ya_full + fxa(:,:,1) ; yb_full = yb_full + fxb(:,:,1)
-        deallocate(fxa, fxb, dxa, dxb)
-      end block
+      umrsf_mf_fxa = 0.0_dp ; umrsf_mf_fxb = 0.0_dp
+      umrsf_mf_dxa = 0.0_dp ; umrsf_mf_dxb = 0.0_dp
+      umrsf_mf_dxa(:,:,1) = pa_full ; umrsf_mf_dxb(:,:,1) = pb_full
+      call umrsf_clock_start(wall1, cpu1)
+      call utddft_fxc(basis, xc_molgrid, .true., xc_moa, xc_mob, &
+                      umrsf_mf_fxa, umrsf_mf_fxb, umrsf_mf_dxa, umrsf_mf_dxb, 1, xc_thresh, infos)
+      call umrsf_timing_accum(wall1, cpu1, umrsf_mf_xc_wall, umrsf_mf_xc_cpu)
+      ya_full = ya_full + umrsf_mf_fxa(:,:,1)
+      yb_full = yb_full + umrsf_mf_fxb(:,:,1)
     end if
+    umrsf_mf_calls = umrsf_mf_calls + 1
+    call umrsf_timing_accum(wall0, cpu0, umrsf_mf_wall, umrsf_mf_cpu)
   end subroutine umrsf_meanfield
 
 !###############################################################################
@@ -2007,7 +2416,7 @@ contains
 !> restricted to the converged subspace. Returns the genuine smooth-basis eigenvector xamp (sign-fixed
 !> to bvec_ref) + eigenvalue omega_eig, reproducing the dense result to the Davidson tolerance. Jacobi
 !> preconditioner = (theta - (eps_b - eps_i))^-1 (orbital gap; DOF k packed column-major over
-!> i=1..nocca, a=noccb+1..nbf, per iatogen). Tunables: UMRSF_TRKTOL (residual norm, 1e-10),
+!> i=1..nocca, a=noccb+1..nbf, per iatogen). Tunables: UMRSF_TRKTOL (residual norm, default 1e-6),
 !> UMRSF_TRKMAXSUB (max subspace before thick-restart, default min(nia,60)).
   subroutine umrsf_track_amplitude_dav(infos, idrv, va, vb, famo, fbmo, bvec_ref, scale_exch, &
                                        hfs, spc_coco, spc_ovov, spc_coov, xamp, omega_eig)
@@ -2037,7 +2446,7 @@ contains
       k = k + 1 ; adiag(k) = fbmo(a,a) - famo(i,i)
     end do ; end do
 
-    rtol = 1.0e-10_dp ; mmax = min(nia, 60) ; maxit = 300
+    rtol = 1.0e-6_dp ; mmax = min(nia, 60) ; maxit = 300
     block
       character(len=24) :: e ; integer :: ios ; real(kind=dp) :: rv ; integer :: iv
       call get_environment_variable("UMRSF_TRKTOL", e, status=ios)
@@ -2740,17 +3149,7 @@ contains
     end do
 
     ! ---- μ : solve Hᵀ μ = λ (dgelss, rank-deficient-safe for SOMO-degenerate refs) ----
-    block
-      real(kind=dp), allocatable :: ht(:,:), svals(:), work(:)
-      real(kind=dp) :: wq(1), rcond
-      integer :: rank, lwork
-      allocate(ht(npair,npair), svals(npair))
-      ht = transpose(hmat) ; rcond = 1.0d-9
-      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, wq, -1, info)
-      lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
-      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, work, lwork, info)
-      deallocate(ht, svals, work)
-    end block   ! μ now in muvec(:,1)
+    call umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, 'Gf analytic alignment response')
 
     ! ---- Sbar = ∂(μ·r)/∂s ----
     allocate(sbar(nbf,nbf)) ; sbar = 0.0_dp
@@ -2805,8 +3204,76 @@ contains
   end function ds_at
 
 !###############################################################################
-!> FULL-BLOCK Z-vector (c06 §16, the decisive fix): solve M z = −R over ALL off-diagonal orbital
-!> rotations p>q (oo + ov + vv, both spins), not just ov. The aligned 11-channel ω is NOT stationary
+!> Solve the alignment adjoint system H^T mu=lambda by the two independent get_jacobi segments.
+!> H is exactly block-diagonal (alpha closed/SOMO segment and beta SOMO/virtual segment), so solving
+!> one large dense least-squares system wastes cubic work.  This keeps the same rank-deficient-safe
+!> dgelss solve, just applied to each independent block.
+  subroutine umrsf_solve_alignment_adjoint_blocks(hmat, prseg, muvec, label)
+    use io_constants, only: iw
+    implicit none
+    real(kind=dp), intent(in) :: hmat(:,:)
+    integer, intent(in) :: prseg(:)
+    real(kind=dp), intent(inout) :: muvec(:,:)
+    character(len=*), intent(in) :: label
+    integer :: npair, seg, nb, i, j, k, info, ios
+    integer, allocatable :: idx(:), ipiv(:)
+    real(kind=dp), allocatable :: hb(:,:), hsolve(:,:), rhs(:,:), svals(:), work(:)
+    real(kind=dp) :: wq(1), rcond
+    integer :: rank, lwork
+    logical :: force_svd
+    character(len=8) :: e
+    external :: dgelss, dgesv
+
+    npair = size(prseg)
+    rcond = 1.0d-9
+    force_svd = .false.
+    call get_environment_variable("UMRSF_ALIGN_SVD", e, status=ios)
+    if (ios == 0 .and. trim(e) == "1") force_svd = .true.
+    do seg = 0, 1
+      nb = count(prseg == seg)
+      if (nb <= 0) cycle
+      allocate(idx(nb), hb(nb,nb), hsolve(nb,nb), rhs(nb,1), ipiv(nb), svals(nb))
+      k = 0
+      do i = 1, npair
+        if (prseg(i) == seg) then
+          k = k + 1
+          idx(k) = i
+        end if
+      end do
+      do j = 1, nb
+        do i = 1, nb
+          hb(i,j) = hmat(idx(j), idx(i))   ! transpose of this block: solve H_block^T mu=lambda
+        end do
+      end do
+      rhs(:,1) = muvec(idx,1)
+      info = 0
+      if (.not. force_svd) then
+        hsolve = hb
+        call dgesv(nb, 1, hsolve, nb, ipiv, rhs, nb, info)
+        if (info /= 0) then
+          write(iw,'(2x,2a,i0,a,i0,a)') trim(label), ': dgesv failed in segment ', seg, &
+                                        ' (info=', info, '); falling back to SVD'
+          rhs(:,1) = muvec(idx,1)
+        end if
+      end if
+      if (force_svd .or. info /= 0) then
+        call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, wq, -1, info)
+        lwork = max(int(wq(1)), 1)
+        allocate(work(lwork))
+        call dgelss(nb, nb, 1, hb, nb, rhs, nb, svals, rcond, rank, work, lwork, info)
+        if (info /= 0) write(iw,'(2x,2a,i0,a,i0)') trim(label), ': dgelss info = ', info, ' segment ', seg
+        if (rank < nb) write(iw,'(2x,2a,i0,a,i0,a,i0)') trim(label), ': rank ', rank, ' / ', nb, ' segment ', seg
+        deallocate(work)
+      end if
+      muvec(idx,1) = rhs(:,1)
+      deallocate(idx, hb, hsolve, rhs, ipiv, svals)
+    end do
+  end subroutine umrsf_solve_alignment_adjoint_blocks
+
+!###############################################################################
+!> FULL-BLOCK Z-vector (c06 §16, the decisive fix): solve M z = -R over ALL off-diagonal orbital
+!> rotations p>q (oo + ov + vv, both spins), not just ov. Alpha and beta MOs are enumerated as
+!> independent unknowns in one spin-coupled super-vector. The aligned 11-channel ω is NOT stationary
 !> to oo/vv rotations (canonical-C G^f antisym: α-oo, β-vv ≠ 0), so the standard ov-only Z-vector
 !> leaves the ~1e-3 wall. R = antisym(G^f) over the p>q pairs. M = the spin-coupled orbital Hessian =
 !> the antisym of the z-coupling gen-Fock (umrsf_genfock_z), built DENSE column-by-column and solved
@@ -2827,10 +3294,10 @@ contains
     real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms, statio
     integer, allocatable :: dsp(:), dpr(:), dqr(:)
     real(kind=dp), allocatable :: mmat(:,:), rhs(:,:), za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)
-    integer :: nbf, nocca, noccb, ndof, k, j, p, q, sp, nocc, info
+    integer :: nbf, nocca, noccb, ndof, ndofa, ndofb, k, j, p, q, sp, nocc, info
     logical :: keep
     real(kind=dp) :: rr
-    external :: dgelss     ! ILP64 LAPACK: OQP_BLAS_INT=8 ⇒ default integer matches; call directly (cf. resp.F90)
+    external :: dgelss     ! BLAS integer width follows the configured default integer size.
 
     nbf = basis%nbf ; nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
 
@@ -2854,6 +3321,11 @@ contains
         if (keep) then ; k = k + 1 ; dsp(k) = sp ; dpr(k) = p ; dqr(k) = q ; end if
       end do ; end do
     end do
+    ndofa = count(dsp == 1) ; ndofb = count(dsp == 2)
+    block
+      use io_constants, only: iw
+      write(iw,'(2x,a,i0,a,i0)') 'dense Z spin DOFs: alpha = ', ndofa, ', beta = ', ndofb
+    end block
 
     ! ---- RHS  R_k = antisym(G^f)  ;  rhs = −R ----
     do k = 1, ndof
@@ -2927,7 +3399,8 @@ contains
 !###############################################################################
 !> MATRIX-FREE iterative full-block Z-vector — the perf replacement for umrsf_zvector_fullblock,
 !> REUSING OQP's stock matrix-free linear solvers (source/pcg.F90, source/minres.F90) instead of a
-!> bespoke GMRES. Solves the IDENTICAL system M z = -R (M = the spin-coupled orbital Hessian = antisym
+!> bespoke GMRES. Solves the IDENTICAL alpha/beta spin-coupled system M z = -R
+!> (M = the spin-coupled orbital Hessian = antisym
 !> of the z-coupling gen-Fock umrsf_genfock_z over the p>q DOFs; R = antisym(G^f)) but WITHOUT forming
 !> M densely — the dense path needs ndof (~5112 at nbf=72, ~21462 at thymine) Fock builds, ONE per
 !> column. M z is applied MATRIX-FREE via a single umrsf_genfock_z (one fock_jk + one f_xc grid pass
@@ -2939,24 +3412,26 @@ contains
 !>   INDEFINITE: the excited-state/SOMO orbital Hessian has negative eigenvalues). So the solve splits
 !>   EXACTLY:
 !>     (1) z_D = (eps_p-eps_q)^-1 b_D                     [diagonal divide, no matvec]
-!>     (2) A_{V,V} z_V = b_V - M_{V,D} z_D                [sym. indefinite => minres_optimize]
+!>     (2) A_{V,V} z_V = b_V - M_{V,D} z_D                [CG fast path, MINRES fallback]
 !>   where M_{V,D} z_D = the ov-antisym readout of ONE umrsf_genfock_z applied to z_D. (2) is solved by
-!>   minres_optimize (matvec umrsf_zov_matvec = the ov-restricted umrsf_genfock_z, preconditioner
-!>   umrsf_zov_precond = the floored (eps_a-eps_i)^-1 Jacobi diagonal) — MINRES (Paige-Saunders) is
-!>   residual-minimizing and stable on indefinite A, converging like the old GMRES (~16 matvecs);
-!>   pcg_optimize (UMRSF_ZPCG=1) STALLS here (CG needs SPD) and is kept only for a verified-SPD
-!>   reference. Both callbacks read a umrsf_zov_ctx_t passed through the solvers' c_ptr `dat`.
+!>   PCG first (matvec umrsf_zov_matvec = the ov-restricted umrsf_genfock_z, preconditioner
+!>   umrsf_zov_precond = the floored (eps_a-eps_i)^-1 Jacobi diagonal).  UMRSF's ov block can be
+!>   indefinite, so the default keeps CG as the fast path at the practical gradient tolerance and
+!>   automatically restarts MINRES only if CG does not converge in the trial budget.
+!>   Force pure PCG with UMRSF_ZPCG=1, or skip CG with UMRSF_ZMINRES=1.  Both callbacks read a
+!>   umrsf_zov_ctx_t passed through the solvers' c_ptr `dat`.
 !> Returns IDENTICAL outputs to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms, statio =
 !> ||antisym(G^f+G^z(z))|| = the M z = -R residual). For the SOMO-degenerate rank-deficient case
 !> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (UMRSF_ZDENSE=1)
-!> is still preferred. Tunables: UMRSF_ZTOL (relative residual, 1e-11), UMRSF_ZMAXIT (max iters),
-!> UMRSF_ZPCG (1 => pcg instead of minres; only valid if A_{V,V} is SPD).
+!> is still preferred. Tunables: UMRSF_ZTOL (relative residual, default 1e-6), UMRSF_ZMAXIT (max iters),
+!> UMRSF_ZCG_TRIAL (default 64), UMRSF_ZMINRES (1 => skip CG), UMRSF_ZPCG (1 => force pure PCG).
   subroutine umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
-                                hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio)
+                                hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio, skip_check)
     use io_constants, only: iw
     use zvector_common, only: sanitize_zvector_preconditioner
-    use pcg_mod, only: pcg_optimize
+    use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
     use minres_mod, only: minres_optimize
+    use messages, only: show_message, WITH_ABORT
     implicit none
     type(information), target, intent(inout) :: infos
     type(basis_set), target, intent(inout) :: basis
@@ -2965,15 +3440,18 @@ contains
     real(kind=dp), intent(in) :: hfscale_ref
     logical, intent(in) :: ovonly
     real(kind=dp), intent(out) :: pza(:,:), pzb(:,:), zmata(:,:), zmatb(:,:), zrms, statio
+    logical, intent(in), optional :: skip_check
     type(umrsf_zov_ctx_t), target :: ctx
     integer, allocatable :: dsp(:), dpr(:), dqr(:)
     logical, allocatable :: isov(:)
-    real(kind=dp), allocatable :: bvec(:), zvec(:), diagm(:), pcinv(:), rhsov(:)
+    real(kind=dp), allocatable :: bvec(:), zvec(:), diagm(:), pcinv(:), rhsov(:), rhsov0(:)
     real(kind=dp), allocatable :: za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)
-    integer :: nbf, nocca, noccb, ndof, ndofov, k, p, q, sp, nocc, kk, mxit, iters
-    logical :: keep, use_minres
-    real(kind=dp) :: rtol, bnorm, errout, cgit, relres, rr
-    character(len=8) :: sname
+    integer :: nbf, nocca, noccb, ndof, ndofov, ndofa, ndofb, ndofova, ndofovb
+    integer :: k, p, q, sp, nocc, kk, mxit, iters, pcg_limit, pcg_iters, minres_iters
+    logical :: keep, force_minres, force_pcg, pcg_done, pcg_bad, did_fallback, do_check
+    real(kind=dp) :: rtol, bnorm, errout, relres, rr, pcg_trial_rel
+    character(len=24) :: sname
+    type(pcg_t) :: pcg
 
     nbf = basis%nbf ; nocca = infos%mol_prop%nelec_a ; noccb = infos%mol_prop%nelec_b
 
@@ -3002,6 +3480,10 @@ contains
       end do ; end do
     end do
     ndofov = count(isov)
+    ndofa = count(dsp == 1)
+    ndofb = count(dsp == 2)
+    ndofova = count((dsp == 1) .and. isov)
+    ndofovb = count((dsp == 2) .and. isov)
 
     ! ---- RHS b = -R = -antisym(G^f) ; diagonal = eps_p - eps_q (the frozen part of M) ----
     do k = 1, ndof
@@ -3028,7 +3510,7 @@ contains
     allocate(ctx%dsp(ndofov), ctx%dpr(ndofov), ctx%dqr(ndofov), source=0)
     allocate(ctx%pcinv(ndofov), source=0.0_dp)
     allocate(ctx%za1(nbf,nbf), ctx%zb1(nbf,nbf), ctx%gza(nbf,nbf), ctx%gzb(nbf,nbf), source=0.0_dp)
-    allocate(rhsov(max(ndofov,1)), source=0.0_dp)
+    allocate(rhsov(max(ndofov,1)), rhsov0(max(ndofov,1)), source=0.0_dp)
     kk = 0
     do k = 1, ndof
       if (isov(k)) then
@@ -3038,13 +3520,14 @@ contains
       end if
     end do
 
-    ! ---- (2) ov solve  A_{V,V} z_V = b_V - M_{V,D} z_D  via minres_optimize (pcg if SPD) ----
-    ! A_{V,V} is SYMMETRIC but INDEFINITE (the excited-state/SOMO orbital Hessian has negative
-    ! eigenvalues), so minres_optimize (Paige-Saunders, residual-minimizing, robust to indefiniteness)
-    ! is the default — it converges like the old GMRES (~16 matvecs). pcg_optimize (UMRSF_ZPCG=1) STALLS
-    ! here (CG requires SPD) and is kept only for a verified-SPD reference.
-    rtol = 1.0e-11_dp ; mxit = min(ndofov, 5000) ; use_minres = .true.
-    iters = 0 ; relres = 0.0_dp
+    ! ---- (2) ov solve  A_{V,V} z_V = b_V - M_{V,D} z_D  via PCG -> MINRES fallback ----
+    ! At the practical gradient tolerance, CG is much faster on the tested UMRSF cases.  MINRES remains
+    ! the robust fallback for genuinely indefinite or stalled cases.
+    rtol = 1.0e-6_dp ; mxit = min(ndofov, 5000)
+    force_minres = .false. ; force_pcg = .false.
+    pcg_limit = min(mxit, 64)
+    iters = 0 ; relres = 0.0_dp ; bnorm = 0.0_dp ; errout = 0.0_dp
+    pcg_trial_rel = 0.0_dp ; did_fallback = .false.
     if (ndofov > 0) then
       ! correction M_{V,D} z_D = ov-antisym readout of umrsf_genfock_z applied to the oo/vv solution
       za1 = 0.0_dp ; zb1 = 0.0_dp
@@ -3070,20 +3553,73 @@ contains
         if (ios==0) then ; read(e,*,iostat=ios) rv ; if (ios==0 .and. rv>0.0_dp) rtol = rv ; end if
         call get_environment_variable("UMRSF_ZMAXIT", e, status=ios)
         if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) mxit = iv ; end if
+        call get_environment_variable("UMRSF_ZCG_TRIAL", e, status=ios)
+        if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) pcg_limit = iv ; end if
+        call get_environment_variable("UMRSF_ZMINRES", e, status=ios)
+        if (ios==0 .and. trim(e)=="1") force_minres = .true.
         call get_environment_variable("UMRSF_ZPCG", e, status=ios)
-        if (ios==0 .and. trim(e)=="1") use_minres = .false.
+        if (ios==0 .and. trim(e)=="1") force_pcg = .true.
       end block
+      pcg_limit = min(max(pcg_limit, 1), mxit)
+      if (force_pcg) force_minres = .false.
 
       bnorm = sqrt(sum(rhsov**2))
       if (bnorm > tiny(1.0_dp)) then
-        ! pcg/minres tol is on the residual NORM (absolute); target the relative tolerance rtol
-        if (use_minres) then
+        rhsov0 = rhsov
+        ! pcg/minres tol is on the residual NORM (absolute); target the relative tolerance rtol.
+        if (force_minres) then
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
-                               tol=rtol*bnorm, err=errout, iters=iters)
+                               tol=rtol*bnorm, err=errout, iters=minres_iters)
+          iters = minres_iters
+          sname = 'MINRES'
         else
-          call pcg_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
-                            tol=rtol*bnorm, err=errout, cgiters=cgit)
-          iters = int(cgit)
+          if (force_pcg) pcg_limit = mxit
+          pcg_done = .false. ; pcg_bad = .false. ; pcg_iters = 0
+          call pcg%init(b=rhsov0, update=umrsf_zov_matvec, precond=umrsf_zov_precond, &
+                        dat=ctx, tol=rtol*bnorm)
+          select case (pcg%errcode)
+          case (PCG_CONVERGED)
+            pcg_done = .true.
+          case (PCG_OK)
+            do kk = 1, pcg_limit
+              pcg_iters = kk
+              call pcg%step()
+              select case (pcg%errcode)
+              case (PCG_CONVERGED)
+                pcg_done = .true.
+                exit
+              case (PCG_OK)
+                continue
+              case default
+                pcg_bad = .true.
+                exit
+              end select
+            end do
+          case default
+            pcg_bad = .true.
+          end select
+
+          if (pcg_bad .and. force_pcg) then
+            call pcg%clean()
+            call show_message('UMRSF-Z PCG broke down; unset UMRSF_ZPCG to allow MINRES fallback.', WITH_ABORT)
+          end if
+
+          if (pcg_done .or. force_pcg) then
+            rhsov = pcg%x
+            errout = pcg%error
+            iters = pcg_iters
+            sname = 'PCG'
+            call pcg%clean()
+          else
+            pcg_trial_rel = pcg%error / bnorm
+            call pcg%clean()
+            rhsov = rhsov0
+            call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
+                                 tol=rtol*bnorm, err=errout, iters=minres_iters)
+            iters = pcg_iters + minres_iters
+            sname = 'AUTO(CG->MINRES)'
+            did_fallback = .true.
+          end if
         end if
         relres = errout / bnorm
       end if
@@ -3105,21 +3641,35 @@ contains
     zrms = sqrt(sum(zvec**2)/max(ndof,1))
 
     ! ---- stationarity residual ||antisym(G^f + G^z(z))|| = max|M z - b| (-> 0 => M z = -R solved) ----
-    call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
-    statio = 0.0_dp
-    do k = 1, ndof
-      if (dsp(k) == 1) then
-        rr = (gfa(dpr(k),dqr(k)) - gfa(dqr(k),dpr(k))) + (gza(dpr(k),dqr(k)) - gza(dqr(k),dpr(k)))
-      else
-        rr = (gfb(dpr(k),dqr(k)) - gfb(dqr(k),dpr(k))) + (gzb(dpr(k),dqr(k)) - gzb(dqr(k),dpr(k)))
-      end if
-      statio = max(statio, abs(rr))
-    end do
-    sname = 'PCG' ; if (use_minres) sname = 'MINRES'
+    ! The normal gradient path builds G^z immediately afterward for W, so it asks us to defer this exact
+    ! check and reuses that G^z instead of paying for one extra mean-field build here.
+    do_check = .true.
+    if (present(skip_check)) do_check = .not. skip_check
+    if (do_check) then
+      call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
+      statio = 0.0_dp
+      do k = 1, ndof
+        if (dsp(k) == 1) then
+          rr = (gfa(dpr(k),dqr(k)) - gfa(dqr(k),dpr(k))) + (gza(dpr(k),dqr(k)) - gza(dqr(k),dpr(k)))
+        else
+          rr = (gfb(dpr(k),dqr(k)) - gfb(dqr(k),dpr(k))) + (gzb(dpr(k),dqr(k)) - gzb(dqr(k),dpr(k)))
+        end if
+        statio = max(statio, abs(rr))
+      end do
+    else
+      statio = errout
+    end if
+    if (bnorm <= tiny(1.0_dp)) sname = 'ZERO-RHS'
+    if (did_fallback) then
+      write(iw,'(2x,a,i0,a,es10.2,a,i0)') 'iterative Z auto fallback: PCG trial matvecs = ', &
+        pcg_iters, ', trial rel-resid = ', pcg_trial_rel, ', MINRES matvecs = ', minres_iters
+    end if
     write(iw,'(2x,3a,i0,a,i0,a,i0,a,es10.2)') 'iterative Z (', trim(sname), &
       '): ndof = ', ndof, ', ov-DOFs = ', ndofov, ', matvecs = ', iters, ', final rel-resid = ', relres
+    write(iw,'(2x,a,i0,a,i0,a,i0,a,i0)') 'iterative Z spin DOFs: alpha = ', ndofa, ', beta = ', ndofb, &
+      ', ov-alpha = ', ndofova, ', ov-beta = ', ndofovb
 
-    deallocate(dsp, dpr, dqr, isov, bvec, zvec, diagm, pcinv, rhsov, za1, zb1, gza, gzb)
+    deallocate(dsp, dpr, dqr, isov, bvec, zvec, diagm, pcinv, rhsov, rhsov0, za1, zb1, gza, gzb)
   end subroutine umrsf_zvector_iter
 
 !###############################################################################
@@ -3234,6 +3784,12 @@ contains
     if (allocated(this%dden_s)) deallocate(this%dden_s)
     if (allocated(this%sgn)) deallocate(this%sgn)
     if (allocated(this%has_coul)) deallocate(this%has_coul)
+    if (allocated(this%coul_ch)) deallocate(this%coul_ch)
+    if (allocated(this%exch_ch)) deallocate(this%exch_ch)
+    if (allocated(this%coul_coef)) deallocate(this%coul_coef)
+    if (allocated(this%exch_coef)) deallocate(this%exch_coef)
+    this%n_coul = 0
+    this%n_exch = 0
   end subroutine grd2_umrsf_resp_clean
 
   !> Per shell-quartet response 2-PDM block (mirrors grd2_uhf_compute_data_t_get_density).
@@ -3245,8 +3801,8 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: df1, nrmij, nrmijk, s
-    integer :: i, j, k, l, ch, i1, j1, k1, l1
+    real(kind=dp) :: df1, nrmij, nrmijk, c
+    integer :: i, j, k, l, idx, ch, i1, j1, k1, l1
     integer :: loc(4), nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
 
@@ -3266,18 +3822,20 @@ contains
           do l = 1, nbf(4)
             l1 = loc(4) + l
             df1 = 0.0_dp
-            do ch = 1, this%nchan
-              s = this%sgn(ch)
-              if (s == 0.0_dp) cycle
+            do idx = 1, this%n_coul
+              ch = this%coul_ch(idx)
+              c = this%coul_coef(idx)
               ! Coulomb (channels with J): +4*sc*s*(Bs(ij)Ds(kl)+Ds(ij)Bs(kl))  [symmetrized densities]
-              if (this%has_coul(ch)) then
-                df1 = df1 + 4.0_dp*this%sc*s*( &
-                        this%bden_s(ch,i1,j1)*this%dden_s(ch,k1,l1) &
-                      + this%dden_s(ch,i1,j1)*this%bden_s(ch,k1,l1) )
-              end if
+              df1 = df1 + c*( &
+                      this%bden_s(ch,i1,j1)*this%dden_s(ch,k1,l1) &
+                    + this%dden_s(ch,i1,j1)*this%bden_s(ch,k1,l1) )
+            end do
+            do idx = 1, this%n_exch
+              ch = this%exch_ch(idx)
+              c = this%exch_coef(idx)
               ! Exchange (all channels): full 8-fold symmetrization of Γ^X(ijkl)=B(ik)D(jl)
               ! with RAW densities (K is NOT symmetrization-invariant). Coeff -s*sx.
-              df1 = df1 - this%sx*s*( &
+              df1 = df1 - c*( &
                       this%bden(ch,i1,k1)*this%dden(ch,j1,l1) &
                     + this%bden(ch,j1,k1)*this%dden(ch,i1,l1) &
                     + this%bden(ch,i1,l1)*this%dden(ch,j1,k1) &
@@ -3331,6 +3889,73 @@ contains
       gcomp%sgn(9)   = gcomp%sgn(9)   * (spc_ovov/hfs)
       gcomp%sgn(10)  = gcomp%sgn(10)  * (spc_coco/hfs)
     end if
+    call umrsf_resp_2pdm_refresh_active(gcomp)
   end subroutine umrsf_resp_2pdm_fill
+
+  subroutine umrsf_resp_2pdm_refresh_active(gcomp)
+    type(grd2_umrsf_resp_t), intent(inout) :: gcomp
+    integer :: ch
+    real(kind=dp) :: s
+
+    if (allocated(gcomp%coul_ch)) deallocate(gcomp%coul_ch)
+    if (allocated(gcomp%exch_ch)) deallocate(gcomp%exch_ch)
+    if (allocated(gcomp%coul_coef)) deallocate(gcomp%coul_coef)
+    if (allocated(gcomp%exch_coef)) deallocate(gcomp%exch_coef)
+    allocate(gcomp%coul_ch(gcomp%nchan), gcomp%exch_ch(gcomp%nchan), &
+             gcomp%coul_coef(gcomp%nchan), gcomp%exch_coef(gcomp%nchan))
+    gcomp%n_coul = 0
+    gcomp%n_exch = 0
+    do ch = 1, gcomp%nchan
+      s = gcomp%sgn(ch)
+      if (abs(s) <= epsilon(1.0_dp)) cycle
+      if (gcomp%has_coul(ch) .and. abs(gcomp%sc) > epsilon(1.0_dp)) then
+        gcomp%n_coul = gcomp%n_coul + 1
+        gcomp%coul_ch(gcomp%n_coul) = ch
+        gcomp%coul_coef(gcomp%n_coul) = 4.0_dp*gcomp%sc*s
+      end if
+      if (abs(gcomp%sx) > epsilon(1.0_dp)) then
+        gcomp%n_exch = gcomp%n_exch + 1
+        gcomp%exch_ch(gcomp%n_exch) = ch
+        gcomp%exch_coef(gcomp%n_exch) = gcomp%sx*s
+      end if
+    end do
+  end subroutine umrsf_resp_2pdm_refresh_active
+
+  subroutine umrsf_resp_2e_grad_split(infos, basis, gcomp, de2e)
+    use grd2, only: grd2_driver
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    type(grd2_umrsf_resp_t), intent(in) :: gcomp
+    real(kind=dp), intent(inout) :: de2e(:,:)
+
+    type(grd2_umrsf_resp_t) :: one
+    real(kind=dp), allocatable :: dtmp(:,:)
+    integer :: ch
+
+    allocate(dtmp, mold=de2e)
+    do ch = 1, gcomp%nchan
+      if (abs(gcomp%sgn(ch)) <= epsilon(1.0_dp)) cycle
+      call one%clean()
+      one%nbf = gcomp%nbf
+      one%nchan = 1
+      one%sc = gcomp%sc
+      one%sx = gcomp%sx
+      allocate(one%bden(1,gcomp%nbf,gcomp%nbf), one%dden(1,gcomp%nbf,gcomp%nbf), &
+               one%bden_s(1,gcomp%nbf,gcomp%nbf), one%dden_s(1,gcomp%nbf,gcomp%nbf), &
+               one%sgn(1), one%has_coul(1))
+      one%bden(1,:,:) = gcomp%bden(ch,:,:)
+      one%dden(1,:,:) = gcomp%dden(ch,:,:)
+      one%bden_s(1,:,:) = gcomp%bden_s(ch,:,:)
+      one%dden_s(1,:,:) = gcomp%dden_s(ch,:,:)
+      one%sgn(1) = gcomp%sgn(ch)
+      one%has_coul(1) = gcomp%has_coul(ch)
+      call umrsf_resp_2pdm_refresh_active(one)
+      dtmp = 0.0_dp
+      call grd2_driver(infos, basis, dtmp, one)
+      de2e = de2e + dtmp
+      call one%clean()
+    end do
+    deallocate(dtmp)
+  end subroutine umrsf_resp_2e_grad_split
 
 end module tdhf_umrsf_gradient_mod

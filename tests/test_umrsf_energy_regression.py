@@ -8,17 +8,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENERGY = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
+UMRSF_GRAD = ROOT / "source" / "modules" / "tdhf_umrsf_gradient.F90"
+UMRSF_ZVEC = ROOT / "source" / "modules" / "tdhf_umrsf_z_vector.F90"
 LIB = ROOT / "source" / "tdhf_mrsf_lib.F90"
+TAGARRAY = ROOT / "source" / "tagarray_driver.F90"
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
 
-# Every UMRSF runtype other than "energy" eventually drives a gradient,
-# Hessian, or Z-vector, none of which are implemented for UMRSF. ("thermo"
-# is also gradient-driven but is not in the checker's recognized runtype set,
-# so it is rejected earlier as an unknown runtype rather than by this guard.)
+# UMRSF currently supports energy and single-point analytic gradients. Other
+# runtypes eventually need Hessians, NACs, or optimization-level reuse that has
+# not been implemented for UMRSF yet.
 UMRSF_BLOCKED_RUNTYPES = (
-    "grad", "prop", "data", "hess", "nac", "nacme",
+    "prop", "data", "hess", "nac", "nacme",
     "optimize", "meci", "mecp", "mep", "ts", "irc", "neb",
 )
 
@@ -71,7 +73,8 @@ def _umrsf_guard_errors(report):
     return [
         diag
         for diag in report.errors
-        if diag.path == "tdhf.type" and "only supports runtype=energy" in diag.message.lower()
+        if diag.path == "tdhf.type"
+        and "supports runtype=energy and runtype=grad" in diag.message.lower()
     ]
 
 
@@ -121,7 +124,8 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
 
         self.assertIn("'umrsf'", oqpdata)
         self.assertIn("self._data.tddft.umrsf=td_type=='umrsf'", oqpdata)
-        self.assertIn("umrsf-tddft gradients are not implemented", single)
+        self.assertIn("'umrsf': oqp.tdhf_umrsf_z_vector", single)
+        self.assertIn("'umrsf': oqp.tdhf_umrsf_gradient", single)
 
     def test_umrsf_energy_runtype_is_not_blocked(self):
         checker = _load_input_checker()
@@ -135,7 +139,7 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
             + report.to_text(),
         )
 
-    def test_umrsf_non_energy_runtypes_are_blocked_at_the_single_choke_point(self):
+    def test_umrsf_non_energy_gradient_runtypes_are_blocked_at_the_single_choke_point(self):
         checker = _load_input_checker()
         for runtype in UMRSF_BLOCKED_RUNTYPES:
             with self.subTest(runtype=runtype):
@@ -150,6 +154,33 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
                     f"error, got {len(guard_errors)}:\n" + report.to_text(),
                 )
                 self.assertIn(runtype, guard_errors[0].value)
+
+    def test_umrsf_grad_runtype_is_allowed(self):
+        checker = _load_input_checker()
+        report = checker.check_input_values(
+            _umrsf_config("grad"), raise_error=False, emit=False
+        )
+        self.assertEqual(
+            _umrsf_guard_errors(report),
+            [],
+            "UMRSF grad should not be rejected by the runtype guard:\n"
+            + report.to_text(),
+        )
+
+    def test_umrsf_zvector_entry_prepares_cached_response(self):
+        zvec = compact(UMRSF_ZVEC.read_text())
+        grad = compact(UMRSF_GRAD.read_text())
+        tags = compact(TAGARRAY.read_text())
+
+        self.assertNotIn("stub", zvec)
+        self.assertIn("calltdhf_umrsf_build_response_gradient", zvec)
+        self.assertIn("coupledalpha/betaresponse", zvec)
+        self.assertIn("oqp_umrsf_response_gradient", zvec)
+        self.assertIn("oqp_umrsf_response_gradient", grad)
+        self.assertIn("alpha/betaz-vectorresponse", grad)
+        self.assertIn("callhf_gradient(infos)", grad)
+        self.assertNotIn("callumrsf_grad_run_gates(inf,de2e_resp", grad)
+        self.assertIn("oqp_umrsf_response_gradient", tags)
 
     def test_umrsf_energy_does_not_use_mrsf_transition_density_output_path(self):
         source = compact(ENERGY.read_text())

@@ -1286,17 +1286,16 @@ contains
     integer, intent(in) :: ivec
 
     real(kind=dp), allocatable :: &
-      scr(:,:), wrk(:,:)
+      scr(:,:), tmp(:), wrk(:,:)
     real(kind=dp), pointer, dimension(:,:) :: &
       adco1a, adco1b, adco2a, adco2b, &
       ado1va, ado1vb, ado2va, ado2vb, agdlr, aco12, ao21v
     integer :: noca, nocb, mrst, i, ij, &
-      j, lr1, lr2, nbf, ok, ni, nj
+      j, lr1, lr2, nbf, ok
     real(kind=dp), parameter :: zero = 0.0_dp
     real(kind=dp), parameter :: one = 1.0_dp
     real(kind=dp), parameter :: half = 0.5_dp
     real(kind=dp), parameter :: sqrt2 = 1.0_dp/sqrt(2.0_dp)
-    real(kind=dp) :: dumn
     logical :: debug_mode
 
     nbf = infos%basis%nbf
@@ -1305,7 +1304,7 @@ contains
     nocb = infos%mol_prop%nelec_b
     debug_mode = infos%tddft%debug_mode
 
-    allocate(scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
+    allocate(tmp(nbf), scr(nbf,nbf), wrk(nbf,nbf), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
     agdlr => fmrsf(11,:,:)
@@ -1342,57 +1341,113 @@ contains
 !   ----- (m,n) to (i+,n) -----
     wrk = scr
 ! 3
-    j = lr2
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado1va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado1vb(ni, nj) * half &
-                      + va(ni, i) * vb(nj, j-1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1va, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado1vb, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr2:lr2), lr1-1)
 ! 4
-    j = lr1
-    do i = 1, lr1-1
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(ni, i) * va(nj, j) * ado2va(ni, nj) * half &
-                      + vb(ni, i) * vb(nj, j) * ado2vb(ni, nj) * half &
-                      - va(ni, i) * vb(nj, j+1) * aco12(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2va, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               half, ado2vb, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+               one, vb, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
+
+    call dgemm('n','n',nbf,1,nbf, &
+               one, aco12, nbf, &
+                    vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',lr1-1,1,nbf, &
+              -one, va, nbf, &
+                    tmp, nbf, &
+               one, wrk(1:lr1-1,lr1:lr1), lr1-1)
 ! 5
-    i = lr1
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco2a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco2b(ni, nj) * half &
-                      + vb(nj, j) * va(ni, i+1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2a, nbf, &
+                     va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco2b, nbf, &
+                     vb(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
 ! 6
-    i = lr2
-    do j = lr2+1, nbf
-      dumn = 0.0_dp
-      do ni = 1, nbf
-        do nj = 1, nbf
-          dumn = dumn + va(nj, j) * va(ni, i) * adco1a(ni, nj) * half &
-                      + vb(nj, j) * vb(ni, i) * adco1b(ni, nj) * half &
-                      - vb(nj, j) * va(ni, i-1) * ao21v(ni, nj)
-        end do
-      end do
-      wrk(i,j) = wrk(i,j) + dumn
-    end do
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1a, nbf, &
+                     va(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, va(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               half, adco1b, nbf, &
+                     vb(:,lr2:lr2), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+               one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+
+    call dgemm('t','n',nbf,1,nbf, &
+               one, ao21v, nbf, &
+                    va(:,lr1:lr1), nbf, &
+               zero, tmp, nbf)
+    call dgemm('t','n',nbf-noca,1,nbf, &
+              -one, vb(:,noca+1), nbf, &
+                    tmp, nbf, &
+               one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
 
     if (mrst==1) then
       wrk(lr1,lr1) = (scr(lr1,lr1)-scr(lr2,lr2))*sqrt2
@@ -3152,4 +3207,3 @@ contains
   end subroutine umrsfdmat
 
 end module tdhf_mrsf_lib
-

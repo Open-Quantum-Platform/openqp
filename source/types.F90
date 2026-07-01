@@ -230,12 +230,19 @@ contains
     real(c_double), optional :: mass(*)
     integer(c_int) :: ok
 
-    integer :: i
+    integer :: i, natoms_default
 
-    ok = this%atoms%init(natoms)
+    if (natoms < 0_c_int64_t .or. natoms > int(huge(natoms_default), c_int64_t)) then
+      ok = 1
+      return
+    endif
+
+    natoms_default = int(natoms)
+
+    ok = this%atoms%init(natoms_default)
     if (ok/=0) return
 
-    do i = 1, natoms
+    do i = 1, natoms_default
       this%atoms%xyz(1,i) = x(i)
       this%atoms%xyz(2,i) = y(i)
       this%atoms%xyz(3,i) = z(i)
@@ -256,4 +263,3 @@ contains
   end function
 
 end module types
-

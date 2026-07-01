@@ -837,7 +837,7 @@ contains
 
 !     Set up radial grid (the standard grid is radial type 1)
       call get_radial_grid(molGrid%rad_pts(:,1), molGrid%rad_wts(:,1), &
-              nrad, infos%dft%rad_grid_type)
+              nrad, int(infos%dft%rad_grid_type))
 
 !     Element-specific radial grids, absolute radii.
 !     MultiExp (SG-0): per-element node count and scaling radius;
@@ -869,7 +869,7 @@ contains
       molGrid%dummyAtom(:nat) = bsrad(:nat) == 0.0_dp
 
 !     Find nearest neighbours for all atoms
-      call molGrid%find_neighbours(rij, partFunType=infos%dft%dft_partfun)
+      call molGrid%find_neighbours(rij, partFunType=int(infos%dft%dft_partfun))
 
 !     Compute atomic grids for each atom
       do iat = 1, nat
@@ -941,14 +941,14 @@ contains
       case(0)
 !       SSF algorithm:
 !       various partitioning functions, no surface shifting
-        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+        call dft_fc_blk(molgrid, int(infos%dft%dft_partfun), &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab)
       case (1)
 !       Precompute surface shifting parameters
         call setaij(aij, nat, bsrad)
 !       Becke's algorithm:
 !       4th deg. Becke's polynomial and surface shifting
-        call dft_fc_blk(molgrid, infos%dft%dft_partfun, &
+        call dft_fc_blk(molgrid, int(infos%dft%dft_partfun), &
                 infos%atoms%xyz,basis%at_mx_dist2,rij,nat,wtab,aij)
 
       end select

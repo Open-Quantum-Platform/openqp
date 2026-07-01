@@ -26,6 +26,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
   character(len=*), parameter, public :: OQP_td_mrsf_density = OQP_prefix // "td_mrsf_density"
   character(len=*), parameter, public :: OQP_td_p = OQP_prefix // "td_p"
+  character(len=*), parameter, public :: OQP_umrsf_response_gradient = OQP_prefix // "umrsf_response_gradient"
   character(len=*), parameter, public :: OQP_td_t = OQP_prefix // "td_t"
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
@@ -94,6 +95,8 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_bvec_mo_comment = "??? td_bvec_mo ???"
   character(len=*), parameter, public :: OQP_td_mrsf_density_comment = "??? td_mrsf_density ???"
   character(len=*), parameter, public :: OQP_td_p_comment = "??? td_p ???"
+  character(len=*), parameter, public :: OQP_umrsf_response_gradient_comment = &
+    "UMRSF response-gradient contribution prepared by the UMRSF z-vector stage"
   character(len=*), parameter, public :: OQP_td_t_comment = "??? td_t ???"
   character(len=*), parameter, public :: OQP_td_xpy_comment = OQP_prefix // "(X+Y) vector for target state in TD-DFT calculations"
   character(len=*), parameter, public :: OQP_td_xmy_comment = OQP_prefix // "(X-Y) vector for target state in TD-DFT calculations"
@@ -113,7 +116,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
   character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
 
-  character(len=*), parameter, public :: all_tags(39) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: all_tags(40) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
@@ -122,7 +125,7 @@ module oqp_tagarray_driver
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
-    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap /)
+    OQP_nac, OQP_td_states_phase, OQP_td_states_overlap, OQP_umrsf_response_gradient /)
   interface tagarray_get_data
     module procedure tagarray_get_data_int64_val, tagarray_get_data_int64_1d, tagarray_get_data_int64_2d, tagarray_get_data_int64_3d
     module procedure tagarray_get_data_real64_val, tagarray_get_data_real64_1d, tagarray_get_data_real64_2d, tagarray_get_data_real64_3d

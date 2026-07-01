@@ -94,6 +94,7 @@ contains
     implicit none
 
     character(len=*), parameter :: subroutine_name = "tdhf_mrsf_energy"
+    integer, parameter :: mrsf_int2_buffer_size = 200000
 
     type(basis_set), pointer :: basis
     type(information), target, intent(inout) :: infos
@@ -130,6 +131,7 @@ contains
     logical :: tamm_dancoff
     integer :: imax
     integer :: ierr
+    integer :: env_len, env_status
     logical :: converged
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
@@ -148,6 +150,8 @@ contains
     integer :: scf_type, mol_mult
 
     logical :: umrsf
+    logical :: target_only_gradient
+    character(len=16) :: target_only_env
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -189,6 +193,12 @@ contains
     maxvec = infos%tddft%maxvec
     cnvtol = infos%tddft%cnvtol
     debug_mode = infos%tddft%debug_mode
+    target_only_gradient = .false.
+    call get_environment_variable('OQP_MRSF_TARGET_ONLY_GRAD', target_only_env, &
+                                  length=env_len, status=env_status)
+    target_only_gradient = env_status == 0 .and. env_len > 0 &
+                           .and. target_only_env(1:1) /= '0' &
+                           .and. target_state >= 1 .and. target_state <= nstates
 
     mol_mult = infos%mol_prop%mult
     if (umrsf) then
@@ -402,6 +412,7 @@ contains
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
+    int2_driver%buf_size = max(int2_driver%buf_size, mrsf_int2_buffer_size)
     call int2_driver%set_screening()
     call flush(iw)
 
@@ -452,6 +463,9 @@ contains
     iter = 0
     mxiter = infos%control%maxit_dav
     ierr = 0
+    if (target_only_gradient) then
+      write(*,'(5X,"MRSF-family gradient target-root convergence enabled for state ",I0)') target_state
+    end if
 
     do iter = 1, mxiter
       nv = iend-ist+1
@@ -640,10 +654,14 @@ contains
       call sym_response_project(infos, sym_ritz, qvec, nstates)
       call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 
-      mxerr = maxval(rnorm)
-
 !     Check convergence
-      converged = mxerr<=cnvtol
+      if (target_only_gradient) then
+        mxerr = rnorm(target_state)
+        converged = mxerr<=cnvtol
+      else
+        mxerr = maxval(rnorm)
+        converged = mxerr<=cnvtol
+      end if
       if (converged) exit
 
 !     No space left for new vectors, exit
@@ -667,7 +685,17 @@ contains
       write(*,'(/,2X,"MRSF-TD-DFT energies NOT CONVERGED after ",I4," iterations"/)') mxiter
       infos%mol_energy%Davidson_converged=.false.
     case (0)
-      write(*,'(/,2X,"MRSF-TD-DFT energies converged in ",I4," iterations"/)') iter
+      if (target_only_gradient) then
+        if (umrsf) then
+          write(*,'(/,2X,"UMRSF-TD-DFT target state ",I0," converged in ",I4," iterations"/)') &
+            target_state, iter
+        else
+          write(*,'(/,2X,"MRSF-TD-DFT target state ",I0," converged in ",I4," iterations"/)') &
+            target_state, iter
+        end if
+      else
+        write(*,'(/,2X,"MRSF-TD-DFT energies converged in ",I4," iterations"/)') iter
+      end if
       infos%mol_energy%Davidson_converged=.true.
     case (1)
       write(*,'(/,2X,"..something is wrong.. nvec = mxvec")')
@@ -745,6 +773,16 @@ contains
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
     infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
+    if (target_only_gradient) then
+      if (umrsf) then
+        write(*,'(2X,"Only target state ",I0," is converged for this UMRSF gradient run.")') &
+          target_state
+      else
+        write(*,'(2X,"Only target state ",I0," is converged for this MRSF gradient run.")') &
+          target_state
+      end if
+      write(*,'(2X,"Other listed excited states are intermediate Davidson roots.")')
+    end if
     call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates)
     call flush(iw)
 

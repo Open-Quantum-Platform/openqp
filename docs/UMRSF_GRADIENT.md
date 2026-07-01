@@ -5,19 +5,35 @@ Analytic nuclear energy gradients for UHF-referenced MRSF-TDDFT
 
 ## Overview
 Excited-state analytic energy gradients for a spin-unrestricted (UHF)
-MRSF-TDDFT reference, via a Lagrangian / Z-vector formulation. Supports
-HF, hybrid, and pure-GGA functionals.
+MRSF-TDDFT reference, via a Lagrangian / Z-vector formulation. The HF
+limit is validated. Hybrid and pure-GGA paths include the XC response
+terms, but remain under finite-difference validation.
 
 ## Validation
-Gradients agree with reference to <=1e-5 Ha/Bohr across
-{HF, hybrid, pure-GGA} x {common Pople/Dunning basis sets}, for the
-low-lying singlet states (S1/S2/S3), up to production size (nbf ~150).
+HF-limit gradients agree with finite-difference references to
+<=1e-5 Ha/Bohr for the validated low-lying singlet states.
 
 For near-degenerate states, gradients follow state character
 (transition-density overlap + spin) rather than energy ordering.
 
+Current DFT/XC status: the coupled alpha/beta Z-vector solve is active
+and agrees with the dense oracle on H2O/BHHLYP, but the total analytic
+gradient still shows a small XC-related finite-difference residual on
+that test case. Treat DFT UMRSF gradients as experimental until that
+residual is closed.
+
 ## Implementation
-Main module: source/modules/tdhf_umrsf_gradient.F90
+Response/Z-vector module: source/modules/tdhf_umrsf_z_vector.F90
+
+Gradient assembly module: source/modules/tdhf_umrsf_gradient.F90
+
+The standard TD-gradient pipeline first calls the UMRSF Z-vector entry
+point, which solves the spin-coupled alpha/beta UMRSF response and
+caches the response-gradient contribution. The alpha and beta MO
+rotations are separate unknown blocks in one coupled solve; the
+mean-field/XC response couples those spin blocks. The gradient entry
+point then evaluates the reference UHF-triplet gradient and adds the
+cached response term.
 
 A UMRSF-TDDFT gradient is requested through the standard OpenQP input
 deck. The reference is the UHF triplet (`[scf] type=uhf`,

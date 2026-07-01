@@ -144,7 +144,7 @@ contains
 
     ! Output results: overlap between old and current MOs
     call print_results(overlap_mo_out, e_a, e_a_old, nbf, &
-                       infos%mol_prop%nelec_a, iw)
+                       int(infos%mol_prop%nelec_a), iw)
 
 !   Print timings
     call measure_time(print_total=1, log_unit=iw)

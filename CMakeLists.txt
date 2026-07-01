@@ -10,6 +10,17 @@ include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
+option(OQP_REUSE_EXTERNALS
+       "Reuse bundled external dependency builds across fresh OpenQP build directories"
+       ON)
+set(OQP_EXTERNALS_ROOT "" CACHE PATH
+    "Optional override for the reusable bundled external dependency cache root.")
+if(DEFINED OQP_EXTERNAL_ROOT AND NOT OQP_EXTERNALS_ROOT)
+    set(OQP_EXTERNALS_ROOT "${OQP_EXTERNAL_ROOT}" CACHE PATH
+        "Optional override for the reusable bundled external dependency cache root." FORCE)
+    message(STATUS "OQP_EXTERNAL_ROOT is accepted as an alias for OQP_EXTERNALS_ROOT.")
+endif()
+mark_as_advanced(OQP_EXTERNALS_ROOT)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)
@@ -60,10 +71,11 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
 endif()
 
 option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
-if(NOT LINALG_LIB_INT64)
+if(NOT LINALG_LIB_INT64 AND NOT APPLE)
     message(FATAL_ERROR
-      "LP64 BLAS/LAPACK is no longer supported after removal of defined/defind. "
-      "OpenQP requires ILP64 BLAS/LAPACK with OQP_BLAS_INT=8."
+      "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "
+      "Accelerate builds. Other platforms require ILP64 BLAS/LAPACK with "
+      "OQP_BLAS_INT=8."
     )
 endif()
 
@@ -93,7 +105,6 @@ endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   add_compile_options(
-  $<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>
   $<$<COMPILE_LANGUAGE:Fortran>:-ffree-line-length-none>
   )
   if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -137,16 +148,21 @@ if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
       -fsanitize=thread
       )
   endif()
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
 endif()
-set(BLA_SIZEOF_INTEGER 8)
-set(OTR_SUFFIX "_64")
-set(OTR_DEFS "-DUSE_ILP64")
+if(LINALG_LIB_INT64)
+    set(BLA_SIZEOF_INTEGER 8)
+    set(OTR_SUFFIX "_64")
+    set(OTR_DEFS "-DUSE_ILP64")
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
+    endif()
+else()
+    set(BLA_SIZEOF_INTEGER 4)
+    set(OTR_SUFFIX "_32")
+    set(OTR_DEFS "")
+endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
 # external library is neither downloaded nor compiled, otr_interface.F90 is dropped
@@ -171,17 +187,15 @@ if(ENABLE_DDX)
   # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
   # (never vendored into the OpenQP tree). Two ways to provide it:
   #   * DDX_ROOT given -> use that prebuilt install (find_package).
-  #   * otherwise      -> CMake builds ddX v0.8.0 from source as ILP64 to match
-  #                       OpenQP's mandatory 64-bit-integer BLAS (see external/).
-  # The ILP64 build is required: a stock LP64 ddX exports an unsuffixed dgemm_
-  # that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
+  #   * otherwise      -> CMake builds ddX v0.8.0 from source to match OpenQP's
+  #                       selected BLAS integer width (see external/).
   if(DEFINED DDX_ROOT OR DEFINED ENV{DDX_ROOT})
     find_package(DDX REQUIRED)
     set(OQP_DDX_AUTOBUILD OFF)
     message(STATUS "ddX continuum-solvation backend (prebuilt): ${DDX_LIBRARY}")
   else()
     set(OQP_DDX_AUTOBUILD ON)
-    message(STATUS "ddX continuum-solvation backend: building ILP64 from source (v0.8.0)")
+    message(STATUS "ddX continuum-solvation backend: building ${BLA_SIZEOF_INTEGER}-byte BLAS integer variant from source (v0.8.0)")
   endif()
 endif()
 
