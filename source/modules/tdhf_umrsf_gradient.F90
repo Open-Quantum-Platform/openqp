@@ -160,6 +160,7 @@ contains
     logical :: dbg_w2e, dbg_wrr, l_zov, l_gvt, l_m1             ! G̃ 2e/refrelax ; ablations: ov-only Z / V-transform G^f / M1
     logical :: l_zdense, l_zcmp                                 ! Z-vector solver: dense dgelss (UMRSF_ZDENSE) ; dense-vs-iter compare (UMRSF_ZCMP)
     logical :: l_g2efd, l_g2ecmp                                ! G̃ 2e: FD oracle (UMRSF_G2EFD) ; analytic-vs-FD compare (UMRSF_G2ECMP)
+    logical :: l_gffd                                           ! ΔG^f: numerical re-align oracle (UMRSF_GFFD) ; default = analytic adjoint-IFT (D1)
     logical :: dft_run, l_xck, l_xcg                           ! Stage-2 XC (§18): DFT run? f_xc kernel (T3)? diff-density XC grad (T2)?
     integer :: ia, ib, i, j
     ! Z-vector (relaxation): canonical MOs + relaxation density
@@ -527,7 +528,7 @@ contains
     block
       character(len=16) :: e ; integer :: ios
       dbg_zw = 0.5_dp ; dbg_w2e = .true. ; dbg_wrr = .true. ; l_zov = .false. ; l_gvt = .false. ; l_m1 = .true.
-      l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false.
+      l_zdense = .false. ; l_zcmp = .false. ; l_g2efd = .false. ; l_g2ecmp = .false. ; l_gffd = .false.
       call get_environment_variable("UMRSF_ZW", e, status=ios)
       if (ios==0) then ; read(e,*,iostat=ios) dbg_zw ; if (ios/=0) dbg_zw = 0.5_dp ; end if
       call get_environment_variable("UMRSF_W2E", e, status=ios) ; if (ios==0) dbg_w2e = (trim(e)/="0")
@@ -545,6 +546,11 @@ contains
       ! max|analytic − FD| per spin (the perf-port GATE: reproduce the FD g2e to ≤1e-9).
       call get_environment_variable("UMRSF_G2EFD",  e, status=ios) ; if (ios==0) l_g2efd  = (trim(e)=="1")
       call get_environment_variable("UMRSF_G2ECMP", e, status=ios) ; if (ios==0) l_g2ecmp = (trim(e)=="1")
+      ! ΔG^f (M1 alignment Jacobian): default = ANALYTIC adjoint-IFT (umrsf_genfock_analytic, D1).
+      ! UMRSF_GFFD=1 → the numerical re-align oracle umrsf_genfock_full (4·nbf² smooth re-aligns, ~1e-8
+      ! floor). Both give the same full gradient (the alignment gauge cancels in assembly); the analytic
+      ! is O(nbf³) matmuls (no int2, no per-(p,q) re-align). D1 model closure DERIVATIONS/c06_exp4/c06_exp5.
+      call get_environment_variable("UMRSF_GFFD",   e, status=ios) ; if (ios==0) l_gffd   = (trim(e)=="1")
     end block
 
     ! ---- Stage-2 XC context (RULES §18 / DERIVATIONS/M2_xc_response.md) ----
@@ -625,7 +631,8 @@ contains
         gfa = matmul(tmp, matmul(gta, transpose(tmp)))
         tmp = matmul(transpose(cbc), matmul(smat_full, vb))     ! V_β
         gfb = matmul(tmp, matmul(gtb, transpose(tmp)))
-      else
+      else if (l_gffd) then
+        ! ORACLE: numerical re-align ΔG^f (4·nbf² smooth re-aligns; the D1 in-model FD ground truth).
         call umrsf_genfock_full(infos, cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
         ! UMRSF_GFCMP=1: byte-identity gate — recompute G^f SERIALLY on the SAME inputs and compare
         ! (isolates the OMP loop from int2's run-to-run thread-reduction noise; must be EXACTLY 0).
@@ -641,6 +648,9 @@ contains
             deallocate(gfas, gfbs)
           end if
         end block
+      else
+        ! DEFAULT (D1): analytic adjoint-IFT ΔG^f (reverse-mode of Φ=μ·r(s_align); O(nbf³), no int2).
+        call umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
       end if
 
       ! ---- FULL-BLOCK Z-vector: M z = −R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
@@ -2641,6 +2651,158 @@ contains
     deallocate(cwa, cwb, ctap, ctbp, dua, dub)
     !$omp end parallel
   end subroutine umrsf_genfock_full
+
+!###############################################################################
+!> ANALYTIC full generalized Fock G^f = V G̃ Vᵀ + ΔG^f  (D1 — replaces the 4·nbf² numerical re-align
+!> in umrsf_genfock_full).  ΔG^f is the adjoint-IFT alignment Jacobian (DERIVATIONS/c06_exp3.py
+!> dGf_analytic; model closure c06_exp4_gauge_closure.py 4.0e-11; CAS c06_cas_chain.py), ported as
+!> the REVERSE-MODE of the scalar Φ(C)=μ·r(s_align(C)) with μ=H⁻ᵀλ held FIXED (the adjoint alignment
+!> response): λ = within-seg antisym G̃, H = ∂r/∂k the get_jacobi btt-stationarity Hessian, r the btt
+!> residual.  Since ⟨μ,∂r/∂U_pq⟩ = ∂Φ/∂U_pq, ΔG^f = −Cᵀ(∂Φ/∂C) is one reverse pass:
+!>   RotA=cacᵀ S va (=Ca^T S C̃a), RotB=cbcᵀ S vb ; T=cacᵀ S cbc ; N=norm_cols(T) ; s=RotAᵀ N RotB
+!>   Sbar=∂(μ·r)/∂s ; Nbar=RotA Sbar RotBᵀ ; Tbar=colnorm_vjp(Nbar,N,g) ; Ya=S cbc Tbarᵀ ; Yb=S cac Tbar
+!>   ΔG^f_a=−cacᵀ Ya ; ΔG^f_b=−cbcᵀ Yb ; G^f_a=RotA G̃a RotAᵀ+ΔG^f_a ; G^f_b=RotB G̃b RotBᵀ+ΔG^f_b.
+!> Reverse-mode ≡ complex-step dGf_analytic to 9e-19 (DERIVATIONS/c06_exp5_reverse_mode.py).  Only
+!> O(nbf³) matmuls + one small npair×npair dgelss for μ — NO int2, NO per-(p,q) re-align.  Segments:
+!> α cols {1..nocca-1} (closed+O1), β cols {nocca..nbf} (O2+virt), faithful to umrsf_jacobi_smooth.
+!> GAUGE: uses the same unseeded aligned va/vb as the noseed de_m1 (umrsf_m1_overlap_grad) ⇒ the
+!> alignment gauge cancels in the assembled gradient (element-wise ΔG^f differs from the numerical
+!> oracle by that gauge; the GRADIENT is exact — gate on the full gradient, not element-wise).
+  subroutine umrsf_genfock_analytic(cac, cbc, va, vb, smat_full, gta, gtb, nocca, gfa, gfb)
+    implicit none
+    real(kind=dp), intent(in) :: cac(:,:), cbc(:,:), va(:,:), vb(:,:), smat_full(:,:)
+    real(kind=dp), intent(in) :: gta(:,:), gtb(:,:)
+    integer, intent(in) :: nocca
+    real(kind=dp), intent(out) :: gfa(:,:), gfb(:,:)
+    real(kind=dp), allocatable :: rota(:,:), rotb(:,:), tcan(:,:), ncan(:,:), sstar(:,:)
+    real(kind=dp), allocatable :: hmat(:,:), muvec(:,:), sbar(:,:), nbar(:,:), tbar(:,:)
+    real(kind=dp), allocatable :: ya(:,:), yb(:,:), gcol(:)
+    integer, allocatable :: pri(:), prj(:), prseg(:)
+    integer :: nbf, npair, k, m, i, j, a, b, seg, slo, shi, info
+    real(kind=dp) :: dotv, w, nrm
+    external :: dgelss
+
+    nbf = size(cac,1)
+
+    ! ---- enumerate within-segment pairs (i<j): seg0 α {1..nocca-1}, seg1 β {nocca..nbf} ----
+    npair = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi ; npair = npair + 1 ; end do ; end do
+    end do
+    allocate(pri(npair), prj(npair), prseg(npair))
+    k = 0
+    do seg = 0, 1
+      if (seg == 0) then ; slo = 1 ; shi = nocca-1 ; else ; slo = nocca ; shi = nbf ; end if
+      do i = slo, shi-1 ; do j = i+1, shi
+        k = k + 1 ; pri(k) = i ; prj(k) = j ; prseg(k) = seg
+      end do ; end do
+    end do
+
+    ! ---- base rotations + column-normalized canonical α-β overlap ; sstar = s_align base value ----
+    allocate(rota(nbf,nbf), rotb(nbf,nbf), tcan(nbf,nbf), ncan(nbf,nbf), sstar(nbf,nbf), gcol(nbf))
+    rota = matmul(transpose(cac), matmul(smat_full, va))
+    rotb = matmul(transpose(cbc), matmul(smat_full, vb))
+    tcan = matmul(transpose(cac), matmul(smat_full, cbc))
+    do j = 1, nbf
+      nrm = max(norm2(tcan(:,j)), 1.0d-10) ; gcol(j) = nrm ; ncan(:,j) = tcan(:,j)/nrm
+    end do
+    sstar = matmul(transpose(rota), matmul(ncan, rotb))
+
+    ! ---- λ = within-segment antisym of the raw aligned gen-Fock G̃ ----
+    allocate(muvec(npair,1))
+    do k = 1, npair
+      i = pri(k) ; j = prj(k)
+      if (prseg(k) == 0) then ; muvec(k,1) = gta(i,j) - gta(j,i)
+      else                    ; muvec(k,1) = gtb(i,j) - gtb(j,i) ; end if
+    end do
+
+    ! ---- alignment Hessian H(m,k)=∂r_m/∂angle_k — EXACT bilinear form (the btt residual is quadratic
+    !      in s and the angle-generator response ds is linear ⇒ no step size). The k-th generator
+    !      rotates s ROWS(a,b) (seg0) or COLS(a,b) (seg1): ds(a,q)=−s(b,q), ds(b,q)=+s(a,q) [rows];
+    !      ds(p,a)=−s(p,b), ds(p,b)=+s(p,a) [cols]. r_m uses 4 entries of s; contract. H is exactly
+    !      block-diagonal (a seg0 generator's ds lives on SEG0 rows, invisible to SEG1 residuals).
+    !      Verified ≡ the FD-H (c06_exp3) to 3.9e-12, μ to 9e-16 (DERIVATIONS/c06_exp5_reverse_mode). ----
+    allocate(hmat(npair,npair))
+    hmat = 0.0_dp
+    do k = 1, npair
+      a = pri(k) ; b = prj(k) ; seg = prseg(k)
+      do m = 1, npair
+        i = pri(m) ; j = prj(m)
+        if (prseg(m) == 0) then     ! r_m = s(i,i)s(j,i) − s(j,j)s(i,j)
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(j,i) + sstar(i,i)*ds_at(seg,a,b,sstar,j,i) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(i,j) - sstar(j,j)*ds_at(seg,a,b,sstar,i,j)
+        else                        ! r_m = s(i,i)s(i,j) − s(j,j)s(j,i)
+          hmat(m,k) = ds_at(seg,a,b,sstar,i,i)*sstar(i,j) + sstar(i,i)*ds_at(seg,a,b,sstar,i,j) &
+                    - ds_at(seg,a,b,sstar,j,j)*sstar(j,i) - sstar(j,j)*ds_at(seg,a,b,sstar,j,i)
+        end if
+      end do
+    end do
+
+    ! ---- μ : solve Hᵀ μ = λ (dgelss, rank-deficient-safe for SOMO-degenerate refs) ----
+    block
+      real(kind=dp), allocatable :: ht(:,:), svals(:), work(:)
+      real(kind=dp) :: wq(1), rcond
+      integer :: rank, lwork
+      allocate(ht(npair,npair), svals(npair))
+      ht = transpose(hmat) ; rcond = 1.0d-9
+      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, wq, -1, info)
+      lwork = max(int(wq(1)), 1) ; allocate(work(lwork))
+      call dgelss(npair, npair, 1, ht, npair, muvec, npair, svals, rcond, rank, work, lwork, info)
+      deallocate(ht, svals, work)
+    end block   ! μ now in muvec(:,1)
+
+    ! ---- Sbar = ∂(μ·r)/∂s ----
+    allocate(sbar(nbf,nbf)) ; sbar = 0.0_dp
+    do k = 1, npair
+      i = pri(k) ; j = prj(k) ; w = muvec(k,1)
+      if (prseg(k) == 0) then    ! r = s(i,i)s(j,i) − s(j,j)s(i,j)
+        sbar(i,i) = sbar(i,i) + w*sstar(j,i) ; sbar(j,i) = sbar(j,i) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(i,j) ; sbar(i,j) = sbar(i,j) - w*sstar(j,j)
+      else                       ! r = s(i,i)s(i,j) − s(j,j)s(j,i)
+        sbar(i,i) = sbar(i,i) + w*sstar(i,j) ; sbar(i,j) = sbar(i,j) + w*sstar(i,i)
+        sbar(j,j) = sbar(j,j) - w*sstar(j,i) ; sbar(j,i) = sbar(j,i) - w*sstar(j,j)
+      end if
+    end do
+
+    ! ---- Nbar = RotA Sbar RotBᵀ ; column-normalize VJP → Tbar ----
+    allocate(nbar(nbf,nbf), tbar(nbf,nbf))
+    nbar = matmul(rota, matmul(sbar, transpose(rotb)))
+    do j = 1, nbf
+      dotv = dot_product(ncan(:,j), nbar(:,j)) ; tbar(:,j) = (nbar(:,j) - ncan(:,j)*dotv)/gcol(j)
+    end do
+
+    ! ---- Ya = S cbc Tbarᵀ ; Yb = S cac Tbar ; ΔG^f_a = −cacᵀ Ya ; ΔG^f_b = −cbcᵀ Yb ----
+    allocate(ya(nbf,nbf), yb(nbf,nbf))
+    ya = matmul(smat_full, matmul(cbc, transpose(tbar)))
+    yb = matmul(smat_full, matmul(cac, tbar))
+
+    ! ---- full G^f = V G̃ Vᵀ + ΔG^f (canonical basis) ----
+    gfa = matmul(rota, matmul(gta, transpose(rota))) - matmul(transpose(cac), ya)
+    gfb = matmul(rotb, matmul(gtb, transpose(rotb))) - matmul(transpose(cbc), yb)
+
+    deallocate(pri, prj, prseg, rota, rotb, tcan, ncan, sstar, gcol, muvec, hmat, &
+               sbar, nbar, tbar, ya, yb)
+  end subroutine umrsf_genfock_analytic
+
+!###############################################################################
+!> ds_at: entry (p,q) of the angle-generator response ∂s/∂angle for the get_jacobi generator (a,b) in
+!> segment `seg`, applied to s_align `s`. seg0 rotates ROWS(a,b): ds(a,q)=−s(b,q), ds(b,q)=+s(a,q);
+!> seg1 rotates COLS(a,b): ds(p,a)=−s(p,b), ds(p,b)=+s(p,a). (Helper for the exact bilinear H.)
+  pure function ds_at(seg, a, b, s, p, q) result(v)
+    implicit none
+    integer, intent(in) :: seg, a, b, p, q
+    real(kind=dp), intent(in) :: s(:,:)
+    real(kind=dp) :: v
+    v = 0.0_dp
+    if (seg == 0) then
+      if (p == a) v = v - s(b,q)
+      if (p == b) v = v + s(a,q)
+    else
+      if (q == a) v = v - s(p,b)
+      if (q == b) v = v + s(p,a)
+    end if
+  end function ds_at
 
 !###############################################################################
 !> FULL-BLOCK Z-vector (c06 §16, the decisive fix): solve M z = −R over ALL off-diagonal orbital
