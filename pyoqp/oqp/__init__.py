@@ -1,20 +1,12 @@
 """OQP instance"""
 
 import os
-import platform
 from oqp.utils.mpi_utils import MPIManager
+from oqp.runtime import resolve_oqp_root
 MPIManager()
-# we must import dftd4 ffi lib before oqp to load library correctly
-try:
-    import dftd4.interface
-except ModuleNotFoundError:
-    print('\nPyOQP: dftd4 is not available')
+# DFT-D4 is linked natively into liboqp (source/dftd4_interface.F90); the
+# external `dftd4` Python package is no longer required or imported.
 
-try:
-    os.environ["OPENQP_ROOT"]
-except KeyError:
-    os.environ["OPENQP_ROOT"] = os.path.abspath(os.path.dirname(__file__))
-#    exit('\nPyQOP: cannot find environment variable $OPENQP_ROOT\n')
 
 try:
     int(os.environ['OMP_NUM_THREADS'])
@@ -36,26 +28,18 @@ if os.environ.get('OQP_RTLD'):
 else:
     RTLD = True
 
+oqp_root, suffix = resolve_oqp_root()
+
 if RTLD:
     from cffi import FFI
 
     ffi = FFI()
-    oqp_root = os.environ["OPENQP_ROOT"]
-
-    if platform.uname()[0] == "Windows":
-        suffix = "dll"
-    elif platform.uname()[0] == "Linux":
-        suffix = "so"
-    elif platform.uname()[0] == "Darwin":
-        suffix = "dylib"
-    else:
-        suffix = "so"
 
     with open(f"{oqp_root}/include/oqp.h", "r", encoding="ascii") as oqp_header:
         defs = oqp_header.read().replace("#include", "//#include")
 
     ffi.cdef(defs)
-    lib = ffi.dlopen(f"{oqp_root}/lib/liboqp.{suffix}", ffi.RTLD_GLOBAL)
+    lib = ffi.dlopen(f"{oqp_root}/lib/liboqp.{suffix}")
 
 else:
     from _oqp import ffi, lib

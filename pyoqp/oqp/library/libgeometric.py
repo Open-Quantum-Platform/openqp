@@ -39,6 +39,13 @@ class GeometricEngine:
     def load_guess_files(self, dirname):
         """No-op hook used by geomeTRIC engines that restore SCF guesses."""
 
+    def number_output(self, dirname, calc_number):
+        """No-op hook used by geomeTRIC NEB engines that version per-image outputs."""
+
+    def __deepcopy__(self, memo):
+        """Keep the OpenQP-backed engine shared across geomeTRIC chain copies."""
+        return self
+
     def calc_new(self, coords, dirname):
         energy, gradient = self.optimizer.one_step(np.asarray(coords, dtype=float).reshape(-1))
         return {
@@ -57,6 +64,10 @@ class _GeometricRunner:
         self.tmax = self.geometric_config.get("tmax", 0.3)
         self.convergence_set = self.geometric_config.get("convergence_set", "GAU")
         self.prefix = self.geometric_config.get("prefix", "geometric")
+        if self.prefix == "geometric":
+            project_name = getattr(mol, "project_name", "")
+            if project_name:
+                self.prefix = f"{project_name}_geometric"
         self.hessian = self.geometric_config.get("hessian", "never")
 
     def _optimizer_keywords(self):
@@ -178,3 +189,111 @@ class GeometricIRCOpt(_GeometricRunner, StateSpecificOpt):
 
     def _optimizer_keywords(self):
         return {"irc": True, "irc_direction": self.irc_direction}
+
+
+class GeometricNEBOpt(StateSpecificOpt):
+    """State-specific geomeTRIC NEB path calculation."""
+
+    def __init__(self, mol):
+        self.mol = mol
+        self.neb_config = mol.config.get("neb", {})
+        self.geometric_config = mol.config.get("geometric", {})
+        self.nimage = int(self.neb_config.get("nimage", 5))
+        self.coordsys = self.geometric_config.get("coordsys", "cart")
+        self.trust = float(self.geometric_config.get("trust", 0.1))
+        self.tmax = float(self.geometric_config.get("tmax", 0.3))
+        self.prefix = self.geometric_config.get("prefix", "geometric_neb")
+        if "input" in mol.config and "optimize" in mol.config:
+            StateSpecificOpt.__init__(self, mol)
+
+    def plan_image_directories(self):
+        """Return isolated per-image working directories for a NEB path."""
+        log_path = getattr(self.mol, "log_path", os.getcwd())
+        neb_root = os.path.join(log_path, "neb")
+        return [
+            os.path.join(neb_root, f"image_{image_index:03d}")
+            for image_index in range(self.nimage)
+        ]
+
+    def _resolve_product_xyz_path(self):
+        product = self.neb_config.get("product", "")
+        if os.path.isabs(product):
+            return product
+
+        candidates = [product]
+        input_file = getattr(self.mol, "input_file", "")
+        if input_file:
+            candidates.append(os.path.join(os.path.dirname(input_file), product))
+
+        for candidate in candidates:
+            if os.path.exists(os.path.abspath(candidate)):
+                return os.path.abspath(candidate)
+        return os.path.abspath(candidates[-1])
+
+    def _read_product_xyz(self):
+        from oqp.library.neb_utils import _read_xyz
+
+        return _read_xyz(self._resolve_product_xyz_path())
+
+    def _build_chain_molecule(self):
+        from geometric.molecule import Elements, Molecule
+        from oqp.library.neb_utils import _interpolate_coordinates
+
+        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        symbols = [Elements[int(atom)] for atom in atoms]
+        reactant = np.asarray(self.mol.get_system(), dtype=float).reshape((self.natom, 3)) * BOHR_TO_ANGSTROM
+        product = self._read_product_xyz()
+        if product.symbols != symbols:
+            raise ValueError("NEB product endpoint atom symbols/order must match the reactant system")
+
+        molecule = Molecule()
+        molecule.elem = symbols
+        molecule.xyzs = []
+        molecule.comms = []
+        denominator = self.nimage - 1
+        product_coords = product.coordinates_angstrom
+        for image_index in range(self.nimage):
+            fraction = image_index / denominator
+            xyz = _interpolate_coordinates(reactant.tolist(), product_coords, fraction)
+            molecule.xyzs.append(np.asarray(xyz, dtype=float))
+            molecule.comms.append(f"OpenQP geomeTRIC NEB image {image_index + 1}/{self.nimage}")
+        molecule.build_topology()
+        return molecule
+
+    def optimize(self):
+        try:
+            from geometric.neb import ElasticBand, OptimizeChain
+            from geometric.params import NEBParams
+        except ModuleNotFoundError as exc:
+            raise ModuleNotFoundError(
+                "geomeTRIC is required for runtype=neb with [optimize] lib=geometric. "
+                "Install it with `pip install geometric`."
+            ) from exc
+
+        log_path = getattr(self.mol, "log_path", os.getcwd())
+        neb_root = os.path.join(log_path, self.prefix)
+        os.makedirs(neb_root, exist_ok=True)
+        for image_dir in self.plan_image_directories():
+            os.makedirs(image_dir, exist_ok=True)
+
+        molecule = self._build_chain_molecule()
+        engine = GeometricEngine(self, molecule)
+        params = NEBParams(
+            images=self.nimage,
+            maxcyc=self.maxit,
+            trust=self.trust,
+            tmax=self.tmax,
+            maxg=float(self.neb_config.get("maxg", self.max_grad * 51.4220674763)),
+            avgg=float(self.neb_config.get("avgg", self.rmsd_grad * 51.4220674763)),
+            nebk=float(self.neb_config.get("k", 1.0)),
+            climb=float(self.neb_config.get("climb", 0.5)),
+            align=bool(self.neb_config.get("align", True)),
+            optep=bool(self.neb_config.get("optep", False)),
+        )
+
+        dump_log(self.mol, title="PyOQP: geomeTRIC NEB Started")
+        chain = ElasticBand(molecule, engine=engine, tmpdir=neb_root, params=params, plain=params.plain)
+        final_chain, opt_cycle = OptimizeChain(chain, engine, params)
+        final_chain.SaveToDisk(fout="chain_final.xyz")
+        dump_log(self.mol, title=f"PyOQP: geomeTRIC NEB Finished after {opt_cycle} cycles")
+        return final_chain

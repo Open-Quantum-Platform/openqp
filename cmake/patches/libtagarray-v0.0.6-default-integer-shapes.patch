@@ -1,0 +1,82 @@
+diff --git a/source/API/Fortran/container.f90 b/source/API/Fortran/container.f90
+index 3f5b08c..d4f2f06 100644
+--- a/source/API/Fortran/container.f90
++++ b/source/API/Fortran/container.f90
+@@ -13,7 +13,9 @@ module tagarray_container
+     procedure, public  :: new => container_t_new
+     procedure, public  :: add_record
+     procedure, public  :: add_record_data
+-    procedure, public  :: reserve_data
++    procedure, public  :: reserve_data_i64
++    procedure, public  :: reserve_data_default
++    generic, public    :: reserve_data => reserve_data_i64, reserve_data_default
+     procedure, public  :: has_record
+     procedure, public  :: has_records
+     procedure, public  :: get_record
+@@ -63,7 +65,7 @@ module tagarray_container
+     call record%new(type_id, data_ptr, data_el_size, array_size, array_shape, options, comment)
+     call this%add_record(Ctag, record)
+   end subroutine add_record_data
+-  subroutine reserve_data(this, tag, datatype, array_size, array_shape, options, comment)
++  subroutine reserve_data_i64(this, tag, datatype, array_size, array_shape, options, comment)
+     class(container_t), intent(inout) :: this
+     character(kind=TA_CHAR, len=*),           intent(in) :: tag
+     integer(c_int32_t),                             intent(in) :: datatype
+@@ -77,7 +79,56 @@ module tagarray_container
+     Ctag = to_Cstring(tag)
+     call record%reserve(datatype, array_size, array_shape, options, comment)
+     call this%add_record(Ctag, record)
+-  end subroutine reserve_data
++  end subroutine reserve_data_i64
++  subroutine reserve_data_default(this, tag, datatype, array_size, array_shape, options, comment)
++    class(container_t), intent(inout) :: this
++    character(kind=TA_CHAR, len=*),           intent(in) :: tag
++    integer(c_int32_t),                             intent(in) :: datatype
++    integer,                                        intent(in) :: array_size
++    integer,                              optional, intent(in) :: array_shape(:)
++    integer,                              optional, intent(in) :: options(TA_OPTIONS_LENGTH)
++    character(kind=TA_CHAR, len=*), optional, intent(in) :: comment
++
++    integer(c_int64_t), allocatable :: array_shape_i64(:)
++    integer(c_int64_t) :: options_i64(TA_OPTIONS_LENGTH)
++
++    if (present(array_shape)) then
++      array_shape_i64 = int(array_shape, c_int64_t)
++    end if
++    if (present(options)) then
++      options_i64 = int(options, c_int64_t)
++    end if
++
++    if (present(array_shape)) then
++      if (present(options)) then
++        if (present(comment)) then
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), array_shape_i64, options_i64, comment)
++        else
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), array_shape_i64, options_i64)
++        end if
++      else
++        if (present(comment)) then
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), array_shape_i64, comment=comment)
++        else
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), array_shape_i64)
++        end if
++      end if
++    else
++      if (present(options)) then
++        if (present(comment)) then
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), options=options_i64, comment=comment)
++        else
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), options=options_i64)
++        end if
++      else
++        if (present(comment)) then
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t), comment=comment)
++        else
++          call reserve_data_i64(this, tag, datatype, int(array_size, c_int64_t))
++        end if
++      end if
++    end if
++  end subroutine reserve_data_default
+   integer(c_int32_t) function has_record(this, tag) result(status)
+     class(container_t),                   intent(inout) :: this
+     character(kind=TA_CHAR, len=*), intent(in)    :: tag

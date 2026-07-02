@@ -9,7 +9,9 @@ module basis_tools
   use iso_fortran_env, only: real64
   use precision, only: dp
   use atomic_structure_m, only: atomic_structure
-  use constants, only: BAS_MXANG, ANGULAR_LABEL, NUM_CART_BF, cart_X, cart_Y, cart_Z
+  use constants, only: BAS_MXANG, ANGULAR_LABEL, NUM_CART_BF, NUM_SPH_BF, &
+                       cart_X, cart_Y, cart_Z, HARMONIC_ACTIVE
+  use cart2sph, only: cart2sph_vec
   use io_constants, only: IW
   use parallel, only: par_env_t
 
@@ -36,6 +38,7 @@ module basis_tools
       g_offset, &  !< Locations of the first Gaussian in shells
       origin, &    !< Tells which atom the shell is centered on
       am, &        !< Array of shell angular momentum
+      harmonic, &  !< Per-shell flag: 1 = pure spherical-harmonic, 0 = Cartesian
       ncontr, &    !< Array of contraction degrees
       ao_offset, & !< Indices of shells in the total AO basis
       naos,   &         !< Array of shell's AO numbers
@@ -84,6 +87,7 @@ module basis_tools
   public basis_set
   public bas_norm_matrix
   public bas_denorm_matrix
+  public build_cart_density
 
   interface bas_norm_matrix
       module procedure bas_norm_matrix_tr
@@ -227,6 +231,7 @@ contains
     allocate (basis%g_offset(num_shell), source=0)
     allocate (basis%origin(num_shell), source=0)
     allocate (basis%am(num_shell), source=0)
+    allocate (basis%harmonic(num_shell), source=0)
     allocate (basis%ncontr(num_shell), source=0)
     allocate (basis%ao_offset(num_shell), source=0)
     allocate (basis%naos(num_shell), source=0)
@@ -254,6 +259,7 @@ contains
     deallocate (basis%g_offset)
     deallocate (basis%origin)
     deallocate (basis%am)
+    deallocate (basis%harmonic)
     deallocate (basis%ncontr)
     deallocate (basis%ao_offset)
     deallocate (basis%naos)
@@ -375,10 +381,61 @@ contains
       maxi = basis%naos(i)
       n = basis%ao_offset(i)
       ang = basis%am(i)
-      basis%bfnrm(n:n+maxi-1) = shells_pnrm2(1:maxi,ang)
+      if (HARMONIC_ACTIVE .and. basis%harmonic(i) == 1) then
+        ! Pure spherical components are already unit-normalized by the
+        ! Cartesian->spherical transform (which folds in shells_pnrm2), so
+        ! bas_norm_matrix must not rescale them again.
+        basis%bfnrm(n:n+maxi-1) = 1.0_dp
+      else
+        basis%bfnrm(n:n+maxi-1) = shells_pnrm2(1:maxi,ang)
+      end if
     end do
 
   end subroutine
+
+!--------------------------------------------------------------------------------
+
+!>  @brief Build the Cartesian-effective density used by gradient/Hessian
+!>         kernels from a spherical (bfnrm-folded) density matrix.
+!>  @details The analytic-derivative kernels iterate Cartesian shell blocks
+!>           and contract them with the AO density. When pure spherical
+!>           shells are active the density is spherical-dimensioned, so we
+!>           expand it block by block to the Cartesian "effective" density
+!>           D_cart = B'_i D_sph B'_j^T (B' = c2s * shells_pnrm2), and return
+!>           Cartesian per-shell offsets to index it. With HARMONIC_ACTIVE
+!>           off (or a fully Cartesian basis) this is a plain copy.
+  subroutine build_cart_density(basis, dsph, dcart, cart_off, nbf_cart)
+    use cart2sph, only: c2s_expand_block
+    class(basis_set), intent(in) :: basis
+    real(dp), intent(in) :: dsph(:,:)
+    real(dp), allocatable, intent(out) :: dcart(:,:)
+    integer, allocatable, intent(out) :: cart_off(:)
+    integer, intent(out) :: nbf_cart
+
+    integer :: ish, jsh, oi, oj, nci, ncj, nsi, nsj, soi, soj
+
+    allocate(cart_off(basis%nshell))
+    nbf_cart = 0
+    do ish = 1, basis%nshell
+      cart_off(ish) = nbf_cart + 1
+      nbf_cart = nbf_cart + NUM_CART_BF(basis%am(ish))
+    end do
+
+    allocate(dcart(nbf_cart, nbf_cart), source=0.0d0)
+    do ish = 1, basis%nshell
+      oi = cart_off(ish); nci = NUM_CART_BF(basis%am(ish))
+      soi = basis%ao_offset(ish); nsi = basis%naos(ish)
+      do jsh = 1, basis%nshell
+        oj = cart_off(jsh); ncj = NUM_CART_BF(basis%am(jsh))
+        soj = basis%ao_offset(jsh); nsj = basis%naos(jsh)
+        call c2s_expand_block( &
+              dsph(soi:soi+nsi-1, soj:soj+nsj-1), &
+              dcart(oi:oi+nci-1, oj:oj+ncj-1), &
+              basis%am(ish), basis%harmonic(ish), &
+              basis%am(jsh), basis%harmonic(jsh))
+      end do
+    end do
+  end subroutine build_cart_density
 
 !--------------------------------------------------------------------------------
 
@@ -433,9 +490,12 @@ contains
 
     integer :: i, n
 
-!$omp parallel do private(i,n)
+!$omp parallel do private(i)
     do i = 1, ld
-      a(:,i) = a(:,i)*p(i)*p(1:i)
+      ! Scale the full column: a(j,i) *= p(i)*p(j), j = 1..ld.  (The previous
+      ! p(1:i) section was non-conforming Fortran; it only worked by accident
+      ! at -O2 and aborts under -fcheck=bounds.)
+      a(1:ld,i) = a(1:ld,i)*p(i)*p(1:ld)
     end do
 !$omp end parallel do
 
@@ -502,6 +562,7 @@ contains
       write (LU, '(*(I8))') basis%g_offset(i) &
         , basis%origin(i) &
         , basis%am(i) &
+        , basis%harmonic(i) &
         , basis%ncontr(i) &
         , basis%ao_offset(i) &
         , basis%naos(i)
@@ -532,6 +593,7 @@ contains
       read (LU, '(*(I8))') basis%g_offset(i) &
         , basis%origin(i) &
         , basis%am(i) &
+        , basis%harmonic(i) &
         , basis%ncontr(i) &
         , basis%ao_offset(i) &
         , basis%naos(i)
@@ -567,7 +629,7 @@ contains
 !> @param[out]   aov    AO values
 !> @author Vladimir Mironov
   subroutine compAOv(basis, ptxyz, naos, &
-                     aov)
+                     aov, shells)
 
     use precision, only: fp
     implicit none
@@ -577,6 +639,9 @@ contains
     real(kind=fp), intent(in) :: ptxyz(3)
     integer, intent(OUT) :: naos
     real(KIND=fp), contiguous, intent(OUT) :: aov(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     real(KIND=fp) :: &
       vexp, vexp1, vexp2, dum
@@ -585,11 +650,22 @@ contains
       ishell, imomfct, ix, iy, iz, ityp
     real(kind=fp) :: dr1(0:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         offset => basis%ao_offset(ishell), &
@@ -632,16 +708,30 @@ contains
             dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
           loci = offset-1
-          do ityp = 1, maxi
-            ix = cart_x(ityp,am)
-            iy = cart_y(ityp,am)
-            iz = cart_z(ityp,am)
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            ! Evaluate the full Cartesian AO vector, then reduce to spherical.
+            block
+              real(kind=fp) :: cbuf(NUM_CART_BF(am)), sbuf(NUM_SPH_BF(am))
+              do ityp = 1, NUM_CART_BF(am)
+                cbuf(ityp) = vexp1*dr1(cart_x(ityp,am), 1) &
+                                  *dr1(cart_y(ityp,am), 2) &
+                                  *dr1(cart_z(ityp,am), 3)
+              end do
+              call cart2sph_vec(cbuf, sbuf, am)
+              aov(offset:offset+NUM_SPH_BF(am)-1) = sbuf
+            end block
+          else
+            do ityp = 1, maxi
+              ix = cart_x(ityp,am)
+              iy = cart_y(ityp,am)
+              iz = cart_z(ityp,am)
 
-!           Compute AO value at a grid point
-            aov(loci+ityp) = vexp1*dr1(ix, 1) &
-                                  *dr1(iy, 2) &
-                                  *dr1(iz, 3)
-          end do
+!             Compute AO value at a grid point
+              aov(loci+ityp) = vexp1*dr1(ix, 1) &
+                                    *dr1(iy, 2) &
+                                    *dr1(iz, 3)
+            end do
+          end if
         end select
       end associate
 
@@ -659,7 +749,7 @@ contains
 !> @param[out]   aogz   AO gradient, Z component
 !> @author Vladimir Mironov
   subroutine compAOvg(basis, ptxyz, naos, &
-                      aov, aogx, aogy, aogz)
+                      aov, aogx, aogy, aogz, shells)
 
     use precision, only: fp
     implicit none
@@ -671,6 +761,9 @@ contains
 
     real(KIND=fp), contiguous, intent(OUT) :: aov(:)
     real(KIND=fp), contiguous, intent(OUT) :: aogx(:), aogy(:), aogz(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     integer :: &
       ishell, loci, &!, iatm, mini, maxi, loci0, & !ifct
@@ -687,13 +780,24 @@ contains
       k2, imomfct
     real(kind=fp) :: dr1(-1:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(:-1,:) = 0
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
 
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         maxi => basis%naos(ishell), &
@@ -760,6 +864,32 @@ contains
           do i = 2, am+1
               dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            ! Build the full Cartesian value + gradient vectors, then reduce
+            ! each to spherical (c2s is r-independent, so it commutes with d/dr).
+            block
+              real(kind=fp) :: cv(NUM_CART_BF(am)), cx(NUM_CART_BF(am))
+              real(kind=fp) :: cy(NUM_CART_BF(am)), cz(NUM_CART_BF(am))
+              real(kind=fp) :: sv(NUM_SPH_BF(am)), sx(NUM_SPH_BF(am))
+              real(kind=fp) :: sy(NUM_SPH_BF(am)), sz(NUM_SPH_BF(am))
+              integer :: ns
+              do ityp = 1, NUM_CART_BF(am)
+                ix = cart_x(ityp,am); iy = cart_y(ityp,am); iz = cart_z(ityp,am)
+                x = dr1(ix, 1); y = dr1(iy, 2); z = dr1(iz, 3)
+                xm = ix*dr1(ix-1, 1); ym = iy*dr1(iy-1, 2); zm = iz*dr1(iz-1, 3)
+                xp = dr1(ix+1, 1)*vexp2; yp = dr1(iy+1, 2)*vexp2; zp = dr1(iz+1, 3)*vexp2
+                cv(ityp) = vexp1*x*y*z
+                cx(ityp) = (-xp+vexp1*xm)*y*z
+                cy(ityp) = (-yp+vexp1*ym)*x*z
+                cz(ityp) = (-zp+vexp1*zm)*x*y
+              end do
+              ns = NUM_SPH_BF(am)
+              call cart2sph_vec(cv, sv, am); aov (offset:offset+ns-1) = sv
+              call cart2sph_vec(cx, sx, am); aogx(offset:offset+ns-1) = sx
+              call cart2sph_vec(cy, sy, am); aogy(offset:offset+ns-1) = sy
+              call cart2sph_vec(cz, sz, am); aogz(offset:offset+ns-1) = sz
+            end block
+          else
           do ityp = 1, maxi
             ix = cart_x(ityp,am)
             iy = cart_y(ityp,am)
@@ -789,6 +919,7 @@ contains
             aogy(loci+ityp) = (-yp+vexp1*ym)*x*z
             aogz(loci+ityp) = (-zp+vexp1*zm)*x*y
           end do
+          end if
         end select
 
       end associate
@@ -814,7 +945,7 @@ contains
 !> @author Vladimir Mironov
   subroutine compAOvgg(basis, ptxyz, naos, &
                        aov, aogx, aogy, aogz, &
-                       aog2xx, aog2yy, aog2zz, aog2xy, aog2yz, aog2xz)
+                       aog2xx, aog2yy, aog2zz, aog2xy, aog2yz, aog2xz, shells)
 
     use precision, only: fp
     implicit none
@@ -829,6 +960,9 @@ contains
     real(KIND=fp), contiguous, intent(OUT) :: &
       aog2xx(:), aog2yy(:), aog2zz(:), &
       aog2xy(:), aog2yz(:), aog2xz(:)
+    !> Optional list of shells to evaluate (e.g. prescreened for a grid
+    !> slice); AOs of unlisted shells are left untouched
+    integer, optional, intent(in) :: shells(:)
 
     integer :: &
       ishell, loci, &!, iatm, mini, maxi, loci0, & !ifct
@@ -852,13 +986,24 @@ contains
       k2, imomfct
     real(kind=fp) :: dr1(-2:10,3), rsqrd
     integer :: i
+    integer :: ishl, nshl
+    logical :: useList
 
     dr1(:-1,:) = 0
     dr1(0,:) = 1
 
+    useList = present(shells)
+    nshl = basis%nshell
+    if (useList) nshl = size(shells)
+
     naos = 0
 
-    do ishell = 1, basis%nshell
+    do ishl = 1, nshl
+      if (useList) then
+        ishell = shells(ishl)
+      else
+        ishell = ishl
+      end if
       associate ( &
         iatm => basis%origin(ishell), &
         maxi => basis%naos(ishell), &
@@ -972,6 +1117,55 @@ contains
               dr1(i,:) = dr1(i-1,:)*dr1(1,:)
           end do
 
+          ! For pure spherical shells, evaluate the full Cartesian value +
+          ! 1st + 2nd derivative vectors, then reduce each to spherical
+          ! (c2s is r-independent, so it commutes with all derivatives).
+          if (HARMONIC_ACTIVE .and. basis%harmonic(ishell) == 1) then
+            block
+              integer, parameter :: NV = 10
+              real(kind=fp) :: cb(NUM_CART_BF(am), NV), sb(NUM_SPH_BF(am))
+              integer :: ns
+              do ityp = 1, NUM_CART_BF(am)
+                ix = cart_x(ityp,am); iy = cart_y(ityp,am); iz = cart_z(ityp,am)
+                x = dr1(ix, 1); y = dr1(iy, 2); z = dr1(iz, 3)
+                xp = dr1(ix+1, 1); yp = dr1(iy+1, 2); zp = dr1(iz+1, 3)
+                xm = ix*dr1(ix-1, 1); ym = iy*dr1(iy-1, 2); zm = iz*dr1(iz-1, 3)
+                xpp = dr1(ix+2, 1); ypp = dr1(iy+2, 2); zpp = dr1(iz+2, 3)
+                xmm = ix*(ix-1)*dr1(ix-2, 1); ymm = iy*(iy-1)*dr1(iy-2, 2)
+                zmm = iz*(iz-1)*dr1(iz-2, 3)
+                dx = -vexp2*xp + vexp1*xm
+                dy = -vexp2*yp + vexp1*ym
+                dz = -vexp2*zp + vexp1*zm
+                dxx = vexp3*xpp - vexp2*(2*ix+1)*x + vexp1*xmm
+                dyy = vexp3*ypp - vexp2*(2*iy+1)*y + vexp1*ymm
+                dzz = vexp3*zpp - vexp2*(2*iz+1)*z + vexp1*zmm
+                dxy = vexp3*xp*yp - vexp2*(xp*ym+xm*yp) + vexp1*xm*ym
+                dyz = vexp3*yp*zp - vexp2*(yp*zm+ym*zp) + vexp1*ym*zm
+                dxz = vexp3*xp*zp - vexp2*(xp*zm+xm*zp) + vexp1*xm*zm
+                cb(ityp,1)  = vexp1*x*y*z
+                cb(ityp,2)  = dx*y*z
+                cb(ityp,3)  = x*dy*z
+                cb(ityp,4)  = x*y*dz
+                cb(ityp,5)  = dxx*y*z
+                cb(ityp,6)  = x*dyy*z
+                cb(ityp,7)  = x*y*dzz
+                cb(ityp,8)  = dxy*z
+                cb(ityp,9)  = dyz*x
+                cb(ityp,10) = dxz*y
+              end do
+              ns = NUM_SPH_BF(am)
+              call cart2sph_vec(cb(:,1),  sb, am); aov   (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,2),  sb, am); aogx  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,3),  sb, am); aogy  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,4),  sb, am); aogz  (offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,5),  sb, am); aog2xx(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,6),  sb, am); aog2yy(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,7),  sb, am); aog2zz(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,8),  sb, am); aog2xy(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,9),  sb, am); aog2yz(offset:offset+ns-1) = sb
+              call cart2sph_vec(cb(:,10), sb, am); aog2xz(offset:offset+ns-1) = sb
+            end block
+          else
           do ityp = 1, maxi
             ix = cart_x(ityp,am)
             iy = cart_y(ityp,am)
@@ -1029,6 +1223,7 @@ contains
             aog2xz(loci+ityp) = dxz*y
 
           end do
+          end if
         end select
 
       end associate
@@ -1282,6 +1477,7 @@ contains
       if (.not. allocated(basis%g_offset)) allocate(basis%g_offset(basis%nshell))
       if (.not. allocated(basis%origin)) allocate(basis%origin(basis%nshell))
       if (.not. allocated(basis%am)) allocate(basis%am(basis%nshell))
+      if (.not. allocated(basis%harmonic)) allocate(basis%harmonic(basis%nshell), source=0)
       if (.not. allocated(basis%ncontr)) allocate(basis%ncontr(basis%nshell))
       if (.not. allocated(basis%ao_offset)) allocate(basis%ao_offset(basis%nshell))
       if (.not. allocated(basis%naos)) allocate(basis%naos(basis%nshell))
@@ -1301,6 +1497,8 @@ contains
     call pe%bcast(basis%origin, basis%nshell)
 
     call pe%bcast(basis%am, basis%nshell)
+
+    call pe%bcast(basis%harmonic, basis%nshell)
 
     call pe%bcast(basis%ncontr, basis%nshell)
 

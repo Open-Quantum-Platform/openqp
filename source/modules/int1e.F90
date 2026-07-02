@@ -33,6 +33,8 @@ contains
     use strings, only: Cstring, fstring
     use physical_constants, only: BOHR_TO_ANGSTROM
     use printing, only: print_module_info
+    use dk_scalar_mod, only: dk_scalar
+
 
     implicit none
 
@@ -42,17 +44,20 @@ contains
     type(basis_set), pointer :: basis
 
     real(kind=dp) :: tol
-    integer :: i, nbf, nat, nbf2
+    integer :: i, nbf, nat, nbf2, dk
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
       hcore(:), tmat(:), smat(:)
     character(len=*), parameter :: tags_general(3) = (/ character(len=80) :: &
       OQP_SM, OQP_TM, OQP_Hcore /)
+    character(len=*), parameter :: tags_stale(1) = (/ character(len=80) :: &
+      OQP_QMAT /)
 
     logical dbg
     dbg = .false.
 
+    dk = infos%control%scal_rel
 !   Files open:
 !   LOG: Read and Write: Main output file
     open(unit=iw,  file=infos%log_filename, position="append")
@@ -79,16 +84,13 @@ contains
 !   Allocate H, S and T matrices
     nbf2 = basis%nbf*(basis%nbf+1)/2
 
-    call infos%dat%remove_records(tags_general)
+!   The overlap matrix changes, so the cached Q = S^(-1/2) is stale
+    call infos%dat%erase(tags_stale)
 
-    call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
-    call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)
-    call infos%dat%reserve_data(OQP_Hcore, TA_TYPE_REAL64, nbf2, comment=OQP_Hcore_comment)
-
-    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_SM, smat)
-    call tagarray_get_data(infos%dat, OQP_TM, tmat)
-    call tagarray_get_data(infos%dat, OQP_Hcore, Hcore)
+!   Allocate H, S and T and bind typed pointers (one call each)
+    call infos%dat%alloc_or_die(OQP_SM,    (/ nbf2 /), smat,  description=OQP_SM_comment)
+    call infos%dat%alloc_or_die(OQP_TM,    (/ nbf2 /), tmat,  description=OQP_TM_comment)
+    call infos%dat%alloc_or_die(OQP_Hcore, (/ nbf2 /), hcore, description=OQP_Hcore_comment)
 
 !   Create arrays of atomic coordinates and charges for one-electron code
     nbf = basis%nbf
@@ -98,6 +100,8 @@ contains
     tol = log(10.0d0)*tol_int
     call omp_hst(basis, infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num, hcore, smat, tmat,&
             logtol=tol, comm=infos%mpiinfo%comm, usempi=infos%mpiinfo%usempi)
+
+    if (dk.gt.0) call dk_scalar(infos)
 
     if (dbg) then
         write(iw,'(/"BARE NUCLEUS HAMILTONIAN INTEGRALS (H=T+V)")')

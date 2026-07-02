@@ -30,10 +30,44 @@ class MoldenWriter:
               3: [0, 1, 2, 5, 3, 4, 7, 8, 6, 9],
               4: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
               }
+    # Pure spherical-harmonic reorder: OpenQP internal order is m = -l..+l
+    # (CCA); Molden wants m = 0, +1, -1, +2, -2, +3, -3, +4, -4. Entries are
+    # zero-based positions into the internal (m=-l..+l) vector.
+    SPH_ORDERS = {0: [0],
+                  1: [0, 1, 2],
+                  2: [2, 3, 1, 4, 0],
+                  3: [3, 4, 2, 5, 1, 6, 0],
+                  4: [4, 5, 3, 6, 2, 7, 1, 8, 0],
+                  }
     SHELL_TYPES = 'spdfg'
     NORMS = np.sqrt(np.pi * np.sqrt(np.pi) * np.array([1.0, 0.5, 0.75, 1.875, 6.5625, 29.53125, 162.421875]))
 
     NBFS = list(int((x + 1) * (x + 2) / 2) for x in range(5))
+    SPH_NBFS = list(2 * x + 1 for x in range(5))
+
+    @staticmethod
+    def _is_spherical(basis):
+        """Infer whether the basis uses pure spherical shells, from the total
+        basis-function count (auto-selection is uniform per basis set)."""
+        angs = basis['angs']
+        ncart = int(sum(int((a + 1) * (a + 2) // 2) for a in angs))
+        nsph = int(sum(2 * int(a) + 1 for a in angs))
+        nbf = int(basis['nbf'])
+        if nbf == nsph and nsph != ncart:
+            return True
+        return False
+
+    def write_spherical_markers(self, basis):
+        """Emit Molden [5D]/[7F]/[9G] markers when the basis is spherical."""
+        if not MoldenWriter._is_spherical(basis):
+            return
+        present = set(int(a) for a in basis['angs'])
+        if 2 in present:
+            print('[5D]', file=self.file)
+        if 3 in present:
+            print('[7F]', file=self.file)
+        if 4 in present:
+            print('[9G]', file=self.file)
 
     def __init__(self, file):
         self.file = file
@@ -87,13 +121,17 @@ class MoldenWriter:
         if header:
             print('[MO]', file=self.file)
 
+        spherical = MoldenWriter._is_spherical(basis)
+        orders = MoldenWriter.SPH_ORDERS if spherical else MoldenWriter.ORDERS
+        nbfs = MoldenWriter.SPH_NBFS if spherical else MoldenWriter.NBFS
+
         reorder = []
         cur_bf = 0
         for i in range(basis['nsh']):
             ang = basis['angs'][i]
-            neword = list(i + cur_bf for i in MoldenWriter.ORDERS[ang])
+            neword = list(j + cur_bf for j in orders[ang])
             reorder += neword
-            cur_bf += MoldenWriter.NBFS[ang]
+            cur_bf += nbfs[ang]
 
         for (eorb, orb, occup) in zip(energies, orbitals, occupancies):
             print(f'Ene= {eorb:15.8f}', file=self.file)
@@ -109,7 +147,7 @@ def write_frequency(mol, freqs, modes):
     xyz = mol.get_system().reshape((natom, 3))
     nmode = len(modes)
     modes = modes.reshape((nmode, natom, 3))
-    freqs = freqs.reshape((-1, 1))
+    freqs = freqs.reshape(-1)
 
     frequency = '\n'.join(['%10.2f' % x for x in freqs])
     coord = ''

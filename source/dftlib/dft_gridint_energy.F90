@@ -25,7 +25,7 @@ module mod_dft_gridint_energy
 !-------------------------------------------------------------------------------
 
   private
-  public dmatd_blk
+  public dmatd_blk, dmatd_density_blk
 
 !-------------------------------------------------------------------------------
 
@@ -149,16 +149,15 @@ contains
               , numPts => xce%numPts &
       )
 
-      ! LDA case
-      do i = 1, numPts
-        tmp(:, i, 1) = 0.5*d1dr(ra, i)*aoV(:, i)
-      end do
-
-      ! GGA case
-      if (xce%funTyp /= OQP_FUNTYP_LDA) then
+      if (xce%funTyp == OQP_FUNTYP_LDA) then
+        do i = 1, numPts
+          tmp(:, i, 1) = 0.5*d1dr(ra, i)*aoV(:, i)
+        end do
+      else
+        ! LDA and GGA terms in a single pass over tmp
         do i = 1, numPts
           c = 2*d1ds(ga,i)*drho(1:3,i) + d1ds(gc,i)*drho(4:6,i)
-          tmp(:,i,1) = tmp(:,i,1) &
+          tmp(:,i,1) = 0.5*d1dr(ra, i)*aoV(:, i) &
             +c(1)*aoG1(:, i, 1) &
             +c(2)*aoG1(:, i, 2) &
             +c(3)*aoG1(:, i, 3)
@@ -186,16 +185,15 @@ contains
 
       if (xce%hasBeta) then
 
-        ! LDA case
-        do i = 1, numPts
-          tmp(:, i, 1) = 0.5*d1dr(rb, i)*aoV(:, i)
-        end do
-
-        ! GGA case
-        if (xce%funTyp /= OQP_FUNTYP_LDA) then
+        if (xce%funTyp == OQP_FUNTYP_LDA) then
+          do i = 1, numPts
+            tmp(:, i, 1) = 0.5*d1dr(rb, i)*aoV(:, i)
+          end do
+        else
+          ! LDA and GGA terms in a single pass over tmp
           do i = 1, numPts
             c = 2*d1ds(gb,i)*drho(4:6,i) + d1ds(gc,i)*drho(1:3,i)
-            tmp(:,i,1) = tmp(:,i,1) &
+            tmp(:,i,1) = 0.5*d1dr(rb, i)*aoV(:, i) &
               +c(1)*aoG1(:, i, 1) &
               +c(2)*aoG1(:, i, 2) &
               +c(3)*aoG1(:, i, 3)
@@ -235,6 +233,7 @@ contains
     real(kind=fp), pointer :: focks(:,:,:)
     real(kind=fp), pointer :: fock_a(:,:)
     real(kind=fp), pointer :: fock_b(:,:)
+    integer :: i, j, jj
 
     call self%resetOrbPointers(xce, focks=focks, fock_a=fock_a, &
                                fock_b=fock_b, myThread=myThread)
@@ -243,23 +242,37 @@ contains
               , indices => xce%indices_p &
       )
 
+      ! Only the upper triangle of focks is valid (dsyr2k 'U' in update)
+      ! and only the upper triangle of fock_a/fock_b is consumed in
+      ! dmatd_blk, so accumulate just that part.  The indices are
+      ! ascending, hence the scatter keeps upper triangle upper.
       if (xce%skip_p) then
 
-         fock_a = fock_a + focks(:,:,1)
-         if (xce%hasBeta) &
-            fock_b = fock_b + focks(:,:,2)
+         do j = 1, numAOs
+           fock_a(1:j, j) = fock_a(1:j, j) + focks(1:j, j, 1)
+         end do
+         if (xce%hasBeta) then
+           do j = 1, numAOs
+             fock_b(1:j, j) = fock_b(1:j, j) + focks(1:j, j, 2)
+           end do
+         end if
 
       else
 
-         fock_a(indices(1:numAOs), &
-                indices(1:numAOs)) = fock_a(indices(1:numAOs), &
-                                            indices(1:numAOs)) &
-                                   + focks(:,:,1)
-         if (xce%hasBeta) &
-            fock_b(indices(1:numAOs), &
-                   indices(1:numAOs)) = fock_b(indices(1:numAOs), &
-                                               indices(1:numAOs)) &
-                                      + focks(:,:,2)
+         do j = 1, numAOs
+           jj = indices(j)
+           do i = 1, j
+             fock_a(indices(i), jj) = fock_a(indices(i), jj) + focks(i, j, 1)
+           end do
+         end do
+         if (xce%hasBeta) then
+           do j = 1, numAOs
+             jj = indices(j)
+             do i = 1, j
+               fock_b(indices(i), jj) = fock_b(indices(i), jj) + focks(i, j, 2)
+             end do
+           end do
+         end if
 
       end if
 
@@ -283,7 +296,8 @@ contains
 !> @author Vladimir Mironov
   subroutine dmatd_blk(basis, molGrid, coeffa, coeffb, fa, fb, &
                        exc, totele, totkin, &
-                       mxAngMom, nbf, dft_threshold, urohf, infos)
+                       mxAngMom, nbf, dft_threshold, urohf, infos, &
+                       sym_atom_weight)
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
@@ -302,6 +316,8 @@ contains
     real(kind=fp), target, intent(inout) :: coeffa(nbf, *), coeffb(nbf, *)
     real(kind=fp), intent(inout) :: fa(*), fb(*)
     real(kind=fp), intent(in) :: dft_threshold
+    !> Optional symmetry-reduction atom weights (orbit size or zero).
+    real(kind=fp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
 
     type(xc_consumer_ks_t) :: dat
     type(xc_options_t) :: xc_opts
@@ -338,6 +354,14 @@ contains
     xc_opts%ao_sparsity_ratio = infos%dft%grid_ao_sparsity_ratio
     ! skip ao_prune_grid if it is pruned grid (SG1)
     if(infos%dft%grid_pruned) xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight
+
+    ! NB: the Phi cache is deliberately NOT opted-in here. dmatd_blk is reached by
+    ! one-shot callers (e.g. finite-difference Hessian via dftexcor, each at a new
+    ! displaced geometry) where the per-slice cache would be built but never
+    ! replayed -- pure memory/copy overhead. The repeated SCF Fock build reaches
+    ! the grid through dmatd_density_blk, which is where the opt-in lives.
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
@@ -378,7 +402,108 @@ contains
 
     call dat%clean()
 
-  end subroutine
+  end subroutine dmatd_blk
+
+!-------------------------------------------------------------------------------
+
+  subroutine dmatd_density_blk(basis, molGrid, dena, denb, fa, fb, &
+                       exc, totele, totkin, &
+                       mxAngMom, nbf, dft_threshold, urohf, infos)
+    use mod_dft_molgrid, only: dft_grid_t
+    use basis_tools, only: basis_set
+    use mod_dft_gridint, only: xc_options_t, run_xc
+    use types, only: information
+    implicit none
+
+    type(dft_grid_t), target, intent(in) :: molGrid
+    type(information), target, intent(in) :: infos
+    type(basis_set) :: basis
+    logical, intent(in) :: urohf
+    integer, intent(in) :: mxAngMom, nbf
+    real(kind=fp), intent(out) :: exc, totele, totkin
+    real(kind=fp), target, intent(in) :: dena(nbf,nbf), denb(nbf,nbf)
+    real(kind=fp), intent(inout) :: fa(*), fb(*)
+    real(kind=fp), intent(in) :: dft_threshold
+
+    type(xc_consumer_ks_t) :: dat
+    type(xc_options_t) :: xc_opts
+    real(kind=fp), target, allocatable :: da2(:,:), db2(:,:)
+    integer :: i0, i, j, nang
+
+    allocate(da2(nbf,nbf), source=0.0_fp)
+    do j = 1, nbf
+      da2(:,j) = dena(:,j)*basis%bfnrm(j)*basis%bfnrm(1:nbf)
+    end do
+    if (urohf) then
+      allocate(db2(nbf,nbf), source=0.0_fp)
+      do j = 1, nbf
+        db2(:,j) = denb(:,j)*basis%bfnrm(j)*basis%bfnrm(1:nbf)
+      end do
+    end if
+
+    nang = maxval(basis%am)+1+1
+    fa(1:nbf*(nbf+1)/2) = 0.0_fp
+    if (urohf) fb(1:nbf*(nbf+1)/2) = 0.0_fp
+    exc = 0.0_fp
+    totele = 0.0_fp
+    totkin = 0.0_fp
+
+    xc_opts%isGGA = infos%functional%needGrd
+    xc_opts%needTau = infos%functional%needTau
+    xc_opts%functional => infos%functional
+    xc_opts%hasBeta = urohf
+    xc_opts%isWFVecs = .false.
+    xc_opts%numAOs = nbf
+    xc_opts%maxPts = molGrid%maxSlicePts
+    xc_opts%limPts = molGrid%maxNRadTimesNAng
+    xc_opts%numAtoms = infos%mol_prop%natom
+    xc_opts%maxAngMom = nang
+    xc_opts%nDer = 0
+    xc_opts%numOccAlpha = infos%mol_prop%nelec_A
+    xc_opts%numOccBeta = infos%mol_prop%nelec_B
+    xc_opts%wfAlpha => da2
+    if (urohf) xc_opts%wfBeta => db2
+    xc_opts%molGrid => molGrid
+    xc_opts%dft_threshold = dft_threshold
+    xc_opts%ao_threshold = infos%dft%grid_ao_threshold
+    xc_opts%ao_sparsity_ratio = 0.0_fp
+
+    ! Opt 1: the SCF Fock build reaches the grid through this density-driven path
+    ! (calc_fock passes the packed density as dens_in). Enable the cross-iteration
+    ! Phi cache from [scf] xc_phi_cache (infos%control%xc_phi_cache).
+    xc_opts%use_phi_cache = (infos%control%xc_phi_cache /= 0)
+
+    call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+    call run_xc(xc_opts, dat, basis)
+
+    exc = dat%E_xc
+    totele = dat%N_elec
+    totkin = dat%E_kin
+
+    i0 = 0
+    do i = 1, nbf
+      fa(i0+1:i0+i) = fa(i0+1:i0+i) + &
+                      dat%fa2((i-1)*nbf+1:(i-1)*nbf+i,1) &
+                      *basis%bfnrm(i) &
+                      *basis%bfnrm(1:i)
+      i0 = i0+i
+    end do
+
+    if (urohf) then
+      i0 = 0
+      do i = 1, nbf
+        fb(i0+1:i0+i) = fb(i0+1:i0+i) + &
+                        dat%fb2((i-1)*nbf+1:(i-1)*nbf+i,1) &
+                        *basis%bfnrm(i) &
+                        *basis%bfnrm(1:i)
+        i0 = i0+i
+      end do
+    end if
+
+    call dat%clean()
+    if (allocated(da2)) deallocate(da2)
+    if (allocated(db2)) deallocate(db2)
+  end subroutine dmatd_density_blk
 
 !-------------------------------------------------------------------------------
 

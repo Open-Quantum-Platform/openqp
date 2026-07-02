@@ -1,0 +1,281 @@
+{
+  "note": "OpenQP vs PySCF vacuum validation for PCM benchmark geometries. HF rows are the strict cross-code gate; DFT rows are protocol-near because OpenQP LibXC+SG1/MHL grid settings are not bit-identical to the PySCF grid used here.",
+  "records": [
+    {
+      "abs_delta_hartree": 5.259536806079268e-09,
+      "functional": null,
+      "id": "h2o_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -76.0107465133,
+      "pyscf_vacuum_total_energy_hartree": -76.01074650804047,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.2924327279506542e-06,
+      "functional": "bhhlyp",
+      "id": "h2o_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -76.3677708433,
+      "pyscf_vacuum_total_energy_hartree": -76.36777213573272,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 2.353094834006697e-05,
+      "functional": "pbe",
+      "id": "h2o_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -76.3208569,
+      "pyscf_vacuum_total_energy_hartree": -76.32088043094834,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 1.0311781295513356e-07,
+      "functional": null,
+      "id": "nh3_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -56.1838398745,
+      "pyscf_vacuum_total_energy_hartree": -56.183839977617815,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 4.474367841567073e-06,
+      "functional": "bhhlyp",
+      "id": "nh3_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -56.5084728487,
+      "pyscf_vacuum_total_energy_hartree": -56.508477323067844,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 1.0480989303118804e-05,
+      "functional": "pbe",
+      "id": "nh3_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -56.4702120312,
+      "pyscf_vacuum_total_energy_hartree": -56.4702225121893,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 3.1302533898269758e-09,
+      "functional": null,
+      "id": "hf_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -100.0028626491,
+      "pyscf_vacuum_total_energy_hartree": -100.00286265223025,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.6413289586125757e-05,
+      "functional": "bhhlyp",
+      "id": "hf_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -100.3835191013,
+      "pyscf_vacuum_total_energy_hartree": -100.38350268801041,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 6.295863454397477e-05,
+      "functional": "pbe",
+      "id": "hf_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -100.3195935261,
+      "pyscf_vacuum_total_energy_hartree": -100.31953056746545,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 4.592550340021262e-09,
+      "functional": null,
+      "id": "ch4_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -40.195061172,
+      "pyscf_vacuum_total_energy_hartree": -40.19506116740745,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 2.6992940938441734e-05,
+      "functional": "bhhlyp",
+      "id": "ch4_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -40.4829671314,
+      "pyscf_vacuum_total_energy_hartree": -40.482940138459064,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 4.118641955130897e-05,
+      "functional": "pbe",
+      "id": "ch4_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -40.4443971483,
+      "pyscf_vacuum_total_energy_hartree": -40.44435596188045,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 2.022993328409939e-08,
+      "functional": null,
+      "id": "co_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -112.7373366816,
+      "pyscf_vacuum_total_energy_hartree": -112.73733670182993,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 3.959020133947888e-06,
+      "functional": "bhhlyp",
+      "id": "co_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -113.2534392682,
+      "pyscf_vacuum_total_energy_hartree": -113.25343530917986,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 1.176789170642678e-05,
+      "functional": "pbe",
+      "id": "co_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -113.1822914453,
+      "pyscf_vacuum_total_energy_hartree": -113.18227967740829,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 3.6072833609068766e-10,
+      "functional": null,
+      "id": "co2_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -187.6328313431,
+      "pyscf_vacuum_total_energy_hartree": -187.63283134346074,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.12587097191863e-05,
+      "functional": "bhhlyp",
+      "id": "co2_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -188.483929033,
+      "pyscf_vacuum_total_energy_hartree": -188.4839177742903,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 3.684791624891659e-05,
+      "functional": "pbe",
+      "id": "co2_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -188.3919932345,
+      "pyscf_vacuum_total_energy_hartree": -188.39195638658376,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 7.599129503432778e-08,
+      "functional": null,
+      "id": "hcn_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -92.8736934472,
+      "pyscf_vacuum_total_energy_hartree": -92.87369352319129,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.3006057841380425e-05,
+      "functional": "bhhlyp",
+      "id": "hcn_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -93.3647788829,
+      "pyscf_vacuum_total_energy_hartree": -93.36476587684216,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 2.6961376121903413e-05,
+      "functional": "pbe",
+      "id": "hcn_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -93.3071474327,
+      "pyscf_vacuum_total_energy_hartree": -93.30712047132388,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 4.881428594671888e-11,
+      "functional": null,
+      "id": "h2co_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -113.864905684,
+      "pyscf_vacuum_total_energy_hartree": -113.86490568395118,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.1163146652393152e-05,
+      "functional": "bhhlyp",
+      "id": "h2co_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -114.4339196639,
+      "pyscf_vacuum_total_energy_hartree": -114.43393082704665,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 1.2830246973294379e-05,
+      "functional": "pbe",
+      "id": "h2co_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -114.3665280474,
+      "pyscf_vacuum_total_energy_hartree": -114.36654087764697,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 8.755392855164246e-09,
+      "functional": null,
+      "id": "ch3oh_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -115.0324298273,
+      "pyscf_vacuum_total_energy_hartree": -115.03242981854461,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 1.939557793662061e-05,
+      "functional": "bhhlyp",
+      "id": "ch3oh_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -115.6426627331,
+      "pyscf_vacuum_total_energy_hartree": -115.64264333752206,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 4.2797452493914534e-05,
+      "functional": "pbe",
+      "id": "ch3oh_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -115.5647508511,
+      "pyscf_vacuum_total_energy_hartree": -115.56470805364751,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 6.846892119938275e-08,
+      "functional": null,
+      "id": "ch3cn_rhf_hf_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -131.9256090613,
+      "pyscf_vacuum_total_energy_hartree": -131.92560912976893,
+      "status": "pass",
+      "tolerance_hartree": 2e-07
+    },
+    {
+      "abs_delta_hartree": 8.86996051008282e-06,
+      "functional": "bhhlyp",
+      "id": "ch3cn_rhf_bhhlyp_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -132.6701019878,
+      "pyscf_vacuum_total_energy_hartree": -132.67009311783949,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    },
+    {
+      "abs_delta_hartree": 1.2140134003857384e-05,
+      "functional": "pbe",
+      "id": "ch3cn_rhf_pbe_631gs_water",
+      "openqp_vacuum_total_energy_hartree": -132.5820353323,
+      "pyscf_vacuum_total_energy_hartree": -132.582023192166,
+      "status": "pass",
+      "tolerance_hartree": 0.0001
+    }
+  ],
+  "schema": "openqp-pyscf-vacuum-validation-v1",
+  "summary": {
+    "failed": 0,
+    "max_delta_hartree": 6.295863454397477e-05,
+    "total": 30
+  }
+}

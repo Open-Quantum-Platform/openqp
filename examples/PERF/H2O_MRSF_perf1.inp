@@ -1,0 +1,23 @@
+# Water MRSF-TDDFT (BHHLYP/cc-pVDZ) excitation energies, perf=1.
+# perf=1 sets resp_cutoff=1e-8 and zv_warmstart=on (both exact); all else off.
+[input]
+system=
+   8   0.000000   0.000000   0.117300
+   1   0.000000   0.757200  -0.469200
+   1   0.000000  -0.757200  -0.469200
+charge=0
+runtype=energy
+functional=bhhlyp
+basis=cc-pvdz
+method=tdhf
+perf=1
+[guess]
+type=huckel
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-8
+maxit=100
+[tdhf]
+type=mrsf
+nstate=3

@@ -17,8 +17,8 @@ module basis_api
         integer :: id
         integer :: element_id
         integer, pointer :: n_exponents(:)
-        real, pointer :: exponents(:)
-        real, pointer :: coefficient(:)
+        real(real64), pointer :: exponents(:)
+        real(real64), pointer :: coefficient(:)
     contains
         procedure(base_shell_clear), deferred, pass :: clear
     end type base_shell
@@ -34,6 +34,7 @@ module basis_api
 
     type, extends(base_shell) :: electron_shell
         integer :: angular_momentum
+        integer :: harmonic = 0   !< 1 = pure spherical-harmonic shell, 0 = Cartesian
         type(electron_shell), pointer :: next => null()
    contains
       procedure :: clear => electron_shell_clear
@@ -46,7 +47,7 @@ module basis_api
         integer, pointer :: ecp_zn(:)
         integer, pointer :: ecp_r_expo(:)
         integer, pointer :: ecp_am(:)
-        real, pointer :: ecp_coord(:)
+        real(real64), pointer :: ecp_coord(:)
    contains
       procedure :: clear => ecpdata_clear
     end type ecpdata
@@ -104,14 +105,20 @@ contains
         integer :: natm, f_expo_len
         natm = info%mol_prop%natom
 
+        ! No ECP for this element: do NOT read the C/Python ecp_zn buffer (it is
+        ! empty/short for non-ECP systems, so reading natm ints reads out of
+        ! bounds -> garbage ecp_zn_num -> zeroed nuclear repulsion, nondeterm-
+        ! inistically). No ECP means no core electrons are removed, so ecp_zn=0.
+        if (info%elshell%element_id .EQ. 0) then
+            ecp_head%element_id = info%elshell%element_id
+            allocate(ecp_head%ecp_zn(natm))
+            ecp_head%ecp_zn = 0
+            return
+        end if
+
         call c_f_pointer(info%elshell%ecp_zn, ecp_zn_ptr, [natm])
         allocate(ecp_head%ecp_zn(natm))
         ecp_head%ecp_zn = ecp_zn_ptr
-
-        if (info%elshell%element_id .EQ. 0) then
-            ecp_head%element_id = info%elshell%element_id
-            return
-        end if
         call c_f_pointer(info%elshell%num_expo, n_expo_ptr, [info%elshell%element_id])
 
         allocate(ecp_head%n_exponents(info%elshell%element_id))
@@ -164,6 +171,7 @@ contains
         new_node%id = info%elshell%id
         new_node%element_id = info%elshell%element_id
         new_node%angular_momentum = info%elshell%ang_mom
+        new_node%harmonic = info%elshell%harmonic
         allocate(new_node%exponents(n_expo))
         allocate(new_node%coefficient(n_expo))
         allocate(new_node%n_exponents(1))
@@ -212,7 +220,7 @@ contains
     subroutine map_shell2basis_set(infos)
         use basis_tools, only: basis_set
         use types, only: information
-        use constants, only: NUM_CART_BF
+        use constants, only: NUM_CART_BF, num_ao
 
         type(information), target, intent(inout) :: infos
         class(basis_set), pointer :: basis
@@ -221,7 +229,7 @@ contains
         integer :: nbf, nshell, nprim, mxcontr, mxam, ii
         integer :: n1,n2
         integer :: f_expo_len
-        real, dimension(:), allocatable :: ex
+        real(real64), dimension(:), allocatable :: ex
 
         infos%control%basis_set_issue = .false.
         if (infos%control%active_basis == 0) then
@@ -247,7 +255,7 @@ contains
             nshell = temp%id
             nprim = nprim + temp%n_exponents(1)
 
-            nbf = nbf + NUM_CART_BF(temp%angular_momentum)
+            nbf = nbf + num_ao(temp%angular_momentum, temp%harmonic)
 
             temp => temp%next  ! Move to the next shell
         end do
@@ -264,6 +272,7 @@ contains
         if (.not. allocated(basis%g_offset)) allocate(basis%g_offset(nshell))
         if (.not. allocated(basis%origin)) allocate(basis%origin(nshell))
         if (.not. allocated(basis%am)) allocate(basis%am(nshell))
+        if (.not. allocated(basis%harmonic)) allocate(basis%harmonic(nshell), source=0)
         if (.not. allocated(basis%ncontr)) allocate(basis%ncontr(nshell))
         if (.not. allocated(basis%ao_offset)) allocate(basis%ao_offset(nshell))
         if (.not. allocated(basis%naos)) allocate(basis%naos(nshell))
@@ -292,7 +301,8 @@ contains
 
             basis%origin(ii) = temp1%element_id
             basis%am(ii) = temp1%angular_momentum
-            basis%naos(ii) = NUM_CART_BF(temp1%angular_momentum)
+            basis%harmonic(ii) = temp1%harmonic
+            basis%naos(ii) = num_ao(temp1%angular_momentum, temp1%harmonic)
             n1 = temp1%n_exponents(1)
 
             temp1 => temp1%next

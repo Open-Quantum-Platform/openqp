@@ -81,11 +81,14 @@ class FakeData(dict):
     def set_sd_scf(self, flag):
         self.sd_scf_flags.append(flag)
 
+    def set_trah_stability(self, flag):
+        self.trah_stability = flag
+
 
 class FakeMol:
     def __init__(self):
         self.config = {
-            "scf": {"converger_type": "diis"},
+            "scf": {"converger_type": "diis", "trh_stab": False},
         }
         self.data = FakeData()
         self.mol_energy = types.SimpleNamespace(energy=-1.0, SCF_converged=False)
@@ -93,6 +96,14 @@ class FakeMol:
 
     def write_molden(self, filename):
         raise AssertionError("save_molden is disabled in this test")
+
+
+class SlottedMolEnergy:
+    __slots__ = ("energy", "SCF_converged")
+
+    def __init__(self, energy=-1.0, converged=False):
+        self.energy = energy
+        self.SCF_converged = converged
 
 
 class TestSinglePointScfFallback(unittest.TestCase):
@@ -107,9 +118,12 @@ class TestSinglePointScfFallback(unittest.TestCase):
         calc = self.single_point.SinglePoint.__new__(self.single_point.SinglePoint)
         calc.mol = FakeMol()
         calc.method = "hf"
+        calc.td = "rpa"
         calc.init_scf = "no"
         calc.forced_attempt = 2
+        calc.converger_type = "diis"
         calc.alternative_scf = "trah"
+        calc.stability = False
         calc.save_molden = False
         calc.exception = False
         calc._prep_guess = lambda: None
@@ -131,25 +145,164 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.energy(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
-        self.assertEqual(calc.mol.data.convergers, ["trah", "diis"])
+        # Default escalation ladder: primary DIIS -> SOSCF (recovers here) -> ...,
+        # then the primary converger is restored (in _run_scf and again in energy()).
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis", "diis"])
         self.assertEqual(calc.mol.data.sd_scf_flags, [False])
 
-    def test_energy_restores_fallback_converger_after_failed_recovery(self):
+    def test_energy_restores_primary_converger_after_failed_recovery(self):
         calc = self.make_calculator()
-        calc.forced_attempt = 1
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.energy = -1.0 - calc.scf_calls
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
 
         with self.assertRaises(RuntimeError):
             calc.energy(do_init_scf=False)
 
-        self.assertEqual(calc.mol.data.convergers, ["trah", "diis"])
+        # Full default ladder is walked (DIIS -> SOSCF -> TRAH) before giving up,
+        # then the primary converger is restored.
+        self.assertEqual(
+            calc.mol.data.convergers, ["diis", "soscf", "trah", "diis", "diis"])
 
-    def test_reference_keeps_recovered_converger_for_matching_gradient(self):
+    def test_reference_restores_primary_converger_for_matching_gradient(self):
         calc = self.make_calculator()
 
         energy = calc.reference(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
-        self.assertEqual(calc.mol.data.convergers, ["trah"])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_escalation_override_replaces_default_ladder(self):
+        # scf.escalation overrides the default DIIS->SOSCF->TRAH chain with an
+        # explicit comma-separated list (here: straight to TRAH, the old behavior).
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["escalation"] = "trah"
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "trah", "diis"])
+
+    def test_escalation_override_multi_stage_chain(self):
+        # An explicit multi-stage chain is honored in order; the primary (diis)
+        # is dropped from it. SOSCF recovers on the second SCF call.
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["escalation"] = "diis,soscf,trah"
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_stability_noop_restores_pre_trah_energy_metadata(self):
+        calc = self.make_calculator()
+        calc.stability = True
+
+        def scf_stable_after_trah_check():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                calc.mol.mol_energy.energy = -1.99999999
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_stable_after_trah_check
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-2.0])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+
+    def test_stability_noop_restores_pre_trah_energy_metadata_without_dict(self):
+        calc = self.make_calculator()
+        calc.mol.mol_energy = SlottedMolEnergy()
+        calc.stability = True
+
+        def scf_stable_after_trah_check():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                calc.mol.mol_energy.energy = -1.99999999
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_stable_after_trah_check
+
+        energy = calc.reference(do_init_scf=False)
+
+        self.assertEqual(energy, [-2.0])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
+        self.assertTrue(calc.mol.mol_energy.SCF_converged)
+
+    def test_default_scf_stability_is_opt_in(self):
+        # The post-SCF TRAH stability safeguard is expensive and can rotate
+        # orbitals; it must not run unless the user writes [scf]
+        # stability=true.
+        oqpdata = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+        self.assertIn("'stability': {'type': bool, 'default': 'False'}", oqpdata)
+
+    def test_stability_safeguard_relaxes_unstable_tdhf_reference(self):
+        # The SCF stability safeguard can also run for the excited-state
+        # reference SCF (method='tdhf', e.g. MRSF) when the user explicitly opts
+        # in with [scf] stability=true.  A DIIS-converged but unstable
+        # open-shell reference can otherwise make MRSF disagree with the
+        # standalone SCF along a PES.  Before the fix this path was gated to
+        # method=='hf', so no TRAH stability pass ran here and the unstable -2.0
+        # solution would have been returned.
+        calc = self.make_calculator()
+        calc.method = "tdhf"
+        calc.td = "mrsf"
+        calc.stability = True
+
+        def scf_unstable_then_relaxes():
+            calc.scf_calls += 1
+            if calc.scf_calls == 1:
+                # primary DIIS converges to an unstable, higher solution
+                calc.mol.mol_energy.energy = -2.0
+                calc.mol.mol_energy.SCF_converged = True
+            else:
+                # the TRAH stability pass escapes to a genuinely lower solution
+                calc.mol.mol_energy.energy = -2.5
+                calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_unstable_then_relaxes
+
+        converged = calc._run_scf()
+
+        self.assertTrue(converged)
+        # The safeguard ran for tdhf (a TRAH stability pass was invoked) ...
+        self.assertIn("trah", calc.mol.data.convergers)
+        # ... and the lower (relaxed) solution was kept.
+        self.assertEqual(calc.mol.mol_energy.energy, -2.5)
+
+    def test_stability_safeguard_skips_ordinary_tdhf_reference(self):
+        # Ordinary closed-shell TDHF/TDA/RPA references should not run the extra
+        # TRAH stability pass even when the user explicitly opts in for SCF
+        # stability; the safeguard is only meaningful here for spin-flip/open-
+        # shell references.
+        calc = self.make_calculator()
+        calc.method = "tdhf"
+        calc.td = "rpa"
+        calc.stability = True
+
+        def scf_converges_once():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.energy = -2.0
+            calc.mol.mol_energy.SCF_converged = True
+
+        calc.scf = scf_converges_once
+
+        converged = calc._run_scf()
+
+        self.assertTrue(converged)
+        self.assertEqual(calc.mol.data.convergers, ["diis", "diis"])
+        self.assertEqual(calc.mol.mol_energy.energy, -2.0)
 
 
 if __name__ == "__main__":

@@ -39,9 +39,45 @@ def string(strng):
     return strng.lower()
 
 
+def ispher_mode(strng):
+    """Normalize the ispher keyword to one of three modes:
+    'auto'  - per-shell AO convention from the basis-set metadata
+              (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
+    'true'  - force pure spherical for every l>=2 shell regardless of how
+              the basis was published (GAMESS ISPHER=1 semantics);
+    'false' - force Cartesian for every shell.
+    Booleans (from saved/dict configs) map to 'true'/'false'."""
+    if isinstance(strng, bool):
+        return 'true' if strng else 'false'
+    s = str(strng).strip().lower()
+    if s in ('auto', 'bse', 'basis'):
+        return 'auto'
+    if s in ('true', 't', '1', 'yes', 'on', '.true.'):
+        return 'true'
+    if s in ('false', 'f', '0', 'no', 'off', '.false.'):
+        return 'false'
+    raise ValueError(f"ispher must be auto, true, or false; got: {strng}")
+
+
 def path(strng):
     """Convert string to Path"""
     return Path(strng)
+
+
+def _perf_parse_bool(v):
+    """Parse a perf input-key boolean; return None for 'auto'/empty (= leave default)."""
+    s = str(v).strip().lower()
+    if s in ("", "auto"):
+        return None
+    return s in ("1", "y", "yes", "t", "true", "on")
+
+
+def _perf_parse_float(v):
+    """Parse a perf input-key float (Fortran 'd' exponents ok); None for 'auto'/empty."""
+    s = str(v).strip().lower()
+    if s in ("", "auto"):
+        return None
+    return float(s.replace("d", "e"))
 
 
 OQP_CONFIG_SCHEMA = {
@@ -52,9 +88,23 @@ OQP_CONFIG_SCHEMA = {
         'functional': {'type': string, 'default': ''},
         'method': {'type': string, 'default': 'hf'},
         'runtype': {'type': string, 'default': 'energy'},
+        # perf: performance preset, default 1 (recommended production; exact). 0..3
+        # resolve to a validated bundle of the performance input keys in
+        # utils/perf_levels.py; explicit input keys override the preset. Set perf=-1
+        # to disable the preset entirely (leave every knob at its control default).
+        'perf': {'type': int, 'default': '1'},
         'system': {'type': str, 'default': ''},
         'system2': {'type': str, 'default': ''},
+        'ispher': {'type': ispher_mode, 'default': 'auto'},
         'd4': {'type': bool, 'default': 'False'},
+        # soc_2e lives here (not in [tdhf]) because it is a run-type flag:
+        # it gates the entire 2e mean-field SOC branch, parallel to runtype=soc.
+        'soc_2e': {'type': int, 'default': '1'},
+        # OpenMP threads per process / MPI rank. 0 = leave OMP_NUM_THREADS / the
+        # built-in default untouched. Applied before the OpenMP runtime loads
+        # (see pyoqp._apply_omp_threads_from_input); a build without OpenMP
+        # ignores it with a warning.
+        'omp_threads': {'type': int, 'default': '0'},
     },
     'mp2': {
         'variant': {'type': string, 'default': 'mp2'},
@@ -69,6 +119,27 @@ OQP_CONFIG_SCHEMA = {
         'continue_geom': {'type': bool, 'default': 'False'},
         'swapmo': {'type': string, 'default': ''},
     },
+    'pcm': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'backend': {'type': string, 'default': 'ddx'},
+        'mode': {'type': string, 'default': 'reference_scf'},
+        'model': {'type': string, 'default': 'ddpcm'},
+        'solvent': {'type': string, 'default': 'water'},
+        'epsilon': {'type': float, 'default': '78.3553'},
+        'radii': {'type': string, 'default': 'uff'},
+    },
+    'symmetry': {
+        'enabled': {'type': string, 'default': 'false'},
+        'point_group': {'type': string, 'default': 'auto'},
+        'subgroup': {'type': string, 'default': 'auto'},
+        'label_mo': {'type': bool, 'default': 'True'},
+        'label_states': {'type': bool, 'default': 'True'},
+        'label_modes': {'type': bool, 'default': 'True'},
+        'use_integral_symmetry': {'type': string, 'default': 'False'},
+        'use_response_symmetry': {'type': bool, 'default': 'False'},
+        'tolerance': {'type': float, 'default': '1.0e-5'},
+        'strict': {'type': bool, 'default': 'False'},
+    },
     'scf': {
         'type': {'type': string, 'default': 'rhf'},
         'maxit': {'type': int, 'default': '30'},
@@ -76,11 +147,9 @@ OQP_CONFIG_SCHEMA = {
         'maxdiis': {'type': int, 'default': '7'},
         'diis_reset_mod': {'type': int, 'default': '10'},
         'diis_reset_conv': {'type': float, 'default': '0.005'},
-        'diis_method_threshold': {'type': float, 'default': '2.0'},
         'diis_type': {'type': string, 'default': 'cdiis'},
-        'vdiis_cdiis_switch': {'type': float, 'default': '0.3'},
+        'cdiis_switch': {'type': float, 'default': '0.3'},
         'vdiis_vshift_switch': {'type': float, 'default': '0.003'},
-        'vshift_cdiis_switch': {'type': float, 'default': '0.3'},
         'vshift': {'type': float, 'default': '0.0'},
         'mom': {'type': bool, 'default': 'False'},
         'mom_switch': {'type': float, 'default': '0.003'},
@@ -91,6 +160,20 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'incremental': {'type': bool, 'default': 'True'},
+        'pscreen': {'type': bool, 'default': 'False'},
+        'pscreen_k': {'type': float, 'default': '1.0e-2'},
+        'pscreen_cap': {'type': float, 'default': '1.0e-8'},
+        'pscreen_tight': {'type': float, 'default': '1.0e-4'},
+        'pscreen_xc_dcut': {'type': float, 'default': '0.0'},
+        'pscreen_xc_aocut': {'type': float, 'default': '0.0'},
+        'pscreen_grid_rad': {'type': int, 'default': '0'},
+        'pscreen_grid_ang': {'type': int, 'default': '0'},
+        # performance knobs (see utils/perf_levels.py). 'auto' defers to the [input]
+        # perf preset; an explicit value overrides it. Translated to OQP_* env vars.
+        'xc_c2f': {'type': string, 'default': 'auto'},
+        'xc_phi_cache': {'type': string, 'default': 'auto'},
+        'xc_incdft': {'type': string, 'default': 'auto'},
+        'grad_cutoff': {'type': string, 'default': 'auto'},
         'init_scf': {'type':  string, 'default': 'no'},
         'init_basis': {'type': string, 'default': 'none'},
         'init_library': {'type': string, 'default': ''},
@@ -100,10 +183,11 @@ OQP_CONFIG_SCHEMA = {
         'save_molden': {'type': bool, 'default': 'True'},
         'rstctmo': {'type': bool, 'default': 'False'},
         'converger_type': {'type': string, 'default': 'diis'},
-        'soscf_reset_mod': {'type': int, 'default': '0'},
-        'soscf_mode': {'type': int, 'default': '0'},
+        'scal_rel': {'type': int, 'default': '0'},
+        'stability': {'type': bool, 'default': 'False'},
         'soscf_lvl_shift': {'type': float, 'default': '0'},
         'alternative_scf': {'type': string, 'default': 'trah'},
+        'escalation': {'type': string, 'default': ''},
         'verbose': {'type': int, 'default': '1'},
         'trh_stab': {'type': bool,  'default': 'False'},
         'trh_ls': {'type': bool,  'default': 'False'},
@@ -114,6 +198,7 @@ OQP_CONFIG_SCHEMA = {
         'trh_nmic': {'type': int,   'default': '50'},
         'trh_gred': {'type': float, 'default': '0.001'},
         'trh_lred': {'type': float, 'default': '0.0001'},
+        'trh_impl': {'type': string, 'default': 'auto'},
     },
 
     'dftgrid': {
@@ -122,11 +207,11 @@ OQP_CONFIG_SCHEMA = {
         'cam_alpha': {'type': float, 'default': '-1.0'},
         'cam_beta': {'type': float, 'default': '-1.0'},
         'cam_mu': {'type': float, 'default': '-1.0'},
-        'rad_type': {'type': string, 'default': 'mhl'},
-        'rad_npts': {'type': int, 'default': '50'},
-        'ang_npts': {'type': int, 'default': '194'},
+        'rad_type': {'type': string, 'default': 'ta'},
+        'rad_npts': {'type': int, 'default': '96'},
+        'ang_npts': {'type': int, 'default': '302'},
         'partfun': {'type': string, 'default': 'ssf'},
-        'pruned': {'type': string, 'default': 'SG1'},
+        'pruned': {'type': string, 'default': 'SG2'},
         'grid_ao_pruned': {'type': bool, 'default': 'True'},
         'grid_ao_threshold': {'type': float, 'default': '1.0e-15'},
         'grid_ao_sparsity_ratio': {'type': float, 'default': '0.9'},
@@ -138,6 +223,7 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
         'tlf': {'type': int, 'default': '2'},
@@ -150,21 +236,36 @@ OQP_CONFIG_SCHEMA = {
         'spc_coov': {'type': float, 'default': '-1.0'},
         'conf_threshold': {'type': float, 'default': '5.0e-2'},
         'ixcore': {'type': string, 'default': '-1'},
-        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES
+        'z_solver': {'type': int, 'default': '0'},  # 0: CG, 1: GMRES (legacy), 2: MINRES, 3: AUTO
         'gmres_dim': {'type': int, 'default': '50'},  # Dimension for GMRES during Z-vector
+        # MRSF performance knobs (see utils/perf_levels.py). 'auto' defers to the
+        # [input] perf preset; an explicit value overrides it.
+        'resp_cutoff': {'type': string, 'default': 'auto'},
+        'fp32': {'type': string, 'default': 'auto'},
+        'zv_warmstart': {'type': string, 'default': 'auto'},
+    },
+    'ekt': {
+        'ip': {'type': bool, 'default': 'True'},
+        'ea': {'type': bool, 'default': 'False'},
     },
     'properties': {
-        'scf_prop': {'type': sarray, 'default': 'el_mom,mulliken'},
+        # Opt-in: properties are computed (and regression-tested) only when
+        # explicitly requested, so they are not surfaced to every reference and
+        # do not become cross-platform regression targets on every SCF run.
+        'scf_prop': {'type': sarray, 'default': ''},
+        # NMR shielding gauge formulation.  CGO is the validated default;
+        # GIAO is recognized explicitly but gated until the integral/response
+        # implementation and benchmarks are complete.
+        'nmr_gauge': {'type': string, 'default': 'cgo'},
         'td_prop': {'type': bool, 'default': 'False'},
         'grad': {'type': iarray, 'default': '0'},
         'nac': {'type': str, 'default': ''},
-        'soc': {'type': str, 'default': ''},
         'export': {'type': bool, 'default': 'False'},
         'title': {'type': str, 'default': ''},
         'back_door': {'type': bool, 'default': False}
     },
     'optimize': {
-        'lib': {'type': str, 'default': 'scipy'},
+        'lib': {'type': str, 'default': 'oqp'},
         'optimizer': {'type': str, 'default': 'bfgs'},
         'step_size': {'type': float, 'default': '0.1'},
         'step_tol': {'type': float, 'default': '1e-2'},
@@ -188,12 +289,6 @@ OQP_CONFIG_SCHEMA = {
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
     },
-    'dlfind': {
-        'printl': {'type': int, 'default': '2'},
-        'icoord': {'type': int, 'default': '3'},
-        'iopt': {'type': int, 'default': '3'},
-        'ims': {'type': int, 'default': '0'},
-    },
     'geometric': {
         'coordsys': {'type': str, 'default': 'tric'},
         'trust': {'type': float, 'default': '0.1'},
@@ -205,6 +300,27 @@ OQP_CONFIG_SCHEMA = {
         'constraints_file': {'type': str, 'default': ''},
         'enforce': {'type': float, 'default': '0.0'},
         'conmethod': {'type': int, 'default': '0'},
+    },
+    'oqp': {
+        'coordsys': {'type': str, 'default': 'tric'},
+        'trust': {'type': float, 'default': '0.2'},
+        'trust_max': {'type': float, 'default': '0.5'},
+        'follow': {'type': int, 'default': '0'},
+        'spring': {'type': float, 'default': '0.05'},
+        'climb': {'type': bool, 'default': 'True'},
+        'fmax': {'type': float, 'default': '2e-3'},
+        'climb_fmax': {'type': float, 'default': '0.05'},
+        'neb_dt': {'type': float, 'default': '0.5'},
+        'maxmove': {'type': float, 'default': '0.2'},
+        'opt_ends': {'type': bool, 'default': 'True'},
+        'end_fmax': {'type': float, 'default': '1e-3'},
+        'irc_step': {'type': float, 'default': '0.1'},
+        'irc_direction': {'type': str, 'default': 'forward'},
+        'mep_step': {'type': float, 'default': '0.1'},
+    },
+    'neb': {
+        'product': {'type': str, 'default': ''},
+        'nimage': {'type': int, 'default': '5'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
@@ -249,7 +365,7 @@ class OQPData:
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
     _methods = ('hf', 'tdhf', 'mp2')
-    _td_types = ('rpa', 'tda', 'sf', 'mrsf')
+    _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
     _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
@@ -260,8 +376,13 @@ class OQPData:
             "functional": "set_dft_functional",
             "system": "set_system",
             "system2": "set_system2",
+            "soc_2e":     "set_soc_2e",
         },
         "guess": {
+        },
+        "pcm": {
+            "enabled": "set_pcm_enabled",
+            "epsilon": "set_pcm_epsilon",
         },
         "mp2": {
             "same_spin_scale": "set_mp2_same_spin_scale",
@@ -273,11 +394,9 @@ class OQPData:
             "maxdiis": "set_scf_maxdiis",
             "diis_reset_mod": "set_scf_diis_reset_mod",
             "diis_reset_conv": "set_scf_diis_reset_conv",
-            "diis_method_threshold": "set_scf_diis_method_threshold",
             "diis_type": "set_scf_diis_type",
-            "vdiis_cdiis_switch": "set_scf_vdiis_cdiis_switch",
+            "cdiis_switch": "set_scf_cdiis_switch",
             "vdiis_vshift_switch": "set_scf_vdiis_vshift_switch",
-            "vshift_cdiis_switch": "set_scf_vshift_cdiis_switch",
             "ft": "set_scf_vshift",
             "vshift": "set_scf_vshift",
             "mom": "set_scf_mom",
@@ -289,11 +408,22 @@ class OQPData:
             "multiplicity": "set_mol_multiplicity",
             "conv": "set_scf_conv",
             "incremental": "set_scf_incremental",
+            "pscreen": "set_scf_pscreen",
+            "pscreen_k": "set_scf_pscreen_k",
+            "pscreen_cap": "set_scf_pscreen_cap",
+            "pscreen_tight": "set_scf_pscreen_tight",
+            "pscreen_xc_dcut": "set_scf_pscreen_xc_dcut",
+            "pscreen_xc_aocut": "set_scf_pscreen_xc_aocut",
+            "pscreen_grid_rad": "set_scf_pscreen_grid_rad",
+            "pscreen_grid_ang": "set_scf_pscreen_grid_ang",
+            "xc_c2f": "set_scf_xc_c2f",
+            "xc_phi_cache": "set_scf_xc_phi_cache",
+            "xc_incdft": "set_scf_xc_incdft",
+            "grad_cutoff": "set_scf_grad_cutoff",
             "active_basis": "set_scf_active_basis",
             "rstctmo": "set_scf_rstctmo",
+            "scal_rel": "set_scf_scal_rel",
             "converger_type": "set_scf_converger_type",
-            "soscf_reset_mod": "set_scf_soscf_reset_mod",
-            "soscf_mode": "set_scf_soscf_mode",
             "soscf_lvl_shift": "set_soscf_lvl_shift",
             "verbose": "set_scf_verbose",
             "trh_stab": "set_trah_stability",
@@ -305,6 +435,7 @@ class OQPData:
             "trh_nmic": "set_trah_n_micro",
             "trh_gred": "set_trah_global_red_factor",
             "trh_lred": "set_trah_local_red_factor",
+            "trh_impl": "set_trah_impl",
             "sd_scf": "set_sd_scf"
         },
         "dftgrid": {
@@ -325,6 +456,7 @@ class OQPData:
         "tdhf": {
             "type": "set_tdhf_type",
             "nstate": "set_tdhf_nstate",
+            "target": "set_tdhf_target",
             "multiplicity": "set_tdhf_multiplicity",
             "maxit": "set_tdhf_maxit",
             "maxit_zv": "set_tdhf_maxit_zv",
@@ -342,6 +474,9 @@ class OQPData:
             "ixcore": "set_tdhf_ixcore",
             "z_solver": "set_tdhf_z_solver",
             "gmres_dim": "set_tdhf_gmres_dim",
+            "resp_cutoff": "set_tdhf_resp_cutoff",
+            "fp32": "set_tdhf_fp32",
+            "zv_warmstart": "set_tdhf_zv_warmstart",
         },
     }
     _typemap = [np.void,
@@ -511,25 +646,17 @@ class OQPData:
         """Set reset DIIS Equations for every diis_reset_mod"""
         self._data.control.diis_reset_conv = diis_reset_conv
 
-    def set_scf_diis_method_threshold(self, diis_method_threshold):
-        """Set DIIS threshold to switch DIIS method"""
-        self._data.control.diis_method_threshold = diis_method_threshold
-
     def set_scf_diis_type(self, diistype):
         """Set DIIS method"""
         self._data.control.diis_type = OQPData._diis_types[diistype]
 
-    def set_scf_vdiis_cdiis_switch(self, vdiis_cdiis_switch):
-        """Set vdiis_cdiis_switch size for better SCF convergence"""
-        self._data.control.vdiis_cdiis_switch = vdiis_cdiis_switch
+    def set_scf_cdiis_switch(self, cdiis_switch):
+        """DIIS error below which the DIIS cascade switches to C-DIIS"""
+        self._data.control.cdiis_switch = cdiis_switch
 
     def set_scf_vdiis_vshift_switch(self, vdiis_vshift_switch):
-        """Set vdiis_vshift_switch size for better SCF convergence"""
+        """DIIS error below which the level shift is turned off (vDIIS)"""
         self._data.control.vdiis_vshift_switch = vdiis_vshift_switch
-
-    def set_scf_vshift_cdiis_switch(self, vshift_cdiis_switch):
-        """Set vshift_cdiis_switch size for better SCF convergence"""
-        self._data.control.vshift_cdiis_switch = vshift_cdiis_switch
 
     def set_scf_vshift(self, vshift):
         """Set Vshift size for better SCF convergency"""
@@ -572,9 +699,89 @@ class OQPData:
         """Set SCF convergence threshold"""
         self._data.control.conv = conv
 
+    def set_scf_scal_rel(self, scal_rel):
+        """Set SCF convergence threshold"""
+        self._data.control.scal_rel = scal_rel
+
     def set_scf_incremental(self, flag):
         """Set incremental Fock matrix build"""
         self._data.control.scf_incremental = 1 if flag else 0
+
+    def set_scf_pscreen(self, flag):
+        """Enable progressive (iteration-dependent) integral screening"""
+        self._data.control.scf_pscreen = 1 if flag else 0
+
+    def set_scf_pscreen_k(self, k):
+        """Progressive screening coupling: tau_iter = k * diis_error"""
+        self._data.control.pscreen_k = k
+
+    def set_scf_pscreen_cap(self, cap):
+        """Progressive screening loosest cutoff (upper clamp on tau_iter)"""
+        self._data.control.pscreen_cap = cap
+
+    def set_scf_pscreen_tight(self, tight):
+        """Progressive screening: pin to int2e_cutoff once diis_error < tight"""
+        self._data.control.pscreen_tight = tight
+
+    def set_scf_pscreen_xc_dcut(self, dcut):
+        """Progressive XC: loose grid density cutoff during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_dcut = dcut
+
+    def set_scf_pscreen_xc_aocut(self, aocut):
+        """Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)"""
+        self._data.control.pscreen_xc_aocut = aocut
+
+    def set_scf_pscreen_grid_rad(self, n):
+        """Progressive XC: coarse radial grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_rad = n
+
+    def set_scf_pscreen_grid_ang(self, n):
+        """Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)"""
+        self._data.control.pscreen_grid_ang = n
+
+    # --- Performance knobs (input keys; 'auto' defers to the perf preset / leaves
+    #     the control default untouched). See utils/perf_levels.py. ---
+    def set_scf_xc_c2f(self, v):
+        """Coarse-to-fine XC grid during SCF descent (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_c2f = 1 if b else 0
+
+    def set_scf_xc_phi_cache(self, v):
+        """Cache collocation Phi across SCF iterations (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_phi_cache = 1 if b else 0
+
+    def set_scf_xc_incdft(self, v):
+        """Incremental DFT (experimental; on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.xc_incdft = 1 if b else 0
+
+    def set_scf_grad_cutoff(self, v):
+        """Schwarz cutoff for the 2e-derivative gradient build (number or auto)."""
+        f = _perf_parse_float(v)
+        if f is not None:
+            self._data.control.grad_cutoff = f
+
+    def set_tdhf_resp_cutoff(self, v):
+        """MRSF response 2e-integral cutoff (number or auto)."""
+        f = _perf_parse_float(v)
+        if f is not None:
+            self._data.control.mrsf_resp_cutoff = f
+
+    def set_tdhf_fp32(self, v):
+        """FP32 MRSF response digestion (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.mrsf_fp32 = 1 if b else 0
+
+    def set_tdhf_zv_warmstart(self, v):
+        """MRSF z-vector warm-start across geometry steps (on/off/auto)."""
+        b = _perf_parse_bool(v)
+        if b is not None:
+            self._data.control.mrsf_zv_warmstart = 1 if b else 0
 
     def set_scf_converger_type(self, converger_type):
         """Set SCF solver for SCF convergence:
@@ -583,7 +790,7 @@ class OQPData:
                 1: BFGS/SOSCF
                 2: TRAH
         """
-        if converger_type == "diis":
+        if converger_type in ("diis", "auto", "ml"):   # auto/ml resolved by the SCF manager (_run_scf); default DIIS here
             self._data.control.converger_type = 0
         elif converger_type == "soscf":
             self._data.control.converger_type = 1
@@ -591,28 +798,8 @@ class OQPData:
             self._data.control.converger_type = 2
 
     def set_soscf_lvl_shift(self, soscf_lvl_shift):
-        """Reset the orbital Hessian. If it is zero, we don't reset by default.
-        """
+        """SOSCF level-shift parameter."""
         self._data.control.soscf_lvl_shift = soscf_lvl_shift
-
-    def set_scf_soscf_mode(self, soscf_mode):
-        """Set the SOSCF mode
-        Parameters:
-            soscf_mode (int):
-                0   : Plane 
-                1   : Stability Improved
-                2   : Stability + Performance
-        """
-        self._data.control.soscf_mode = soscf_mode
-
-    def set_scf_soscf_reset_mod(self, soscf_reset_mod):
-        """Set the SOSCF Hessian reset mode.
-        Parameters:
-            soscf_reset_mod (int):
-                0      – Disable Hessian reset.
-                >0     – Reset the Hessian at the specified SCF iteration.
-        """
-        self._data.control.soscf_reset_mod = soscf_reset_mod
 
     def set_scf_verbose(self, verbose):
         """Controls output verbosity"""
@@ -679,14 +866,36 @@ class OQPData:
         if not (0.0 < f < 1.0):
             raise ValueError("local_red_factor must be in (0,1)")
         self._data.control.trh_lred = float(f)
+    def set_trah_impl(self, trh_impl) -> None:
+        """
+        Select the TRAH implementation.
+        Valid values:
+          auto   : native Fortran trust-region augmented-Hessian solver
+          native : native Fortran trust-region augmented-Hessian solver
+          otr    : external OpenTrustRegion library
+        """
+        impl_map = {"otr": 0, "native": 1, "auto": 1}
+        if not isinstance(trh_impl, str):
+            raise TypeError("trh_impl must be a string")
+        self._data.control.trh_impl = impl_map[trh_impl.strip().lower()]
+
     def set_sd_scf(self, sd_scf):
         """prevent running the first SD-SCF calculation"""
         self._data.control.sd_scf = sd_scf
 
+    def set_pcm_enabled(self, enabled):
+        """Enable the PCM reaction-field contribution to the SCF (ddX backend)"""
+        self._data.control.pcm_enabled = enabled
+
+    def set_pcm_epsilon(self, epsilon):
+        """Set the PCM solvent dielectric constant"""
+        self._data.control.pcm_epsilon = epsilon
+
     def set_tdhf_type(self, td_type):
         """Handle td-dft calculation type"""
-        if td_type.lower() == 'tda':
-            self._data.tddft.tda = True
+        td_type = td_type.lower()
+        self._data.tddft.tda = td_type == 'tda'
+        self._data.tddft.umrsf = td_type == 'umrsf'
 
     def set_tdhf_nstate(self, nstate):
         """Set number of states in tdhf calculation"""
@@ -771,9 +980,15 @@ class OQPData:
 
     def set_tdhf_z_solver(self, z_solver):
         """Set z-vector solver type:
-           0: CG (Conjugate Gradient) only
-           1: GMRES (Generalized Minimal Residual)
+           0: CG (Conjugate Gradient, default) - for symmetric positive-definite (A+B)
+           1: GMRES (Generalized Minimal Residual) - legacy explicit fallback
+           2: MINRES (Minimal Residual) - symmetric, robust when (A+B) is indefinite
+           3: AUTO - try CG, fall back to MINRES then GMRES if a solver fails
         """
+        if z_solver not in (0, 1, 2, 3):
+            raise ValueError(
+                f"z_solver must be 0 (CG), 1 (GMRES), 2 (MINRES), or 3 (AUTO); got {z_solver}"
+            )
         self._data.tddft.z_solver = z_solver
 
     def set_conf_threshold(self, conf_threshold):
@@ -831,7 +1046,7 @@ class OQPData:
 
     def set_dftgrid_pruned(self, pruned):
         """Set pruned grid"""
-        pruned_list = ['SG1', ]
+        pruned_list = ['SG0', 'SG1', 'SG2', 'SG3']
         if pruned != "":
             pruned = pruned.upper()
             if pruned in pruned_list:
@@ -872,6 +1087,9 @@ class OQPData:
             num_atoms, x, y, z, q, mass = read_system(system)
             self.mol2 = np.array(x + y + z).reshape((3, num_atoms)).T.reshape(-1)
 
+    def set_soc_2e(self, soc_2e):
+        self._data.control.soc_2e = soc_2e
+
     def parse_section(self, config, section):
         cfg_input = config[section]
         for key in cfg_input.keys():
@@ -887,10 +1105,17 @@ class OQPData:
         Apply the data from the OQP config
         The latter has to be read from the input file
         """
+        lib.oqp_set_harmonic_active(ispher_mode(config['input'].get('ispher', 'auto')) != 'false')
         for section in config:
             self.parse_section(config, section)
 
         molecule = self._data
+
+        # Native TRAH is the default implementation. Explicit trh_impl=otr still
+        # selects the external OpenTrustRegion implementation when it is compiled.
+        trh_choice = str(config.get('scf', {}).get('trh_impl', 'auto')).strip().lower()
+        if trh_choice == 'auto':
+            molecule.control.trh_impl = 1
         natom = molecule.mol_prop.natom
         charge = molecule.mol_prop.charge
         nelec = sum(int(molecule.qn[i]) for i in range(natom)) - charge

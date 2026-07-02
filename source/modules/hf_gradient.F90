@@ -2,7 +2,8 @@ module hf_gradient_mod
 
   use precision, only: dp
   use grd2, only: grd2_driver, grd2_compute_data_t
-  use basis_tools, only: basis_set
+  use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+  use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
 
   implicit none
@@ -15,8 +16,14 @@ module hf_gradient_mod
     real(kind=dp), pointer :: da(:) => null()
     real(kind=dp), pointer :: db(:) => null()
     real(kind=dp), allocatable :: d2a(:,:), d2b(:,:)
+    ! Cartesian-effective (bfnrm-folded) densities + Cartesian offsets, built
+    ! by build_cart and used by get_density under HARMONIC_ACTIVE.
+    real(kind=dp), allocatable :: d2a_cart(:,:), d2b_cart(:,:)
+    integer, allocatable :: cart_off(:)
+    integer :: nbf_cart = 0
     integer :: nbf = 0
   contains
+    procedure :: build_cart => grd2_hf_build_cart
   end type
 
 !###############################################################################
@@ -42,6 +49,8 @@ module hf_gradient_mod
   private
 
   public hf_gradient
+  public grd2_rhf_compute_data_t
+  public grd2_uhf_compute_data_t
 
 !###############################################################################
 
@@ -73,9 +82,8 @@ contains
 
     type(information), target, intent(inout) :: infos
 
-    integer :: b_size, c_size, s_size
     type(basis_Set), pointer :: basis
-    logical :: urohf, dft
+    logical :: dft
     type(dft_grid_t) :: molGrid
 
 !   3. LOG: Write: Main output file
@@ -83,18 +91,11 @@ contains
 !
     call print_module_info('HF_DFT_Gradient','Computing Gradient of HF/DFT')
 
-    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
     dft = infos%control%hamilton == 20
 
 !   Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
-
-!   Allocate memory
-    b_size = basis%nbf*(basis%nbf+1)/2
-    c_size = basis%nbf
-    s_size = (basis%nshell**2+basis%nshell)/2
-
 
 !   Compute 1e gradient
 
@@ -285,12 +286,43 @@ contains
 
     call gcomp%init()
 
+    select type (gcomp)
+    class is (grd2_hf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
+
     call grd2_driver(infos, basis, de, gcomp)
     infos%atoms%grad = infos%atoms%grad + de
 
     call gcomp%clean()
 
   end subroutine
+
+!###############################################################################
+
+  !> @brief Build Cartesian-effective (bfnrm-folded) densities + Cartesian
+  !>        offsets for the 2e gradient under HARMONIC_ACTIVE. The 2-particle
+  !>        density factorizes, so get_density uses the SAME formula on the
+  !>        expanded density (no separate bfnrm factor).
+  subroutine grd2_hf_build_cart(this, basis)
+    class(grd2_hf_compute_data_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), allocatable :: tmp(:,:)
+    integer, allocatable :: dummy_off(:)
+    integer :: ncb
+
+    if (.not. HARMONIC_ACTIVE) return
+
+    tmp = this%d2a
+    call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+    call build_cart_density(basis, tmp, this%d2a_cart, this%cart_off, this%nbf_cart)
+
+    if (allocated(this%d2b)) then
+      tmp = this%d2b
+      call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+      call build_cart_density(basis, tmp, this%d2b_cart, dummy_off, ncb)
+    end if
+  end subroutine grd2_hf_build_cart
 
 !###############################################################################
 
@@ -351,6 +383,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_rhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -361,21 +397,36 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, bfn
+    logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: d2a(:,:)
     integer :: i1, j1, k1, l1
+    logical :: usecart
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
+    do_exchange = xcfact/=0.0_dp
+
+    ! Under HARMONIC_ACTIVE the derivative ERIs are Cartesian, so contract
+    ! against the Cartesian-effective density with Cartesian offsets; the
+    ! bfnrm factor is already folded into d2a_cart. Otherwise use the
+    ! spherical/Cartesian density with shell offsets and apply bfnrm.
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      d2a => this%d2a_cart
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      d2a => this%d2a
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
 
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-
-    nbf = basis%naos(id)
-
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
     do i = 1, nbf(1)
@@ -389,14 +440,16 @@ contains
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
-            if (xcfact/=0.0_dp) then
-              dq1 = this%d2a(i1,k1)*this%d2a(j1,l1) &
-                  + this%d2a(i1,l1)*this%d2a(j1,k1)
+            df1 = coulfact*d2a(i1,j1)*d2a(k1,l1)
+            if (do_exchange) then
+              dq1 = d2a(i1,k1)*d2a(j1,l1) &
+                  + d2a(i1,l1)*d2a(j1,k1)
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*bfn
           end do
         end do
       end do
@@ -408,6 +461,10 @@ contains
 !> @brief This routine forms the product of density
 !>        matrices for use in forming the two electron
 !>        gradient. Valid for closed and open shell SCF.
+!> @note  dabmax is computed from the unnormalized density products (the
+!>        historic screening convention); the basis normalization enters only
+!>        the stored block, through norm factors hoisted out of the inner
+!>        loops.
   subroutine grd2_uhf_compute_data_t_get_density(this, basis, id, dab, dabmax)
 
     implicit none
@@ -418,21 +475,34 @@ contains
     real(kind=dp), target, intent(out) :: dab(*)
     real(kind=dp), intent(out) :: dabmax
 
-    real(kind=dp) :: coulfact, xcfact, df1, dq1
+    real(kind=dp) :: coulfact, xcfact, df1, dq1, bfn
+    logical :: do_exchange
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: d2a(:,:), d2b(:,:)
     integer :: i1, j1, k1, l1
+    logical :: usecart
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
+    do_exchange = xcfact/=0.0_dp
+
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      d2a => this%d2a_cart
+      d2b => this%d2b_cart
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      d2a => this%d2a
+      d2b => this%d2b
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
 
     dabmax = 0
-    loc = basis%ao_offset(id)-1
-
-    nbf = basis%naos(id)
-
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
 
     do i = 1, nbf(1)
@@ -446,16 +516,18 @@ contains
 
           do l = 1, nbf(4)
             l1 = loc(4) + l
-            df1 = coulfact*this%d2a(i1,j1)*this%d2a(k1,l1)
-            if (xcfact/=0.0_dp) then
-              dq1 = this%d2a(i1,k1)*this%d2a(j1,l1) &
-                  + this%d2a(i1,l1)*this%d2a(j1,k1) &
-                  + this%d2b(i1,k1)*this%d2b(j1,l1) &
-                  + this%d2b(i1,l1)*this%d2b(j1,k1)
+            df1 = coulfact*d2a(i1,j1)*d2a(k1,l1)
+            if (do_exchange) then
+              dq1 = d2a(i1,k1)*d2a(j1,l1) &
+                  + d2a(i1,l1)*d2a(j1,k1) &
+                  + d2b(i1,k1)*d2b(j1,l1) &
+                  + d2b(i1,l1)*d2b(j1,k1)
               df1 = df1-xcfact*dq1
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i1,j1,k1,l1]))
+            ab(l,k,j,i) = df1*bfn
           end do
         end do
       end do

@@ -175,6 +175,25 @@ contains
 
   end subroutine mulliken_excited
 
+  !> @brief Store a per-atom charge vector to a tagarray so it can be written
+  !>   to the reference/restart JSON and regression-tested from Python.
+  subroutine store_atom_charges(infos, tag, comment, chg)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+
+    type(information), target, intent(inout) :: infos
+    character(len=*), intent(in) :: tag, comment
+    real(kind=dp), intent(in) :: chg(:)
+
+    real(kind=dp), contiguous, pointer :: chgout(:)
+    integer :: nat
+
+    nat = size(chg)
+    call infos%dat%alloc_or_die(tag, (/ nat /), chgout, description=comment)
+    chgout(1:nat) = chg(1:nat)
+  end subroutine store_atom_charges
+
   subroutine mulliken(infos)
     use precision, only: dp
     use io_constants, only: iw
@@ -182,6 +201,7 @@ contains
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
+    use oqp_tagarray_driver, only: OQP_mulliken_charges, OQP_mulliken_charges_comment
 
     implicit none
 
@@ -218,6 +238,9 @@ contains
     write(iw,'(/,2X,A)') 'Atomic partial charges (Mulliken)'
     call print_charges(infos, chg)
 
+    call store_atom_charges(infos, OQP_mulliken_charges, &
+                            OQP_mulliken_charges_comment, chg)
+
     close(iw)
 
   end subroutine mulliken
@@ -231,6 +254,7 @@ contains
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
+    use oqp_tagarray_driver, only: OQP_lowdin_charges, OQP_lowdin_charges_comment
 
     implicit none
 
@@ -266,6 +290,9 @@ contains
 
     write(iw,'(/,2X,A)') 'Atomic partial charges (Lowdin)'
     call print_charges(infos, chg)
+
+    call store_atom_charges(infos, OQP_lowdin_charges, &
+                            OQP_lowdin_charges_comment, chg)
 
     close(iw)
 
@@ -382,7 +409,7 @@ contains
     do i = 1, basis%nshell
       iatom = basis%origin(i)
       i0 = basis%ao_offset(i)
-      i1 = basis%ao_offset(i)+NUM_CART_BF(basis%am(i))-1
+      i1 = basis%ao_offset(i)+basis%naos(i)-1   ! AO count per shell (spherical-aware)
       at_pop(iatom) = at_pop(iatom) + sum(ao_pop(i0:i1))
     end do
   end subroutine

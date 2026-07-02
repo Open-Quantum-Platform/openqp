@@ -9,7 +9,7 @@ from oqp import ffi
 import basis_set_exchange as bse
 from oqp.utils.mpi_utils import MPIManager
 import json
-from oqp.molecule.oqpdata import compute_alpha_beta_electrons
+from oqp.molecule.oqpdata import compute_alpha_beta_electrons, ispher_mode
 
 
 class BasisData:
@@ -22,6 +22,8 @@ class BasisData:
         self.atom_xyz = mol.data["xyz"]
         self.basis_names = []
         self.shells_data = []
+        self._ffi_buffer_refs = []
+        self.mol._ffi_buffer_refs = self._ffi_buffer_refs
         self.ecp = {
             "ang": [],
             "r_expo": [],
@@ -33,6 +35,18 @@ class BasisData:
             "num_expo": []
         }
         self.use_ecp = False
+
+    def _ispher_mode(self):
+        return ispher_mode(self.mol.config['input'].get('ispher', 'auto'))
+
+    def _buffer_ptr(self, values, dtype, ctype):
+        array = np.ascontiguousarray(np.asarray(values, dtype=dtype))
+        if not hasattr(self, "_ffi_buffer_refs"):
+            self._ffi_buffer_refs = []
+        if getattr(self.mol, "_ffi_buffer_refs", None) is not self._ffi_buffer_refs:
+            self.mol._ffi_buffer_refs = self._ffi_buffer_refs
+        self._ffi_buffer_refs.append(array)
+        return ffi.cast(ctype, ffi.from_buffer(array))
 
     def get_basis_data(self, elements, basis_name='STO-3G', el_index=0):
         """
@@ -63,12 +77,23 @@ class BasisData:
         for shell in basis['elements'][element_key]['electron_shells']:
             ang_ii = 0
 
+            # BSE tags the harmonic type per shell: 'gto_spherical' |
+            # 'gto_cartesian' | 'gto' (s/p, where Cartesian == spherical).
+            # ispher=auto selects the AO convention the basis was published
+            # with, e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical
+            # (5d); ispher=true forces pure spherical for every shell (GAMESS
+            # ISPHER=1); ispher=false deactivates the harmonic gate globally.
+            shell_ft = shell.get('function_type', 'gto')
+            shell_is_spherical = shell_ft.endswith('spherical')
+            force_spherical = self._ispher_mode() == 'true'
+
             for coefficients in shell['coefficients']:
                 shell['angular_momentum']
                 if len(shell['angular_momentum']) > 1:
                     ang_mom = shell['angular_momentum'][ang_ii]
                 else:
                     ang_mom = shell['angular_momentum'][0]
+                shell_harmonic = 1 if (shell_is_spherical or force_spherical) else 0
 
                 self.shell_num += 1
 
@@ -78,6 +103,7 @@ class BasisData:
                     "id": self.shell_num,
                     "element_id": el_index + 1,
                     "angular_momentum": ang_mom,
+                    "harmonic": shell_harmonic,
                     "exponents": [float(x) for i, x in enumerate(shell['exponents']) if i in nonzero_indices],
                     "coefficients": list(map(float, [coefficients[i] for i in nonzero_indices]))
                 }
@@ -182,21 +208,13 @@ class BasisData:
         self.mol.data["element_id"] = int(self.ecp["element_id"])
         self.mol.data["ecp_nam"] = len(self.ecp["ang"])
 
-        n_expo_array = np.array(self.ecp["num_expo"], dtype=np.int32)
-        self.mol.data["num_expo"] = ffi.cast("int*", ffi.from_buffer(n_expo_array))
-
-        expo_array = np.array(self.ecp["g_expo"], dtype=np.float64)
-        self.mol.data["expo"] = ffi.cast("double*", ffi.from_buffer(expo_array))
-        coef_array = np.array(self.ecp["coef"], dtype=np.float64)
-        self.mol.data["coef"] = ffi.cast("double*", ffi.from_buffer(coef_array))
-
-        r_expo_array = np.array(self.ecp["r_expo"], dtype=np.float64)
-        self.mol.data["ecp_rex"] = ffi.cast("int*", ffi.from_buffer(r_expo_array))
-
-        coord_array = np.array(self.ecp["coord"], dtype=np.float64)
-        self.mol.data["ecp_am"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ang"], dtype=np.float64)))
-        self.mol.data["ecp_zn"] = ffi.cast("int*", ffi.from_buffer(np.array(self.ecp["ecp_electron"], dtype=np.int32)))
-        self.mol.data["ecp_coord"] = ffi.cast("double*", ffi.from_buffer(coord_array))
+        self.mol.data["num_expo"] = self._buffer_ptr(self.ecp["num_expo"], np.int32, "int*")
+        self.mol.data["expo"] = self._buffer_ptr(self.ecp["g_expo"], np.float64, "double*")
+        self.mol.data["coef"] = self._buffer_ptr(self.ecp["coef"], np.float64, "double*")
+        self.mol.data["ecp_rex"] = self._buffer_ptr(self.ecp["r_expo"], np.float64, "int*")
+        self.mol.data["ecp_am"] = self._buffer_ptr(self.ecp["ang"], np.float64, "int*")
+        self.mol.data["ecp_zn"] = self._buffer_ptr(self.ecp["ecp_electron"], np.int32, "int*")
+        self.mol.data["ecp_coord"] = self._buffer_ptr(self.ecp["coord"], np.float64, "double*")
 
         oqp.append_ecp(self.mol)
 
@@ -232,15 +250,11 @@ class BasisData:
             self.mol.data["id"] = int(shell["id"])
             self.mol.data["element_id"] = int(shell["element_id"])
             self.mol.data["ang_mom"] = shell["angular_momentum"]
+            self.mol.data["harmonic"] = int(shell.get("harmonic", 0))
 
-            n_expo_array = np.array([len(shell["exponents"])], dtype=np.int32)
-            self.mol.data["num_expo"] = ffi.cast("int*", ffi.from_buffer(n_expo_array))
-
-            expo_array = np.array(shell["exponents"], dtype=np.float64)
-            self.mol.data["expo"] = ffi.cast("double*", ffi.from_buffer(expo_array))
-
-            coef_array = np.array(shell["coefficients"], dtype=np.float64)
-            self.mol.data["coef"] = ffi.cast("double*", ffi.from_buffer(coef_array))
+            self.mol.data["num_expo"] = self._buffer_ptr([len(shell["exponents"])], np.int32, "int*")
+            self.mol.data["expo"] = self._buffer_ptr(shell["exponents"], np.float64, "double*")
+            self.mol.data["coef"] = self._buffer_ptr(shell["coefficients"], np.float64, "double*")
 
             oqp.append_shell(self.mol)
 

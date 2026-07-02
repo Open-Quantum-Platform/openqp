@@ -242,6 +242,14 @@ contains
 !   Print ESP charges
     call print_charges(infos, chg)
 
+!   Store RESP charges to a tagarray for JSON output / regression testing
+    block
+      real(kind=dp), contiguous, pointer :: chgout(:)
+      call infos%dat%alloc_or_die(OQP_resp_chg, (/ nat /), chgout, &
+                                  description=OQP_resp_chg_comment)
+      chgout(1:nat) = chg(1:nat)
+    end block
+
 !   Compute RMS error of the ponential induced by ESP charges
     call check_charges( &
             x=xyz(:nptcur,1), &

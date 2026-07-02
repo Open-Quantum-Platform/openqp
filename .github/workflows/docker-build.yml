@@ -13,12 +13,32 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_DOCKER_CREDENTIALS: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
+      # Keep in sync with the FROM line in Dockerfile and the openqp-dev repo's
+      # buildenv.Dockerfile / publish-buildenv.yml (which publishes this tag).
+      BUILDENV_IMAGE: openqp/openqp-buildenv:1
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Read package version
+        id: version
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import re
+          from pathlib import Path
+
+          pyproject = Path("pyproject.toml").read_text()
+          match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+          if not match:
+              raise SystemExit("Could not find project.version in pyproject.toml")
+          version = match.group(1)
+          print(f"version={version}")
+          print(f"docker_tag=v{version}")
+          PY
+
       - name: Set up Docker Buildx
+        id: setup-buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
@@ -28,27 +48,57 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-
-      - name: Build Docker Image
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      # The build environment (toolchain, ILP64 OpenBLAS, Python deps) is a
+      # prebuilt image, built and published by the
+      # Open-Quantum-Platform/openqp-dev companion repo
+      # (.github/workflows/publish-buildenv.yml). Here we only pull it; if it is
+      # missing, fail loudly rather than rebuild a recipe this repo no longer
+      # carries.
+      - name: Prepare build environment image
+        id: buildenv
         run: |
-          PUSH_ARGS=""
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "${DOCKER_USERNAME}" ] && [ -n "${DOCKER_PASSWORD}" ]; then
-            PUSH_ARGS="--push --tag openqp/openqp:v1.0"
+          if ! docker pull "${BUILDENV_IMAGE}"; then
+            echo "::error::${BUILDENV_IMAGE} not found in registry. Publish it from" \
+                 "the openqp-dev repo (publish-buildenv.yml) before building here."
+            exit 1
           fi
-          docker buildx build \
-            --platform linux/amd64 \
-            ${PUSH_ARGS} \
-            .
+          echo "source=registry" >> "${GITHUB_OUTPUT}"
 
-      - name: Verify Docker Image
+      - name: Cache Docker build mounts
+        if: steps.buildenv.outputs.source == 'registry'
+        id: docker-cache-mounts
+        uses: actions/cache@v4
+        with:
+          path: docker-cache-mounts
+          key: docker-cache-mounts-${{ runner.os }}-${{ hashFiles('Dockerfile', 'pyproject.toml', 'external/CMakeLists.txt') }}
+          restore-keys: |
+            docker-cache-mounts-${{ runner.os }}-
+
+      - name: Restore Docker build mounts
+        if: steps.buildenv.outputs.source == 'registry'
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: docker-cache-mounts
+          dockerfile: Dockerfile
+          skip-extraction: ${{ steps.docker-cache-mounts.outputs.cache-hit }}
+
+      - name: Build OpenQP image
+        if: steps.buildenv.outputs.source == 'registry'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          tags: openqp/openqp:${{ steps.version.outputs.docker_tag }}
+          load: true
+          # BuildKit's GitHub cache keeps source-independent Docker layers.
+          # actions/cache + buildkit-cache-dance above keep the pip/OpenQP
+          # externals cache mounts. pyproject.toml or external/CMakeLists.txt
+          # changes get a new mount-cache key and refresh subsequent builds.
+          cache-from: type=gha,scope=openqp-docker
+          cache-to: type=gha,mode=max,scope=openqp-docker
+
+      - name: Push image
         if: github.event_name == 'push' && env.HAS_DOCKER_CREDENTIALS == 'true'
-        run: |
-          docker pull openqp/openqp:v1.0
-          docker inspect openqp/openqp:v1.0
+        # The buildenv image is published by the openqp-dev companion repo, not
+        # here; this repo only publishes the OpenQP application image.
+        run: docker push openqp/openqp:${{ steps.version.outputs.docker_tag }}

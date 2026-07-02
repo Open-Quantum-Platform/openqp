@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(Open-Quantum-Package
-  VERSION 1.0.0
+  VERSION 1.2.0
   LANGUAGES C CXX Fortran)
 
 set(CMAKE_Fortran_STANDARD 2003)
@@ -9,6 +9,18 @@ set(CMAKE_Fortran_STANDARD 2003)
 include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
+option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
+option(OQP_REUSE_EXTERNALS
+       "Reuse bundled external dependency builds across fresh OpenQP build directories"
+       ON)
+set(OQP_EXTERNALS_ROOT "" CACHE PATH
+    "Optional override for the reusable bundled external dependency cache root.")
+if(DEFINED OQP_EXTERNAL_ROOT AND NOT OQP_EXTERNALS_ROOT)
+    set(OQP_EXTERNALS_ROOT "${OQP_EXTERNAL_ROOT}" CACHE PATH
+        "Optional override for the reusable bundled external dependency cache root." FORCE)
+    message(STATUS "OQP_EXTERNAL_ROOT is accepted as an alias for OQP_EXTERNALS_ROOT.")
+endif()
+mark_as_advanced(OQP_EXTERNALS_ROOT)
 
 if(ENABLE_MPI)
     find_package(MPI REQUIRED)
@@ -59,6 +71,13 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
 endif()
 
 option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
+if(NOT LINALG_LIB_INT64 AND NOT APPLE)
+    message(FATAL_ERROR
+      "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "
+      "Accelerate builds. Other platforms require ILP64 BLAS/LAPACK with "
+      "OQP_BLAS_INT=8."
+    )
+endif()
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
 
@@ -86,7 +105,6 @@ endif()
 
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   add_compile_options(
-  $<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>
   $<$<COMPILE_LANGUAGE:Fortran>:-ffree-line-length-none>
   )
   if(CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -130,22 +148,27 @@ if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
       -fsanitize=thread
       )
   endif()
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
-elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-  add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
 endif()
 if(LINALG_LIB_INT64)
     set(BLA_SIZEOF_INTEGER 8)
     set(OTR_SUFFIX "_64")
     set(OTR_DEFS "-DUSE_ILP64")
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
+    endif()
 else()
     set(BLA_SIZEOF_INTEGER 4)
     set(OTR_SUFFIX "_32")
     set(OTR_DEFS "")
 endif()
+
+# Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the
+# external library is neither downloaded nor compiled, otr_interface.F90 is dropped
+# from the build, and the TRAH dispatch falls back to the native solver for every
+# trh_impl. Default ON preserves the validated gradient/MRSF reference paths.
+option(ENABLE_OPENTRAH "Build and link the external OpenTrustRegion (OpenTRAH) solver" ON)
 if(ENABLE_OPENMP)
   find_package(OpenMP 3.1 REQUIRED)
 endif()
@@ -160,13 +183,31 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(oqp_functions)
 
+if(ENABLE_DDX)
+  # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
+  # (never vendored into the OpenQP tree). Two ways to provide it:
+  #   * DDX_ROOT given -> use that prebuilt install (find_package).
+  #   * otherwise      -> CMake builds ddX v0.8.0 from source to match OpenQP's
+  #                       selected BLAS integer width (see external/).
+  # For ILP64 builds, this also avoids a stock LP64 ddX exporting an unsuffixed
+  # dgemm_ that collides with OpenQP's ILP64 dgemm_ on Linux's flat namespace.
+  if(DEFINED DDX_ROOT OR DEFINED ENV{DDX_ROOT})
+    find_package(DDX REQUIRED)
+    set(OQP_DDX_AUTOBUILD OFF)
+    message(STATUS "ddX continuum-solvation backend (prebuilt): ${DDX_LIBRARY}")
+  else()
+    set(OQP_DDX_AUTOBUILD ON)
+    message(STATUS "ddX continuum-solvation backend: building ${BLA_SIZEOF_INTEGER}-byte BLAS integer variant from source (v0.8.0)")
+  endif()
+endif()
+
 # Fix possible issues with DYLD_LIBRARY_PATH
 if(APPLE)
     set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 endif()
 
 if(${LINALG_LIB} STREQUAL none)
-    message(FATAL_ERROR "LINALG_LIB=none is not supported because OpenQP builds and links OpenTrustRegion, which requires BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
+    message(FATAL_ERROR "LINALG_LIB=none is not supported: OpenQP (and the optional OpenTrustRegion) require BLAS/LAPACK. Use LINALG_LIB=auto, a concrete BLAS/LAPACK vendor, or netlib.")
 endif()
 
 # Resolve BLAS/LAPACK before configuring external projects. OpenTrustRegion
@@ -176,6 +217,21 @@ endif()
 # findLinearAlgebra() is called again after the oqp target exists.
 findLinearAlgebra()
 
+# Prebuilt ddX (find_package(DDX) above) created the DDX::ddx imported target in
+# cmake/FindDDX.cmake BEFORE findLinearAlgebra() resolved BLAS/LAPACK, so it
+# could not record ddX's BLAS dependency. Now that the libraries are known,
+# propagate them so the DDX_ROOT path links cleanly on a flat-namespace linker
+# (Linux), exactly as the autobuilt path does via _ddx_interface_libs in
+# external/CMakeLists.txt. Without this a prebuilt-ddX Linux build hits the same
+# "undefined reference to drot_/dtrmm_/..." failure in the smoke tests and oqp.
+if(ENABLE_DDX AND NOT OQP_DDX_AUTOBUILD AND TARGET DDX::ddx)
+  if(_LINALG_LIB_TYPE STREQUAL "NetLib")
+    set_property(TARGET DDX::ddx PROPERTY INTERFACE_LINK_LIBRARIES ${LIBLAPACK} ${LIBBLAS})
+  elseif(DEFINED LAPACK_LIBRARIES OR DEFINED BLAS_LIBRARIES)
+    set_property(TARGET DDX::ddx PROPERTY INTERFACE_LINK_LIBRARIES ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
+  endif()
+endif()
+
 add_subdirectory(external)
 
 add_definitions(-DOQP)
@@ -183,6 +239,27 @@ add_subdirectory(source)
 
 if(BUILD_TESTING)
   enable_testing()
+  if(ENABLE_DDX)
+    add_executable(oqp_ddx_link_smoke tests/ddx_link_smoke.c)
+    target_link_libraries(oqp_ddx_link_smoke PRIVATE DDX::ddx)
+    add_test(NAME oqp_ddx_link_smoke COMMAND oqp_ddx_link_smoke)
+
+    add_executable(oqp_ddx_adapter_smoke
+      tests/ddx_adapter_smoke.c
+      source/solvent_ddx_adapter.c
+    )
+    target_compile_definitions(oqp_ddx_adapter_smoke PRIVATE OQP_ENABLE_DDX)
+    target_include_directories(oqp_ddx_adapter_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/source)
+    target_link_libraries(oqp_ddx_adapter_smoke PRIVATE DDX::ddx m)
+    add_test(NAME oqp_ddx_adapter_smoke COMMAND oqp_ddx_adapter_smoke)
+
+    # When ddX is built from source, the imported DDX::ddx target wraps a future
+    # build byproduct; make the smoke executables wait for the ExternalProject.
+    if(OQP_DDX_AUTOBUILD)
+      add_dependencies(oqp_ddx_link_smoke ddx)
+      add_dependencies(oqp_ddx_adapter_smoke ddx)
+    endif()
+  endif()
 endif()
 
 if(USE_LIBINT)

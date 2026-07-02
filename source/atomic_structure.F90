@@ -1,5 +1,5 @@
 module atomic_structure_m
-  use, intrinsic :: iso_c_binding, only: c_double, c_int
+  use, intrinsic :: iso_c_binding, only: c_double, c_int, c_int64_t
   implicit none
 !  Structured Data types for basis set index
   type, public :: atomic_structure
@@ -17,7 +17,7 @@ module atomic_structure_m
 contains
   function atomic_structure_init(self, natoms) result(ok)
     class(atomic_structure) :: self
-    integer :: natoms
+    integer(c_int64_t), intent(in) :: natoms
     integer(c_int) :: ok
     ok = self%clean()
     if (ok /= 0) return

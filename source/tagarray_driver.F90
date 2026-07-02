@@ -2,7 +2,7 @@
 module oqp_tagarray_driver
   use tagarray
 
-  use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_char, c_ptr, c_null_ptr
+  use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_char, c_ptr, c_null_ptr, c_bool
 
   implicit none
   private
@@ -19,7 +19,12 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B = OQP_prefix // "VEC_MO_B"
   character(len=*), parameter, public :: OQP_Hcore = OQP_prefix // "Hcore"
   character(len=*), parameter, public :: OQP_SM = OQP_prefix // "SM"
+  character(len=*), parameter, public :: OQP_QMAT = OQP_prefix // "QMAT"
   character(len=*), parameter, public :: OQP_TM = OQP_prefix // "TM"
+  character(len=*), parameter, public :: OQP_ERI_AO = OQP_prefix // "ERI_AO"
+  character(len=*), parameter, public :: OQP_ERI_AO_comment = &
+    "Two-electron repulsion integrals (mu nu|la si) in AO basis, chemist "// &
+    "notation, full nbf**4 array stored C-contiguous with si fastest"
   character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
   character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
   character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
@@ -29,6 +34,32 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_xpy = OQP_prefix // "td_xpy"
   character(len=*), parameter, public :: OQP_td_xmy = OQP_prefix // "td_xmy"
   character(len=*), parameter, public :: OQP_td_energies = OQP_prefix // "td_energies"
+  character(len=*), parameter, public :: OQP_td_singlet_energies = OQP_prefix // "td_singlet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_triplet_energies = OQP_prefix // "td_triplet_energies"    !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_s = OQP_prefix // "td_bvec_mo_s"                  !new
+  character(len=*), parameter, public :: OQP_td_bvec_mo_t = OQP_prefix // "td_bvec_mo_t"                  !new
+  character(len=*), parameter, public :: OQP_nmr_shielding = OQP_prefix // "nmr_shielding"
+  character(len=*), parameter, public :: OQP_nmr_shielding_comment = &
+    "Isotropic NMR shielding per atom (ppm); shape (5, natom): rows = "// &
+    "dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled"
+  character(len=*), parameter, public :: OQP_mulliken_charges = OQP_prefix // "mulliken_charges"
+  character(len=*), parameter, public :: OQP_mulliken_charges_comment = &
+    "Mulliken atomic partial charges (e), one per atom"
+  character(len=*), parameter, public :: OQP_lowdin_charges = OQP_prefix // "lowdin_charges"
+  character(len=*), parameter, public :: OQP_lowdin_charges_comment = &
+    "Lowdin atomic partial charges (e), one per atom"
+  ! NB: identifier differs from the subroutine oqp_resp_charges (Fortran is
+  ! case-insensitive); the JSON key is still "resp_charges".
+  character(len=*), parameter, public :: OQP_resp_chg = OQP_prefix // "resp_charges"
+  character(len=*), parameter, public :: OQP_resp_chg_comment = &
+    "RESP/ESP-fitted atomic partial charges (e), one per atom"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_density_mo = OQP_prefix // "mrsf_ekt_density_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_lagrangian_mo = OQP_prefix // "mrsf_ekt_lagrangian_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_fock_mo = OQP_prefix // "mrsf_ekt_fock_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_orbitals_mo = OQP_prefix // "mrsf_ekt_orbitals_mo"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_eigenvalues = OQP_prefix // "mrsf_ekt_eigenvalues"
+  character(len=*), parameter, public :: OQP_mrsf_ekt_strengths = OQP_prefix // "mrsf_ekt_strengths"
+  character(len=*), parameter, public :: OQP_hf_hessian = OQP_prefix // "hf_hessian"
   character(len=*), parameter, public :: OQP_log_filename = OQP_prefix // "log_filename"
   character(len=*), parameter, public :: OQP_basis_filename = OQP_prefix // "basis_filename"
   character(len=*), parameter, public :: OQP_hbasis_filename = OQP_prefix // "hbasis_filename"
@@ -45,6 +76,21 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_nac = OQP_prefix // "nac"
   character(len=*), parameter, public :: OQP_td_states_phase = OQP_prefix // "td_states_phase"
   character(len=*), parameter, public :: OQP_td_states_overlap = OQP_prefix // "td_states_overlap"
+  character(len=*), parameter, public :: OQP_soc_eval    = OQP_prefix // "soc_eval"
+  character(len=*), parameter, public :: OQP_soc_evec_re = OQP_prefix // "soc_evec_re"
+  character(len=*), parameter, public :: OQP_soc_evec_im = OQP_prefix // "soc_evec_im"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re = OQP_prefix // "soc_hsoc_re"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im = OQP_prefix // "soc_hsoc_im"
+
+  ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
+  ! is enabled; see docs/plans/2026-06-07-symmetry-reductions-design.md)
+  character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"
+  character(len=*), parameter, public :: OQP_sym_shell_map = OQP_prefix // "sym_shell_map"
+  character(len=*), parameter, public :: OQP_sym_ao_target = OQP_prefix // "sym_ao_target"
+  character(len=*), parameter, public :: OQP_sym_ao_sign = OQP_prefix // "sym_ao_sign"
+  character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
+  character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
+  character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"
@@ -56,6 +102,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_B_comment = "Coefficients of beta molecular orbitals"
   character(len=*), parameter, public :: OQP_Hcore_comment = "triangle core Hamiltonian matrix"
   character(len=*), parameter, public :: OQP_SM_comment = "triangle Overlap matrix"
+  character(len=*), parameter, public :: OQP_QMAT_comment = "canonical orthogonalizer Q = S^(-1/2), full (nbf x nbf)"
   character(len=*), parameter, public :: OQP_TM_comment = "triangle Kinetic-Energy matrix"
   character(len=*), parameter, public :: OQP_WAO_comment = "??? WAO ???"
   character(len=*), parameter, public :: OQP_td_abxc_comment = "??? td_abxc ???"
@@ -75,10 +122,18 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_states_phase_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_td_states_overlap_comment = OQP_prefix // "Bvecs phase sign with respect to Bvec_old"
   character(len=*), parameter, public :: OQP_xyz_oldcomment = OQP_prefix // "saved geo from previous step"
-  character(len=*), parameter, public :: all_tags(32) = (/ character(len=80) :: &
+  character(len=*), parameter, public :: OQP_soc_eval_comment    = OQP_prefix // "SOC adiabatic eigenvalues (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_evec_re_comment = OQP_prefix // "SOC eigenvectors real part"
+  character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
+  character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
+  character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
+
+  character(len=*), parameter, public :: all_tags(39) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
     OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
+    OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
+    OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, OQP_hf_hessian, &
     OQP_log_filename, OQP_basis_filename, OQP_hbasis_filename, &
     OQP_xyz_old, OQP_overlap_mo, OQP_overlap_ao, OQP_E_MO_A_old, OQP_E_MO_B_old, &
     OQP_VEC_MO_A_old, OQP_VEC_MO_B_old, OQP_td_bvec_mo_old, OQP_td_energies_old, &
@@ -110,17 +165,16 @@ contains
     type(recordinfo_t) :: record_info
 
     ptr = c_null_ptr
-    record_info = container%get_record_info(tag)
-    res = container%get_status()
+    res = TA_CONTAINER_RECORD_NOT_FOUND
+    if (.not. container%contains(tag)) return
 
-    if (res == TA_OK) then
-      ptr = record_info%data
-      res = product(record_info%dimensions(1:record_info%n_dimensions))
-      if (present(type_id)) type_id = record_info%type_id
-      if (present(ndims  )) ndims   = record_info%n_dimensions
-      if (present(dims   )) dims    = record_info%dimensions
-      if (present(data_size   )) data_size    = record_info%data_length
-    end if
+    record_info = container%get(tag)
+    ptr = record_info%data
+    res = record_info%count
+    if (present(type_id)) type_id = record_info%type_id
+    if (present(ndims  )) ndims   = int(record_info%ndims, c_int32_t)
+    if (present(dims   )) dims(1:record_info%ndims) = record_info%dims
+    if (present(data_size   )) data_size = record_info%count
 
   end function tagarray_get_cptr
 
@@ -136,10 +190,13 @@ contains
     logical :: abort_
     abort_ = WITHOUT_ABORT
     if (present(abort)) abort_ = abort
-    status_ = container%has_records(tags, tag_id)
-    if (status_ /= TA_OK) call show_message( &
-        location // ": " // get_status_message(status_, trim(tags(tag_id))), &
-        abort_)
+    status_ = TA_OK
+    if (.not. container%contains(tags, tag_id)) then
+      status_ = TA_CONTAINER_RECORD_NOT_FOUND
+      call show_message( &
+          location // ": " // get_status_message(status_, trim(tags(tag_id))), &
+          abort_)
+    end if
     if (present(status)) status = status_
   end subroutine data_has_tags_location
   subroutine data_has_tags_ms(container, tags, modulename, subroutinename, abort, status)
@@ -153,10 +210,13 @@ contains
     logical :: abort_
     abort_ = WITHOUT_ABORT
     if (present(abort)) abort_ = abort
-    status_ = container%has_records(tags, tag_id)
-    if (status_ /= TA_OK) call show_message( &
-        modulename // "::" // subroutinename // ": " // get_status_message(status_, trim(tags(tag_id))), &
-        abort_)
+    status_ = TA_OK
+    if (.not. container%contains(tags, tag_id)) then
+      status_ = TA_CONTAINER_RECORD_NOT_FOUND
+      call show_message( &
+          modulename // "::" // subroutinename // ": " // get_status_message(status_, trim(tags(tag_id))), &
+          abort_)
+    end if
     if (present(status)) status = status_
   end subroutine data_has_tags_ms
   subroutine check_status(status, modulename, subroutinename, tag, abort)
@@ -177,7 +237,7 @@ contains
     integer(8), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_val
   subroutine tagarray_get_data_int64_1d(container, tag, ptr, status)
@@ -186,7 +246,7 @@ contains
     integer(8), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_1d
   subroutine tagarray_get_data_int64_2d(container, tag, ptr, status)
@@ -195,7 +255,7 @@ contains
     integer(8), pointer :: ptr(:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_2d
   subroutine tagarray_get_data_int64_3d(container, tag, ptr, status)
@@ -204,7 +264,7 @@ contains
     integer(8), pointer :: ptr(:,:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_INT64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_INT64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_int64_3d
   subroutine tagarray_get_data_real64_val(container, tag, ptr, status)
@@ -213,7 +273,7 @@ contains
     real(8), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_val
   subroutine tagarray_get_data_real64_1d(container, tag, ptr, status)
@@ -222,7 +282,7 @@ contains
     real(8), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_1d
   subroutine tagarray_get_data_real64_2d(container, tag, ptr, status)
@@ -231,7 +291,7 @@ contains
     real(8), pointer :: ptr(:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_2d
   subroutine tagarray_get_data_real64_3d(container, tag, ptr, status)
@@ -240,7 +300,7 @@ contains
     real(8), pointer :: ptr(:,:,:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_REAL64, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_REAL64, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_real64_3d
 
@@ -250,7 +310,7 @@ contains
     character(len=*, kind=c_char), pointer :: ptr
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_VALUE(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    TA_CONTAINER_GET_VALUE(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_val
 
@@ -260,7 +320,7 @@ contains
     character(len=*, kind=c_char), pointer :: ptr(:)
     integer(c_int32_t), optional, intent(out) :: status
     integer(c_int32_t) :: status_
-    TA_GET_CONTAINER_DATA(container, tag, TA_TYPE_CHAR8, ptr, status_)
+    TA_CONTAINER_GET_ARRAY(container, tag, TA_TYPE_CHAR8, ptr, status_)
     if (present(status)) status = status_
   end subroutine tagarray_get_data_char8_1d
 end module oqp_tagarray_driver

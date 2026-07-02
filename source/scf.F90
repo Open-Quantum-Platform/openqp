@@ -43,7 +43,7 @@ contains
   !> @param[inout]  infos    System information and calculation parameters
   !>                         (updated with converged energy and wavefunction).
   !> @param[in]     molGrid  Molecular grid for DFT calculations.
-  subroutine scf_driver(basis, infos, molGrid)
+  subroutine scf_driver(basis, infos, molGrid, coarseGrid)
     USE precision, only: dp
     use oqp_tagarray_driver
     use constants, only: kB_HaK
@@ -56,13 +56,15 @@ contains
     use guess, only: get_ab_initio_density, get_ab_initio_orbital
     use util, only: measure_time, e_charge_repulsion
     use printing, only: print_mo_range
-    use mathlib, only: traceprod_sym_packed, matrix_invsqrt
+    use mathlib, only: traceprod_sym_packed
+    use qmat_cache, only: get_qmat_cached
     use mathlib, only: unpack_matrix
     use io_constants, only: IW
     use basis_tools, only: basis_set
     use scf_converger, only: scf_conv_result, scf_conv, &
                              conv_cdiis, conv_ediis, conv_soscf, &
                              conv_trah
+    use mod_dft_incdft, only: incdft_should_reuse, incdft_reset
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
@@ -75,7 +77,8 @@ contains
     !==============================================================================
     type(basis_set), intent(in) :: basis              ! Basis set information
     type(information), target, intent(inout) :: infos ! System information & parameters
-    type(dft_grid_t), intent(in) :: molGrid           ! Molecular grid for DFT
+    type(dft_grid_t), intent(in), target :: molGrid   ! Molecular grid for DFT (full/fine)
+    type(dft_grid_t), intent(in), target, optional :: coarseGrid ! coarse grid for the SCF descent
 
     !================================================o=o===========================
     ! Matrix Dimensions and Basic Parameters
@@ -93,6 +96,8 @@ contains
     integer :: scf_type                 ! Type of SCF calculation
     character(16) :: scf_name = ""      ! Name of the SCF method (RHF/UHF/ROHF)
     logical :: is_dft                   ! True if using DFT, false for HF
+    logical :: use_incdft               ! Opt 2: incremental-XC reuse enabled
+    logical :: xc_reuse_now             ! Opt 2: reuse XC this iteration
     real(kind=dp) :: scalefactor        ! Scaling factor for HF exchange
     logical :: do_check = .false.
 
@@ -123,10 +128,36 @@ contains
     integer :: diis_reset        ! Frequency of DIIS reset
     integer :: maxdiis           ! Maximum number of DIIS vectors
     real(kind=dp) :: diis_error  ! DIIS error matrix norm
+    real(kind=dp) :: stall_best  ! best DIIS error seen (orchestration: stall detection)
+    integer       :: stall_count ! iters since the last meaningful DIIS-error drop
+    logical       :: stalled_exit ! converger bailed out stalled (escalate, not converged)
     character(len=6), dimension(5) :: diis_name          ! Names of DIIS methods
     real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! DIIS error threshold for C-DIIS
     real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! DIIS error threshold for E-DIIS
     logical :: diis_reset_condition                      ! Flag for DIIS reset condition
+
+    !==============================================================================
+    ! Progressive (iteration-dependent) integral screening
+    !==============================================================================
+    logical       :: ps_on            ! progressive screening enabled this run
+    logical       :: ps_timer         ! env-gated per-iteration Fock-build timer
+    real(kind=dp) :: ps_cut_tight     ! the user's tight (final) int2e_cutoff
+    real(kind=dp) :: ps_k             ! coupling: tau_iter = ps_k * diis_error
+    real(kind=dp) :: ps_cap           ! loosest allowed cutoff (upper clamp)
+    real(kind=dp) :: ps_tight         ! pin to ps_cut_tight once diis_error < ps_tight
+    real(kind=dp) :: ps_tau           ! this iteration's effective cutoff
+    logical       :: ps_pin           ! true once we have pinned to the tight cutoff
+    character(len=64) :: ps_env       ! scratch for env-var reads
+    integer       :: ps_ln            ! env-var length / iostat scratch
+    integer(kind=8) :: ps_t0, ps_t1, ps_rate ! Fock-build timer counters
+    logical       :: ps_xc            ! progressive XC-grid threshold ramp active
+    real(kind=dp) :: ps_xc_dcut       ! loose grid density cutoff during descent
+    real(kind=dp) :: ps_xc_aocut      ! loose grid AO-prune threshold during descent
+    real(kind=dp) :: ps_xc_dcut0      ! saved baseline grid density cutoff
+    real(kind=dp) :: ps_xc_aocut0     ! saved baseline grid AO-prune threshold
+    logical       :: ps_grid_on       ! coarse->fine XC grid ramp active
+    type(dft_grid_t), pointer :: ps_cur_grid ! grid selected for this iteration's XC build
+    logical       :: ps_force_iter    ! force one pinned full-accuracy iteration before converging
 
     !==============================================================================
     ! SOSCF Convergence Acceleration Parameters
@@ -319,6 +350,11 @@ contains
       if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
     end if
 
+    ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
+    ! Controlled by [scf] xc_incdft (infos%control%xc_incdft).
+    use_incdft = is_dft .and. (infos%control%xc_incdft /= 0)
+    if (use_incdft) call incdft_reset()
+
     !==============================================================================
     ! Initialize pFON Parameters
     !==============================================================================
@@ -403,11 +439,17 @@ contains
     !==============================================================================
     call measure_time(print_total=1, log_unit=IW)
 
-    ! Prepare orthogonalization matrix (S^-1/2)
-    call matrix_invsqrt(smat, qmat, nbf)
+    ! Prepare orthogonalization matrix (S^-1/2), reusing the
+    ! copy cached during the initial guess when available
+    call get_qmat_cached(infos, smat, qmat, nbf)
 
-    ! Compute Nuclear-Nuclear energy
-!    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
+    ! Compute Nuclear-Nuclear repulsion energy on EVERY SCF entry, directly from
+    ! the (Fortran-owned) atom data. Do not rely on it being set by a later
+    ! energy-components pass: the robust-driver escalation / stability-following
+    ! TRAH pass re-enters SCF with a fresh energy object and would otherwise read
+    ! an uninitialised nenergy (garbage ~0) -> total = electronic only, which then
+    ! overwrites the correct mol_energy. (ecp_zn_num is 0 for non-ECP atoms.)
+    energy%nenergy = e_charge_repulsion(infos%atoms%xyz, infos%atoms%zn - infos%basis%ecp_zn_num)
 
     ! During guess, the Hcore, Q nd Overlap matrices were formed.
     ! Using these, the initial orbitals (VEC) and density (Dmat) were subsequently computed.
@@ -448,13 +490,13 @@ contains
     !   ├── diis_type = 5 (V-DIIS):
     !   │   ├── vshift unset (0.0): Sets vshift = 0.1
     !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
-    !   │       Thresholds: [2.0, 1.0, vdiis_cdiis_switch]
+    !   │       Thresholds: [2.0, 1.0, cdiis_switch]
     !   ├── vshift set (non-zero):
     !   │   └── Uses: [C-DIIS, E-DIIS, C-DIIS]
-    !   │       Thresholds: [2.0, 1.0, vshift_cdiis_switch]
+    !   │       Thresholds: [2.0, 1.0, cdiis_switch]
     !   └── Otherwise:
     !       └── Uses: diis_type method (1=C-DIIS, 2=E-DIIS, 3=A-DIIS)
-    !           Threshold: diis_method_threshold
+    !           Threshold: 2.0
     !
     ! converger_type = 1 (Pure SOSCF):
     !   └── Uses: SOSCF
@@ -472,89 +514,85 @@ contains
     ! DIIS options
     maxdiis = infos%control%maxdiis
     diis_error = 2.0_dp
+    stall_best = huge(1.0_dp)
+    stall_count = 0
+    stalled_exit = .false.
     diis_name = [character(len=6) :: "none", "c-DIIS", "e-DIIS", "a-DIIS", "v-DIIS"]
     diis_reset = infos%control%diis_reset_mod
 
-    ! Initialize SCF Convergence Accelerator
-    select case (infos%control%converger_type)
-    case (scf_diis) ! Pure DIIS Accelerators
-      ! Set up DIIS convergence accelerator
-      if (infos%control%diis_type == 5) then
-        ! v-DIIS setup: combination of E-DIIS and C-DIIS with vshift
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis, &
-                                      conv_ediis, &
-                                      conv_cdiis], &
-                       thresholds   =[ethr_cdiis_big, &
-                                      ethr_ediis, &
-                                      infos%control%vdiis_cdiis_switch], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-        if (infos%control%vshift == 0.0_dp) then
-          infos%control%vshift = 0.1_dp
-          vshift = 0.1_dp
-          write(IW, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
-        end if
-      elseif (infos%control%vshift /= 0.0_dp) then
-        ! Custom vshift setup with E-DIIS and C-DIIS
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[conv_cdiis, &
-                                      conv_ediis, &
-                                      conv_cdiis], &
-                       thresholds   =[ethr_cdiis_big, &
-                                      ethr_ediis, &
-                                      infos%control%vshift_cdiis_switch], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-      else
-        ! Standard DIIS setup from input
-        call conv%init(ldim=nbf, &
-                       maxvec=maxdiis, &
-                       subconvergers=[infos%control%diis_type], &
-                       thresholds   =[infos%control%diis_method_threshold], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
-      end if
+    !==============================================================================
+    ! Progressive (iteration-dependent) integral screening setup. Default OFF.
+    ! tau_iter = clamp(ps_k*diis_error, ps_cut_tight, ps_cap) while diis_error
+    ! >= ps_tight; pinned to ps_cut_tight (with a full incremental rebuild) once
+    ! diis_error < ps_tight, so the converged energy matches the all-tight run.
+    ! Env vars override the control fields for quick experimentation.
+    !==============================================================================
+    ps_cut_tight = infos%control%int2e_cutoff
+    ps_on    = (infos%control%scf_pscreen /= 0)
+    ps_k     = infos%control%pscreen_k
+    ps_cap   = infos%control%pscreen_cap
+    ps_tight = infos%control%pscreen_tight
+    ps_pin   = .false.
+    call get_environment_variable("OQP_PSCREEN", ps_env, ps_ln)
+    if (ps_ln > 0) ps_on = (ps_env(1:1)=='1' .or. ps_env(1:1)=='y' .or. ps_env(1:1)=='Y' &
+                            .or. ps_env(1:1)=='t' .or. ps_env(1:1)=='T')
+    call get_environment_variable("OQP_PSCREEN_K", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_k
+    call get_environment_variable("OQP_PSCREEN_CAP", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_cap
+    call get_environment_variable("OQP_PSCREEN_TIGHT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_tight
+    ! The pin must trigger at or before convergence, otherwise the loose/coarse phase
+    ! can never reach its (looser) noise floor below pscreen_tight and the SCF stalls.
+    ! Keep pscreen_tight at least an order above the SCF convergence threshold.
+    ps_tight = max(ps_tight, 10.0_dp * infos%control%conv)
+    ps_timer = .false.
+    call get_environment_variable("OQP_FOCK_TIMER", ps_env, ps_ln)
+    if (ps_ln > 0) ps_timer = (ps_env(1:1)=='1' .or. ps_env(1:1)=='y' .or. ps_env(1:1)=='Y' &
+                               .or. ps_env(1:1)=='t' .or. ps_env(1:1)=='T')
+    ! keep the loose cap from ever being tighter than the final cutoff
+    ps_cap = max(ps_cap, ps_cut_tight)
+    if (ps_on) then
+      write(IW,'(/3x,a)') 'Progressive integral screening ENABLED (iteration-dependent int2e_cutoff)'
+      write(IW,'(3x,a,es9.2,a,es9.2,a,es9.2,a,es9.2)') &
+        '  tight=', ps_cut_tight, '  k=', ps_k, '  cap=', ps_cap, '  pin<', ps_tight
+    end if
 
-    case (scf_bfgs) ! Pure SOSCF Accelerator
-      use_soscf = .true.
-      ! Pure SOSCF strategy
-      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                     maxvec=infos%control%maxit, &
-                     subconvergers=[conv_soscf], &
-                     thresholds   =[huge(1.0_dp)], &  ! SOSCF runs from first iteration
-                     overlap=smat_full, &
-                     overlap_sqrt=qmat, &
-                     num_focks=soscf_nfocks, &
-                     scf_type=infos%control%scftype, &
-                     verbose=infos%control%verbose)
-      ! Configure the SOSCF converger with SOSCF input parameters
-      call set_soscf_parametres(infos, conv)
-    case (scf_trah) ! Pure TRAH Accelerator
-      use_trah = .true.
-        call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
-                       maxvec=infos%control%maxit, &
-                       subconvergers=[conv_trah], &
-                       thresholds=[huge(1.0_dp)], &
-                       overlap=smat_full, &
-                       overlap_sqrt=qmat, &
-                       num_focks=soscf_nfocks, &
-                       scf_type=infos%control%scftype, &
-                       verbose=infos%control%verbose, &
-                       sd_scf=infos%control%sd_scf)
+    ! Progressive XC-grid threshold ramp (gated by the same scf_pscreen + ps_pin latch).
+    ! During the descent, loosen the DFT grid density cutoff / AO-prune threshold so early
+    ! XC builds prune more AOs and skip more low-density points; restore to the user's
+    ! baseline (tight) once pinned, so the converged XC energy is unchanged.
+    ps_xc_dcut  = infos%control%pscreen_xc_dcut
+    ps_xc_aocut = infos%control%pscreen_xc_aocut
+    call get_environment_variable("OQP_PSCREEN_XC_DCUT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_xc_dcut
+    call get_environment_variable("OQP_PSCREEN_XC_AOCUT", ps_env, ps_ln)
+    if (ps_ln > 0) read(ps_env,*,iostat=ps_ln) ps_xc_aocut
+    ps_xc_dcut0  = infos%dft%grid_density_cutoff
+    ps_xc_aocut0 = infos%dft%grid_ao_threshold
+    ps_xc = ps_on .and. (ps_xc_dcut > 0.0_dp .or. ps_xc_aocut > 0.0_dp)
+    if (ps_xc) write(IW,'(3x,a,es9.2,a,es9.2)') &
+        '  XC ramp: loose grid dcut=', ps_xc_dcut, '  loose grid aocut=', ps_xc_aocut
+    ! Coarse->fine XC grid ramp (single engine). coarseGrid is built+passed by
+    ! hf_energy under the unified policy: it covers BOTH the opt-in progressive-
+    ! screening request and the default-on coarse-to-fine schedule. The ramp is
+    ! therefore independent of integral screening (ps_on) -- it runs whenever a
+    ! coarse grid was provided.
+    ps_grid_on = present(coarseGrid)
+    ! When the grid ramp runs without integral screening, it still needs a pin
+    ! threshold: the coarse-to-fine switch threshold (fixed 1e-2, floored at
+    ! 10*conv). With integral screening on, ps_tight (above) governs both.
+    if (ps_grid_on .and. .not. ps_on) then
+      ps_tight = 1.0e-2_dp
+      ps_tight = max(ps_tight, 10.0_dp * infos%control%conv)
+    end if
+    ps_cur_grid => molGrid
+    if (ps_grid_on) write(IW,'(3x,a)') '  XC ramp: coarse grid during descent, full grid pinned in the tail'
 
-      ! Configure the TRAH converger with input parameters
-      call set_trah_parametres(infos, molgrid, conv)
-
-    end select
+    ! Initialize SCF Convergence Accelerator (single source of truth)
+    call init_scf_converger(infos, molGrid, conv, nbf, nelec_a, nelec_b, &
+                            maxdiis, diis_nfocks, soscf_nfocks, &
+                            smat_full, qmat, vshift, use_soscf, use_trah)
 
 
     ! Initialize DFT exchange-correlation energy
@@ -564,32 +602,36 @@ contains
     !==============================================================================
     ! Print SCF Options
     !==============================================================================
-    write(IW,'(/5X,"SCF options"/ &
-               &5X,18("-")/ &
-               &5X,"SCF type = ",A,5x,"MaxIT = ",I5/, &
-               &5X,"MaxDIIS = ",I5,17x,"Conv = ",F14.10/, &
-               &5X,"DIIS Type = ",A/, &
-               &5X,"vDIIS_cDIIS_Switch = ",F8.5,3x,"vDIIS_vshift_Switch = ",F8.5/, &
-               &5X,"DIIS Reset Mod = ",I5,10x,"DIIS Reset Conv = ",F12.8/, &
-               &5X,"VShift = ",F8.5,15X,"VShift_cDIIS_Switch = ",F8.5)') &
-               & scf_name, infos%control%maxit, &
-               & infos%control%maxdiis, infos%control%conv, &
-               & diis_name(infos%control%diis_type), &
-               & infos%control%vdiis_cdiis_switch, infos%control%vdiis_vshift_switch, &
-               & infos%control%diis_reset_mod, infos%control%diis_reset_conv, &
-               & infos%control%vshift, infos%control%vshift_cdiis_switch
-    write(IW,'(5X,"MOM = ",L5,21X,"MOM_Switch = ",F8.5)') &
-               & infos%control%mom, infos%control%mom_switch
-    write(IW,'(5X,"pFON = ",L5,20X,"pFON Start Temp. = ",F9.2,/, &
-               5X, "pFON Cooling Rate = ", F9.2,2X," pFON Num. Smearing = ",F8.5)') &
-               infos%control%pfon, infos%control%pfon_start_temp, &
-               infos%control%pfon_cooling_rate, infos%control%pfon_nsmear
-    if (use_soscf) then
-      write(IW,'(/5X,"SOSCF options"/ &
-                 &5X,18("-"))')
-      write(IW,'(5X,"SOSCF enabled = ",L5,16X,"SOSCF type = ",A)') &
-             & use_soscf, trim(get_solver_name(infos%control%converger_type))
+    ! Only the options relevant to the active converger/features are printed,
+    ! to keep the log focused (the previous version dumped every knob always).
+    write(IW,'(/5X,"SCF options"/5X,18("-"))')
+    write(IW,'(5X,"SCF type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
+               trim(scf_name), infos%control%maxit, infos%control%conv
+    if (use_trah) then
+      write(IW,'(5X,"Converger = TRAH (trust-region augmented Hessian)")')
+    else if (use_soscf) then
+      write(IW,'(5X,"Converger = SOSCF (",A,")")') &
+                 trim(get_solver_name(int(infos%control%converger_type)))
+    else
+      write(IW,'(5X,"Converger = ",A,"   MaxDIIS = ",I0)') &
+                 trim(diis_name(infos%control%diis_type)), infos%control%maxdiis
+      if (infos%control%diis_reset_mod > 0) &
+        write(IW,'(5X,"DIIS reset every ",I0," iters when error > ",ES9.2)') &
+                   infos%control%diis_reset_mod, infos%control%diis_reset_conv
+      if (infos%control%diis_type == 5) &
+        write(IW,'(5X,"vDIIS switch: cDIIS = ",F6.3,"  vshift = ",F7.4)') &
+                   infos%control%cdiis_switch, infos%control%vdiis_vshift_switch
+      if (infos%control%vshift /= 0.0_dp) &
+        write(IW,'(5X,"Level shift = ",F6.3,"  (cDIIS switch = ",F6.3,")")') &
+                   infos%control%vshift, infos%control%cdiis_switch
     end if
+    if (infos%control%mom) &
+      write(IW,'(5X,"MOM enabled (switch = ",ES9.2,")")') infos%control%mom_switch
+    if (infos%control%pfon) &
+      write(IW,'(5X,"pFON enabled: start T = ",F7.1," K, cooling = ",F6.1, &
+                 &" K/iter, smearing = ",F6.3)') &
+                 infos%control%pfon_start_temp, infos%control%pfon_cooling_rate, &
+                 infos%control%pfon_nsmear
 
     ! Initial message for SCF iterations
     if (infos%control%pfon) then
@@ -605,9 +647,19 @@ contains
             &  4x,'Iter',9x,'Energy',12x,'Delta E',9x,'Int Skip',5x,'Grad. RMS',6x,'Den. RMS',7x,'Shift',5x,'Method'/ &
             &  3x,107('='))")
     elseif(infos%control%converger_type == scf_trah) then
-      write(IW,"(/, &
-            5x,'Using OpenTrustRegion library for SCF convergence.',/, &
-            5x,'(see: https://github.com/eriksen-lab/opentrustregion)')")
+#ifdef OQP_HAVE_OPENTRAH
+      if (infos%control%trh_impl == 1) then
+        write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
+              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
+      else
+        write(IW,"(/,5x,'OpenTRAH (external OpenTrustRegion library)', &
+              &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021);', &
+              &/,5x,' https://github.com/eriksen-lab/opentrustregion]')")
+      end if
+#else
+      write(IW,"(/,5x,'Trust-region augmented-Hessian (TRAH) SCF solver', &
+            &/,5x,'[Helmich-Paris, J. Chem. Phys. 154, 164104 (2021)]')")
+#endif
 
     else
       write(IW,fmt="&
@@ -637,7 +689,100 @@ contains
       !----------------------------------------------------------------------------
       pfock = 0.0_dp
 
-      call calc_fock(basis, infos, molgrid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold)
+      !----------------------------------------------------------------------------
+      ! Unified pin latch: enter the convergence tail (pin to full accuracy) once
+      ! the DIIS error drops below ps_tight. Shared by the 2e-cutoff ramp (ps_on),
+      ! the XC-threshold ramp (ps_xc) and the coarse->fine grid ramp (ps_grid_on)
+      ! so they all tighten together. Sticky; never fires on iteration 1.
+      !----------------------------------------------------------------------------
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin .and. iter > 1 &
+          .and. diis_error < ps_tight) then
+        ps_pin = .true.
+      end if
+      ! Fail-safe: also pin in the final iterations, so a run that exhausts maxit
+      ! without converging still reports a full-accuracy (full-grid, tight-cutoff)
+      ! state -- and hands a full-grid warm-start to any convergence-escalation
+      ! restart -- rather than a loose/coarse one.
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin .and. iter >= maxit - 2) then
+        ps_pin = .true.
+      end if
+
+      ! Progressive screening: pick this iteration's 2e cutoff. Loose early
+      ! (coupled to the previous iteration's DIIS error), pinned to the user's
+      ! tight cutoff in the convergence tail. fock_jk re-reads
+      ! infos%control%int2e_cutoff on every build, so setting it here suffices.
+      if (ps_on) then
+        if (ps_pin) then
+          ps_tau = ps_cut_tight            ! latched: tight for the rest of the SCF
+        else if (iter == 1) then
+          ps_tau = ps_cap                  ! loosest cutoff for the first build
+        else
+          ps_tau = max(ps_cut_tight, min(ps_cap, ps_k*diis_error))
+        end if
+        infos%control%int2e_cutoff = ps_tau
+      end if
+
+      ! Progressive XC: loosen the grid thresholds during the descent, restore (pin) in
+      ! the tail. Uses the same ps_pin latch set above, so ERI and XC tighten together.
+      if (ps_xc) then
+        if (ps_pin) then
+          infos%dft%grid_density_cutoff = ps_xc_dcut0
+          infos%dft%grid_ao_threshold   = ps_xc_aocut0
+        else
+          if (ps_xc_dcut  > 0.0_dp) infos%dft%grid_density_cutoff = ps_xc_dcut
+          if (ps_xc_aocut > 0.0_dp) infos%dft%grid_ao_threshold   = ps_xc_aocut
+        end if
+      end if
+
+      ! Coarse->fine grid selection (shares the ps_pin latch): coarse grid during the
+      ! descent, full grid once pinned so the converged XC energy is unchanged.
+      if (ps_grid_on) then
+        if (ps_pin) then
+          ps_cur_grid => molGrid
+        else
+          ps_cur_grid => coarseGrid
+        end if
+      end if
+
+      ! Incremental-Fock refresh. The incremental build forms F = F_old + G[dD] and
+      ! screens the two-electron contributions on the *shrinking* dD; as dD -> 0 the
+      ! int2e_cutoff drops proportionally more terms, so F_old drifts (~1e-8) and the
+      ! DIIS error plateaus at that noise floor (it cannot reach conv). Periodically,
+      ! and every iteration once in the tight tail, rebuild the FULL Fock by zeroing
+      ! the incremental history -- this clears the accumulated drift (so DIIS converges
+      ! cleanly, matching a from-scratch build) while keeping incremental's per-cycle
+      ! savings during the global descent. With progressive screening, ALSO rebuild
+      ! whenever we pin to the tight cutoff, so contributions dropped during the loose
+      ! phase are recaptured and the converged energy matches the all-tight run.
+      if (infos%control%scf_incremental /= 0 .and. iter > 1) then
+        if (mod(iter, 10) == 0 .or. diis_error < 1.0e-4_dp .or. ((ps_on .or. ps_grid_on) .and. ps_pin)) then
+          fold = 0.0_dp
+          dold = 0.0_dp
+        end if
+      end if
+
+      ! Opt 2 (IncDFT): decide whether to reuse the reference XC this iteration.
+      ! diis_error here is the previous iteration's value (set after calc_fock),
+      ! a valid proxy for closeness to convergence; the reuse window forces full
+      ! XC builds again once near convergence (diis_error < incdft_stop, aligned
+      ! with the J/K incremental refresh above) so the fixed point stays exact.
+      xc_reuse_now = .false.
+      if (use_incdft) xc_reuse_now = incdft_should_reuse(diis_error, iter)
+      ! The progressive coarse->fine grid ramp and IncDFT's collocation-Phi cache are
+      ! incompatible while the grid is coarse (the cache is grid-specific): never reuse
+      ! XC during the loose/coarse phase. Once pinned the grid is the full grid again
+      ! and reuse is valid. (Both default off, so this is a no-op on the default path.)
+      if (ps_grid_on .and. .not. ps_pin) xc_reuse_now = .false.
+
+      if (ps_timer) call system_clock(ps_t0, ps_rate)
+      call calc_fock(basis, infos, ps_cur_grid, pfock, energy, mo_a, pdmat,mo_b,nschwz,fold , dold, &
+                     xc_reuse=xc_reuse_now)
+      if (ps_timer) then
+        call system_clock(ps_t1)
+        write(IW,'(3x,a,i4,a,f10.4,a,es9.2,a,i0)') 'pscreen iter ', iter, &
+          '  Fock(s)=', real(ps_t1-ps_t0,dp)/real(max(1_8,ps_rate),dp), &
+          '  tau=', infos%control%int2e_cutoff, '  skip=', nschwz
+      end if
 
       !----------------------------------------------------------------------------
       ! Form Special ROHF Fock Matrix and Apply Vshift (if ROHF calculation)
@@ -768,6 +913,36 @@ contains
           mo_energy_b = mo_energy_a
         end if
         call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+        ! TRAH returns rotated (non-canonical) orbitals/energies. Diagonalize
+        ! the converged Fock so post-SCF properties and analytic gradients receive
+        ! canonical MOs and orbital energies (same density/energy at the stationary
+        ! point). RHF/UHF use the spin Fock directly; ROHF needs its effective Fock
+        ! and is left to the existing ROHF handling.
+        if (infos%control%trh_impl == 1 .and. scf_type /= scf_rohf) then
+          if (do_mom) then
+            ! MOM: the aufbau fill in get_ab_initio_orbital can drop the
+            ! state-specific occupation TRAH converged to (TRAH itself preserves
+            ! the occupied space by rotation, so the energy/density built above are
+            ! already on the target). Use the TRAH-converged MOs as the MOM
+            ! reference so the canonical MOs -- and the density rebuilt from them --
+            ! keep the targeted occupied space.
+            mo_a_prev = mo_a; mo_e_a_prev = mo_energy_a
+            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            call apply_mom(infos, mo_a_prev, mo_e_a_prev, mo_a, mo_energy_a, &
+                           smat_full, nelec_a, "Alpha", work1, work2)
+            if (scf_type == scf_uhf .and. nelec_b /= 0) then
+              mo_b_prev = mo_b; mo_e_b_prev = mo_energy_b
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+              call apply_mom(infos, mo_b_prev, mo_e_b_prev, mo_b, mo_energy_b, &
+                             smat_full, nelec_b, "Beta", work1, work2)
+            end if
+            call get_ab_initio_density(pdmat(:,1),mo_a,pdmat(:,2),mo_b,infos,basis)
+          else
+            call get_ab_initio_orbital(pfock(:,1), mo_a, mo_energy_a, qmat)
+            if (scf_type == scf_uhf .and. nelec_b /= 0) &
+              call get_ab_initio_orbital(pfock(:,2), mo_b, mo_energy_b, qmat)
+          end if
+        end if
       end if
 
       diis_error = conv_res%get_error()
@@ -782,22 +957,61 @@ contains
       !----------------------------------------------------------------------------
       ! Print iteration information
       if (infos%control%pfon) then
-        write(IW,fmt="(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a,5x,a,f9.2)") &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,fmt="(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       elseif (infos%control%converger_type == scf_bfgs) then
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, rms_grad, rms_dp, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(rms_grad), fmt_real14(rms_dp), vshift, &
               trim(conv_res%active_converger_name)
       elseif(use_trah) then
 !              write(IW, "(10x, '')")
       else
-        write(IW,'(4x,i4.1,2x,f17.10,1x,f17.10,1x,i13,1x,f14.8,5x,f5.3,5x,a)') &
-              iter, energy%etot, energy%etot - e_old, nschwz, diis_error, vshift, &
+        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a)') &
+              iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
+              fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name)
       end if
       call flush(IW)
+
+      !----------------------------------------------------------------------------
+      ! Orchestration: detect converger stagnation and hand off early
+      !----------------------------------------------------------------------------
+      ! A converger that stops reducing its error for many iterations while still
+      ! above the threshold is stuck near its noise floor (e.g. C-DIIS oscillating
+      ! at ~1e-8 from integral/grid noise). Rather than spin to maxit, bail out so
+      ! the escalation ladder (DIIS -> SOSCF -> TRAH) hands the residual gradient
+      ! to a higher-order method. Skipped for TRAH (the last-resort solver) and
+      ! while a level shift / pFON anneal is still ramping the error artificially.
+      if (.not. use_trah .and. vshift == 0.0_dp .and. .not. do_pfon) then
+        if (diis_error < 0.5_dp * stall_best) then
+          stall_best  = diis_error
+          stall_count = 0
+        else
+          stall_count = stall_count + 1
+        end if
+        if (stall_count >= 12 .and. iter >= 20 .and. &
+            diis_error > infos%control%conv) then
+          if (ps_grid_on .and. .not. ps_pin) then
+            ! Stalled while still on the coarse descent grid: pin to the full grid
+            ! and give it a chance before handing off, so the reported state (and
+            ! any escalation warm-start) comes from the full grid, not the coarse one.
+            ps_pin = .true.
+            stall_best  = huge(1.0_dp)
+            stall_count = 0
+          else
+            write(IW,"(3x,64('-')/10x,'Converger stalled (error ',ES9.2, &
+                 &' flat for ',I0,' iters); handing off to the escalation ladder.')") &
+                 diis_error, stall_count
+            infos%mol_energy%SCF_converged = .false.
+            stalled_exit = .true.
+            exit
+          end if
+        end if
+      end if
 
       !----------------------------------------------------------------------------
       ! Update VDIIS Parameters (if using VDIIS)
@@ -813,9 +1027,29 @@ contains
       e_old = energy%etot
 
       !----------------------------------------------------------------------------
+      ! Progressive screening: never accept convergence on a loose/coarse build.
+      ! diis_error can drop from > pscreen_tight to < conv in a single step, which
+      ! would otherwise exit right after a loose-cutoff / coarse-grid Fock and report
+      ! that approximate energy. Force one pinned full-accuracy iteration (tight
+      ! int2e_cutoff + XC thresholds + full grid) before convergence is allowed.
+      !----------------------------------------------------------------------------
+      ps_force_iter = .false.
+      if ((ps_on .or. ps_grid_on) .and. .not. ps_pin &
+          .and. (abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
+        ps_pin = .true.
+        ps_force_iter = .true.
+        write(IW,"(3x,64('-')/10x,'Coarse-to-fine / progressive screening: final full-accuracy SCF iteration.')")
+      end if
+
+      !----------------------------------------------------------------------------
       ! Check for SCF Convergence
       !----------------------------------------------------------------------------
-      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp)) then
+      ! Convergence guards (both .false. on the default path, so a no-op there):
+      !  - ps_force_iter (progressive screening): never converge on a loose/coarse build.
+      !  - xc_reuse_now (IncDFT): never converge on an iteration whose XC was reused
+      !    (stale); the next iteration forces a full XC build so the fixed point is exact.
+      if ((abs(diis_error) < infos%control%conv) .and. (vshift == 0.0_dp) &
+          .and. (.not. ps_force_iter) .and. (.not. xc_reuse_now)) then
         ! Fully converged - exit loop
         if (do_pfon) then
           if (pfon%temp > 1.0_dp + 1.0e-6_dp) then
@@ -864,7 +1098,7 @@ contains
                        overlap=smat_full, &
                        overlap_sqrt=qmat, &
                        num_focks=diis_nfocks, &
-                       verbose=infos%control%verbose)
+                       verbose=int(infos%control%verbose))
         ! After resetting DIIS, we need to skip SD
         call conv%add_data(f=pfock(:,1:diis_nfocks), &
                            dens=pdmat(:,1:diis_nfocks), &
@@ -960,6 +1194,14 @@ contains
     ! End of Main SCF Iteration Loop
     end do
 
+    ! Restore the user's tight 2e cutoff for any downstream builds (gradient,
+    ! properties, response) regardless of where the SCF loop exited.
+    if (ps_on) infos%control%int2e_cutoff = ps_cut_tight
+    if (ps_xc) then
+      infos%dft%grid_density_cutoff = ps_xc_dcut0
+      infos%dft%grid_ao_threshold   = ps_xc_aocut0
+    end if
+
     !----------------------------------------------------------------------------
     ! Clean Convergence Accelerator (DIIS/SOSCF)
     !----------------------------------------------------------------------------
@@ -973,7 +1215,10 @@ contains
     ! Report SCF Convergence Status
     !----------------------------------------------------------------------------
     if (use_trah) iter = conv_res%get_iter()
-    if (iter > maxit) then
+    if (stalled_exit) then
+      write(IW,"(3x,64('-')/10x,'SCF stalled before convergence; escalating to a higher-order solver.')")
+      infos%mol_energy%SCF_converged = .false.
+    else if (iter > maxit) then
       write(IW,"(3x,64('-')/10x,'SCF did not converge. Restarting SCF with the TRAH method.')")
       infos%mol_energy%SCF_converged = .false.
     else
@@ -1284,6 +1529,125 @@ contains
     end if
   end subroutine handle_homo_lumo_gap
 
+  !> @brief Configure the SCF convergence accelerator (DIIS / SOSCF / TRAH).
+  !>
+  !> Single source of truth for converger selection.  Behaviour is identical
+  !> to the former inline select-case in scf_driver; it is factored out here so
+  !> all converger-selection logic lives in one place.
+  !>
+  !>   converger_type = scf_diis : DIIS family
+  !>       diis_type = 5 (v-DIIS) -> [c-DIIS, e-DIIS, c-DIIS], auto vshift=0.1
+  !>       vshift /= 0            -> [c-DIIS, e-DIIS, c-DIIS] with custom vshift
+  !>       otherwise             -> single diis_type method
+  !>   converger_type = scf_bfgs : SOSCF (active from the first iteration)
+  !>   converger_type = scf_trah : TRAH trust-region
+  subroutine init_scf_converger(infos, molgrid, conv, nbf, nelec_a, nelec_b, &
+                                maxdiis, diis_nfocks, soscf_nfocks, &
+                                smat_full, qmat, vshift, use_soscf, use_trah)
+    use precision, only: dp
+    use io_constants, only: iw
+    use types, only: information
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_converger, only: scf_conv, conv_cdiis, conv_ediis, conv_soscf, conv_trah
+    use scf_addons, only: scf_diis, scf_bfgs, scf_trah
+
+    implicit none
+
+    type(information), intent(inout) :: infos
+    type(dft_grid_t), intent(in) :: molgrid
+    type(scf_conv), intent(inout) :: conv
+    integer, intent(in) :: nbf, nelec_a, nelec_b
+    integer, intent(in) :: maxdiis, diis_nfocks, soscf_nfocks
+    real(kind=dp), intent(in) :: smat_full(:,:), qmat(:,:)
+    real(kind=dp), intent(inout) :: vshift
+    logical, intent(out) :: use_soscf, use_trah
+
+    real(kind=dp), parameter :: ethr_cdiis_big = 2.0_dp  ! c-DIIS error threshold
+    real(kind=dp), parameter :: ethr_ediis = 1.0_dp      ! e-DIIS error threshold
+    integer :: control_converger, control_diis, control_verbose
+    integer :: control_maxit, control_scftype
+
+    use_soscf = .false.
+    use_trah = .false.
+    control_converger = int(infos%control%converger_type)
+    control_diis = int(infos%control%diis_type)
+    control_verbose = int(infos%control%verbose)
+    control_maxit = int(infos%control%maxit)
+    control_scftype = int(infos%control%scftype)
+
+    select case (control_converger)
+    case (scf_diis) ! DIIS family
+      if (control_diis == 5) then
+        ! v-DIIS: cascade of c-DIIS / e-DIIS / c-DIIS with level shift
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, ethr_ediis, &
+                                      infos%control%cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=control_verbose)
+        if (infos%control%vshift == 0.0_dp) then
+          infos%control%vshift = 0.1_dp
+          vshift = 0.1_dp
+          write(iw, '(X,A)') 'Setting Vshift = 0.1 a.u., since VDIIS is chosen without Vshift value.'
+        end if
+      elseif (infos%control%vshift /= 0.0_dp) then
+        ! Custom level shift with c-DIIS / e-DIIS / c-DIIS cascade
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[conv_cdiis, conv_ediis, conv_cdiis], &
+                       thresholds   =[ethr_cdiis_big, ethr_ediis, &
+                                      infos%control%cdiis_switch], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=control_verbose)
+      else
+        ! Standard single DIIS method from input
+        call conv%init(ldim=nbf, &
+                       maxvec=maxdiis, &
+                       subconvergers=[control_diis], &
+                       thresholds   =[ethr_cdiis_big], &
+                       overlap=smat_full, &
+                       overlap_sqrt=qmat, &
+                       num_focks=diis_nfocks, &
+                       verbose=control_verbose)
+      end if
+
+    case (scf_bfgs) ! SOSCF
+      use_soscf = .true.
+      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                     maxvec=control_maxit, &
+                     subconvergers=[conv_soscf], &
+                     thresholds   =[huge(1.0_dp)], &
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=soscf_nfocks, &
+                     scf_type=control_scftype, &
+                     verbose=control_verbose)
+      call set_soscf_parametres(infos, conv)
+
+    case (scf_trah) ! TRAH
+      use_trah = .true.
+      call conv%init(ldim=nbf, nelec_a=nelec_a, nelec_b=nelec_b, &
+                     maxvec=control_maxit, &
+                     subconvergers=[conv_trah], &
+                     thresholds   =[huge(1.0_dp)], &
+                     overlap=smat_full, &
+                     overlap_sqrt=qmat, &
+                     num_focks=soscf_nfocks, &
+                     scf_type=control_scftype, &
+                     verbose=control_verbose, &
+                     sd_scf=infos%control%sd_scf)
+      call set_trah_parametres(infos, molgrid, conv)
+
+    case default
+    end select
+
+  end subroutine init_scf_converger
+
   !> @In this implementation, we don’t need these parameters— they were added,
   !> @but they appear to be unnecessary right now.
   !> @brief Configures parameters for the Second-Order SCF (SOSCF) convergence accelerator.
@@ -1306,18 +1670,8 @@ contains
       select type (sc => conv%sconv(i)%s)
         type is (soscf_converger)
           sc%level_shift = infos%control%soscf_lvl_shift
-          sc%soscf_reset_mod = infos%control%soscf_reset_mod
-      ! SOSCF_mode
-          select case (infos%control%soscf_mode)
-          case (0)
-            sc%variant = SOSCF_VARIANT_ORIGINAL          ! original behavior
-          case (1)
-            sc%variant = SOSCF_VARIANT_STABLE_ONLY       ! curvature-safe L-BFGS only
-          case (2)
-            sc%variant = SOSCF_VARIANT_QUAD_LS           ! + quadratic line search (no extra J/K)
-          case default
-            sc%variant = SOSCF_VARIANT_ORIGINAL
-          end select
+          sc%variant = SOSCF_VARIANT_ORIGINAL
+          sc%soscf_reset_mod = 0   ! no orbital-Hessian reset (preserved default)
 
       class default
       ! not an SOSCF converger; nothing to do
@@ -1355,16 +1709,20 @@ contains
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
     use scf_converger, only: scf_conv, trah_converger, scf_conv_result
+#ifdef OQP_HAVE_OPENTRAH
     use otr_interface, only: init_trah_solver, run_trah_solver
+#endif
+    use trah_native,   only: trah_native_run
     use scf_addons, only: scf_energy_t
+    use io_constants, only: IW
 
     implicit none
-     
+
     type(information), target, intent(inout) :: infos
     type(dft_grid_t), target, intent(in) :: mol_grid
     type(scf_conv), intent(inout) :: conv
     class(scf_conv_result), intent(inout) :: res
-    type(scf_energy_t), intent(inout) :: energy 
+    type(scf_energy_t), intent(inout) :: energy
 
     integer :: i
 
@@ -1372,8 +1730,22 @@ contains
     do i = lbound(conv%sconv, 1), ubound(conv%sconv, 1)
       select type (sc => conv%sconv(i)%s)
         type is (trah_converger)
-          call init_trah_solver(infos, mol_grid, sc , energy)
-          call run_trah_solver(res)
+#ifdef OQP_HAVE_OPENTRAH
+          if (infos%control%trh_impl == 1) then
+            ! native Fortran trust-region augmented-Hessian solver (default)
+            call trah_native_run(infos, mol_grid, sc, res, energy)
+          else
+            ! external OpenTrustRegion library (explicit trh_impl=otr)
+            call init_trah_solver(infos, mol_grid, sc , energy)
+            call run_trah_solver(res)
+          end if
+#else
+          ! OpenTRAH not compiled (-DENABLE_OPENTRAH=OFF): use the native solver for
+          ! every trh_impl (the external gradient/MRSF reference paths are unavailable).
+          if (infos%control%trh_impl /= 1) &
+            write(IW,'(5X,A)') 'NOTE: OpenTRAH (OpenTrustRegion) is not compiled; using native TRAH.'
+          call trah_native_run(infos, mol_grid, sc, res, energy)
+#endif
       end select
     end do
 
@@ -1610,5 +1982,29 @@ contains
 
      deallocate(WS, T, wrk)
    end subroutine rohf_fix
-end module scf
 
+  !> @brief Format a value for a 17-char SCF iteration table column.
+  !> @detail Uses the usual fixed-point form while the value fits the column
+  !>         and falls back to scientific notation (same width) otherwise, so
+  !>         pathological values print as numbers instead of '*****'.
+  function fmt_real17(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=17) :: str
+    if (val == val .and. abs(val) < 1.0e5_dp) then
+      write(str, '(f17.10)') val
+    else
+      write(str, '(es17.8e3)') val
+    end if
+  end function fmt_real17
+
+  !> @brief Same as fmt_real17 for the 14-char error/gradient columns.
+  function fmt_real14(val) result(str)
+    real(kind=dp), intent(in) :: val
+    character(len=14) :: str
+    if (val == val .and. abs(val) < 1.0e4_dp) then
+      write(str, '(f14.8)') val
+    else
+      write(str, '(es14.5e3)') val
+    end if
+  end function fmt_real14
+end module scf

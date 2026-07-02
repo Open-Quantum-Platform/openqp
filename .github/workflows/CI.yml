@@ -1,7 +1,5 @@
 name: CI
 on: [push, pull_request]
-env:
-   BUILD_DIR: _build
 jobs:
    gcc-build:
       runs-on: ${{ matrix.os }}
@@ -18,25 +16,156 @@ jobs:
            uses: actions/setup-python@v5
            with:
             python-version: '3.10'
+            cache: 'pip'
+            cache-dependency-path: pyoqp/requirements.txt
+         # Persist the reusable bundled-externals cache (see external/CMakeLists.txt)
+         # across CI runs. The cache content is keyed internally by toolchain,
+         # compiler flags, build type, BLAS choice, and bundled versions, so a
+         # stale restore is never reused for an incompatible build -- it just
+         # falls back to a cold externals build. The externals do not depend on
+         # MPI, so both MPI matrix legs share one cache entry per OS.
+         #
+         # Any variable that changes the internal externals key MUST also appear
+         # in the outer key, otherwise an unchanged outer key would match exactly
+         # and actions/cache would never SAVE the rebuilt externals, leaving CI
+         # permanently cold. Two such variables: the full compiler version (a
+         # runner image bumping gcc changes the internal key) and the BLAS backend
+         # -- LINALG_LIB=OpenBLAS makes the internal key say "other"/openblas
+         # instead of "NetLib", so the `openblas64` marker below gives those
+         # externals their own cache entry. The restore-keys stay scoped to that
+         # marker so a stale NetLib cache is never dragged back in and re-saved.
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: echo "gcc=$(gfortran-${{ matrix.version }} -dumpfullversion)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/.cache/openqp/externals
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-openblas64-
          - name: Install OpenBLAS (ubuntu-latest)
            if: ${{ matrix.os == 'ubuntu-latest' || contains(matrix.os, 'ubuntu-24.04') }}
            run: |
-            sudo apt-get install libopenblas-dev
+            # ILP64 OpenBLAS (provides openblas64.pc). The build requests ILP64
+            # (LINALG_LIB_INT64=ON), so LINALG_LIB=OpenBLAS resolves this system
+            # library and OpenQP (and ddX) link it directly -- no reference LAPACK
+            # is compiled from source.
+            sudo apt-get install libopenblas64-dev
          - name: Install MPI (ubuntu)
            if: ${{ contains(matrix.os, 'ubuntu') }}
            run: |
             sudo apt-get install libopenmpi-dev
          - name: Install CMake
            run: pip install ninja cmake
-         - name: Install pyoqp dependencies
+         - name: Build & install OpenQP
+           env:
+            CC: gcc-${{ matrix.version }}
+            CXX: g++-${{ matrix.version }}
+            FC: gfortran-${{ matrix.version }}
            run: |
-            cd pyoqp && pip install -r requirements.txt
-         - name: Configure build
+            # Build + install from the repo root in one step. scikit-build-core
+            # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
+            # native library, header and share/ data into the installed package,
+            # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
+            # and runtime deps (numpy/scipy/geometric/...) come from pyproject.
+            # USE_LIBINT/ENABLE_OPENMP/LINALG_LIB_INT64 are pyproject defaults; CI
+            # overrides the build type, the MPI matrix leg, ENABLE_DDX, and the
+            # BLAS/LAPACK choice.
+            #
+            # LINALG_LIB=OpenBLAS links the system ILP64 OpenBLAS installed above
+            # (it bundles LAPACK), so neither OpenQP nor ddX compiles the reference
+            # NetLib LAPACK from source -- that was the slow part of the build.
+            #
+            # ENABLE_DDX=ON builds the optional ddX continuum-solvation backend so
+            # the PCM/ddX (DDPCM) examples actually run below instead of reporting
+            # SKIPPED. ddX is still built from source; the bundled-externals cache
+            # above (keyed on external/CMakeLists.txt) pays that cost once.
+            #
+            # External deps (libxc, nlopt, ...) are fetched via ExternalProject and
+            # the upstream hosts intermittently return HTTP 504. The bundled-
+            # externals cache persists across retries, so a re-run only re-fetches
+            # whatever failed.
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.build-type=Debug \
+                --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
+                --config-settings=cmake.define.ENABLE_DDX=ON \
+                --config-settings=cmake.define.ENABLE_MPI=${{ matrix.MPI }}; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         # Run the full example/reference regression suite. Each test runs in its
+         # own subprocess, so a hard failure in one example cannot abort the rest
+         # of the run (see oqp_tester.py). Exercised once per OS on the non-MPI
+         # leg: the suite is the same code path and running it under both MPI legs
+         # only doubles wall-clock.
+         - name: Locate ddX runtime library
+           # The ENABLE_DDX=ON build links libddx.so, which is installed in the
+           # bundled-externals dir, not next to the installed liboqp.so. For a
+           # plain `pip install .` build the runtime loader cannot find it, so
+           # `import oqp` (hence every `openqp` invocation) fails with
+           # "libddx.so: cannot open shared object file". Put its directory on
+           # LD_LIBRARY_PATH so the validate + test steps below can load liboqp.
+           if: ${{ matrix.MPI == 'OFF' }}
            run: |
-            cmake -B ${{ env.BUILD_DIR }} -G Ninja -DCMAKE_BUILD_TYPE=Debug -DUSE_LIBINT=OFF -DCMAKE_C_COMPILER=gcc-${{ matrix.version }} -DCMAKE_CXX_COMPILER=g++-${{ matrix.version }} -DCMAKE_Fortran_COMPILER=gfortran-${{ matrix.version }} -DCMAKE_INSTALL_PREFIX=. -DENABLE_OPENMP=ON -DLINALG_LIB_INT64=OFF -DENABLE_MPI=${{ matrix.MPI }}
-         - name: Compile & Install
+            lib="$(find "$HOME"/.cache/openqp -name 'libddx.so*' -print -quit 2>/dev/null)"
+            if [ -n "$lib" ]; then
+              echo "LD_LIBRARY_PATH=$(dirname "$lib"):${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+              echo "ddX runtime library: $lib"
+            else
+              echo "::error::libddx.so not found under ~/.cache/openqp; ddX build is broken"
+              exit 1
+            fi
+
+         - name: Validate example references
+           # Gate: every example reference must carry the regression values its
+           # runtype/method/properties require (the registry in
+           # oqp/utils/regression.py). Fails loudly if a new example or a newly
+           # registered value lands without its reference value. Exits non-zero
+           # (unlike the piped run_tests below), so it actually blocks CI.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --validate_examples
+
+         - name: Check feature coverage
+           # Gate: every opt-in feature flag in the input schema must be
+           # exercised by at least one example, so a new capability cannot ship
+           # without a test (see EXEMPT_FLAGS / KNOWN_UNCOVERED in
+           # oqp/utils/regression.py). Existing gaps are grandfathered notes.
+           if: ${{ matrix.MPI == 'OFF' }}
+           run: openqp --check_feature_coverage
+
+         - name: Run example test suite
+           if: ${{ matrix.MPI == 'OFF' }}
+           env:
+            # One OMP thread per test so all runner cores run tests concurrently
+            # (max_workers = cpus // omp_threads); the examples are tiny.
+            OQP_TEST_OMP_THREADS: 1
            run: |
-            ninja -C ${{ env.BUILD_DIR }} install
-         - name: Install pyoqp
-           run: |
-            cd pyoqp && pip install .
+            # pipefail: `openqp --run_tests` exits non-zero when any example
+            # fails/errors, but piping to `tee` would otherwise mask that exit
+            # code (the pipeline would report tee's success) and let accuracy
+            # regressions pass CI silently. With pipefail the failure propagates.
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
+            # The tester reports a missing-optional-backend example as SKIPPED
+            # (green), not FAILED. Since this build sets ENABLE_DDX=ON, the DDPCM
+            # examples MUST run -- if any hit the OQP_ENABLE_DDX skip sentinel,
+            # ddX silently did not build and the green suite would be a false pass.
+            # Fail explicitly on that sentinel (see oqp_tester.py
+            # _OPTIONAL_FEATURE_SENTINELS / the "build lacks ..." log line).
+            if grep -q 'OQP_ENABLE_DDX' run_tests.out; then
+              echo "::error::ddX-enabled build skipped a DDPCM example (OQP_ENABLE_DDX sentinel); ddX must be built and the PCM examples must run"
+              exit 1
+            fi
+
+# NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
+# the inline comment in each input. The energy-only ddPCM Fock coupling is
+# self-consistent only to ~1e-7, so a tighter target would not converge. The
+# deeper scientific PCM validation gate lives in
+# tests/test_pcm_literature_benchmarks.py.

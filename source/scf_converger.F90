@@ -417,7 +417,7 @@ module scf_converger
   implicit none
 
   private
-  ! -- SOSCF variant selector (driven by infos%control%soscf_mode) --
+  ! -- SOSCF variant selector (always SOSCF_VARIANT_ORIGINAL) --
   integer, parameter, public :: SOSCF_VARIANT_ORIGINAL    = 0
   integer, parameter, public :: SOSCF_VARIANT_STABLE_ONLY = 1
   integer, parameter, public :: SOSCF_VARIANT_QUAD_LS     = 2
@@ -553,6 +553,8 @@ module scf_converger
   contains
     procedure, pass :: get_mo_a     => conv_result_trah_get_mo_a
     procedure, pass :: get_mo_b     => conv_result_trah_get_mo_b
+    procedure, pass :: get_mo_e_a   => conv_result_trah_get_mo_e_a
+    procedure, pass :: get_mo_e_b   => conv_result_trah_get_mo_e_b
     procedure, pass :: get_fock     => conv_result_trah_get_fock
     procedure, pass :: get_rms_grad => conv_result_trah_get_rms_g
     procedure, pass :: get_iter     => conv_result_trah_get_iter
@@ -1396,6 +1398,34 @@ contains
     istat = 0
   end subroutine conv_result_trah_get_mo_b
 
+  subroutine conv_result_trah_get_mo_e_a(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_a
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_a
+
+  subroutine conv_result_trah_get_mo_e_b(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_b
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_b
+
   subroutine conv_result_trah_get_fock(self, matrix, istat)
     class(scf_conv_trah_result), intent(in) :: self
     integer, intent(out) :: istat
@@ -1616,7 +1646,6 @@ contains
     real(kind=dp), intent(in) :: error
     class(subconverger), pointer :: conv
     integer :: i, nconv
-    logical :: use_soscf_now
 
     nconv = ubound(self%thresholds, 1)
     do i = 0, nconv
@@ -1624,16 +1653,6 @@ contains
     end do
 
     conv => self%sconv(min(i,nconv))%s
-    use_soscf_now = .false.
-    do i = 0, nconv
-      select type (sc => self%sconv(i)%s)
-      type is (soscf_converger)
-        ! SOSCF exists in the set of convergers
-        ! Check if we should use it based on current iteration
-        use_soscf_now = .true.
-        exit
-      end select
-    end do
     ! Continue using the 'SD' converger if
     ! already initiated
     if (i == 0 .and. self%step > 0) then

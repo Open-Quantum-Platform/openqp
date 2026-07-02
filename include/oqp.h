@@ -115,11 +115,9 @@ struct control_parameters {
     int64_t   maxdiis;
     int64_t   diis_reset_mod;
     double    diis_reset_conv;
-    double    diis_method_threshold;
     int64_t   diis_type;
-    double    vdiis_cdiis_switch;
+    double    cdiis_switch;
     double    vdiis_vshift_switch;
-    double    vshift_cdiis_switch;
     double    vshift;
     bool      mom;
     bool      pfon;
@@ -130,16 +128,24 @@ struct control_parameters {
     double    conv;
     int64_t   scf_incremental;
     double    int2e_cutoff;
+    int64_t   scf_pscreen;
+    double    pscreen_k;
+    double    pscreen_cap;
+    double    pscreen_tight;
+    double    pscreen_xc_dcut;
+    double    pscreen_xc_aocut;
+    int64_t   pscreen_grid_rad;
+    int64_t   pscreen_grid_ang;
     int64_t   esp;
     int64_t   resp_target;
     double    esp_constr;
     bool      basis_set_issue;
     double    conf_print_threshold;
     bool      rstctmo;
+    int64_t   scal_rel;
+    int64_t   soc_2e;
     int64_t   converger_type;
     double    soscf_lvl_shift;
-    int64_t   soscf_reset_mod;
-    int64_t   soscf_mode;
     int64_t   verbose;
     bool      trh_stab;
     bool      trh_ls;
@@ -150,7 +156,18 @@ struct control_parameters {
     int64_t   trh_nmic;
     double    trh_gred;
     double    trh_lred;
+    int64_t   trh_impl;
     bool      sd_scf;
+    bool      pcm_enabled;
+    double    pcm_epsilon;
+    /* Performance knobs -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   xc_c2f;
+    int64_t   xc_phi_cache;
+    int64_t   xc_incdft;
+    double    grad_cutoff;
+    double    mrsf_resp_cutoff;
+    int64_t   mrsf_fp32;
+    int64_t   mrsf_zv_warmstart;
 };
 
 struct mpi_communicator {
@@ -163,6 +180,7 @@ struct electron_shell {
         int id;
 	int element_id;
 	int32_t ang_mom;
+	int32_t harmonic;
 	int32_t ecp_nam;
 	int* num_expo;
 	double* expo;
@@ -175,6 +193,8 @@ struct electron_shell {
 
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
+int oqp_have_openmp(void);
+void oqp_omp_set_num_threads(int n);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
         int32_t *type_id, int32_t *ndims, int64_t *dims, void **v);
 int64_t oqp_alloc(struct oqp_handle_t *c_handle, char *code,
@@ -187,6 +207,7 @@ int64_t oqp_get_basis(struct oqp_handle_t *c_handle,
 
 /* `mass` is optional, pass NULL if not needed */
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
+void oqp_set_harmonic_active(bool flag);
 void oqp_banner(struct oqp_handle_t *inf);
 
 void apply_basis(struct oqp_handle_t *inf);
@@ -196,24 +217,49 @@ void append_ecp(struct oqp_handle_t *inf);
 
 void int1e(struct oqp_handle_t *inf);
 
+void int2e(struct oqp_handle_t *inf);
+
 void guess_hcore(struct oqp_handle_t *inf);
 void guess_huckel(struct oqp_handle_t *inf);
+void guess_modhuckel(struct oqp_handle_t *inf);
 void guess_json(struct oqp_handle_t *inf);
+void guess_sap(struct oqp_handle_t *inf);
+void guess_minao(struct oqp_handle_t *inf);
 void proj_dm_newbas(struct oqp_handle_t *inf);
 
 void hf_energy(struct oqp_handle_t *inf);
 void hf_gradient(struct oqp_handle_t *inf);
+void hf_hessian(struct oqp_handle_t *inf);
+void hess1_selftest(struct oqp_handle_t *inf);
+void grd2_hess_selftest(struct oqp_handle_t *inf);
+void hess_skel_selftest(struct oqp_handle_t *inf);
+void hess_skel_open_selftest(struct oqp_handle_t *inf);
+void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);
+void cphf_static_polarizability(struct oqp_handle_t *inf, double *alpha);
+void vibrational_intensities_native(struct oqp_handle_t *inf, int64_t nmode, int64_t ncoord,
+        double *modes, double *dipole_derivatives, double *polarizability_derivatives,
+        double *infrared_intensities, double *mode_dipole_derivatives,
+        double *raman_activities, double *mode_polarizability_derivatives);
+void cphf_polarizability_selftest(struct oqp_handle_t *inf);
+void cphf_uhf_polarizability_selftest(struct oqp_handle_t *inf);
+void cphf_rohf_polarizability_selftest(struct oqp_handle_t *inf);
+void fockx_selftest(struct oqp_handle_t *inf);
+void fockx_os_selftest(struct oqp_handle_t *inf);
 
 void tdhf_energy(struct oqp_handle_t *inf);
 void tdhf_z_vector(struct oqp_handle_t *inf);
 void tdhf_gradient(struct oqp_handle_t *inf);
+void tdhf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_sf_energy(struct oqp_handle_t *inf);
 void tdhf_sf_z_vector(struct oqp_handle_t *inf);
 void tdhf_sf_gradient(struct oqp_handle_t *inf);
+void tdhf_sf_hessian(struct oqp_handle_t *inf);
 
 void tdhf_mrsf_energy(struct oqp_handle_t *inf);
 void tdhf_umrsf_energy(struct oqp_handle_t *inf);
+void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
+void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
@@ -228,3 +274,13 @@ void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
 
+/* Native DFT-D4 dispersion (source/dftd4_interface.F90). Self-contained:
+   takes atomic numbers + coordinates (Bohr), not the oqp handle. */
+void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
+                    const char *func, int lfunc, int do_grad,
+                    double *energy, double *grad, int *ier);
+void soc_mrsf(struct oqp_handle_t *inf);
+void dk_scalar(struct oqp_handle_t *inf);
+void nmr_shielding(struct oqp_handle_t *inf);
+void nmr_giao_shielding_debug(struct oqp_handle_t *inf);
+void nmr_giao_shielding(struct oqp_handle_t *inf);
