@@ -106,6 +106,11 @@ OQP_CONFIG_SCHEMA = {
         # ignores it with a warning.
         'omp_threads': {'type': int, 'default': '0'},
     },
+    'mp2': {
+        'variant': {'type': string, 'default': 'mp2'},
+        'same_spin_scale': {'type': float, 'default': '1.0'},
+        'opposite_spin_scale': {'type': float, 'default': '1.0'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -359,7 +364,7 @@ class OQPData:
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
-    _methods = ('hf', 'tdhf')
+    _methods = ('hf', 'tdhf', 'mp2')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
@@ -378,6 +383,10 @@ class OQPData:
         "pcm": {
             "enabled": "set_pcm_enabled",
             "epsilon": "set_pcm_epsilon",
+        },
+        "mp2": {
+            "same_spin_scale": "set_mp2_same_spin_scale",
+            "opposite_spin_scale": "set_mp2_opposite_spin_scale",
         },
         "scf": {
             "type": "set_scf_type",
@@ -998,6 +1007,14 @@ class OQPData:
                 functional.ljust(20)[:20].upper().encode("ascii")
             )
         self._data.control.hamilton = OQPData._dft_switch[dft]
+
+    def set_mp2_same_spin_scale(self, scale):
+        """Set standalone MP2 same-spin scale."""
+        self._data.dft.MP2SS_Scale = scale
+
+    def set_mp2_opposite_spin_scale(self, scale):
+        """Set standalone MP2 opposite-spin scale."""
+        self._data.dft.MP2OS_Scale = scale
 
     def set_dftgrid_rad_type(self, radtype):
         """Set radial grid type in DFT"""

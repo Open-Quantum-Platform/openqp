@@ -143,7 +143,7 @@ struct control_parameters {
     double    conf_print_threshold;
     bool      rstctmo;
     int64_t   scal_rel;
-    int64_t   soc_2e;  
+    int64_t   soc_2e;
     int64_t   converger_type;
     double    soscf_lvl_shift;
     int64_t   verbose;
@@ -262,6 +262,8 @@ void tdhf_mrsf_ekt_ip(struct oqp_handle_t *inf);
 void tdhf_mrsf_ekt_ea(struct oqp_handle_t *inf);
 void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
+
+void mp2_energy(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
