@@ -307,7 +307,17 @@ class OpenQpQMMM:
                     (1, self.op.mol.get_atoms2("natom"), 3)
                 )
                 oqp.grad_esp_qmmm(self.op.mol)
-                gqm += self.op.mol.data["OQP::ESPF_GRAD"]
+                # OQP::ESPF_GRAD is declared Fortran (3, natom) but its flat
+                # buffer is atom-major (a0x,a0y,a0z,a1x,...), matching the QM
+                # gradient. Reshape the flat buffer to (natom, 3). Adding the
+                # (3, natom) view directly only works when natom == 3 (a square
+                # coincidence), which is why non-3-atom QM regions - e.g.
+                # link-atom-capped fragments - previously broke.
+                natom_qm = self.op.mol.get_atoms2("natom")
+                esp_grad = np.asarray(
+                    self.op.mol.data["OQP::ESPF_GRAD"]
+                ).reshape(natom_qm, 3)
+                gqm += esp_grad
                 # --- Unit conversion to OpenMM conventions ------------------------
                 self.eqm *= 2625.499639 * unit.kilojoule_per_mole
                 self.gqm = gqm[0]*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
@@ -333,7 +343,10 @@ class OpenQpQMMM:
                     gradient.grad_func[gradient.td](gradient.mol)
                     gqm = gradient.mol.get_grad().reshape((gradient.natom, 3))
                     oqp.grad_esp_qmmm_excited(self.op.mol)
-                    gqm += self.op.mol.data["OQP::ESPF_GRAD"]
+                    # ESPF_GRAD flat buffer is atom-major; reshape to (natom, 3).
+                    gqm += np.asarray(
+                        self.op.mol.data["OQP::ESPF_GRAD"]
+                    ).reshape(gradient.natom, 3)
                     grads[i] = gqm.copy()
                     self.gqm = gqm*49614.75  # Hartree/bohr -> kJ/mol/nm (PR #205 review M1b)
                     self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
@@ -360,13 +373,23 @@ class OpenQpQMMM:
 
         for i in range(nonbonded.getNumExceptions()):
             p1, p2, chargeProd, sigma, epsilon = nonbonded.getExceptionParameters(i)
+            # A QM-MM bonded exclusion (1-2/1-3, chargeProd==0) must stay a full
+            # exclusion: turning it into a charged pair would change the set of
+            # non-excluded exceptions (OpenMM forbids that in
+            # updateParametersInContext) and would double-count QM->MM
+            # electrostatics already handled by the ESPF embedding. Only genuine
+            # scaled (1-4) exceptions carry a non-zero charge product.
+            if chargeProd.value_in_unit(unit.elementary_charge ** 2) == 0.0:
+               continue
             if p1 in self.qm_atoms and p2 not in self.qm_atoms:
-               charge1 = pchg_qm[np.where(self.qm_atoms == p1)[0]]*unit.elementary_charge
+               k1 = int(np.where(self.qm_atoms == p1)[0][0])
+               charge1 = pchg_qm[k1]*unit.elementary_charge
                charge2, sigma2, epsilon2 = nonbonded.getParticleParameters(p2)
                chargeProd=charge1*charge2
                nonbonded.setExceptionParameters(i,p1,p2,chargeProd,sigma,epsilon)
             elif p2 in self.qm_atoms and p1 not in self.qm_atoms:
-               charge2 = pchg_qm[np.where(self.qm_atoms == p2)[0]]*unit.elementary_charge
+               k2 = int(np.where(self.qm_atoms == p2)[0][0])
+               charge2 = pchg_qm[k2]*unit.elementary_charge
                charge1, sigma1, epsilon1 = nonbonded.getParticleParameters(p1)
                chargeProd=charge1*charge2
                nonbonded.setExceptionParameters(i,p1,p2,chargeProd,sigma,epsilon)
