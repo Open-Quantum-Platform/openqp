@@ -9,6 +9,9 @@ from oqp.library.single_point import (
     BasisOverlap, NACME, NAC
 )
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
+from oqp.library.qmmm_connectivity import (
+    detect_link_atoms, link_atom_position,
+)
 
 import oqp
 
@@ -141,9 +144,35 @@ class OpenQpQMMM:
             self.mol = None
 
         self.op = None
+
+        # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
+        # bond that the QM/MM partition cuts.  Empty when the QM region is a set
+        # of whole molecules (e.g. a water box), in which case every code path
+        # below is a no-op and behaviour is identical to the pre-link-atom
+        # driver.
+        self.link_atoms = self._detect_link_atoms()
+
         self.mm_systems = self.prepare_mm()
 
     # --- Internal helpers -------------------------------------------------
+
+    def _detect_link_atoms(self):
+        """Find dangling QM–MM bonds in the topology and build link atoms."""
+        z_by_index = {
+            atom.index: atom.element.atomic_number
+            for atom in self.topology.atoms()
+        }
+        bonds = [(b[0].index, b[1].index) for b in self.topology.bonds()]
+        return detect_link_atoms(bonds, self.qm_atoms, lambda i: z_by_index[i])
+
+    def _link_positions_angstrom(self, positions):
+        """Link-atom Cartesian positions (Angstrom) for the given frame."""
+        coords = []
+        for link in self.link_atoms:
+            qm_p = positions[link.qm_index].value_in_unit(unit.angstrom)
+            mm_p = positions[link.mm_index].value_in_unit(unit.angstrom)
+            coords.append(link_atom_position(qm_p, mm_p, link.g))
+        return coords
 
     def _build_xyz_string(self):
         xyz_atoms = []
@@ -155,6 +184,10 @@ class OpenQpQMMM:
                 y = self.positions[at_index][1].value_in_unit(unit.angstrom)
                 z = self.positions[at_index][2].value_in_unit(unit.angstrom)
                 xyz_atoms.append(f"{sym} {x:.6f} {y:.6f} {z:.6f}")
+        # Cap severed QM–MM bonds with hydrogen link atoms (appended last so the
+        # QM-atom ordering above is preserved).
+        for pos in self._link_positions_angstrom(self.positions):
+            xyz_atoms.append(f"H {pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}")
         return '; '.join(xyz_atoms)
 
     def _update_mol_positions(self):
@@ -165,6 +198,9 @@ class OpenQpQMMM:
                 y = self.positions[atom.index][1].value_in_unit(unit.angstrom)
                 z = self.positions[atom.index][2].value_in_unit(unit.angstrom)
                 coords.append([x, y, z])
+        # Append hydrogen link atoms capping severed QM–MM bonds.
+        for pos in self._link_positions_angstrom(self.positions):
+            coords.append([pos[0], pos[1], pos[2]])
         coords = np.array(coords)
         ang2bohr = 1.8897259886
         self.mol.set_atoms2("xyz", (coords * ang2bohr).ravel())
@@ -350,10 +386,28 @@ class OpenQpQMMM:
             potmm, potqm = self.electrostatic_potential()
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
-        emm, gmm = self.forces_mm(pchg_qm)
+
+        # Fold each link atom's ESP charge onto its QM host so the charge the QM
+        # region presents to the MM electrostatics is conserved (link atoms are
+        # not MM particles).  No-op when there are no link atoms.
+        pchg_mm = np.array(pchg_qm, dtype=float).copy()
+        nqm = len(self.qm_atoms)
+        for a, link in enumerate(self.link_atoms):
+            pchg_mm[link.host_row] += pchg_mm[nqm + a]
+
+        emm, gmm = self.forces_mm(pchg_mm)
 
         total_energy = eqm + emm
         total_forces = gmm.copy()
+
+        # Redistribute link-atom gradients onto their real host atoms by the
+        # chain rule of the scaled capping position R_L = R_QM + g(R_MM-R_QM).
+        # The QM-host share is folded into the QM gradient row (distributed
+        # below); the MM-host share is applied directly to the MM host atom.
+        for a, link in enumerate(self.link_atoms):
+            g_link = self.gqm[nqm + a]
+            self.gqm[link.host_row] = self.gqm[link.host_row] + (1.0 - link.g) * g_link
+            total_forces[link.mm_index] = total_forces[link.mm_index] - link.g * g_link
 
         for k, i in enumerate(self.qm_atoms):
             total_forces[i] = total_forces[i] - self.gqm[k]
@@ -475,6 +529,25 @@ class OpenQpQMMM:
         }
 
 
+    def _pad_potential_for_link_atoms(self, potmm, potqm):
+       """Extend the ESPF embedding arrays to cover hydrogen link atoms.
+
+       Link atoms are additional QM centres appended after the real QM atoms.
+       They are capping hydrogens rather than physical atoms, so they are not
+       embedded in the MM electrostatic field (their MM potential is taken as
+       zero) and carry no periodic QM–QM self-image term.  This keeps the
+       array dimensions consistent with the QM geometry (natom = nqm + nlink)
+       while leaving the whole-molecule (no-link) case untouched.
+       """
+       nlink = len(self.link_atoms)
+       if nlink == 0:
+           return potmm, potqm
+       nqm = len(self.qm_atoms)
+       potmm = np.concatenate([np.asarray(potmm, dtype=float), np.zeros(nlink)])
+       padded = np.zeros((nqm + nlink, nqm + nlink), dtype=float)
+       padded[:nqm, :nqm] = potqm
+       return potmm, padded
+
     def electrostatic_potential(self):
 
        syspbc=self.mm_systems["sys0"]
@@ -509,7 +582,9 @@ class OpenQpQMMM:
        # QM-QM correction potential is identically zero. Return a zero matrix
        # (not None) so the Fortran add_potqm_contributions has a valid record.
        if self.Cutoff == app.NoCutoff:
-           return potmm, np.zeros((len(self.qm_atoms), len(self.qm_atoms)))
+           return self._pad_potential_for_link_atoms(
+               potmm, np.zeros((len(self.qm_atoms), len(self.qm_atoms)))
+           )
 
     #######################################################################
     #                 2. Compute QM pair potential                        #
@@ -586,4 +661,4 @@ class OpenQpQMMM:
            nonbondedew.setParticleParameters(self.qm_atoms[i], 0.0*unit.elementary_charge, 0.0, 0.0)
            nonbondedor.setParticleParameters(self.qm_atoms[i], 0.0*unit.elementary_charge, 0.0, 0.0)
 
-       return potmm,potqm
+       return self._pad_potential_for_link_atoms(potmm, potqm)
