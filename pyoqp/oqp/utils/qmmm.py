@@ -79,7 +79,9 @@ def _openmm_from_oqp(force_field,nonbondedMethod,constraints,water):
    else:
       exit(f"The {nonbondedMethod} type of electrostatics is not yet implemented")
 
-   if constraints is None:
+   # ``constraints`` arrives from the config as a string (default "None"), so
+   # compare by value, not identity: treat None / "" / "none" as no constraint.
+   if constraints is None or str(constraints).strip().lower() in ("", "none"):
       const = None
    elif constraints == 'HBonds':
       const = app.HBonds

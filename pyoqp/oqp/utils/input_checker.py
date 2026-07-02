@@ -389,6 +389,65 @@ def _omp_threads(report: CheckReport) -> int:
         return 1
 
 
+def _check_qm_atom_indices(tokens: list[str], report: CheckReport) -> None:
+    """Validate the QM-region atom indices that follow a .pdb path.
+
+    Mirrors the parsing in ``oqpdata.read_system``: each token is either a
+    single index or a ``start-end`` range. Indices must be non-negative and
+    unique.
+    """
+    if not tokens:
+        report.add(
+            "ERROR",
+            "input.system",
+            "QM/MM PDB geometry has no QM atom indices.",
+            expected="one or more atom indices, e.g. '9 10 17-19'",
+            action="List the QM-region atom indices after the .pdb path.",
+            wiki=WIKI_HELP["input.system"],
+        )
+        return
+
+    indices: list[int] = []
+    for tok in tokens:
+        if "-" in tok:
+            parts = tok.split("-")
+            if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
+                report.add(
+                    "ERROR",
+                    "input.system",
+                    "Invalid QM atom index range.",
+                    value=tok,
+                    expected="start-end with non-negative integers, e.g. '17-19'",
+                    action="Use an ascending integer range for the QM atom selection.",
+                    wiki=WIKI_HELP["input.system"],
+                )
+                return
+            start, end = int(parts[0]), int(parts[1])
+            indices.extend(range(start, end + 1))
+        elif tok.isdigit():
+            indices.append(int(tok))
+        else:
+            report.add(
+                "ERROR",
+                "input.system",
+                "Invalid QM atom index.",
+                value=tok,
+                expected="a non-negative integer or 'start-end' range",
+                action="List QM atom indices as integers or ranges after the .pdb path.",
+                wiki=WIKI_HELP["input.system"],
+            )
+            return
+
+    if len(indices) != len(set(indices)):
+        report.add(
+            "ERROR",
+            "input.system",
+            "Repeated entries in the QM atom list.",
+            action="Remove duplicate QM atom indices from the system selection.",
+            wiki=WIKI_HELP["input.system"],
+        )
+
+
 def _check_system(config: dict[str, Any], report: CheckReport) -> None:
     system = _get(config, "input", "system", "")
     if not system:
@@ -404,13 +463,31 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
 
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     if xyz_path:
-        resolved = os.path.abspath(xyz_path)
-        if not os.path.exists(resolved):
+        # Only the first whitespace-delimited token is the file path. QM/MM
+        # runs append the QM-region atom indices after a .pdb path
+        # (e.g. "mol.pdb 9 10 17-19"), so validate the path token alone rather
+        # than the whole line (which never exists as a file).
+        tokens = xyz_path.split()
+        path_token = tokens[0]
+        resolved = os.path.abspath(path_token)
+        if path_token.lower().endswith(".pdb"):
+            if not os.path.exists(resolved):
+                report.add(
+                    "ERROR",
+                    "input.system",
+                    "Referenced PDB file does not exist.",
+                    value=path_token,
+                    action="Fix the path or place the PDB file in the working directory.",
+                    wiki=WIKI_HELP["input.system"],
+                )
+            else:
+                _check_qm_atom_indices(tokens[1:], report)
+        elif not os.path.exists(resolved):
             report.add(
                 "ERROR",
                 "input.system",
                 "Referenced XYZ file does not exist.",
-                value=xyz_path,
+                value=path_token,
                 action="Fix the path or place the XYZ file in the working directory.",
                 wiki=WIKI_HELP["input.system"],
             )
