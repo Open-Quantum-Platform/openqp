@@ -25,6 +25,26 @@ from oqp.library.frequency import normal_mode, thermal_analysis
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 
 
+MP2_VARIANT_SCALES = {
+    'mp2': (1.0, 1.0),
+    'conventional': (1.0, 1.0),
+    'scs': (1.0 / 3.0, 1.2),
+    'scs-mp2': (1.0 / 3.0, 1.2),
+    'sos': (0.0, 1.3),
+    'sos-mp2': (0.0, 1.3),
+    'os': (0.0, 1.0),
+    'os-mp2': (0.0, 1.0),
+    'opposite-spin': (0.0, 1.0),
+    'ss': (1.0, 0.0),
+    'ss-mp2': (1.0, 0.0),
+    'same-spin': (1.0, 0.0),
+    'sss': (1.0, 0.0),
+    'sss-mp2': (1.0, 0.0),
+    'scs-mi': (1.29, 0.40),
+    'scs-mi-mp2': (1.29, 0.40),
+}
+
+
 class Calculator:
     """
     OQP calculator base class
@@ -179,6 +199,7 @@ class SinglePoint(Calculator):
         self.save_molden = mol.config['scf']['save_molden']
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
+        self._configure_mp2()
         self.energy_func = {
             'hf': oqp.hf_energy,
             'rpa': oqp.tdhf_energy,
@@ -191,6 +212,31 @@ class SinglePoint(Calculator):
 
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
+
+    def _configure_mp2(self):
+        if self.method != 'mp2':
+            return
+        if self.functional:
+            raise ValueError('method=mp2 requires an HF reference; remove [input] functional.')
+
+        mp2_config = self.mol.config.get('mp2', {})
+        variant = mp2_config.get('variant', 'mp2')
+        if variant == 'custom':
+            ss_scale = mp2_config.get('same_spin_scale', 1.0)
+            os_scale = mp2_config.get('opposite_spin_scale', 1.0)
+        else:
+            try:
+                ss_scale, os_scale = MP2_VARIANT_SCALES[variant]
+            except KeyError as exc:
+                known = ', '.join(sorted([*MP2_VARIANT_SCALES, 'custom']))
+                raise ValueError(f'Unknown MP2 variant {variant}. Use one of: {known}') from exc
+
+        ss_scale = float(ss_scale)
+        os_scale = float(os_scale)
+        self.mol.config.setdefault('mp2', {})['same_spin_scale'] = ss_scale
+        self.mol.config.setdefault('mp2', {})['opposite_spin_scale'] = os_scale
+        self.mol.data.set_mp2_same_spin_scale(ss_scale)
+        self.mol.data.set_mp2_opposite_spin_scale(os_scale)
 
     def _prep_guess(self):
         oqp.library.set_basis(self.mol)

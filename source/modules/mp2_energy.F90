@@ -6,7 +6,7 @@
 !> (RHF/UHF/ROHF) is converged first by the usual PyOQP `reference` step, and
 !> this driver adds the second-order Moller-Plesset correlation energy on top,
 !> reusing the validated two-electron driver via `mp2_lib`.  It is dispatched
-!> from Python as `[tdhf] type = mp2` (a ground-state post-SCF method that
+!> from Python as `[input] method = mp2` (a ground-state post-SCF method that
 !> reports no excitations).
 module mp2_energy_mod
 
@@ -19,7 +19,7 @@ module mp2_energy_mod
 
 contains
 
-  !> C-bound entry point: `[tdhf] type = mp2` dispatches here.
+  !> C-bound entry point: `[input] method = mp2` dispatches here.
   subroutine mp2_energy_C(c_handle) bind(C, name="mp2_energy")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -36,11 +36,12 @@ contains
     use types, only: information
     use printing, only: print_module_info
     use mp2_lib, only: mp2_correlation
+    use messages, only: show_message, with_abort
 
     implicit none
 
     type(information), target, intent(inout) :: infos
-    real(kind=dp) :: e_mp2, e_aa, e_bb, e_ab, e_ref
+    real(kind=dp) :: e_mp2, e_aa, e_bb, e_ab, e_ref, e_ss
     logical :: computed
 
     open(unit=iw, file=infos%log_filename, position="append")
@@ -54,10 +55,14 @@ contains
     write(iw,'(2X,A)') 'MP2  (Moller-Plesset second order, ground state)'
     write(iw,'(2X,60("="))')
     if (computed) then
+      e_ss = e_aa + e_bb
       write(iw,'(2X,A,F20.10)') 'E(reference, SCF)      = ', e_ref
       write(iw,'(2X,A,F20.10)') 'E(MP2, same-spin aa)   = ', e_aa
       write(iw,'(2X,A,F20.10)') 'E(MP2, same-spin bb)   = ', e_bb
+      write(iw,'(2X,A,F20.10)') 'E(MP2, same-spin total)= ', e_ss
       write(iw,'(2X,A,F20.10)') 'E(MP2, opp-spin  ab)   = ', e_ab
+      write(iw,'(2X,A,F20.10)') 'MP2 same-spin scale    = ', infos%dft%MP2SS_Scale
+      write(iw,'(2X,A,F20.10)') 'MP2 opp-spin scale     = ', infos%dft%MP2OS_Scale
       write(iw,'(2X,A,F20.10)') 'E(MP2, correlation)    = ', e_mp2
       write(iw,'(2X,A,F20.10)') 'E(MP2, total)          = ', e_ref + e_mp2
       ! Report the MP2 total as the molecular energy for downstream consumers.
@@ -65,8 +70,12 @@ contains
       infos%mol_energy%etot   = e_ref + e_mp2
     else
       write(iw,'(2X,A)') 'MP2 not computed: the system exceeds the per-MO-pair'
-      write(iw,'(2X,A)') 'Coulomb-build size guard (raise OQP_ADC2_MAX_JBUILDS,'
+      write(iw,'(2X,A)') 'Coulomb-build size guard (raise OQP_MP2_MAX_JBUILDS,'
       write(iw,'(2X,A)') 'or use a smaller basis).'
+      write(iw,'(2X,60("="),/)')
+      close(iw)
+      call show_message('MP2 aborted: OQP_MP2_MAX_JBUILDS guard was exceeded', with_abort)
+      return
     end if
     write(iw,'(2X,60("="),/)')
 

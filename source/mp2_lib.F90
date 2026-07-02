@@ -5,8 +5,8 @@
 !>
 !> The correlation energy is built in the spin-blocked (aa, bb, ab) form on
 !> semicanonicalized orbitals, reusing the validated two-electron driver
-!> (`int2_compute`) via per-occupied-MO-pair Coulomb builds -- so no O(N^4) MO
-!> integral tensor is ever stored.  A ROHF reference is semicanonicalized first
+!> (`int2_compute`) via per-occupied-MO-pair Coulomb builds -- so no full O(N^4)
+!> MO integral tensor is ever stored.  A ROHF reference is semicanonicalized first
 !> (occ-occ and vir-vir Fock blocks diagonalized) so the canonical MP2 amplitude
 !> denominators are well defined.  Validated to 1e-8 Ha against PySCF UMP2.
 module mp2_lib
@@ -19,7 +19,7 @@ module mp2_lib
 
   !> Default guard on the number of per-MO-pair Coulomb builds the correlation
   !> assembly performs (nocc*nvir over both spins); overridable at run time via
-  !> OQP_MP2_MAX_JBUILDS.  Prevents an accidental O(N^2) explosion of J-builds.
+  !> OQP_MP2_MAX_JBUILDS.  Prevents an accidental large number of J-builds.
   integer, parameter :: MAX_JBUILDS = 4000
 
 contains
@@ -50,7 +50,6 @@ contains
     use messages, only: show_message, with_abort
     use oqp_tagarray_driver, only: tagarray_get_data, &
                                    OQP_VEC_MO_A, OQP_VEC_MO_B, &
-                                   OQP_E_MO_A, OQP_E_MO_B, &
                                    OQP_FOCK_A, OQP_FOCK_B
 
     type(information), target, intent(inout) :: infos
@@ -61,7 +60,6 @@ contains
     type(int2_compute_t) :: int2_driver
 
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:)
-    real(kind=dp), contiguous, pointer :: e_mo_a(:), e_mo_b(:)
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
     ! Semicanonical orbitals/energies (occ-occ and vir-vir Fock blocks
     ! diagonalized) -- required for a standard ROHF/UHF MP2.
@@ -70,6 +68,8 @@ contains
 
     integer :: nbf, nbf2, nocca, noccb, vira, virb, ok
     real(kind=dp) :: e_opp_scratch
+    real(kind=dp) :: ss_scale, os_scale
+    logical :: restricted_ref, need_same_spin, need_opposite_spin
 
     e_mp2 = 0.0_dp; e_aa = 0.0_dp; e_bb = 0.0_dp; e_ab = 0.0_dp
     computed = .false.
@@ -87,11 +87,20 @@ contains
     if (.not. mp2_build_is_affordable(nbf, nocca, noccb)) return
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
-    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
-    call tagarray_get_data(infos%dat, OQP_E_MO_A, e_mo_a)
-    call tagarray_get_data(infos%dat, OQP_E_MO_B, e_mo_b)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
-    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    restricted_ref = (infos%control%scftype == 1)
+    if (restricted_ref) then
+      mo_b => mo_a
+      fock_b => fock_a
+    else
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+    end if
+
+    ss_scale = infos%dft%MP2SS_Scale
+    os_scale = infos%dft%MP2OS_Scale
+    need_same_spin = abs(ss_scale) > 1.0e-14_dp
+    need_opposite_spin = abs(os_scale) > 1.0e-14_dp
 
     ! Semicanonicalize each spin so the MP2 denominators use canonical orbital
     ! energies (Fock occ-occ / vir-vir sub-blocks diagonalized).  For a UHF
@@ -112,7 +121,7 @@ contains
                         mo_a_sc, e_a_sc, nocca, vira, &    ! "left"  = alpha occ/vir
                         mo_a_sc, e_a_sc, nocca, vira, &    ! same-spin partner = alpha
                         mo_b_sc, e_b_sc, noccb, virb, &    ! opposite-spin partner = beta
-                        same_spin=.true., do_opposite=.true., &
+                        same_spin=need_same_spin, do_opposite=need_opposite_spin, &
                         e_same=e_aa, e_opp=e_ab)
 
     ! Same-spin beta block (opposite-spin already counted once above).
@@ -121,14 +130,14 @@ contains
                         mo_b_sc, e_b_sc, noccb, virb, &
                         mo_b_sc, e_b_sc, noccb, virb, &
                         mo_a_sc, e_a_sc, nocca, vira, &
-                        same_spin=.true., do_opposite=.false., &
+                        same_spin=need_same_spin, do_opposite=.false., &
                         e_same=e_bb, e_opp=e_opp_scratch)
 
     deallocate(mo_a_sc, mo_b_sc, e_a_sc, e_b_sc)
 
     call int2_driver%clean()
 
-    e_mp2 = e_aa + e_bb + e_ab
+    e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab
     computed = .true.
 
   end subroutine mp2_correlation
@@ -159,8 +168,8 @@ contains
     type(int2_urohf_data_t), target :: int2_data
     real(kind=dp), allocatable, target :: pdmat(:,:)
     real(kind=dp), allocatable :: dfull(:,:), jfull(:,:), scr(:,:), jpack(:)
-    ! T_same(j,b ; i,a) = (i a | j b) over the same(left) spin
-    real(kind=dp), allocatable :: tsame(:,:,:,:)
+    ! same_block(a,b,j) = (i a | j b) for one occupied i.
+    real(kind=dp), allocatable :: same_block(:,:,:)
     real(kind=dp), allocatable :: gopp(:,:)
     integer :: i, a, j, b, ii, ok
     real(kind=dp) :: denom, num
@@ -168,14 +177,20 @@ contains
     allocate(pdmat(nbf2,2), dfull(nbf,nbf), jfull(nbf,nbf), scr(nbf,nbf), &
              jpack(nbf2), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('mp2: cannot allocate J-build scratch', WITH_ABORT)
-    allocate(tsame(nocc_l,nvir_l,nocc_l,nvir_l), source=0.0_dp, stat=ok)
-    if (ok /= 0) call show_message('mp2: cannot allocate same-spin tensor', WITH_ABORT)
+    if (same_spin .and. (nocc_s /= nocc_l .or. nvir_s /= nvir_l)) then
+      call show_message('mp2: inconsistent same-spin dimensions', WITH_ABORT)
+    end if
+    if (same_spin) then
+      allocate(same_block(nvir_l,nvir_s,nocc_s), source=0.0_dp, stat=ok)
+      if (ok /= 0) call show_message('mp2: cannot allocate same-spin block', WITH_ABORT)
+    end if
     if (do_opposite) then
       allocate(gopp(nocc_o,nvir_o), source=0.0_dp, stat=ok)
       if (ok /= 0) call show_message('mp2: cannot allocate opp-spin block', WITH_ABORT)
     end if
 
     do i = 1, nocc_l
+      if (same_spin) same_block = 0.0_dp
       do a = 1, nvir_l
         ! Rank-1 symmetric AO density of MO_i (x) MO_(occ+a) (left spin).
         call rank1_sym_density(cmo_l(:,i), cmo_l(:,nocc_l+a), nbf, dfull)
@@ -197,16 +212,18 @@ contains
         call unpack_matrix(jpack, jfull, 'U')
         call int2_data%clean()
 
-        ! Same-spin: (i a | j b) = MO_j^T J MO_(occ+b), all j,b of left spin.
-        ! scr = J * C_occ(left)  -> (nbf, nocc_l)
-        call dgemm('n','n', nbf, nocc_l, nbf, 1.0_dp, jfull, nbf, &
-                   cmo_s, nbf, 0.0_dp, scr, nbf)
-        do j = 1, nocc_l
-          do b = 1, nvir_l
-            ! (i a | j b) = sum_mu C_(occ+b)(mu) * scr(mu,j)
-            tsame(j,b,i,a) = dot_product(cmo_s(:,nocc_l+b), scr(:,j))
+        if (same_spin) then
+          ! Same-spin: (i a | j b) = MO_j^T J MO_(occ+b), all j,b of left spin.
+          ! scr = J * C_occ(left)  -> (nbf, nocc_s)
+          call dgemm('n','n', nbf, nocc_s, nbf, 1.0_dp, jfull, nbf, &
+                     cmo_s, nbf, 0.0_dp, scr, nbf)
+          do j = 1, nocc_s
+            do b = 1, nvir_s
+              ! (i a | j b) = sum_mu C_(occ+b)(mu) * scr(mu,j)
+              same_block(a,b,j) = dot_product(cmo_s(:,nocc_s+b), scr(:,j))
+            end do
           end do
-        end do
+        end if
 
         if (do_opposite) then
           ! Opposite spin: (i a | j b) with j,b on the OTHER spin.
@@ -226,26 +243,26 @@ contains
           end do
         end if
       end do
-    end do
-
-    ! Same-spin contraction with antisymmetrized integrals.
-    if (same_spin) then
-      do i = 1, nocc_l
-        do j = 1, nocc_l
+      ! Same-spin contraction with antisymmetrized integrals.  Only the
+      ! virtual-virtual blocks for the current occupied i are retained, avoiding
+      ! the previous (nocc*nvir)^2 tensor.
+      if (same_spin) then
+        do j = 1, nocc_s
           do a = 1, nvir_l
-            do b = 1, nvir_l
-              denom = e_l(i) + e_l(j) - e_l(nocc_l+a) - e_l(nocc_l+b)
+            do b = 1, nvir_s
+              denom = e_l(i) + e_s(j) - e_l(nocc_l+a) - e_s(nocc_s+b)
               if (abs(denom) < 1.0e-10_dp) cycle
               ! <ij||ab> = (ia|jb) - (ib|ja)
-              num = tsame(j,b,i,a) - tsame(j,a,i,b)
+              num = same_block(a,b,j) - same_block(b,a,j)
               e_same = e_same + 0.25_dp * num*num / denom
             end do
           end do
         end do
-      end do
-    end if
+      end if
+    end do
 
-    deallocate(pdmat, dfull, jfull, scr, jpack, tsame)
+    deallocate(pdmat, dfull, jfull, scr, jpack)
+    if (allocated(same_block)) deallocate(same_block)
     if (allocated(gopp)) deallocate(gopp)
 
   end subroutine mp2_spin_block
