@@ -36,6 +36,9 @@ tools/_grad_validation_scratch/
 tools/_stress_scratch/
 tools/_example_grad_scratch/
 
+# OpenQP run artifact (default project restart/output JSON)
+oqp_project.json
+
 # Hessian dev scratch artifacts
 scratch_hess/
 run_compare_hess.py
