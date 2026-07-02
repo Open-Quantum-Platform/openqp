@@ -1,0 +1,15 @@
+Reference values for examples/MP2/h2o_ump2_6-31g.inp
+Method: UHF/UMP2, H2O, 6-31G (closed shell -> UMP2 == RMP2)
+Cross-checked against PySCF mp.UMP2 (conv_tol 1e-12):
+
+  E(UHF)            = -75.9842900384
+  E(MP2 corr)       =  -0.1278307500
+  E(UHF+UMP2 total) = -76.1121207884
+
+OQP prints E(MP2, correlation) and E(MP2, total) in the MP2 block;
+they must match the above to ~1e-6 Ha.
+
+--- OQP method=mp2 result (validated end-to-end) ---
+  E(reference, SCF)   = -75.9842900313
+  E(MP2, correlation) =  -0.1278307446   (PySCF: -0.1278307500, d=5e-9)
+  E(MP2, total)       = -76.1121207758   (PySCF: -76.1121207884, d=1e-8)

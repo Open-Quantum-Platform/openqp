@@ -186,6 +186,7 @@ class SinglePoint(Calculator):
             'sf': oqp.tdhf_sf_energy,
             'mrsf': oqp.tdhf_mrsf_energy,
             'umrsf': oqp.tdhf_umrsf_energy,
+            'mp2': oqp.mp2_energy,
         }
 
         # initialize state sign
@@ -336,7 +337,7 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
-        if self.method not in ['hf', 'tdhf']:
+        if self.method not in ['hf', 'tdhf', 'mp2']:
             raise ValueError(f'Unknown method type {self.method}')
 
         target_converger = self.mol.config['scf']['converger_type']
@@ -347,9 +348,11 @@ class SinglePoint(Calculator):
             # ixcore
             self.ixcore_shift()
 
-            # compute excitations
+            # compute excitations / correlation
             if self.method == 'tdhf':
                 energies = self.excitation(ref_energy)
+            elif self.method == 'mp2':
+                energies = self.correlation(ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -432,6 +435,16 @@ class SinglePoint(Calculator):
             else:
                 exit()
 
+        self.mol.energies = energies
+
+        return energies
+
+    def correlation(self, ref_energy):
+        # ground-state post-SCF correlation (MP2): the Fortran driver updates
+        # mol_energy.energy in place to the correlated total.
+        dump_log(self.mol, title='PyOQP: MP2 correlation steps', section='')
+        self.energy_func['mp2'](self.mol)
+        energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
 
         return energies
