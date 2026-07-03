@@ -37,9 +37,10 @@ option(USE_LIBINT        "Use Libint two-electron code"      ON)
 set(LINALG_LIB auto CACHE STRING "Select BLAS & LAPACK Library")
 # See BLA_VENDOR in FindBLAS documentation
 set(linalg_lib_options none auto netlib
+    Apple
 #    Generic
 #    ACML ACML_MP ACML_GPU
-#    Apple NAS
+#    NAS
 #    Arm Arm_mp Arm_ilp64 Arm_ilp64_mp
 #    ATLAS
 #    CXML DXML
@@ -70,7 +71,18 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
     message(FATAL_ERROR "LINALG_LIB must be one of ${linalg_lib_options}")
 endif()
 
-option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
+# BLAS/LAPACK integer width. Default follows the native-BLAS platform policy:
+# macOS defaults to LP64 because the mandated backend (Apple Accelerate) only
+# provides an LP64 (4-byte integer) interface; everywhere else ILP64 (8-byte).
+# Both remain explicitly overridable, e.g. -DLINALG_LIB=OpenBLAS
+# -DLINALG_LIB_INT64=ON for an ILP64 build on macOS.
+if(APPLE)
+    set(_oqp_linalg_int64_default OFF)
+else()
+    set(_oqp_linalg_int64_default ON)
+endif()
+option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ${_oqp_linalg_int64_default})
+unset(_oqp_linalg_int64_default)
 if(NOT LINALG_LIB_INT64 AND NOT APPLE)
     message(FATAL_ERROR
       "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "
@@ -78,6 +90,11 @@ if(NOT LINALG_LIB_INT64 AND NOT APPLE)
       "OQP_BLAS_INT=8."
     )
 endif()
+
+# Escape hatch for the no-silent-NetLib policy in findLinearAlgebra(): when ON,
+# a missing mandated/requested BLAS backend falls back to the bundled NetLib
+# reference BLAS with a WARNING instead of failing the configuration.
+option(OQP_ALLOW_REFERENCE_BLAS "Allow fallback to the slow bundled NetLib reference BLAS when the requested backend is missing" OFF)
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
 
