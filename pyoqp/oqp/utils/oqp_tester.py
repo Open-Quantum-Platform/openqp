@@ -358,8 +358,10 @@ class OQPTester:
 
     @staticmethod
     def _skip_in_full_run(input_file: str) -> bool:
-        """True for examples excluded from `run_tests all` because each costs
-        many times a normal example and dominates the suite wall-clock:
+        """True for examples excluded from `run_tests all`.
+
+        Excluded because each costs many times a normal example and dominates
+        the suite wall-clock:
 
           * numerical Hessians  -- runtype=hess without the opt-in
             type=analytical flag (numerical is the default); ~3N displaced
@@ -367,6 +369,14 @@ class OQPTester:
             at every displacement (~20-25x a normal test).
           * IRC paths           -- runtype=irc; traces many optimisation steps
             (the slowest single example in the suite).
+
+        Excluded because they are not self-contained regression tests:
+
+          * QM/MM examples      -- qmmm_flag=true; require the optional OpenMM
+            backend plus external PDB/force-field files that the isolated
+            per-example runner does not stage, so they error (PDB not found)
+            rather than regressing a value. They remain a development preview
+            (OpenQP PR #205).
 
         Analytical Hessians (type=analytical) and ordinary opt/TS runs are
         unaffected, and the skipped examples still run when invoked explicitly
@@ -379,6 +389,8 @@ class OQPTester:
         if 'runtype=irc' in text:
             return True
         if 'runtype=hess' in text and 'type=analytical' not in text:
+            return True
+        if 'qmmm_flag=true' in text:
             return True
         return False
 
