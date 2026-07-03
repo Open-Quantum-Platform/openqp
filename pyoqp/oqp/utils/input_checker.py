@@ -1118,15 +1118,18 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     # which exist for UMRSF yet. Reject them here at the single choke point
     # so validation fails early instead of dying at runtime.
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if method == "tdhf" and td_type == "umrsf" and runtype not in ("energy", "grad"):
+    # optimize enabled: the geomeTRIC/scipy optimize driver is method-agnostic (it only calls the
+    # per-step gradient), and the UMRSF analytic gradient is validated (re-gate CH2/butadiene/thymine,
+    # HF+DFT). Hessians/NAC remain unimplemented for UMRSF.
+    if method == "tdhf" and td_type == "umrsf" and runtype not in ("energy", "grad", "optimize"):
         report.add(
             "ERROR",
             "tdhf.type",
-            "UMRSF-TDDFT supports runtype=energy and runtype=grad; "
-            "Hessians, NAC, and geometry optimizations are not implemented yet.",
+            "UMRSF-TDDFT supports runtype=energy, grad, and optimize; "
+            "Hessians and NAC are not implemented yet.",
             value=f"{td_type}/{runtype}",
-            expected="energy or grad",
-            action="Use runtype=energy or runtype=grad for UMRSF-TDDFT.",
+            expected="energy, grad, or optimize",
+            action="Use runtype=energy, grad, or optimize for UMRSF-TDDFT.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
