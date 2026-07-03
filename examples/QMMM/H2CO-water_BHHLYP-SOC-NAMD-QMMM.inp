@@ -1,0 +1,60 @@
+# SOC-NAMD (intersystem crossing) with ESPF QM/MM embedding.
+#
+# QM  = formaldehyde (H2CO, atoms 0-3), MRSF-TDDFT/BHHLYP/6-31G* on a triplet
+#       ROHF reference; hopping is on the spin-adiabatic manifold (ns singlets +
+#       3*nt triplet Ms sublevels, here 2 + 3*2 = 8 states).
+# MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
+#
+# Minimal demonstration: nstep=1 runs a single nuclear step (one embedded
+# singlet + triplet MRSF + SOC evaluation with the weighted-MCH diagonal
+# gradient) so it finishes quickly.  Requires the optional OpenMM backend and
+# the companion files formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml.  It is
+# excluded from `openqp --run_tests all`; run it explicitly, e.g.
+# `openqp --run_tests examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp`.
+[input]
+system=
+   6   0.000000   0.000000   0.000000
+   8   0.000000   0.000000   1.203000
+   1   0.000000   0.943000  -0.589000
+   1   0.000000  -0.943000  -0.589000
+charge=0
+runtype=namd
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=3
+
+[properties]
+grad=1
+
+[md]
+nstep=1
+dt=0.25
+active=5
+substep=50
+init_temp=300
+velocity=maxwell
+seed=3
+decoherence=edc
+trivial=True
+soc=True
+thrshe=0.1
+
+[qmmm]
+pdb_file=formaldehyde_water.pdb
+forcefield_files=formaldehyde.xml tip3p.xml
+qm_atoms=0-3
+cutoff=NoCutoff
+embedding=electrostatic

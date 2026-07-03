@@ -1,0 +1,27 @@
+<ForceField>
+ <!-- Minimal formaldehyde (H2CO) residue for QM/MM.  The QM atoms' MM
+      electrostatics are replaced by ESPF-derived charges in the driver, so the
+      template charges are placeholders; only the Lennard-Jones parameters
+      (GAFF-like) matter for QM-MM steric coupling. -->
+ <AtomTypes>
+  <Type name="FOR-C" class="c"  element="C" mass="12.011"/>
+  <Type name="FOR-O" class="o"  element="O" mass="15.999"/>
+  <Type name="FOR-H" class="h5" element="H" mass="1.008"/>
+ </AtomTypes>
+ <Residues>
+  <Residue name="FOR">
+   <Atom name="C"  type="FOR-C"/>
+   <Atom name="O"  type="FOR-O"/>
+   <Atom name="H1" type="FOR-H"/>
+   <Atom name="H2" type="FOR-H"/>
+   <Bond atomName1="C" atomName2="O"/>
+   <Bond atomName1="C" atomName2="H1"/>
+   <Bond atomName1="C" atomName2="H2"/>
+  </Residue>
+ </Residues>
+ <NonbondedForce coulomb14scale="0.8333333333" lj14scale="0.5">
+  <Atom type="FOR-C" charge="0.0" sigma="0.3399669508423535"  epsilon="0.3598240"/>
+  <Atom type="FOR-O" charge="0.0" sigma="0.2959921901149463"  epsilon="0.8786400"/>
+  <Atom type="FOR-H" charge="0.0" sigma="0.2421462452611422"  epsilon="0.0627600"/>
+ </NonbondedForce>
+</ForceField>

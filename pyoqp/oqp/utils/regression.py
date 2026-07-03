@@ -326,7 +326,7 @@ KNOWN_UNCOVERED = {
     'scf.trh_stab': 'TRAH SCF stability-following (escape unstable solutions)',
     'optimize.init_scf': 'fresh initial-guess SCF each optimization step',
     'nac.bp': 'branching-plane analysis at conical intersections',
-    'md.soc': 'SOC-NAMD intersystem crossing (PR #205); needs a runtype=namd example',
+    # md.soc is exercised by examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp.
     'md.dt_adaptive': 'adaptive NAMD timestep (PR #205); needs a runtype=namd example',
     'qmmm.rigidwater': 'rigid-water SHAKE/RATTLE constraints for QM/MM MD (PR #205); needs a QM/MM MD example',
 }
