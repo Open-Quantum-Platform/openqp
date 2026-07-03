@@ -345,15 +345,19 @@ macro(findLinearAlgebra)
       # macOS: Accelerate's modern ILP64 interface via symbol interposition
       # (see findAccelerateILP64 above; OpenQP is ILP64-only).
       # FATALs internally if the SDK lacks $NEWLAPACK$ILP64 (macOS < 13.3).
-      # Externals that link BLAS themselves are not wired for the alias list
-      # yet -- refuse the combination rather than let them bind the classic
-      # LP64 symbols and corrupt (they are OFF by default).
-      if(ENABLE_DDX OR ENABLE_OPENTRAH)
+      # OpenTrustRegion is a STATIC library absorbed into liboqp, so its
+      # BLAS/LAPACK references resolve at the liboqp link where the alias list
+      # applies -- the interposition covers it, and the POST_BUILD guard fails
+      # the build naming any of its symbols missing from the alias list.
+      # ddX however builds a SHARED libddx that links BLAS itself and is NOT
+      # wired for the interposition yet: refuse it (OFF by default) rather
+      # than let it bind the classic LP64 symbols and silently corrupt.
+      if(ENABLE_DDX)
         message(FATAL_ERROR
-            "ENABLE_DDX/ENABLE_OPENTRAH link BLAS/LAPACK directly and are not "
-            "yet wired for the Accelerate ILP64 alias interposition. Build them "
-            "with an ILP64 library instead (-DLINALG_LIB=OpenBLAS) or disable "
-            "the feature on macOS.")
+            "ENABLE_DDX builds a shared libddx that links BLAS/LAPACK directly "
+            "and is not yet wired for the Accelerate ILP64 alias interposition. "
+            "Build it with an ILP64 library instead (-DLINALG_LIB=OpenBLAS) or "
+            "disable ddX on macOS.")
       endif()
       findAccelerateILP64()
 

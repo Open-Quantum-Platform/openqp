@@ -26,7 +26,14 @@ build:
       - external/fprettify
       - objdir/external
   script:
-    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
+    # LINALG_LIB=netlib pins the bundled reference BLAS explicitly: this job's
+    # image provides no MKL/OpenBLAS, and since the native-BLAS platform policy
+    # landed, LINALG_LIB=auto on Linux x86_64 mandates Intel MKL and FAILS the
+    # configure when it is missing (no more silent NetLib fallback). Pinning
+    # netlib reproduces this job's previous effective behavior, explicitly.
+    # Upgrade path: install an ILP64 OpenBLAS in the CI image and switch to
+    # -DLINALG_LIB=OpenBLAS (what GitHub CI tests and the Linux wheels bundle).
+    - cmake -G Ninja -Bobjdir -DCMAKE_BUILD_TYPE=Release -DLINALG_LIB=netlib -DUSE_LIBINT=OFF -DENABLE_ASAN=OFF -DENABLE_LSAN=OFF -DENABLE_UBSAN=OFF -DBUILD_TESTING=ON -DCMAKE_INSTALL_PREFIX=$CI_PROJECT_DIR
     - cmake --build objdir --parallel 4 --target install
 
   artifacts:
