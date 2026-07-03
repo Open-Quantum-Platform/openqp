@@ -492,11 +492,12 @@ contains
     n = nint(params(13))
     if (n <= 0) n = int(infos%tddft%nstate)
 
-    ! (re)allocate the results record
-    call infos%dat%remove_records(tags_out)
-    call infos%dat%reserve_data(OQP_namd_results, ta_type_real64, &
-         n*n + 8, (/ n*n + 8 /), comment=OQP_namd_results_comment)
-    call tagarray_get_data(infos%dat, OQP_namd_results, results)
+    ! (re)allocate the results record. erase + alloc_or_die replaces the removed
+    ! remove_records/reserve_data API (main's tagarray container refactor); erase
+    ! drops any stale record so alloc_or_die always binds a fresh n*n+8 buffer.
+    call infos%dat%erase(tags_out)
+    call infos%dat%alloc_or_die(OQP_namd_results, (/ n*n + 8 /), results, &
+         description=OQP_namd_results_comment)
 
     ! unpack parameters
     dt_fs       = params(1)

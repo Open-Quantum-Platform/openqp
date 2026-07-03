@@ -151,8 +151,10 @@ module qmmm_mod
     wn  => ttt(:,:nptcur)
     tol = log(10.0d0) * tol_int
 
-    call infos%dat%reserve_data(OQP_partial_charges, TA_TYPE_REAL64, nat, &
-         comment=OQP_partial_charges_comment)
+    ! alloc_or_die replaces the removed reserve_data API (main's tagarray
+    ! container refactor) and binds the pointer in one call.
+    call infos%dat%alloc_or_die(OQP_partial_charges, (/ nat /), partial_charges, &
+         description=OQP_partial_charges_comment)
     partial_charges = 0.0_dp
     call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
@@ -248,7 +250,7 @@ module qmmm_mod
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
 
-    call infos%dat%reserve_data(OQP_ESPF_CORR, TA_TYPE_REAL64, nbf2*nat, (/ nbf2, nat /), comment=OQP_ESPF_CORR_comment)
+    call infos%dat%alloc_or_die(OQP_ESPF_CORR, (/ nbf2, nat /), chg_ops_corr, description=OQP_ESPF_CORR_comment)
     call data_has_tags(infos%dat, tags, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_ESPF_CORR, chg_ops_corr)
 
@@ -578,7 +580,7 @@ module qmmm_mod
     wn => ttt(:,:nptcur)
     tol = log(10.0d0)*tol_int
 
-    call infos%dat%reserve_data(OQP_partial_charges, TA_TYPE_REAL64, infos%mol_prop%natom, comment=OQP_partial_charges_comment)
+    call infos%dat%alloc_or_die(OQP_partial_charges, (/ infos%mol_prop%natom /), partial_charges, description=OQP_partial_charges_comment)
     call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
 
@@ -782,7 +784,7 @@ module qmmm_mod
 
 ! ESP gradient contribution
 !   Tagarray
-    call infos%dat%reserve_data(OQP_ESPF_GRAD, TA_TYPE_REAL64, nat*3, (/ 3, nat /), comment=OQP_ESPF_GRAD_comment)
+    call infos%dat%alloc_or_die(OQP_ESPF_GRAD, (/ 3, nat /), espf_grad_ta, description=OQP_ESPF_GRAD_comment)
     call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_POTMM, mm_potential)
     call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
@@ -939,7 +941,7 @@ module qmmm_mod
 
 ! ESP gradient contribution
 !   Tagarray
-    call infos%dat%reserve_data(OQP_ESPF_GRAD, TA_TYPE_REAL64, nat*3, (/ 3, nat /), comment=OQP_ESPF_GRAD_comment)
+    call infos%dat%alloc_or_die(OQP_ESPF_GRAD, (/ 3, nat /), espf_grad_ta, description=OQP_ESPF_GRAD_comment)
     call data_has_tags(infos%dat, tags_qmmm, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_POTMM, mm_potential)
     call tagarray_get_data(infos%dat, OQP_partial_charges, partial_charges)
