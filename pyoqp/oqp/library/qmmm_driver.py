@@ -303,6 +303,18 @@ class OpenQpQMMM:
             oqp.form_esp_charges(self.op.mol)
             self.pchg_qm = self.op.mol.data["OQP::partial_charges"]
 
+            # The embedded SCF contains only the electronic QM-MM coupling
+            # (dEqm/dphi_A = -Q_A, verified by finite differences). In the
+            # full-ESPF scheme OpenMM carries no QM charge, so add the
+            # nuclear-MM interaction sum_A Z_A phi_A to complete the QM-MM
+            # electrostatic energy; its field derivative Z_A dphi/dx together
+            # with the electronic response gives the net-charge coupling force
+            # already supplied by the analytic coupling term.
+            if self.espf_full and potmm is not None:
+                self.eqm += float(
+                    np.dot(self.op.mol.get_atoms2("charge"), potmm)
+                )
+
             if potqm is not None and potmm is not None:
                 potmm -= np.einsum(
                     "ij,j->i", potqm,
