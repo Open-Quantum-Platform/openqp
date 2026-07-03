@@ -145,6 +145,14 @@ class OpenQpQMMM:
 
         self.op = None
 
+        # Route the *entire* QM-MM electrostatic coupling through ESPF (energy in
+        # the embedded SCF + analytic gradient), with OpenMM reduced to pure
+        # MM-MM. This is required for a consistent analytic gradient across a
+        # covalent QM/MM boundary; the split scheme (QM charges as OpenMM point
+        # charges) is only self-consistent for whole-molecule QM regions.
+        # Non-periodic (NoCutoff) only for now.
+        self.espf_full = str(Embedding).lower() in ("espf", "espf_full")
+
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
         # bond that the QM/MM partition cuts.  Empty when the QM region is a set
         # of whole molecules (e.g. a water box), in which case every code path
@@ -153,6 +161,15 @@ class OpenQpQMMM:
         self.link_atoms = self._detect_link_atoms()
 
         self.mm_systems = self.prepare_mm()
+
+        # Per-QM-centre set of MM atoms to exclude from the QM-MM electrostatics
+        # (the 1-2/1-3 bonded neighbours of a frontier atom), applied
+        # consistently to both the embedding potential and the coupling force so
+        # the analytic gradient stays exact. Link atoms inherit their frontier
+        # atom's exclusions plus the MM host.
+        self._qm_mm_excluded = (
+            self._build_qm_mm_exclusions() if self.espf_full else None
+        )
 
     # --- Internal helpers -------------------------------------------------
 
@@ -293,7 +310,11 @@ class OpenQpQMMM:
                 )
                 self.op.mol.data["OQP::POTMM"] = potmm
 
-            if potmm is not None:
+            # In the full-ESPF scheme the QM-MM coupling lives entirely in the
+            # embedded SCF energy (and OpenMM carries no QM charges), so there is
+            # no double count to remove. The split scheme subtracts it here
+            # because OpenMM re-adds the coupling via the QM point charges.
+            if potmm is not None and not self.espf_full:
                 self.eqm -= np.dot(
                     self.pchg_qm - self.op.mol.get_atoms2("charge"), potmm
                 )
@@ -366,6 +387,19 @@ class OpenQpQMMM:
 
         forces = { force.__class__.__name__ : force for force in system.getForces() }
         nonbonded = forces['NonbondedForce']
+
+        if self.espf_full:
+            # Pure MM-MM: QM atoms carry no charge; all QM-MM electrostatics are
+            # handled analytically by ESPF + the coupling force. vdW and bonded
+            # terms (incl. boundary-spanning) are retained.
+            for iatom in self.qm_atoms:
+                charge, sigma, epsilon = nonbonded.getParticleParameters(iatom)
+                nonbonded.setParticleParameters(
+                    iatom, 0.0 * unit.elementary_charge, sigma, epsilon)
+            nonbonded.updateParametersInContext(simulation.context)
+            state = simulation.context.getState(getEnergy=True, getForces=True)
+            return state.getPotentialEnergy(), state.getForces(asNumpy=True)
+
         for k, iatom in enumerate(self.qm_atoms):
             charge, sigma, epsilon = nonbonded.getParticleParameters(iatom)
             charge = pchg_qm[k]*unit.elementary_charge
@@ -405,16 +439,19 @@ class OpenQpQMMM:
         self.qm_atoms = qm_atoms
 
         potmm = potqm = None
-        if self.Embedding == "electrostatic":
+        if self.Embedding == "electrostatic" or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
+        nqm = len(self.qm_atoms)
+
+        if self.espf_full:
+            return self._assemble_force_espf(eqm, pchg_qm)
 
         # Fold each link atom's ESP charge onto its QM host so the charge the QM
         # region presents to the MM electrostatics is conserved (link atoms are
         # not MM particles).  No-op when there are no link atoms.
         pchg_mm = np.array(pchg_qm, dtype=float).copy()
-        nqm = len(self.qm_atoms)
         for a, link in enumerate(self.link_atoms):
             pchg_mm[link.host_row] += pchg_mm[nqm + a]
 
@@ -437,6 +474,40 @@ class OpenQpQMMM:
         cmm=np.sum(total_forces,axis=0)
         for i in range(len(total_forces)):
             total_forces[i]-=cmm/float(len(total_forces))
+
+        return total_energy, total_forces
+
+    def _assemble_force_espf(self, eqm, pchg_qm):
+        """Assemble the total force in the full-ESPF scheme:
+          F = F_MM(pure)  -  grad_QM(HF+ESPF charge-fluctuation)  +  F_coupling
+        where F_coupling is the analytic QM-charge <-> MM-charge Coulomb force
+        (field-fluctuation term), applied to both QM and MM atoms.
+        """
+        FCONV = 49614.75  # Hartree/bohr -> kJ/mol/nm
+        nqm = len(self.qm_atoms)
+
+        emm, gmm = self.forces_mm(pchg_qm)   # pure MM-MM (QM charges zeroed)
+        total_energy = eqm + emm
+        total_forces = gmm.copy()
+
+        f_qm, f_mm, mm_idx = self._coupling_forces(np.asarray(pchg_qm, dtype=float))
+        f_qm = f_qm * FCONV
+        f_mm = f_mm * FCONV
+
+        # Project link-atom contributions (QM gradient and coupling force) onto
+        # the real host atoms.
+        for a, link in enumerate(self.link_atoms):
+            g_link = self.gqm[nqm + a]
+            self.gqm[link.host_row] = self.gqm[link.host_row] + (1.0 - link.g) * g_link
+            total_forces[link.mm_index] = total_forces[link.mm_index] - link.g * g_link
+            fl = f_qm[nqm + a]
+            f_qm[link.host_row] = f_qm[link.host_row] + (1.0 - link.g) * fl
+            total_forces[link.mm_index] = total_forces[link.mm_index] + link.g * fl
+
+        for k, i in enumerate(self.qm_atoms):
+            total_forces[i] = total_forces[i] - self.gqm[k] + f_qm[k]
+        for j, m in enumerate(mm_idx):
+            total_forces[m] = total_forces[m] + f_mm[j]
 
         return total_energy, total_forces
 
@@ -571,7 +642,118 @@ class OpenQpQMMM:
        padded[:nqm, :nqm] = potqm
        return potmm, padded
 
+    # ------------------------------------------------------------------
+    #  Full-ESPF (non-split) QM-MM electrostatics
+    # ------------------------------------------------------------------
+    _ANG2BOHR = 1.8897259886
+
+    def _qm_center_positions_bohr(self):
+        """Cartesian positions (bohr) of every QM centre (real QM atoms in
+        topology order, then hydrogen link atoms), matching the QM geometry
+        order used to build the QM system and the POTMM array."""
+        coords = []
+        for atom in self.topology.atoms():
+            if atom.index in self.qm_atoms:
+                p = self.positions[atom.index].value_in_unit(unit.angstrom)
+                coords.append([c * self._ANG2BOHR for c in p])
+        for pos in self._link_positions_angstrom(self.positions):
+            coords.append([c * self._ANG2BOHR for c in pos])
+        return np.asarray(coords, dtype=float)
+
+    def _build_qm_mm_exclusions(self):
+        """List (one set per QM centre, in centre order) of MM atom indices to
+        exclude from the QM-MM electrostatics: the 1-2/1-3 bonded neighbours of
+        each frontier QM atom (OpenMM full exclusions, chargeProd==0). Link
+        atoms inherit their frontier atom's set plus the MM host."""
+        nb = next(f for f in self.mm_systems["sys0"].getForces()
+                  if isinstance(f, mm.NonbondedForce))
+        qm_set = set(int(i) for i in self.qm_atoms)
+        excl = {int(a): set() for a in self.qm_atoms}
+        for i in range(nb.getNumExceptions()):
+            p1, p2, cp, _, _ = nb.getExceptionParameters(i)
+            if cp.value_in_unit(unit.elementary_charge ** 2) != 0.0:
+                continue
+            if p1 in qm_set and p2 not in qm_set:
+                excl[p1].add(p2)
+            elif p2 in qm_set and p1 not in qm_set:
+                excl[p2].add(p1)
+        # NOTE: full-field embedding (no exclusions) is used -- excluding the
+        # bonded MM neighbours was found to worsen the analytic-gradient
+        # consistency, so the embedding potential and the coupling force both
+        # see the complete MM charge set (per the ESPF formulation).
+        rows = []
+        for atom in self.topology.atoms():
+            if atom.index in qm_set:
+                rows.append(set())
+        for link in self.link_atoms:
+            rows.append(set())
+        return rows
+
+    def _mm_charges_positions_bohr(self):
+        """MM (non-QM) force-field charges (e), positions (bohr) and absolute
+        atom indices. These carry the classical electrostatics the QM density
+        is embedded in."""
+        nb = next(f for f in self.mm_systems["sys0"].getForces()
+                  if isinstance(f, mm.NonbondedForce))
+        qm_set = set(int(i) for i in self.qm_atoms)
+        q, xyz, idx = [], [], []
+        for i in range(nb.getNumParticles()):
+            if i in qm_set:
+                continue
+            charge, _, _ = nb.getParticleParameters(i)
+            p = self.positions[i].value_in_unit(unit.angstrom)
+            q.append(charge.value_in_unit(unit.elementary_charge))
+            xyz.append([c * self._ANG2BOHR for c in p])
+            idx.append(i)
+        return np.asarray(q), np.asarray(xyz, dtype=float), np.asarray(idx, dtype=int)
+
+    def _center_mm_mask(self, center_row, mm_idx):
+        """Boolean mask over the MM arrays: False for MM atoms excluded from
+        this QM centre's electrostatics (bonded 1-2/1-3 neighbours)."""
+        excluded = self._qm_mm_excluded[center_row]
+        if not excluded:
+            return np.ones(len(mm_idx), dtype=bool)
+        return np.array([int(m) not in excluded for m in mm_idx], dtype=bool)
+
+    def _full_field_potmm(self):
+        """MM electrostatic potential at every QM centre, with each frontier
+        centre's bonded MM neighbours excluded (consistent with the coupling
+        force), phi_A = sum_{M not excluded} Q_M / |r_A - r_M|  (Hartree/e)."""
+        qm_xyz = self._qm_center_positions_bohr()
+        mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
+        potmm = np.zeros(len(qm_xyz))
+        for a in range(len(qm_xyz)):
+            mask = self._center_mm_mask(a, mm_idx)
+            d = qm_xyz[a] - mm_xyz[mask]
+            r = np.linalg.norm(d, axis=1)
+            potmm[a] = np.sum(mmq[mask] / r)
+        return potmm
+
+    def _coupling_forces(self, pchg):
+        """Classical Coulomb force (Hartree/bohr) between the QM ESP charges
+        q_A and the (unexcluded) MM charges Q_M -- the field-fluctuation term
+        Tr[q dphi/dx] of eq 7. Uses the same per-centre exclusions as the
+        embedding potential. Returns (F on QM centres, F on MM atoms, MM idx)."""
+        qm_xyz = self._qm_center_positions_bohr()
+        mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
+        f_qm = np.zeros_like(qm_xyz)
+        f_mm = np.zeros_like(mm_xyz)
+        for a in range(len(qm_xyz)):
+            mask = self._center_mm_mask(a, mm_idx)
+            d = qm_xyz[a] - mm_xyz[mask]            # r_A - r_M
+            r = np.linalg.norm(d, axis=1)
+            coeff = pchg[a] * mmq[mask] / r ** 3    # q_A Q_M / r^3
+            f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
+            f_mm[mask] -= coeff[:, None] * d        # Newton's third law
+        return f_qm, f_mm, mm_idx
+
     def electrostatic_potential(self):
+
+       if self.espf_full:
+           # Full-field embedding: phi from all MM charges (no exclusions),
+           # QM-QM periodic correction unused (non-periodic).
+           nqm_c = len(self.qm_atoms) + len(self.link_atoms)
+           return self._full_field_potmm(), np.zeros((nqm_c, nqm_c))
 
        syspbc=self.mm_systems["sys0"]
        simpbc=self.mm_systems["sim0"]
