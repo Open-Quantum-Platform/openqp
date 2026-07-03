@@ -147,11 +147,12 @@ class OpenQpQMMM:
 
         # Route the *entire* QM-MM electrostatic coupling through ESPF (energy in
         # the embedded SCF + analytic gradient), with OpenMM reduced to pure
-        # MM-MM. This is required for a consistent analytic gradient across a
-        # covalent QM/MM boundary; the split scheme (QM charges as OpenMM point
-        # charges) is only self-consistent for whole-molecule QM regions.
-        # Non-periodic (NoCutoff) only for now.
-        self.espf_full = str(Embedding).lower() in ("espf", "espf_full")
+        # MM-MM. This gives a finite-difference-exact analytic gradient for both
+        # whole-molecule and covalent-boundary QM regions, so it is the default
+        # for electrostatic embedding. ("split" selects the legacy scheme that
+        # routes QM charges through OpenMM point charges -- kept for reference.)
+        self.espf_full = str(Embedding).lower() in (
+            "espf", "espf_full", "electrostatic")
 
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
         # bond that the QM/MM partition cuts.  Empty when the QM region is a set
@@ -451,7 +452,7 @@ class OpenQpQMMM:
         self.qm_atoms = qm_atoms
 
         potmm = potqm = None
-        if self.Embedding == "electrostatic" or self.espf_full:
+        if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
