@@ -9,13 +9,20 @@ on:
   push:
     branches: [main]
 
+# Read-only, no secrets: the job only STATICALLY reads Fortran/CMake as text; it
+# never builds or executes checked-out PR code.
+permissions:
+  contents: read
+
 jobs:
   blas-wrapper:
     name: BLAS/LAPACK wrapper gate (rule 1)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout PR code (scanned as text only)
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -26,5 +33,26 @@ jobs:
       # Accelerate ILP64 alias. This catches an un-wrapped raw call on every
       # platform, before the build -- the portable complement to the macOS-only,
       # link-time check_accelerate_aliases gate.
+      #
+      # A PR must not be able to weaken rule 1 by editing the gate script in the
+      # same PR, so we run the TRUSTED base-branch copy of the script against the
+      # PR-head tree ($GITHUB_WORKSPACE), never the PR's own copy. (The base
+      # branch's cmake/check_accelerate_aliases.cmake link-time gate is the
+      # independent, non-PR-controlled backstop.)
       - name: BLAS/LAPACK wrapper gate
-        run: python3 tools/check_blas_wrapper.py
+        run: |
+          set -euo pipefail
+          gate=tools/check_blas_wrapper.py
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            git fetch --depth=1 origin "$base" || true
+            if git cat-file -e "$base:$gate" 2>/dev/null; then
+              mkdir -p .gate
+              git show "$base:$gate" > .gate/check_blas_wrapper.py
+              gate=.gate/check_blas_wrapper.py
+              echo "Using trusted base-branch gate script ($base:tools/check_blas_wrapper.py)"
+            else
+              echo "Base branch has no gate script yet; using in-tree copy (bootstrap)."
+            fi
+          fi
+          python3 "$gate" "$GITHUB_WORKSPACE"

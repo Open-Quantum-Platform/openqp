@@ -22,6 +22,7 @@ WHY THIS IS THE RIGHT INVARIANT (see commit ad43fae1, the dgels bug):
   at link time. This script is the PORTABLE gate: it runs on any PR on any OS by
   static inspection and names the offending routine + call site before the build.
 
+Usage: check_blas_wrapper.py [REPO_ROOT]   (default: this script's own repo)
 Exit: 0 clean, 1 violations, 2 setup error.
 """
 import os
@@ -169,6 +170,20 @@ def strip_comment(line):
 
 
 def main():
+    # Optional argv[1] = repository root to scan. CI passes the PR-head tree here
+    # so the TRUSTED base-branch copy of this script can lint untrusted PR code
+    # (a PR must not be able to weaken the gate by editing this file). Default:
+    # the tree this script lives in.
+    global REPO, SRC, CMAKE, WRAPPER_FILES
+    if len(sys.argv) > 1:
+        REPO = os.path.abspath(sys.argv[1])
+        SRC = os.path.join(REPO, "source")
+        CMAKE = os.path.join(REPO, "cmake", "oqp_functions.cmake")
+        WRAPPER_FILES = {
+            os.path.normpath(os.path.join(SRC, "mathlib", "lapack_wrap.F90")),
+            os.path.normpath(os.path.join(SRC, "mathlib", "blas_wrap.F90")),
+        }
+
     reg = registered_syms()
     if not reg:
         print(f"ERROR: could not parse OQP_ACCELERATE_ILP64_SYMS from {CMAKE}",
@@ -189,9 +204,11 @@ def main():
         for i, line in enumerate(lines, 1):
             code = strip_comment(line)
             # subroutine calls: flag known-BLAS and, via the shape heuristic,
-            # a new BLAS/LAPACK external that CANON does not list.
-            m = call_rx.search(code)
-            if m:
+            # a new BLAS/LAPACK external that CANON does not list. Use finditer,
+            # not search: Fortran ';' statement separators allow more than one
+            # `call` per line (a style the tree uses, e.g. hf_hessian.F90), and a
+            # non-first call must be inspected too.
+            for m in call_rx.finditer(code):
                 name = m.group(1).lower()
                 if name not in reg and (
                     name in CANON
