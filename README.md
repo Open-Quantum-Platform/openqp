@@ -1,6 +1,6 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — using autonomous, interoperable modules driven through the **PyOQP** Python wrapper.
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, standalone MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — using autonomous, interoperable modules driven through the **PyOQP** Python wrapper.
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
@@ -12,6 +12,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | --- | --- | --- |
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
+| MP2 | RHF, UHF, and ROHF references; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Energy-only post-SCF correlation with a Pythonic `job.theory.mp2(...)` helper |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
 | **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
@@ -99,6 +100,20 @@ openqp --run_tests all                            # run the packaged example tes
 ```
 
 Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_threads=16`.
+
+The same input model is available from Python. A standalone MP2 calculation can
+be written in the Pythonic OpenQP wrapper as:
+
+```python
+from oqp.openqp import OpenQP
+
+job = OpenQP("h2o_mp2", silent=1)
+job.molecule(geometry="water", charge=0, multiplicity=1)
+job.theory.mp2(basis="6-31g", reference="uhf", variant="scs-mp2")
+
+mol = job.run()
+print(mol.get_results()["energy"])
+```
 
 ### Documentation
 
