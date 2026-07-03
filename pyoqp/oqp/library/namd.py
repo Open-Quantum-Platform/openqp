@@ -611,6 +611,10 @@ class NAMD_QMMM(NAMD):
         # OQP::partial_charges holds the active state's QM charges afterwards.
         gqm = self._qm_gradient()
         pchg = np.array(mol.data["OQP::partial_charges"])
+
+        if getattr(self.driver, "espf_full", False):
+            return self._total_force_espf(potmm, gqm, pchg)
+
         # MM forces with embedded QM charges (OpenMM units)
         emm_q, gmm_q = self.driver.forces_mm(pchg)
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
@@ -637,6 +641,44 @@ class NAMD_QMMM(NAMD):
         eqm -= np.dot(pchg - znuc, potmm)
         epot = eqm + emm
         return f_all, epot
+
+    def _total_force_espf(self, potmm, gqm, pchg):
+        """Full-ESPF force/energy assembly (mirrors OpenQpQMMM._assemble_force_espf,
+        in atomic units). QM-MM electrostatics go entirely through ESPF: OpenMM
+        is pure MM-MM, the embedded SCF carries the electronic coupling, the
+        nuclear-MM term sum_A Z_A phi_A is added explicitly, and the analytic
+        coupling force is applied to QM and MM atoms."""
+        mol = self.mol
+        u = self._u
+        nqm = len(self.qm_atoms)
+        if len(self.driver.link_atoms) and gqm.shape[0] == nqm:
+            raise NotImplementedError(
+                "NAMD full-ESPF across a covalent boundary needs the QM link "
+                "atoms in the NAMD mol (only the driver has them). Use "
+                "QMMM_MD for covalent-boundary QM/MM, or add link atoms to the "
+                "NAMD QM geometry.")
+
+        emm_q, gmm_q = self.driver.forces_mm(pchg)     # pure MM-MM
+        gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
+        emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
+
+        fq, fm, mm_idx = self.driver._coupling_forces(pchg)   # a.u. (Ha/bohr)
+
+        f_all = gmm.copy()
+        for a, link in enumerate(self.driver.link_atoms):
+            gl, fl = gqm[nqm + a], fq[nqm + a]
+            gqm[link.host_row] = gqm[link.host_row] + (1.0 - link.g) * gl
+            fq[link.host_row] = fq[link.host_row] + (1.0 - link.g) * fl
+            f_all[link.mm_index] = f_all[link.mm_index] - link.g * gl + link.g * fl
+        for k, i in enumerate(self.qm_atoms):
+            f_all[i] = f_all[i] - gqm[k] + fq[k]
+        for j, m in enumerate(mm_idx):
+            f_all[m] = f_all[m] + fm[j]
+        f_all -= f_all.mean(axis=0)
+
+        eqm = float(mol.energies[self.active]) + float(
+            np.dot(np.array(mol.get_atoms2("charge")), potmm))
+        return f_all, eqm + emm
 
     # ------------------------------------------------------------------ #
     def run(self):
@@ -1561,6 +1603,34 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         """Assemble full-system force (a.u.) and total potential energy (Ha)."""
         mol = self.mol
         u = self._u
+
+        if getattr(self.driver, "espf_full", False):
+            # Full-ESPF: pure MM-MM + nuclear-MM energy + analytic coupling force
+            # (see NAMD_QMMM._total_force_espf / OpenQpQMMM._assemble_force_espf).
+            nqm = len(self.qm_atoms)
+            if len(self.driver.link_atoms) and g_qm.shape[0] == nqm:
+                raise NotImplementedError(
+                    "SOC-NAMD full-ESPF across a covalent boundary needs the QM "
+                    "link atoms in the NAMD mol; use QMMM_MD for boundary QM/MM.")
+            emm_q, gmm_q = self.driver.forces_mm(pchg)
+            gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
+            emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE
+            fq, fm, mm_idx = self.driver._coupling_forces(pchg)
+            f_all = gmm.copy()
+            for a, link in enumerate(self.driver.link_atoms):
+                gl, fl = g_qm[nqm + a], fq[nqm + a]
+                g_qm[link.host_row] = g_qm[link.host_row] + (1.0 - link.g) * gl
+                fq[link.host_row] = fq[link.host_row] + (1.0 - link.g) * fl
+                f_all[link.mm_index] = f_all[link.mm_index] - link.g * gl + link.g * fl
+            for k, i in enumerate(self.qm_atoms):
+                f_all[i] = f_all[i] - g_qm[k] + fq[k]
+            for j, m in enumerate(mm_idx):
+                f_all[m] = f_all[m] + fm[j]
+            f_all -= f_all.mean(axis=0)
+            eqm = float(e_diag) + float(
+                np.dot(np.array(mol.get_atoms2("charge")), potmm))
+            return f_all, eqm + emm
+
         emm_q, gmm_q = self.driver.forces_mm(pchg)
         gmm = np.array(gmm_q.value_in_unit(u.kilojoule_per_mole / u.nanometer)) / HABOHR_TO_KJMOLNM
         emm = emm_q.value_in_unit(u.kilojoule_per_mole) * KJMOL_TO_HARTREE

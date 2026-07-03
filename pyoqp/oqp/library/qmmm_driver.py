@@ -701,6 +701,26 @@ class OpenQpQMMM:
             rows.append(set())
         return rows
 
+    def _box_lengths_bohr(self):
+        """Orthorhombic periodic box lengths (bohr), or None when the QM/MM
+        electrostatics are non-periodic (NoCutoff). Used for the minimum-image
+        real-space QM-MM electrostatics under PBC."""
+        if self.Cutoff is app.NoCutoff:
+            return None
+        vecs = self.topology.getPeriodicBoxVectors()
+        if vecs is None:
+            return None
+        box = np.array([[c.value_in_unit(unit.angstrom) for c in v] for v in vecs])
+        # orthorhombic diagonal (water-box QM/MM); off-diagonal ignored
+        return np.diag(box) * self._ANG2BOHR
+
+    def _min_image(self, d, box):
+        """Minimum-image displacement(s) for an (N,3) array under an
+        orthorhombic box (bohr). No-op when box is None."""
+        if box is None:
+            return d
+        return d - box * np.round(d / box)
+
     def _mm_charges_positions_bohr(self):
         """MM (non-QM) force-field charges (e), positions (bohr) and absolute
         atom indices. These carry the classical electrostatics the QM density
@@ -733,10 +753,11 @@ class OpenQpQMMM:
         force), phi_A = sum_{M not excluded} Q_M / |r_A - r_M|  (Hartree/e)."""
         qm_xyz = self._qm_center_positions_bohr()
         mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
+        box = self._box_lengths_bohr()
         potmm = np.zeros(len(qm_xyz))
         for a in range(len(qm_xyz)):
             mask = self._center_mm_mask(a, mm_idx)
-            d = qm_xyz[a] - mm_xyz[mask]
+            d = self._min_image(qm_xyz[a] - mm_xyz[mask], box)
             r = np.linalg.norm(d, axis=1)
             potmm[a] = np.sum(mmq[mask] / r)
         return potmm
@@ -748,11 +769,12 @@ class OpenQpQMMM:
         embedding potential. Returns (F on QM centres, F on MM atoms, MM idx)."""
         qm_xyz = self._qm_center_positions_bohr()
         mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
+        box = self._box_lengths_bohr()
         f_qm = np.zeros_like(qm_xyz)
         f_mm = np.zeros_like(mm_xyz)
         for a in range(len(qm_xyz)):
             mask = self._center_mm_mask(a, mm_idx)
-            d = qm_xyz[a] - mm_xyz[mask]            # r_A - r_M
+            d = self._min_image(qm_xyz[a] - mm_xyz[mask], box)   # r_A - r_M
             r = np.linalg.norm(d, axis=1)
             coeff = pchg[a] * mmq[mask] / r ** 3    # q_A Q_M / r^3
             f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
