@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import multiprocessing
 import os
 from typing import Any
@@ -16,9 +17,18 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-METHODS = {"hf", "tdhf"}
+METHODS = {"hf", "tdhf", "mp2"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
+MP2_VARIANTS = {
+    "mp2", "conventional",
+    "scs", "scs-mp2",
+    "sos", "sos-mp2",
+    "os", "os-mp2", "opposite-spin",
+    "ss", "ss-mp2", "same-spin", "sss", "sss-mp2",
+    "scs-mi", "scs-mi-mp2",
+    "custom",
+}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -39,7 +49,8 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, or method=dftb for the optional external DFTB+ backend.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, or method=dftb for the optional external DFTB+ backend.",
+    "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
     "scf.type": "RHF is for multiplicity 1 closed-shell references. SF/MRSF needs an open-shell reference, usually ROHF.",
@@ -916,6 +927,54 @@ def _check_tdhf(config: dict[str, Any], report: CheckReport) -> None:
         )
 
 
+def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "mp2":
+        return
+
+    functional = _get(config, "input", "functional", "")
+    variant = _as_lower(_get(config, "mp2", "variant", "mp2"))
+    ss_scale = _get(config, "mp2", "same_spin_scale", 1.0)
+    os_scale = _get(config, "mp2", "opposite_spin_scale", 1.0)
+
+    if functional:
+        report.add(
+            "ERROR",
+            "input.functional",
+            "Standalone MP2 requires an HF reference, not a DFT functional.",
+            value=functional,
+            expected="empty functional",
+            action="Remove [input] functional for method=mp2.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if variant not in MP2_VARIANTS:
+        report.add(
+            "ERROR",
+            "mp2.variant",
+            "Unknown MP2 spin-scaling variant.",
+            value=variant,
+            expected=", ".join(sorted(MP2_VARIANTS)),
+            action="Choose a named variant or use variant=custom with explicit scales.",
+            wiki=WIKI_HELP["mp2.variant"],
+        )
+
+    if variant == "custom":
+        try:
+            finite_scales = math.isfinite(float(ss_scale)) and math.isfinite(float(os_scale))
+        except (TypeError, ValueError):
+            finite_scales = False
+        if not finite_scales:
+            report.add(
+                "ERROR",
+                "mp2.same_spin_scale/mp2.opposite_spin_scale",
+                "Custom MP2 scale factors must be finite numbers.",
+                value=f"{ss_scale}/{os_scale}",
+                action="Set finite same_spin_scale and opposite_spin_scale values.",
+                wiki=WIKI_HELP["mp2.variant"],
+            )
+
+
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -1086,6 +1145,18 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         )
         return
 
+    if method == "mp2" and runtype != "energy":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "MP2 currently supports energy-only calculations.",
+            value=runtype,
+            expected="energy",
+            action="Use runtype=energy until MP2 gradients and derivative workflows are implemented.",
+            wiki=WIKI_HELP["input.method"],
+        )
+        return
+
     if runtype == "ekt":
         td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
         ekt_ip = bool(_get(config, "ekt", "ip", False))
@@ -1162,7 +1233,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype == "nacme":
         _check_nacme(config, report)
 
-    if runtype == "soc":       
+    if runtype == "soc":
         _check_soc(config, report)
 
     if runtype == "hess":
@@ -1864,7 +1935,7 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf or tdhf.",
+            action="Choose hf, tdhf, or mp2.",
             wiki=WIKI_HELP["input.method"],
         )
 
@@ -1875,6 +1946,7 @@ def check_input_values(
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)
+    _check_mp2(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
     _check_runtype(config, report, input_dir)
