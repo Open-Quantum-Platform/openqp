@@ -132,12 +132,13 @@ class RuntimeRootResolutionTests(unittest.TestCase):
             self.assertEqual(lines[-2], str(package_root.resolve()))
             self.assertEqual(lines[-1], str(env_root))
 
-    def test_cmake_forces_ilp64_when_stale_cache_sets_lp64(self):
+    def test_cmake_rejects_lp64_from_stale_cache(self):
         source = (ROOT / "CMakeLists.txt").read_text()
 
-        self.assertIn("Forcing LINALG_LIB_INT64=ON", source)
-        self.assertIn("set(LINALG_LIB_INT64 ON CACHE BOOL", source)
-        self.assertIn("FORCE)", source)
+        # ILP64-only: a stale cache (or old script) carrying LINALG_LIB_INT64=OFF
+        # must fail the configure loudly instead of producing a mixed-width build.
+        self.assertIn("if(DEFINED LINALG_LIB_INT64 AND NOT LINALG_LIB_INT64)", source)
+        self.assertIn("LP64 (4-byte BLAS integer) support has been", source)
 
     def test_macos_cffi_extension_uses_package_local_liboqp(self):
         source = (ROOT / "pyoqp" / "CMakeLists.txt").read_text()
@@ -166,19 +167,18 @@ class RuntimeRootResolutionTests(unittest.TestCase):
         self.assertIn("types: [opened, synchronize, reopened, labeled, unlabeled]", source)
         self.assertIn("build_wheel_smoke:", source)
         self.assertIn(
-            "if: github.event_name == 'pull_request' && !contains("
-            "github.event.pull_request.labels.*.name, 'release')",
+            "!contains(github.event.pull_request.labels.*.name, 'release')",
             source,
         )
         self.assertNotIn("OQP_EXTERNALS_ROOT", source)
         self.assertIn("CIBW_BUILD: \"cp311-*\"", source)
         self.assertIn("path: .cache/openqp/externals", source)
-        self.assertIn("XDG_CACHE_HOME=\"$(pwd)/.cache\"", source)
+        self.assertIn("XDG_CACHE_HOME=/host-cache", source)
         self.assertIn("cache_path: ~/Library/Caches/openqp/externals", source)
         self.assertIn("build_wheels:", source)
+        self.assertIn("github.event_name == 'release'", source)
         self.assertIn(
-            "if: github.event_name != 'pull_request' || contains("
-            "github.event.pull_request.labels.*.name, 'release')",
+            "contains(github.event.pull_request.labels.*.name, 'release')",
             source,
         )
         self.assertIn("CIBW_BUILD: \"cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*\"", source)

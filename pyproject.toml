@@ -40,7 +40,12 @@ wheel.packages = ["pyoqp/oqp"]
 USE_LIBINT = "OFF"
 ENABLE_OPENMP = "ON"
 ENABLE_OPENTRAH = "OFF"
-LINALG_LIB_INT64 = "ON"
+# LINALG_LIB is intentionally NOT pinned here: CMake's native-BLAS platform
+# policy resolves it per OS/arch -- macOS -> Accelerate ($NEWLAPACK$ILP64);
+# Linux x86_64 -> MKL; Linux aarch64 -> OpenBLAS -- so a plain `pip install .`
+# is deterministic per platform. OpenQP is ILP64-only (8-byte integers
+# everywhere, unconditional). Override the backend per-build if needed:
+#   pip install . -C cmake.define.LINALG_LIB=OpenBLAS
 CMAKE_INSTALL_PREFIX = "."
 
 [tool.pytest.ini_options]

@@ -35,7 +35,7 @@ PY
 
 # Copy and install the checked-out OpenQP source.  GitHub Actions has already
 # checked out the branch/PR being tested, so do not clone main again here.
-# USE_LIBINT=OFF, ENABLE_OPENMP=ON, and LINALG_LIB_INT64=ON are the pyproject
+# USE_LIBINT=OFF and ENABLE_OPENMP=ON are the pyproject
 # defaults; CC/CXX/FC select the gcc-14 toolchain and CMAKE_ARGS points the
 # ILP64 BLAS/LAPACK search at the OpenBLAS in the build environment (LAPACK is
 # bundled in libopenblas).  OPENQP_ROOT is intentionally not set: the

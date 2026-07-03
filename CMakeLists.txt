@@ -1,5 +1,68 @@
 cmake_minimum_required(VERSION 3.25)
 
+# macOS: a bare configure picks Apple clang for C/C++ while Fortran must be
+# GNU gfortran (Apple ships no Fortran compiler). Mixing the toolchains links
+# BOTH OpenMP runtimes (clang's libomp + gfortran's libgomp) -- crashes and
+# thread oversubscription -- and the validated macOS configuration is all-GNU
+# (Homebrew gcc). When the user chose no compilers, auto-select the newest
+# COMPLETE Homebrew GCC toolchain so a plain `pip install .` gets the
+# supported compilers. The trio is picked as a matched set -- never a
+# mixed-version gcc/gfortran pair.
+#
+# Two traps encoded here:
+#  * this must run BEFORE project() (compilers are locked in there), and the
+#    APPLE variable is only set BY project() -- pre-project() code must test
+#    CMAKE_HOST_APPLE instead;
+#  * pip's build frontend on macOS INJECTS CC=clang / CXX=clang++ into the
+#    build environment. A bare unversioned default (clang/clang++/cc/c++) is
+#    toolchain noise, not a user choice, so it does not suppress the
+#    auto-selection. Real intent still always wins: any -DCMAKE_*_COMPILER,
+#    any FC, or any non-default CC/CXX (e.g. CC=gcc-14 or an absolute path).
+set(_oqp_env_cc  "$ENV{CC}")
+set(_oqp_env_cxx "$ENV{CXX}")
+if(CMAKE_HOST_APPLE AND _oqp_env_cc MATCHES "^(clang|cc)$")
+  set(_oqp_env_cc "")
+endif()
+if(CMAKE_HOST_APPLE AND _oqp_env_cxx MATCHES "^(clang\\+\\+|c\\+\\+)$")
+  set(_oqp_env_cxx "")
+endif()
+if(CMAKE_HOST_APPLE
+   AND NOT DEFINED CMAKE_C_COMPILER
+   AND NOT DEFINED CMAKE_CXX_COMPILER
+   AND NOT DEFINED CMAKE_Fortran_COMPILER
+   AND "${_oqp_env_cc}" STREQUAL ""
+   AND "${_oqp_env_cxx}" STREQUAL ""
+   AND "$ENV{FC}" STREQUAL "")
+  foreach(_oqp_gcc_ver 16 15 14 13)
+    find_program(_oqp_mac_gcc "gcc-${_oqp_gcc_ver}")
+    find_program(_oqp_mac_gxx "g++-${_oqp_gcc_ver}")
+    find_program(_oqp_mac_gfc "gfortran-${_oqp_gcc_ver}")
+    if(_oqp_mac_gcc AND _oqp_mac_gxx AND _oqp_mac_gfc)
+      set(CMAKE_C_COMPILER       "${_oqp_mac_gcc}")
+      set(CMAKE_CXX_COMPILER     "${_oqp_mac_gxx}")
+      set(CMAKE_Fortran_COMPILER "${_oqp_mac_gfc}")
+      message(STATUS "macOS: auto-selected Homebrew GCC ${_oqp_gcc_ver} toolchain "
+                     "(${_oqp_mac_gcc}); set CC/CXX/FC or -DCMAKE_*_COMPILER to override")
+      break()
+    endif()
+    unset(_oqp_mac_gcc CACHE)
+    unset(_oqp_mac_gxx CACHE)
+    unset(_oqp_mac_gfc CACHE)
+  endforeach()
+  if(NOT CMAKE_C_COMPILER)
+    message(WARNING
+      "macOS: no complete Homebrew GCC toolchain (gcc-NN + g++-NN + gfortran-NN) "
+      "was found; falling back to the system default compilers. A mixed "
+      "Clang/gfortran build with OpenMP is unsupported (two OpenMP runtimes) -- "
+      "install a full toolchain with `brew install gcc`.")
+  endif()
+  unset(_oqp_mac_gcc CACHE)
+  unset(_oqp_mac_gxx CACHE)
+  unset(_oqp_mac_gfc CACHE)
+endif()
+unset(_oqp_env_cc)
+unset(_oqp_env_cxx)
+
 project(Open-Quantum-Package
   VERSION 1.2.0
   LANGUAGES C CXX Fortran)
@@ -37,9 +100,10 @@ option(USE_LIBINT        "Use Libint two-electron code"      ON)
 set(LINALG_LIB auto CACHE STRING "Select BLAS & LAPACK Library")
 # See BLA_VENDOR in FindBLAS documentation
 set(linalg_lib_options none auto netlib
+    Apple
 #    Generic
 #    ACML ACML_MP ACML_GPU
-#    Apple NAS
+#    NAS
 #    Arm Arm_mp Arm_ilp64 Arm_ilp64_mp
 #    ATLAS
 #    CXML DXML
@@ -70,14 +134,26 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
     message(FATAL_ERROR "LINALG_LIB must be one of ${linalg_lib_options}")
 endif()
 
-option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
-if(NOT LINALG_LIB_INT64 AND NOT APPLE)
+# OpenQP is ILP64-only: 8-byte BLAS/LAPACK integers AND 8-byte default
+# Fortran integers on EVERY platform -- one uniform integer model across all
+# hardware. macOS uses Accelerate's modern $NEWLAPACK$ILP64 interface via
+# symbol interposition (requires macOS >= 13.3; see findAccelerateILP64 in
+# cmake/oqp_functions.cmake); Linux uses MKL / OpenBLAS ILP64.
+# LP64 (4-byte BLAS integer) support has been REMOVED: the flag below is a
+# tombstone so a stale CMake cache or an old build script cannot silently
+# produce a mixed-width build.
+if(DEFINED LINALG_LIB_INT64 AND NOT LINALG_LIB_INT64)
     message(FATAL_ERROR
-      "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "
-      "Accelerate builds. Other platforms require ILP64 BLAS/LAPACK with "
-      "OQP_BLAS_INT=8."
-    )
+      "LINALG_LIB_INT64=OFF: LP64 (4-byte BLAS integer) support has been "
+      "removed -- OpenQP is ILP64-only on all platforms (macOS >= 13.3 uses "
+      "Accelerate's \$NEWLAPACK\$ILP64 interface). Remove the flag and clear "
+      "any stale CMake cache.")
 endif()
+
+# Escape hatch for the no-silent-NetLib policy in findLinearAlgebra(): when ON,
+# a missing mandated/requested BLAS backend falls back to the bundled NetLib
+# reference BLAS with a WARNING instead of failing the configuration.
+option(OQP_ALLOW_REFERENCE_BLAS "Allow fallback to the slow bundled NetLib reference BLAS when the requested backend is missing" OFF)
 
 option(ENABLE_OPENMP     "Enable OpenMP parallelization"     OFF)
 
@@ -149,19 +225,15 @@ if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
       )
   endif()
 endif()
-if(LINALG_LIB_INT64)
-    set(BLA_SIZEOF_INTEGER 8)
-    set(OTR_SUFFIX "_64")
-    set(OTR_DEFS "-DUSE_ILP64")
-    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-        add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
-    endif()
-else()
-    set(BLA_SIZEOF_INTEGER 4)
-    set(OTR_SUFFIX "_32")
-    set(OTR_DEFS "")
+# ILP64 everywhere (unconditional): 8-byte BLAS integers and 8-byte default
+# Fortran integers. See the LINALG_LIB_INT64 tombstone above.
+set(BLA_SIZEOF_INTEGER 8)
+set(OTR_SUFFIX "_64")
+set(OTR_DEFS "-DUSE_ILP64")
+if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-fdefault-integer-8>)
+elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    add_compile_options($<$<COMPILE_LANGUAGE:Fortran>:-i8>)
 endif()
 
 # Build and link the external OpenTrustRegion (OpenTRAH) SCF solver. When OFF the

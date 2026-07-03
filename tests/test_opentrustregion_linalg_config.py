@@ -59,21 +59,22 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
     def test_lp64_blas_is_macos_only(self):
         top_cmake = (ROOT / "CMakeLists.txt").read_text()
 
-        self.assertIn("if(NOT LINALG_LIB_INT64 AND NOT APPLE)", top_cmake)
-        self.assertIn("LP64 BLAS/LAPACK is supported only on macOS", top_cmake)
+        # ILP64-only: LP64 support was removed; the flag survives solely as a
+        # tombstone that fails a stale cache / old script loudly.
+        self.assertIn("if(DEFINED LINALG_LIB_INT64 AND NOT LINALG_LIB_INT64)", top_cmake)
+        self.assertIn("LP64 (4-byte BLAS integer) support has been", top_cmake)
 
-    def test_default_integer8_flags_are_gated_on_linalg_int64(self):
+    def test_default_integer8_flags_are_unconditional_ilp64(self):
         top_cmake = (ROOT / "CMakeLists.txt").read_text()
 
-        guard = top_cmake.index("if(LINALG_LIB_INT64)")
-        before_guard = top_cmake[:guard]
-        int64_guard_block = top_cmake[guard:top_cmake.index("if(ENABLE_OPENMP)")]
-
-        self.assertNotIn("fdefault-integer-8", before_guard)
-        self.assertNotIn(":-i8>", before_guard)
-        self.assertIn("fdefault-integer-8", int64_guard_block)
-        self.assertIn(":-i8>", int64_guard_block)
-        self.assertIn("set(BLA_SIZEOF_INTEGER 4)", int64_guard_block)
+        # OpenQP is ILP64-only: the 8-byte default-integer flags and the BLAS
+        # width are set unconditionally (no LP64 branch may reappear).
+        self.assertIn("set(BLA_SIZEOF_INTEGER 8)", top_cmake)
+        self.assertNotIn("set(BLA_SIZEOF_INTEGER 4)", top_cmake)
+        self.assertIn("fdefault-integer-8", top_cmake)
+        self.assertIn(":-i8>", top_cmake)
+        self.assertIn('set(OTR_DEFS "-DUSE_ILP64")', top_cmake)
+        self.assertNotIn('set(OTR_SUFFIX "_32")', top_cmake)
 
     def test_oqp_blas_integer_width_follows_linalg_configuration(self):
         source_cmake = (ROOT / "source" / "CMakeLists.txt").read_text()
@@ -222,7 +223,6 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
                 project(openblas_config_probe NONE)
                 set(CMAKE_PREFIX_PATH [=[{package_root.as_posix()}]=])
                 set(BLA_SIZEOF_INTEGER 8)
-                set(LINALG_LIB_INT64 ON)
                 include([=[{(ROOT / "cmake" / "oqp_functions.cmake").as_posix()}]=])
                 findOpenBLASConfig()
                 if(NOT BLAS_FOUND OR NOT LAPACK_FOUND)
