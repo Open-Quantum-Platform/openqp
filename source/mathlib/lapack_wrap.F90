@@ -50,6 +50,43 @@ contains
 
 !----------------------------------------------------------------------
 
+  subroutine oqp_dgels_i64(trans, m, n, nrhs, a, lda, b, ldb, work, lwork, info)
+    character :: trans
+    integer :: info, lda, ldb, lwork, m, n, nrhs
+    real(dp) ::  a(lda,*), b(ldb,*), work(*)
+
+    integer(blas_int) :: info_, lda_, ldb_, lwork_, m_, n_, nrhs_
+
+    logical :: ok
+
+    if (ARG_CHECK) then
+    ok = .true.
+
+    ok = ok .and. (lda   <= HUGE_BLAS_INT)
+    ok = ok .and. (ldb   <= HUGE_BLAS_INT)
+    ok = ok .and. (lwork <= HUGE_BLAS_INT)
+    ok = ok .and. (m     <= HUGE_BLAS_INT)
+    ok = ok .and. (n     <= HUGE_BLAS_INT)
+    ok = ok .and. (nrhs  <= HUGE_BLAS_INT)
+
+    if (.not.ok) call show_message(ERRMSG, WITH_ABORT)
+    end if
+
+    lda_   = int(lda,   blas_int)
+    ldb_   = int(ldb,   blas_int)
+    lwork_ = int(lwork, blas_int)
+    m_     = int(m,     blas_int)
+    n_     = int(n,     blas_int)
+    nrhs_  = int(nrhs,  blas_int)
+
+    call dgels(trans, m_, n_, nrhs_, a, lda_, b, ldb_, work, lwork_, info_)
+
+    info  = info_
+
+  end subroutine
+
+!----------------------------------------------------------------------
+
   subroutine oqp_dgesv_i64(n, nrhs, a, lda, ipiv, b, ldb, info)
     integer :: info, lda, ldb, n, nrhs
     integer :: ipiv(*)

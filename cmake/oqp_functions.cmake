@@ -195,7 +195,7 @@ set(OQP_ACCELERATE_ILP64_SYMS
     caxpy ccopy cdotc cdotu cgbmv cgemm cgemv cgerc cgeru chbmv chemm chemv
     cher cher2 cher2k cherk chpmv chpr chpr2 cscal csrot csscal cswap csymm
     csyr2k csyrk ctbmv ctbsv ctpmv ctpsv ctrmm ctrmv ctrsm ctrsv
-    dasum daxpy dcopy ddot dgbmv dgemm dgemv dgeqrf dger dgesv dgesvd dgetri
+    dasum daxpy dcopy ddot dgbmv dgemm dgemv dgeqrf dgels dger dgesv dgesvd dgetrf dgetri
     dgglse dlamch dnrm2 dorgqr dormqr drot drotm dsbmv dscal dsdot dspev
     dspevx dspmv dspr dspr2 dswap dsyev dsyevd dsymm dsymv dsyr dsyr2 dsyr2k
     dsyrk dsysv dsytrf dsytri dsytrs dtbmv dtbsv dtpmv dtpsv dtpttr dtrmm
