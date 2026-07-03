@@ -8,9 +8,9 @@
 # Minimal demonstration: nstep=1 runs a single nuclear step (one embedded
 # singlet + triplet MRSF + SOC evaluation with the weighted-MCH diagonal
 # gradient) so it finishes quickly.  Requires the optional OpenMM backend and
-# the companion files formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml.  It is
-# excluded from `openqp --run_tests all`; run it explicitly, e.g.
-# `openqp --run_tests examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp`.
+# the companion files formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read
+# relative to this file).  It is part of `openqp --run_tests all`, and is
+# reported SKIPPED when OpenMM is not installed.
 [input]
 system=
    6   0.000000   0.000000   0.000000

@@ -366,9 +366,27 @@ class NAMD_QMMM(NAMD):
 
         from oqp.library.qmmm_md import _resolve_cutoff
 
+        # Resolve QM/MM auxiliary files (PDB, local force-field XMLs) relative to
+        # the input file's directory when a bare/relative name does not resolve
+        # against the current working directory. This lets the examples run from
+        # any CWD (e.g. `openqp --run_tests`, which executes each example by its
+        # full path). OpenMM built-in force fields (amber14-all.xml, ...) are left
+        # untouched: the join is only used when it actually points at a file.
+        inp_dir = os.path.dirname(os.path.abspath(mol.input_file)) \
+            if getattr(mol, 'input_file', None) else ''
+
+        def _resolve_aux(name):
+            if name and inp_dir and not os.path.isabs(name) \
+                    and not os.path.exists(name):
+                cand = os.path.join(inp_dir, name)
+                if os.path.exists(cand):
+                    return cand
+            return name
+
         q = mol.config['qmmm']
-        pdb_file = q['pdb_file']
-        ff_files = [s for s in str(q['forcefield_files']).replace(',', ' ').split() if s]
+        pdb_file = _resolve_aux(q['pdb_file'])
+        ff_files = [_resolve_aux(s) for s in
+                    str(q['forcefield_files']).replace(',', ' ').split() if s]
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff

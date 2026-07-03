@@ -5,13 +5,12 @@ classical (OpenMM) MM environment. These examples require the optional **OpenMM*
 backend (`pip install openmm`) and read auxiliary topology/force-field files
 (`*.pdb`, `*.xml`) from this directory.
 
-Because they depend on OpenMM and on staged auxiliary files (which the isolated
-per-example test runner does not copy), the QM/MM examples are **excluded from
-`openqp --run_tests all`**. Run one explicitly:
+The NAMD-QMMM examples (`runtype=namd`) resolve their auxiliary files relative
+to the input file, so they **are part of `openqp --run_tests all`**. When OpenMM
+is not installed they are reported **SKIPPED** (like the ddX/PCM examples on a
+build without ddX), so the suite stays green either way. Run one directly:
 
 ```bash
-openqp --run_tests examples/QMMM/H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp
-# or just execute it:
 openqp examples/QMMM/H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp
 ```
 
