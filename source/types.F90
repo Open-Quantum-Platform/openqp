@@ -185,6 +185,7 @@ module types
     real(c_double)     :: mrsf_resp_cutoff  = 1.0d-8    !< MRSF response 2e cutoff
     integer(c_int64_t) :: mrsf_fp32         = 0         !< FP32 MRSF response digestion
     integer(c_int64_t) :: mrsf_zv_warmstart = 1         !< MRSF z-vector warm-start (1=on, default)
+    logical(c_bool) :: qmmm_flag = .false.       !< QM/MM Flag
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

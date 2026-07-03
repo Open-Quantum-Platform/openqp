@@ -147,6 +147,7 @@ module oqp_linalg
   use blas_wrap, only: snrm2      =>  oqp_snrm2_i64
 
   use lapack_wrap, only: dgeqrf => oqp_dgeqrf_i64
+  use lapack_wrap, only: dgels  => oqp_dgels_i64
   use lapack_wrap, only: dgesv  => oqp_dgesv_i64
   use lapack_wrap, only: dsysv  => oqp_dsysv_i64
   use lapack_wrap, only: dgglse => oqp_dgglse_i64

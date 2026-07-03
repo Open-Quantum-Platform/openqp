@@ -1,0 +1,58 @@
+# MRSF-TDDFT NAMD with ESPF QM/MM embedding (internal conversion, no SOC).
+#
+# QM  = formaldehyde (H2CO, atoms 0-3), MRSF-TDDFT/BHHLYP/6-31G* on a triplet
+#       ROHF reference.
+# MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
+#
+# This is a *minimal* demonstration: nstep=1 runs a single nuclear step (one
+# embedded MRSF electronic-structure + gradient evaluation) so it finishes
+# quickly.  Requires the optional OpenMM backend and the companion files
+# formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read relative to this
+# file).  It is part of `openqp --run_tests all`, and is reported SKIPPED when
+# OpenMM is not installed.
+[input]
+system=
+   6   0.000000   0.000000   0.000000
+   8   0.000000   0.000000   1.203000
+   1   0.000000   0.943000  -0.589000
+   1   0.000000  -0.943000  -0.589000
+charge=0
+runtype=namd
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+qmmm_flag=True
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=3
+
+[properties]
+grad=1
+
+[md]
+nstep=1
+dt=0.5
+active=1
+substep=50
+init_temp=300
+velocity=maxwell
+seed=3
+decoherence=edc
+trivial=True
+soc=False
+
+[qmmm]
+pdb_file=formaldehyde_water.pdb
+forcefield_files=formaldehyde.xml tip3p.xml
+qm_atoms=0-3
+cutoff=NoCutoff
+embedding=electrostatic

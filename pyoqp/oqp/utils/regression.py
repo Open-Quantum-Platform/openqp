@@ -313,6 +313,10 @@ EXEMPT_FLAGS = {
     'nac.restart': 'reload cached .dcme scratch in numerical NAC (IO restart)',
     'nac.clean': 'rmtree numerical-NAC scratch after run (IO cleanup)',
     'tests.exception': 'test-harness toggle (raise vs exit on non-convergence)',
+    'md.restart': 'reload saved NAMD trajectory state (IO restart)',
+    'md.econs': 'per-step velocity rescale to conserve E_tot; numerical stabilizer sub-knob',
+    'md.soc_du_dt_corr': 'SOC adiabatic-basis dU/dt gradient correction; diagnostic numerical sub-knob',
+    'md.soc_tdc_grad_corr': 'SOC adiabatic-basis TDC-projected gradient correction; diagnostic numerical sub-knob',
 }
 
 # section.option -> reason. Real capability, tracked gap (needs an example).
@@ -322,6 +326,9 @@ KNOWN_UNCOVERED = {
     'scf.trh_stab': 'TRAH SCF stability-following (escape unstable solutions)',
     'optimize.init_scf': 'fresh initial-guess SCF each optimization step',
     'nac.bp': 'branching-plane analysis at conical intersections',
+    # md.soc is exercised by examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp.
+    'md.dt_adaptive': 'adaptive NAMD timestep (PR #205); needs a runtype=namd example',
+    'qmmm.rigidwater': 'rigid-water SHAKE/RATTLE constraints for QM/MM MD (PR #205); needs a QM/MM MD example',
 }
 
 _SCHEMA_FILE = os.path.join(os.path.dirname(__file__), os.pardir,

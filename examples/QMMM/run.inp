@@ -1,0 +1,19 @@
+[input]
+functional = bhhlyp
+basis      = 6-31g
+qmmm_flag  = true
+
+[scf]
+type  = rhf
+maxit = 100
+
+
+[qmmm]
+pdb_file         = water_dimer.pdb
+forcefield_files = tip3p.xml
+qm_atoms         = 0-2
+cutoff           = PME
+embedding        = electrostatic
+n_steps          = 1000
+timestep         = 0.1
+temperature      = 300.0

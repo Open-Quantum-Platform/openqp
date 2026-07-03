@@ -48,6 +48,7 @@ def install_runfunc_stubs():
     libscipy.MECIOpt = type("MECIOpt", (), {})
     libscipy.MECPOpt = type("MECPOpt", (), {})
     libscipy.MEP = type("MEP", (), {})
+    libscipy.QMMMOpt = type("QMMMOpt", (), {})
     sys.modules["oqp.library.libscipy"] = libscipy
 
     libgeometric = types.ModuleType("oqp.library.libgeometric")

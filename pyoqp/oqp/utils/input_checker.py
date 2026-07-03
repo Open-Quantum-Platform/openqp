@@ -14,6 +14,7 @@ from oqp.utils.mpi_utils import MPIManager
 SUPPORTED_RUNTYPES = {
     "energy", "grad", "hess", "nac", "nacme", "bp", "optimize",
     "meci", "mecp", "tci", "mep", "ts", "irc", "neb", "prop", "data", "ekt", "soc",
+    "namd",
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
@@ -399,6 +400,65 @@ def _omp_threads(report: CheckReport) -> int:
         return 1
 
 
+def _check_qm_atom_indices(tokens: list[str], report: CheckReport) -> None:
+    """Validate the QM-region atom indices that follow a .pdb path.
+
+    Mirrors the parsing in ``oqpdata.read_system``: each token is either a
+    single index or a ``start-end`` range. Indices must be non-negative and
+    unique.
+    """
+    if not tokens:
+        report.add(
+            "ERROR",
+            "input.system",
+            "QM/MM PDB geometry has no QM atom indices.",
+            expected="one or more atom indices, e.g. '9 10 17-19'",
+            action="List the QM-region atom indices after the .pdb path.",
+            wiki=WIKI_HELP["input.system"],
+        )
+        return
+
+    indices: list[int] = []
+    for tok in tokens:
+        if "-" in tok:
+            parts = tok.split("-")
+            if len(parts) != 2 or not all(p.strip().isdigit() for p in parts):
+                report.add(
+                    "ERROR",
+                    "input.system",
+                    "Invalid QM atom index range.",
+                    value=tok,
+                    expected="start-end with non-negative integers, e.g. '17-19'",
+                    action="Use an ascending integer range for the QM atom selection.",
+                    wiki=WIKI_HELP["input.system"],
+                )
+                return
+            start, end = int(parts[0]), int(parts[1])
+            indices.extend(range(start, end + 1))
+        elif tok.isdigit():
+            indices.append(int(tok))
+        else:
+            report.add(
+                "ERROR",
+                "input.system",
+                "Invalid QM atom index.",
+                value=tok,
+                expected="a non-negative integer or 'start-end' range",
+                action="List QM atom indices as integers or ranges after the .pdb path.",
+                wiki=WIKI_HELP["input.system"],
+            )
+            return
+
+    if len(indices) != len(set(indices)):
+        report.add(
+            "ERROR",
+            "input.system",
+            "Repeated entries in the QM atom list.",
+            action="Remove duplicate QM atom indices from the system selection.",
+            wiki=WIKI_HELP["input.system"],
+        )
+
+
 def _check_system(config: dict[str, Any], report: CheckReport) -> None:
     system = _get(config, "input", "system", "")
     if not system:
@@ -414,13 +474,31 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
 
     inline_lines, xyz_path = _iter_coordinate_lines(system)
     if xyz_path:
-        resolved = os.path.abspath(xyz_path)
-        if not os.path.exists(resolved):
+        # Only the first whitespace-delimited token is the file path. QM/MM
+        # runs append the QM-region atom indices after a .pdb path
+        # (e.g. "mol.pdb 9 10 17-19"), so validate the path token alone rather
+        # than the whole line (which never exists as a file).
+        tokens = xyz_path.split()
+        path_token = tokens[0]
+        resolved = os.path.abspath(path_token)
+        if path_token.lower().endswith(".pdb"):
+            if not os.path.exists(resolved):
+                report.add(
+                    "ERROR",
+                    "input.system",
+                    "Referenced PDB file does not exist.",
+                    value=path_token,
+                    action="Fix the path or place the PDB file in the working directory.",
+                    wiki=WIKI_HELP["input.system"],
+                )
+            else:
+                _check_qm_atom_indices(tokens[1:], report)
+        elif not os.path.exists(resolved):
             report.add(
                 "ERROR",
                 "input.system",
                 "Referenced XYZ file does not exist.",
-                value=xyz_path,
+                value=path_token,
                 action="Fix the path or place the XYZ file in the working directory.",
                 wiki=WIKI_HELP["input.system"],
             )
@@ -1183,6 +1261,46 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             )
         return
 
+    if runtype == "namd":
+        td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+        if method != "tdhf" or td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "input.runtype",
+                "NAMD (surface hopping) currently supports only MRSF-TDDFT.",
+                value=f"{method}/{td_type}",
+                expected="input.method=tdhf and tdhf.type=mrsf",
+                action="Set [input] method=tdhf and [tdhf] type=mrsf for NAMD.",
+                wiki=WIKI_HELP["tdhf.type"],
+            )
+        nstate = int(_get(config, "tdhf", "nstate", 1))
+        active = int(_get(config, "md", "active", 1))
+        soc_val = _get(config, "md", "soc", False)
+        soc = (soc_val is True) or (str(soc_val).lower() in ("true", "1", "on", "yes"))
+        if soc:
+            # SOC-NAMD hops on the spin-adiabatic manifold: ns singlets +
+            # 3*nt triplet Ms sublevels (ns = nt = tdhf.nstate).
+            amax = nstate + 3 * nstate
+            if active < 1 or active > amax:
+                report.add(
+                    "ERROR",
+                    "md.active",
+                    "Initial active state must be a valid spin-adiabatic state.",
+                    value=active,
+                    expected=f"1 <= md.active <= ns+3*nt ({amax}) for SOC-NAMD",
+                    action="Set [md] active within the spin-adiabatic manifold (4*nstate states), or raise [tdhf] nstate.",
+                )
+        elif active < 1 or active > nstate:
+            report.add(
+                "ERROR",
+                "md.active",
+                "Initial active state must be a valid excited state.",
+                value=active,
+                expected=f"1 <= md.active <= tdhf.nstate ({nstate})",
+                action="Set [md] active within the number of excited states, and raise [tdhf] nstate if needed.",
+            )
+        return
+
     # UMRSF-TDDFT only implements the energy path. Every other runtype
     # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
     # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
@@ -1459,100 +1577,6 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             action="Set [neb] nimage=3 or larger.",
         )
 
-
-def _check_dlfind(config: dict[str, Any], report: CheckReport) -> None:
-    runtype = _as_lower(_get(config, "input", "runtype", "optimize"))
-    icoord = _get(config, "dlfind", "icoord", 3)
-    iopt = _get(config, "dlfind", "iopt", 3)
-    ims = _get(config, "dlfind", "ims", 0)
-
-    if runtype == "optimize":
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Single-state DL-FIND optimization only supports icoord 0-4.",
-                value=icoord,
-                action="Use icoord in 0,1,2,3,4.",
-            )
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Single-state DL-FIND optimization only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Single-state optimization requires ims=0.",
-                value=ims,
-                action="Set ims=0.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-
-    if runtype == "meci":
-        if iopt not in DLFIND_MIN_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "DL-FIND MECI only supports iopt 0-3.",
-                value=iopt,
-                action="Use iopt in 0,1,2,3.",
-            )
-        if ims not in DLFIND_MECI_IMS:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "DL-FIND MECI requires ims=1, 2, or 3.",
-                value=ims,
-                action="Set ims to a MECI mode.",
-                wiki=WIKI_HELP["dlfind.ims"],
-            )
-        if ims == 3 and icoord not in DLFIND_LN_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Lagrange-Newton MECI requires icoord 10-14.",
-                value=icoord,
-                action="Use icoord 10-14 with ims=3.",
-            )
-        if ims in {1, 2} and icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Penalty/gradient-projection MECI requires icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 with ims=1 or ims=2.",
-            )
-
-    if runtype == "ts":
-        if iopt not in DLFIND_TS_IOPT:
-            report.add(
-                "ERROR",
-                "dlfind.iopt",
-                "Transition-state DL-FIND uses P-RFO (iopt=9).",
-                value=iopt,
-                action="Set [dlfind] iopt=9 for runtype=ts.",
-            )
-        if ims != 0:
-            report.add(
-                "ERROR",
-                "dlfind.ims",
-                "Transition-state search is not a MECI mode and requires ims=0.",
-                value=ims,
-                action="Set [dlfind] ims=0 for runtype=ts.",
-            )
-        if icoord not in DLFIND_SINGLE_ICOORD:
-            report.add(
-                "ERROR",
-                "dlfind.icoord",
-                "Transition-state DL-FIND search expects icoord 0-4.",
-                value=icoord,
-                action="Use icoord 0-4 for TS optimization.",
-            )
 
 def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))

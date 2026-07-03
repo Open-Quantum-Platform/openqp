@@ -68,6 +68,7 @@ contains
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
+    use qmmm_mod, only: get_mm_energy,form_esp_charges,print_mm_energy, add_potqm_contributions 
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -220,6 +221,13 @@ contains
     real(kind=dp), allocatable :: mo_energy_a_for_rstctmo(:)
 
     !==============================================================================
+    ! Matrices and Vectors for QMMM
+    !==============================================================================
+    real(kind=dp), allocatable :: dhcore(:)
+    real(kind=dp), allocatable :: hcore_bk(:)
+!    real(kind=dp), allocatable :: dens_old(:)
+
+    !==============================================================================
     ! Tag Arrays for Accessing Data
     !==============================================================================
     real(kind=dp), contiguous, pointer :: smat(:), hcore(:), tmat(:), &
@@ -329,6 +337,8 @@ contains
              qmat(nbf, nbf), &
              work1(nbf,nbf), &
              work2(nbf,nbf), &
+             dhcore(nbf_tri), &
+             hcore_bk(nbf_tri), &
              stat=ok, &
              source=0.0_dp)
     if(ok/=0) call show_message('Cannot allocate memory for SCF', WITH_ABORT)
@@ -349,6 +359,7 @@ contains
                source=0.0_dp)
       if(ok/=0) call show_message('Cannot allocate memory for temporary vectors',WITH_ABORT)
     end if
+    hcore_bk = hcore
 
     ! Opt 2 (IncDFT): start each SCF with a clean XC reference store.
     ! Controlled by [scf] xc_incdft (infos%control%xc_incdft).
@@ -1191,6 +1202,14 @@ contains
       call handle_homo_lumo_gap(iter, scf_type, nelec, nelec_a, nelec_b, &
                                 mo_energy_a, mo_energy_b, vshift, IW, &
                                 H_U_gap, modify_vshift=.false., do_print=.true.)
+      select case(scf_type)
+      case (scf_rhf)
+        call add_potqm_contributions(infos, pdmat(:,1), dhcore)
+      case (scf_uhf,scf_rohf)
+        call add_potqm_contributions(infos, pdmat(:,1)+pdmat(:,2), dhcore)
+      end select
+      hcore  = hcore_bk + dhcore
+
     ! End of Main SCF Iteration Loop
     end do
 
@@ -1256,6 +1275,7 @@ contains
     !----------------------------------------------------------------------------
     ! Save Final Fock and Density Matrices
     !----------------------------------------------------------------------------
+
     select case (scf_type)
     case (scf_rhf)
       fock_a = pfock(:,1)
@@ -1275,6 +1295,15 @@ contains
       mo_energy_b = mo_energy_a
       
     end select
+!  Construct ESPF partial charges and print MM energy in output (only done if QM/MM run)
+!     select case (scf_type)
+!     case (scf_rhf)
+!       add_potqm_contributions(infos, dmat_a, h1e)
+!       call form_esp_charges(infos,dmat_a,nbf)
+!     case (scf_uhf,scf_rohf)
+!       call add_potqm_contributions(infos, dmat_a+dmat_b, h1e)
+!       call form_esp_charges(infos,dmat_a+dmat_b,nbf)
+!     end select
     !----------------------------------------------------------------------------
     ! Print Molecular Orbitals
     !----------------------------------------------------------------------------

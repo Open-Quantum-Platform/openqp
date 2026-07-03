@@ -274,6 +274,10 @@ class _WorkflowProxy:
         object.__setattr__(self, "pcm", _WorkflowPcmProxy(owner))
         object.__setattr__(self, "nmr", _WorkflowNmrProxy(owner))
         object.__setattr__(self, "soc", _WorkflowSocProxy(owner))
+        # Nonadiabatic MD (Tully surface hopping); MRSF-TDDFT only, [md] section.
+        # Gas-phase by default; combine with job.qmmm(...) for QM/MM NAMD and
+        # pass soc=True (with optional soc_basis) for SOC-NAMD.
+        object.__setattr__(self, "namd", _WorkflowMrsfSectionProxy(owner, "md", "namd", "NAMD"))
 
     def __call__(self, runtype=None, **kwargs):
         return self._owner._control(
@@ -432,6 +436,49 @@ class OpenQP:
         for option, value in kwargs.items():
             updates[f"input.{option}"] = value
         return self.set(**updates)
+
+    def qmmm(self, pdb_file=None, forcefield=None, forcefield_files=None,
+             qm_atoms=None, cutoff=None, embedding=None, rigidwater=None,
+             **kwargs):
+        """Enable ESPF QM/MM embedding and configure the ``[qmmm]`` section.
+
+        Sets ``[input] qmmm_flag=true`` and populates ``[qmmm]``. The QM geometry
+        and atom selection come from ``job.molecule("file.pdb <indices>")`` for a
+        single-point QM/MM energy; QM/MM molecular dynamics (``runtype=namd``)
+        additionally reads ``pdb_file``/``forcefield``/``qm_atoms`` here. Combine
+        with ``job.workflow.namd(...)`` for (SOC-)NAMD-QMMM dynamics.
+
+        ``forcefield`` is an alias for the ``[qmmm] forcefield_files`` list.
+        ``qm_atoms`` accepts a string (``"0-2"`` / ``"0 1 2"``) or a list of
+        indices; a ``forcefield`` list is joined into a comma-separated string.
+        Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
+        """
+        if forcefield is not None and forcefield_files is not None:
+            raise ValueError("Use either forcefield or forcefield_files, not both.")
+        ff = forcefield if forcefield is not None else forcefield_files
+        if isinstance(ff, (list, tuple)):
+            ff = ",".join(str(item) for item in ff)
+        if isinstance(qm_atoms, (list, tuple)):
+            qm_atoms = " ".join(str(index) for index in qm_atoms)
+
+        self.set(**{"input.qmmm_flag": True})
+        updates = {}
+        if pdb_file is not None:
+            updates["pdb_file"] = pdb_file
+        if ff is not None:
+            updates["forcefield_files"] = ff
+        if qm_atoms is not None:
+            updates["qm_atoms"] = qm_atoms
+        if cutoff is not None:
+            updates["cutoff"] = cutoff
+        if embedding is not None:
+            updates["embedding"] = embedding
+        if rigidwater is not None:
+            updates["rigidwater"] = rigidwater
+        updates.update(kwargs)
+        if updates:
+            self.section("qmmm", **updates)
+        return self
 
     @staticmethod
     def _looks_like_basis(value):
@@ -1018,7 +1065,7 @@ OQP = OpenQP
 
 
 class OPENQP:
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, silent: bool = False):
         parser = OQPConfigParser(schema=OQP_CONFIG_SCHEMA)
         for k, v in cfg.items():
             if k == "input.system":
@@ -1036,10 +1083,24 @@ class OPENQP:
             input_file=None,
             log="oqp_project.log",
             input_dict=self.config_str,
-            silent=0,
+            silent=1 if silent else 0,
             usempi=True
         )
         self.mol = self.runner.mol
+
+    @property
+    def sp(self):
+        """SinglePoint view used by the ESPF QM/MM driver
+        (oqp.library.qmmm_driver) for embedded SCF / excitation calls
+        (``self.op.sp.*``). Built on first access and imported lazily so that
+        importing oqp.openqp / constructing OPENQP does not require the compiled
+        library."""
+        sp = self.__dict__.get("_sp")
+        if sp is None:
+            from oqp.library.single_point import SinglePoint
+            sp = SinglePoint(self.mol)
+            self.__dict__["_sp"] = sp
+        return sp
 
     def _normalize_system(self, system):
         """

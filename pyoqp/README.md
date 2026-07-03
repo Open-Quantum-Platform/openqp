@@ -4,10 +4,13 @@
 
 ## Features
 
-- Geometry optimization for arbitrary state local minimum, MECI, MEP with Scipy library
-- Geometry optimization with geomeTRIC for state-specific optimization, MECI, MECP, TS, constrained optimizations, and IRC paths
+- Native geometry optimization (`[optimize] lib=oqp`) for minima, TS, MECI,
+  MECP, TCI, NEB, IRC, and MEP paths, with SciPy and geomeTRIC available as
+  optional backends
 - Native Fortran initial guesses: `hcore`, `huckel`, `modhuckel`, `minao`, and `sap` (no external quantum-chemistry package required at runtime)
-- Energy gradient calculations interface for nonadiabatic molecular dynamics
+- Energy, gradient, state-overlap, and hop-driver interfaces for
+  nonadiabatic molecular dynamics
+- Native FSSH NAMD (`runtype=namd`), SOC-NAMD, and ESPF/OpenMM QM/MM NAMD
 
 ## Prerequisite
 
@@ -130,7 +133,7 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     export=False
 
 [optimize]
-    lib=geometric
+    lib=oqp
     optimizer=bfgs
     step_size=0.1
     step_tol=1e-2
@@ -157,6 +160,26 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     nproc=1
     read=False
     restart=False
+
+[md]
+    nstep=100
+    dt=0.5
+    active=1
+    substep=200
+    decoherence=edc
+    thrshe=1.0e9
+    tdc=fd
+    trivial=True
+    init_temp=300.0
+    velocity=maxwell
+    seed=1
+    restart=False
+    soc=False
+    soc_basis=adiabatic
+    soc_du_dt_corr=False
+    soc_tdc_grad_corr=False
+    grad_wthr=0.001
+    init_state=''
 
 </pre>
 
@@ -190,14 +213,15 @@ input section handle the basic information of molecular system
       energy     single-point energy (default)
       grad       single-point energy and gradients
       hess       frequency calculation (numerical only)
-      nac        non-adiabatic coupling (not available yet)
-      soc        spin-orbit coupling (not available yet)
+      nac        nonadiabatic coupling
+      soc        spin-orbit coupling
+      namd       fewest-switches nonadiabatic molecular dynamics
       optimize   local minimum geometry optimization
       meci       minimum energy conical intersection optimization
       mep        minimum energy path calculation
       ts         transition state optimization
-      irc        intrinsic reaction coordinate with [optimize]lib=geometric
-      neb        nudge elasted band calculation (not avaialble yet)
+      irc        intrinsic reaction coordinate
+      neb        nudged elastic band calculation
  
 - system // specify molecular structure or xyz file
 
@@ -378,16 +402,46 @@ properties section handel the property calculation
     
 - nac // compute non-adiabatic coupling for two given states
 
-      not available yet
+      nac         compute derivative-coupling vectors
+      nacme       compute nonadiabatic coupling matrix elements
     
 - soc // compute the spin-orbit coupling for two given states
 
-      not available yet
+      use [input]runtype=soc for an SOC calculation
     
 - export // save the computed data to text files
 
       True        save the energies, gradients
       False       do not save data
+
+### [md]
+
+md section controls fewest-switches nonadiabatic molecular dynamics
+(`[input] runtype=namd`).
+
+- soc // enable spin-orbit-coupled dynamics
+
+      False       internal-conversion NAMD without SOC (default)
+      True        SOC-NAMD / ISC dynamics
+
+- soc_basis // choose the SOC propagation and force representation
+
+      adiabatic   SHARC-like spin-adiabatic propagation with weighted MCH gradients (default)
+      mch         MCH-basis SOC propagation with exact active-root MCH gradients; recommended for SOC-QM/MM production
+
+- soc_du_dt_corr // optional spin-adiabatic diagnostic correction
+
+      True        add finite-difference dU/dt force correction
+      False       no dU/dt correction (default)
+
+- soc_tdc_grad_corr // optional spin-adiabatic diagnostic correction
+
+      True        add MCH TDC-projected derivative-coupling force correction
+      False       no TDC-projected force correction (default)
+
+For QM/MM NAMD, set `[input] qmmm_flag=True`; `runtype=namd` remains on the
+normal OpenQP Runner path.  The legacy OpenMM ground-state MD path is selected
+only by `runtype=md` with `qmmm_flag=True`.
 
 ### [optimize]
 
@@ -395,8 +449,9 @@ optimize section handle the geometry optimization
 
 - lib // choose the optimization library
 
-      scipy       use scipy.optimize library
-      geometric   use geomeTRIC (default). Supports runtype=optimize, meci, mecp, ts, and irc
+      oqp         use the native optimizer (default). Supports optimize, ts, meci, mecp, tci, neb, irc, and mep
+      scipy       use scipy.optimize library for optimize, meci, mecp, and mep
+      geometric   use geomeTRIC for optimize, meci, mecp, ts, irc, and neb
 
 - optimizer // choose the scipy optimizer
 

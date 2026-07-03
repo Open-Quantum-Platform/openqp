@@ -1089,6 +1089,8 @@ contains
     use oqp_linalg
     use printing, only: print_module_info
     use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
+    use population_analysis, only: mulliken_excited
+    use qmmm_mod, only: form_esp_charges_excited
 
 
     implicit none
@@ -1444,6 +1446,13 @@ contains
     if (zv_tmr_on) zv_t_back = zv_t_back + (zv_wtime() - t0_zv)
 
     call zv_timers_report(iw, solver_name)
+
+    ! QM/MM (ESPF): excited-state Mulliken population and ESP charges for the
+    ! relaxed density, needed for the MM electrostatic embedding gradient.
+    if (infos%control%qmmm_flag) then
+       call mulliken_excited(infos)
+       call form_esp_charges_excited(infos)
+    end if
 
     call int2_driver%clean()
     if (zv_rc_loosen) infos%control%int2e_cutoff = zv_rc_save

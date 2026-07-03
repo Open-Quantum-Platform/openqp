@@ -46,6 +46,13 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC coordinates with a restricted-step RFO step and needs no external optimizer package.
 
+#### Dynamics & QM/MM
+
+- Native fewest-switches surface hopping (`runtype=namd`) for gas-phase MRSF-TDDFT internal conversion.
+- SOC-NAMD for intersystem crossing, including SHARC-like spin-adiabatic propagation and an MCH-basis SOC mode with exact active-root MCH gradients (`[md] soc_basis=mch`).
+- ESPF electrostatic QM/MM with OpenMM, including PME periodic electrostatics, smooth ESPF grid forces, and QM/MM NAMD/SOC-NAMD dispatch.
+- Overlap-based MRSF state tracking, finite-time NAC/TDC propagation, and SOC-QM/MM regression guards for hop bookkeeping and restart/reproducibility-sensitive state.
+
 #### SCF, Initial Guesses & Performance
 
 | Area | What OpenQP provides |
@@ -72,7 +79,7 @@ The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC c
 | Optional [MOKIT](https://github.com/1234zou/MOKIT) | Broader external wavefunction conversion workflows |
 
 ### Upcoming Features
-- **Efficient electrostatic embedding QM/MM** by [ESPF QM/MM](https://doi.org/10.1063/5.0133646)
+- Full analytic spin-adiabatic SOC gradients, requiring MCH derivative-coupling vectors and SOC-gradient matrix elements.
 - **Scalar-relativistic (X2C) framework** extending the relativistic MRSF-TDDFT treatment
 
 ### Install

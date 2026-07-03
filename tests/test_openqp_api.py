@@ -25,6 +25,25 @@ SCHEMA = {
         "library": {"type": str, "default": ""},
         "ispher": {"type": _string, "default": "auto"},
         "omp_threads": {"type": int, "default": "0"},
+        "qmmm_flag": {"type": bool, "default": "False"},
+    },
+    "qmmm": {
+        "forcefield_files": {"type": str, "default": ""},
+        "pdb_file": {"type": str, "default": ""},
+        "qm_atoms": {"type": str, "default": ""},
+        "cutoff": {"type": _string, "default": "NoCutoff"},
+        "embedding": {"type": _string, "default": "electrostatic"},
+        "rigidwater": {"type": bool, "default": "False"},
+    },
+    "md": {
+        "nstep": {"type": int, "default": "100"},
+        "dt": {"type": float, "default": "0.5"},
+        "active": {"type": int, "default": "1"},
+        "soc": {"type": bool, "default": "False"},
+        "soc_basis": {"type": _string, "default": "adiabatic"},
+        "init_state": {"type": _string, "default": ""},
+        "thrshe": {"type": float, "default": "1.0e9"},
+        "init_temp": {"type": float, "default": "300.0"},
     },
     "scf": {
         "type": {"type": _string, "default": "rhf"},
@@ -767,6 +786,66 @@ $$$$
 
         with self.assertRaisesRegex(ValueError, "Move these options"):
             job.workflow.soc(functional="bhhlyp")
+
+    def test_qmmm_enables_flag_and_section(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="qmmm_energy")
+            .molecule("ala.pdb 9 10 17 18 19", basis="6-31g*")
+            .qmmm(embedding="electrostatic")
+        )
+        job.workflow.energy()
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
+
+    def test_qmmm_normalizes_lists_and_rejects_duplicate_forcefield(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="qmmm_md").molecule("m.pdb 0 1 2", basis="6-31g")
+        job.qmmm(
+            pdb_file="m.pdb",
+            forcefield=["amber14-all.xml", "amber14/tip3p.xml"],
+            qm_atoms=[0, 1, 2],
+            cutoff="PME",
+            rigidwater=True,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(
+            config["qmmm"]["forcefield_files"], "amber14-all.xml,amber14/tip3p.xml"
+        )
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0 1 2")
+        self.assertEqual(config["qmmm"]["cutoff"], "PME")
+        with self.assertRaisesRegex(ValueError, "either forcefield or forcefield_files"):
+            job.qmmm(forcefield="a.xml", forcefield_files="b.xml")
+
+    def test_workflow_namd_builds_soc_qmmm_deck(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="socnamd_qmmm")
+            .molecule("chromo.pdb 0 1 2 3 4", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            .qmmm(pdb_file="chromo.pdb", qm_atoms="0-4", cutoff="PME")
+        )
+        job.workflow.namd(soc=True, soc_basis="mch", nstep=200, dt=0.5, init_state="S1")
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["qmmm_flag"], "True")
+        self.assertEqual(config["input"]["runtype"], "namd")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["md"]["soc"], "True")
+        self.assertEqual(config["md"]["soc_basis"], "mch")
+        self.assertEqual(config["md"]["nstep"], "200")
+        self.assertEqual(config["md"]["init_state"], "S1")
+
+    def test_workflow_namd_requires_mrsf_theory(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="bad_namd")
+            .molecule(geometry="water")
+            .theory("dft", functional="bhhlyp", basis="6-31g*")
+        )
+        with self.assertRaisesRegex(ValueError, "only with MRSF-TDDFT"):
+            job.workflow.namd(nstep=10)
 
     def test_soc_helper_rejects_response_multiplicity(self):
         openqp = load_openqp_module()

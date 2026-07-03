@@ -1,0 +1,32 @@
+HEADER    FORMALDEHYDE IN WATER (QM=H2CO, MM=5 H2O)
+CRYST1   25.000   25.000   25.000  90.00  90.00  90.00 P 1           1
+HETATM    1  C   FOR A   1       0.000   0.000   0.000  1.00  0.00           C
+HETATM    2  O   FOR A   1       0.000   0.000   1.203  1.00  0.00           O
+HETATM    3  H1  FOR A   1       0.000   0.943  -0.589  1.00  0.00           H
+HETATM    4  H2  FOR A   1       0.000  -0.943  -0.589  1.00  0.00           H
+TER       5      FOR A   1
+HETATM    6  O   HOH A   2       0.000   0.000   4.000  1.00  0.00           O
+HETATM    7  H1  HOH A   2       0.757   0.587   4.000  1.00  0.00           H
+HETATM    8  H2  HOH A   2      -0.757   0.587   4.000  1.00  0.00           H
+TER       9      HOH A   2
+HETATM   10  O   HOH A   3       3.600   0.000   0.600  1.00  0.00           O
+HETATM   11  H1  HOH A   3       4.357   0.587   0.600  1.00  0.00           H
+HETATM   12  H2  HOH A   3       2.843   0.587   0.600  1.00  0.00           H
+TER      13      HOH A   3
+HETATM   14  O   HOH A   4      -3.600   0.000   0.600  1.00  0.00           O
+HETATM   15  H1  HOH A   4      -2.843   0.587   0.600  1.00  0.00           H
+HETATM   16  H2  HOH A   4      -4.357   0.587   0.600  1.00  0.00           H
+TER      17      HOH A   4
+HETATM   18  O   HOH A   5       0.000   3.600  -0.600  1.00  0.00           O
+HETATM   19  H1  HOH A   5       0.757   4.187  -0.600  1.00  0.00           H
+HETATM   20  H2  HOH A   5      -0.757   4.187  -0.600  1.00  0.00           H
+TER      21      HOH A   5
+HETATM   22  O   HOH A   6       0.000  -3.600  -0.600  1.00  0.00           O
+HETATM   23  H1  HOH A   6       0.757  -3.013  -0.600  1.00  0.00           H
+HETATM   24  H2  HOH A   6      -0.757  -3.013  -0.600  1.00  0.00           H
+TER      25      HOH A   6
+CONECT    1    2    3    4
+CONECT    2    1
+CONECT    3    1
+CONECT    4    1
+END
