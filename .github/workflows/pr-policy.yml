@@ -1,0 +1,30 @@
+name: PR policy
+
+# Enforce the contribution rules in AGENTS.md that can be checked
+# deterministically. The Claude/Codex automated reviews cover the rest
+# (examples, pythonic Python API, openqp-docs) as non-blocking review comments.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  blas-wrapper:
+    name: BLAS/LAPACK wrapper gate (rule 1)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Portable, dependency-free source lint: every BLAS/LAPACK routine
+      # referenced from source/ (outside the wrapper modules) must be registered
+      # in OQP_ACCELERATE_ILP64_SYMS, i.e. it has an oqp_*_i64 wrapper and a macOS
+      # Accelerate ILP64 alias. This catches an un-wrapped raw call on every
+      # platform, before the build -- the portable complement to the macOS-only,
+      # link-time check_accelerate_aliases gate.
+      - name: BLAS/LAPACK wrapper gate
+        run: python3 tools/check_blas_wrapper.py
