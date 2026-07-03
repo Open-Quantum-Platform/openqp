@@ -145,44 +145,25 @@ contains
             Dmat_a(nbf2), &
             Dmat_b(nbf2))
 
-    ! allocate alpha
-    call infos%dat%reserve_data(OQP_DM_A, TA_TYPE_REAL64, nbf2_alt, comment=OQP_DM_A_comment)
-    call infos%dat%reserve_data(OQP_E_MO_A, TA_TYPE_REAL64, nbf_alt, comment=OQP_E_MO_A_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_A, TA_TYPE_REAL64, nbf_alt*nbf_alt, (/ nbf_alt, nbf_alt /), comment=OQP_VEC_MO_A_comment)
-    ! load alpha data
+    ! Load the converged initial-basis orbitals/densities. These are INPUTS --
+    ! the projection source, read below through the *_alt pointers -- so they
+    ! must be retrieved, NOT reallocated (alloc_or_die would erase them).
     call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a_alt)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a_alt)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a_alt)
-    call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2_alt, comment=OQP_DM_B_comment)
-    call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf_alt, comment=OQP_E_MO_B_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf_alt*nbf_alt, (/ nbf_alt, nbf_alt /), comment=OQP_VEC_MO_B_comment)
-!    ! load beta
     call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b_alt)
     call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b_alt)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b_alt)
-    ! clean data
-    call infos%dat%remove_records(tags_alpha_tmp)
-    call infos%dat%remove_records(tags_beta_tmp)
     ! allocate alpha_tmp
-    call infos%dat%reserve_data("OQP::DM_A_tmp", TA_TYPE_REAL64, nbf2, comment=OQP_DM_A_comment)
-    call infos%dat%reserve_data("OQP::E_MO_A_tmp", TA_TYPE_REAL64, nbf, comment=OQP_E_MO_A_comment)
-    call infos%dat%reserve_data("OQP::VEC_MO_A_tmp", TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_A_comment)
-    ! load alpha_tmp data
-    call data_has_tags(infos%dat, tags_alpha, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, "OQP::DM_A_tmp", dmat_a)
-    call tagarray_get_data(infos%dat, "OQP::E_MO_A_tmp", mo_energy_a)
-    call tagarray_get_data(infos%dat, "OQP::VEC_MO_A_tmp", mo_a)
+    call infos%dat%alloc_or_die("OQP::DM_A_tmp", (/ nbf2 /), dmat_a, description=OQP_DM_A_comment)
+    call infos%dat%alloc_or_die("OQP::E_MO_A_tmp", (/ nbf /), mo_energy_a, description=OQP_E_MO_A_comment)
+    call infos%dat%alloc_or_die("OQP::VEC_MO_A_tmp", (/ nbf, nbf /), mo_a, description=OQP_VEC_MO_A_comment)
     ! allocate beta_tmp
-    call infos%dat%reserve_data("OQP::DM_B_tmp", TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
-    call infos%dat%reserve_data("OQP::E_MO_B_tmp", TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
-    call infos%dat%reserve_data("OQP::VEC_MO_B_tmp", TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_B_comment)
-    ! load beta_tmp
-    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, "OQP::DM_B_tmp", dmat_b)
-    call tagarray_get_data(infos%dat, "OQP::E_MO_B_tmp", mo_energy_b)
-    call tagarray_get_data(infos%dat, "OQP::VEC_MO_B_tmp", mo_b)
+    call infos%dat%alloc_or_die("OQP::DM_B_tmp", (/ nbf2 /), dmat_b, description=OQP_DM_B_comment)
+    call infos%dat%alloc_or_die("OQP::E_MO_B_tmp", (/ nbf /), mo_energy_b, description=OQP_E_MO_B_comment)
+    call infos%dat%alloc_or_die("OQP::VEC_MO_B_tmp", (/ nbf, nbf /), mo_b, description=OQP_VEC_MO_B_comment)
 !
     Dmat_b = 0_dp
     Dmat_a = 0_dp

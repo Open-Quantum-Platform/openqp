@@ -9,7 +9,8 @@ module tdhf_z_vector_mod
   use mod_dft_molgrid, only: dft_grid_t
   use oqp_linalg
   use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
-  use zvector_common, only: sanitize_zvector_preconditioner
+  use zvector_common, only: sanitize_zvector_preconditioner, &
+    zv_opts_t, zv_read_opts, zv_prog_tau
 
   implicit none
 
@@ -104,6 +105,8 @@ contains
     integer :: i, j, iter, ok
     integer :: nocc, nvir, lexc, nbf, nbf2
     real(kind=dp) :: cnvtol, scale_exch
+    type(zv_opts_t) :: zvo
+    real(kind=dp) :: zv_rc_tight
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -137,6 +140,10 @@ contains
   ! Parameter it should be inputed later
   ! convergence tolerance in the iterative TD-DFT step.
     cnvtol = infos%tddft%zvconv
+    ! Shared z-vector perf opt-ins (env OQP_TDHF_ZV_*); progressive screening
+    ! default ON, zvconv override default off (see zvector_common).
+    call zv_read_opts(zvo, "TDHF")
+    if (zvo%conv_user > 0.0_dp) cnvtol = zvo%conv_user
 
     nocc = infos%mol_prop%nocc
     nvir = nbf-nocc
@@ -150,8 +157,6 @@ contains
       source=0.0_dp)
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
-
-    call infos%dat%remove_records([character(80) :: OQP_WAO, OQP_TD_P])
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
@@ -188,7 +193,9 @@ contains
 
     call tdhf_unrelaxed_density(xmy(:,infos%tddft%target_state), xpy(:,infos%tddft%target_state), mo_a, td_t(:,1), nocc, tda)
 
-    ! Initialize ERI calculations
+    ! Initialize ERI calculations (tight; progressive screening ramps the
+    ! run-time threshold per CG step and is restored tight for the tail).
+    zv_rc_tight = infos%control%int2e_cutoff
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
@@ -256,6 +263,10 @@ contains
     do iter = 1, infos%control%maxit_zv
       if (pcg%errcode /= PCG_OK) exit
 
+      ! Progressive screening: loosen while the residual is large, pin tight
+      ! near convergence (pcg%error is the residual norm; cnvtol is its square).
+      if (zvo%prog_on) call int2_driver%set_cutoff(zv_prog_tau(zvo, pcg%error**2, zv_rc_tight))
+
       call pcg%step()
 
       write(iw,'(" ITER#",I2," ERROR =",3X,1P,E10.3,1X,"/",1P,E10.3)') &
@@ -297,6 +308,8 @@ contains
       infos%mol_energy%Z_Vector_converged=.false.
     end select
     call flush(iw)
+    ! Restore the tight cutoff for the relaxed-density / W back-projection.
+    if (zvo%prog_on) call int2_driver%set_cutoff(zv_rc_tight)
 
 !   Save Z-vector and clean up memory
     deallocate(xminv, rhs, xm)
@@ -318,8 +331,7 @@ contains
     pa(:,:,1) = pa(:,:,1) + wrk1 ! T+Z
 
     ! Store relaxed difference density matrix P to global memory
-    call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf2, [nbf2, 1], comment=OQP_td_p_comment)
-    call tagarray_get_data(infos%dat, OQP_td_p, td_p)
+    call infos%dat%alloc_or_die(OQP_td_p, (/ nbf2, 1 /), td_p, description=OQP_td_p_comment)
     call pack_matrix(pa(:,:,1), td_p(:,1))
 
     ! Compute H+[P]
@@ -374,8 +386,7 @@ contains
     call orthogonal_transform('t', nbf, mo_a, wmo)
 
     ! Store W to global memory
-    call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf2, comment=OQP_WAO_comment)
-    call tagarray_get_data(infos%dat, OQP_WAO, wao)
+    call infos%dat%alloc_or_die(OQP_WAO, (/ nbf2 /), wao, description=OQP_WAO_comment)
     call pack_matrix(wmo, wao)
     wao = wao*0.5_dp
 

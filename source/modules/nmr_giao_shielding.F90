@@ -338,9 +338,7 @@ contains
     ! --- Store isotropic shielding (ppm) to a tagarray for JSON output ---
     !     rows: dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled
     !     stored atom-major (flat): atom a occupies entries 5*(a-1)+1 .. 5*a.
-    call infos%dat%reserve_data(OQP_nmr_shielding, TA_TYPE_REAL64, 5*nat, &
-                                comment=OQP_nmr_shielding_comment)
-    call tagarray_get_data(infos%dat, OQP_nmr_shielding, nmrout)
+    call infos%dat%alloc_or_die(OQP_nmr_shielding, (/ 5*nat /), nmrout, description=OQP_nmr_shielding_comment)
     do iat = 1, nat
       nmrout(5*(iat-1)+1) = (sig_dia(1,1,iat)+sig_dia(2,2,iat)+sig_dia(3,3,iat))/3.0d0
       nmrout(5*(iat-1)+2) = (sig_u(1,1,iat)+sig_u(2,2,iat)+sig_u(3,3,iat))/3.0d0

@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="OpenQP",
-    version="1.0",
+    version="1.2.0",
     author="Jingbai Li",
     author_email="lijingbai@zspu.edu.cn",
     description="Python Wrapper for Open Quantum Platform",

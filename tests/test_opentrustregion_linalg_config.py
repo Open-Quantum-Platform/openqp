@@ -37,7 +37,7 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn("LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}", external_cmake)
         self.assertIn("add_dependencies(libopentrustregion LAPACK)", external_cmake)
         self.assertIn("CMAKE_POLICY_VERSION_MINIMUM=3.5", external_cmake)
-        self.assertIn("PATCH_COMMAND /usr/bin/perl", external_cmake)
+        self.assertIn("PATCH_COMMAND perl", external_cmake)
         self.assertIn("cmake_minimum_required(VERSION 3.5)", external_cmake)
         self.assertLess(
             external_cmake.index("ExternalProject_Add(LAPACK"),
@@ -93,6 +93,7 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         patch = (ROOT / "cmake" / "patches" / "libtagarray-v0.0.6-default-integer-shapes.patch").read_text()
 
         self.assertIn("libtagarray-v0.0.6-default-integer-shapes.patch", external_cmake)
+        self.assertIn("PATCH_COMMAND sh -c", external_cmake)
         self.assertIn("grep -q reserve_data_default", external_cmake)
         self.assertIn("generic, public    :: reserve_data => reserve_data_i64, reserve_data_default", patch)
         self.assertIn("integer,                              optional, intent(in) :: array_shape(:)", patch)
@@ -118,6 +119,17 @@ class OpenTrustRegionLinalgConfigTests(unittest.TestCase):
         self.assertIn('string(MD5 _oqp_external_make_program_hash "${CMAKE_MAKE_PROGRAM}")', external_cmake)
         self.assertIn('string(APPEND _oqp_external_generator "-make${_oqp_external_make_program_hash}")', external_cmake)
         self.assertIn("${OQP_EXTERNAL_GENERATOR_ARGS}", external_cmake)
+
+    def test_reusable_external_cache_roots_are_created_before_downloads(self):
+        external_cmake = (ROOT / "external" / "CMakeLists.txt").read_text()
+
+        self.assertIn("if(WIN32)", external_cmake)
+        self.assertIn('string(MD5 _oqp_external_key_hash "${_oqp_external_key}")', external_cmake)
+        self.assertIn('set(_oqp_external_key "win-${_oqp_external_key_hash}")', external_cmake)
+        self.assertIn("file(MAKE_DIRECTORY", external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_SOURCE_ROOT}"', external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_BUILD_ROOT}"', external_cmake)
+        self.assertIn('"${OQP_EXTERNALS_INSTALL_ROOT}"', external_cmake)
 
     def test_gradient_atom_count_uses_explicit_kind(self):
         grd1 = (ROOT / "source" / "integrals" / "grd1.F90").read_text()

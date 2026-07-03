@@ -4,7 +4,7 @@ set(_OQP_EXTERNALS_CACHE_REVISION "1")
 set(_OQP_LIBINT2_VERSION "2.7.1.1-am4")
 set(_OQP_NLOPT_VERSION "2.9.1")
 set(_OQP_LIBXC_VERSION "7.0.0")
-set(_OQP_TAGARRAY_VERSION "0.0.6")
+set(_OQP_TAGARRAY_VERSION "1.0.0")
 set(_OQP_LIBECPINT_VERSION "1.0.7")
 set(_OQP_LAPACK_VERSION "3.10.0")
 set(_OQP_OPENTRUSTREGION_VERSION "2.0.0")
@@ -48,9 +48,15 @@ if(OQP_REUSE_EXTERNALS)
     string(APPEND _oqp_external_generator "-${CMAKE_GENERATOR_INSTANCE}")
   endif()
   if(CMAKE_MAKE_PROGRAM)
-    string(MD5 _oqp_external_make_program_hash "${CMAKE_MAKE_PROGRAM}")
-    string(SUBSTRING "${_oqp_external_make_program_hash}" 0 12 _oqp_external_make_program_hash)
-    string(APPEND _oqp_external_generator "-make${_oqp_external_make_program_hash}")
+    # Key on the make program's BASENAME (e.g. "ninja"), NOT its absolute path.
+    # scikit-build-core / pip place ninja in a per-build temporary isolated env
+    # (/tmp/build-env-XXXX/.../ninja), so the absolute path -- and thus an MD5 of
+    # it -- changes on EVERY build. Hashing the path made the externals cache key
+    # unique per run, so the cached externals (libecpint, LAPACK, ...) never
+    # matched and were recompiled every single time. The basename still
+    # distinguishes ninja vs make/gmake, which is all that affects the build.
+    get_filename_component(_oqp_external_make_name "${CMAKE_MAKE_PROGRAM}" NAME_WE)
+    string(APPEND _oqp_external_generator "-${_oqp_external_make_name}")
   endif()
   if(CMAKE_CONFIGURATION_TYPES)
     string(REPLACE ";" "+" _oqp_external_configurations "${CMAKE_CONFIGURATION_TYPES}")
@@ -91,9 +97,17 @@ if(OQP_REUSE_EXTERNALS)
   set(_oqp_external_key
       "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${_oqp_external_generator}-${CMAKE_C_COMPILER_ID}${CMAKE_C_COMPILER_VERSION}-${CMAKE_CXX_COMPILER_ID}${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_Fortran_COMPILER_ID}${CMAKE_Fortran_COMPILER_VERSION}-${CMAKE_BUILD_TYPE}-${_oqp_external_linkage}-${_LINALG_LIB_TYPE}-blas${_oqp_external_blas_hash}-blasint${BLA_SIZEOF_INTEGER}-flags${_oqp_external_flags_hash}-${_OQP_EXTERNALS_VERSION_KEY}")
   string(REGEX REPLACE "[^A-Za-z0-9_.+-]" "_" _oqp_external_key "${_oqp_external_key}")
+  if(WIN32)
+    string(MD5 _oqp_external_key_hash "${_oqp_external_key}")
+    set(_oqp_external_key "win-${_oqp_external_key_hash}")
+  endif()
   set(OQP_EXTERNALS_SOURCE_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/src" CACHE INTERNAL "OQP_EXTERNALS_SOURCE_ROOT" FORCE)
   set(OQP_EXTERNALS_BUILD_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/build" CACHE INTERNAL "OQP_EXTERNALS_BUILD_ROOT" FORCE)
   set(OQP_EXTERNALS_INSTALL_ROOT "${_OQP_EXTERNALS_ROOT}/${_oqp_external_key}/install" CACHE INTERNAL "OQP_EXTERNALS_INSTALL_ROOT" FORCE)
+  file(MAKE_DIRECTORY
+      "${OQP_EXTERNALS_SOURCE_ROOT}"
+      "${OQP_EXTERNALS_BUILD_ROOT}"
+      "${OQP_EXTERNALS_INSTALL_ROOT}")
   message(STATUS "Reusable bundled externals cache: ${_OQP_EXTERNALS_ROOT}")
   message(STATUS "Reusable bundled externals key: ${_oqp_external_key}")
 endif()
@@ -282,23 +296,42 @@ oqp_reuse_or_build(libtagarray
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}tagarray_f${CMAKE_STATIC_LIBRARY_SUFFIX}"
         "${TAGARRAY_BUILD_DIR}/include/tagarray")
+# tagarray's high-level helpers (c%alloc / alloc_or_die) take default-INTEGER
+# shapes and a default-LOGICAL override, so the library must be built with the
+# same default integer kind as OpenQP. OpenQP promotes its default integer (and
+# logical) to 8 bytes for ILP64 via add_compile_options(-fdefault-integer-8 /
+# -i8), which ExternalProject does NOT inherit; forward it explicitly here so
+# the kinds match (otherwise alloc_or_die / create(override=...) fail to resolve
+# in ILP64 builds).
+set(_TAGARRAY_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}")
+if(LINALG_LIB_INT64)
+  if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -fdefault-integer-8")
+  elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    string(APPEND _TAGARRAY_Fortran_FLAGS " -i8")
+  endif()
+endif()
 if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
         PREFIX ${TAGARRAY_PREFIX}
-        URL https://github.com/foxtran/libtagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
-        URL_HASH SHA256=9c844092f123276bb461e37e3451068c097b5a1fec9d65514ad3018baaeb2b32
-#        GIT_REPOSITORY https://github.com/foxtran/libtagarray.git
+        URL https://github.com/Open-Quantum-Platform/tagarray/archive/refs/tags/v${_OQP_TAGARRAY_VERSION}.tar.gz
+        URL_HASH SHA256=590896bcdaadca4c3466474d35eff06ed4090c42d37a3f8ddda0def83833c6c5
+#        GIT_REPOSITORY https://github.com/Open-Quantum-Platform/tagarray.git
 #        GIT_TAG master
         SOURCE_DIR ${TAGARRAY_SOURCE_DIR}
         BINARY_DIR ${TAGARRAY_BUILD_DIR}
         STAMP_DIR  ${TAGARRAY_STAMP_DIR}
         UPDATE_COMMAND ""
-        PATCH_COMMAND /bin/sh -c "grep -q reserve_data_default <SOURCE_DIR>/source/API/Fortran/container.f90 || patch -p1 -i ${CMAKE_SOURCE_DIR}/cmake/patches/libtagarray-v0.0.6-default-integer-shapes.patch"
+        # tagarray v1.0.0 ships a 144-char iso_c_binding USE line that its own
+        # -std=f2018 build truncates under gfortran>=12; wrap it (idempotent).
+        PATCH_COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/fix_tagarray_linelen.py ${TAGARRAY_SOURCE_DIR}
         INSTALL_COMMAND ""
         CMAKE_ARGS -DENABLE_FORTRAN=ON
                    -DENABLE_TESTING=OFF
+                   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                    -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
                    -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+                   "-DCMAKE_Fortran_FLAGS=${_TAGARRAY_Fortran_FLAGS}"
                    ${OQP_EXTERNAL_GENERATOR_ARGS}
         )
 endif()
@@ -373,7 +406,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         BUILD_BYPRODUCTS ${LIBLAPACK}
                          ${LIBBLAS}
         UPDATE_COMMAND ""
-        PATCH_COMMAND /usr/bin/perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
+        PATCH_COMMAND perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
         INSTALL_COMMAND ""
         CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
                    -DBUILD_SINGLE=ON
@@ -600,18 +633,28 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         list(APPEND DDX_CMAKE_ARGS "${_ddx_prefix_path_arg}")
     endif()
     # Forward the same BLAS/LAPACK choice OpenQP resolved (findLinearAlgebra()).
+    # _ddx_interface_libs captures the *same* libraries so they can be re-exported
+    # as INTERFACE_LINK_LIBRARIES on the DDX::ddx imported target below: the shared
+    # libddx.so leaves its BLAS/LAPACK symbols (drot_, dtrmm_, dswap_, ...)
+    # undefined, and on a flat-namespace linker (Linux) every executable that links
+    # DDX::ddx must resolve them itself. macOS' two-level namespace records the dep
+    # inside libddx.dylib, so this only bites on Linux -- but exporting it is
+    # correct everywhere. LAPACK precedes BLAS so LAPACK's own BLAS calls resolve.
+    set(_ddx_interface_libs "")
     if(_LINALG_LIB_TYPE STREQUAL NetLib)
         oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${LIBBLAS})
         oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
         list(APPEND DDX_CMAKE_ARGS
             "${_ddx_blas_arg}"
             "${_ddx_lapack_arg}")
+        set(_ddx_interface_libs ${LIBLAPACK} ${LIBBLAS})
     elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
         oqp_external_cmake_list_arg(_ddx_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
         oqp_external_cmake_list_arg(_ddx_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
         list(APPEND DDX_CMAKE_ARGS
             "${_ddx_blas_arg}"
             "${_ddx_lapack_arg}")
+        set(_ddx_interface_libs ${LAPACK_LIBRARIES} ${BLAS_LIBRARIES})
     elseif(DEFINED BLA_VENDOR)
         list(APPEND DDX_CMAKE_ARGS -DBLA_VENDOR=${BLA_VENDOR})
         if(DEFINED BLA_PREFER_PKGCONFIG)
@@ -622,6 +665,15 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         endif()
         if(DEFINED BLA_PKGCONFIG_LAPACK)
             list(APPEND DDX_CMAKE_ARGS -DBLA_PKGCONFIG_LAPACK=${BLA_PKGCONFIG_LAPACK})
+        endif()
+        # No explicit library paths in the BLA_VENDOR branch; re-export whatever
+        # find_package() did resolve so the consumer can still satisfy libddx's
+        # BLAS/LAPACK symbols on a flat-namespace linker.
+        if(DEFINED LAPACK_LIBRARIES)
+            list(APPEND _ddx_interface_libs ${LAPACK_LIBRARIES})
+        endif()
+        if(DEFINED BLAS_LIBRARIES)
+            list(APPEND _ddx_interface_libs ${BLAS_LIBRARIES})
         endif()
     endif()
 
@@ -654,8 +706,168 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
     set_target_properties(DDX::ddx PROPERTIES
         IMPORTED_LOCATION ${DDX_LIBRARY}
         INTERFACE_INCLUDE_DIRECTORIES ${DDX_INCLUDE_DIR})
+    # Propagate ddX's own BLAS/LAPACK dependency to every consumer. Without this,
+    # linking DDX::ddx on Linux fails with "undefined reference to drot_/dtrmm_/
+    # dswap_/..." because libddx.so does not record its BLAS dependency the way a
+    # macOS two-level-namespace dylib does. See _ddx_interface_libs above.
+    if(_ddx_interface_libs)
+        set_target_properties(DDX::ddx PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_ddx_interface_libs}")
+    endif()
     message(STATUS "ddX will be built with ${BLA_SIZEOF_INTEGER}-byte BLAS integers from source: ${DDX_LIBRARY}")
 endif()
 
+
+# ---------------------------------------------------------------------------
+# DFT-D4 dispersion (native): mctc-lib -> multicharge -> dftd4.
+# Replaces the former `dftd4` Python (cffi) package. All three install into one
+# shared prefix so dftd4 finds its deps via find_package(); the static libs are
+# linked into liboqp in source/. Follows the reuse/stand-in pattern above.
+# ---------------------------------------------------------------------------
+if(OQP_REUSE_EXTERNALS)
+    set(DFTD4_INSTALL "${OQP_EXTERNALS_INSTALL_ROOT}/dftd4" CACHE INTERNAL "DFTD4_INSTALL" FORCE)
+else()
+    set(DFTD4_INSTALL "${CMAKE_BINARY_DIR}/external/install/dftd4" CACHE INTERNAL "DFTD4_INSTALL" FORCE)
+endif()
+
+# The dftd4 stack is built with DEFAULT (4-byte) integers, NOT -fdefault-integer-8.
+# dftd4/multicharge get ILP64 BLAS via their own WITH_ILP64 option (which sets
+# -DIK=i8 for the BLAS interface only); forcing -fdefault-integer-8 instead breaks
+# dftd4's bind(c) enum kind (df_enum) vs default-integer consistency. mctc-lib uses
+# no BLAS. Because the stack stays 4-byte, the shim hands mctc-lib's `new` a 4-byte
+# `num` (OQP_D4_INT_KIND=4 in source/CMakeLists.txt), independent of the host width.
+# WITH_OpenMP tracks OpenQP's ENABLE_OPENMP: dftd4/multicharge default WITH_OpenMP
+# ON, but OpenQP only finds/links OpenMP when ENABLE_OPENMP=ON (default OFF), so
+# without this the D4 statics would carry an OpenMP runtime dependency liboqp does
+# not satisfy. WITH_TESTS=OFF is honored by multicharge; dftd4/mctc-lib ignore it
+# and add their test subdir (and dftd4 an unconditional mstore fetch) unconditionally,
+# so those are stripped via PATCH_COMMAND on each ExternalProject below.
+set(DFTD4_COMMON_ARGS
+        -DCMAKE_INSTALL_PREFIX=${DFTD4_INSTALL}
+        -DCMAKE_PREFIX_PATH=${DFTD4_INSTALL}
+        -DCMAKE_INSTALL_LIBDIR=lib
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_SHARED_LIBS=OFF
+        -DWITH_TESTS=OFF
+        -DWITH_OpenMP=${ENABLE_OPENMP}
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+        ${OQP_EXTERNAL_GENERATOR_ARGS}
+)
+
+# dftd4 3.7.0 and mctc-lib 0.4.2 call add_subdirectory("test") unconditionally
+# (they do not honor WITH_TESTS), and dftd4 additionally does an unconditional
+# find_package("mstore") whose fetch method downloads an unpinned mstore purely
+# for its test target. Strip both so a clean/offline build neither needs mstore
+# nor builds tests. Substitutions are idempotent (safe under OQP_REUSE_EXTERNALS).
+# `.` stands in for the literal " to avoid nested-quote escaping.
+set(DFTD4_DROP_TESTS_PERL "s/\\nadd_subdirectory\\(.test.\\)/\\n# test subdir disabled by OpenQP/g")
+set(DFTD4_DROP_MSTORE_PERL "s/if\\(NOT TARGET .mstore..mstore.\\)\\s*\\n\\s*find_package\\(.mstore.\\)\\s*\\nendif\\(\\)/# mstore find disabled by OpenQP (no dftd4 tests)/g")
+
+# Feed dftd4/multicharge the same BLAS+LAPACK choice OpenQP resolved, the same
+# way ddx is fed above. multicharge needs LAPACK (a linear solve), so BOTH
+# BLAS_LIBRARIES and LAPACK_LIBRARIES must be forwarded. WITH_ILP64 selects the
+# 8-byte BLAS interface in dftd4/multicharge to match BLA_SIZEOF_INTEGER.
+set(DFTD4_BLAS_ARGS "")
+if(BLA_SIZEOF_INTEGER EQUAL 8)
+    list(APPEND DFTD4_BLAS_ARGS -DWITH_ILP64=ON)
+endif()
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${LIBBLAS})
+    oqp_external_cmake_list_arg(_d4_lapack_arg LAPACK_LIBRARIES ${LIBLAPACK})
+    list(APPEND DFTD4_BLAS_ARGS "${_d4_blas_arg}" "${_d4_lapack_arg}")
+elseif(DEFINED BLAS_LIBRARIES AND DEFINED LAPACK_LIBRARIES)
+    oqp_external_cmake_list_arg(_d4_blas_arg BLAS_LIBRARIES ${BLAS_LIBRARIES})
+    oqp_external_cmake_list_arg(_d4_lapack_arg LAPACK_LIBRARIES ${LAPACK_LIBRARIES})
+    list(APPEND DFTD4_BLAS_ARGS "${_d4_blas_arg}" "${_d4_lapack_arg}")
+elseif(DEFINED BLA_VENDOR)
+    list(APPEND DFTD4_BLAS_ARGS -DBLA_VENDOR=${BLA_VENDOR})
+endif()
+
+set(DFTD4_MCTC_LIB        ${DFTD4_INSTALL}/lib/libmctc-lib.a     CACHE INTERNAL "DFTD4_MCTC_LIB" FORCE)
+set(DFTD4_MULTICHARGE_LIB ${DFTD4_INSTALL}/lib/libmulticharge.a  CACHE INTERNAL "DFTD4_MULTICHARGE_LIB" FORCE)
+set(DFTD4_DFTD4_LIB       ${DFTD4_INSTALL}/lib/libdftd4.a        CACHE INTERNAL "DFTD4_DFTD4_LIB" FORCE)
+
+oqp_set_external_paths(DFTD4_MCTC mctc-lib
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/mctc-lib"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/mctc-lib/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(mctc-lib "${DFTD4_MCTC_LIB}")
+if(NOT TARGET mctc-lib)
+ExternalProject_Add(mctc-lib
+        PREFIX ${DFTD4_MCTC_PREFIX}
+        URL https://github.com/grimme-lab/mctc-lib/archive/refs/tags/v0.4.2.tar.gz
+        URL_HASH SHA256=c7aa45c0a3e6f96e3316e15fc6cdbe48b15234940d3773927a57bb7bfe9744ac
+        SOURCE_DIR ${DFTD4_MCTC_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_MCTC_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_MCTC_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_MCTC_LIB}
+        UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_MCTC_SOURCE_DIR}/CMakeLists.txt
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS}
+        )
+endif()
+
+oqp_set_external_paths(DFTD4_MC multicharge
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/multicharge"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/multicharge/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(multicharge "${DFTD4_MULTICHARGE_LIB}")
+if(NOT TARGET multicharge)
+ExternalProject_Add(multicharge
+        PREFIX ${DFTD4_MC_PREFIX}
+        URL https://github.com/grimme-lab/multicharge/archive/refs/tags/v0.3.0.tar.gz
+        URL_HASH SHA256=2fcc1f80871f404f005e9db458ffaec95bb28a19516a0245278cd3175b63a6b2
+        LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
+        SOURCE_DIR ${DFTD4_MC_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_MC_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_MC_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_MULTICHARGE_LIB}
+        UPDATE_COMMAND ""
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
+        )
+add_dependencies(multicharge mctc-lib)
+endif()
+
+oqp_set_external_paths(DFTD4_D4 dftd4
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_SOURCE_DIR}/external/dftd4-deps/dftd4"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/build-${CMAKE_Fortran_COMPILER_ID}"
+    "${CMAKE_BINARY_DIR}/external/dftd4-deps/dftd4/stamp-${CMAKE_Fortran_COMPILER_ID}"
+    "${DFTD4_INSTALL}")
+oqp_reuse_or_build(dftd4 "${DFTD4_DFTD4_LIB}" "${DFTD4_MULTICHARGE_LIB}" "${DFTD4_MCTC_LIB}")
+if(NOT TARGET dftd4)
+ExternalProject_Add(dftd4
+        PREFIX ${DFTD4_D4_PREFIX}
+        URL https://github.com/dftd4/dftd4/archive/refs/tags/v3.7.0.tar.gz
+        URL_HASH SHA256=f00b244759eff2c4f54b80a40673440ce951b6ddfa5eee1f46124297e056f69c
+        LIST_SEPARATOR ${OQP_EXTERNAL_LIST_SEPARATOR}
+        SOURCE_DIR ${DFTD4_D4_SOURCE_DIR}
+        BINARY_DIR ${DFTD4_D4_BUILD_DIR}
+        STAMP_DIR  ${DFTD4_D4_STAMP_DIR}
+        BUILD_BYPRODUCTS ${DFTD4_DFTD4_LIB}
+        UPDATE_COMMAND ""
+        PATCH_COMMAND perl -0pi -e "${DFTD4_DROP_TESTS_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
+                COMMAND perl -0pi -e "${DFTD4_DROP_MSTORE_PERL}" ${DFTD4_D4_SOURCE_DIR}/CMakeLists.txt
+        CMAKE_ARGS ${DFTD4_COMMON_ARGS} ${DFTD4_BLAS_ARGS}
+        )
+add_dependencies(dftd4 multicharge)
+endif()
+if(_LINALG_LIB_TYPE STREQUAL NetLib)
+    if(TARGET mctc-lib)
+        add_dependencies(mctc-lib LAPACK)
+    endif()
+    if(TARGET multicharge)
+        add_dependencies(multicharge LAPACK)
+    endif()
+    if(TARGET dftd4)
+        add_dependencies(dftd4 LAPACK)
+    endif()
+endif()
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)

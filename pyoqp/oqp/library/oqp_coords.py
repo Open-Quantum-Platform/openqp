@@ -311,13 +311,18 @@ class RedundantInternalCoordinates:
         # source of the divide-by-zero / overflow / invalid matmul warnings).
         if nq == 0 or not np.all(np.isfinite(b)):
             return np.zeros((nq, nq)), 0
-        g = b @ b.T
+        # On macOS/Accelerate-backed NumPy, the ``@`` matmul ufunc can emit
+        # spurious floating-point RuntimeWarnings (divide/overflow/invalid) for
+        # this medium-size B B^T product even when B and the resulting G matrix
+        # are fully finite.  np.dot routes to the same BLAS product but does not
+        # leak those false-positive fenv flags.
+        g = np.dot(b, b.T)
         w, v = np.linalg.eigh(g)
         # Relative cutoff: drop near-null eigenvalues so the pseudo-inverse does
         # not divide by ~0 (an absolute cutoff lets tiny-but-positive eigenvalues
         # through and blows the G-inverse up on ill-conditioned, near-linear sets).
         keep = w > eig_tol * max(float(w.max()), 1.0)
-        inv = (v[:, keep] / w[keep]) @ v[:, keep].T
+        inv = np.dot(v[:, keep] / w[keep], v[:, keep].T)
         rank = int(np.count_nonzero(keep))
         return inv, rank
 
@@ -398,7 +403,7 @@ class DelocalizedInternalCoordinates:
     @classmethod
     def from_ric(cls, ric, x, eig_tol=1.0e-6):
         b = ric.b_matrix(x)
-        g = b @ b.T
+        g = np.dot(b, b.T)
         w, v = np.linalg.eigh(0.5 * (g + g.T))
         u = v[:, w > eig_tol]
         return cls(ric, u, ric.q(x))
@@ -413,10 +418,10 @@ class DelocalizedInternalCoordinates:
         return self.U.T @ self.ric.b_matrix(x)
 
     def _g_inverse(self, b, eig_tol=1.0e-8):
-        g = b @ b.T
+        g = np.dot(b, b.T)
         w, v = np.linalg.eigh(0.5 * (g + g.T))
         keep = w > eig_tol
-        inv = (v[:, keep] / w[keep]) @ v[:, keep].T
+        inv = np.dot(v[:, keep] / w[keep], v[:, keep].T)
         return inv, int(np.count_nonzero(keep))
 
     def grad_to_q(self, x, gx):

@@ -128,6 +128,14 @@ struct control_parameters {
     double    conv;
     int64_t   scf_incremental;
     double    int2e_cutoff;
+    int64_t   scf_pscreen;
+    double    pscreen_k;
+    double    pscreen_cap;
+    double    pscreen_tight;
+    double    pscreen_xc_dcut;
+    double    pscreen_xc_aocut;
+    int64_t   pscreen_grid_rad;
+    int64_t   pscreen_grid_ang;
     int64_t   esp;
     int64_t   resp_target;
     double    esp_constr;
@@ -152,6 +160,14 @@ struct control_parameters {
     bool      sd_scf;
     bool      pcm_enabled;
     double    pcm_epsilon;
+    /* Performance knobs -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   xc_c2f;
+    int64_t   xc_phi_cache;
+    int64_t   xc_incdft;
+    double    grad_cutoff;
+    double    mrsf_resp_cutoff;
+    int64_t   mrsf_fp32;
+    int64_t   mrsf_zv_warmstart;
     bool      qmmm_flag;
 };
 
@@ -202,6 +218,8 @@ void append_ecp(struct oqp_handle_t *inf);
 
 void int1e(struct oqp_handle_t *inf);
 
+void int2e(struct oqp_handle_t *inf);
+
 void guess_hcore(struct oqp_handle_t *inf);
 void guess_huckel(struct oqp_handle_t *inf);
 void guess_modhuckel(struct oqp_handle_t *inf);
@@ -228,8 +246,6 @@ void cphf_uhf_polarizability_selftest(struct oqp_handle_t *inf);
 void cphf_rohf_polarizability_selftest(struct oqp_handle_t *inf);
 void fockx_selftest(struct oqp_handle_t *inf);
 void fockx_os_selftest(struct oqp_handle_t *inf);
-void cphf_f0x_selftest(struct oqp_handle_t *inf);
-void cphf_dpdx_selftest(struct oqp_handle_t *inf);
 
 void tdhf_energy(struct oqp_handle_t *inf);
 void tdhf_z_vector(struct oqp_handle_t *inf);
@@ -257,6 +273,12 @@ void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);
 void lowdin(struct oqp_handle_t *inf);
+
+/* Native DFT-D4 dispersion (source/dftd4_interface.F90). Self-contained:
+   takes atomic numbers + coordinates (Bohr), not the oqp handle. */
+void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
+                    const char *func, int lfunc, int do_grad,
+                    double *energy, double *grad, int *ier);
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);

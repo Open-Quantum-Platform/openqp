@@ -57,15 +57,14 @@ def _runtime_available():
         os.environ.setdefault("OMP_NUM_THREADS", "1")
         import oqp  # noqa: F401
         from oqp.pyoqp import Runner  # noqa: F401
-        import dftd4  # noqa: F401
-        from dftd4.interface import DampingParam, DispersionModel  # noqa: F401
-        return True
+        # dftd4 is linked natively into liboqp (no Python dftd4 package needed).
+        return hasattr(oqp.lib, "oqp_dftd4_disp")
     except Exception:
         return False
 
 
 @unittest.skipUnless(_runtime_available(),
-                     "compiled OpenQP runtime and/or dftd4 not available")
+                     "compiled OpenQP runtime with native dftd4 not available")
 class D4AnalyticHessian(unittest.TestCase):
     def _hessian(self, hess_type, d4):
         from oqp.pyoqp import Runner

@@ -19,6 +19,10 @@ type=huckel
 [scf]
 multiplicity=1
 type=rhf
+# Progressive (iteration-dependent) integral screening: opt-in perf path, default off.
+# Energy-neutral -- the convergence tail is pinned to the tight int2e_cutoff -- so this
+# example's reference is unchanged; it exercises the scf.pscreen feature-coverage gate.
+pscreen=True
 
 [dftgrid]
 rad_type=becke

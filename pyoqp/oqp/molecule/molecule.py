@@ -12,6 +12,41 @@ from .oqpdata import OQPData, OQP_CONFIG_SCHEMA
 from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
+from oqp.utils import regression as regkeys
+
+# Environment variable that opts JSON dumps into "lean" mode: internal
+# ``OQP::`` arrays (density/Fock/MO matrices, etc.) and any other non-regression
+# data are dropped before the bundle is written, keeping only the keys declared
+# in the regression registry (physics + identity/metadata). Used when
+# (re)generating committed example *test references*. The full bundle is still
+# written by default so the ``guess=json`` restart workflow keeps working.
+LEAN_JSON_ENV = 'OQP_LEAN_JSON'
+
+
+def _env_wants_lean_json():
+    """True when ``OQP_LEAN_JSON`` is set to a truthy value."""
+    return os.environ.get(LEAN_JSON_ENV, '').strip().lower() not in (
+        '', '0', 'false', 'no', 'off')
+
+
+def _load_json(path):
+    """Load a JSON file, returning {} if it is missing or unreadable."""
+    try:
+        with open(path, 'r') as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def _abs_nested(value):
+    """Element-wise magnitude of a (possibly nested) numeric array.
+
+    Used for sign/phase-ambiguous regression values (e.g. non-adiabatic
+    couplings) so a global sign flip between builds does not register as a diff.
+    """
+    return np.abs(np.array(value, dtype=float)).tolist()
+
+
 class Molecule:
     """
     OQP molecule representation in python
@@ -1098,10 +1133,17 @@ class Molecule:
 
     def get_nac(self):
         """
-        Get non-adiabatic couping in Hartree/Bohr
-        """
+        Get the non-adiabatic (phase-corrected derivative) coupling matrix d_ij.
 
-        return []
+        Populated by a NACME run (``self.dcm``); empty for every other runtype.
+        The elements are sign/phase ambiguous between builds, so the regression
+        comparison uses magnitudes (see the ``nac`` registry entry,
+        ``phase_invariant=True``).
+        """
+        dcm = np.asarray(self.dcm, dtype=float)
+        if dcm.size == 0:
+            return []
+        return dcm.tolist()
 
     def get_soc(self):
         """
@@ -1260,6 +1302,21 @@ class Molecule:
             # previous data is not available, return current data to bypass nacme calculation
             return self.get_system(), self.get_data()
 
+    def explicit_scf_props(self):
+        """Lowercased scf_prop values requested for this calculation.
+
+        ``scf_prop`` defaults to empty, so its config value is exactly the set of
+        properties the user asked for -- works identically for file-based and
+        scripting-API (input_dict) runs. Regression coverage of a property is
+        opt-in: only requested properties are surfaced to the JSON, required by
+        the gate, and compared.
+        """
+        try:
+            requested = self.config.get('properties', {}).get('scf_prop', []) or []
+        except (AttributeError, TypeError):
+            return []
+        return [str(p).strip().lower() for p in requested if str(p).strip()]
+
     def get_results(self):
         """
         Collect computed results to dict
@@ -1278,6 +1335,18 @@ class Molecule:
         except AttributeError:
             data['td_energies'] = np.array([0]).tolist()
 
+        # Surface the spin-resolved excitation ladders as public regression
+        # keys when present (a SOC run computes both). The public td_energies
+        # mirrors only one ladder, so without these the SOC singlet excitation
+        # energies would no longer be compared once the internal OQP:: arrays
+        # are trimmed from the references.
+        for key, tag in (('td_singlet_energies', 'OQP::td_singlet_energies'),
+                         ('td_triplet_energies', 'OQP::td_triplet_energies')):
+            try:
+                data[key] = np.array(self.data[tag]).tolist()
+            except (AttributeError, KeyError, TypeError):
+                pass
+
         # save NMR isotropic shielding if available (CGO or GIAO).
         # Flat atom-major array -> (natom, 5) in ppm; columns =
         # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].
@@ -1286,6 +1355,30 @@ class Molecule:
             data['nmr_shielding'] = sh.tolist()
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
+
+        # SCF properties are surfaced to the JSON only when EXPLICITLY requested
+        # in the input (scf_prop defaults to 'el_mom,mulliken', which every SCF
+        # run computes for the log -- we must not bloat/require those on every
+        # reference). The explicit request is the regression opt-in.
+        props = self.explicit_scf_props()
+        charge_tags = (('mulliken', 'mulliken_charges', 'OQP::mulliken_charges'),
+                       ('lowdin', 'lowdin_charges', 'OQP::lowdin_charges'),
+                       ('resp', 'resp_charges', 'OQP::resp_charges'))
+        for prop, key, tag in charge_tags:
+            if prop not in props:
+                continue
+            try:
+                data[key] = np.array(self.data[tag]).tolist()
+            except (AttributeError, KeyError, TypeError):
+                pass
+        if 'el_mom' in props:
+            try:
+                dip = np.zeros(3, dtype=np.float64)
+                oqp.electric_dipole_au(
+                    self, oqp.ffi.cast("double *", oqp.ffi.from_buffer(dip)))
+                data['dipole'] = dip.tolist()
+            except Exception:
+                pass
 
         # save gradients if available
         data['grad'] = np.array(self.get_grad()).tolist()
@@ -1373,6 +1466,7 @@ class Molecule:
         """
         self.mpi_manager.set_mpi_comm(self.data)
         self.config = self.get_config(input_source)
+        self._resolve_perf(input_source)
         self.data.apply_config(self.config)
         self.data['usempi'] = int(self.usempi)
         self.xyz = self.data._data.xyz
@@ -1382,6 +1476,17 @@ class Molecule:
         self.initialize_symmetry_metadata()
 
         return self
+
+    def _resolve_perf(self, input_source):
+        """Apply the `perf` preset to self.config before it is pushed to the control
+        struct: fill the performance input keys left at the sentinel 'auto' (an explicit
+        value always wins). Env-var free. Stores the resolution report for logging."""
+        from oqp.utils import perf_levels
+        self.perf_level = self.config.get("input", {}).get("perf", perf_levels.UNSET)
+        self.perf_report, self.perf_warns = perf_levels.apply(
+            self.config, self.perf_level,
+            scf_conv=self.config.get("scf", {}).get("conv"),
+            zv_conv=self.config.get("tdhf", {}).get("zvconv"))
 
     @mpi_dump
     def write_molden(self, filename):
@@ -1466,9 +1571,19 @@ class Molecule:
         return data
 
     @mpi_dump
-    def save_data(self):
+    def save_data(self, lean=None):
         """
         Save mol data and computed results to json
+
+        Args:
+            lean: When True, drop internal ``OQP::`` arrays (density, Fock,
+                MO coefficients, overlap/kinetic, SOC/TD/MRSF scratch, etc.)
+                before writing. These are never compared by ``check_ref`` and
+                are not consumed by any example, so test references can omit
+                them to stay ~99% smaller. When None (default) the behaviour
+                follows the ``OQP_LEAN_JSON`` environment variable; otherwise
+                the full bundle is written so the ``guess=json`` restart
+                workflow (``load_data``/``put_data``) keeps its DM/Fock/MO data.
         """
         if self.idx != 1:
             jsonfile = self.log.replace('.log', f'_{self.idx}.json')
@@ -1477,6 +1592,11 @@ class Molecule:
         data = self.get_data()
         data.update(self.get_results())
         data.update(self.set_config_json())
+
+        if lean is None:
+            lean = _env_wants_lean_json()
+        if lean:
+            data = {k: v for k, v in data.items() if regkeys.lean_keep(k)}
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
@@ -1596,100 +1716,110 @@ class Molecule:
 
         return energy, hessian, freqs, modes, inertia
 
-    def check_ref(self):
-        # compare test data with ref data
+    def regression_context(self):
+        """(runtype, excited, props) used to resolve which registry keys apply.
+
+        ``excited`` is True when an excited-state (TDDFT/MRSF/...) method is
+        active, which is the gate for comparing ``td_energies`` (a ground-state
+        run stores the placeholder [0]). ``props`` is the list of requested
+        ``scf_prop`` values (e.g. 'nmr'), the gate for property keys.
+        """
         runtype = self.config['input']['runtype']
+        tdhf_type = self.config.get('tdhf', {}).get('type')
+        excited = bool(tdhf_type) and str(tdhf_type).lower() not in ('none',)
+        # Only EXPLICITLY requested properties are regression targets (the
+        # default el_mom,mulliken is computed for the log but not tested).
+        props = self.explicit_scf_props()
+        return runtype, excited, props
+
+    def check_ref(self):
+        """Compare runtime results against the reference, driven by the
+        regression registry (an allowlist: exactly the declared quantities for
+        this runtype/method/properties are compared)."""
         ref_file = self.input_file.replace('.inp', '.json')
         runtime_data = self.get_data()
         runtime_data.update(self.get_results())
-        skip_keys = [
-            'OQP::VEC_MO_A', 'OQP::VEC_MO_B',
-            'OQP::td_abxc', 'OQP::td_bvec_mo', 'OQP::td_mrsf_density',
-            'OQP::td_states_overlap', 'OQP::state_sign', 'OQP::td_states_phase',
-            'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
-            'OQP::soc_evec_re', 'OQP::soc_evec_im', 'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
-            'OQP::dc_matrix', 'OQP::nac_matrix', 'OQP::DM_A', 'OQP::DM_B', 'OQP::DM_B', 'E_MO_A', 'OQP::Hcore',
-            'OQP::SM', 'OQP::TM', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B', 'OQP::WAO',
-            'OQP::mrsf_ekt_density_mo', 'OQP::mrsf_ekt_lagrangian_mo', 'OQP::mrsf_ekt_fock_mo',
-            'OQP::mrsf_ekt_orbitals_mo', 'OQP::mrsf_ekt_eigenvalues', 'OQP::mrsf_ekt_strengths',
-            'OQP::hf_hessian',
-            'json', 'symmetry_metadata'
-        ]
-        tdhf_type = self.config.get('tdhf', {}).get('type')
-        required_ref_keys = []
-        if tdhf_type in ('mrsf_ekt_ip', 'mrsf_ekt_ea') or runtype == 'ekt':
-            required_ref_keys.append('mrsf_ekt')
-
-        if runtype in ['energy', 'ekt']:
-            skip_keys.append('grad')
-            skip_keys.append('hess')
-
-        if runtype in ['grad', 'optimize', 'meci', 'mep']:
-            skip_keys.append('hess')
-
-        if runtype in ['hess', 'nacme', 'nac', 'soc']:
-            skip_keys.append('grad')
+        runtype, excited, props = self.regression_context()
 
         message = ''
         total_diff = 0
 
-        if os.path.exists(ref_file):
-            message += f'   PyOQP reference data {ref_file}\n'
-
-            with open(ref_file, 'r') as indata:
-                ref_data = json.load(indata)
-
-            # Hessian runs write detailed Hessian references to a sidecar
-            # <input>.hess.json. Keep the primary restart/reference JSON
-            # compact, but compare the runtime hess matrix against the
-            # sidecar when the primary hess field is intentionally empty.
-            if runtype == 'hess' and ref_data.get('hess') == []:
-                hess_ref_file = self.input_file.replace('.inp', '.hess.json')
-                if os.path.exists(hess_ref_file):
-                    with open(hess_ref_file, 'r') as hess_indata:
-                        hess_ref_data = json.load(hess_indata)
-                    if 'hessian' in hess_ref_data:
-                        ref_data['hess'] = hess_ref_data['hessian']
-
-            for key in required_ref_keys:
-                if key not in ref_data:
-                    total_diff += 1.0
-                    message += f'   PyOQP missing reference {key:<20} ... failed (1.00000000)\n'
-
-            for key, value in ref_data.items():
-                if key in skip_keys:
-                    continue
-                if key not in runtime_data:
-                    flag, diff = 'failed', 1.0
-                else:
-                    flag, diff = compare_data(runtime_data[key], value)
-                total_diff += diff
-                message += f'   PyOQP checking {key:<20} ... {flag} ({diff:.8f})\n'
-        else:
+        if not os.path.exists(ref_file):
             message += '   PyOQP reference data is not found (skip and save data)\n'
-            self.save_data()
+            # A freshly generated reference keeps only the registry keys.
+            self.save_data(lean=True)
+            return message, total_diff
+
+        message += f'   PyOQP reference data {ref_file}\n'
+        with open(ref_file, 'r') as indata:
+            ref_data = json.load(indata)
+
+        compare = regkeys.keys_to_compare(runtype, excited, props)
+
+        # Vibrational quantities (hessian/freqs/IR/Raman) live in the
+        # <input>.hess.json sidecar; the matching runtime sidecar was written
+        # next to the run log by save_freqs(). Load both lazily.
+        ref_side = runtime_side = {}
+        if any(e.source == 'sidecar' for e in compare):
+            ref_side = _load_json(self.input_file.replace('.inp', '.hess.json'))
+            runtime_side = _load_json(self.log.replace('.log', '.hess.json'))
+
+        _MISSING = object()
+        for e in compare:
+            if e.source == 'sidecar':
+                refv = ref_side.get(e.field(), _MISSING)
+                rtv = runtime_side.get(e.field(), _MISSING)
+            else:
+                refv = ref_data.get(e.key, _MISSING)
+                rtv = runtime_data.get(e.key, _MISSING)
+
+            # Reference missing the key: a failure only if the key is required.
+            if refv is _MISSING or refv is None or refv == []:
+                if e.required:
+                    total_diff += 1.0
+                    message += f'   PyOQP missing reference {e.key:<20} ... failed (1.00000000)\n'
+                continue
+            if rtv is _MISSING or rtv is None:
+                total_diff += 1.0
+                message += f'   PyOQP checking {e.key:<20} ... failed (runtime missing)\n'
+                continue
+
+            a, b = rtv, refv
+            if e.phase_invariant:   # sign/phase ambiguous -> compare magnitudes
+                a, b = _abs_nested(a), _abs_nested(b)
+            flag, diff = compare_data(a, b, skip_sub=e.skip_sub, rtol=e.rtol)
+            total_diff += diff
+            message += f'   PyOQP checking {e.key:<20} ... {flag} ({diff:.8f})\n'
 
         return message, total_diff
 
 
-def compare_data(data_1, data_2):
+def compare_data(data_1, data_2, skip_sub=(), rtol=0.0):
     """
     Compute the numerical differences between two arrays
+
+    ``skip_sub`` names dict sub-keys to ignore during comparison (e.g. the
+    phase/sign-ambiguous EKT orbital vectors); the registry supplies these per
+    quantity so they are declared in one place.
+
+    ``rtol`` (0 = exact absolute compare) sets a relative tolerance: a value is
+    counted as matching when ``|a-b| <= rtol*|b|``, and only the excess beyond
+    that tolerance contributes to the reported diff. Used for large-magnitude
+    quantities (e.g. SOC, ~1e5 cm^-1) where the absolute round(diff,4) gate
+    would otherwise demand far more significant figures than ULP-level noise.
     """
     if isinstance(data_1, dict) or isinstance(data_2, dict):
         if not isinstance(data_1, dict) or not isinstance(data_2, dict):
             return 'failed', 1.0
         diff = 0.0
         for key in sorted(data_2):
-            if key in ('orbitals_mo', 'dyson_orbitals_mo'):
-                # EKT orbital vectors are phase/sign ambiguous between runs;
-                # eigenvalues and pole strengths provide the stable regression
-                # signal for the structured EKT result.
+            if key in skip_sub:
                 continue
             if key not in data_1:
                 diff += 1.0
                 continue
-            _, subdiff = compare_data(data_1[key], data_2[key])
+            _, subdiff = compare_data(data_1[key], data_2[key],
+                                      skip_sub=skip_sub, rtol=rtol)
             diff += subdiff
         if np.round(diff, 4) > 0:
             return 'failed', diff
@@ -1727,7 +1857,13 @@ def compare_data(data_1, data_2):
         # Use the maximum element-wise deviation instead of an L1 sum so
         # vector-valued references are judged by per-value numerical drift,
         # not by the number of states/components in the vector.
-        diff = float(np.max(np.abs(arr_1 - arr_2)))
+        absdiff = np.abs(arr_1 - arr_2)
+        if rtol > 0:
+            # Count only the deviation in excess of the per-element relative
+            # tolerance, so noise within rtol*|ref| passes while a genuine
+            # regression still shows up in the reported diff.
+            absdiff = np.maximum(0.0, absdiff - rtol * np.abs(arr_2))
+        diff = float(np.max(absdiff))
     if np.round(diff, 4) > 0:
         return 'failed', diff
 

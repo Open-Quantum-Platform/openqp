@@ -84,7 +84,7 @@ contains
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
-      get_mrsf_transition_density, get_jacobi, umrsfssqu
+      get_mrsf_transition_density, get_jacobi, umrsfssqu, mrsf_set_fp32
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use oqp_linalg
@@ -131,6 +131,7 @@ contains
     integer :: imax
     integer :: ierr
     logical :: converged
+    real(kind=dp) :: rc_save, rc_new
     real(kind=dp) :: mxerr, cnvtol, scale_exch
     real(kind=dp) :: spc_scale_coco, spc_scale_ovov, spc_scale_coov
     integer :: maxvec, mrst, nstates, target_state
@@ -241,18 +242,9 @@ contains
 
     nvec = min(max(nstates,6), mxvec)
 
-    call infos%dat%remove_records(tags_alloc)
-
-    call infos%dat%reserve_data(OQP_td_bvec_mo, TA_TYPE_REAL64, &
-        xvec_dim*nstates, (/xvec_dim, nstates/), comment=OQP_td_bvec_mo_comment)
-    call infos%dat%reserve_data(OQP_td_t, TA_TYPE_REAL64, nbf2*2, (/ nbf2, 2 /), comment=OQP_td_t_comment)
-    call infos%dat%reserve_data(OQP_td_energies, TA_TYPE_REAL64, nstates, comment=OQP_td_energies_comment)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo_out)
-
-    call tagarray_get_data(infos%dat, OQP_td_t, td_t)
-    call tagarray_get_data(infos%dat, OQP_td_energies, mrsf_energies)
+    call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
+    call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
+    call infos%dat%alloc_or_die(OQP_td_energies, (/ nstates /), mrsf_energies, description=OQP_td_energies_comment)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
@@ -399,6 +391,28 @@ contains
     if (mrst==3) write(*,'(  5x,"Davidson algorithm for Triplet response states")')
     if (mrst==5) write(*,'(  5x,"Davidson algorithm for Quintet response states")')
     write(*,'(5x,46("="))')
+
+    ! Loosen the 2e integral cutoff for the MRSF RESPONSE build only. The
+    ! response is built on the converged orbitals, so it tolerates a far looser
+    ! cutoff than the SCF default (5e-11). DEFAULT 1e-8 -- measured exact to the
+    ! printed precision (<<1 ueV, far below the ~5e-5 regression tolerance and
+    ! the iterative conv tolerance) -- removes integrals the response cannot
+    ! resolve, cutting the integral COUNT (eval + digestion) for a modest free
+    ! speedup that grows with system size. Override via env OQP_MRSF_RESP_CUTOFF
+    ! (a.u.): set looser (e.g. 1e-7/1e-6) for more speed at ueV cost, or set to
+    ! the SCF cutoff (5e-11) to recover the previous exact-tight behavior.
+    ! max(SCF cutoff, requested) never goes tighter than the SCF integrals.
+    ! Restored after the response so SCF / later steps are unaffected.
+    ! Response 2e cutoff from [tdhf] resp_cutoff (infos%control%mrsf_resp_cutoff,
+    ! default 1e-8). max(SCF cutoff, requested) never goes tighter than SCF.
+    rc_save = infos%control%int2e_cutoff
+    rc_new = infos%control%mrsf_resp_cutoff
+    if (rc_new <= 0.0_dp) rc_new = 1.0e-8_dp
+    infos%control%int2e_cutoff = max(rc_save, rc_new)
+
+    ! FP32 response digestion from [tdhf] fp32 (infos%control%mrsf_fp32). Also
+    ! reaches the z-vector gradient, which reuses the same process-global flag.
+    call mrsf_set_fp32(int(infos%control%mrsf_fp32))
 
     ! Initialize ERI (Electron Repulsion Integrals) calculations
     call int2_driver%init(basis, infos)
@@ -749,6 +763,7 @@ contains
     call flush(iw)
 
     call int2_driver%clean()
+    infos%control%int2e_cutoff = rc_save
 
     call measure_time(print_total=1, log_unit=iw)
     close(iw)

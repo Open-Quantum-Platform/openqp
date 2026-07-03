@@ -30,7 +30,7 @@ execute_process(
 
 execute_process(
     COMMAND
-        ${Python3_EXECUTABLE} "-c" "from distutils.sysconfig import get_config_var; print(get_config_var('EXT_SUFFIX'))"
+        ${Python3_EXECUTABLE} "-c" "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     OUTPUT_VARIABLE _cffi_ext_suffix
     ERROR_QUIET
     OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -70,6 +70,17 @@ add_custom_target(liboqp
     DEPENDS
         ${CMAKE_CURRENT_BINARY_DIR}/_oqp${_cffi_ext_suffix}
 )
+
+if(APPLE)
+  add_custom_command(
+    TARGET liboqp
+    POST_BUILD
+    COMMAND install_name_tool -change @rpath/liboqp.dylib
+            @loader_path/liboqp.dylib
+            ${CMAKE_CURRENT_BINARY_DIR}/_oqp.abi3${OQP_ABI3_SUFFIX}
+    COMMENT "Rewriting PyOQP extension load path for package-local liboqp.dylib"
+  )
+endif()
 
 add_dependencies(liboqp oqp)
 

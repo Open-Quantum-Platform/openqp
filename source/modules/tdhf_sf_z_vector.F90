@@ -43,12 +43,15 @@ contains
     use mathlib, only: pack_matrix, unpack_matrix
     use oqp_linalg
     use printing, only: print_module_info
-    use zvector_common, only: sanitize_zvector_preconditioner
+    use zvector_common, only: sanitize_zvector_preconditioner, &
+      zv_opts_t, zv_read_opts, zv_prog_tau
 
     implicit none
 
     character(len=*), parameter :: subroutine_name = "tdhf_sf_z_vector"
     real(kind=dp), parameter :: SF_ZVEC_DENOMINATOR_FLOOR = 1.0d-12
+    type(zv_opts_t) :: zvo
+    real(kind=dp) :: zv_rc_tight
 
     type(basis_set), pointer :: basis
     type(information), target, intent(inout) :: infos
@@ -134,6 +137,10 @@ contains
   ! Parameter it should be inputed later
   ! convergence tolerance in the iterative TD-DFT step.
     cnvtol = infos%tddft%zvconv
+    ! Shared z-vector perf opt-ins (env OQP_SF_ZV_*); progressive screening
+    ! default ON, zvconv override default off (see zvector_common).
+    call zv_read_opts(zvo, "SF")
+    if (zvo%conv_user > 0.0_dp) cnvtol = zvo%conv_user
 
     nocca = infos%mol_prop%nelec_A
     nvira = nbf-noccA
@@ -173,16 +180,9 @@ contains
 
     if( ok/=0 ) call show_message('Cannot allocate memory', with_abort)
 
-    call infos%dat%remove_records(tags_alloc)
-
-    call infos%dat%reserve_data(OQP_WAO, TA_TYPE_REAL64, nbf_tri, comment=OQP_WAO_comment)
-    call infos%dat%reserve_data(OQP_td_p, TA_TYPE_REAL64, nbf_tri*2, (/ nbf_tri, 2 /), comment=OQP_td_p_comment)
-    call infos%dat%reserve_data(OQP_td_abxc, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_td_abxc)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_WAO, wao)
-    call tagarray_get_data(infos%dat, OQP_td_p, td_p)
-    call tagarray_get_data(infos%dat, OQP_td_abxc, td_abxc)
+    call infos%dat%alloc_or_die(OQP_WAO, (/ nbf_tri /), wao, description=OQP_WAO_comment)
+    call infos%dat%alloc_or_die(OQP_td_p, (/ nbf_tri, 2 /), td_p, description=OQP_td_p_comment)
+    call infos%dat%alloc_or_die(OQP_td_abxc, (/ nbf, nbf /), td_abxc, description=OQP_td_abxc)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
@@ -201,6 +201,9 @@ contains
     call sfdmat(bvec_mo(:,infos%tddft%target_state), td_abxc, mo_a, ta, tb, nocca, noccb)
 
   ! Initialize ERI calculations
+    ! Progressive screening keeps init at the tight cutoff (full pair list) and
+    ! ramps the run-time threshold per CG iteration; restore tight for the tail.
+    zv_rc_tight = infos%control%int2e_cutoff
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
@@ -329,6 +332,7 @@ contains
     call flush(iw)
 
     call run_sf_cg_zvector()
+    if (zvo%prog_on) call int2_driver%set_cutoff(zv_rc_tight)
 
 
 ! -----------------------------------------------
@@ -473,6 +477,10 @@ contains
         call orthogonal_transform('t', nbf, mo_a, wrk1, pa(:,:,1), wrk3)
   !     Beta
         call orthogonal_transform('t', nbf, mo_b, wrk2, pa(:,:,2), wrk3)
+
+  !     Progressive screening: loosen cutoff while the residual is large, pinned
+  !     tight near convergence (zv_prog_tau); restored after the loop.
+        if (zvo%prog_on) call int2_driver%set_cutoff(zv_prog_tau(zvo, error, zv_rc_tight))
 
   !     (A+B)*PK
         call int2_data%clean()

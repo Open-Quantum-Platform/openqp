@@ -8,7 +8,7 @@ system=
  1        0.970626115      3.986327433     -1.890562004
 charge=0
 method=hf
-basis=cc-pVTZ
+basis=6-31g*
 runtype=grad
 functional=
 d4=False

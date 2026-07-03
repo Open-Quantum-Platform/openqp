@@ -83,24 +83,15 @@ contains
     ndtlf = infos%tddft%tlf
 
     ! Allocate data for outputing in python level
-    call infos%dat%remove_records(tags_alloc)
-    call infos%dat%reserve_data(OQP_td_states_phase, ta_type_real64, &
-          nstates, (/ nstates /), comment=OQP_td_states_phase_comment)
-    call infos%dat%reserve_data(OQP_td_states_overlap, ta_type_real64, &
-          nstates*nstates, (/ nstates, nstates /), comment=OQP_td_states_overlap_comment)
-    call infos%dat%reserve_data(OQP_nac, ta_type_real64, &
-          nstates*nstates, (/ nstates, nstates /), comment=OQP_nac_comment)
+    call infos%dat%alloc_or_die(OQP_td_states_phase, (/ nstates /), td_states_phase, description=OQP_td_states_phase_comment)
+    call infos%dat%alloc_or_die(OQP_td_states_overlap, (/ nstates, nstates /), td_states_overlap, description=OQP_td_states_overlap_comment)
+    call infos%dat%alloc_or_die(OQP_nac, (/ nstates, nstates /), nac_out, description=OQP_nac_comment)
 
     ! Load data from python level
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
     call tagarray_get_data(infos%dat, OQP_overlap_mo, overlap_mo)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo_old, bvec_mo_old)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, with_abort)
-    call tagarray_get_data(infos%dat, OQP_td_states_phase, td_states_phase)
-    call tagarray_get_data(infos%dat, OQP_td_states_overlap, td_states_overlap)
-    call tagarray_get_data(infos%dat, OQP_nac, nac_out)
 
     allocate(bvec(xvec_dim,nstates), &
              bvec_old(xvec_dim,nstates), &

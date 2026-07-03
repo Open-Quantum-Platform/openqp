@@ -16,6 +16,7 @@ method=hf
 type=huckel
 
 [scf]
+stability=true
 type=uhf
 multiplicity=3
 

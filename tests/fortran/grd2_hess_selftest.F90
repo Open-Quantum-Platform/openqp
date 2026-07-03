@@ -60,6 +60,10 @@ contains
     ! Fixed closed-shell RHF density-fetch object (same one the gradient uses)
     gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = basis%nbf )
     call gcomp%init()
+    select type (gcomp)
+    class is (grd2_rhf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
 
     allocate(hess_an(n3,n3), hess_fd(n3,n3), source=0.0_dp)
     allocate(de_p(3,natom), de_m(3,natom))
@@ -188,6 +192,10 @@ contains
 
     gcomp = grd2_rhf_compute_data_t( da = dmat_a, hfscale = 1.0_dp, nbf = nbf )
     call gcomp%init()
+    select type (gcomp)
+    class is (grd2_rhf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
 
     ! analytic skeleton (1e + 2e, no nuclear repulsion)
     call hess_ee_overlap(basis, wlag, han)
@@ -343,6 +351,10 @@ contains
     gcomp = grd2_uhf_compute_data_t( da = dmat_a, db = dmat_b, &
                                      hfscale = 1.0_dp, nbf = nbf )
     call gcomp%init()
+    select type (gcomp)
+    class is (grd2_uhf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
 
     ! analytic skeleton (1e + 2e, no nuclear repulsion)
     call hess_ee_overlap(basis, wlag, han)

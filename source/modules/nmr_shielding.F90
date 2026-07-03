@@ -276,9 +276,8 @@ contains
     ! ---- Store isotropic shielding (ppm) to a tagarray for JSON output ----
     block
       real(kind=8), contiguous, pointer :: nmrout(:)
-      call infos%dat%reserve_data(OQP_nmr_shielding, TA_TYPE_REAL64, 5*nat, &
-                                  comment=OQP_nmr_shielding_comment)
-      call tagarray_get_data(infos%dat, OQP_nmr_shielding, nmrout)
+      call infos%dat%alloc_or_die(OQP_nmr_shielding, (/ 5*nat /), nmrout, &
+                                  description=OQP_nmr_shielding_comment)
       do i = 1, nat
         nmrout(5*(i-1)+1) = siso_dia(i)
         nmrout(5*(i-1)+2) = siso_para(i)

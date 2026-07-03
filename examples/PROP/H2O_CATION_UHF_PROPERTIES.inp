@@ -1,0 +1,22 @@
+# HF/6-31G*/UHF/ENERGY of the H2O+ cation (open-shell doublet) with SCF
+# property analysis. Covers the unrestricted path for the electric dipole and
+# Mulliken/Lowdin/RESP atomic charges (RESP constrains to the +1 total charge).
+[input]
+system=
+   8   0.000000000   0.000000000  -0.041061554
+   1  -0.533194329   0.533194329  -0.614469223
+   1   0.533194329  -0.533194329  -0.614469223
+charge=1
+runtype=energy
+basis=6-31g*
+method=hf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=2
+type=uhf
+
+[properties]
+scf_prop=el_mom,mulliken,lowdin,resp

@@ -173,6 +173,7 @@ module int2_compute
     procedure, public, pass :: init => int2_compute_t_init
     procedure, public, pass :: enable_petite => int2_compute_t_enable_petite
     procedure, public, pass :: set_screening => int2_compute_t_set_screening
+    procedure, public, pass :: set_cutoff => int2_compute_t_set_cutoff
     procedure, public, pass :: clean => int2_compute_t_clean
     procedure, public, pass :: run => int2_run
     procedure, public, pass :: run_generic => int2_twoei
@@ -437,6 +438,25 @@ contains
     class(int2_compute_t), intent(inout) :: this
     call ints_exchange(this%basis, this%schwarz_ints_regular, rys_only=this%rys_only)
   end subroutine int2_compute_t_set_screening
+
+!###############################################################################
+
+!> @brief Update only the run-time integral-screening threshold (no rebuild).
+!> @detail The Schwarz bounds (set_screening) and the shell-pair list (init) are
+!>   cutoff-independent / superset-safe, so changing the quartet/pair screening
+!>   threshold is just a scalar update of `this%cutoffs` using the same scaling
+!>   as init. This enables progressive (iteration-dependent) screening: a driver
+!>   initialised at the TIGHT cutoff can be loosened during the early, inexact
+!>   phase of an iterative solve and pinned back to tight before convergence so
+!>   the final result is unchanged. The exponent cutoff is kept fixed (as init).
+  subroutine int2_compute_t_set_cutoff(this, cutoff)
+    implicit none
+    class(int2_compute_t), intent(inout) :: this
+    real(kind=dp), intent(in) :: cutoff
+    real(kind=dp), parameter :: ec1 = 1.0d-02, ec2 = 1.0d-04
+    real(kind=dp), parameter :: cx1 = 25.0d+00
+    call this%cutoffs%set(cutoff, ec1*cutoff, ec2*cutoff, cx1*log(10.0d0))
+  end subroutine int2_compute_t_set_cutoff
 
 !###############################################################################
 

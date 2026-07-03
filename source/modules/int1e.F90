@@ -87,18 +87,15 @@ contains
     nbf2 = basis%nbf*(basis%nbf+1)/2
     nat = ubound(infos%atoms%zn,1)
 
-!   If you remove records, you removes the tagarray of OQP_mm_potential defined in Python.
-    call infos%dat%remove_records(tags_general)
 !   The overlap matrix changes, so the cached Q = S^(-1/2) is stale
-    call infos%dat%remove_records(tags_stale)
+    call infos%dat%erase(tags_stale)
 
-    call infos%dat%reserve_data(OQP_SM, TA_TYPE_REAL64, nbf2, comment=OQP_SM_comment)
-    call infos%dat%reserve_data(OQP_TM, TA_TYPE_REAL64, nbf2, comment=OQP_TM_comment)
-    call infos%dat%reserve_data(OQP_Hcore, TA_TYPE_REAL64, nbf2, comment=OQP_Hcore_comment)
-    call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_SM, smat)
-    call tagarray_get_data(infos%dat, OQP_TM, tmat)
-    call tagarray_get_data(infos%dat, OQP_Hcore, Hcore)
+!   Allocate H, S and T and bind typed pointers (one call each). alloc_or_die
+!   allocates or reuses in place, so the Python-set OQP_mm_potential tagarray is
+!   preserved (only the stale SM/TM/Hcore/Q records are refreshed here).
+    call infos%dat%alloc_or_die(OQP_SM,    (/ nbf2 /), smat,  description=OQP_SM_comment)
+    call infos%dat%alloc_or_die(OQP_TM,    (/ nbf2 /), tmat,  description=OQP_TM_comment)
+    call infos%dat%alloc_or_die(OQP_Hcore, (/ nbf2 /), hcore, description=OQP_Hcore_comment)
 
 !   Create arrays of atomic coordinates and charges for one-electron code
     nbf = basis%nbf

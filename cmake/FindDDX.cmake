@@ -41,6 +41,11 @@ if(DDX_FOUND)
       IMPORTED_LOCATION "${DDX_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${DDX_INCLUDE_DIR}"
     )
+    # NOTE: a prebuilt shared libddx leaves its BLAS/LAPACK symbols undefined, so
+    # on a flat-namespace linker (Linux) consumers must resolve them. INTERFACE_
+    # LINK_LIBRARIES is attached by the top-level CMakeLists.txt right after
+    # findLinearAlgebra() (this module runs before BLAS/LAPACK is resolved), so
+    # the same libraries the autobuilt path uses are propagated to DDX::ddx.
   endif()
 endif()
 

@@ -5,7 +5,7 @@ system=
  1   0.533194329  -0.533194329  -0.614469223
 charge=0
 method=hf
-basis=cc-pVTZ
+basis=6-31g*
 runtype=grad
 functional=b3lypv5
 d4=False

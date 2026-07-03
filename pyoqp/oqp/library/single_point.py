@@ -13,14 +13,36 @@ from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
 
-try:
-    from dftd4.interface import DampingParam, DispersionModel
+# DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
+# exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
+# there is no longer a Python <= 3.12 constraint.
+dftd_installed = 'dftd4 (native)' if hasattr(oqp.lib, 'oqp_dftd4_disp') else 'not available'
 
-    dftd_installed = 'dftd4'
-except ModuleNotFoundError:
-    from oqp.utils.matrix import DampingParam, DispersionModel
 
-    dftd_installed = 'not installed'
+def dftd4_native_disp(atoms, coordinates, functional, do_grad):
+    """DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp's native dftd4.
+
+    atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. 'pbe0'.
+    """
+    natom = len(atoms)
+    func = ('bhlyp' if functional.lower() in ('bhhlyp',) else functional).encode('ascii')
+    z = oqp.ffi.new('int[]', [int(a) for a in atoms])
+    xyz = oqp.ffi.new('double[]', np.ascontiguousarray(coordinates, dtype=np.float64).reshape(-1).tolist())
+    energy_ptr = oqp.ffi.new('double*')
+    grad_buf = oqp.ffi.new('double[]', natom * 3)
+    ier = oqp.ffi.new('int*')
+    oqp.lib.oqp_dftd4_disp(natom, z, xyz, func, len(func), int(do_grad),
+                           energy_ptr, grad_buf, ier)
+    if ier[0] != 0:
+        raise RuntimeError(f"dftd4: no D4 damping parameters for functional '{functional}'")
+    energy = energy_ptr[0]
+    if do_grad:
+        grad = np.frombuffer(oqp.ffi.buffer(grad_buf, natom * 3 * 8),
+                             dtype=np.float64).reshape(natom, 3).copy()
+    else:
+        grad = np.zeros((natom, 3))
+    return energy, grad
+
 
 from oqp.library.frequency import normal_mode, thermal_analysis
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
@@ -73,19 +95,10 @@ class LastStep(Calculator):
             do_grad = False
 
         atoms = mol.get_atoms()
-        coordinates = mol.get_system().reshape((-1, 3))
+        coordinates = mol.get_system().reshape((-1, 3))  # Bohr
         natom = len(atoms)
         if self.do_d4:
-            model = DispersionModel(atoms, coordinates)
-            func_for_d4 = 'bhlyp' if self.functional.lower() in ('bhhlyp') else self.functional
-            res = model.get_dispersion(DampingParam(method=func_for_d4),
-                                       grad=do_grad)
-
-            energy = res['energy']
-            if do_grad:
-                grad = res['gradient']
-            else:
-                grad = np.zeros((natom, 3))
+            energy, grad = dftd4_native_disp(atoms, coordinates, self.functional, do_grad)
         else:
             energy = 0.0
             grad = np.zeros((natom, 3))
@@ -454,8 +467,9 @@ class SinglePoint(Calculator):
         Data summary (OpenQP, 58 cells): C-DIIS is the best primary (wins 52/58, mean
         ~21 Fock builds vs A-DIIS 39, E-DIIS 53); the hard class is open-shell
         transition-metal systems (esp. DFT), where C-DIIS can stall/find a wrong basin
-        -> keep C-DIIS but enable the TRAH stability safeguard. The reactive escalation
-        ladder (DIIS->SOSCF->TRAH) remains the safety net for all classes.
+        -> keep C-DIIS and rely on the reactive escalation ladder
+        (DIIS->SOSCF->TRAH) as the safety net for all classes. The TRAH stability
+        safeguard is opt-in (scf.stability) and is never enabled here automatically.
 
         mode='ml' uses a trained, distilled model if shipped in pyoqp; otherwise it
         transparently falls back to these rules.
@@ -472,13 +486,12 @@ class SinglePoint(Calculator):
             except Exception:
                 used = 'ML(no model -> rules)'
 
-        # ROHF/UHF stability is the priority: ROKS is the MRSF-TDDFT reference, so an
-        # open-shell SCF that lands on a non-lowest (unstable) solution corrupts the
-        # excited-state calculation. Enable the stability safeguard for open-shell
-        # references (especially DFT/ROKS and transition-metal), where it matters most.
-        hard = f['open_shell'] and (f['transition_metal'] or f['is_dft'])
-        if used != 'ML-model' and hard:
-            stability = True
+        # Stability following is opt-in: it runs only when the user sets
+        # scf.stability in the input. The SCF manager never enables it on its
+        # own -- not even for the hard class (open-shell DFT/ROKS or
+        # transition-metal references), where it matters most. The reactive
+        # escalation ladder (DIIS->SOSCF->TRAH) remains the convergence safety
+        # net for all classes regardless.
 
         dump_log(self.mol, section='',
                  title='PyOQP SCF manager [%s]: %s%s%s%s -> primary=%s%s' % (
@@ -487,7 +500,7 @@ class SinglePoint(Calculator):
                      'TM ' if f['transition_metal'] else '',
                      'DFT' if f['is_dft'] else 'HF',
                      ' natom=%d' % f['natom'],
-                     primary, ' +stability' if (stability and hard) else ''))
+                     primary, ' +stability' if stability else ''))
         return primary, stability
 
     def _run_scf(self):
@@ -508,13 +521,14 @@ class SinglePoint(Calculator):
              ``scf.alternative_scf`` (back-compat) sets only the final method.
              The primary converger is dropped from the chain and duplicates are
              removed while preserving order.
-          3. **Stability safeguard** (``scf.stability``, default on) — seed a
+          3. **Stability safeguard** (``scf.stability``, default off,
+             opt-in) — when the user requests it in the input, seed a
              stability-following TRAH pass from the converged orbitals.  At a
              genuine minimum this is a ~0-iteration no-op; when the converged
              point is an unstable saddle it relaxes to the lowest solution.
              This catches the case where DIIS *converges* to a non-aufbau /
              non-lowest open-shell (UHF/ROHF) solution and would otherwise be
-             returned silently.
+             returned silently.  It is never enabled automatically.
 
         Returns
         -------
@@ -567,12 +581,20 @@ class SinglePoint(Calculator):
             converged = self.mol.mol_energy.SCF_converged
 
         # --- Stage 3: stability safeguard ---
-        # Applied to ground-state targets (method='hf'), where a non-lowest SCF
-        # solution would be the returned result.  Skipped for excited-state
-        # (tdhf) runs: there the SCF is an intermediate reference and the extra
-        # TRAH pass can energy-invariantly re-canonicalize orbitals, perturbing
-        # sensitive (e.g. range-separated MRSF) excited-state gradients.
-        if converged and stability and primary != 'trah' and self.method == 'hf':
+        # Applied only when the user opts in with [scf] stability=true.  Covers
+        # ground-state targets (method='hf') and spin-flip excited-state
+        # reference SCFs (method='tdhf' with type sf/mrsf/umrsf).  A
+        # DIIS-converged but *unstable* open-shell solution is just as wrong a
+        # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
+        # building MRSF on it makes the reference (and the excited states)
+        # disagree with the standalone SCF along a PES.  Do not apply this to
+        # ordinary closed-shell TDHF/TDA/RPA references.  The safeguard only
+        # KEEPS the relaxed orbitals when TRAH finds a genuinely lower solution
+        # (e_post < e_pre); an energy-invariant re-canonicalization (no lowering)
+        # is reverted below by restoring the snapshot.
+        td_type = str(getattr(self, 'td', '')).lower()
+        spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
+        if converged and stability and primary != 'trah' and (self.method == 'hf' or spin_flip_reference):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
@@ -1184,17 +1206,13 @@ class Hessian(Calculator):
         if not self.mol.config.get('input', {}).get('d4', False):
             return 0.0
 
-        try:
-            from dftd4.interface import DampingParam, DispersionModel
-        except Exception as exc:  # pragma: no cover - exercised only without dftd4
+        if not hasattr(oqp.lib, 'oqp_dftd4_disp'):
             raise RuntimeError(
-                'hess.type=analytical with input.d4=true requires the dftd4 package; '
-                'install dftd4 or use hess.type=numerical.'
-            ) from exc
+                'hess.type=analytical with input.d4=true requires native dftd4 '
+                'support in liboqp; rebuild OpenQP or use hess.type=numerical.'
+            )
 
         functional = self.mol.config['input']['functional'].lower() or 'hf'
-        func_for_d4 = 'bhlyp' if functional in ('bhhlyp',) else functional
-        param = DampingParam(method=func_for_d4)
 
         atoms = self.mol.get_atoms()
         dx = self.mol.config['hess']['dx']
@@ -1202,9 +1220,8 @@ class Hessian(Calculator):
         ncoord = flat.size
 
         def disp_grad(coord_flat):
-            model = DispersionModel(atoms, coord_flat.reshape((-1, 3)))
-            res = model.get_dispersion(param, grad=True)
-            return np.asarray(res['gradient'], dtype=float).reshape(-1)
+            _, grad = dftd4_native_disp(atoms, coord_flat.reshape((-1, 3)), functional, True)
+            return np.asarray(grad, dtype=float).reshape(-1)
 
         hess = np.zeros((ncoord, ncoord))
         for i in range(ncoord):
