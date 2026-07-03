@@ -37,6 +37,11 @@ SCHEMA = {
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
     },
+    "mp2": {
+        "variant": {"type": _string, "default": "mp2"},
+        "same_spin_scale": {"type": float, "default": "1.0"},
+        "opposite_spin_scale": {"type": float, "default": "1.0"},
+    },
     "properties": {
         "grad": {"type": int, "default": "0"},
         "scf_prop": {"type": _string, "default": ""},
@@ -282,6 +287,57 @@ $$$$
         self.assertEqual(config["input"]["functional"], "")
         self.assertEqual(config["scf"]["type"], "rhf")
 
+    def test_mp2_helper_sets_energy_reference_and_variant(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_mp2")
+            .molecule(geometry="water", basis="6-31g", charge=0, multiplicity=1)
+            .mp2(reference="uhf", variant="scs-mp2", conv=1.0e-10)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["scf"]["conv"], "1e-10")
+        self.assertEqual(config["mp2"]["variant"], "scs-mp2")
+
+    def test_mp2_helper_clears_prior_dft_and_sets_custom_scales(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="reuse_as_mp2")
+            .molecule(geometry="water", basis="6-31g*")
+            .dft("pbe", runtype="grad")
+            .mp2(same_spin_scale=0.5, opposite_spin_scale=1.1)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["runtype"], "energy")
+        self.assertEqual(config["mp2"]["variant"], "custom")
+        self.assertEqual(config["mp2"]["same_spin_scale"], "0.5")
+        self.assertEqual(config["mp2"]["opposite_spin_scale"], "1.1")
+
+    def test_mp2_helper_rejects_non_energy_and_functional(self):
+        openqp = load_openqp_module()
+
+        with self.assertRaisesRegex(ValueError, "runtype='energy'"):
+            openqp.OpenQP(project="bad_mp2_runtype").mp2(runtype="grad")
+
+        with self.assertRaisesRegex(ValueError, "do not pass functional"):
+            openqp.OpenQP(project="bad_mp2_functional").theory("mp2", functional="pbe")
+
+        with self.assertRaisesRegex(ValueError, "variant='custom'"):
+            openqp.OpenQP(project="bad_mp2_scales").mp2(
+                variant="sos-mp2",
+                opposite_spin_scale=1.1,
+            )
+
     def test_mrsf_helper_uses_openqp_defaults(self):
         openqp = load_openqp_module()
         job = openqp.OpenQP(project="h2_mrsf").molecule("H 0 0 0; H 0 0 0.74").mrsf(nstate=4)
@@ -352,6 +408,18 @@ $$$$
         self.assertEqual(config["input"]["basis"], "6-31g*")
         self.assertEqual(config["scf"]["type"], "rhf")
 
+        mp2 = (
+            openqp.OpenQP(project="h2o_mp2_namespace")
+            .molecule(geometry="water", charge=0, multiplicity=1)
+            .theory.mp2(basis="6-31g", reference="uhf", variant="sos-mp2")
+        )
+        config = mp2.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["functional"], "")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "uhf")
+        self.assertEqual(config["mp2"]["variant"], "sos-mp2")
+
         mrsf = (
             openqp.OpenQP(project="h2o_mrsf_namespace")
             .molecule(geometry="water", charge=0)
@@ -416,6 +484,17 @@ $$$$
         self.assertEqual(config["scf"]["multiplicity"], "3")
         self.assertEqual(config["tdhf"]["type"], "sf")
         self.assertEqual(config["tdhf"]["nstate"], "3")
+
+        mp2 = (
+            openqp.OpenQP(project="h2o_mp2")
+            .molecule(geometry="water", charge=0)
+            .theory("mp2", basis="6-31g", reference="rohf", multiplicity=1)
+        )
+        config = mp2.to_input_dict()
+        self.assertEqual(config["input"]["method"], "mp2")
+        self.assertEqual(config["input"]["basis"], "6-31g")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "1")
 
         with self.assertRaisesRegex(ValueError, "TDDFT theory requires"):
             openqp.OpenQP(project="bad_tddft").theory("tddft")
