@@ -81,6 +81,64 @@ _LAPACK = """
 """
 CANON = set((_BLAS1 + _BLAS2 + _BLAS3 + _LAPACK).split())
 
+# CANON is the *known* set, but it cannot list every LAPACK routine (there are
+# hundreds). So a second, list-free heuristic catches a genuinely new routine:
+# a `call NAME(` whose NAME has the LAPACK shape [precision][matrix-type][op],
+# is NOT defined anywhere in the scanned OpenQP source (=> it is an external
+# symbol resolved from the BLAS/LAPACK library), and is NOT registered. Anchoring
+# on the real LAPACK matrix-type digraphs (ge, sy, he, po, tr, ...) -- not just
+# "[sdcz] + letters" -- is what keeps ordinary externals like `call solver(` or
+# `call second(` from being mistaken for LAPACK, while still flagging a new
+# `call dgesdd(` / `call dpotrs(` / `call dsyevr(` that CANON does not list.
+# (BLAS L1/L2/L3, which do not follow this scheme, are fully covered by CANON.)
+# Restricting this to `call NAME(` (never bare function-style refs, which produce
+# fragment false positives on names like `dftd4_calc`) and excluding
+# OpenQP-defined procedures completes the false-positive guard.
+BLAS_CALL_PAT = re.compile(
+    r"^[sdcz](?:bd|di|gb|ge|gg|gt|hb|he|hg|hp|hs|la|op|or|pb|po|pp|pt|"
+    r"sb|sp|st|sy|tb|tg|tp|tr|tz|un|up)[a-z0-9]{2,4}$")
+# Belt-and-suspenders: [sdcz]-initial subroutines that survive the digraph anchor
+# yet are not BLAS/LAPACK externals (none known today; kept as an explicit escape).
+INTRINSIC_SUB = set()
+
+DEF_RX = re.compile(r"\b(?:subroutine|function)\s+([a-z][a-z0-9_]*)", re.I)
+
+
+def scan_files():
+    """Fortran compiled into liboqp: all of source/, plus the tests/fortran/*.F90
+    bind(C) self-test harnesses that source/CMakeLists.txt appends to the library
+    target (they ship inside liboqp, so a raw call there evades the macOS alias
+    gate exactly like one in source/). Wrapper bodies are excluded by the caller."""
+    files = []
+    for root, _, names in os.walk(SRC):
+        for fn in names:
+            if fn.endswith((".F90", ".f90")):
+                files.append(os.path.normpath(os.path.join(root, fn)))
+    cml = os.path.join(SRC, "CMakeLists.txt")
+    try:
+        with open(cml, encoding="utf-8") as fh:
+            cml_txt = fh.read()
+    except OSError:
+        cml_txt = ""
+    for rel in re.findall(r"tests/fortran/([A-Za-z0-9_]+\.[Ff]90)", cml_txt):
+        p = os.path.normpath(os.path.join(REPO, "tests", "fortran", rel))
+        if os.path.exists(p):
+            files.append(p)
+    return files
+
+
+def defined_procedures(files):
+    """Names of every subroutine/function DEFINED in the scanned source. A
+    `call NAME(` to a name in this set is an internal routine, never a BLAS/LAPACK
+    external, so the shape heuristic must not flag it."""
+    defined = set()
+    for path in files:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                for m in DEF_RX.finditer(strip_comment(line)):
+                    defined.add(m.group(1).lower())
+    return defined
+
 
 def registered_syms():
     """Names in OQP_ACCELERATE_ILP64_SYMS (the wrapper/alias source of truth)."""
@@ -121,29 +179,36 @@ def main():
     func_rx = re.compile(r"(?<![\w%])([a-z][a-z0-9]+)\s*\(", re.I)
     defkw = re.compile(r"\b(subroutine|function|end|module|use|interface)\b", re.I)
 
+    files = [p for p in scan_files() if p not in WRAPPER_FILES]
+    defined = defined_procedures(files)
+
     violations = []
-    for root, _, files in os.walk(SRC):
-        for fn in files:
-            if not fn.endswith((".F90", ".f90")):
-                continue
-            path = os.path.normpath(os.path.join(root, fn))
-            if path in WRAPPER_FILES:
-                continue
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                lines = fh.readlines()
-            for i, line in enumerate(lines, 1):
-                code = strip_comment(line)
-                names = set()
-                m = call_rx.search(code)
-                if m:
-                    names.add(m.group(1).lower())
-                if not defkw.search(code):
-                    for fm in func_rx.finditer(code):
-                        names.add(fm.group(1).lower())
-                for name in names:
-                    if name in CANON and name not in reg:
+    for path in files:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+        for i, line in enumerate(lines, 1):
+            code = strip_comment(line)
+            # subroutine calls: flag known-BLAS and, via the shape heuristic,
+            # a new BLAS/LAPACK external that CANON does not list.
+            m = call_rx.search(code)
+            if m:
+                name = m.group(1).lower()
+                if name not in reg and (
+                    name in CANON
+                    or (BLAS_CALL_PAT.match(name)
+                        and name not in defined
+                        and name not in INTRINSIC_SUB)
+                ):
+                    violations.append(
+                        (os.path.relpath(path, REPO), i, name, line.strip()))
+            # BLAS/LAPACK *function* refs (ddot, dnrm2, dlamch, ...): limited to
+            # CANON so name fragments never produce false positives.
+            if not defkw.search(code):
+                for fm in func_rx.finditer(code):
+                    fn = fm.group(1).lower()
+                    if fn in CANON and fn not in reg:
                         violations.append(
-                            (os.path.relpath(path, REPO), i, name, line.strip()))
+                            (os.path.relpath(path, REPO), i, fn, line.strip()))
 
     if violations:
         seen, uniq = set(), []
@@ -152,21 +217,26 @@ def main():
             if k not in seen:
                 seen.add(k)
                 uniq.append(v)
-        print("PR RULE 1 VIOLATION: BLAS/LAPACK routine(s) referenced from source "
-              "but NOT registered in OQP_ACCELERATE_ILP64_SYMS.\n"
+        print("PR RULE 1 VIOLATION: BLAS/LAPACK routine(s) referenced from the "
+              "Fortran compiled into liboqp but NOT registered in "
+              "OQP_ACCELERATE_ILP64_SYMS.\n"
               "Such a routine has no oqp_*_i64 wrapper and no macOS Accelerate "
               "ILP64 alias, so the macOS build's check_accelerate_aliases gate will "
-              "fail and OQP_BLAS_INT=4 builds pass wrong-width integers.\n"
+              "fail (OpenQP is ILP64-only, so this is the failure that bites).\n"
               "Fix: add the base name to OQP_ACCELERATE_ILP64_SYMS in "
               "cmake/oqp_functions.cmake, add its oqp_<name>_i64 wrapper in "
               "source/mathlib/{blas,lapack}_wrap.F90, and rename it in "
-              "source/mathlib/oqp_linalg.F90 (see how dgels was added in ad43fae1).\n")
+              "source/mathlib/oqp_linalg.F90 (see how dgels was added in ad43fae1).\n"
+              "If a flagged name is an internal routine (not BLAS/LAPACK), it will "
+              "have a `subroutine`/`function` definition in the scanned source and "
+              "so should not be reported -- please open an issue if it is.\n")
         for rel, ln, name, txt in uniq:
             print(f"  {rel}:{ln}: {name}  ->  {txt}")
         print(f"\n{len(uniq)} unregistered BLAS/LAPACK reference(s).")
         return 1
 
-    print(f"OK: every BLAS/LAPACK routine referenced in source/ is registered in "
+    print(f"OK: every BLAS/LAPACK routine referenced in source/ and the "
+          f"tests/fortran/*.F90 harnesses linked into liboqp is registered in "
           f"OQP_ACCELERATE_ILP64_SYMS ({len(reg)} symbols).")
     return 0
 

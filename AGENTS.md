@@ -17,12 +17,20 @@ name (`call dgels(...)` resolves to `oqp_dgels_i64`).
 
 - Raw calls are only allowed **inside the wrapper modules**
   `source/mathlib/lapack_wrap.F90` and `source/mathlib/blas_wrap.F90`.
-- A raw call elsewhere breaks two things: the macOS Accelerate ILP64 alias check
-  (`cmake/check_accelerate_aliases.cmake`) and the ILP64 integer ABI on
-  `OQP_BLAS_INT=4` builds.
+- OpenQP is **ILP64-only** (`-fdefault-integer-8`, `BLA_SIZEOF_INTEGER=8`), so a
+  bare call binds correct-width 8-byte integers on Linux. The failure a stray raw
+  call causes is on **macOS Accelerate**, whose classic Fortran symbols are LP64:
+  every referenced name must be interposed onto its `$NEWLAPACK$ILP64` variant via
+  the alias list, so a routine that is CALLED but not in `OQP_ACCELERATE_ILP64_SYMS`
+  fails `cmake/check_accelerate_aliases.cmake`.
 - If a wrapper is missing, add `oqp_<name>_i64` to the wrapper module, add the
   `<name> => oqp_<name>_i64` rename in `source/mathlib/oqp_linalg.F90`, and add
   the routine to `OQP_ACCELERATE_ILP64_SYMS` in `cmake/oqp_functions.cmake`.
+- The **enforced minimum** is registration in `OQP_ACCELERATE_ILP64_SYMS`, not
+  literal `use oqp_linalg`: a number of long-standing sites call bare BLAS
+  directly and are correct on the ILP64-only build (they predate the wrapper
+  convention). New code should still prefer `use oqp_linalg` for clarity, but the
+  CI gate rejects any *unregistered* BLAS/LAPACK routine regardless of call style.
 
 **Enforced by CI:** `tools/check_blas_wrapper.py` (the `PR policy` workflow)
 fails the build if any BLAS/LAPACK routine referenced from `source/` (outside the

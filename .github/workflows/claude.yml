@@ -53,10 +53,12 @@ jobs:
             In addition to correctness/bug review, check the PR against the four
             contribution rules in AGENTS.md (in the repo root) and report each
             explicitly:
-              1. BLAS/LAPACK calls go through the oqp_linalg wrapper (no raw
-                 dgemm/dgels/dgetrf/... outside source/mathlib/lapack_wrap.F90
-                 and blas_wrap.F90); new routines are registered in
-                 OQP_ACCELERATE_ILP64_SYMS.
+              1. Every BLAS/LAPACK routine the PR references is registered in
+                 OQP_ACCELERATE_ILP64_SYMS (cmake/oqp_functions.cmake) so it gets
+                 an oqp_<name>_i64 wrapper and a macOS Accelerate ILP64 alias; new
+                 code should prefer `use oqp_linalg`. (OpenQP is ILP64-only, so the
+                 operative failure of an unregistered routine is the macOS alias
+                 gate.) The PR policy lint enforces the registration part.
               2. New functionality (runtype/method/[section]/keyword/flag) adds a
                  small, fast example under examples/.
               3. User-facing additions have a pythonic Python-API addition in
