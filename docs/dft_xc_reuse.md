@@ -115,11 +115,11 @@ to make the negative result reproducible (`[SCFTIME] ... xc_reused=T/F`).
 ## Reproduce
 
 ```sh
-# build (note LP64 BLAS flag, required on macOS/Accelerate):
+# build (macOS resolves to Accelerate ILP64 automatically):
 cmake -G Ninja -B build -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 \
   -DCMAKE_Fortran_COMPILER=gfortran-15 -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=ON -DENABLE_OPENMP=ON -DENABLE_PYTHON=OFF -DUSE_LIBINT=OFF \
-  -DLINALG_LIB=auto -DLINALG_LIB_INT64=OFF
+  -DLINALG_LIB=auto
 ninja -C build oqp
 
 # run with timing, toggling the optimizations:

@@ -2049,7 +2049,13 @@ contains
     integer(kind=4) :: ires
     integer :: na, i, j, ifock
     logical :: is_a_repeat
-    integer :: opt_global, opt_lbfgs
+    ! NLOpt's f77-style API stores a C POINTER in the opt handle argument
+    ! (NLOpt documents it as integer*8), so the handles must be 8 bytes
+    ! REGARDLESS of the build's default integer width. With a default-width
+    ! declaration, LP64 builds (4-byte default integer, e.g. native macOS
+    ! Accelerate) let nlo_create() write an 8-byte pointer into 4-byte storage
+    ! => stack corruption => SIGSEGV (exit -11) in every EDIIS/ADIIS SCF.
+    integer(kind=8) :: opt_global, opt_lbfgs
     type(ediis_opt_data) :: t
 
     allocate(scf_conv_interp_result :: res)
