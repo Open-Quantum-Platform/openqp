@@ -51,6 +51,12 @@ jobs:
             # (LINALG_LIB_INT64=ON), so LINALG_LIB=OpenBLAS resolves this system
             # library and OpenQP (and ddX) link it directly -- no reference LAPACK
             # is compiled from source.
+            #
+            # Test-what-ships: OpenBLAS ILP64 is exactly the BLAS the Linux PyPI
+            # wheels bundle (build_wheels.yml), so these legs validate the shipped
+            # configuration. The Linux x86_64 SOURCE-build mandate (LINALG_LIB=auto
+            # -> Intel MKL ILP64) is not exercised here -- installing oneAPI on
+            # runners is impractical; it is validated manually on MKL machines.
             sudo apt-get install libopenblas64-dev
          - name: Install MPI (ubuntu)
            if: ${{ contains(matrix.os, 'ubuntu') }}
@@ -163,6 +169,91 @@ jobs:
               echo "::error::ddX-enabled build skipped a DDPCM example (OQP_ENABLE_DDX sentinel); ddX must be built and the PCM examples must run"
               exit 1
             fi
+
+   # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
+   # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
+   # resolve to Apple Accelerate and LINALG_LIB_INT64 defaults ON -- the
+   # uniform 8-byte (ILP64) integer model on all platforms, on macOS via
+   # Accelerate's $NEWLAPACK$ILP64 interface with the post-build alias guard
+   # (cmake/check_accelerate_aliases.cmake) failing the build on any LP64
+   # symbol leak. The classic LP64 interface remains an explicit macOS-only
+   # opt-out (-DLINALG_LIB_INT64=OFF), validated manually, not in CI.
+   macos-build:
+      name: macOS Accelerate ILP64 (${{ matrix.os }})
+      runs-on: ${{ matrix.os }}
+      strategy:
+         fail-fast: false
+         matrix:
+            # macos-15 = arm64 (Apple Silicon), macos-15-intel = x86_64. Both
+            # matter: past integer-ABI bugs manifested differently per arch
+            # (Apple Silicon ran, Intel crashed on the same build).
+            os: [macos-15, macos-15-intel]
+      steps:
+         - name: Checkout code
+           uses: actions/checkout@v4
+         - name: Setup Python
+           uses: actions/setup-python@v5
+           with:
+            python-version: '3.12'
+         - name: Install GCC toolchain
+           run: brew install gcc@15
+         - name: Get toolchain version for the externals cache key
+           id: toolchain
+           run: echo "gcc=$(gfortran-15 -dumpfullversion)" >> "$GITHUB_OUTPUT"
+         - name: Cache bundled externals
+           uses: actions/cache@v4
+           with:
+            path: ~/Library/Caches/openqp/externals
+            key: oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-accelerate-lp64-${{ hashFiles('external/CMakeLists.txt') }}
+            restore-keys: |
+               oqp-externals-${{ matrix.os }}-gcc${{ steps.toolchain.outputs.gcc }}-accelerate-lp64-
+         - name: Build & install OpenQP (pure defaults -> Accelerate ILP64)
+           env:
+            CC: gcc-15
+            CXX: g++-15
+            FC: gfortran-15
+           run: |
+            # No LINALG_LIB / LINALG_LIB_INT64: the platform policy must resolve
+            # them (macOS -> Apple Accelerate ILP64). Retry loop as in the Linux
+            # job: external deps are fetched via ExternalProject and upstream
+            # hosts intermittently 504; the externals cache persists across
+            # retries.
+            n=0
+            until pip install -v . \
+                --config-settings=cmake.define.CMAKE_C_COMPILER=gcc-15 \
+                --config-settings=cmake.define.CMAKE_CXX_COMPILER=g++-15 \
+                --config-settings=cmake.define.CMAKE_Fortran_COMPILER=gfortran-15; do
+              n=$((n + 1))
+              if [ "$n" -ge 3 ]; then
+                echo "::error::build failed after $n attempts"
+                exit 1
+              fi
+              echo "::warning::build attempt $n failed (likely a transient dependency download); retrying in 30s"
+              sleep 30
+            done
+         - name: Assert Accelerate is the linked BLAS
+           run: |
+            # The policy's whole point: a defaults build on macOS must link the
+            # system Accelerate framework -- not NetLib, not anything else.
+            # (import oqp prints a benign mpi4py warning line; take the last
+            # stdout line as the path.)
+            LIB=$(python -c "import glob, os, oqp; print(glob.glob(os.path.join(os.path.dirname(oqp.__file__), 'lib', 'liboqp*.dylib'))[0])" | tail -1)
+            echo "liboqp: $LIB"
+            otool -L "$LIB" | grep -q "Accelerate.framework" || {
+              echo "::error::liboqp does not link Accelerate.framework:"; otool -L "$LIB"; exit 1;
+            }
+         - name: Run example test suite
+           env:
+            OQP_TEST_OMP_THREADS: 1
+           run: |
+            # pipefail so a failing suite cannot be masked by tee (see the Linux
+            # job comment). This suite includes the PBE EDIIS/ADIIS examples that
+            # exercise the NLOpt handle path and the molden/basis-export examples
+            # that exercise the oqp_get_basis integer ABI -- the integer-width
+            # regressions this leg exists to catch, now under the ILP64
+            # interposition.
+            set -o pipefail
+            openqp --run_tests all | tee run_tests.out
 
 # NOTE: the two DDPCM smoke examples (examples/PCM/*.inp) run at conv=1e-6 -- see
 # the inline comment in each input. The energy-only ddPCM Fock coupling is

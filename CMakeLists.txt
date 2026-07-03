@@ -71,18 +71,13 @@ if(NOT LINALG_LIB IN_LIST linalg_lib_options)
     message(FATAL_ERROR "LINALG_LIB must be one of ${linalg_lib_options}")
 endif()
 
-# BLAS/LAPACK integer width. Default follows the native-BLAS platform policy:
-# macOS defaults to LP64 because the mandated backend (Apple Accelerate) only
-# provides an LP64 (4-byte integer) interface; everywhere else ILP64 (8-byte).
-# Both remain explicitly overridable, e.g. -DLINALG_LIB=OpenBLAS
-# -DLINALG_LIB_INT64=ON for an ILP64 build on macOS.
-if(APPLE)
-    set(_oqp_linalg_int64_default OFF)
-else()
-    set(_oqp_linalg_int64_default ON)
-endif()
-option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ${_oqp_linalg_int64_default})
-unset(_oqp_linalg_int64_default)
+# BLAS/LAPACK integer width: ILP64 (8-byte) by default on EVERY platform --
+# one uniform integer model across all hardware. On macOS this uses
+# Accelerate's modern $NEWLAPACK$ILP64 interface via symbol interposition
+# (requires macOS >= 13.3; see findAccelerateILP64 in cmake/oqp_functions.cmake).
+# The classic LP64 Accelerate interface remains available as a macOS-only
+# explicit opt-out: -DLINALG_LIB_INT64=OFF.
+option(LINALG_LIB_INT64  "Use 64-bit integer interface to BLAS/LAPACK" ON)
 if(NOT LINALG_LIB_INT64 AND NOT APPLE)
     message(FATAL_ERROR
       "LP64 BLAS/LAPACK is supported only on macOS, primarily for native "

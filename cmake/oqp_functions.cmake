@@ -167,6 +167,98 @@ macro(validateOpenBLASPkgConfigInt64 _pc_module)
     endif()
 endmacro()
 
+# =================================================================
+# Accelerate ILP64 backend (macOS, LINALG_LIB_INT64=ON).
+#
+# Accelerate's classic Fortran symbols (dgemm_, dgesvd_, ...) are LP64
+# (4-byte integers) only. Since macOS 13.3 Accelerate ALSO ships a genuine
+# ILP64 (8-byte integer) BLAS/LAPACK behind suffixed symbols
+# (`dgemm$NEWLAPACK$ILP64`, ...). We interpose every classic name OpenQP
+# references onto its ILP64 variant with an ld alias-list FILE, so macOS
+# builds run 8-byte integers end-to-end exactly like MKL/OpenBLAS ILP64 on
+# Linux -- uniform integer model on all platforms, no LP64 special case, and
+# still zero bundled BLAS (Accelerate is a system framework).
+#
+# Two ld gotchas are baked in here (both verified the hard way):
+#   * use an alias-list FILE (-Wl,-alias_list,<file>), never inline
+#     -Wl,-alias,... -- the `$` in the symbol name gets shell-expanded to
+#     nothing by the sh that drives the link, silently aliasing to `_dgemm`;
+#   * the file format is "<real_symbol> <alias_name>" per line, i.e. the
+#     ILP64 symbol FIRST and the classic name as its alias.
+#
+# The symbol list below was generated from the real liboqp:
+#   nm -u liboqp.dylib | grep -E '^_[a-z][a-z0-9]+_$'
+# with every candidate link-probed against Accelerate for a
+# $NEWLAPACK$ILP64 variant (163/163 routable). If OpenQP gains a new
+# BLAS/LAPACK call that is missing here, the POST_BUILD guard
+# (cmake/check_accelerate_aliases.cmake) FAILS the build naming the symbol --
+# a stale list cannot silently ship a 4-byte routine into an 8-byte build.
+# =================================================================
+set(OQP_ACCELERATE_ILP64_SYMS
+    caxpy ccopy cdotc cdotu cgbmv cgemm cgemv cgerc cgeru chbmv chemm chemv
+    cher cher2 cher2k cherk chpmv chpr chpr2 cscal csrot csscal cswap csymm
+    csyr2k csyrk ctbmv ctbsv ctpmv ctpsv ctrmm ctrmv ctrsm ctrsv
+    dasum daxpy dcopy ddot dgbmv dgemm dgemv dgeqrf dger dgesv dgesvd dgetri
+    dgglse dlamch dnrm2 dorgqr dormqr drot drotm dsbmv dscal dsdot dspev
+    dspevx dspmv dspr dspr2 dswap dsyev dsyevd dsymm dsymv dsyr dsyr2 dsyr2k
+    dsyrk dsysv dsytrf dsytri dsytrs dtbmv dtbsv dtpmv dtpsv dtpttr dtrmm
+    dtrmv dtrsm dtrsv dtrttp dzasum dznrm2
+    icamax idamax isamax izamax
+    sasum saxpy scasum scnrm2 scopy sdot sdsdot sgbmv sgemm sgemv sger snrm2
+    srot srotm ssbmv sscal sspmv sspr sspr2 sswap ssymm ssymv ssyr ssyr2
+    ssyr2k ssyrk ssytrf ssytri ssytrs stbmv stbsv stpmv stpsv strmm strmv
+    strsm strsv
+    xerbla
+    zaxpy zcopy zdotc zdotu zdrot zdscal zgbmv zgemm zgemv zgerc zgeru zhbmv
+    zheev zhemm zhemv zher zher2 zher2k zherk zhpmv zhpr zhpr2 zscal zswap
+    zsymm zsyr2k zsyrk ztbmv ztbsv ztpmv ztpsv ztrmm ztrmv ztrsm ztrsv
+    CACHE INTERNAL "BLAS/LAPACK routines interposed onto Accelerate ILP64")
+
+function(oqp_accelerate_alias_file out_path)
+    set(_txt "")
+    foreach(_s IN LISTS OQP_ACCELERATE_ILP64_SYMS)
+        # "$" is literal in CMake strings; the line format is
+        # "<real symbol> <alias>": the ILP64 symbol is real, classic name aliases it.
+        string(APPEND _txt "_${_s}$NEWLAPACK$ILP64 _${_s}_\n")
+    endforeach()
+    file(WRITE "${out_path}" "${_txt}")
+endfunction()
+
+macro(findAccelerateILP64)
+    cleanBlasVars()
+    # Probe: link a stub with the FULL alias list. This validates at configure
+    # time that every symbol in OQP_ACCELERATE_ILP64_SYMS has a $NEWLAPACK$ILP64
+    # variant in this SDK's Accelerate (needs macOS >= 13.3) -- a missing one
+    # fails here with a clear story instead of at the liboqp link.
+    oqp_accelerate_alias_file("${CMAKE_BINARY_DIR}/_oqp_accel_ilp64_probe.alias")
+    file(WRITE "${CMAKE_BINARY_DIR}/_oqp_accel_ilp64_probe.f90" "program p\nend program\n")
+    try_compile(_OQP_ACC_ILP64_OK "${CMAKE_BINARY_DIR}/_oqp_accel_ilp64_probe_dir"
+        SOURCES "${CMAKE_BINARY_DIR}/_oqp_accel_ilp64_probe.f90"
+        LINK_LIBRARIES "-framework Accelerate"
+        LINK_OPTIONS "-Wl,-alias_list,${CMAKE_BINARY_DIR}/_oqp_accel_ilp64_probe.alias")
+    if(NOT _OQP_ACC_ILP64_OK)
+        message(FATAL_ERROR
+            "Accelerate's ILP64 interface (\$NEWLAPACK\$ILP64 symbols) is not "
+            "available from this SDK -- it requires macOS >= 13.3. Either update "
+            "macOS/Xcode, use the classic LP64 Accelerate interface with "
+            "-DLINALG_LIB_INT64=OFF, or pick an ILP64 backend explicitly, e.g. "
+            "-DLINALG_LIB=OpenBLAS.")
+    endif()
+    oqp_accelerate_alias_file("${CMAKE_BINARY_DIR}/accelerate_ilp64.alias")
+    set(OQP_ACC_ALIAS "${CMAKE_BINARY_DIR}/accelerate_ilp64.alias"
+        CACHE INTERNAL "Accelerate ILP64 alias list")
+    set(BLAS_FOUND   TRUE)
+    set(LAPACK_FOUND TRUE)
+    set(BLAS_LIBRARIES   "-framework Accelerate")
+    set(LAPACK_LIBRARIES "-framework Accelerate")
+    # ILP64: 8-byte integers on both sides, recorded as facts so the width
+    # gate holds on this path too.
+    set(BLAS_SIZEOF_INTEGER   8)
+    set(LAPACK_SIZEOF_INTEGER 8)
+    message(STATUS "BLAS/LAPACK: Apple Accelerate ILP64 (\$NEWLAPACK\$ILP64 interposition, "
+                   "${CMAKE_BINARY_DIR}/accelerate_ilp64.alias)")
+endmacro()
+
 # Handle "the required BLAS/LAPACK backend was not found".
 # Policy: NEVER fall back to the bundled NetLib reference BLAS silently -- that
 # is how unoptimized wheels shipped and how CI ended up testing a different
@@ -213,8 +305,12 @@ macro(findLinearAlgebra)
     # probing whatever BLAS happens to be installed. Environment probing made
     # the selected BLAS differ between wheels, CI, and user machines (and
     # shipped NetLib reference BLAS in the PyPI Linux wheels); the mandate
-    # makes every build path pick the same backend on the same hardware:
-    #     macOS (arm64 and x86_64)  -> Apple Accelerate (LP64)
+    # makes every build path pick the same backend on the same hardware,
+    # ALL with the uniform 8-byte (ILP64) integer model by default:
+    #     macOS (arm64 and x86_64)  -> Apple Accelerate ILP64
+    #                                  ($NEWLAPACK$ILP64 interposition; the
+    #                                  classic LP64 interface remains available
+    #                                  with -DLINALG_LIB_INT64=OFF)
     #     Linux x86_64              -> Intel MKL (ILP64)
     #     Linux aarch64             -> OpenBLAS (ILP64)
     # Platforms outside this table keep the legacy environment probe.
@@ -251,16 +347,23 @@ macro(findLinearAlgebra)
     elseif(linalg_lib STREQUAL netlib)
         # Explicit user choice of the bundled reference BLAS: do nothing.
 
-    else()
-      if(linalg_lib STREQUAL Apple AND LINALG_LIB_INT64)
-        # Accelerate's classic (Fortran-symbol) interface is LP64-only.
+    elseif(linalg_lib STREQUAL Apple AND LINALG_LIB_INT64)
+      # macOS with the default 8-byte integers: Accelerate's modern ILP64
+      # interface via symbol interposition (see findAccelerateILP64 above).
+      # FATALs internally if the SDK lacks $NEWLAPACK$ILP64 (macOS < 13.3).
+      # Externals that link BLAS themselves are not wired for the alias list
+      # yet -- refuse the combination rather than let them bind the classic
+      # LP64 symbols and corrupt (they are OFF by default).
+      if(ENABLE_DDX OR ENABLE_OPENTRAH)
         message(FATAL_ERROR
-            "LINALG_LIB resolves to Apple Accelerate, which only provides an "
-            "LP64 (4-byte integer) BLAS/LAPACK interface, but LINALG_LIB_INT64=ON "
-            "requests 8-byte BLAS integers. Configure with -DLINALG_LIB_INT64=OFF "
-            "(the macOS default) or pick an ILP64 backend explicitly, e.g. "
-            "-DLINALG_LIB=OpenBLAS.")
+            "ENABLE_DDX/ENABLE_OPENTRAH link BLAS/LAPACK directly and are not "
+            "yet wired for the Accelerate ILP64 alias interposition. Build them "
+            "with an ILP64 library instead (-DLINALG_LIB=OpenBLAS "
+            "-DLINALG_LIB_INT64=ON) or disable the feature on macOS.")
       endif()
+      findAccelerateILP64()
+
+    else()
       if(linalg_lib STREQUAL OpenBLAS)
         set(BLA_PREFER_PKGCONFIG ON)
         if(LINALG_LIB_INT64)
@@ -351,6 +454,19 @@ macro(findLinearAlgebra)
          set(_MKL_INTERFACE_LAYER "ILP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
       else()
          set(_MKL_INTERFACE_LAYER "LP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
+      endif()
+    elseif(linalg_lib STREQUAL Apple AND LINALG_LIB_INT64)
+      set(_LINALG_LIB_TYPE "Accelerate_ILP64" CACHE INTERNAL "_LIANLG_LIB_TYPE")
+      if(TARGET oqp)
+        target_link_libraries(oqp ${BLAS_LIBRARIES})
+        # Interpose every classic BLAS/LAPACK symbol onto its $NEWLAPACK$ILP64
+        # variant (see findAccelerateILP64), then verify at POST_BUILD that no
+        # classic LP64 symbol leaked through un-aliased -- a leak would run a
+        # 4-byte-integer routine inside this 8-byte build.
+        target_link_options(oqp PRIVATE "-Wl,-alias_list,${OQP_ACC_ALIAS}")
+        add_custom_command(TARGET oqp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -DLIB=$<TARGET_FILE:oqp>
+                    -P ${CMAKE_SOURCE_DIR}/cmake/check_accelerate_aliases.cmake)
       endif()
     else()
       set(_LINALG_LIB_TYPE "other" CACHE INTERNAL "_LIANLG_LIB_TYPE")
