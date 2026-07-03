@@ -13,7 +13,7 @@ functional=
 
 [guess]
 type=huckel
-save_mol=true
+save_mol=false
 
 
 [scf]
@@ -21,3 +21,4 @@ type=uhf
 multiplicity=1
 maxit=50
 conv=1.0e-10
+save_molden=false

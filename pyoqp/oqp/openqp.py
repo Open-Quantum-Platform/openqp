@@ -230,6 +230,9 @@ class _TheoryProxy:
             raise ValueError("DFT theory requires functional=...")
         return self._owner.dft(functional, **kwargs)
 
+    def mp2(self, **kwargs):
+        return self._owner.mp2(**kwargs)
+
     def tdhf(self, **kwargs):
         return self._owner._theory("tdhf", **kwargs)
 
@@ -533,6 +536,15 @@ class OpenQP:
                 basis=basis,
                 **keywords,
             )
+        if method_key in {"mp2", "moller-plesset", "moller-plesset-2"}:
+            if functional not in (None, ""):
+                raise ValueError("MP2 theory requires an HF reference; do not pass functional.")
+            return self.mp2(
+                reference=reference or "rhf",
+                runtype=runtype,
+                basis=basis,
+                **keywords,
+            )
         if method_key in {"tdhf", "td-hf"}:
             multiplicity = keywords.pop("multiplicity", 1)
             return self._response_theory(
@@ -581,7 +593,7 @@ class OpenQP:
                 **keywords,
             )
         raise ValueError(
-            "Unknown theory method. Use hf, dft, tdhf, tddft, "
+            "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
             "sf-tddft, or mrsf-tddft."
         )
 
@@ -626,6 +638,51 @@ class OpenQP:
         updates.update(scf_keywords)
         if updates:
             self.scf(**updates)
+        return self
+
+    def mp2(self, reference="rhf", runtype=None, multiplicity=None,
+            basis=None, variant=None, same_spin_scale=None,
+            opposite_spin_scale=None, **scf_keywords):
+        """Use a compact OpenQP MP2 setup for energy-only post-SCF jobs."""
+        if runtype is None:
+            runtype = "energy"
+        elif str(runtype).lower() != "energy":
+            raise ValueError("MP2 currently supports runtype='energy' only.")
+        if "functional" in scf_keywords:
+            functional = scf_keywords.pop("functional")
+            if functional:
+                raise ValueError("MP2 theory requires an HF reference; do not pass functional.")
+
+        has_custom_scale = same_spin_scale is not None or opposite_spin_scale is not None
+        if has_custom_scale:
+            if variant is None:
+                variant = "custom"
+            elif str(variant).lower() != "custom":
+                raise ValueError("Custom MP2 scale factors require variant='custom'.")
+
+        input_updates = {"method": "mp2", "functional": "", "runtype": runtype}
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
+
+        scf_updates = {}
+        if reference is not None:
+            scf_updates["type"] = reference
+        if multiplicity is not None:
+            scf_updates["multiplicity"] = multiplicity
+        scf_updates.update(scf_keywords)
+        if scf_updates:
+            self.scf(**scf_updates)
+
+        mp2_updates = {}
+        if variant is not None:
+            mp2_updates["variant"] = variant
+        if same_spin_scale is not None:
+            mp2_updates["same_spin_scale"] = same_spin_scale
+        if opposite_spin_scale is not None:
+            mp2_updates["opposite_spin_scale"] = opposite_spin_scale
+        if mp2_updates:
+            self.section("mp2", **mp2_updates)
         return self
 
     def _response_theory(self, functional="", basis=None, runtype=None,

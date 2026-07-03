@@ -1,6 +1,6 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — using autonomous, interoperable modules driven through the **PyOQP** Python wrapper.
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules.
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
@@ -12,6 +12,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | --- | --- | --- |
 | Hartree–Fock | RHF, ROHF, UHF | Closed- and open-shell SCF foundations |
 | DFT | RKS / UKS / ROKS via [LibXC](https://gitlab.com/libxc/libxc) | Hundreds of LCAO functionals; range-separated (CAM/LRC) support |
+| MP2 | RHF, UHF, and ROHF references; MP2, SCS-MP2, SOS-MP2, OS/SS-MP2, SCS-MI-MP2, and custom spin scaling | Energy-only post-SCF correlation with spin-component-scaled variants |
 | TDHF / TDDFT | RPA, TDA | Conventional linear-response excited states |
 | SF-TDDFT | Spin-flip TDA | Spin-flip excited states from a high-spin reference |
 | **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
