@@ -47,10 +47,21 @@ The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC c
 
 #### Dynamics & QM/MM
 
+Nonadiabatic molecular dynamics (`runtype=namd`) with Tully fewest-switches
+surface hopping on MRSF-TDDFT states, spin-orbit-coupled intersystem crossing,
+and ESPF QM/MM embedding. These compose into **SOC-NAMD-QMMM**: excited-state
+surface-hopping dynamics of an MRSF-TDDFT chromophore, with singlet/triplet
+intersystem crossing, embedded in an explicit (OpenMM) MM solvent.
+
 - Native fewest-switches surface hopping (`runtype=namd`) for gas-phase MRSF-TDDFT internal conversion.
-- SOC-NAMD for intersystem crossing, including SHARC-like spin-adiabatic propagation and an MCH-basis SOC mode with exact active-root MCH gradients (`[md] soc_basis=mch`).
-- ESPF electrostatic QM/MM with OpenMM, including PME periodic electrostatics, smooth ESPF grid forces, and QM/MM NAMD/SOC-NAMD dispatch.
-- Overlap-based MRSF state tracking, finite-time NAC/TDC propagation, and SOC-QM/MM regression guards for hop bookkeeping and restart/reproducibility-sensitive state.
+- SOC-NAMD for intersystem crossing: SHARC-like spin-adiabatic propagation and an MCH-basis mode with exact active-root MCH gradients (`[md] soc_basis=mch`).
+- ESPF electrostatic QM/MM via OpenMM (PME periodic electrostatics, smooth ESPF grid forces, rigid-water constraints); QM/MM composes with both FSSH and SOC-NAMD to give SOC-NAMD-QMMM.
+- Overlap-based MRSF state tracking, finite-difference NAC/TDC propagation, and energy-based decoherence (EDC).
+
+See the **SOC-NAMD-QMMM** guide and the `[md]` / `[qmmm]` keyword pages in the
+[manual](https://open-quantum-platform.github.io/openqp-docs/workflows/soc-namd-qmmm/)
+for complete input decks and the compact `job.qmmm(...)` / `job.workflow.namd(...)`
+Python API.
 
 #### SCF, Initial Guesses & Performance
 
