@@ -1,0 +1,29 @@
+# Ethylene MRSF-TDDFT BHHLYP/6-31G* (pi->pi* benchmark)
+# Triplet ROHF high-spin reference; geometry from task brief Appendix A (Angstrom).
+[input]
+system=
+   C   0.000000   0.000000   0.668600
+   C   0.000000   0.000000  -0.668600
+   H   0.000000   0.922900   1.237200
+   H   0.000000  -0.922900   1.237200
+   H   0.000000   0.922900  -1.237200
+   H   0.000000  -0.922900  -1.237200
+charge=0
+runtype=energy
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-8
+stability=False
+
+[tdhf]
+type=mrsf
+nstate=4
+conv=1.0e-8

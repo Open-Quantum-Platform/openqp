@@ -1,0 +1,27 @@
+# Formaldehyde MRSF-TDDFT BHHLYP/6-31G* (n->pi* benchmark)
+# Triplet ROHF high-spin reference; geometry from task brief Appendix A (Angstrom).
+[input]
+system=
+   C   0.000000   0.000000  -0.529700
+   O   0.000000   0.000000   0.677500
+   H   0.000000   0.934200  -1.124000
+   H   0.000000  -0.934200  -1.124000
+charge=0
+runtype=energy
+basis=6-31g*
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+conv=1.0e-8
+stability=False
+
+[tdhf]
+type=mrsf
+nstate=4
+conv=1.0e-8

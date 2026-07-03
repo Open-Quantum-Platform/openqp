@@ -1,0 +1,46 @@
+ Entering Gaussian System, Link 0=g16
+ ******************************************
+ Gaussian 16:  ES64L-G16RevC.01
+ ******************************************
+ # td(nstates=3) bhandhlyp/6-31g* formaldehyde
+
+ ----------------------------------------------------------------------
+ Reference: synthetic fixture for cclib parser validation (oqp-misc).
+ Excitation energies below are the committed reference values.
+ ----------------------------------------------------------------------
+
+                          Input orientation:
+ ---------------------------------------------------------------------
+ Center     Atomic      Atomic             Coordinates (Angstroms)
+ Number     Number       Type             X           Y           Z
+ ---------------------------------------------------------------------
+      1          6           0        0.000000    0.000000   -0.529700
+      2          8           0        0.000000    0.000000    0.677500
+      3          1           0        0.000000    0.934200   -1.124000
+      4          1           0        0.000000   -0.934200   -1.124000
+ ---------------------------------------------------------------------
+ Stoichiometry    CH2O
+ Standard basis: 6-31G(d)
+
+ The electronic state is 1-A1.
+ Alpha  occ. eigenvalues --  -19.10000  -10.20000   -1.10000   -0.65000
+ Alpha  occ. eigenvalues --   -0.55000   -0.45000   -0.40000   -0.39000
+ Alpha virt. eigenvalues --    0.10000    0.18000    0.55000    0.60000
+
+ SCF Done:  E(RBHandHLYP) =  -114.030000000     A.U. after   10 cycles
+
+ Excitation energies and oscillator strengths:
+
+ Excited State   1:      Singlet-A2     3.9892 eV  310.80 nm  f=0.0000  <S**2>=0.000
+       8 ->  9         0.70000
+ This state for optimization and/or second-order correction.
+
+ Excited State   2:      Singlet-B2     8.9000 eV  139.31 nm  f=0.0150  <S**2>=0.000
+       7 ->  9         0.69000
+
+ Excited State   3:      Singlet-B1     9.5000 eV  130.51 nm  f=0.1100  <S**2>=0.000
+       6 ->  9         0.68000
+
+ SavETr:  write IOETrn=   770 NScale= 10 NData=  16 NLR=1 NState=    3 LETran=      64.
+
+ Normal termination of Gaussian 16 at Thu Jun 19 00:00:00 2026.
