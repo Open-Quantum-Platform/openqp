@@ -304,12 +304,11 @@ oqp_reuse_or_build(libtagarray
 # the kinds match (otherwise alloc_or_die / create(override=...) fail to resolve
 # in ILP64 builds).
 set(_TAGARRAY_Fortran_FLAGS "${CMAKE_Fortran_FLAGS}")
-if(LINALG_LIB_INT64)
-  if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-    string(APPEND _TAGARRAY_Fortran_FLAGS " -fdefault-integer-8")
-  elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-    string(APPEND _TAGARRAY_Fortran_FLAGS " -i8")
-  endif()
+# ILP64-only: default integers are always 8 bytes.
+if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+  string(APPEND _TAGARRAY_Fortran_FLAGS " -fdefault-integer-8")
+elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+  string(APPEND _TAGARRAY_Fortran_FLAGS " -i8")
 endif()
 if(NOT TARGET libtagarray)
 ExternalProject_Add(libtagarray
@@ -373,11 +372,7 @@ ExternalProject_Add(libecpint
         )
 endif()
 if(_LINALG_LIB_TYPE STREQUAL NetLib)
-  if(LINALG_LIB_INT64)
-    set(BLA_LIB_SUFFIX "64")
-  else()
-    set(BLA_LIB_SUFFIX "")
-  endif()
+  set(BLA_LIB_SUFFIX "64")
   if(BUILD_SHARED_LIBS)
     set(la_fortran_flags "${CMAKE_Fortran_FLAGS} -fpic")
   else()
@@ -408,7 +403,7 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
         UPDATE_COMMAND ""
         PATCH_COMMAND perl -0pi -e "s/cmake_minimum_required\\(VERSION 3\\.2\\)/cmake_minimum_required(VERSION 3.5)/g" <SOURCE_DIR>/CMakeLists.txt <SOURCE_DIR>/INSTALL/CMakeLists.txt
         INSTALL_COMMAND ""
-        CMAKE_ARGS -DBUILD_INDEX64=${LINALG_LIB_INT64}
+        CMAKE_ARGS -DBUILD_INDEX64=ON
                    -DBUILD_SINGLE=ON
                    -DBUILD_DOUBLE=ON
                    -DBUILD_COMPLEX=ON
@@ -432,15 +427,12 @@ oqp_set_external_paths(OPENTRUSTREGION opentrustregion
     "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-build-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/opentrustregion/src/libopentrustregion-stamp-${CMAKE_Fortran_COMPILER_ID}"
     "${CMAKE_BINARY_DIR}/external/install/opentrustregion")
+# ILP64-only: default integers are always 8 bytes.
 set(otr_integer_flags "")
-if(LINALG_LIB_INT64)
-    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
-        set(otr_integer_flags "-fdefault-integer-8")
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-        set(otr_integer_flags "-fdefault-integer-8")
-    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-        set(otr_integer_flags "-i8")
-    endif()
+if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+    set(otr_integer_flags "-fdefault-integer-8")
+elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+    set(otr_integer_flags "-i8")
 endif()
 set(otr_fortran_flags "${CMAKE_Fortran_FLAGS} ${OTR_DEFS} ${otr_integer_flags}")
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)
@@ -598,13 +590,12 @@ if(ENABLE_DDX AND OQP_DDX_AUTOBUILD)
         CACHE INTERNAL "DDX_LIBRARY" FORCE)
 
     # Match OpenTrustRegion's BLAS integer flags.
+    # ILP64-only: default integers are always 8 bytes.
     set(ddx_integer_flags "")
-    if(LINALG_LIB_INT64)
-        if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
-            set(ddx_integer_flags "-fdefault-integer-8")
-        elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
-            set(ddx_integer_flags "-i8")
-        endif()
+    if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Flang")
+        set(ddx_integer_flags "-fdefault-integer-8")
+    elseif("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "Intel" OR "${CMAKE_Fortran_COMPILER_ID}" STREQUAL "IntelLLVM")
+        set(ddx_integer_flags "-i8")
     endif()
     set(ddx_fortran_flags "${CMAKE_Fortran_FLAGS} ${ddx_integer_flags}")
     if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER 10.0)

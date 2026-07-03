@@ -1,6 +1,6 @@
 # check_accelerate_aliases.cmake
 # ---------------------------------------------------------------------------
-# POST-BUILD guard for the Accelerate-ILP64 backend (macOS, LINALG_LIB_INT64=ON).
+# POST-BUILD guard for the Accelerate-ILP64 backend (macOS; OpenQP is ILP64-only).
 #
 # Fails the build if liboqp still references any *classic* (LP64, 4-byte
 # integer) Accelerate BLAS/LAPACK symbol that was NOT interposed onto its

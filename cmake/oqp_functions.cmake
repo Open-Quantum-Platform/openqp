@@ -94,10 +94,9 @@ macro(findOpenBLASConfig)
         endif()
         if(_openblas_config_h AND EXISTS "${_openblas_config_h}")
             file(READ "${_openblas_config_h}" _openblas_config)
-            if(LINALG_LIB_INT64 AND NOT _openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
-                message(FATAL_ERROR "OpenBLAS config at ${_openblas_config_h} is LP64, but OpenQP is configured for 8-byte BLAS integers.")
-            elseif(NOT LINALG_LIB_INT64 AND _openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
-                message(FATAL_ERROR "OpenBLAS config at ${_openblas_config_h} is ILP64, but OpenQP is configured for 4-byte BLAS integers.")
+            # OpenQP is ILP64-only: the OpenBLAS build must be 8-byte.
+            if(NOT _openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
+                message(FATAL_ERROR "OpenBLAS config at ${_openblas_config_h} is LP64, but OpenQP requires 8-byte (ILP64) BLAS integers.")
             endif()
         endif()
         set(BLAS_FOUND TRUE)
@@ -133,7 +132,7 @@ endmacro()
 # names match) yet every BLAS call would read an 8-byte dimension/leading-dim as
 # two 4-byte ints => silent numerical corruption on ILP64 builds. So we must NOT
 # depend on BLAS_SIZEOF_INTEGER here: re-query pkg-config ourselves and assert
-# OPENBLAS_USE64BITINT is present iff LINALG_LIB_INT64 is ON.
+# OPENBLAS_USE64BITINT is present (OpenQP is ILP64-only).
 macro(validateOpenBLASPkgConfigInt64 _pc_module)
     if(NOT "${_pc_module}" STREQUAL "")
         find_package(PkgConfig QUIET)
@@ -153,10 +152,8 @@ macro(validateOpenBLASPkgConfigInt64 _pc_module)
                 # headers. This mirrors findOpenBLASConfig()'s guarded check.
                 if(_oqp_openblas_config_h)
                     file(READ "${_oqp_openblas_config_h}" _oqp_openblas_config)
-                    if(LINALG_LIB_INT64 AND NOT _oqp_openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
-                        message(FATAL_ERROR "OpenBLAS pkg-config module '${_pc_module}' resolves to an LP64 build (${_oqp_openblas_config_h} does not define OPENBLAS_USE64BITINT), but OpenQP is configured for 8-byte BLAS integers (LINALG_LIB_INT64=ON). Point pkg-config at a genuine ILP64 OpenBLAS (openblas64) or set LINALG_LIB_INT64=OFF.")
-                    elseif(NOT LINALG_LIB_INT64 AND _oqp_openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
-                        message(FATAL_ERROR "OpenBLAS pkg-config module '${_pc_module}' resolves to an ILP64 build (${_oqp_openblas_config_h} defines OPENBLAS_USE64BITINT), but OpenQP is configured for 4-byte BLAS integers (LINALG_LIB_INT64=OFF). Point pkg-config at an LP64 OpenBLAS (openblas) or set LINALG_LIB_INT64=ON.")
+                    if(NOT _oqp_openblas_config MATCHES "#define[ \t]+OPENBLAS_USE64BITINT")
+                        message(FATAL_ERROR "OpenBLAS pkg-config module '${_pc_module}' resolves to an LP64 build (${_oqp_openblas_config_h} does not define OPENBLAS_USE64BITINT), but OpenQP requires 8-byte (ILP64) BLAS integers. Point pkg-config at a genuine ILP64 OpenBLAS (openblas64).")
                     endif()
                     unset(_oqp_openblas_config)
                 endif()
@@ -168,7 +165,7 @@ macro(validateOpenBLASPkgConfigInt64 _pc_module)
 endmacro()
 
 # =================================================================
-# Accelerate ILP64 backend (macOS, LINALG_LIB_INT64=ON).
+# Accelerate ILP64 backend (macOS; OpenQP is ILP64-only).
 #
 # Accelerate's classic Fortran symbols (dgemm_, dgesvd_, ...) are LP64
 # (4-byte integers) only. Since macOS 13.3 Accelerate ALSO ships a genuine
@@ -240,9 +237,8 @@ macro(findAccelerateILP64)
         message(FATAL_ERROR
             "Accelerate's ILP64 interface (\$NEWLAPACK\$ILP64 symbols) is not "
             "available from this SDK -- it requires macOS >= 13.3. Either update "
-            "macOS/Xcode, use the classic LP64 Accelerate interface with "
-            "-DLINALG_LIB_INT64=OFF, or pick an ILP64 backend explicitly, e.g. "
-            "-DLINALG_LIB=OpenBLAS.")
+            "macOS/Xcode or pick another ILP64 backend explicitly, e.g. "
+            "-DLINALG_LIB=OpenBLAS (OpenQP is ILP64-only; LP64 support was removed).")
     endif()
     oqp_accelerate_alias_file("${CMAKE_BINARY_DIR}/accelerate_ilp64.alias")
     set(OQP_ACC_ALIAS "${CMAKE_BINARY_DIR}/accelerate_ilp64.alias"
@@ -308,9 +304,7 @@ macro(findLinearAlgebra)
     # makes every build path pick the same backend on the same hardware,
     # ALL with the uniform 8-byte (ILP64) integer model by default:
     #     macOS (arm64 and x86_64)  -> Apple Accelerate ILP64
-    #                                  ($NEWLAPACK$ILP64 interposition; the
-    #                                  classic LP64 interface remains available
-    #                                  with -DLINALG_LIB_INT64=OFF)
+    #                                  ($NEWLAPACK$ILP64 interposition)
     #     Linux x86_64              -> Intel MKL (ILP64)
     #     Linux aarch64             -> OpenBLAS (ILP64)
     # Platforms outside this table keep the legacy environment probe.
@@ -347,9 +341,9 @@ macro(findLinearAlgebra)
     elseif(linalg_lib STREQUAL netlib)
         # Explicit user choice of the bundled reference BLAS: do nothing.
 
-    elseif(linalg_lib STREQUAL Apple AND LINALG_LIB_INT64)
-      # macOS with the default 8-byte integers: Accelerate's modern ILP64
-      # interface via symbol interposition (see findAccelerateILP64 above).
+    elseif(linalg_lib STREQUAL Apple)
+      # macOS: Accelerate's modern ILP64 interface via symbol interposition
+      # (see findAccelerateILP64 above; OpenQP is ILP64-only).
       # FATALs internally if the SDK lacks $NEWLAPACK$ILP64 (macOS < 13.3).
       # Externals that link BLAS themselves are not wired for the alias list
       # yet -- refuse the combination rather than let them bind the classic
@@ -358,21 +352,17 @@ macro(findLinearAlgebra)
         message(FATAL_ERROR
             "ENABLE_DDX/ENABLE_OPENTRAH link BLAS/LAPACK directly and are not "
             "yet wired for the Accelerate ILP64 alias interposition. Build them "
-            "with an ILP64 library instead (-DLINALG_LIB=OpenBLAS "
-            "-DLINALG_LIB_INT64=ON) or disable the feature on macOS.")
+            "with an ILP64 library instead (-DLINALG_LIB=OpenBLAS) or disable "
+            "the feature on macOS.")
       endif()
       findAccelerateILP64()
 
     else()
       if(linalg_lib STREQUAL OpenBLAS)
+        # ILP64-only: always the openblas64 pkg-config module.
         set(BLA_PREFER_PKGCONFIG ON)
-        if(LINALG_LIB_INT64)
-          set(BLA_PKGCONFIG_BLAS openblas64)
-          set(BLA_PKGCONFIG_LAPACK openblas64)
-        else()
-          set(BLA_PKGCONFIG_BLAS openblas)
-          set(BLA_PKGCONFIG_LAPACK openblas)
-        endif()
+        set(BLA_PKGCONFIG_BLAS openblas64)
+        set(BLA_PKGCONFIG_LAPACK openblas64)
       endif()
       set(BLA_VENDOR ${linalg_lib})
       findBlasLapack()
@@ -397,7 +387,7 @@ macro(findLinearAlgebra)
           elseif(linalg_lib MATCHES "^Intel10_64ilp")
             oqpLinalgNotFound("${linalg_lib}" "Install Intel MKL (oneAPI) and load its environment (source setvars.sh, or 'module load imkl') so MKLROOT is set before configuring.")
           elseif(linalg_lib STREQUAL OpenBLAS)
-            oqpLinalgNotFound(OpenBLAS "Install an ILP64 OpenBLAS so that 'pkg-config --exists openblas64' succeeds (e.g. libopenblas64-dev / openblas built with INTERFACE64=1), or an LP64 one when LINALG_LIB_INT64=OFF.")
+            oqpLinalgNotFound(OpenBLAS "Install an ILP64 OpenBLAS so that 'pkg-config --exists openblas64' succeeds (e.g. libopenblas64-dev / openblas built with INTERFACE64=1),.")
           else()
             oqpLinalgNotFound("${linalg_lib}" "The requested BLA_VENDOR '${linalg_lib}' was not found by CMake's FindBLAS.")
           endif()
@@ -417,8 +407,8 @@ macro(findLinearAlgebra)
         if(DEFINED BLAS_SIZEOF_INTEGER AND NOT BLAS_SIZEOF_INTEGER EQUAL ${BLA_SIZEOF_INTEGER})
           message(FATAL_ERROR
               "Selected BLAS ('${linalg_lib}') has ${BLAS_SIZEOF_INTEGER}-byte "
-              "integers; OpenQP is configured for ${BLA_SIZEOF_INTEGER}-byte "
-              "BLAS integers (LINALG_LIB_INT64=${LINALG_LIB_INT64}).")
+              "integers; OpenQP requires ${BLA_SIZEOF_INTEGER}-byte (ILP64) "
+              "BLAS integers.")
         endif()
       endif()
     endif()
@@ -450,12 +440,8 @@ macro(findLinearAlgebra)
       if(TARGET oqp)
         target_link_libraries(oqp ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
       endif()
-      if(LINALG_LIB_INT64)
-         set(_MKL_INTERFACE_LAYER "ILP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
-      else()
-         set(_MKL_INTERFACE_LAYER "LP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
-      endif()
-    elseif(linalg_lib STREQUAL Apple AND LINALG_LIB_INT64)
+      set(_MKL_INTERFACE_LAYER "ILP64" CACHE INTERNAL "_MKL_INTERFACE_LAYER")
+    elseif(linalg_lib STREQUAL Apple)
       set(_LINALG_LIB_TYPE "Accelerate_ILP64" CACHE INTERNAL "_LIANLG_LIB_TYPE")
       if(TARGET oqp)
         target_link_libraries(oqp ${BLAS_LIBRARIES})
