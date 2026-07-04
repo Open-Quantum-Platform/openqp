@@ -453,10 +453,13 @@ class OpenQP:
         indices; a ``forcefield`` list is joined into a comma-separated string.
 
         ``frontier_scheme`` sets the MM frontier-host (M1) charge treatment when
-        the QM/MM partition cuts a covalent bond (``runtype=namd`` ESPF path):
+        the QM/MM partition cuts a covalent bond in the ESPF path:
         ``'none'`` (default, the validated full-field ESPF baseline), or the
         optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
-        for whole-molecule QM regions.
+        for whole-molecule QM regions. Covalent QM/MM boundaries are handled by
+        the ground-state QM/MM MD path (``QMMM_MD``); the nonadiabatic
+        ``runtype=namd`` path does not yet append link atoms to its QM molecule
+        and raises on a covalent cut.
 
         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
         """

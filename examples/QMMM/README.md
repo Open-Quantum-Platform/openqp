@@ -45,7 +45,9 @@ ground-state OpenMM-integrator QM/MM MD deck.
 When the QM/MM partition cuts a covalent bond, the dangling QM bond is capped
 with a hydrogen link atom and the MM host atom (`M1`) sits ~1.5 Å from the QM
 density. `[qmmm] frontier_scheme` selects how that frontier charge is treated in
-the ESPF (`runtype=namd`) electrostatics:
+the ESPF electrostatics. Covalent QM/MM boundaries are handled by the
+ground-state QM/MM MD path (`QMMM_MD`); the nonadiabatic `runtype=namd` path does
+not yet append link atoms to its QM molecule and raises on a covalent cut.
 
 | value | meaning |
 | --- | --- |
