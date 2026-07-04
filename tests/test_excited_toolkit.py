@@ -4,7 +4,7 @@ Pure-Python unit tests (compare harness, descriptors, GTO-evaluator guard) load
 the modules directly from their files, so they run without a compiled ``liboqp``
 (mirroring tests/test_quantum_fcidump.py). The integration test exercises the
 public ``oqp.interop`` API end-to-end and is skipped when the compiled extension
-or the benchmark inputs are unavailable.
+or the fixture inputs are unavailable.
 """
 import importlib.util
 import os
@@ -15,6 +15,7 @@ import pytest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, os.pardir))
+_INPUT_DIR = os.path.join(_HERE, "fixtures", "excited_toolkit")
 
 
 def _load_file(modname, relpath):
@@ -125,7 +126,11 @@ def test_interop_public_api_shape():
 # end-to-end integration (skipped without a build / inputs)
 # --------------------------------------------------------------------------
 def _have_input(name):
-    return os.path.isfile(os.path.join(_ROOT, "benchmark", "inputs", name))
+    return os.path.isfile(os.path.join(_INPUT_DIR, name))
+
+
+def _input_path(name):
+    return os.path.join(_INPUT_DIR, name)
 
 
 @pytest.mark.skipif(not os.environ.get("OPENQP_ROOT"),
@@ -133,13 +138,13 @@ def _have_input(name):
 def test_integration_keystone_qcschema_fcidump(tmp_path):
     pytest.importorskip("oqp")
     if not (_have_input("ch2o_mrsf.inp") and _have_input("h2_rhf_sto3g.inp")):
-        pytest.skip("benchmark inputs not present")
+        pytest.skip("excited-toolkit fixture inputs not present")
     from oqp.pyoqp import Runner
     from oqp.interop import (MRSFExcitedStates, to_qcschema, validate_qcschema,
                              dump_fcidump, verify_fcidump_fci)
 
     # keystone: reconstructed transition dipole matches OQP's own to <=1e-6
-    inp = os.path.join(_ROOT, "benchmark", "inputs", "ch2o_mrsf.inp")
+    inp = _input_path("ch2o_mrsf.inp")
     r = Runner(project="ch2o_t", input_file=inp,
                log=str(tmp_path / "ch2o.log"), silent=1, usempi=False)
     r.run()
@@ -162,7 +167,7 @@ def test_integration_keystone_qcschema_fcidump(tmp_path):
 
     # FCIDUMP delegated to oqp.quantum, verified against PySCF FCI
     pytest.importorskip("pyscf")
-    inp2 = os.path.join(_ROOT, "benchmark", "inputs", "h2_rhf_sto3g.inp")
+    inp2 = _input_path("h2_rhf_sto3g.inp")
     r2 = Runner(project="h2_t", input_file=inp2,
                 log=str(tmp_path / "h2.log"), silent=1, usempi=False)
     r2.run()
