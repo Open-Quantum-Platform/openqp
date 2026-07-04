@@ -151,7 +151,9 @@ contains
     use grd1, only: eijden, grad_nn, grad_ee_overlap, &
             grad_ee_kinetic, grad_en_hellman_feynman, &
             grad_en_pulay, grad_1e_ecp
+#ifdef OQP_ENABLE_QMMM
     use qmmm_mod, only: grad_esp_qmmm
+#endif
 
     implicit none
 

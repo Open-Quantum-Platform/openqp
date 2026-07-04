@@ -1089,8 +1089,10 @@ contains
     use oqp_linalg
     use printing, only: print_module_info
     use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
+#ifdef OQP_ENABLE_QMMM
     use population_analysis, only: mulliken_excited
     use qmmm_mod, only: form_esp_charges_excited
+#endif
 
 
     implicit none
@@ -1449,10 +1451,12 @@ contains
 
     ! QM/MM (ESPF): excited-state Mulliken population and ESP charges for the
     ! relaxed density, needed for the MM electrostatic embedding gradient.
+#ifdef OQP_ENABLE_QMMM
     if (infos%control%qmmm_flag) then
        call mulliken_excited(infos)
        call form_esp_charges_excited(infos)
     end if
+#endif
 
     call int2_driver%clean()
     if (zv_rc_loosen) infos%control%int2e_cutoff = zv_rc_save

@@ -241,6 +241,12 @@ endif()
 # from the build, and the TRAH dispatch falls back to the native solver for every
 # trh_impl. Default ON preserves the validated gradient/MRSF reference paths.
 option(ENABLE_OPENTRAH "Build and link the external OpenTrustRegion (OpenTRAH) solver" ON)
+
+# Optional native feature modules consumed by the external openqp-namd-qmmm package.
+# Default ON: a stock build is byte-for-byte unchanged. Turn OFF for a lean core
+# without the surface-hopping / ESPF QM/MM kernels (e.g. energy/opt-only deployments).
+option(ENABLE_QMMM "Build native QM/MM (ESPF) support: qmmm.F90 + the in-core ESPF hooks" ON)
+option(ENABLE_NAMD "Build native NAMD surface-hopping kernels: namd.F90 (mrsf_namd_hop)" ON)
 if(ENABLE_OPENMP)
   find_package(OpenMP 3.1 REQUIRED)
 endif()

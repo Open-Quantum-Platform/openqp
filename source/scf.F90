@@ -68,7 +68,9 @@ contains
     use scf_addons, only: pfon_t, apply_mom, level_shift_fock, calc_fock, &
                           scf_energy_t, scf_rhf, scf_uhf, scf_rohf, get_scf_name, &
                           scf_diis, scf_bfgs, scf_trah, get_solver_name
-    use qmmm_mod, only: get_mm_energy,form_esp_charges,print_mm_energy, add_potqm_contributions 
+#ifdef OQP_ENABLE_QMMM
+    use qmmm_mod, only: get_mm_energy,form_esp_charges,print_mm_energy, add_potqm_contributions
+#endif 
     implicit none
 
     character(len=*), parameter :: subroutine_name = "scf_driver"
@@ -1202,12 +1204,14 @@ contains
       call handle_homo_lumo_gap(iter, scf_type, nelec, nelec_a, nelec_b, &
                                 mo_energy_a, mo_energy_b, vshift, IW, &
                                 H_U_gap, modify_vshift=.false., do_print=.true.)
+#ifdef OQP_ENABLE_QMMM
       select case(scf_type)
       case (scf_rhf)
         call add_potqm_contributions(infos, pdmat(:,1), dhcore)
       case (scf_uhf,scf_rohf)
         call add_potqm_contributions(infos, pdmat(:,1)+pdmat(:,2), dhcore)
       end select
+#endif
       hcore  = hcore_bk + dhcore
 
     ! End of Main SCF Iteration Loop

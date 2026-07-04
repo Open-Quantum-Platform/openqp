@@ -33,7 +33,9 @@ contains
     use strings, only: Cstring, fstring
     use physical_constants, only: BOHR_TO_ANGSTROM
     use printing, only: print_module_info
+#ifdef OQP_ENABLE_QMMM
     use qmmm_mod, only: oqp_esp_qmmm
+#endif
     use dk_scalar_mod, only: dk_scalar
 
     implicit none
