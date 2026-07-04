@@ -17,11 +17,13 @@ import argparse, csv, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
-from systems import SYSTEMS  # noqa: E402
+from systems import SYSTEMS, PROFILES  # noqa: E402
 
 BASIS = "def2-svp"
-FUNCS = ["", "b3lypv5"]                         # HF and a hybrid KS
-CONVERGERS = ["cdiis", "ediis", "adiis", "soscf", "trah"]
+# Functionals and convergers are per-profile (systems.PROFILES) and driven per system in
+# main(), so editing a system's profile (or adding a new one) actually changes its DB rows.
+# Previously two hard-coded globals here overrode the profiles, silently ignoring hard-case
+# coverage such as pbe / bhhlyp / vdiis.
 # Optional progress pings: set TG_TOKEN and TG_CHAT in the environment (never hardcode).
 TG_TOKEN = os.environ.get("TG_TOKEN", "")
 TG_CHAT = os.environ.get("TG_CHAT", "")
@@ -45,7 +47,9 @@ def read_xyz(root, geom):
 
 
 def conv_block(c):
-    if c in ("cdiis", "ediis", "adiis"):
+    if c in ("cdiis", "ediis", "adiis", "vdiis"):
+        # DIIS family: native top-level converger is 'diis' (default), diis_type picks the
+        # subtype. vDIIS is a subtype too (native auto-applies its level shift).
         return ["maxdiis=10", f"diis_type={c}", "maxit=200"]
     if c == "soscf":
         return ["converger_type=soscf", "maxit=200"]
@@ -120,8 +124,11 @@ def run_cell(root, s, ref, mult, func, c, wd, omp):
     niter = sum(int(n) for _, n in es) if es else -1
     E = es[-1][0] if es else "nan"
     # True Fock-equivalent cost: each SCF iteration is ~1 Fock build; TRAH adds one
-    # response build per micro-iteration. DIIS/SOSCF: micro=0 so fock_builds==niter.
-    micro = trah_micro_sum(txt) if c == "trah" else 0
+    # response build per micro-iteration. Sum micro from ANY TRAH macro table in the log,
+    # not only when TRAH is the primary converger: the robustness ladder lets a DIIS/SOSCF
+    # primary fall through to a TRAH escalation stage whose micro builds are real cost.
+    # trah_micro_sum() returns 0 when the log has no TRAH table (pure DIIS/SOSCF runs).
+    micro = trah_micro_sum(txt)
     fock_builds = (niter + micro) if niter > 0 else -1
     return dict(converged=conv, niter=niter, micro=micro, fock_builds=fock_builds,
                 time=round(dt, 2), E=E)
@@ -149,10 +156,11 @@ def main():
     for s in SYSTEMS:
         if s["tier"] > a.maxtier:
             continue
+        prof = PROFILES[s["profile"]]
         natom = len(read_xyz(root, s["geom"]))
         for ref, mult in s["refs"].items():
-            for func in FUNCS:
-                for c in CONVERGERS:
+            for func in prof["functionals"]:
+                for c in prof["convergers"]:
                     if (s["id"], ref, func or "hf", c) in done:
                         continue
                     jobs.append((s, ref, mult, func, c, natom))

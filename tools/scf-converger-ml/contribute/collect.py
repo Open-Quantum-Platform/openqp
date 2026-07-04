@@ -21,7 +21,7 @@ import argparse, csv, glob, os, re, time
 
 _TM = {'Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn','Y','Zr','Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd',
        'La','Hf','Ta','W','Re','Os','Ir','Pt','Au','Hg'}
-FIELDS = ["system","ref","func","converger","natom","charge","transition_metal","converged","niter","energy","basis"]
+FIELDS = ["system","ref","mult","func","converger","natom","charge","transition_metal","converged","niter","energy","basis"]
 
 
 def parse_log(path):
@@ -30,10 +30,16 @@ def parse_log(path):
         return None
     def g(pat, d=""):
         m = re.search(pat, t, re.I); return m.group(1).strip() if m else d
-    basis = g(r"basis\s*=?\s*([\w\-\*\(\)]+)")
-    func = g(r"functional\s*=?\s*([\w\-]+)") or "hf"
-    ref = (g(r"\bscf\.?type\s*=?\s*(rhf|rohf|uhf)") or g(r"\b(RHF|ROHF|UHF) energy")).lower() or "rhf"
-    charge = g(r"charge\s*=?\s*(-?\d+)", "0")
+    # OpenQP log metadata is colon-form ("PyOQP charge:  0", "PyOQP hf/functional:  b3lypv5",
+    # "PyOQP basis:  def2-svp", "PyOQP scf type:  rhf"); also accept the input-file "key=value"
+    # form. Allowing only "=" (as before) silently defaulted DFT/charged logs to hf/charge 0.
+    basis = g(r"basis\s*[:=]?\s*([\w\-\*\(\)]+)")
+    func = g(r"functional\s*[:=]?\s*([\w\-]+)") or "hf"
+    ref = (g(r"\bscf[ ._]?type\s*[:=]?\s*(rhf|rohf|uhf)") or g(r"\b(RHF|ROHF|UHF) energy")).lower() or "rhf"
+    charge = g(r"charge\s*[:=]?\s*(-?\d+)", "0")
+    # SCF multiplicity is a training feature (train_selector defaults missing -> 1, which would
+    # mislabel high-spin open-shell data as singlets). The log prints "PyOQP scf multiplicity".
+    mult = g(r"scf multiplicity\s*[:=]?\s*(\d+)", "1")
     conv = "convergence achieved" in t
     es = re.findall(r"energy is\s+(-?\d+\.\d+)\s+after\s+(\d+)\s+iterations", t)
     # TRAH macro 'micro' column -> add response builds to the cost
@@ -46,17 +52,27 @@ def parse_log(path):
     atoms = re.findall(r"^\s*([A-Z][a-z]?)\s+-?\d+\.\d+\s+-?\d+\.\d+\s+-?\d+\.\d+", t, re.M)
     natom = len(atoms); tm = 1 if any(a in _TM for a in atoms) else 0
     sysname = os.path.splitext(os.path.basename(path))[0]
-    return dict(system=sysname, ref=ref, func=func, converger=conver.lower(), natom=natom,
+    # The native log prints hyphenated DIIS names ("c-DIIS"/"e-DIIS"/"a-DIIS"/"v-DIIS");
+    # the training/runtime code only maps the non-hyphenated labels (cdiis/ediis/adiis/
+    # vdiis), so strip the hyphen before writing the CSV.
+    return dict(system=sysname, ref=ref, mult=mult, func=func,
+                converger=conver.lower().replace("-", ""), natom=natom,
                 charge=charge, transition_metal=tm, converged=conv, niter=niter,
                 energy=energy, basis=basis)
 
 
 def collect(logs, out):
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    # De-dup on every run-defining field: the same molecule/ref/functional/converger at a
+    # different charge, multiplicity or basis is a *distinct* data point, not a duplicate.
+    # (Keying only by system/ref/func/converger silently dropped that diversity.)
+    def _key(r):
+        return tuple(r.get(f, "") for f in
+                     ("system", "ref", "mult", "func", "converger", "charge", "basis"))
     seen = set()
     if os.path.exists(out):
         for r in csv.DictReader(open(out)):
-            seen.add((r["system"], r["ref"], r["func"], r["converger"]))
+            seen.add(_key(r))
     new = 0
     write_header = not os.path.exists(out)
     with open(out, "a", newline="") as f:
@@ -67,7 +83,7 @@ def collect(logs, out):
             r = parse_log(lg)
             if not r:
                 continue
-            k = (r["system"], r["ref"], r["func"], r["converger"])
+            k = _key(r)
             if k in seen:
                 continue
             w.writerow(r); seen.add(k); new += 1

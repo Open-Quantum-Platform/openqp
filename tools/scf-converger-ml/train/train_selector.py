@@ -12,9 +12,16 @@ Usage : python train/train_selector.py --db data/db_openqp_postfix.csv
 import argparse, csv, collections, os, glob
 
 TM = set(range(21, 31)) | set(range(39, 49)) | set(range(57, 81))
-_SYM2Z = {  # minimal symbol->Z for TM detection from geometries
+# symbol->Z covering the SAME ranges the runtime _scf_features treats as transition metals
+# (21-30, 39-48, 57-80). Stopping at Cd (48) made the geometry-based fallback label common
+# 5d/lanthanide systems (Hf, Pt, Au, Hg, ...) as transition_metal=0 while production predicts
+# with 1, corrupting any split on that feature.
+_SYM2Z = {
     'Sc':21,'Ti':22,'V':23,'Cr':24,'Mn':25,'Fe':26,'Co':27,'Ni':28,'Cu':29,'Zn':30,
-    'Y':39,'Zr':40,'Nb':41,'Mo':42,'Tc':43,'Ru':44,'Rh':45,'Pd':46,'Ag':47,'Cd':48}
+    'Y':39,'Zr':40,'Nb':41,'Mo':42,'Tc':43,'Ru':44,'Rh':45,'Pd':46,'Ag':47,'Cd':48,
+    'La':57,'Ce':58,'Pr':59,'Nd':60,'Pm':61,'Sm':62,'Eu':63,'Gd':64,'Tb':65,'Dy':66,
+    'Ho':67,'Er':68,'Tm':69,'Yb':70,'Lu':71,'Hf':72,'Ta':73,'W':74,'Re':75,'Os':76,
+    'Ir':77,'Pt':78,'Au':79,'Hg':80}
 
 
 def has_tm(system, geomdir):

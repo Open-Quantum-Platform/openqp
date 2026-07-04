@@ -19,6 +19,11 @@ def load(db):
         r["niter"] = int(r["niter"]); r["converged"] = (r["converged"] == "True")
         r["tier"] = int(r["tier"]); r["natom"] = int(r["natom"]); r["mult"] = int(r["mult"])
         r["charge"] = int(r["charge"])
+        # True Fock-equivalent cost: for TRAH this folds in the expensive response/micro
+        # builds that niter (macro count) omits, so ranking by niter falsely favors TRAH.
+        # Older DBs without the column fall back to niter.
+        fb = r.get("fock_builds", "")
+        r["fock_builds"] = int(float(fb)) if str(fb) not in ("", "-1", "None") else r["niter"]
     return rows
 
 
@@ -47,12 +52,12 @@ def main():
         ok = [r for r in crows if r["converged"] and r["niter"] > 0]
         if not ok:
             continue
-        best = min(ok, key=lambda r: r["niter"])
+        best = min(ok, key=lambda r: r["fock_builds"])
         cd = next((r for r in crows if r["converger"] == "cdiis" and r["converged"]), None)
         wins[best["converger"]] += 1
         X.append(features(crows)); y.append(best["converger"]); keys.append(key)
-        oracle_cost.append(best["niter"])
-        cdiis_cost.append(cd["niter"] if cd else best["niter"] * 3)
+        oracle_cost.append(best["fock_builds"])
+        cdiis_cost.append(cd["fock_builds"] if cd else best["fock_builds"] * 3)
 
     n = len(y)
     print(f"cells with >=1 converged converger: {n}")
@@ -81,7 +86,7 @@ def main():
     for i, key in enumerate(keys):
         crows = cells[key]
         pr = next((r for r in crows if r["converger"] == pred[i] and r["converged"] and r["niter"] > 0), None)
-        sel_cost.append(pr["niter"] if pr else cdiis_cost[i])
+        sel_cost.append(pr["fock_builds"] if pr else cdiis_cost[i])
     print(f"\nLOO selector accuracy: {acc:.2f}")
     print(f"total Fock builds  selector={sum(sel_cost)}  oracle={sum(oracle_cost)}"
           f"  always-cdiis={sum(cdiis_cost)}")
