@@ -1,0 +1,25 @@
+data files: 1 | rows: 296
+labeled cells: 55 | label distribution: {'soscf': 11, 'cdiis': 39, 'trah': 1, 'adiis': 1, 'ediis': 3}
+LOO-by-system accuracy: 0.62
+
+|--- charge <= -1.00
+|   |--- class: ediis
+|--- charge >  -1.00
+|   |--- charge <= 1.00
+|   |   |--- is_uhf <= 0.50
+|   |   |   |--- is_dft <= 0.50
+|   |   |   |   |--- class: cdiis
+|   |   |   |--- is_dft >  0.50
+|   |   |   |   |--- class: cdiis
+|   |   |--- is_uhf >  0.50
+|   |   |   |--- mult <= 4.00
+|   |   |   |   |--- class: cdiis
+|   |   |   |--- mult >  4.00
+|   |   |   |   |--- class: cdiis
+|   |--- charge >  1.00
+|   |   |--- is_dft <= 0.50
+|   |   |   |--- class: cdiis
+|   |   |--- is_dft >  0.50
+|   |   |   |--- class: ediis
+
+distilled -> model/scf_selector_model.py
