@@ -61,8 +61,20 @@ input (`[qmmm] frontier_scheme = rcd`) or the Python API
 (`job.qmmm(..., frontier_scheme="rcd")`). It is a no-op for whole-molecule QM
 regions (no cut bond).
 
-A runnable covalent-boundary demonstration on a real force field —
-the alanine dipeptide cut through the `ALA C–CA` bond with AMBER-14 — lives in
-`tests/test_qmmm_frontier_openmm.py` (link-atom detection + frontier-charge
-conservation; OpenMM-gated). The pure redistribution math (including a
-finite-difference gradient check) is in `tests/test_qmmm_frontier.py`.
+A runnable covalent-boundary deck is
+`ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp` — the alanine dipeptide (ACE-ALA-NH2) with
+AMBER-14, QM = the C-terminal amide so the QM/MM partition cuts the `ALA C–CA`
+backbone bond, run as ground-state QM/MM MD (`runtype=md`) with
+`frontier_scheme=rcd`:
+
+```bash
+cd examples/QMMM && openqp ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp
+```
+
+Like the other ground-state QM/MM decks it is skipped by `openqp --run_tests all`
+(covalent-boundary QM/MM is the ground-state MD path, not `runtype=namd`). The
+same alanine boundary is exercised automatically — link-atom detection +
+frontier-charge conservation on the real AMBER-14 charges — in
+`tests/test_qmmm_frontier_openmm.py` (OpenMM-gated), and the pure redistribution
+math (including a finite-difference gradient check) in
+`tests/test_qmmm_frontier.py`.

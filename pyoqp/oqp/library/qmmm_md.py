@@ -272,6 +272,15 @@ class QMMM_MD:
             self._apply_xyz_positions(str(qm_atoms_xyz), qm_list)
 
         # ------ store QM config / mol for the driver ----------------------
+        # The outer runtype=md only selects this ground-state QM/MM MD driver
+        # (see pyoqp dispatch); the QM subsystem itself runs a single-point
+        # energy+gradient each step. Force the internal QM runtype to 'energy'
+        # so the QM engine's input check accepts a config that arrived with
+        # runtype=md (config mode; harmless when the key is absent).
+        if isinstance(qm_cfg, dict):
+            for _k in list(qm_cfg):
+                if str(_k).split('.')[-1].strip().lower() == 'runtype':
+                    qm_cfg[_k] = 'energy'
         self.oqp_cfg = qm_cfg
         self.mol     = mol
 
