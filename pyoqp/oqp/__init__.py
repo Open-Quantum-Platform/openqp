@@ -44,8 +44,34 @@ if RTLD:
 else:
     from _oqp import ffi, lib
 
+def _missing_symbol_stub(name):
+    """Placeholder for a native symbol declared in include/oqp.h but absent from
+    this liboqp build -- i.e. an optional feature module compiled out via
+    ENABLE_NAMD / ENABLE_QMMM = OFF. Importing ``oqp`` and running energy-only
+    jobs still work; only *using* the missing feature raises, and with an
+    actionable message instead of a bare cffi symbol-not-found error."""
+
+    def _stub(*args, **kwargs):
+        raise RuntimeError(
+            f"OpenQP native symbol '{name}' is not present in this liboqp build. "
+            f"It belongs to an optional feature module that was compiled out "
+            f"(e.g. -DENABLE_NAMD=OFF or -DENABLE_QMMM=OFF). Rebuild OpenQP with "
+            f"that feature enabled to use it."
+        )
+
+    return _stub
+
+
 for attr_name in dir(lib):
-    attr_value = getattr(lib, attr_name)
+    try:
+        attr_value = getattr(lib, attr_name)
+    except AttributeError:
+        # Declared in oqp.h but not exported by this liboqp (feature compiled
+        # out via ENABLE_NAMD / ENABLE_QMMM = OFF). Bind a stub so `import oqp`
+        # and energy-only jobs still succeed; the stub raises a clear error only
+        # if the missing feature is actually used.
+        globals()[attr_name] = _missing_symbol_stub(attr_name)
+        continue
     if callable(attr_value):
         if attr_name not in ('oqp_init', 'oqp_clean', 'oqp_set_atoms'):
             globals()[attr_name] = _oqp_wrapper(attr_value)

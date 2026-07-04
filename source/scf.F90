@@ -304,6 +304,16 @@ contains
       scalefactor = 1.0_dp
     end if
 
+#ifndef OQP_ENABLE_QMMM
+    ! QM/MM (ESPF) support was compiled out (ENABLE_QMMM=OFF). Refuse to run a
+    ! QM/MM job rather than silently returning gas-phase results (dhcore stays 0).
+    if (infos%control%qmmm_flag) then
+      call show_message('QM/MM was requested (qmmm_flag=.true.) but this OpenQP '// &
+        'build was compiled without QM/MM support (ENABLE_QMMM=OFF). '// &
+        'Rebuild OpenQP with -DENABLE_QMMM=ON.', WITH_ABORT)
+    end if
+#endif
+
     !==============================================================================
     ! Retrieve Tag Arrays and Allocate Memory
     !==============================================================================

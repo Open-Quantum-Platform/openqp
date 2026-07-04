@@ -111,8 +111,11 @@ pip install . -C cmake.define.ENABLE_QMMM=OFF -C cmake.define.ENABLE_NAMD=OFF   
 | Default (`ON`/`ON`) | ✓ | ✓ | ✓ | ✓ (with package) |
 | `OFF`/`OFF` | ✗ | ✗ | ✓ | package import probe fails cleanly |
 
-The package adds an import-time capability probe (`hasattr(oqp.lib, "mrsf_namd_hop")`, …) so a
-mismatched core errors early with the fix instead of a deep symbol failure mid-run.
+`oqp/__init__.py` binds native symbols **tolerantly**: a symbol declared in `include/oqp.h`
+but absent from `liboqp` (feature compiled out) is bound to a stub, so `import oqp` and
+energy-only jobs still work — only *using* a missing feature raises an actionable error. In
+addition, `scf_driver` **rejects** `qmmm_flag=.true.` at SCF entry when built
+`ENABLE_QMMM=OFF`, so a QM/MM job fails loudly instead of silently returning gas-phase results.
 
 ## 5. General MM-backend interface (step 2)
 
@@ -161,10 +164,11 @@ the monorepo before a package boundary can hide a regression.
 
 ## 7. Risks / open questions
 
-- **cffi dlopen vs. hard-linked `_oqp`.** The `hasattr` probe is correct for the lazy dlopen
-  path (`oqp/__init__.py:42`). If the package ships against the compiled `_oqp` extension,
-  unconditional prototypes in `include/oqp.h` for absent symbols would fail at link time
-  instead — decide whether those prototypes need `#ifdef` gating too.
+- **cffi dlopen vs. hard-linked `_oqp`.** *(Resolved for the default dlopen path.)*
+  `oqp/__init__.py` binds symbols tolerantly (missing → stub), so an OFF core imports fine and
+  energy jobs run. The non-default hard-linked `_oqp` extension path would still need the
+  `include/oqp.h` prototypes `#ifdef`-gated to build against an OFF core — a follow-up only if
+  that path is used.
 - **Split scheme is OpenMM-only.** Consider having the config validator reject
   `mm_engine != openmm` combined with the split scheme (`espf_full=False`) to prevent a
   silently-wrong run.
