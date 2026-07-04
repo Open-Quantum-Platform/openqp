@@ -1,6 +1,6 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules.
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://github.com/Open-Quantum-Platform/openqp-tutorials)** (guided, runnable end-to-end walkthroughs).
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
@@ -121,7 +121,8 @@ Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_t
 
 ### Documentation
 
-- [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/)
+- [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/) (reference docs; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs))
+- [OpenQP Tutorials](https://github.com/Open-Quantum-Platform/openqp-tutorials) (guided, runnable walkthroughs)
 - [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/)
 - [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
 - [Example inputs](examples)
