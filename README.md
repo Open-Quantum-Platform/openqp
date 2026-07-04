@@ -1,6 +1,6 @@
 ## Open Quantum Platform: OpenQP
 
-Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://github.com/Open-Quantum-Platform/openqp-tutorials)** (guided, runnable end-to-end walkthroughs).
+Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c01117)) is a quantum chemical platform built around [Mixed-Reference Spin-Flip (MRSF)-TDDFT](https://doi.org/10.1021/acs.jpclett.3c02296) with an emphasis on an open-source ecosystem. It combines conventional HF/DFT, MP2 correlation, and TDHF/TDDFT with MRSF-TDDFT to treat multiconfigurational ground and excited states — diradicals, bond breaking, conical intersections, nonadiabatic dynamics, and spin-orbit coupling — through autonomous, interoperable modules. Learn it through the **[OpenQP manual](https://open-quantum-platform.github.io/openqp-docs/)** (reference documentation for every method, workflow, and keyword; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs)) and the hands-on **[OpenQP tutorials](https://open-quantum-platform.github.io/openqp-tutorials/)** (guided, runnable end-to-end walkthroughs).
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
@@ -19,6 +19,8 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 
+**Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
+
 #### Properties & Spectroscopy
 
 | Capability | Scope | Notes |
@@ -34,6 +36,8 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | Population & moments | Mulliken, Löwdin, RESP charges; electric multipole moments | `runtype=prop` |
 | Dispersion | [DFT-D4](https://dftd4.readthedocs.io/en/latest/) correction | — |
 
+**Tutorials:** [Hessians, frequencies & IR/Raman](https://open-quantum-platform.github.io/openqp-tutorials/vibrational-analysis/) · [NMR shielding](https://open-quantum-platform.github.io/openqp-tutorials/nmr-shielding/) · [Spin–orbit coupling](https://open-quantum-platform.github.io/openqp-tutorials/spin-orbit-coupling/) · [Population, moments & charges](https://open-quantum-platform.github.io/openqp-tutorials/properties-and-population/) · [PCM/ddX solvation](https://open-quantum-platform.github.io/openqp-tutorials/pcm-solvation/)
+
 #### Geometry & Reaction Paths
 
 | Workflow | `runtype` | Backends |
@@ -46,11 +50,13 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC coordinates with a restricted-step RFO step and needs no external optimizer package.
 
+**Tutorials:** [Geometry optimization & TS](https://open-quantum-platform.github.io/openqp-tutorials/geometry-optimization/) · [Conical intersections](https://open-quantum-platform.github.io/openqp-tutorials/conical-intersections/)
+
 #### Dynamics & QM/MM
 
 Nonadiabatic molecular dynamics (`runtype=namd`) with Tully fewest-switches
 surface hopping on MRSF-TDDFT states, spin-orbit-coupled intersystem crossing,
-and ESPF QM/MM embedding. These compose into **SOC-NAMD-QMMM**: excited-state
+and ESPF QM/MM embedding. These compose into **[SOC-NAMD-QMMM](https://open-quantum-platform.github.io/openqp-tutorials/soc-namd-qmmm/)**: excited-state
 surface-hopping dynamics of an MRSF-TDDFT chromophore, with singlet/triplet
 intersystem crossing, embedded in an explicit (OpenMM) MM solvent.
 
@@ -58,6 +64,8 @@ intersystem crossing, embedded in an explicit (OpenMM) MM solvent.
 - SOC-NAMD for intersystem crossing: SHARC-like spin-adiabatic propagation and an MCH-basis mode with exact active-root MCH gradients (`[md] soc_basis=mch`).
 - ESPF electrostatic QM/MM via OpenMM (PME periodic electrostatics, smooth ESPF grid forces, rigid-water constraints); QM/MM composes with both FSSH and SOC-NAMD to give SOC-NAMD-QMMM.
 - Overlap-based MRSF state tracking, finite-difference NAC/TDC propagation, and energy-based decoherence (EDC).
+
+**Tutorials:** [SOC-NAMD-QMMM](https://open-quantum-platform.github.io/openqp-tutorials/soc-namd-qmmm/) · [ESPF QM/MM embedding](https://open-quantum-platform.github.io/openqp-tutorials/qmmm-embedding/)
 
 See the **SOC-NAMD-QMMM** guide and the `[md]` / `[qmmm]` keyword pages in the
 [manual](https://open-quantum-platform.github.io/openqp-docs/workflows/soc-namd-qmmm/)
@@ -74,6 +82,8 @@ Python API.
 | DFT grids | Lebedev plus SG-0/SG-1/SG-2/SG-3 pruned grids with per-element DE2 radial quadrature; OpenMP-parallel XC kernels |
 | Excited-state robustness | Davidson auto-restart; MINRES/AUTO Z-vector fallbacks |
 | Parallelism & deployment | OpenMP and MPI; BLAS/LAPACK optimization; pip install and Docker images |
+
+**Tutorials:** [SCF convergence & guesses](https://open-quantum-platform.github.io/openqp-tutorials/scf-convergence/) · [Effective core potentials](https://open-quantum-platform.github.io/openqp-tutorials/effective-core-potentials/)
 
 #### Ecosystem & Integrations
 
@@ -122,7 +132,7 @@ Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_t
 ### Documentation
 
 - [OpenQP Manual](https://open-quantum-platform.github.io/openqp-docs/) (reference docs; source: [openqp-docs](https://github.com/Open-Quantum-Platform/openqp-docs))
-- [OpenQP Tutorials](https://github.com/Open-Quantum-Platform/openqp-tutorials) (guided, runnable walkthroughs)
+- [OpenQP Tutorials](https://open-quantum-platform.github.io/openqp-tutorials/) (guided, runnable walkthroughs)
 - [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/)
 - [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
 - [Example inputs](examples)
