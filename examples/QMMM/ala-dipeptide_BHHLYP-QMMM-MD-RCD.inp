@@ -8,10 +8,10 @@
 # point charges at the M1-M2 bond midpoints conserving total charge + dipole).
 #
 # Covalent-boundary QM/MM is handled by this ground-state QM/MM MD path; the
-# nonadiabatic runtype=namd path does not append link atoms and raises on a cut.
-# Requires the optional OpenMM backend.  Like the other ground-state QM/MM decks
-# (run.inp, ala.inp) it is skipped by `openqp --run_tests all`; the frontier-
-# charge math is regression-tested in tests/test_qmmm_frontier*.py.
+# nonadiabatic surface-hopping (NAMD) path does not append link atoms and raises
+# on a cut. Requires the optional OpenMM backend.  Like the other ground-state
+# QM/MM decks (run.inp, ala.inp) it is skipped by the full example suite; the
+# frontier-charge math is regression-tested in tests/test_qmmm_frontier*.py.
 [input]
 runtype    = md
 qmmm_flag  = true
