@@ -1,5 +1,4 @@
-# Formaldehyde MRSF-TDDFT BHHLYP/6-31G* (n->pi* benchmark)
-# Triplet ROHF high-spin reference; geometry from task brief Appendix A (Angstrom).
+# Formaldehyde MRSF-TDDFT BHHLYP/6-31G* input for excited-toolkit integration tests.
 [input]
 system=
    C   0.000000   0.000000  -0.529700

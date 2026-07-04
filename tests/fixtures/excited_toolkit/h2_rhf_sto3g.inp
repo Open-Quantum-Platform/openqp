@@ -1,5 +1,4 @@
-# H2 RHF/STO-3G closed-shell reference for the FCIDUMP -> PySCF FCI cross-check.
-# Geometry from task brief Appendix A (Angstrom).
+# H2 RHF/STO-3G input for the excited-toolkit FCIDUMP integration test.
 [input]
 system=
    H   0.000000   0.000000   0.000000
