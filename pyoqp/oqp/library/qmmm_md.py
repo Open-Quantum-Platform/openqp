@@ -224,6 +224,7 @@ class QMMM_MD:
 
         self.cutoff    = _resolve_cutoff(qmmm_cfg.get("cutoff", "PME"))
         self.embedding = str(qmmm_cfg.get("embedding", "electrostatic"))
+        self.frontier_scheme = str(qmmm_cfg.get("frontier_scheme", "none"))
         self.n_steps   = int(qmmm_cfg.get("n_steps", 1000))
         self.timestep  = float(qmmm_cfg.get("timestep", 1.0)) * unit.femtoseconds
         self.temperature = float(qmmm_cfg.get("temperature", 300.0)) * unit.kelvin
@@ -345,6 +346,7 @@ class QMMM_MD:
             mol=self.mol,
             Cutoff=self.cutoff,
             Embedding=self.embedding,
+            frontier_scheme=self.frontier_scheme,
         )
         self.mm_systems = self.oqp_driver.mm_systems
 

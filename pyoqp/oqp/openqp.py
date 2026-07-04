@@ -439,7 +439,7 @@ class OpenQP:
 
     def qmmm(self, pdb_file=None, forcefield=None, forcefield_files=None,
              qm_atoms=None, cutoff=None, embedding=None, rigidwater=None,
-             **kwargs):
+             frontier_scheme=None, **kwargs):
         """Enable ESPF QM/MM embedding and configure the ``[qmmm]`` section.
 
         Sets ``[input] qmmm_flag=true`` and populates ``[qmmm]``. The QM geometry
@@ -451,6 +451,13 @@ class OpenQP:
         ``forcefield`` is an alias for the ``[qmmm] forcefield_files`` list.
         ``qm_atoms`` accepts a string (``"0-2"`` / ``"0 1 2"``) or a list of
         indices; a ``forcefield`` list is joined into a comma-separated string.
+
+        ``frontier_scheme`` sets the MM frontier-host (M1) charge treatment when
+        the QM/MM partition cuts a covalent bond (``runtype=namd`` ESPF path):
+        ``'none'`` (default, the validated full-field ESPF baseline), or the
+        optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
+        for whole-molecule QM regions.
+
         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
         """
         if forcefield is not None and forcefield_files is not None:
@@ -475,6 +482,8 @@ class OpenQP:
             updates["embedding"] = embedding
         if rigidwater is not None:
             updates["rigidwater"] = rigidwater
+        if frontier_scheme is not None:
+            updates["frontier_scheme"] = frontier_scheme
         updates.update(kwargs)
         if updates:
             self.section("qmmm", **updates)

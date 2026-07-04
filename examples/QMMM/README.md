@@ -39,3 +39,28 @@ contract and the compact `job.qmmm(...)` / `job.workflow.namd(...)` Python API.
 `ala.inp` and `2E4E_RHF-DFT-QMMM_energy.inp` are QM/MM single-point energy decks
 (QM selection via `[input] system = file.pdb <indices>`); `run.inp` is a
 ground-state OpenMM-integrator QM/MM MD deck.
+
+## Covalent QM/MM boundary — `[qmmm] frontier_scheme`
+
+When the QM/MM partition cuts a covalent bond, the dangling QM bond is capped
+with a hydrogen link atom and the MM host atom (`M1`) sits ~1.5 Å from the QM
+density. `[qmmm] frontier_scheme` selects how that frontier charge is treated in
+the ESPF (`runtype=namd`) electrostatics:
+
+| value | meaning |
+| --- | --- |
+| `none` (default) | Full-field: the QM density sees the complete MM charge set. This is the **validated ESPF baseline** — ESPF couples the MM potential to QM *atomic-charge operators* (`h += Σ_A φ_A Q̂_A`, Huix-Rotllant & Ferré, *JCTC* 2021, 17, 538, eq 6), which already suppresses the electron spill-out that motivates redistribution in density-based embedding, so the ESPF papers use full MM charges even at a covalent protein boundary. |
+| `rcd` | Delete `M1`'s charge and redistribute it to virtual point charges at the `M1–M2` bond midpoints, conserving the **total charge and the dipole about `M1`**. Gradient-consistent (the midpoints are linear in the real atom positions). |
+| `rc` | As `rcd` but conserving only the total charge. |
+| `z1` | Delete `M1`'s charge (conserves neither; for comparison). |
+
+`rcd`/`rc`/`z1` are **optional refinements**, not the ESPF default. Enable via the
+input (`[qmmm] frontier_scheme = rcd`) or the Python API
+(`job.qmmm(..., frontier_scheme="rcd")`). It is a no-op for whole-molecule QM
+regions (no cut bond).
+
+A runnable covalent-boundary demonstration on a real force field —
+the alanine dipeptide cut through the `ALA C–CA` bond with AMBER-14 — lives in
+`tests/test_qmmm_frontier_openmm.py` (link-atom detection + frontier-charge
+conservation; OpenMM-gated). The pure redistribution math (including a
+finite-difference gradient check) is in `tests/test_qmmm_frontier.py`.
