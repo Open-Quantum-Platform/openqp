@@ -1,0 +1,37 @@
+# Ground-state QM/MM molecular dynamics (runtype=md) across a COVALENT QM/MM
+# boundary, demonstrating [qmmm] frontier_scheme.
+#
+# System: the alanine dipeptide (ACE-ALA-NH2, ala.pdb) with AMBER-14.  QM = the
+# C-terminal amide (ALA C,O + NH2), so the QM/MM partition cuts the ALA C-CA
+# backbone bond: it is capped with a hydrogen link atom and the MM host-atom
+# charge is redistributed by frontier_scheme=rcd (delete the M1 charge; virtual
+# point charges at the M1-M2 bond midpoints conserving total charge + dipole).
+#
+# Covalent-boundary QM/MM is handled by this ground-state QM/MM MD path; the
+# nonadiabatic surface-hopping (NAMD) path does not append link atoms and raises
+# on a cut. Requires the optional OpenMM backend.  Like the other ground-state
+# QM/MM decks (run.inp, ala.inp) it is skipped by the full example suite; the
+# frontier-charge math is regression-tested in tests/test_qmmm_frontier*.py.
+[input]
+runtype    = md
+qmmm_flag  = true
+method     = hf
+functional = bhhlyp
+basis      = 6-31g
+charge     = 0
+
+[scf]
+type         = rhf
+multiplicity = 1
+
+[qmmm]
+pdb_file         = ala.pdb
+forcefield_files = amber14-all.xml
+qm_atoms         = 8,9,16,17,18
+cutoff           = NoCutoff
+embedding        = electrostatic
+frontier_scheme  = rcd
+n_steps          = 2
+timestep         = 0.5
+ensemble         = nve
+temperature      = 300.0

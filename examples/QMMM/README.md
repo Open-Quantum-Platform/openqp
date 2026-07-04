@@ -39,3 +39,42 @@ contract and the compact `job.qmmm(...)` / `job.workflow.namd(...)` Python API.
 `ala.inp` and `2E4E_RHF-DFT-QMMM_energy.inp` are QM/MM single-point energy decks
 (QM selection via `[input] system = file.pdb <indices>`); `run.inp` is a
 ground-state OpenMM-integrator QM/MM MD deck.
+
+## Covalent QM/MM boundary — `[qmmm] frontier_scheme`
+
+When the QM/MM partition cuts a covalent bond, the dangling QM bond is capped
+with a hydrogen link atom and the MM host atom (`M1`) sits ~1.5 Å from the QM
+density. `[qmmm] frontier_scheme` selects how that frontier charge is treated in
+the ESPF electrostatics. Covalent QM/MM boundaries are handled by the
+ground-state QM/MM MD path (`QMMM_MD`); the nonadiabatic `runtype=namd` path does
+not yet append link atoms to its QM molecule and raises on a covalent cut.
+
+| value | meaning |
+| --- | --- |
+| `none` (default) | Full-field: the QM density sees the complete MM charge set. This is the **validated ESPF baseline** — ESPF couples the MM potential to QM *atomic-charge operators* (`h += Σ_A φ_A Q̂_A`, Huix-Rotllant & Ferré, *JCTC* 2021, 17, 538, eq 6), which already suppresses the electron spill-out that motivates redistribution in density-based embedding, so the ESPF papers use full MM charges even at a covalent protein boundary. |
+| `rcd` | Delete `M1`'s charge and redistribute it to virtual point charges at the `M1–M2` bond midpoints, conserving the **total charge and the dipole about `M1`**. Gradient-consistent (the midpoints are linear in the real atom positions). |
+| `rc` | As `rcd` but conserving only the total charge. |
+| `z1` | Delete `M1`'s charge (conserves neither; for comparison). |
+
+`rcd`/`rc`/`z1` are **optional refinements**, not the ESPF default. Enable via the
+input (`[qmmm] frontier_scheme = rcd`) or the Python API
+(`job.qmmm(..., frontier_scheme="rcd")`). It is a no-op for whole-molecule QM
+regions (no cut bond).
+
+A runnable covalent-boundary deck is
+`ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp` — the alanine dipeptide (ACE-ALA-NH2) with
+AMBER-14, QM = the C-terminal amide so the QM/MM partition cuts the `ALA C–CA`
+backbone bond, run as ground-state QM/MM MD (`runtype=md`) with
+`frontier_scheme=rcd`:
+
+```bash
+cd examples/QMMM && openqp ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp
+```
+
+Like the other ground-state QM/MM decks it is skipped by `openqp --run_tests all`
+(covalent-boundary QM/MM is the ground-state MD path, not `runtype=namd`). The
+same alanine boundary is exercised automatically — link-atom detection +
+frontier-charge conservation on the real AMBER-14 charges — in
+`tests/test_qmmm_frontier_openmm.py` (OpenMM-gated), and the pure redistribution
+math (including a finite-difference gradient check) in
+`tests/test_qmmm_frontier.py`.

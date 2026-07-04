@@ -88,7 +88,7 @@ OQP_CONFIG_SCHEMA = {
         'constraints': {'type': str, 'default': 'None'},
         'rigidwater': {'type': bool, 'default': 'False'},
         'nsteps': {'type': int, 'default': '1'},
-        'timestep': {'type': int, 'default': '1'},
+        'timestep': {'type': float, 'default': '1.0'},
         'istate': {'type': int, 'default': '0'},
         # NAMD-QMMM (Runner runtype=namd) keys
         'pdb_file': {'type': str, 'default': ''},
@@ -97,6 +97,11 @@ OQP_CONFIG_SCHEMA = {
         'cutoff': {'type': str, 'default': 'NoCutoff'},
         'embedding': {'type': str, 'default': 'electrostatic'},
         'temperature': {'type': float, 'default': '300.0'},
+        # Frontier (M1) charge treatment across a covalent QM/MM cut for ESPF
+        # embedding: none (default = full-field, the validated ESPF baseline;
+        # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
+        # rc | z1 (optional redistribution refinements).
+        'frontier_scheme': {'type': str, 'default': 'none'},
     },
     'input': {
         'charge': {'type': int, 'default': '0'},
