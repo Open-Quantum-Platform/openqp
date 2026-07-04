@@ -50,6 +50,23 @@ jobs:
             Leave a non-blocking review comment with blocking issues, important suggestions,
             and tests that should be run. If no blocking issues are found, say so clearly.
 
+            In addition to correctness/bug review, check the PR against the four
+            contribution rules in AGENTS.md (in the repo root) and report each
+            explicitly:
+              1. Every BLAS/LAPACK routine the PR references is registered in
+                 OQP_ACCELERATE_ILP64_SYMS (cmake/oqp_functions.cmake) so it gets
+                 an oqp_<name>_i64 wrapper and a macOS Accelerate ILP64 alias; new
+                 code should prefer `use oqp_linalg`. (OpenQP is ILP64-only, so the
+                 operative failure of an unregistered routine is the macOS alias
+                 gate.) The PR policy lint enforces the registration part.
+              2. New functionality (runtype/method/[section]/keyword/flag) adds a
+                 small, fast example under examples/.
+              3. User-facing additions have a pythonic Python-API addition in
+                 pyoqp/oqp/openqp.py and a test in tests/test_openqp_api.py.
+              4. New user-facing keywords/workflows are documented in openqp-docs
+                 (a linked openqp-docs PR).
+            For each rule, state PASS, or explain what is missing.
+
       - name: Claude review unavailable
         if: steps.claude_review.outcome == 'failure'
         run: |
