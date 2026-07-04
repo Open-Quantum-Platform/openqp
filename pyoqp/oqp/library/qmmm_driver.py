@@ -130,7 +130,17 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.forcefield = forcefield
-        self.qm_atoms = np.array(qm_atoms, dtype=int)
+        # Sort the QM selection into ascending (topology) order. The QM geometry
+        # handed to the engine is built by iterating self.topology.atoms() filtered
+        # by membership (i.e. topology order), so gqm / f_qm / pchg come back in
+        # topology order. The force-scatter loops in _assemble_force / _assemble_
+        # force_espf and the link-atom host_row projection index those arrays by
+        # position in self.qm_atoms; if qm_atoms were given out of order (e.g.
+        # "5,2,7") those positions would not match topology order and QM gradients,
+        # coupling forces, and link-atom projections would land on the wrong atoms.
+        # Sorting makes input order == topology order without changing the QM
+        # calculation (the engine already sees the atoms in topology order).
+        self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
         self.Cutoff = Cutoff
         self.Embedding = Embedding
 
