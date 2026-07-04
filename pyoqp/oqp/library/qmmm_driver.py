@@ -459,7 +459,11 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.mm_systems = mm_systems
-        self.qm_atoms = qm_atoms
+        # Re-normalize to ascending (topology) order on every call: callers
+        # (e.g. QMMM_MD) pass their own config-order qm_atoms here, which would
+        # otherwise overwrite the sorted copy set in __init__ and reintroduce the
+        # force mis-scatter this fix prevents. See __init__ for the rationale.
+        self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
 
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
