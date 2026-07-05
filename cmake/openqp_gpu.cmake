@@ -24,17 +24,22 @@
 option(OPENQP_WITH_GPU "Link the auto-downloaded openqp-gpu CUDA library" OFF)
 set(OPENQP_GPU_REPO "git@github.com:Open-Quantum-Platform/openqp-gpu.git"
     CACHE STRING "openqp-gpu git repository for auto-download")
-set(OPENQP_GPU_TAG  "integrate-native-pieces"
-    CACHE STRING "openqp-gpu git tag/branch to fetch")
+# Pin to an immutable commit so an OPENQP_WITH_GPU=ON build is reproducible and
+# cannot be silently changed by a rebased/moved branch. Override to a newer
+# tag/SHA on the cmake line if you want a different GPU revision.
+set(OPENQP_GPU_TAG  "b051b31758e83dfdd93c9342b2798377cb704ee4"
+    CACHE STRING "openqp-gpu git commit/tag to fetch (immutable ref recommended)")
 set(OPENQP_GPU_SOURCE_DIR "" CACHE PATH
     "Use this local openqp-gpu checkout instead of downloading (optional)")
 
 if(OPENQP_WITH_GPU)
-  # The GPU library needs CUDA; enable it in this build tree.
-  enable_language(CUDA)
+  # Select the target GPU architecture BEFORE enabling the CUDA language, so
+  # CMake initializes CMAKE_CUDA_ARCHITECTURES (and the fetched GPU targets)
+  # from it rather than from the compiler's varying default.
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 80)   # A100; override on the cmake line
   endif()
+  enable_language(CUDA)
 
   # The complete GPU attachment links the SCF J/K, XC, MRSF sigma, and gradient
   # entry points, so build the full library. Only the standalone DF-tensor

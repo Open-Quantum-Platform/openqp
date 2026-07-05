@@ -157,18 +157,30 @@ contains
       return
     end if
     call c_f_procpointer(fp, ext_iter)
-    ! optional symbols
+    ! set_scale is MANDATORY: without it the device sigma would silently run at
+    ! the library's default exchange scale, which is wrong for scaled/hybrid
+    ! DFT (the MRSF gate also enables non-CAM DFT). Treat its absence as an
+    ! unavailable session so the driver keeps the native path.
     fp = c_dlsym(h, "routec_sig_set_scale"//c_null_char)
-    if (c_associated(fp)) call c_f_procpointer(fp, ext_scale)
+    if (.not. c_associated(fp)) then
+      write(error_unit, '(a)') &
+        ' routec_sig: routec_sig_set_scale symbol not found in '//trim(path)
+      ext_init => null()
+      ext_iter => null()
+      return
+    end if
+    call c_f_procpointer(fp, ext_scale)
+    ! optional
     fp = c_dlsym(h, "routec_sig_free"//c_null_char)
     if (c_associated(fp)) call c_f_procpointer(fp, ext_free)
 #endif
   end subroutine routec_sig_load
 
-  !> .true. iff the sigma-session (init+iter) is resolved.
+  !> .true. iff the sigma-session (init+iter+set_scale) is resolved.
   logical function routec_sig_available()
     if (.not. tried) call routec_sig_load()
-    routec_sig_available = associated(ext_init) .and. associated(ext_iter)
+    routec_sig_available = associated(ext_init) .and. associated(ext_iter) &
+                     .and. associated(ext_scale)
   end function routec_sig_available
 
   !> Begin a Davidson sigma-session: upload Ca,Cb (MO coeff), Fa,Fb (MO Fock,

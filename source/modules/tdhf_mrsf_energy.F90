@@ -160,7 +160,7 @@ contains
     ! OQP_ROUTEC_SIG seam: when .true., the per-vector sigma triple (mrsfcbc ->
     ! int2 -> mrsfmntoia+mrsfesum) is replaced by a device-resident sigma-session
     ! call that returns amo(:,ist:iend) = (A-B).X directly. Decided ONCE pre-loop.
-    logical :: use_sig
+    logical :: use_sig, sig_done
     integer :: sig_ierr
 
     ! tagarray
@@ -505,15 +505,26 @@ contains
     do iter = 1, mxiter
       nv = iend-ist+1
 
+      sig_done = .false.
       if (use_sig) then
       ! ---- OQP_ROUTEC_SIG fast path: amo(:,ist:iend) = (A-B).X on device ----
       ! Replaces the whole 6a (mrsfcbc) -> 6b (int2) -> 6c (mrsfmntoia+mrsfesum)
       ! triple for the new trial columns. bvec_mo/amo are already the MO occ-virt
       ! parameterization (ntrial = nocca*(nbf-noccb), col-major i-fast), so the
       ! slices drop straight in with no reshape or AO traffic.
-        if (.not. routec_sig_apply(bvec_mo(:,ist:iend), nv, amo(:,ist:iend))) &
-          call show_message('routec_sig: sig_iter declined mid-run', with_abort)
-      else
+      ! A mid-run decline (device error / OOM / unsupported batch) is
+      ! recoverable: switch the session off and compute this and every later
+      ! slice through the native path instead of aborting the run.
+        if (routec_sig_apply(bvec_mo(:,ist:iend), nv, amo(:,ist:iend))) then
+          sig_done = .true.
+        else
+          use_sig = .false.
+          write(*, '(2x,a)') &
+            'routec_sig: sig_iter declined mid-run -> reverting to native sigma path'
+        end if
+      end if
+
+      if (.not. sig_done) then
 
       if( mrst==1 .or. mrst==3 ) then
 
