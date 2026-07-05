@@ -255,6 +255,10 @@ endif()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(oqp_functions)
 
+# Optional GPU acceleration (openqp-gpu). Default OFF; when ON, auto-downloads
+# and links the library and builds the MRSF seam in its compile-time path.
+include(openqp_gpu)
+
 if(ENABLE_DDX)
   # ddX is LGPL-3.0: it stays an *external*, dynamically-linked dependency
   # (never vendored into the OpenQP tree). Two ways to provide it:

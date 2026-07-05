@@ -87,6 +87,8 @@ contains
       get_mrsf_transition_density, get_jacobi, umrsfssqu, mrsf_set_fp32
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
+    use routec_sig, only: routec_sig_available, routec_sig_begin, &
+      routec_sig_apply, routec_sig_end
     use oqp_linalg
     use int1, only: multipole_integrals
     use printing, only: print_module_info
@@ -154,6 +156,12 @@ contains
     integer :: scf_type, mol_mult
 
     logical :: umrsf
+
+    ! OQP_ROUTEC_SIG seam: when .true., the per-vector sigma triple (mrsfcbc ->
+    ! int2 -> mrsfmntoia+mrsfesum) is replaced by a device-resident sigma-session
+    ! call that returns amo(:,ist:iend) = (A-B).X directly. Decided ONCE pre-loop.
+    logical :: use_sig
+    integer :: sig_ierr
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
@@ -466,6 +474,28 @@ contains
       call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
     end if
 
+    ! ---- OQP_ROUTEC_SIG pre-loop gate (decide use_sig ONCE) ----------------
+    ! Activate the device sigma-session only for the MRSF S/T flagship the v3
+    ! engine supports: mrst in {1,3}, non-UMRSF, no CAM, no spin-pair rescale
+    ! (all spc_* == HFscale). fa/fb are the unpacked MO Fock built above;
+    ! scale_exch is finalized above. Any failure => pure native path.
+    use_sig = .false.
+    if ((mrst==1 .or. mrst==3) .and. .not. umrsf) then
+      if (infos%tddft%spc_coco == infos%tddft%hfscale .and. &
+          infos%tddft%spc_ovov == infos%tddft%hfscale .and. &
+          infos%tddft%spc_coov == infos%tddft%hfscale .and. &
+          .not. (dft .and. infos%dft%cam_flag)) then
+        if (routec_sig_available()) then
+          sig_ierr = routec_sig_begin(nbf, mo_a, mo_b, fa, fb, &
+                                      nocca, noccb, mrst, scale_exch)
+          use_sig = (sig_ierr == 0)
+          if (.not. use_sig) write(*,'(2x,a,i0,a)') &
+            'routec_sig: sig_begin returned ', sig_ierr, &
+            ' -> using native MRSF sigma path'
+        end if
+      end if
+    end if
+
     ist = 1
     iend = nvec
     iter = 0
@@ -474,6 +504,16 @@ contains
 
     do iter = 1, mxiter
       nv = iend-ist+1
+
+      if (use_sig) then
+      ! ---- OQP_ROUTEC_SIG fast path: amo(:,ist:iend) = (A-B).X on device ----
+      ! Replaces the whole 6a (mrsfcbc) -> 6b (int2) -> 6c (mrsfmntoia+mrsfesum)
+      ! triple for the new trial columns. bvec_mo/amo are already the MO occ-virt
+      ! parameterization (ntrial = nocca*(nbf-noccb), col-major i-fast), so the
+      ! slices drop straight in with no reshape or AO traffic.
+        if (.not. routec_sig_apply(bvec_mo(:,ist:iend), nv, amo(:,ist:iend))) &
+          call show_message('routec_sig: sig_iter declined mid-run', with_abort)
+      else
 
       if( mrst==1 .or. mrst==3 ) then
 
@@ -641,6 +681,8 @@ contains
 
         end if
       end do
+
+      end if   ! use_sig / native sigma path
 
       vl_p(1:nvec, 1:nvec) => vl(1:nvec*nvec)
       vr_p(1:nvec, 1:nvec) => vr(1:nvec*nvec)
@@ -811,6 +853,7 @@ contains
     call flush(iw)
 
     call int2_driver%clean()
+    if (use_sig) call routec_sig_end()
     infos%control%int2e_cutoff = rc_save
 
     call measure_time(print_total=1, log_unit=iw)
