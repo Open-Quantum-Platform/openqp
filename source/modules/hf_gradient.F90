@@ -233,6 +233,8 @@ contains
     use oqp_tagarray_driver
     use messages, only: show_message, WITH_ABORT
     use types, only: information
+    use parallel, only: par_env_t
+    use routec_bridge, only: routec_try_grad2
 
     implicit none
 
@@ -252,6 +254,10 @@ contains
     real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:)
     integer(4) :: status
 
+    ! Route-C external 2e-gradient seam
+    type(par_env_t) :: pe
+    integer :: ok_ext
+
     urohf = infos%control%scftype >= 2
     hfscale = 1.0d0
     if(infos%control%hamilton.ge.20) hfscale = infos%dft%hfscale
@@ -261,6 +267,28 @@ contains
             stat=ok)
 
     if(ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
+
+    ! Route-C external DF 2e-gradient (inert unless $OQP_ROUTEC_GRAD_LIB is
+    ! set). RHF-type density only, no CAM (the attenuated short-range pass
+    ! stays native). Rank 0 computes, result broadcast; info/=0 falls back.
+    if (.not. urohf .and. .not. infos%dft%cam_flag) then
+      call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a, status)
+      call check_status(status, module_name, subroutine_name, OQP_DM_A)
+      call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+      ok_ext = 0
+      if (pe%rank == 0) then
+        if (routec_try_grad2(dmat_a, infos%atoms%xyz, de, basis%nbf, &
+                             ubound(infos%atoms%zn,1), hfscale, 1.0d0)) &
+          ok_ext = 1
+      end if
+      call pe%bcast(ok_ext, 1)
+      if (ok_ext == 1) then
+        call pe%bcast(de, size(de))
+        infos%atoms%grad = infos%atoms%grad + de
+        return
+      end if
+      de = 0.0d0
+    end if
 
     if (urohf) then
 

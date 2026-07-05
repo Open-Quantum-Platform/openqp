@@ -36,11 +36,10 @@ if(OPENQP_WITH_GPU)
     set(CMAKE_CUDA_ARCHITECTURES 80)   # A100; override on the cmake line
   endif()
 
-  # For the MRSF energy seam only the SCF + sigma sources are needed. Build the
-  # minimal library (no gradient, no XC, no builder tool) for a fast download.
+  # The complete GPU attachment links the SCF J/K, XC, MRSF sigma, and gradient
+  # entry points, so build the full library. Only the standalone DF-tensor
+  # builder tool is skipped -- it is not linked into OpenQP.
   set(OPENQP_GPU_DFBUILD OFF CACHE BOOL "" FORCE)
-  set(OPENQP_GPU_GRAD    OFF CACHE BOOL "" FORCE)
-  set(OPENQP_GPU_DFT     OFF CACHE BOOL "" FORCE)
 
   if(OPENQP_GPU_SOURCE_DIR)
     message(STATUS "openqp-gpu: using local source ${OPENQP_GPU_SOURCE_DIR}")

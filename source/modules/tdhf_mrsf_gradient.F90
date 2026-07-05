@@ -203,6 +203,8 @@ contains
     use precision, only: dp
     use messages, only: show_message, WITH_ABORT
     use types, only: information
+    use parallel, only: par_env_t
+    use routec_bridge, only: routec_try_grad2_mrsf
 
     implicit none
 
@@ -217,6 +219,10 @@ contains
     integer :: ok
     real(kind=dp), allocatable :: de(:,:)
     class(grd2_compute_data_t), allocatable :: gcomp
+
+    ! Route-C external MRSF 2e-gradient seam
+    type(par_env_t) :: pe
+    integer :: ok_ext
 
     dft = infos%control%hamilton == 20 ! dft or hf
     urohf = infos%control%scftype >= 2
@@ -251,6 +257,31 @@ contains
     write(*, '(16x,"|   CO-CO   |   OV-OV   |   CO-OV   |")')
     write(*, '(16x,"|", t20, f6.3, t29, "|", t32, f6.3, t41, "|", t44, f6.3, t53, "|")') &
        infos%tddft%spc_coco, infos%tddft%spc_ovov, infos%tddft%spc_coov
+
+    ! Route-C external MRSF DF 2e-gradient (inert unless $OQP_ROUTEC_GRAD_LIB
+    ! exposes routec_grad2_mrsf). No CAM (the attenuated short-range pass stays
+    ! native); d/p/spc passed RAW (before the init() sum/diff transform).
+    ! Rank 0 computes, result broadcast; declined -> native.
+    if (.not. (dft .and. infos%dft%cam_flag)) then
+      call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+      ok_ext = 0
+      if (pe%rank == 0) then
+        if (routec_try_grad2_mrsf(d, p, spc, infos%atoms%xyz, de, &
+                                  basis%nbf, ubound(infos%atoms%zn,1), &
+                                  scale_exch, scale_exch2, 1.0d0, &
+                                  [infos%tddft%spc_coco, &
+                                   infos%tddft%spc_ovov, &
+                                   infos%tddft%spc_coov], &
+                                  infos%tddft%mult)) ok_ext = 1
+      end if
+      call pe%bcast(ok_ext, 1)
+      if (ok_ext == 1) then
+        call pe%bcast(de, size(de))
+        infos%atoms%grad = infos%atoms%grad + de
+        return
+      end if
+      de = 0.0d0
+    end if
 
     gcomp = grd2_mrsf_compute_data_t( d2 = d &
                                     , p2 = p &
