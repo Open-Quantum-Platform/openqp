@@ -562,6 +562,19 @@ class SinglePoint(Calculator):
                      primary, ' +stability' if stability else ''))
         return primary, stability
 
+    def _apply_selected_converger(self, primary):
+        """Map selector labels onto native SCF controls.
+
+        The training database labels DIIS variants (C-/E-/A-/v-DIIS) separately,
+        while the native top-level converger switch expects ``diis`` plus a
+        DIIS-subtype control value.
+        """
+        primary = str(primary).lower()
+        if primary in ('cdiis', 'ediis', 'adiis', 'vdiis'):
+            self.mol.data.set_scf_diis_type(primary)
+            return 'diis'
+        return primary
+
     def _run_scf(self):
         """Unified robust SCF driver.
 
@@ -604,6 +617,7 @@ class SinglePoint(Calculator):
         # --- SCF manager: converger_type=auto|ml picks the primary from system features ---
         if str(primary).lower() in ('auto', 'ml'):
             primary, stability = self._select_converger(str(primary).lower(), stability)
+        primary = self._apply_selected_converger(primary)
 
         # --- Stage 1: primary converger ---
         data.set_scf_converger_type(primary)

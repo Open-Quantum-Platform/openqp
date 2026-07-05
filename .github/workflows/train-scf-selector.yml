@@ -1,0 +1,37 @@
+name: train-scf-selector
+
+on:
+  push:
+    paths:
+      - "tools/scf-converger-ml/data/**"
+      - "tools/scf-converger-ml/geometries/**"
+      - "tools/scf-converger-ml/train/**"
+      - "tools/scf-converger-ml/harness/**"
+      - "tools/scf-converger-ml/contribute/**"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -q scikit-learn numpy
+      - name: Train and distill selector
+        run: tools/scf-converger-ml/train/run.sh
+      - name: Commit refreshed model
+        run: |
+          git config user.name "scf-ml-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            tools/scf-converger-ml/model/scf_selector_model.py \
+            tools/scf-converger-ml/model/metrics.txt \
+            pyoqp/oqp/library/scf_selector_model.py
+          git diff --cached --quiet || git commit -m "auto: retrain selector on new data [skip ci]"
+          git push

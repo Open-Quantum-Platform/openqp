@@ -21,6 +21,7 @@ def load_module(name, relative_path):
 def install_single_point_stubs():
     oqp = types.ModuleType("oqp")
     oqp.__path__ = []
+    setattr(oqp, "lib", types.SimpleNamespace())
     setattr(oqp, "hf_energy", lambda mol: None)
     setattr(oqp, "tdhf_energy", lambda mol: None)
     setattr(oqp, "tdhf_sf_energy", lambda mol: None)
@@ -59,6 +60,9 @@ def install_single_point_stubs():
     setattr(file_utils, "write_xyz", lambda *args, **kwargs: None)
     sys.modules["oqp.utils.file_utils"] = file_utils
 
+    qmmm = types.ModuleType("oqp.utils.qmmm")
+    sys.modules["oqp.utils.qmmm"] = qmmm
+
     library = types.ModuleType("oqp.library")
     library.__path__ = []
     sys.modules["oqp.library"] = library
@@ -73,10 +77,14 @@ class FakeData(dict):
     def __init__(self):
         super().__init__()
         self.convergers = []
+        self.diis_types = []
         self.sd_scf_flags = []
 
     def set_scf_converger_type(self, converger):
         self.convergers.append(converger)
+
+    def set_scf_diis_type(self, diis_type):
+        self.diis_types.append(diis_type)
 
     def set_sd_scf(self, flag):
         self.sd_scf_flags.append(flag)
@@ -196,6 +204,23 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.reference(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_ml_selector_maps_diis_subtype_to_native_controls(self):
+        # The distilled model labels DIIS variants, while native control uses a
+        # top-level DIIS converger plus a DIIS subtype.
+        model = types.ModuleType("oqp.library.scf_selector_model")
+        setattr(model, "predict", lambda features: "ediis")
+        sys.modules["oqp.library.scf_selector_model"] = model
+
+        calc = self.make_calculator()
+        calc.converger_type = "ml"
+        calc.mol.config["scf"]["converger_type"] = "ml"
+
+        converged = calc._run_scf()
+
+        self.assertTrue(converged)
+        self.assertEqual(calc.mol.data.diis_types, ["ediis"])
         self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
 
     def test_stability_noop_restores_pre_trah_energy_metadata(self):
