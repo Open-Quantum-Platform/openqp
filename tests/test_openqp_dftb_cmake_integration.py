@@ -51,6 +51,12 @@ class OpenQPDFTBCMakeIntegrationTests(unittest.TestCase):
         self.assertIn("openqp_dftb_api", bridge)
         self.assertIn('bind(C, name="oqp_dftb_state_gradient")', bridge)
 
+    def test_dftb_disabled_stub_uses_unconditional_status_writer(self):
+        bridge = (ROOT / "source" / "openqp_dftb_bridge.F90").read_text(encoding="utf-8")
+        writer_pos = bridge.index("subroutine write_c_string")
+        guard_pos = bridge.index("#ifdef OQP_ENABLE_OPENQP_DFTB", bridge.index("end subroutine oqp_dftb_state_gradient_C"))
+        self.assertLess(writer_pos, guard_pos)
+
     def test_cffi_header_declares_dftb_bridge(self):
         header = (ROOT / "include" / "oqp.h").read_text(encoding="utf-8")
         self.assertIn("void oqp_dftb_state_gradient", header)

@@ -88,6 +88,23 @@ contains
 #endif
   end subroutine oqp_dftb_state_gradient_C
 
+  subroutine write_c_string(text, chars, n_chars)
+    character(len=*), intent(in) :: text
+    character(kind=c_char), intent(out) :: chars(*)
+    integer(c_int32_t), value :: n_chars
+    integer :: i
+    integer :: n
+
+    if (n_chars <= 0) return
+    do i = 1, int(n_chars)
+      chars(i) = c_null_char
+    enddo
+    n = min(len_trim(text), max(0, int(n_chars) - 1))
+    do i = 1, n
+      chars(i) = text(i:i)
+    enddo
+  end subroutine write_c_string
+
 #ifdef OQP_ENABLE_OPENQP_DFTB
   subroutine run_openqp_dftb(c_handle, parameter_path, parameter_len, method_name, method_len, &
       root, n_roots, need_gradient, molecular_charge, scc_mixer, scc_history, max_scc_iterations, &
@@ -310,23 +327,6 @@ contains
     enddo
     call write_c_string(message, status_message, status_message_len)
   end subroutine run_openqp_dftb
-
-  subroutine write_c_string(text, chars, n_chars)
-    character(len=*), intent(in) :: text
-    character(kind=c_char), intent(out) :: chars(*)
-    integer(c_int32_t), value :: n_chars
-    integer :: i
-    integer :: n
-
-    if (n_chars <= 0) return
-    do i = 1, int(n_chars)
-      chars(i) = c_null_char
-    enddo
-    n = min(len_trim(text), max(0, int(n_chars) - 1))
-    do i = 1, n
-      chars(i) = text(i:i)
-    enddo
-  end subroutine write_c_string
 
   subroutine set_spin_flip_reference(options)
     type(openqp_dftb_options_t), intent(inout) :: options
