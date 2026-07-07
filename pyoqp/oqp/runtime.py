@@ -33,15 +33,17 @@ def _source_root_from_package(package_root):
 
 def _candidate_roots(package_root=None):
     package_root = Path(package_root or Path(__file__).resolve().parent)
-    roots = [package_root]
-
-    source_root = _source_root_from_package(package_root)
-    if source_root is not None:
-        roots.append(source_root)
+    roots = []
 
     env_root = os.environ.get("OPENQP_ROOT")
     if env_root:
         roots.append(Path(env_root).expanduser())
+
+    roots.append(package_root)
+
+    source_root = _source_root_from_package(package_root)
+    if source_root is not None:
+        roots.append(source_root)
 
     seen = set()
     unique_roots = []

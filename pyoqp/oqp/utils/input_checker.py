@@ -18,7 +18,7 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-METHODS = {"hf", "tdhf", "mp2"}
+METHODS = {"hf", "tdhf", "mp2", "dftb"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 MP2_VARIANTS = {
@@ -30,6 +30,13 @@ MP2_VARIANTS = {
     "scs-mi", "scs-mi-mp2",
     "custom",
 }
+DFTB_BACKENDS = {"auto", "native", "probe"}
+DFTB_TYPES = {
+    "auto", "ground", "dftb", "dftb0", "ground_noscc", "noscc",
+    "tddftb", "tda", "sf", "sftddftb", "sf-tddftb",
+    "mrsf", "mrsftddftb", "mrsf-tddftb",
+}
+DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -50,7 +57,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, or method=dftb for the optional external DFTB+ backend.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, or method=dftb for the optional OpenQP-DFTB backend.",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -63,6 +70,8 @@ WIKI_HELP = {
     "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
     "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
+    "dftb.parameter_path": "Set [dftb] parameter_path to an .opdftb file or an SKF parameter directory; OPENQP_DFTB_PARAMETER_PATH may also provide it.",
+    "dftb.namd": "OpenQP-DFTB can provide NAMD surface data through runtype=data. NAC/NACME requires an implemented DFTB state-overlap backend.",
 }
 
 
@@ -790,6 +799,201 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             )
 
 
+def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != "dftb":
+        return
+
+    backend = _as_lower(_get(config, "dftb", "backend", "native"))
+    dftb_type = _as_lower(_get(config, "dftb", "type", "auto"))
+    parameter_path = _get(config, "dftb", "parameter_path", "")
+    executable = _get(config, "dftb", "executable", "")
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    nstate = _get(config, "tdhf", "nstate", 1)
+    grad_states = _as_list(_get(config, "properties", "grad", []))
+    istate = _get(config, "optimize", "istate", 0)
+    jstate = _get(config, "optimize", "jstate", 0)
+
+    if backend not in DFTB_BACKENDS:
+        report.add(
+            "ERROR",
+            "dftb.backend",
+            "Unknown OpenQP-DFTB backend.",
+            value=backend,
+            expected=", ".join(sorted(DFTB_BACKENDS)),
+            action="Use native for OpenQP-linked calculations; probe is only an explicit developer fallback.",
+        )
+
+    if dftb_type not in DFTB_TYPES:
+        report.add(
+            "ERROR",
+            "dftb.type",
+            "Unknown OpenQP-DFTB calculation type.",
+            value=dftb_type,
+            expected="ground, tddftb, sf, mrsf, or auto",
+            action="Use auto to derive the DFTB response type from [tdhf] type, or set it explicitly.",
+        )
+
+    if not parameter_path and not os.environ.get("OPENQP_DFTB_PARAMETER_PATH"):
+        report.add(
+            "ERROR",
+            "dftb.parameter_path",
+            "OpenQP-DFTB requires an explicit parameter source.",
+            expected=".opdftb file or SKF directory",
+            action="Set [dftb] parameter_path, or export OPENQP_DFTB_PARAMETER_PATH.",
+            wiki=WIKI_HELP["dftb.parameter_path"],
+        )
+
+    if backend == "probe" and not executable and not os.environ.get("OPENQP_DFTB_STATE_GRADIENT_PROBE"):
+        report.add(
+            "WARNING",
+            "dftb.executable",
+            "Probe backend selected without an explicit probe executable.",
+            action="Set [dftb] executable or put openqp_dftb_state_gradient_probe on PATH.",
+        )
+
+    for path, value in (
+        ("dftb.scc_tolerance", _get(config, "dftb", "scc_tolerance", 1.0e-8)),
+        ("dftb.response_tolerance", _get(config, "dftb", "response_tolerance", 1.0e-6)),
+        ("dftb.scc_mixing", _get(config, "dftb", "scc_mixing", 0.35)),
+    ):
+        if value <= 0.0:
+            report.add(
+                "ERROR",
+                path,
+                "DFTB numeric option must be positive.",
+                value=value,
+                action="Use a positive value.",
+            )
+
+    for path, value in (
+        ("dftb.omega", _get(config, "dftb", "omega", 0.3)),
+        ("dftb.cam_alpha", _get(config, "dftb", "cam_alpha", 0.0)),
+        ("dftb.cam_beta", _get(config, "dftb", "cam_beta", 1.0)),
+    ):
+        if value < 0.0:
+            report.add(
+                "ERROR",
+                path,
+                "DFTB range-separation/CAM option must be non-negative.",
+                value=value,
+                action="Use zero or a positive value.",
+            )
+
+    if _get(config, "dftb", "scc_mixing", 0.35) > 1.0:
+        report.add(
+            "ERROR",
+            "dftb.scc_mixing",
+            "SCC mixing must be in the interval (0, 1].",
+            value=_get(config, "dftb", "scc_mixing", 0.35),
+            action="Reduce the population-vector mixing fraction.",
+        )
+
+    for path in ("scc_history", "max_scc_iterations", "response_max_iterations", "response_max_subspace", "timeout"):
+        value = _get(config, "dftb", path, 1)
+        if value <= 0:
+            report.add(
+                "ERROR",
+                f"dftb.{path}",
+                "DFTB integer option must be positive.",
+                value=value,
+                action="Use a positive integer.",
+            )
+
+    if _get(config, "dftb", "scc_max_step", 0.5) < 0.0:
+        report.add(
+            "ERROR",
+            "dftb.scc_max_step",
+            "SCC mixer max step must be non-negative.",
+            value=_get(config, "dftb", "scc_max_step", 0.5),
+            action="Use zero to disable the cap or a positive cap.",
+        )
+
+    if _get(config, "dftb", "spc", 0.5) < 0.0 and abs(_get(config, "dftb", "spc", 0.5) + 1.0) > 1.0e-12:
+        report.add(
+            "ERROR",
+            "dftb.spc",
+            "MRSF spin-pair coupling must be non-negative, or -1 to inherit the CAM exchange fraction.",
+            value=_get(config, "dftb", "spc", 0.5),
+            action="Use 0.5 for the current OpenQP-DFTB production calibration.",
+        )
+
+    if _as_lower(_get(config, "dftb", "scc_mixer", "auto")) not in DFTB_SCC_MIXERS:
+        report.add(
+            "ERROR",
+            "dftb.scc_mixer",
+            "Unknown DFTB SCC mixer.",
+            value=_get(config, "dftb", "scc_mixer", "auto"),
+            expected=", ".join(sorted(DFTB_SCC_MIXERS)),
+            action="Use auto, anderson, broyden, diis, trust/trah, or linear.",
+        )
+
+    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
+    if runtype in {"nac", "nacme", "bp"}:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "OpenQP-DFTB NAMD coupling is not available until the DFTB state-overlap/NACME backend is wired.",
+            value=runtype,
+            expected="data for energies/gradients, or a DFTB state-overlap implementation before nac/nacme/bp",
+            action="Use runtype=data for NAMD surface energies/gradients; enable nac/nacme only after adding a validated DFTB state-overlap hook.",
+            wiki=WIKI_HELP["dftb.namd"],
+        )
+    elif runtype not in allowed_runtype:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "OpenQP-DFTB is currently wired only through energy/gradient-driven workflows.",
+            value=runtype,
+            expected=", ".join(sorted(allowed_runtype)),
+            action="Use energy, grad, data, optimize, meci, or mep until Hessian/NAC/SOC DFTB hooks are implemented.",
+        )
+
+    ground_like = dftb_type in {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
+    if dftb_type == "auto" and runtype in {"optimize", "mep"} and int(istate) == 0:
+        ground_like = True
+
+    if not ground_like and td_type not in {"rpa", "tda", "sf", "mrsf"}:
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            "OpenQP-DFTB response hooks support TDDFTB/TDA, SF-TDDFTB, and MRSF-TDDFTB.",
+            value=td_type,
+            expected="rpa/tda, sf, or mrsf",
+            action="Set [tdhf] type=tda, sf, or mrsf, or set [dftb] type=ground for S0 DFTB.",
+        )
+
+    requested = []
+    if runtype in {"grad", "data"}:
+        requested.extend(grad_states)
+    if runtype in {"optimize", "mep"}:
+        requested.append(istate)
+    if runtype == "meci":
+        requested.extend([istate, jstate])
+    max_requested = _max_state(requested)
+
+    if ground_like and max_requested > 0:
+        report.add(
+            "ERROR",
+            "dftb.type",
+            "Ground-state DFTB can only target state 0.",
+            value={"type": dftb_type, "requested_state": max_requested},
+            expected="state 0",
+            action="Use [dftb] type=tddftb/sf/mrsf for excited states.",
+        )
+
+    if not ground_like and max_requested > nstate:
+        report.add(
+            "ERROR",
+            "tdhf.nstate",
+            "DFTB requested state is above the solved response space.",
+            value={"nstate": nstate, "requested_state": max_requested},
+            expected=f"nstate >= {max_requested}",
+            action="Increase [tdhf] nstate.",
+        )
+
+
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     multiplicity = _get(config, "scf", "multiplicity", 1)
@@ -1342,6 +1546,9 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
 
+    if method == "dftb" and runtype in {"nac", "bp", "nacme"}:
+        return
+
     if runtype == "neb":
         _check_neb(config, report, input_dir)
 
@@ -1413,14 +1620,14 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if runtype == "meci":
-        if method != "tdhf":
+        if method not in {"tdhf", "dftb"}:
             report.add(
                 "ERROR",
                 "input.method",
-                "MECI optimization requires method=tdhf.",
+                "MECI optimization requires an excited-state method.",
                 value=method,
-                expected="tdhf",
-                action="Set [input] method=tdhf and configure [tdhf].",
+                expected="tdhf or dftb",
+                action="Set [input] method=tdhf or method=dftb and configure the response state space.",
             )
         if jstate <= istate:
             report.add(
@@ -1959,7 +2166,7 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf, tdhf, or mp2.",
+            action="Choose hf, tdhf, mp2, or dftb.",
             wiki=WIKI_HELP["input.method"],
         )
 
@@ -1967,6 +2174,7 @@ def check_input_values(
     _check_basis(config, report)
     _check_guess(config, report)
     _check_pcm(config, report)
+    _check_dftb(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

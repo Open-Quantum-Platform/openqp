@@ -45,6 +45,7 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.openqp_dftb import OpenQPDFTBAdapter
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 import oqp.utils.qmmm as qmmm
 
@@ -403,6 +404,8 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).energy()
         if self.method not in ['hf', 'tdhf', 'mp2']:
             raise ValueError(f'Unknown method type {self.method}')
 
@@ -452,6 +455,9 @@ class SinglePoint(Calculator):
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
 
     def reference(self, do_init_scf=True):
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).reference()
+
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
         # Experimental petite-list reduction (no-op unless
@@ -790,6 +796,9 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).excitation(ref_energy)
+
         # Response-space symmetry blocking (no-op unless
         # [symmetry] use_response_symmetry is enabled).
         if getattr(self.mol, 'symmetry_metadata', None) and \
@@ -882,7 +891,7 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf']:
+        if self.method not in ['hf', 'tdhf', 'dftb']:
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -898,6 +907,8 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+        elif self.method == 'dftb':
+            grads = OpenQPDFTBAdapter(self.mol).gradient(self.grads)
 
         # Petite-list runs produce a skeleton two-electron gradient; project
         # onto the totally symmetric component (exact for 1-dim irreps; all

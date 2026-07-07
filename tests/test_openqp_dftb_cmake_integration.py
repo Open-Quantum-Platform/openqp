@@ -43,9 +43,18 @@ class OpenQPDFTBCMakeIntegrationTests(unittest.TestCase):
         self.assertIn("target_include_directories(oqp PUBLIC ${OPENQP_DFTB_INCLUDE_DIR})", block)
         self.assertIn("target_link_libraries(oqp ${OPENQP_DFTB_LIBRARY})", block)
 
-    def test_openqp_repo_does_not_embed_dftb_implementation(self):
+    def test_openqp_repo_contains_only_thin_dftb_bridge(self):
         source_files = [path.name for path in (ROOT / "source").glob("openqp_dftb*.F90")]
-        self.assertEqual([], source_files)
+        self.assertEqual(["openqp_dftb_bridge.F90"], source_files)
+        bridge = (ROOT / "source" / "openqp_dftb_bridge.F90").read_text(encoding="utf-8")
+        self.assertIn("#ifdef OQP_ENABLE_OPENQP_DFTB", bridge)
+        self.assertIn("openqp_dftb_api", bridge)
+        self.assertIn('bind(C, name="oqp_dftb_state_gradient")', bridge)
+
+    def test_cffi_header_declares_dftb_bridge(self):
+        header = (ROOT / "include" / "oqp.h").read_text(encoding="utf-8")
+        self.assertIn("void oqp_dftb_state_gradient", header)
+        self.assertIn("status=-9001", header)
 
 
 if __name__ == "__main__":

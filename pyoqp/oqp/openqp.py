@@ -236,6 +236,9 @@ class _TheoryProxy:
     def tdhf(self, **kwargs):
         return self._owner._theory("tdhf", **kwargs)
 
+    def dftb(self, **kwargs):
+        return self._owner.dftb(**kwargs)
+
     def tddft(self, functional=None, **kwargs):
         if functional is None:
             raise ValueError("TDDFT theory requires functional=...")
@@ -628,6 +631,27 @@ class OpenQP:
                 multiplicity=multiplicity,
                 **keywords,
             )
+        if method_key in {"dftb", "openqp-dftb", "tddftb", "td-dftb"}:
+            return self.dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-tddftb", "sf-td-dftb", "sftddftb"}:
+            return self.dftb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-tddftb", "mrsf-td-dftb", "mrsftddftb"}:
+            return self.dftb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
         if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
             if functional is None:
                 raise ValueError("SF-TDDFT theory requires functional=...")
@@ -653,7 +677,7 @@ class OpenQP:
             )
         raise ValueError(
             "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
-            "sf-tddft, or mrsf-tddft."
+            "sf-tddft, mrsf-tddft, or dftb."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -816,6 +840,45 @@ class OpenQP:
         updates = {"type": "mrsf", "nstate": nstate}
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
+
+    def dftb(self, runtype=None, response_type="mrsf", nstate=3,
+             parameter_path=None, **keywords):
+        """Use the optional OpenQP-DFTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "dftb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        dftb_schema = OQP_CONFIG_SCHEMA.get("dftb", {})
+        dftb_updates = {}
+        if parameter_path is not None:
+            dftb_updates["parameter_path"] = parameter_path
+        for key in list(keywords.keys()):
+            if key in dftb_schema:
+                dftb_updates[key] = keywords.pop(key)
+
+        requested_type = str(keywords.pop("type", response_type)).lower()
+        dftb_type = requested_type
+        tdhf_type = {
+            "ground": "tda",
+            "dftb": "tda",
+            "dftb0": "tda",
+            "tddftb": "tda",
+            "td-dftb": "tda",
+            "tda": "tda",
+            "sf": "sf",
+            "sftddftb": "sf",
+            "sf-tddftb": "sf",
+            "mrsf": "mrsf",
+            "mrsftddftb": "mrsf",
+            "mrsf-tddftb": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("DFTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        dftb_updates["type"] = dftb_type
+        self.section("dftb", **dftb_updates)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
 
     def soc(self, nstate=3, functional=None, reference="rohf",
             reference_multiplicity=3, soc_2e=1, scal_rel=2,
