@@ -1112,24 +1112,26 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             )
         return
 
-    # UMRSF-TDDFT only implements the energy path. Every other runtype
-    # eventually drives a gradient, Hessian, or Z-vector (grad/prop/data,
-    # hess/thermo, nac/nacme, optimize/meci/mecp/mep/ts/irc/neb), none of
-    # which exist for UMRSF yet. Reject them here at the single choke point
-    # so validation fails early instead of dying at runtime.
+    # UMRSF-TDDFT implements the energy and gradient paths (and the gradient-driven
+    # optimizers built on them). Runtypes that need a Hessian (hess/thermo/ts/irc) or a
+    # nonadiabatic-coupling vector (nac/nacme) do not exist for UMRSF yet. Reject those here
+    # at the single choke point so validation fails early instead of dying at runtime.
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    # optimize enabled: the geomeTRIC/scipy optimize driver is method-agnostic (it only calls the
-    # per-step gradient), and the UMRSF analytic gradient is validated (re-gate CH2/butadiene/thymine,
-    # HF+DFT). Hessians/NAC remain unimplemented for UMRSF.
-    if method == "tdhf" and td_type == "umrsf" and runtype not in ("energy", "grad", "optimize"):
+    # optimize/meci/mecp/tci enabled: the geomeTRIC/scipy/oqp optimizers are method-agnostic (they only
+    # call per-state gradients), and the UMRSF analytic gradient is validated (CH2/butadiene/thymine,
+    # HF+DFT). The MECI/MECP/TCI penalty and updating-branching-plane methods are coupling-free (two or
+    # three state energies + gradients, no NAC vector), so they need only the UMRSF gradient. Hessians
+    # (hess/ts/irc) and NAC (nac/nacme) remain unimplemented for UMRSF and stay blocked below.
+    if method == "tdhf" and td_type == "umrsf" and runtype not in (
+            "energy", "grad", "optimize", "meci", "mecp", "tci"):
         report.add(
             "ERROR",
             "tdhf.type",
-            "UMRSF-TDDFT supports runtype=energy, grad, and optimize; "
-            "Hessians and NAC are not implemented yet.",
+            "UMRSF-TDDFT supports runtype=energy, grad, optimize, meci, mecp, and tci; "
+            "Hessians (hess/ts/irc) and NAC (nac/nacme) are not implemented yet.",
             value=f"{td_type}/{runtype}",
-            expected="energy, grad, or optimize",
-            action="Use runtype=energy, grad, or optimize for UMRSF-TDDFT.",
+            expected="energy, grad, optimize, meci, mecp, or tci",
+            action="Use runtype=energy, grad, optimize, meci, mecp, or tci for UMRSF-TDDFT.",
             wiki=WIKI_HELP["tdhf.type"],
         )
         return
