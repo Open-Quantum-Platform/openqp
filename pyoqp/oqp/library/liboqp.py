@@ -61,6 +61,9 @@ class _OQPRunner:
             # OQPEngine's own loop is a backstop; the OQP convergence test
             # (which raises StopIteration at maxit) governs termination.
             maxiter=self.maxit,
+            # None for every optimizer except OQPMECIOpt — the ordinary
+            # optimization path is untouched by the engine's MECI branches.
+            meci_metrics=getattr(self, "_meci_metrics_hook", None),
         )
         dump_log(
             self.mol,
@@ -75,6 +78,25 @@ class _OQPRunner:
 
         try:
             engine.run(energy_gradient, on_converged=self.check_convergence)
+        except StopIteration:
+            pass
+        self._restore_meci_best(engine)
+
+    def _restore_meci_best(self, engine):
+        """After a MECI run, rebase onto the minimum-gap point when the walk
+        ended significantly off it (wall/maxit/drift).  The point is
+        re-evaluated so the reported energies/metrics belong to the restored
+        geometry.  No-op for ordinary optimizations (engine.best is None)."""
+        best = getattr(engine, "best", None)
+        if best is None:
+            return
+        final_gap = abs(float(self.metrics.get("gap", 0.0)))
+        if final_gap <= best[0] + 2.0e-4:
+            return
+        dump_log(self.mol, title="PyOQP: MECI best-point restore "
+                                 "(gap %.3e -> %.3e Ha)" % (final_gap, best[0]))
+        try:
+            self.one_step(best[1])
         except StopIteration:
             pass
 
@@ -109,6 +131,15 @@ class OQPMECIOpt(_OQPRunner, MECIOpt):
 
     def __init__(self, mol):
         MECIOpt.__init__(self, mol)
+
+    def _meci_metrics_hook(self):
+        """Per-evaluation CI metrics for OQPEngine's MECI-aware stepping.
+        'ubp' tracks the CURRENT search (hybrid flips penalty->ubp mid-run)."""
+        return {
+            "gap": self.metrics.get("gap", 0.0),
+            "seam": self.metrics.get("seam_rmsd"),
+            "ubp": self.meci_search == "ubp",
+        }
 
 
 class OQPMECPOpt(_OQPRunner, MECPOpt):

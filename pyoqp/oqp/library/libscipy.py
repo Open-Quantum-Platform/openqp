@@ -465,6 +465,10 @@ class MECIOpt(Optimizer):
         self.metrics['max_step'] = max_step
         self.metrics['rmsd_grad'] = rmsd_grad
         self.metrics['max_grad'] = max_grad
+        # seam-minimization residual (the P*mean-gradient part), consumed by
+        # the lib=oqp MECI-aware step control
+        self.metrics['seam_rmsd'] = rmsd_df_1
+        self.metrics['seam_max'] = max_df_1
 
         # store energy and coordinates
         self.pre_energy = f

@@ -46,7 +46,7 @@ class ConvergenceSignal(Exception):
 class OQPEngine:
     def __init__(self, atoms, x0, mode="min", trust=0.2, trust_min=5.0e-3,
                  trust_max=0.5, maxiter=100, follow_mode=0, coordsys="auto",
-                 logger=None):
+                 logger=None, meci_metrics=None):
         self.atoms = np.asarray(atoms, dtype=int).reshape(-1)
         self.x = np.asarray(x0, dtype=float).reshape(-1)
         self.mode = mode
@@ -71,6 +71,19 @@ class OQPEngine:
         self.coordsys = label
         self.H = self.coords.guess_hessian(self.x)
         self._prev = None
+        # MECI support (active only when the caller provides a metrics hook —
+        # ordinary optimizations never enter any of the MECI branches below).
+        # The hook returns {'gap': Ha, 'seam': projected-mean-grad rms or None,
+        # 'ubp': bool} for the point just evaluated.  A composite-gradient
+        # (ubp) objective has no consistent scalar, so its steps are judged on
+        # the gap / seam residual instead of the energy ratio, its Hessian is
+        # not updated across the gap V-kink, and gap-exploding steps are
+        # rejected.  The minimum-gap point is captured for all MECI searches.
+        self.meci_metrics = meci_metrics
+        self._aux = None
+        self._aux_prev = None
+        self._rejects = 0
+        self.best = None  # (gap, x.copy(), e) at the minimum-gap evaluation
 
     # -- public driver ------------------------------------------------------ #
     def run(self, energy_gradient, on_converged=None):
@@ -84,6 +97,11 @@ class OQPEngine:
         try:
             for _ in range(self.maxiter):
                 e, g_cart = energy_gradient(self.x)
+                if self.meci_metrics is not None:
+                    self._aux = dict(self.meci_metrics())
+                    gap = abs(float(self._aux.get("gap", 0.0)))
+                    if self.best is None or gap < self.best[0]:
+                        self.best = (gap, self.x.copy(), e)
                 if on_converged is not None:
                     on_converged()
                 self.x = self._take_step(e, np.asarray(g_cart, dtype=float).reshape(-1))
@@ -93,16 +111,37 @@ class OQPEngine:
 
     # -- one macro-iteration ------------------------------------------------ #
     def _take_step(self, e, g_cart):
+        # ubp: reject a gap-exploding step — return to the previous point
+        # (re-evaluated next iteration) with a halved trust radius, and learn
+        # nothing from the bad pair.  The composite gradient always points
+        # down-gap, so a doubled gap means the quadratic model misled the step.
+        if self._meci_ubp() and self._prev is not None and "x" in self._prev \
+                and self._aux_prev is not None:
+            gap = abs(float(self._aux["gap"]))
+            pgap = abs(float(self._aux_prev["gap"]))
+            # only a genuine reopening (past kink scale), not seam-slide noise
+            if gap > 1.0e-3 and gap - pgap > max(2.0e-4, pgap) and self._rejects < 4:
+                self._rejects += 1
+                self.trust = max(self.trust * 0.5, self.trust_min)
+                x_back = self._prev["x"]
+                self._prev = None
+                return x_back
+        self._rejects = 0
+
         b = self.coords.b_matrix(self.x)
         g_q = self.coords.grad_to_q(self.x, g_cart)
 
         if self._prev is not None:
             s = self._prev["dq"]
             y = g_q - self._prev["g_q"]
-            self.H = self._update_hessian(self.H, s, y)
-            actual = e - self._prev["e"]
-            pred = self._prev["pred"]
-            self._update_trust(actual, pred, self._prev["cart_step"])
+            if not self._near_kink():
+                self.H = self._update_hessian(self.H, s, y)
+            if self._meci_ubp():
+                self._update_trust_meci(self._prev["cart_step"])
+            else:
+                actual = e - self._prev["e"]
+                pred = self._prev["pred"]
+                self._update_trust(actual, pred, self._prev["cart_step"])
 
         dq = self._rfo_step(self.H, g_q)
         dq = self._restrict_to_trust(b, dq)
@@ -121,8 +160,39 @@ class OQPEngine:
         cart_step = self.coords.cart_rmsd(self.x, x_new)
         pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
         self._prev = {"e": e, "g_q": g_q, "dq": dq_taken,
-                      "pred": pred, "cart_step": cart_step}
+                      "pred": pred, "cart_step": cart_step, "x": self.x.copy()}
+        self._aux_prev = self._aux
         return x_new
+
+    # -- MECI (composite-gradient) helpers ----------------------------------- #
+    def _meci_ubp(self):
+        """True while driving a branching-plane (ubp) composite gradient."""
+        return self._aux is not None and bool(self._aux.get("ubp", False))
+
+    def _near_kink(self):
+        """True when either end of the step is near the gap V-kink, where the
+        composite gradient's curvature is discontinuous and a BFGS update
+        would poison the Hessian."""
+        if not self._meci_ubp() or self._aux_prev is None:
+            return False
+        return min(abs(float(self._aux["gap"])),
+                   abs(float(self._aux_prev["gap"]))) < 1.0e-3
+
+    def _update_trust_meci(self, cart_step):
+        """Judge a ubp step by CI progress, not the energy ratio: the
+        composite objective has no consistent scalar, and the seam approach
+        is legitimately uphill in the average energy."""
+        gap = abs(float(self._aux["gap"]))
+        pgap = abs(float(self._aux_prev["gap"])) if self._aux_prev else gap
+        seam = self._aux.get("seam")
+        pseam = self._aux_prev.get("seam") if self._aux_prev else None
+        good = (gap <= pgap + 4.0e-5) or \
+               (seam is not None and pseam is not None and seam <= pseam)
+        if good:
+            if cart_step >= 0.8 * self.trust:
+                self.trust = min(self.trust * 2.0, self.trust_max)
+        else:
+            self.trust = max(self.trust * 0.5, self.trust_min)
 
     # -- RFO / P-RFO -------------------------------------------------------- #
     def _rfo_step(self, h, g):
