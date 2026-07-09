@@ -38,6 +38,16 @@ class _StateResult:
     excitation_energy: float | None = None
     spin_square: float | None = None
     stdout: str = ""
+    # C API v2 extras (native backend only).
+    all_state_energies: np.ndarray | None = None
+    all_spin_squares: np.ndarray | None = None
+    relaxed_charges: np.ndarray | None = None
+    nbf: int = 0
+    noca: int = 0
+    nocb: int = 0
+    mo_energies: np.ndarray | None = None
+    mo_coefficients: np.ndarray | None = None
+    response_vectors: np.ndarray | None = None
 
 
 class OpenQPDFTBAdapter:
@@ -93,6 +103,13 @@ class OpenQPDFTBAdapter:
         self.mol.energies = energies
         self.mol.grads = grads
         self._store_td_energies(energies)
+        active = max(states)
+        active_result = getattr(self, "_last_results", {}).get(active)
+        if active_result is not None:
+            if active_result.relaxed_charges is not None:
+                self.mol.data["OQP::partial_charges"] = np.ascontiguousarray(
+                    active_result.relaxed_charges)
+            self._store_wavefunction_tags(active_result)
         return grads
 
     def _evaluate(self, states, *, need_grad):
@@ -108,8 +125,11 @@ class OpenQPDFTBAdapter:
             requested = sorted(set(requested) | set(range(1, self.nstate + 1)))
 
         results = {}
-        for state in requested:
-            results[state] = self._run_state(method, state, need_grad=False)
+        if method not in _GROUND_TYPES:
+            # C API v2 returns every response root from ONE solve.
+            base = self._run_state(method, min(requested), need_grad=False)
+            for state in requested:
+                results[state] = base
 
         if method in _GROUND_TYPES or 0 in states:
             results[0] = self._run_state("ground", 0, need_grad=False)
@@ -118,11 +138,17 @@ class OpenQPDFTBAdapter:
             energies = np.array([results[0].state_energy], dtype=float)
         else:
             energies = np.zeros(self.nstate + 1, dtype=float)
-            first = results[min(results)]
-            energies[0] = first.reference_energy
-            for state, result in results.items():
-                if state > 0 and state <= self.nstate:
-                    energies[state] = result.state_energy
+            energies[0] = base.reference_energy
+            if base.all_state_energies is not None and len(base.all_state_energies) >= self.nstate:
+                energies[1:] = base.all_state_energies[: self.nstate]
+            else:
+                # probe backend fallback: one call per state
+                for state in requested:
+                    result = self._run_state(method, state, need_grad=False)
+                    results[state] = result
+                    if 0 < state <= self.nstate:
+                        energies[state] = result.state_energy
+            self._store_wavefunction_tags(base)
 
         gradient_map = {}
         if need_grad:
@@ -132,6 +158,7 @@ class OpenQPDFTBAdapter:
                 results[state] = gradient_result
                 gradient_map[state] = gradient_result.gradient_bohr
 
+        self._last_results = results
         return energies, gradient_map
 
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
@@ -139,6 +166,15 @@ class OpenQPDFTBAdapter:
         cache = self.mol._openqp_dftb_cache
         if key in cache:
             return cache[key]
+        # One geometry (+ embedding potential) per cache generation: an MD
+        # trajectory would otherwise grow the cache without bound.
+        generation = (key[0], key[1], key[2][0])
+        if cache.get("__generation__") != generation:
+            library = cache.get("__native_library__")
+            cache.clear()
+            if library is not None:
+                cache["__native_library__"] = library
+            cache["__generation__"] = generation
 
         backend = str(self.dftb.get("backend", "native")).lower()
         if backend in {"native", "auto"}:
@@ -176,6 +212,32 @@ class OpenQPDFTBAdapter:
         gradient = (ctypes.c_double * (3 * natom))()
         status_message = ctypes.create_string_buffer(1024)
         status = ctypes.c_int64()
+
+        v_ext = self._external_potential()
+        if v_ext is None:
+            n_ext = 0
+            ext_potential = (ctypes.c_double * 1)()
+        else:
+            n_ext = natom
+            ext_potential = (ctypes.c_double * natom)(*np.asarray(v_ext, dtype=float))
+
+        nstate = int(max(1, self.nstate))
+        n_roots_out = ctypes.c_int64()
+        all_state_energies = (ctypes.c_double * nstate)()
+        all_spin_squares = (ctypes.c_double * nstate)()
+        relaxed_charges = (ctypes.c_double * natom)()
+        nbf_out = ctypes.c_int64()
+        noca_out = ctypes.c_int64()
+        nocb_out = ctypes.c_int64()
+        vec_dim_out = ctypes.c_int64()
+        # Minimal SK basis has at most 9 orbitals/atom (spd): over-allocate and
+        # let the library fill what it needs (capacity-guarded on its side).
+        nbf_max = 9 * natom
+        mo_capacity = nbf_max * nbf_max
+        mo_energies = (ctypes.c_double * nbf_max)()
+        mo_coefficients = (ctypes.c_double * mo_capacity)()
+        vec_capacity = mo_capacity * nstate
+        response_vectors = (ctypes.c_double * vec_capacity)()
 
         lib.openqp_dftb_state_gradient(
             ctypes.c_int64(natom),
@@ -215,11 +277,26 @@ class OpenQPDFTBAdapter:
             ctypes.c_double(float(self.dftb.get("mrsf_shift_co", 0.0))),
             ctypes.c_double(float(self.dftb.get("mrsf_shift_ov", 0.0))),
             ctypes.c_double(float(self.dftb.get("mrsf_shift_cv", 0.0))),
+            ctypes.c_int64(n_ext),
+            ext_potential,
             ctypes.byref(reference_energy),
             ctypes.byref(state_energy),
             ctypes.byref(excitation_energy),
             ctypes.byref(spin_square),
             gradient,
+            ctypes.byref(n_roots_out),
+            all_state_energies,
+            all_spin_squares,
+            relaxed_charges,
+            ctypes.byref(nbf_out),
+            ctypes.byref(noca_out),
+            ctypes.byref(nocb_out),
+            ctypes.byref(vec_dim_out),
+            ctypes.c_int64(mo_capacity),
+            mo_energies,
+            mo_coefficients,
+            ctypes.c_int64(vec_capacity),
+            response_vectors,
             status_message,
             ctypes.c_int32(1024),
             ctypes.byref(status),
@@ -233,6 +310,23 @@ class OpenQPDFTBAdapter:
             )
 
         gradient_bohr = np.frombuffer(gradient, dtype=np.float64).reshape((natom, 3)).copy()
+        n_roots = int(n_roots_out.value)
+        nbf = int(nbf_out.value)
+        vec_dim = int(vec_dim_out.value)
+        all_e = np.frombuffer(all_state_energies, dtype=np.float64)[:n_roots].copy() \
+            if n_roots > 0 else None
+        all_s2 = np.frombuffer(all_spin_squares, dtype=np.float64)[:n_roots].copy() \
+            if n_roots > 0 else None
+        mo_c = None
+        mo_e = None
+        if 0 < nbf <= nbf_max:
+            mo_c = np.frombuffer(mo_coefficients, dtype=np.float64)[: nbf * nbf].reshape(
+                (nbf, nbf), order="F").copy()
+            mo_e = np.frombuffer(mo_energies, dtype=np.float64)[:nbf].copy()
+        vecs = None
+        if vec_dim > 0 and n_roots > 0:
+            vecs = np.frombuffer(response_vectors, dtype=np.float64)[: vec_dim * n_roots].reshape(
+                (vec_dim, n_roots), order="F").copy()
         return _StateResult(
             state=state,
             reference_energy=float(reference_energy.value),
@@ -240,6 +334,15 @@ class OpenQPDFTBAdapter:
             gradient_bohr=gradient_bohr,
             excitation_energy=float(excitation_energy.value) if state > 0 else None,
             spin_square=float(spin_square.value) if state > 0 else None,
+            all_state_energies=all_e,
+            all_spin_squares=all_s2,
+            relaxed_charges=np.frombuffer(relaxed_charges, dtype=np.float64).copy(),
+            nbf=nbf,
+            noca=int(noca_out.value),
+            nocb=int(nocb_out.value),
+            mo_energies=mo_e,
+            mo_coefficients=mo_c,
+            response_vectors=vecs,
         )
 
     def _native_library(self):
@@ -419,10 +522,47 @@ class OpenQPDFTBAdapter:
             requested.append(int(config.get("optimize", {}).get("jstate", 2)))
         return max(0, max(requested))
 
+    def _external_potential(self):
+        """Per-atom external electrostatic potential (QM/MM embedding), or None.
+
+        The QM/MM drivers set mol.dftb_external_potential = POTMM (Hartree/e,
+        one value per QM atom incl. link-atom caps) before each QM call.
+        """
+        v_ext = getattr(self.mol, "dftb_external_potential", None)
+        if v_ext is None:
+            return None
+        v_ext = np.asarray(v_ext, dtype=float).reshape(-1)
+        if v_ext.size != self.natom:
+            raise ValueError(
+                f"dftb_external_potential must have one value per atom "
+                f"({self.natom}), got {v_ext.size}"
+            )
+        return v_ext
+
+    def _store_wavefunction_tags(self, result: _StateResult) -> None:
+        """Publish MO coefficients/energies and response vectors as OQP:: tags.
+
+        Uses the SAME tag names as the native path (liboqp never sets them for
+        method=dftb), so BasisOverlap.load_previous_data and the NAMD back_door
+        carry work unchanged. Arrays carry DFTB dimensions (SK minimal basis).
+        """
+        if result.mo_coefficients is None:
+            return
+        data = self.mol.data
+        data["OQP::VEC_MO_A"] = np.ascontiguousarray(result.mo_coefficients)
+        data["OQP::VEC_MO_B"] = np.ascontiguousarray(result.mo_coefficients)
+        data["OQP::E_MO_A"] = np.ascontiguousarray(result.mo_energies)
+        data["OQP::E_MO_B"] = np.ascontiguousarray(result.mo_energies)
+        if result.response_vectors is not None:
+            data["OQP::td_bvec_mo"] = np.ascontiguousarray(result.response_vectors)
+
     def _cache_key(self, method: str, state: int, *, need_grad: bool):
         coords = np.ascontiguousarray(self.mol.get_system(), dtype=np.float64)
         atoms = tuple(int(z) for z in np.asarray(self.mol.get_atoms()).reshape(-1))
+        v_ext = self._external_potential()
+        v_ext_key = v_ext.tobytes() if v_ext is not None else b""
         option_key = (
+            v_ext_key,
             self._parameter_path(),
             method,
             state,
