@@ -329,11 +329,6 @@ KNOWN_UNCOVERED = {
     # md.soc is exercised by examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp.
     'md.dt_adaptive': 'adaptive NAMD timestep (PR #205); needs a runtype=namd example',
     'qmmm.rigidwater': 'rigid-water SHAKE/RATTLE constraints for QM/MM MD (PR #205); needs a QM/MM MD example',
-    # Exercised end-to-end by the openqp-dftb repository's own FD-gradient test
-    # suite (LC ROKS reference + LC-MRSF response vs finite differences); a
-    # PyOQP example would additionally need the external libopenqp_dftb_c
-    # build and Slater-Koster parameter files, which CI does not ship.
-    'dftb.lc_ground_state': 'LC-DFTB2 (OB2-type) self-consistent reference; covered by openqp-dftb ctest, needs external SK parameters for a PyOQP example',
 }
 
 _SCHEMA_FILE = os.path.join(os.path.dirname(__file__), os.pardir,

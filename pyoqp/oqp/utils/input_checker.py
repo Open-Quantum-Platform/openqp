@@ -33,7 +33,7 @@ MP2_VARIANTS = {
 DFTB_BACKENDS = {"auto", "native", "probe"}
 DFTB_TYPES = {
     "auto", "ground", "dftb", "dftb0", "ground_noscc", "noscc",
-    "tddftb", "tda", "sf", "sftddftb", "sf-tddftb",
+    "tddftb", "tda", "td-dftb", "sf", "sftddftb", "sf-tddftb",
     "mrsf", "mrsftddftb", "mrsf-tddftb",
 }
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
@@ -1071,6 +1071,21 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             expected="rpa/tda, sf, or mrsf",
             action="Set [tdhf] type=tda, sf, or mrsf, or set [dftb] type=ground for S0 DFTB.",
         )
+
+    if not ground_like:
+        try:
+            nstate_val = int(nstate)
+        except (TypeError, ValueError):
+            nstate_val = 0
+        if nstate_val < 1:
+            report.add(
+                "ERROR",
+                "tdhf.nstate",
+                "OpenQP-DFTB excited-state response needs at least one root.",
+                value=nstate,
+                expected="tdhf.nstate >= 1",
+                action="Set [tdhf] nstate to the number of response roots (>= 1).",
+            )
 
     requested = []
     if runtype in {"grad", "data"}:
@@ -2211,14 +2226,46 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
 
 
 def _check_dftb_nacme_previous_geometry(config: dict[str, Any], report: CheckReport) -> None:
-    """DFTB nacme reuses the previous-geometry requirement of _check_nacme
+    """DFTB nacme reuses the previous-geometry validation of _check_nacme
+    (presence, system2 path existence, non-empty inline geometry, nac.align)
     without the all-electron method=tdhf gate of _check_nac."""
-    if not _get(config, "guess", "file2", "") and not _get(config, "input", "system2", ""):
+    guess_file2 = _get(config, "guess", "file2", "")
+    system2 = _get(config, "input", "system2", "")
+
+    if not guess_file2 and not system2:
         report.add(
             "ERROR",
             "input.system2",
             "NACME overlap needs previous-step information from guess.file2 or input.system2.",
             action="Set [guess] file2 to a restart JSON or provide [input] system2.",
+        )
+
+    if system2:
+        inline_lines, xyz_path = _iter_coordinate_lines(system2)
+        if xyz_path and not os.path.exists(os.path.abspath(xyz_path)):
+            report.add(
+                "ERROR",
+                "input.system2",
+                "Referenced system2 XYZ file does not exist.",
+                value=xyz_path,
+                action="Fix the system2 file path.",
+            )
+        if not xyz_path and not inline_lines:
+            report.add(
+                "ERROR",
+                "input.system2",
+                "system2 is set but empty.",
+                action="Provide a previous geometry or remove system2.",
+            )
+
+    align = _as_lower(_get(config, "nac", "align", "reorder"))
+    if align not in {"no", "reorder"}:
+        report.add(
+            "WARNING",
+            "nac.align",
+            "Only align=no and align=reorder are clearly handled by the Python layer.",
+            value=align,
+            action="Use align=reorder unless you have implemented another mode downstream.",
         )
 
 

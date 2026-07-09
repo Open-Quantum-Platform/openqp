@@ -853,11 +853,14 @@ class OpenQP:
         dftb_updates = {}
         if parameter_path is not None:
             dftb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is a
+        # [dftb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.dftb(type=...) and silently fall back to response_type.
+        requested_type = str(keywords.pop("type", response_type)).lower()
         for key in list(keywords.keys()):
-            if key in dftb_schema:
+            if key in dftb_schema and key != "type":
                 dftb_updates[key] = keywords.pop(key)
 
-        requested_type = str(keywords.pop("type", response_type)).lower()
         dftb_type = requested_type
         tdhf_type = {
             "ground": "tda",
