@@ -962,6 +962,30 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             action="Use auto, anderson, broyden, diis, trust/trah, or linear.",
         )
 
+    # QM/MM (ESPF/OpenMM) with the DFTB backend: the openqp-dftb library takes
+    # the MM electrostatic potential directly into the SCC Hamiltonian
+    # (mol.dftb_external_potential), so the OpenQpQMMM/QMMM_MD drivers support
+    # method=dftb with full-ESPF electrostatic or mechanical embedding
+    # (including hydrogen link atoms across covalent QM/MM cuts). The legacy
+    # 'split' scheme (QM point charges routed through OpenMM) is rejected: it
+    # would double-count the coupling already inside the embedded DFTB energy.
+    # runtype=namd with method=dftb stays blocked by the generic NAMD gate
+    # until a DFTB state-overlap/NACME backend exists.
+    if bool(_get(config, "input", "qmmm_flag", False)):
+        embedding = str(
+            _get(config, "qmmm", "embedding", "electrostatic") or "electrostatic"
+        ).strip().lower()
+        if embedding == "split":
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                "OpenQP-DFTB QM/MM does not support the legacy 'split' embedding.",
+                value=embedding,
+                expected="electrostatic, espf, or mechanical",
+                action="Use [qmmm] embedding=electrostatic (full-ESPF scheme) "
+                       "or mechanical with method=dftb.",
+            )
+
     allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
     if runtype in {"nac", "nacme", "bp"}:
         report.add(

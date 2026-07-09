@@ -532,6 +532,28 @@ class NAMD_QMMM(NAMD):
         mol = self.mol
         potmm, potqm = self.driver.electrostatic_potential()
 
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # DFTB electrostatic embedding: the openqp-dftb library folds the
+            # per-atom MM potential (Hartree/e) directly into the SCC
+            # Hamiltonian, so there is no ESPF operator / hcore mutation here.
+            # POTQM stays zeroed (same resolution as the native path below).
+            # Only the full-ESPF scheme is supported: the legacy 'split'
+            # scheme would double-count the coupling already inside the
+            # embedded DFTB state energy.
+            if not getattr(self.driver, 'espf_full', False):
+                raise NotImplementedError(
+                    "NAMD QM/MM with method=dftb requires [qmmm] embedding="
+                    "electrostatic/espf (full-ESPF scheme).")
+            mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            sp = SinglePoint(mol)
+            ref = sp.reference()
+            if with_overlap:
+                mol.back_door = (self.prev_xyz, self.prev_data)
+                BasisOverlap(mol).overlap()
+            sp.excitation(ref)
+            LastStep(mol).compute(mol)
+            return potmm, potqm
+
         sp = SinglePoint(mol)
         sp._prep_guess()
         nat = mol.data["natom"]
@@ -564,6 +586,14 @@ class NAMD_QMMM(NAMD):
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # The DFTB analytic gradient is d(E_embedded)/dR at FIXED potential
+            # values: the charge-response (Pulay-type) coupling term is already
+            # inside it, so the native grad_esp_qmmm(_excited)/OQP::ESPF_GRAD
+            # addition is skipped. The adapter has also just published
+            # OQP::partial_charges (relaxed net charges of the active state)
+            # for the classical coupling forces in _total_force.
+            return g
         # ESPF_ROHF=1: use the ROHF reference density for ESPF charges and
         # gradient, matching GAMESS which always fits ESPF from the SCF (ROHF)
         # density regardless of the target excited state.  Combined with
@@ -696,8 +726,19 @@ class NAMD_QMMM(NAMD):
             f_all[m] = f_all[m] + fm[j]
         f_all -= f_all.mean(axis=0)
 
-        eqm = float(mol.energies[self.active]) + float(
-            np.dot(np.array(mol.get_atoms2("charge")), potmm))
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # The DFTB embedded state energy is already COMPLETE: the library
+            # folds the MM potential into the SCC Hamiltonian and the returned
+            # energy includes the full net-charge coupling
+            #   E_ext = sum_A q_A phi_A   (q_A = NET atomic charge, cores +
+            # electrons; dE/dphi_A = +q_A, verified by finite differences).
+            # The native path below instead carries only the electronic
+            # coupling in the embedded SCF and must add the nuclear term
+            # sum_A Z_A phi_A -- do NOT add it for dftb.
+            eqm = float(mol.energies[self.active])
+        else:
+            eqm = float(mol.energies[self.active]) + float(
+                np.dot(np.array(mol.get_atoms2("charge")), potmm))
         return f_all, eqm + emm
 
     # ------------------------------------------------------------------ #
