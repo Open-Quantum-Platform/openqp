@@ -822,7 +822,7 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown OpenQP-DFTB backend.",
             value=backend,
             expected=", ".join(sorted(DFTB_BACKENDS)),
-            action="Use native for OpenQP-linked calculations; probe is only an explicit developer fallback.",
+            action="Use native (loads the standalone libopenqp_dftb_c shared library); probe is only an explicit developer fallback.",
         )
 
     if dftb_type not in DFTB_TYPES:
@@ -833,6 +833,39 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             value=dftb_type,
             expected="ground, tddftb, sf, mrsf, or auto",
             action="Use auto to derive the DFTB response type from [tdhf] type, or set it explicitly.",
+        )
+
+    lc_gamma = _as_lower(_get(config, "dftb", "lc_gamma", "yukawa"))
+    if lc_gamma not in {"yukawa", "erf"}:
+        report.add(
+            "ERROR",
+            "dftb.lc_gamma",
+            "Unknown OpenQP-DFTB long-range gamma kernel.",
+            value=lc_gamma,
+            expected="yukawa or erf",
+            action="Use yukawa (DFTB+ LC-DFTB2 Yukawa-Slater gamma) or erf (erf(omega R)/R).",
+        )
+
+    response_solver = _as_lower(_get(config, "dftb", "response_solver", "auto"))
+    if response_solver not in {"auto", "dense", "davidson"}:
+        report.add(
+            "ERROR",
+            "dftb.response_solver",
+            "Unknown OpenQP-DFTB response solver.",
+            value=response_solver,
+            expected="auto, dense, or davidson",
+            action="Use auto unless you need to force a specific eigensolver.",
+        )
+
+    target_multiplicity = int(_get(config, "dftb", "target_multiplicity", 1))
+    if target_multiplicity not in (1, 3):
+        report.add(
+            "ERROR",
+            "dftb.target_multiplicity",
+            "OpenQP-DFTB MRSF/SF response states must be singlet or triplet.",
+            value=target_multiplicity,
+            expected="1 or 3",
+            action="Use 1 for singlet response states or 3 for triplet response states.",
         )
 
     if not parameter_path and not os.environ.get("OPENQP_DFTB_PARAMETER_PATH"):

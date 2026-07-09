@@ -44,15 +44,8 @@ if RTLD:
 else:
     from _oqp import ffi, lib
 
-OPTIONAL_SYMBOLS = {"oqp_dftb_state_gradient"}
-
 for attr_name in dir(lib):
-    try:
-        attr_value = getattr(lib, attr_name)
-    except AttributeError:
-        if attr_name in OPTIONAL_SYMBOLS:
-            continue
-        raise
+    attr_value = getattr(lib, attr_name)
     if callable(attr_value):
         if attr_name not in ('oqp_init', 'oqp_clean', 'oqp_set_atoms'):
             globals()[attr_name] = _oqp_wrapper(attr_value)

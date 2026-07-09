@@ -282,26 +282,6 @@ void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
                     const char *func, int lfunc, int do_grad,
                     double *energy, double *grad, int *ier);
 
-/* Optional OpenQP-DFTB backend hook. The symbol is present in every build;
-   status=-9001 means OpenQP was built without ENABLE_OPENQP_DFTB. */
-void oqp_dftb_state_gradient(struct oqp_handle_t *inf,
-                    const char *parameter_path, int32_t parameter_len,
-                    const char *method_name, int32_t method_len,
-                    int64_t root, int64_t n_roots, int64_t need_gradient,
-                    int64_t molecular_charge,
-                    int64_t scc_mixer, int64_t scc_history,
-                    int64_t max_scc_iterations,
-                    int64_t response_max_iterations,
-                    int64_t response_max_subspace,
-                    double scc_tolerance, double scc_mixing,
-                    double scc_max_step, double response_tolerance,
-                    double spc, double omega, double cam_alpha,
-                    double cam_beta,
-                    double *reference_energy, double *state_energy,
-                    double *excitation_energy, double *spin_square,
-                    double *gradient,
-                    char *status_message, int32_t status_message_len,
-                    int64_t *status);
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);

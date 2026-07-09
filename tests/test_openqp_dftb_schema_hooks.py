@@ -76,12 +76,24 @@ class OpenQPDFTBSchemaHookTests(unittest.TestCase):
             "scc_mixer",
             "scc_tolerance",
             "spc",
+            "spc_coco",
+            "spc_ovov",
+            "spc_coov",
             "omega",
+            "lc_gamma",
+            "lc_ground_state",
+            "zvector",
+            "spin_complete",
+            "target_multiplicity",
+            "response_solver",
+            "mrsf_shift_oo",
             "timeout",
         ):
             self.assertIn(key, dftb)
         self.assertEqual("native", dftb["backend"]["default"])
         self.assertEqual(0.5, dftb["spc"]["type"](dftb["spc"]["default"]))
+        self.assertEqual("yukawa", dftb["lc_gamma"]["default"])
+        self.assertEqual("auto", dftb["response_solver"]["default"])
 
     def test_parser_accepts_dftb_input_section(self):
         OQP_CONFIG_SCHEMA = _import_or_skip("oqp.molecule.oqpdata").OQP_CONFIG_SCHEMA

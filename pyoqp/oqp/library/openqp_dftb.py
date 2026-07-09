@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -140,10 +141,6 @@ class OpenQPDFTBAdapter:
 
         backend = str(self.dftb.get("backend", "native")).lower()
         if backend in {"native", "auto"}:
-            if not hasattr(oqp.lib, "oqp_dftb_state_gradient"):
-                raise RuntimeError(
-                    "OpenQP was not built with the native oqp_dftb_state_gradient C hook."
-                )
             result = self._run_native(method, state, need_grad=need_grad)
         elif backend == "probe":
             result = self._run_probe(method, state)
@@ -154,67 +151,129 @@ class OpenQPDFTBAdapter:
         return result
 
     def _run_native(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
+        """Call libopenqp_dftb_c (the standalone openqp-dftb shared C API) in-process.
+
+        openqp-dftb stays a fully separate library: PyOQP hands over geometry and
+        options as plain C scalars/arrays and receives energies and the analytic
+        state gradient back. No OpenQP build coupling, no Fortran module seam.
+        """
+        lib = self._native_library()
+        natom = self.natom
+        atoms = np.ascontiguousarray(
+            np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
+        )
+        coords_bohr = np.ascontiguousarray(
+            np.asarray(self.mol.get_system(), dtype=np.float64).reshape(-1)
+        )
         parameter = self._parameter_path().encode("utf-8")
         method_name = self._probe_method_name(method).encode("ascii")
-        reference_energy = oqp.ffi.new("double *")
-        state_energy = oqp.ffi.new("double *")
-        excitation_energy = oqp.ffi.new("double *")
-        spin_square = oqp.ffi.new("double *")
-        gradient = oqp.ffi.new("double[]", self.natom * 3)
-        status_message = oqp.ffi.new("char[]", 1024)
-        status = oqp.ffi.new("int64_t *")
 
-        oqp.lib.oqp_dftb_state_gradient(
-            self.mol.data._data,
+        reference_energy = ctypes.c_double()
+        state_energy = ctypes.c_double()
+        excitation_energy = ctypes.c_double()
+        spin_square = ctypes.c_double()
+        gradient = (ctypes.c_double * (3 * natom))()
+        status_message = ctypes.create_string_buffer(1024)
+        status = ctypes.c_int64()
+
+        lib.openqp_dftb_state_gradient(
+            ctypes.c_int64(natom),
+            atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+            coords_bohr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             parameter,
-            len(parameter),
+            ctypes.c_int32(len(parameter)),
             method_name,
-            len(method_name),
-            int(state),
-            int(max(1, self.nstate)),
-            int(bool(need_grad)),
-            int(self.config.get("input", {}).get("charge", 0)),
-            self._scc_mixer_code(),
-            int(self.dftb.get("scc_history", 12)),
-            int(self.dftb.get("max_scc_iterations", 1200)),
-            int(self.dftb.get("response_max_iterations", 50)),
-            int(self.dftb.get("response_max_subspace", 50)),
-            float(self.dftb.get("scc_tolerance", 1.0e-8)),
-            float(self.dftb.get("scc_mixing", 0.35)),
-            float(self.dftb.get("scc_max_step", 0.5)),
-            float(self.dftb.get("response_tolerance", 1.0e-6)),
-            float(self.dftb.get("spc", 0.5)),
-            float(self.dftb.get("omega", 0.3)),
-            float(self.dftb.get("cam_alpha", 0.0)),
-            float(self.dftb.get("cam_beta", 1.0)),
-            reference_energy,
-            state_energy,
-            excitation_energy,
-            spin_square,
+            ctypes.c_int32(len(method_name)),
+            ctypes.c_int64(int(state)),
+            ctypes.c_int64(int(max(1, self.nstate))),
+            ctypes.c_int64(int(bool(need_grad))),
+            ctypes.c_int64(int(self.config.get("input", {}).get("charge", 0))),
+            ctypes.c_int64(self._scc_mixer_code()),
+            ctypes.c_int64(int(self.dftb.get("scc_history", 12))),
+            ctypes.c_int64(int(self.dftb.get("max_scc_iterations", 1200))),
+            ctypes.c_int64(int(self.dftb.get("response_max_iterations", 50))),
+            ctypes.c_int64(int(self.dftb.get("response_max_subspace", 100))),
+            ctypes.c_int64(self._response_solver_code()),
+            ctypes.c_int64(self._reference_multiplicity(method)),
+            ctypes.c_int64(int(self.dftb.get("target_multiplicity", 1))),
+            ctypes.c_int64(int(bool(self.dftb.get("spin_complete", True)))),
+            ctypes.c_int64(int(bool(self.dftb.get("lc_ground_state", False)))),
+            ctypes.c_int64(int(self._lc_gamma_is_erf())),
+            ctypes.c_int64(int(bool(self.dftb.get("zvector", True)))),
+            ctypes.c_double(float(self.dftb.get("scc_tolerance", 1.0e-8))),
+            ctypes.c_double(float(self.dftb.get("scc_mixing", 0.35))),
+            ctypes.c_double(float(self.dftb.get("scc_max_step", 0.5))),
+            ctypes.c_double(float(self.dftb.get("response_tolerance", 1.0e-6))),
+            ctypes.c_double(self._spc_channel("spc_coco")),
+            ctypes.c_double(self._spc_channel("spc_ovov")),
+            ctypes.c_double(self._spc_channel("spc_coov")),
+            ctypes.c_double(float(self.dftb.get("omega", 0.3))),
+            ctypes.c_double(float(self.dftb.get("cam_alpha", 0.0))),
+            ctypes.c_double(float(self.dftb.get("cam_beta", 1.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_oo", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_co", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_ov", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_cv", 0.0))),
+            ctypes.byref(reference_energy),
+            ctypes.byref(state_energy),
+            ctypes.byref(excitation_energy),
+            ctypes.byref(spin_square),
             gradient,
             status_message,
-            1024,
-            status,
+            ctypes.c_int32(1024),
+            ctypes.byref(status),
         )
-        if status[0] != 0:
-            detail = oqp.ffi.string(status_message).decode("utf-8", errors="replace").strip()
+        if status.value != 0:
+            detail = status_message.value.decode("utf-8", errors="replace").strip()
             suffix = f": {detail}" if detail else ""
             raise RuntimeError(
-                f"OpenQP-DFTB native bridge failed for method={method}, "
-                f"state={state}, status={status[0]}{suffix}"
+                f"openqp-dftb native library call failed for method={method}, "
+                f"state={state}, status={status.value}{suffix}"
             )
 
-        gradient_bohr = np.frombuffer(
-            oqp.ffi.buffer(gradient, self.natom * 3 * 8),
-            dtype=np.float64,
-        ).reshape((self.natom, 3)).copy()
+        gradient_bohr = np.frombuffer(gradient, dtype=np.float64).reshape((natom, 3)).copy()
         return _StateResult(
             state=state,
-            reference_energy=float(reference_energy[0]),
-            state_energy=float(state_energy[0]),
+            reference_energy=float(reference_energy.value),
+            state_energy=float(state_energy.value),
             gradient_bohr=gradient_bohr,
-            excitation_energy=float(excitation_energy[0]) if state > 0 else None,
-            spin_square=float(spin_square[0]) if state > 0 else None,
+            excitation_energy=float(excitation_energy.value) if state > 0 else None,
+            spin_square=float(spin_square.value) if state > 0 else None,
+        )
+
+    def _native_library(self):
+        cache = self.mol._openqp_dftb_cache
+        lib = cache.get("__native_library__")
+        if lib is not None:
+            return lib
+        path = self._native_library_path()
+        try:
+            lib = ctypes.CDLL(str(path))
+        except OSError as exc:
+            raise RuntimeError(f"Could not load the openqp-dftb library {path}: {exc}") from exc
+        if not hasattr(lib, "openqp_dftb_state_gradient"):
+            raise RuntimeError(
+                f"{path} does not export openqp_dftb_state_gradient; "
+                "rebuild openqp-dftb with OPENQP_DFTB_BUILD_SHARED=ON."
+            )
+        lib.openqp_dftb_state_gradient.restype = None
+        cache["__native_library__"] = lib
+        return lib
+
+    def _native_library_path(self) -> Path:
+        raw = self.dftb.get("library_path") or os.environ.get("OPENQP_DFTB_LIBRARY")
+        if raw:
+            path = self._resolve_user_path(raw)
+            if Path(path).exists():
+                return Path(path)
+            raise FileNotFoundError(f"openqp-dftb library not found at {path}")
+        for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
+            found = shutil.which(name)
+            if found:
+                return Path(found)
+        raise FileNotFoundError(
+            "Set [dftb] library_path or OPENQP_DFTB_LIBRARY to the libopenqp_dftb_c "
+            "shared library built from openqp-dftb (OPENQP_DFTB_BUILD_SHARED=ON)."
         )
 
     def _run_probe(self, method: str, state: int) -> _StateResult:
@@ -241,6 +300,7 @@ class OpenQPDFTBAdapter:
                 self._fmt(self.dftb.get("cam_alpha", 0.0)),
                 self._fmt(self.dftb.get("cam_beta", 1.0)),
                 str(int(self.config.get("input", {}).get("charge", 0))),
+                "erf" if self._lc_gamma_is_erf() else "yukawa",
             ]
             dump_log(
                 self.mol,
@@ -353,9 +413,24 @@ class OpenQPDFTBAdapter:
             float(self.dftb.get("scc_max_step", 0.5)),
             int(self.dftb.get("max_scc_iterations", 1200)),
             float(self.dftb.get("spc", 0.5)),
+            self._spc_channel("spc_coco"),
+            self._spc_channel("spc_ovov"),
+            self._spc_channel("spc_coov"),
             float(self.dftb.get("omega", 0.3)),
             float(self.dftb.get("cam_alpha", 0.0)),
             float(self.dftb.get("cam_beta", 1.0)),
+            float(self.dftb.get("mrsf_shift_oo", 0.0)),
+            float(self.dftb.get("mrsf_shift_co", 0.0)),
+            float(self.dftb.get("mrsf_shift_ov", 0.0)),
+            float(self.dftb.get("mrsf_shift_cv", 0.0)),
+            str(self.dftb.get("lc_gamma", "yukawa")).lower(),
+            bool(self.dftb.get("lc_ground_state", False)),
+            bool(self.dftb.get("zvector", True)),
+            bool(self.dftb.get("spin_complete", True)),
+            int(self.dftb.get("reference_multiplicity", 0)),
+            int(self.dftb.get("target_multiplicity", 1)),
+            str(self.dftb.get("response_solver", "auto")).lower(),
+            int(self.dftb.get("response_max_subspace", 100)),
         )
         return atoms, coords.tobytes(), option_key
 
@@ -417,6 +492,28 @@ class OpenQPDFTBAdapter:
     @staticmethod
     def _fmt(value) -> str:
         return f"{float(value):.16g}"
+
+    def _response_solver_code(self) -> int:
+        solver = str(self.dftb.get("response_solver", "auto")).lower()
+        return {"dense": 0, "davidson": 1, "auto": 2}[solver]
+
+    def _lc_gamma_is_erf(self) -> bool:
+        kernel = str(self.dftb.get("lc_gamma", "yukawa")).lower()
+        if kernel not in {"yukawa", "erf"}:
+            raise ValueError(f"[dftb] lc_gamma must be yukawa or erf, got {kernel!r}")
+        return kernel == "erf"
+
+    def _reference_multiplicity(self, method: str) -> int:
+        explicit = int(self.dftb.get("reference_multiplicity", 0))
+        if explicit > 0:
+            return explicit
+        return 3 if method in {"sf", "sftddftb", "sf-tddftb", "mrsf", "mrsftddftb", "mrsf-tddftb"} else 1
+
+    def _spc_channel(self, key: str) -> float:
+        value = self.dftb.get(key, None)
+        if value is None or str(value).strip() == "" or float(value) <= -900.0:
+            return float(self.dftb.get("spc", 0.5))
+        return float(value)
 
     def _scc_mixer_code(self) -> int:
         mixer = str(self.dftb.get("scc_mixer", "auto")).lower()
