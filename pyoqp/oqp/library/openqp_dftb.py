@@ -267,7 +267,12 @@ class OpenQPDFTBAdapter:
             if Path(path).exists():
                 return Path(path)
             raise FileNotFoundError(f"openqp-dftb library not found at {path}")
+        oqp_root = os.environ.get("OPENQP_ROOT", "")
         for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
+            if oqp_root:
+                staged = Path(oqp_root) / "lib" / name
+                if staged.exists():
+                    return staged
             found = shutil.which(name)
             if found:
                 return Path(found)

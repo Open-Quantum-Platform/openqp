@@ -863,3 +863,35 @@ if(_LINALG_LIB_TYPE STREQUAL NetLib)
 endif()
 
 set_directory_properties(PROPERTIES CLEAN_NO_CUSTOM 1)
+
+if(ENABLE_OPENQP_DFTB)
+  # Convenience build of the standalone openqp-dftb shared C-API library. It is
+  # deliberately NOT cached with the heavy pinned externals (it is a ~30 s build
+  # that evolves quickly; caching would only risk serving stale versions) and it
+  # is NEVER linked into liboqp: PyOQP dlopens the staged dylib at runtime.
+  set(_OQP_DFTB_INSTALL_DIR "${CMAKE_BINARY_DIR}/external/install/openqp-dftb")
+  if(OPENQP_DFTB_SOURCE_DIR)
+    set(_OQP_DFTB_SOURCE_ARGS SOURCE_DIR "${OPENQP_DFTB_SOURCE_DIR}")
+  else()
+    set(_OQP_DFTB_SOURCE_ARGS
+        GIT_REPOSITORY "${OPENQP_DFTB_GIT_REPOSITORY}"
+        GIT_TAG "${OPENQP_DFTB_GIT_TAG}")
+  endif()
+  ExternalProject_Add(openqp_dftb_external
+    ${_OQP_DFTB_SOURCE_ARGS}
+    PREFIX "${CMAKE_BINARY_DIR}/external/openqp-dftb"
+    CMAKE_ARGS
+      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+      -DCMAKE_Fortran_COMPILER=${CMAKE_Fortran_COMPILER}
+      -DCMAKE_INSTALL_PREFIX=${_OQP_DFTB_INSTALL_DIR}
+      -DOPENQP_DFTB_BUILD_SHARED=ON
+      -DOPENQP_DFTB_BUILD_TESTS=OFF
+      ${OQP_EXTERNAL_GENERATOR_ARGS}
+    BUILD_ALWAYS TRUE
+  )
+  install(DIRECTORY "${_OQP_DFTB_INSTALL_DIR}/lib/"
+    DESTINATION lib
+    FILES_MATCHING
+      PATTERN "libopenqp_dftb_c.*"
+  )
+endif()
