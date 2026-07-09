@@ -866,6 +866,8 @@ class OpenQP:
             "ground": "tda",
             "dftb": "tda",
             "dftb0": "tda",
+            "noscc": "tda",
+            "ground_noscc": "tda",
             "tddftb": "tda",
             "td-dftb": "tda",
             "tda": "tda",

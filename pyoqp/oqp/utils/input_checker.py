@@ -865,6 +865,20 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
         _zv = _get(config, "dftb", "zvector", True)
         if (_zv is False) or (str(_zv).lower() in ("false", "0", "off", "no")):
             _probe_unforwarded.append("zvector")
+        # Response-solver / reference controls the probe CLI also never forwards.
+        if float(_get(config, "dftb", "response_tolerance", 1.0e-6)) != 1.0e-6:
+            _probe_unforwarded.append("response_tolerance")
+        if int(_get(config, "dftb", "response_max_iterations", 50)) != 50:
+            _probe_unforwarded.append("response_max_iterations")
+        if int(_get(config, "dftb", "response_max_subspace", 100)) != 100:
+            _probe_unforwarded.append("response_max_subspace")
+        if str(_get(config, "dftb", "response_solver", "auto")).lower() != "auto":
+            _probe_unforwarded.append("response_solver")
+        if int(_get(config, "dftb", "reference_multiplicity", 0)) != 0:
+            _probe_unforwarded.append("reference_multiplicity")
+        _sc = _get(config, "dftb", "spin_complete", True)
+        if (_sc is False) or (str(_sc).lower() in ("false", "0", "off", "no")):
+            _probe_unforwarded.append("spin_complete")
         if _probe_unforwarded:
             report.add(
                 "ERROR",
@@ -1716,6 +1730,23 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if method == "dftb" and runtype in {"nac", "bp"}:
         # numerical NAC vectors / branching-plane are not wired for DFTB; the
         # DFTB runtype gate in _check_dftb already reports the unsupported case.
+        # Still validate the NAC worker count so an invalid [nac] nproc is caught
+        # in preflight rather than crashing multiprocessing.Pool(processes=0).
+        if runtype == "nac":
+            nac_nproc = _get(config, "nac", "nproc", 1)
+            try:
+                nac_nproc_int = int(nac_nproc)
+            except (TypeError, ValueError):
+                nac_nproc_int = 0
+            if nac_nproc_int < 1:
+                report.add(
+                    "ERROR",
+                    "nac.nproc",
+                    "Number of NAC workers must be positive.",
+                    value=nac_nproc,
+                    expected="nac.nproc >= 1",
+                    action="Set [nac] nproc to a positive integer.",
+                )
         return
     if method == "dftb" and runtype == "nacme":
         # DFTB nacme IS wired (TLF state-overlap backend), but it still needs the
