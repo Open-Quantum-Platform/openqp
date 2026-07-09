@@ -267,6 +267,14 @@ class OpenQPDFTBAdapter:
             if Path(path).exists():
                 return Path(path)
             raise FileNotFoundError(f"openqp-dftb library not found at {path}")
+        # pip-installed openqp-dftb wheel bundles the library next to its
+        # locator package: the most robust default when nothing is configured.
+        try:
+            import openqp_dftb  # noqa: PLC0415
+
+            return Path(openqp_dftb.library_path())
+        except (ImportError, FileNotFoundError):
+            pass
         oqp_root = os.environ.get("OPENQP_ROOT", "")
         for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
             if oqp_root:
@@ -277,8 +285,9 @@ class OpenQPDFTBAdapter:
             if found:
                 return Path(found)
         raise FileNotFoundError(
-            "Set [dftb] library_path or OPENQP_DFTB_LIBRARY to the libopenqp_dftb_c "
-            "shared library built from openqp-dftb (OPENQP_DFTB_BUILD_SHARED=ON)."
+            "Could not locate libopenqp_dftb_c. Either `pip install openqp-dftb`, "
+            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP with "
+            "-DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
         )
 
     def _run_probe(self, method: str, state: int) -> _StateResult:
