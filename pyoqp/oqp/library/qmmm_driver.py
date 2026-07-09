@@ -522,6 +522,19 @@ class OpenQpQMMM:
         for j, m in enumerate(mm_idx):
             total_forces[m] = total_forces[m] + f_mm[j]
 
+        # Enforce translational invariance (Sum F = 0). The MM-MM force and the
+        # analytic QM<->MM coupling force each already sum to zero (Newton's
+        # third law), so any residual net force is a spurious component of the
+        # QM ESPF gradient (grad_esp_qmmm), whose charge-response term must
+        # vanish under a rigid translation but does not numerically at a
+        # covalent QM/MM boundary (the link-atom row carries a large,
+        # non-invariant contribution that the g/(1-g) redistribution then dumps
+        # onto the MM boundary atom). Removing the mean net force restores
+        # momentum conservation and stops the COM runaway that otherwise makes
+        # link-atom NVE dynamics diverge. This mirrors the split-embedding path
+        # (see compute_force above).
+        total_forces -= np.mean(total_forces, axis=0)
+
         return total_energy, total_forces
 
 

@@ -735,6 +735,7 @@ class NAMD_QMMM(NAMD):
             self._state_overlap()
             self.vel = self.v_all[self.qm_atoms].copy()       # hop sees QM velocities
             active_old = self.active
+            epot_old = epot                                    # total E_pot before hop
             new_active, hopped = self._hop()
             self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
             active_changed = new_active != active_old
@@ -742,6 +743,24 @@ class NAMD_QMMM(NAMD):
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
                 accel_new = f_all / self.m_all[:, None]
+            if hopped:
+                # The Fortran FSSH kernel rescaled QM velocities for the bare
+                # electronic gap only (namd_eabs = td_energies). With the default
+                # state-dependent ESPF charges the embedding term in E_pot also
+                # changes at an internal-conversion hop, so the electronic-gap
+                # rescale alone leaves E_tot discontinuous by that embedding
+                # energy change. Compensate the residual with an additional
+                # isotropic full-system rescale, exactly as NAMD_SOC_QMMM.run()
+                # does for ISC hops. de_espf isolates the state-dependent
+                # embedding-energy change (= -(q_old - q_new).potmm); it is zero
+                # for ESPF_ROHF=1 (state-independent charges).
+                de_espf = ((epot_old - epot) +
+                           (float(mol.energies[self.active])
+                            - float(mol.energies[active_old])))
+                if abs(de_espf) > 1e-10:
+                    ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                    if ekin_all > 0:
+                        self.v_all *= np.sqrt(max(0.0, 1.0 + de_espf / ekin_all))
 
             accel = accel_new
             self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
