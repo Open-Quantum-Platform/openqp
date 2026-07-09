@@ -1250,6 +1250,8 @@ class NAMD_SOC(NAMD):
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
             mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
             SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1389,6 +1391,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
         mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1656,6 +1660,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         pchg_dom = None
         for (mult, state), w in wmap.items():
             mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
             SinglePoint(mol).excitation([self.e_ref])
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1844,6 +1850,8 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
         mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()

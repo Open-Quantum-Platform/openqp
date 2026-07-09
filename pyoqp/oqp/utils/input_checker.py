@@ -806,6 +806,15 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
 
     backend = _as_lower(_get(config, "dftb", "backend", "native"))
     dftb_type = _as_lower(_get(config, "dftb", "type", "auto"))
+    # Canonicalize response-type aliases so the runtype/NAMD/SOC gates below see
+    # a single spelling per family (e.g. mrsftddftb/mrsf-tddftb -> mrsf).
+    _DFTB_TYPE_CANON = {
+        "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
+        "td-dftb": "tddftb", "tda": "tddftb",
+        "sftddftb": "sf", "sf-tddftb": "sf",
+        "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
+    }
+    dftb_type_canon = _DFTB_TYPE_CANON.get(dftb_type, dftb_type)
     parameter_path = _get(config, "dftb", "parameter_path", "")
     executable = _get(config, "dftb", "executable", "")
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -823,6 +832,19 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             value=backend,
             expected=", ".join(sorted(DFTB_BACKENDS)),
             action="Use native (loads the standalone libopenqp_dftb_c shared library); probe is only an explicit developer fallback.",
+        )
+
+    scf_prop = _as_list(_get(config, "properties", "scf_prop", []))
+    if scf_prop:
+        report.add(
+            "ERROR",
+            "properties.scf_prop",
+            "OpenQP-DFTB does not implement SCF property analyses "
+            "(mulliken/lowdin/nmr/...); they dispatch to Gaussian-basis "
+            "routines the DFTB adapter never initializes.",
+            value=", ".join(str(v) for v in scf_prop),
+            expected="omit properties.scf_prop for method=dftb",
+            action="Remove properties.scf_prop, or use an all-electron method for SCF properties.",
         )
 
     if dftb_type not in DFTB_TYPES:
@@ -985,10 +1007,34 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use [qmmm] embedding=electrostatic (full-ESPF scheme) "
                        "or mechanical with method=dftb.",
             )
+        if runtype == "namd":
+            soc_val = _get(config, "md", "soc", False)
+            soc_on = (soc_val is True) or (str(soc_val).lower() in ("true", "1", "on", "yes"))
+            if soc_on:
+                report.add(
+                    "ERROR",
+                    "md.soc",
+                    "OpenQP-DFTB SOC-NAMD with QM/MM embedding is not yet wired: "
+                    "the SOC electronic/gradient path still uses the native ESPF "
+                    "hcore/gradient hooks, which the DFTB backend does not consume.",
+                    value="soc=true with qmmm_flag=true",
+                    expected="gas-phase SOC-NAMD (qmmm_flag=false), or non-SOC DFTB QM/MM NAMD",
+                    action="Disable [md] soc for DFTB QM/MM NAMD, or run SOC-NAMD without QM/MM.",
+                )
+            if embedding == "mechanical":
+                report.add(
+                    "ERROR",
+                    "qmmm.embedding",
+                    "OpenQP-DFTB QM/MM NAMD requires full-ESPF electrostatic embedding; "
+                    "the mechanical path raises at the first electronic step.",
+                    value=embedding,
+                    expected="electrostatic",
+                    action="Use [qmmm] embedding=electrostatic for DFTB QM/MM NAMD.",
+                )
 
     allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
     td_type_for_namd = _as_lower(_get(config, "tdhf", "type", "rpa"))
-    if td_type_for_namd == "mrsf" and dftb_type in {"auto", "mrsf"}:
+    if td_type_for_namd == "mrsf" and dftb_type_canon in {"auto", "mrsf"}:
         # MRSF-TDDFTB has a state-overlap (TLF) backend and one-center SOC:
         # overlap-based couplings and surface hopping are available.
         allowed_runtype |= {"nac", "nacme", "namd", "soc"}
@@ -1608,7 +1654,14 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
 
-    if method == "dftb" and runtype in {"nac", "bp", "nacme"}:
+    if method == "dftb" and runtype in {"nac", "bp"}:
+        # numerical NAC vectors / branching-plane are not wired for DFTB; the
+        # DFTB runtype gate in _check_dftb already reports the unsupported case.
+        return
+    if method == "dftb" and runtype == "nacme":
+        # DFTB nacme IS wired (TLF state-overlap backend), but it still needs the
+        # previous-step geometry; run only that portion of the nacme validation.
+        _check_dftb_nacme_previous_geometry(config, report)
         return
 
     if runtype == "neb":
@@ -2155,6 +2208,18 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
                 )
 
     _add_cpu_info(report, "nac.nproc", nproc, False)
+
+
+def _check_dftb_nacme_previous_geometry(config: dict[str, Any], report: CheckReport) -> None:
+    """DFTB nacme reuses the previous-geometry requirement of _check_nacme
+    without the all-electron method=tdhf gate of _check_nac."""
+    if not _get(config, "guess", "file2", "") and not _get(config, "input", "system2", ""):
+        report.add(
+            "ERROR",
+            "input.system2",
+            "NACME overlap needs previous-step information from guess.file2 or input.system2.",
+            action="Set [guess] file2 to a restart JSON or provide [input] system2.",
+        )
 
 
 def _check_nacme(config: dict[str, Any], report: CheckReport) -> None:

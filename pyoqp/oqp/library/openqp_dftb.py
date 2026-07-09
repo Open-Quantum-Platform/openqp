@@ -168,6 +168,16 @@ class OpenQPDFTBAdapter:
         self._last_results = results
         return energies, gradient_map
 
+    def _reject_probe_with_embedding(self, backend: str) -> None:
+        if backend == "probe" and self._external_potential() is not None:
+            raise ValueError(
+                "OpenQP-DFTB QM/MM electrostatic embedding requires the native "
+                "backend: the probe executable does not carry the per-atom "
+                "external potential, so it would return unembedded energies and "
+                "gradients while the driver assembles embedded coupling forces. "
+                "Set [dftb] backend=native for QM/MM jobs."
+            )
+
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
         key = self._cache_key(method, state, need_grad=need_grad)
         cache = self.mol._openqp_dftb_cache
@@ -184,6 +194,7 @@ class OpenQPDFTBAdapter:
             cache["__generation__"] = generation
 
         backend = str(self.dftb.get("backend", "native")).lower()
+        self._reject_probe_with_embedding(backend)
         if backend in {"native", "auto"}:
             result = self._run_native(method, state, need_grad=need_grad)
         elif backend == "probe":
@@ -507,6 +518,14 @@ class OpenQPDFTBAdapter:
         istate = int(self.config.get("optimize", {}).get("istate", 0))
         if runtype in {"optimize", "mep"} and istate == 0:
             return "ground"
+
+        # A plain energy/gradient run that targets no excited state is a
+        # ground-state DFTB job; only fall through to a response method when an
+        # excited state or an excited-state workflow is actually requested.
+        if runtype in {"energy", "grad", "data"}:
+            grad_states = [int(x) for x in self.config.get("properties", {}).get("grad", [])]
+            if not any(s > 0 for s in grad_states) and runtype != "data":
+                return "ground"
 
         td_type = str(self.config.get("tdhf", {}).get("type", "tda")).lower()
         try:

@@ -876,7 +876,11 @@ class OpenQP:
         if tdhf_type is None:
             raise ValueError("DFTB response_type must be ground, tddftb, sf, or mrsf.")
 
-        dftb_updates["type"] = dftb_type
+        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
+        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
+        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
+        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
+        dftb_updates["type"] = _BACKEND_TYPE.get(dftb_type, dftb_type)
         self.section("dftb", **dftb_updates)
         return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
 
@@ -927,10 +931,14 @@ class OpenQP:
     def _require_mrsf_theory_for(self, workflow_name):
         method = str(self.config_typed.get("input", {}).get("method", "")).lower()
         response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
-        if method != "tdhf" or response != "mrsf":
+        dftb_type = str(self.config_typed.get("dftb", {}).get("type", "auto")).lower()
+        dftb_mrsf = method == "dftb" and dftb_type in {
+            "auto", "mrsf", "mrsftddftb", "mrsf-tddftb"} and response == "mrsf"
+        if not ((method == "tdhf" and response == "mrsf") or dftb_mrsf):
             raise ValueError(
-                f"{workflow_name} is currently supported only with MRSF-TDDFT. "
-                "Call job.theory('mrsf-tddft', ...) before selecting this workflow."
+                f"{workflow_name} is currently supported only with MRSF-TDDFT "
+                "or MRSF-TDDFTB. Call job.theory('mrsf-tddft', ...) or "
+                "job.dftb(response_type='mrsf', ...) before selecting this workflow."
             )
 
     def _require_reference_scf_theory_for(self, workflow_name):

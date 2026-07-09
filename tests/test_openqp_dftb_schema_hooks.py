@@ -151,19 +151,30 @@ spc = 0.5
 
     def test_input_checker_accepts_dftb_nacme_with_mrsf_overlap_backend(self):
         # The MRSF-TDDFTB state-overlap (TLF) backend provides nacme/nac/namd/soc;
-        # non-MRSF response types remain rejected.
+        # nacme still needs previous-step geometry, and non-MRSF response types
+        # remain rejected.
         check_input_values = _import_or_skip("oqp.utils.input_checker").check_input_values
 
+        # nacme with previous geometry passes.
         config = _base_dftb_config(runtype="nacme")
+        config["input"]["system2"] = "\nH 0.0 0.0 0.0\nH 0.0 0.0 0.71"
         report = check_input_values(config, raise_error=False, emit=False)
         self.assertTrue(report.ok, report.to_text())
 
+        # nacme without previous geometry is rejected (BasisOverlap needs it).
         config = _base_dftb_config(runtype="nacme")
-        config["tdhf"]["type"] = "sf"
         report = check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(report.ok)
-        text = report.to_text()
-        self.assertIn("state-overlap backend", text)
+        self.assertIn("previous-step information", report.to_text())
+
+        # non-MRSF response type is still rejected for nacme.
+        config = _base_dftb_config(runtype="nacme")
+        config["input"]["system2"] = "\nH 0.0 0.0 0.0\nH 0.0 0.0 0.71"
+        config["tdhf"]["type"] = "sf"
+        config["dftb"]["type"] = "sf"
+        report = check_input_values(config, raise_error=False, emit=False)
+        self.assertFalse(report.ok)
+        self.assertIn("state-overlap backend", report.to_text())
 
     def test_single_point_routes_dftb_to_adapter(self):
         text = (ROOT / "pyoqp" / "oqp" / "library" / "single_point.py").read_text(encoding="utf-8")
