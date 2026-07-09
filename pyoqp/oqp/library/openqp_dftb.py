@@ -64,7 +64,7 @@ class OpenQPDFTBAdapter:
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
         # accordingly so generic bookkeeping (get_data tag selection for the
         # NAMD back_door carry, beta-set handling) treats both spin sets.
-        if self._resolved_method() in {"sf", "mrsf"} and \
+        if self._probe_method_name(self._resolved_method()) in {"sf", "mrsf"} and \
                 str(self.config.get("scf", {}).get("type", "rhf")).lower() == "rhf":
             self.config.setdefault("scf", {})["type"] = "rohf"
 
@@ -83,7 +83,7 @@ class OpenQPDFTBAdapter:
         """Return the DFTB reference energy in the same shape as SCF reference()."""
         method = self._resolved_method()
         if method in _GROUND_TYPES:
-            result = self._run_state("ground", 0, need_grad=False)
+            result = self._run_state(method, 0, need_grad=False)
         else:
             result = self._run_state(method, 1, need_grad=False)
             self._store_wavefunction_tags(result)
@@ -400,10 +400,20 @@ class OpenQPDFTBAdapter:
             return Path(openqp_dftb.library_path())
         except (ImportError, FileNotFoundError):
             pass
+        # The -DENABLE_OPENQP_DFTB=ON hook stages libopenqp_dftb_c next to the
+        # liboqp that the Python package already resolved. Self-locating installs
+        # and source-tree runs do not set OPENQP_ROOT, so check the RESOLVED
+        # runtime root's lib dir before the OPENQP_ROOT env fallback and PATH.
+        lib_dirs = []
+        resolved_root = getattr(oqp, "oqp_root", "")
+        if resolved_root:
+            lib_dirs.append(Path(resolved_root) / "lib")
         oqp_root = os.environ.get("OPENQP_ROOT", "")
+        if oqp_root:
+            lib_dirs.append(Path(oqp_root) / "lib")
         for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
-            if oqp_root:
-                staged = Path(oqp_root) / "lib" / name
+            for lib_dir in lib_dirs:
+                staged = lib_dir / name
                 if staged.exists():
                     return staged
             found = shutil.which(name)

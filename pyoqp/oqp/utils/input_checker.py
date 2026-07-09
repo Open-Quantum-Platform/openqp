@@ -846,6 +846,38 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
                    "tags or the state-overlap/SOC entry points these workflows need.",
         )
 
+    if backend == "probe":
+        # The probe executable receives only a fixed subset of scalar controls;
+        # options it cannot forward would be silently ignored, so reject them
+        # rather than run with probe defaults.
+        _probe_unforwarded = []
+        if int(_get(config, "dftb", "target_multiplicity", 1)) != 1:
+            _probe_unforwarded.append("target_multiplicity")
+        for _ch in ("spc_coco", "spc_ovov", "spc_coov"):
+            if float(_get(config, "dftb", _ch, -999.0)) != -999.0:
+                _probe_unforwarded.append(_ch)
+        for _sh in ("mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv"):
+            if float(_get(config, "dftb", _sh, 0.0)) != 0.0:
+                _probe_unforwarded.append(_sh)
+        _lc = _get(config, "dftb", "lc_ground_state", False)
+        if (_lc is True) or (str(_lc).lower() in ("true", "1", "on", "yes")):
+            _probe_unforwarded.append("lc_ground_state")
+        _zv = _get(config, "dftb", "zvector", True)
+        if (_zv is False) or (str(_zv).lower() in ("false", "0", "off", "no")):
+            _probe_unforwarded.append("zvector")
+        if _probe_unforwarded:
+            report.add(
+                "ERROR",
+                "dftb.backend",
+                "OpenQP-DFTB backend=probe cannot forward these options to the "
+                "probe executable; they would be silently ignored.",
+                value=", ".join(_probe_unforwarded),
+                expected="native",
+                action="Use [dftb] backend=native for target_multiplicity, "
+                       "per-channel spc_*, mrsf_shift_*, lc_ground_state, or "
+                       "zvector=false.",
+            )
+
     scf_prop = _as_list(_get(config, "properties", "scf_prop", []))
     if scf_prop:
         report.add(
