@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import textwrap
 
 import numpy as np
 
@@ -284,11 +285,19 @@ class OpenQPDFTBAdapter:
             found = shutil.which(name)
             if found:
                 return Path(found)
-        raise FileNotFoundError(
-            "Could not locate libopenqp_dftb_c. Either `pip install openqp-dftb`, "
-            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP with "
-            "-DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
+        message = (
+            "openqp-dftb not found: could not locate libopenqp_dftb_c. "
+            "Install it with `pip install openqp-dftb` (or `pip install "
+            "git+https://github.com/Open-Quantum-Platform/openqp-dftb.git`), "
+            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP "
+            "with -DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
         )
+        dump_log(
+            self.mol,
+            title="PyOQP: openqp-dftb NOT FOUND\n   "
+            + "\n   ".join(textwrap.wrap(message, width=76)),
+        )
+        raise FileNotFoundError(message)
 
     def _run_probe(self, method: str, state: int) -> _StateResult:
         executable = self._probe_executable()
