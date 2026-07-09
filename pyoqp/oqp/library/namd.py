@@ -897,7 +897,11 @@ class NAMD_SOC(NAMD):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()                     # sets OQP::overlap_mo
 
+        is_dftb = mol.config['input']['method'] == 'dftb'
+
         mol.data.set_tdhf_multiplicity(1)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 1
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -905,13 +909,18 @@ class NAMD_SOC(NAMD):
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 3
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)           # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -936,13 +945,19 @@ class NAMD_SOC(NAMD):
         mol.data.set_tdhf_multiplicity(1)
         mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
-        oqp.get_states_overlap(mol)
+        if mol.config['input']['method'] == 'dftb':
+            _dftb_spatial_overlap(mol, 1)
+        else:
+            oqp.get_states_overlap(mol)
         s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
 
         mol.data.set_tdhf_multiplicity(3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
-        oqp.get_states_overlap(mol)
+        if mol.config['input']['method'] == 'dftb':
+            _dftb_spatial_overlap(mol, 3)
+        else:
+            oqp.get_states_overlap(mol)
         s_t = np.array(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
 
         s = np.zeros((n, n))
@@ -1591,7 +1606,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
 
+        is_dftb = mol.config['input']['method'] == 'dftb'
+
         mol.data.set_tdhf_multiplicity(1)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 1
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -1599,13 +1618,18 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 3
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)            # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -1910,3 +1934,49 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                    f'E_kin={ekin:.8f}  hop={hopped}  '
                    f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+
+
+def _dftb_soc_tags(mol):
+    """Build OQP::soc_* tags for method=dftb (one-center SOC + numpy eigh)."""
+    from oqp.library.openqp_dftb import OpenQPDFTBAdapter, HA_TO_WAVENUMBER, FINE_STRUCTURE
+    adapter = OpenQPDFTBAdapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    x_s = np.asarray(data['OQP::td_bvec_mo_s'])
+    x_t = np.asarray(data['OQP::td_bvec_mo_t'])
+    hsoc_re, hsoc_im = adapter.soc_matrix(
+        np.asarray(data['OQP::VEC_MO_A']).ravel(), x_s.ravel(), x_t.ravel(),
+        noca=noca, nocb=nocb)
+    e_s = np.asarray(data['OQP::td_singlet_energies']).ravel()
+    e_t = np.asarray(data['OQP::td_triplet_energies']).ravel()
+    e0 = min(e_s[0], e_t[0])
+    diag = np.concatenate([e_s - e0, np.repeat(e_t - e0, 3)]) * HA_TO_WAVENUMBER
+    dfac = 0.5 * FINE_STRUCTURE ** 2 * HA_TO_WAVENUMBER
+    h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
+    eigenvalues, eigenvectors = np.linalg.eigh(h_total)
+    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
+    data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
+    data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
+    data['OQP::soc_hsoc_re'] = fortran_tag(np.ascontiguousarray(hsoc_re))
+    data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
+
+
+def _dftb_spatial_overlap(mol, multiplicity):
+    """DFTB spatial state overlap for the current td_bvec_mo(_old) tags."""
+    from oqp.library.openqp_dftb import OpenQPDFTBAdapter
+    adapter = OpenQPDFTBAdapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    tlf = int(mol.config.get('tdhf', {}).get('tlf', 2))
+    _, s_st = adapter.states_overlap(
+        np.asarray(data['OQP::xyz_old']).ravel(),
+        np.asarray(mol.get_system(), dtype=float).ravel(),
+        np.asarray(data['OQP::VEC_MO_A_old']).ravel(),
+        np.asarray(data['OQP::VEC_MO_A']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo_old']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo']).ravel(),
+        noca=noca, nocb=nocb, multiplicity=multiplicity, tlf_order=tlf)
+    data['OQP::td_states_overlap'] = s_st

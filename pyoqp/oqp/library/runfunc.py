@@ -163,6 +163,12 @@ def compute_nac(mol):
     NAC(mol).nac()
 
 def compute_soc(mol):
+    if mol.config['input']['method'] == 'dftb':
+        from oqp.library.openqp_dftb import dftb_soc
+        dftb_soc(mol)
+        LastStep(mol).compute(mol)
+        return
+
     sp = SinglePoint(mol)
     ref_energy = sp.reference()          # SCF один раз
 

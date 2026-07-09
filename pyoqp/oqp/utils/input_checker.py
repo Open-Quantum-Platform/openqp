@@ -987,14 +987,19 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
-    if runtype in {"nac", "nacme", "bp"}:
+    td_type_for_namd = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if td_type_for_namd == "mrsf" and dftb_type in {"auto", "mrsf"}:
+        # MRSF-TDDFTB has a state-overlap (TLF) backend and one-center SOC:
+        # overlap-based couplings and surface hopping are available.
+        allowed_runtype |= {"nac", "nacme", "namd", "soc"}
+    if runtype in {"nac", "nacme", "bp"} and runtype not in allowed_runtype:
         report.add(
             "ERROR",
             "input.runtype",
-            "OpenQP-DFTB NAMD coupling is not available until the DFTB state-overlap/NACME backend is wired.",
+            "OpenQP-DFTB NAMD coupling requires the MRSF-TDDFTB state-overlap backend.",
             value=runtype,
-            expected="data for energies/gradients, or a DFTB state-overlap implementation before nac/nacme/bp",
-            action="Use runtype=data for NAMD surface energies/gradients; enable nac/nacme only after adding a validated DFTB state-overlap hook.",
+            expected="tdhf.type=mrsf (and dftb.type auto/mrsf) for nac/nacme; bp is not available",
+            action="Use tdhf.type=mrsf for DFTB nonadiabatic couplings.",
             wiki=WIKI_HELP["dftb.namd"],
         )
     elif runtype not in allowed_runtype:
@@ -1524,7 +1529,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
 
     if runtype == "namd":
         td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-        if method != "tdhf" or td_type != "mrsf":
+        if method not in {"tdhf", "dftb"} or td_type != "mrsf":
             report.add(
                 "ERROR",
                 "input.runtype",
@@ -1847,6 +1852,21 @@ def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
+
+    if method == "dftb":
+        # MRSF-TDDFTB one-center SOC: the ROKS triplet reference is implied
+        # by the DFTB backend (the adapter enforces it), so only the response
+        # type needs checking here.
+        if td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "tdhf.type",
+                "SOC requires tdhf.type=mrsf.",
+                value=td_type,
+                expected="mrsf",
+                action="Set [tdhf] type=mrsf.",
+            )
+        return
 
     if method != "tdhf":
         report.add(
