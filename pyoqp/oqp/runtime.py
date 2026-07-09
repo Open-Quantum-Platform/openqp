@@ -35,15 +35,19 @@ def _candidate_roots(package_root=None):
     package_root = Path(package_root or Path(__file__).resolve().parent)
     roots = []
 
-    env_root = os.environ.get("OPENQP_ROOT")
-    if env_root:
-        roots.append(Path(env_root).expanduser())
-
+    # Prefer the runtime files shipped with the current Python package (and the
+    # inferred source tree in a dev checkout) so a stale OPENQP_ROOT pointing at
+    # another OpenQP build cannot shadow the matching liboqp/data of THIS
+    # package. OPENQP_ROOT is only a compatibility fallback (see resolve_oqp_root).
     roots.append(package_root)
 
     source_root = _source_root_from_package(package_root)
     if source_root is not None:
         roots.append(source_root)
+
+    env_root = os.environ.get("OPENQP_ROOT")
+    if env_root:
+        roots.append(Path(env_root).expanduser())
 
     seen = set()
     unique_roots = []

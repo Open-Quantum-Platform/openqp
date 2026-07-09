@@ -834,6 +834,18 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             action="Use native (loads the standalone libopenqp_dftb_c shared library); probe is only an explicit developer fallback.",
         )
 
+    if backend == "probe" and runtype in {"nacme", "nac", "namd", "soc"}:
+        report.add(
+            "ERROR",
+            "dftb.backend",
+            "OpenQP-DFTB nacme/nac/namd/soc require the native backend.",
+            value=backend,
+            expected="native",
+            action="Use [dftb] backend=native: the probe executable only returns "
+                   "energies/gradients and cannot publish the MO/response-vector "
+                   "tags or the state-overlap/SOC entry points these workflows need.",
+        )
+
     scf_prop = _as_list(_get(config, "properties", "scf_prop", []))
     if scf_prop:
         report.add(

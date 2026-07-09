@@ -121,6 +121,9 @@ class OpenQPDFTBAdapter:
 
     def _evaluate(self, states, *, need_grad):
         method = self._resolved_method()
+        # The ground reference for a state-0 call is the requested ground
+        # variant (dftb0/noscc/ground_noscc run NoSCC), not always plain SCC.
+        ground_method = method if method in _GROUND_TYPES else "ground"
         states = sorted({int(state) for state in states})
 
         if method in _GROUND_TYPES:
@@ -139,7 +142,7 @@ class OpenQPDFTBAdapter:
                 results[state] = base
 
         if method in _GROUND_TYPES or 0 in states:
-            results[0] = self._run_state("ground", 0, need_grad=False)
+            results[0] = self._run_state(ground_method, 0, need_grad=False)
 
         if method in _GROUND_TYPES:
             energies = np.array([results[0].state_energy], dtype=float)
@@ -160,7 +163,7 @@ class OpenQPDFTBAdapter:
         gradient_map = {}
         if need_grad:
             for state in states:
-                run_method = "ground" if state == 0 else method
+                run_method = ground_method if state == 0 else method
                 gradient_result = self._run_state(run_method, state, need_grad=True)
                 results[state] = gradient_result
                 gradient_map[state] = gradient_result.gradient_bohr
@@ -519,15 +522,17 @@ class OpenQPDFTBAdapter:
         if runtype in {"optimize", "mep"} and istate == 0:
             return "ground"
 
-        # A plain energy/gradient run that targets no excited state is a
-        # ground-state DFTB job; only fall through to a response method when an
-        # excited state or an excited-state workflow is actually requested.
-        if runtype in {"energy", "grad", "data"}:
+        td_type = str(self.config.get("tdhf", {}).get("type", "tda")).lower()
+
+        # A plain energy/gradient run that targets no excited state and does not
+        # explicitly request an open-shell (SF/MRSF) response is a ground-state
+        # DFTB job. An explicit tdhf.type=sf/mrsf is honored even for
+        # runtype=energy, so it is NOT collapsed to ground here.
+        if runtype in {"energy", "grad"} and td_type in {"rpa", "tda"}:
             grad_states = [int(x) for x in self.config.get("properties", {}).get("grad", [])]
-            if not any(s > 0 for s in grad_states) and runtype != "data":
+            if not any(s > 0 for s in grad_states):
                 return "ground"
 
-        td_type = str(self.config.get("tdhf", {}).get("type", "tda")).lower()
         try:
             return _EXCITED_METHOD_BY_TDHF_TYPE[td_type]
         except KeyError as exc:
@@ -654,6 +659,20 @@ class OpenQPDFTBAdapter:
             )
         return v_ext
 
+    def _mo_tag_present(self, geom_key) -> bool:
+        """True if MO coefficient tags are already published for this geometry.
+
+        Used to avoid reverting a BasisOverlap phase/reorder alignment when
+        excitation()/energy() re-stores tags at the same geometry.
+        """
+        if getattr(self.mol, "_dftb_mo_tag_geom", None) != geom_key:
+            return False
+        try:
+            self.mol.data["OQP::VEC_MO_A"]
+            return True
+        except (KeyError, AttributeError):
+            return False
+
     @staticmethod
     def _fortran_tag(array2d):
         """Store a true (rows, cols) matrix the way native OQP:: tags are laid out.
@@ -675,11 +694,20 @@ class OpenQPDFTBAdapter:
         if result.mo_coefficients is None:
             return
         data = self.mol.data
-        mo_tag = self._fortran_tag(result.mo_coefficients)
-        data["OQP::VEC_MO_A"] = mo_tag
-        data["OQP::VEC_MO_B"] = mo_tag.copy()
-        data["OQP::E_MO_A"] = np.ascontiguousarray(result.mo_energies)
-        data["OQP::E_MO_B"] = np.ascontiguousarray(result.mo_energies)
+        # Preserve MO tags that were already published (and possibly
+        # phase/reorder-aligned by BasisOverlap) for the CURRENT geometry: a
+        # later excitation()/energy() call at the same geometry must not revert
+        # the alignment the DFTB state-overlap path relies on. Response vectors
+        # and dims are always refreshed (align_x re-aligns td_bvec_mo after).
+        geom_key = np.ascontiguousarray(
+            np.asarray(self.mol.get_system(), dtype=np.float64)).tobytes()
+        if not self._mo_tag_present(geom_key):
+            mo_tag = self._fortran_tag(result.mo_coefficients)
+            data["OQP::VEC_MO_A"] = mo_tag
+            data["OQP::VEC_MO_B"] = mo_tag.copy()
+            data["OQP::E_MO_A"] = np.ascontiguousarray(result.mo_energies)
+            data["OQP::E_MO_B"] = np.ascontiguousarray(result.mo_energies)
+            self.mol._dftb_mo_tag_geom = geom_key
         if result.response_vectors is not None:
             data["OQP::td_bvec_mo"] = self._fortran_tag(result.response_vectors)
         data["OQP::dftb_wf_dims"] = np.array(
@@ -772,14 +800,20 @@ class OpenQPDFTBAdapter:
 
     @staticmethod
     def _probe_method_name(method: str) -> str:
+        # Normalize every accepted [dftb] type alias to one of the backend's
+        # method names (ground variants, tddftb, sf, mrsf). The input checker
+        # accepts spellings such as tda/td-dftb/sftddftb/mrsftddftb; the native
+        # C API does not recognize all of them, so canonicalize here.
         method = method.lower()
-        if method in {"dftb", "dftb0", "ground_noscc", "noscc"}:
-            return method
-        if method == "sf-tddftb":
-            return "sf"
-        if method == "mrsf-tddftb":
-            return "mrsf"
-        return method
+        canon = {
+            "dftb": "ground", "ground": "ground",
+            "dftb0": "ground_noscc", "noscc": "ground_noscc",
+            "ground_noscc": "ground_noscc",
+            "tddftb": "tddftb", "tda": "tddftb", "td-dftb": "tddftb", "rpa": "tddftb",
+            "sf": "sf", "sftddftb": "sf", "sf-tddftb": "sf",
+            "mrsf": "mrsf", "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
+        }
+        return canon.get(method, method)
 
     @staticmethod
     def _fmt(value) -> str:
