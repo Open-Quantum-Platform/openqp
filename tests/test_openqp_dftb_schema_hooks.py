@@ -149,16 +149,21 @@ spc = 0.5
         report = check_input_values(config, raise_error=False, emit=False)
         self.assertTrue(report.ok, report.to_text())
 
-    def test_input_checker_rejects_dftb_nacme_until_state_overlap_exists(self):
+    def test_input_checker_accepts_dftb_nacme_with_mrsf_overlap_backend(self):
+        # The MRSF-TDDFTB state-overlap (TLF) backend provides nacme/nac/namd/soc;
+        # non-MRSF response types remain rejected.
         check_input_values = _import_or_skip("oqp.utils.input_checker").check_input_values
 
         config = _base_dftb_config(runtype="nacme")
+        report = check_input_values(config, raise_error=False, emit=False)
+        self.assertTrue(report.ok, report.to_text())
 
+        config = _base_dftb_config(runtype="nacme")
+        config["tdhf"]["type"] = "sf"
         report = check_input_values(config, raise_error=False, emit=False)
         self.assertFalse(report.ok)
         text = report.to_text()
-        self.assertIn("DFTB state-overlap/NACME backend", text)
-        self.assertNotIn("NAC workflows require method=tdhf", text)
+        self.assertIn("state-overlap backend", text)
 
     def test_single_point_routes_dftb_to_adapter(self):
         text = (ROOT / "pyoqp" / "oqp" / "library" / "single_point.py").read_text(encoding="utf-8")
