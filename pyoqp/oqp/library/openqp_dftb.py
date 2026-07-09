@@ -61,6 +61,12 @@ class OpenQPDFTBAdapter:
         self.nstate = self._effective_nstate()
         if not hasattr(mol, "_openqp_dftb_cache"):
             mol._openqp_dftb_cache = {}
+        # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
+        # accordingly so generic bookkeeping (get_data tag selection for the
+        # NAMD back_door carry, beta-set handling) treats both spin sets.
+        if self._resolved_method() in {"sf", "mrsf"} and \
+                str(self.config.get("scf", {}).get("type", "rhf")).lower() == "rhf":
+            self.config.setdefault("scf", {})["type"] = "rohf"
 
     def energy(self):
         """Return an OpenQP-style state-energy array and update molecule data."""
@@ -80,6 +86,7 @@ class OpenQPDFTBAdapter:
             result = self._run_state("ground", 0, need_grad=False)
         else:
             result = self._run_state(method, 1, need_grad=False)
+            self._store_wavefunction_tags(result)
         energies = np.array([result.reference_energy], dtype=float)
         self.mol.energies = energies
         return energies
@@ -522,6 +529,95 @@ class OpenQPDFTBAdapter:
             requested.append(int(config.get("optimize", {}).get("jstate", 2)))
         return max(0, max(requested))
 
+    def states_overlap(self, xyz_old, xyz_new, mo_old, mo_new, x_old, x_new, *,
+                       noca, nocb, multiplicity, tlf_order=2):
+        """Cross-geometry MRSF/SF state overlap via libopenqp_dftb_c.
+
+        All matrix inputs are FORTRAN-FLAT 1-D arrays (i.e. tag.ravel() of the
+        native-convention tags). Returns (overlap_mo_tag, states_overlap_tag)
+        in the same native tag layout (transpose view of the Fortran matrices).
+        """
+        lib = self._native_library()
+        natom = self.natom
+        nbf = int(round(np.sqrt(mo_new.size)))
+        nstate = x_new.size // (noca * (nbf - nocb))
+        atoms = np.ascontiguousarray(
+            np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1))
+        parameter = self._parameter_path().encode("utf-8")
+        overlap_mo = (ctypes.c_double * (nbf * nbf))()
+        states_overlap = (ctypes.c_double * (nstate * nstate))()
+        status_message = ctypes.create_string_buffer(1024)
+        status = ctypes.c_int64()
+        as_c = lambda a: np.ascontiguousarray(np.asarray(a, dtype=np.float64).reshape(-1))
+        xyz_old = as_c(xyz_old); xyz_new = as_c(xyz_new)
+        mo_old = as_c(mo_old); mo_new = as_c(mo_new)
+        x_old = as_c(x_old); x_new = as_c(x_new)
+        dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        lib.openqp_dftb_states_overlap(
+            ctypes.c_int64(natom),
+            atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+            dptr(xyz_old), dptr(xyz_new),
+            parameter, ctypes.c_int32(len(parameter)),
+            ctypes.c_int64(nbf), ctypes.c_int64(int(noca)), ctypes.c_int64(int(nocb)),
+            ctypes.c_int64(int(nstate)), ctypes.c_int64(int(multiplicity)),
+            ctypes.c_int64(int(tlf_order)),
+            dptr(mo_old), dptr(mo_new), dptr(x_old), dptr(x_new),
+            overlap_mo, states_overlap,
+            status_message, ctypes.c_int32(1024), ctypes.byref(status),
+        )
+        if status.value != 0:
+            detail = status_message.value.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"openqp-dftb states_overlap failed: {detail}")
+        # C-order reshape of the Fortran-flat buffers = the native tag layout.
+        s_mo = np.frombuffer(overlap_mo, dtype=np.float64).reshape((nbf, nbf)).copy()
+        s_st = np.frombuffer(states_overlap, dtype=np.float64).reshape((nstate, nstate)).copy()
+        return s_mo, s_st
+
+    def soc_matrix(self, mo, x_singlet, x_triplet, *, noca, nocb):
+        """Raw one-center MRSF SOC matrix (no alpha^2/2) via libopenqp_dftb_c.
+
+        Inputs are Fortran-flat 1-D arrays; returns (hsoc_re, hsoc_im) as
+        (dim, dim) numpy arrays in the GAMESS state ordering, where the
+        row/column index layout matches the native soc_mrsf convention.
+        """
+        lib = self._native_library()
+        natom = self.natom
+        nbf = int(round(np.sqrt(mo.size)))
+        n_dim = noca * (nbf - nocb)
+        ns = x_singlet.size // n_dim
+        nt = x_triplet.size // n_dim
+        dim = ns + 3 * nt
+        atoms = np.ascontiguousarray(
+            np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1))
+        coords_bohr = np.ascontiguousarray(
+            np.asarray(self.mol.get_system(), dtype=np.float64).reshape(-1))
+        parameter = self._parameter_path().encode("utf-8")
+        hsoc_re = (ctypes.c_double * (dim * dim))()
+        hsoc_im = (ctypes.c_double * (dim * dim))()
+        status_message = ctypes.create_string_buffer(1024)
+        status = ctypes.c_int64()
+        as_c = lambda a: np.ascontiguousarray(np.asarray(a, dtype=np.float64).reshape(-1))
+        mo = as_c(mo); x_singlet = as_c(x_singlet); x_triplet = as_c(x_triplet)
+        dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        lib.openqp_dftb_soc_matrix(
+            ctypes.c_int64(natom),
+            atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+            dptr(coords_bohr),
+            parameter, ctypes.c_int32(len(parameter)),
+            ctypes.c_int64(nbf), ctypes.c_int64(int(noca)), ctypes.c_int64(int(nocb)),
+            ctypes.c_int64(ns), ctypes.c_int64(nt),
+            dptr(mo), dptr(x_singlet), dptr(x_triplet),
+            hsoc_re, hsoc_im,
+            status_message, ctypes.c_int32(1024), ctypes.byref(status),
+        )
+        if status.value != 0:
+            detail = status_message.value.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(f"openqp-dftb soc_matrix failed: {detail}")
+        # Hermitian: fortran-vs-C reshape only transposes; fix with explicit .T
+        re = np.frombuffer(hsoc_re, dtype=np.float64).reshape((dim, dim)).T.copy()
+        im = np.frombuffer(hsoc_im, dtype=np.float64).reshape((dim, dim)).T.copy()
+        return re, im
+
     def _external_potential(self):
         """Per-atom external electrostatic potential (QM/MM embedding), or None.
 
@@ -539,22 +635,36 @@ class OpenQPDFTBAdapter:
             )
         return v_ext
 
+    @staticmethod
+    def _fortran_tag(array2d):
+        """Store a true (rows, cols) matrix the way native OQP:: tags are laid out.
+
+        Native tag arrays carry the FORTRAN column-major flat data under a
+        numpy view with the Fortran shape, so python code that indexes them
+        (align_mo, align_x, NACME) effectively sees the transpose. Emulate
+        exactly that so all downstream consumers behave like the native path.
+        """
+        return np.ascontiguousarray(array2d.T).reshape(array2d.shape)
+
     def _store_wavefunction_tags(self, result: _StateResult) -> None:
         """Publish MO coefficients/energies and response vectors as OQP:: tags.
 
-        Uses the SAME tag names as the native path (liboqp never sets them for
-        method=dftb), so BasisOverlap.load_previous_data and the NAMD back_door
-        carry work unchanged. Arrays carry DFTB dimensions (SK minimal basis).
+        Uses the SAME tag names and layout conventions as the native path
+        (liboqp never sets them for method=dftb), so BasisOverlap, NACME, and
+        the NAMD back_door carry work unchanged. Arrays carry DFTB dimensions.
         """
         if result.mo_coefficients is None:
             return
         data = self.mol.data
-        data["OQP::VEC_MO_A"] = np.ascontiguousarray(result.mo_coefficients)
-        data["OQP::VEC_MO_B"] = np.ascontiguousarray(result.mo_coefficients)
+        mo_tag = self._fortran_tag(result.mo_coefficients)
+        data["OQP::VEC_MO_A"] = mo_tag
+        data["OQP::VEC_MO_B"] = mo_tag.copy()
         data["OQP::E_MO_A"] = np.ascontiguousarray(result.mo_energies)
         data["OQP::E_MO_B"] = np.ascontiguousarray(result.mo_energies)
         if result.response_vectors is not None:
-            data["OQP::td_bvec_mo"] = np.ascontiguousarray(result.response_vectors)
+            data["OQP::td_bvec_mo"] = self._fortran_tag(result.response_vectors)
+        data["OQP::dftb_wf_dims"] = np.array(
+            [result.nbf, result.noca, result.nocb], dtype=float)
 
     def _cache_key(self, method: str, state: int, *, need_grad: bool):
         coords = np.ascontiguousarray(self.mol.get_system(), dtype=np.float64)
@@ -695,3 +805,64 @@ class OpenQPDFTBAdapter:
         energies = np.asarray(energies, dtype=float)
         if energies.size > 1:
             self.mol.data["OQP::td_energies"] = energies[1:] - energies[0]
+
+
+HA_TO_WAVENUMBER = 219474.6313708
+FINE_STRUCTURE = 7.2973525693e-3
+
+
+def dftb_soc(mol):
+    """Standalone SOC driver for method=dftb (mirror of the native compute_soc).
+
+    Runs the MRSF response for both target multiplicities from the same ROKS
+    reference, builds the one-center SOC matrix, diagonalizes
+    diag((E - e0) * ha2wn) + hsoc * (alpha^2/2 * ha2wn) in numpy, and fills the
+    same OQP:: tags the native soc_mrsf produces (soc_eval in cm^-1 relative to
+    the lowest MCH excitation; soc_hsoc_* raw, without the alpha^2/2 prefactor).
+    """
+    adapter = OpenQPDFTBAdapter(mol)
+    data = mol.data
+    dftb = mol.config['dftb']
+    saved = dftb.get('target_multiplicity', 1)
+    try:
+        dftb['target_multiplicity'] = 1
+        singlet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        data['OQP::td_singlet_energies'] = np.asarray(data['OQP::td_energies']).copy()
+        x_s = np.asarray(data['OQP::td_bvec_mo']).copy()
+        data['OQP::td_bvec_mo_s'] = x_s.copy()
+        mo_tag = np.asarray(data['OQP::VEC_MO_A']).copy()
+        dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+
+        dftb['target_multiplicity'] = 3
+        triplet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        data['OQP::td_triplet_energies'] = np.asarray(data['OQP::td_energies']).copy()
+        x_t = np.asarray(data['OQP::td_bvec_mo']).copy()
+        data['OQP::td_bvec_mo_t'] = x_t.copy()
+    finally:
+        dftb['target_multiplicity'] = saved
+
+    mol.singlet_energies = singlet_energies
+    mol.triplet_energies = triplet_energies
+
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    hsoc_re, hsoc_im = adapter.soc_matrix(
+        mo_tag.ravel(), x_s.ravel(), x_t.ravel(), noca=noca, nocb=nocb)
+
+    ns = len(singlet_energies) - 1
+    nt = len(triplet_energies) - 1
+    e_s = singlet_energies[1:]
+    e_t = triplet_energies[1:]
+    e0 = min(e_s[0], e_t[0])
+    diag = np.concatenate([e_s - e0, np.repeat(e_t - e0, 3)]) * HA_TO_WAVENUMBER
+    dfac = 0.5 * FINE_STRUCTURE ** 2 * HA_TO_WAVENUMBER
+    h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
+    eigenvalues, eigenvectors = np.linalg.eigh(h_total)
+
+    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
+    data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
+    data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
+    data['OQP::soc_hsoc_re'] = fortran_tag(np.ascontiguousarray(hsoc_re))
+    data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
+    mol.soc = eigenvalues.real
+    return eigenvalues.real
