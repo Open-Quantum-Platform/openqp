@@ -767,23 +767,29 @@ class NAMD_QMMM(NAMD):
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
                 accel_new = f_all / self.m_all[:, None]
-            if hopped:
+            if hopped and self._post_trivial_source(active_old) == active_old:
                 # The Fortran FSSH kernel rescaled QM velocities for the bare
                 # electronic gap only (namd_eabs = td_energies). With the default
                 # state-dependent ESPF charges the embedding term in E_pot also
                 # changes at an internal-conversion hop, so the electronic-gap
                 # rescale alone leaves E_tot discontinuous by that embedding
-                # energy change. Compensate the residual with an additional
-                # isotropic full-system rescale, exactly as NAMD_SOC_QMMM.run()
-                # does for ISC hops. Reference the post-trivial-crossing source
-                # state (the kernel may relabel the active state by diabatic
-                # following before the hop and rescale for that source); it
-                # coincides with active_old when no trivial crossing occurred.
-                # de_espf is zero for ESPF_ROHF=1 (state-independent charges).
-                src = self._post_trivial_source(active_old)
+                # energy change. Compensate it with an additional isotropic
+                # full-system rescale, exactly as NAMD_SOC_QMMM.run() does for
+                # ISC hops. de_espf is zero for ESPF_ROHF=1 (state-independent
+                # charges).
+                #
+                # This branch is entered only when no diabatic (trivial) crossing
+                # relabelled the active state in the same step, so active_old is
+                # unambiguously the pre-hop surface the nuclei were propagated on.
+                # When a trivial crossing coincides with the hop the reference
+                # surface is ambiguous (the kernel rescales for the near-
+                # degenerate post-crossing source), so the rescale is skipped:
+                # the omitted ESPF/electronic differences between the near-
+                # degenerate labels are small, and this avoids both mixing two
+                # source surfaces and rolling back a diabatic relabel.
                 de_espf = ((epot_old - epot) +
                            (float(mol.energies[self.active])
-                            - float(mol.energies[src])))
+                            - float(mol.energies[active_old])))
                 ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
                 scale2 = 1.0 + de_espf / ekin_all if ekin_all > 0 else 0.0
                 if scale2 <= 0.0:

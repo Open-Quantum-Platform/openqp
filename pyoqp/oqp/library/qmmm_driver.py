@@ -768,16 +768,23 @@ class OpenQpQMMM:
             c, _, _ = nb.getParticleParameters(i)
             return c.value_in_unit(unit.elementary_charge)
 
+        boundary = set(int(l.mm_index) for l in self.link_atoms)
         shift = {}
         for link in self.link_atoms:
             m1 = int(link.mm_index)
-            m2 = [j for j in neigh.get(m1, ()) if j not in qm_set and j != m1]
-            if not m2:                       # isolated boundary atom: nowhere to shift
+            # Redistribute only onto MM neighbours that are neither QM nor
+            # another boundary (M1) atom. Excluding all boundary atoms keeps the
+            # result independent of link-atom processing order and prevents a
+            # zeroed M1 from being handed charge by an adjacent M1 (which would
+            # leave a nonzero near-field point charge that defeats the shift).
+            m2 = [j for j in neigh.get(m1, ())
+                  if j not in qm_set and j not in boundary]
+            if not m2:                       # no eligible neighbour: leave M1 as is
                 continue
-            q_m1 = shift.get(m1, _ff_q(m1))
             shift[m1] = 0.0
+            share = _ff_q(m1) / len(m2)      # original FF charge -> order independent
             for j in m2:
-                shift[j] = shift.get(j, _ff_q(j)) + q_m1 / len(m2)
+                shift[j] = shift.get(j, _ff_q(j)) + share
         return shift
 
     def _mm_charges_positions_bohr(self):
