@@ -770,19 +770,21 @@ class OpenQpQMMM:
 
         boundary = set(int(l.mm_index) for l in self.link_atoms)
         shift = {}
-        for link in self.link_atoms:
-            m1 = int(link.mm_index)
+        # Iterate over the *unique* MM boundary atoms: one atom can be cut by
+        # more than one QM-MM bond (several link atoms share its mm_index), and
+        # its charge must be redistributed only once, not once per severed bond.
+        for m1 in sorted(boundary):
             # Redistribute only onto MM neighbours that are neither QM nor
             # another boundary (M1) atom. Excluding all boundary atoms keeps the
-            # result independent of link-atom processing order and prevents a
-            # zeroed M1 from being handed charge by an adjacent M1 (which would
-            # leave a nonzero near-field point charge that defeats the shift).
+            # result independent of processing order and prevents a zeroed M1
+            # from being handed charge by an adjacent M1 (which would leave a
+            # nonzero near-field point charge that defeats the shift).
             m2 = [j for j in neigh.get(m1, ())
                   if j not in qm_set and j not in boundary]
             if not m2:                       # no eligible neighbour: leave M1 as is
                 continue
             shift[m1] = 0.0
-            share = _ff_q(m1) / len(m2)      # original FF charge -> order independent
+            share = _ff_q(m1) / len(m2)      # original FF charge, redistributed once
             for j in m2:
                 shift[j] = shift.get(j, _ff_q(j)) + share
         return shift
