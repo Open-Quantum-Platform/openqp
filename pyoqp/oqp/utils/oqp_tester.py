@@ -58,6 +58,7 @@ class OQPTester:
     # not ERROR. Keep these specific to capability gates, never generic errors.
     _OPTIONAL_FEATURE_SENTINELS = (
         "OQP_ENABLE_DDX",  # ddX / PCM continuum solvation built off
+        "openqp-dftb not found",  # optional external openqp-dftb library absent
     )
 
     def __init__(self,
@@ -200,9 +201,19 @@ class OQPTester:
                 and 'openmm' in str(err).lower()
             )
 
+            # DFTB examples need the optional external openqp-dftb library
+            # (libopenqp_dftb_c). When it is absent the adapter raises
+            # FileNotFoundError("openqp-dftb not found ..."); report SKIPPED so a
+            # build without the optional DFTB backend still produces a green suite.
+            needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
+
             if needs_openmm_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional OpenMM backend "
+                                     "(not installed); skipped")
+            elif needs_dftb_missing:
+                result["status"] = "SKIPPED"
+                result["message"] = ("requires the optional openqp-dftb backend "
                                      "(not installed); skipped")
             elif is_irc_maxiter:
                 result["status"] = "PASSED"
@@ -392,6 +403,13 @@ class OQPTester:
             examples (runtype=namd) are NOT skipped: they resolve their auxiliary
             files relative to the input file and SKIP cleanly when OpenMM is
             absent (see run_single_test).
+          * DFTB (method=dftb)  -- these need the optional external openqp-dftb
+            library (libopenqp_dftb_c) AND an external Slater-Koster parameter
+            set, neither of which the repository or CI ships, so they are
+            documentation examples rather than self-contained regression tests.
+            They still SKIP cleanly when only the library is absent (see the
+            openqp-dftb-not-found handling in run_single_test), and run when
+            invoked explicitly with a real parameter path.
 
         Analytical Hessians (type=analytical) and ordinary opt/TS runs are
         unaffected, and the skipped examples still run when invoked explicitly
@@ -406,6 +424,8 @@ class OQPTester:
         if 'runtype=hess' in text and 'type=analytical' not in text:
             return True
         if 'qmmm_flag=true' in text and 'runtype=namd' not in text:
+            return True
+        if 'method=dftb' in text:
             return True
         return False
 

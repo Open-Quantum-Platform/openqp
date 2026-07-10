@@ -87,6 +87,20 @@ class _WorkflowSectionProxy(_SectionProxy):
         return super().__call__(**kwargs)
 
 
+class _DFTBSectionProxy(_SectionProxy):
+    """Callable [dftb] section proxy.
+
+    ``job.dftb(...)`` runs the DFTB workflow helper (method=dftb plus the
+    response-type plumbing), while ``job.dftb.option`` reads and
+    ``job.dftb.option = value`` writes the [dftb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._dftb(*args, **kwargs)
+
+
 class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
     """Optimization workflow proxy with runtype-aware backend routing."""
 
@@ -235,6 +249,9 @@ class _TheoryProxy:
 
     def tdhf(self, **kwargs):
         return self._owner._theory("tdhf", **kwargs)
+
+    def dftb(self, **kwargs):
+        return self._owner._dftb(**kwargs)
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -628,6 +645,34 @@ class OpenQP:
                 multiplicity=multiplicity,
                 **keywords,
             )
+        if method_key in {"dftb", "openqp-dftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tddftb", "td-dftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-tddftb", "sf-td-dftb", "sftddftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-tddftb", "mrsf-td-dftb", "mrsftddftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
         if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
             if functional is None:
                 raise ValueError("SF-TDDFT theory requires functional=...")
@@ -653,7 +698,7 @@ class OpenQP:
             )
         raise ValueError(
             "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
-            "sf-tddft, or mrsf-tddft."
+            "sf-tddft, mrsf-tddft, or dftb."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -817,6 +862,64 @@ class OpenQP:
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
 
+    @property
+    def dftb(self):
+        """Callable [dftb] section proxy.
+
+        ``job.dftb(...)`` runs the DFTB workflow helper below, while
+        ``job.dftb.option`` / ``job.dftb.option = value`` read and write the
+        [dftb] section like every other schema section.
+        """
+        return _DFTBSectionProxy(self, "dftb")
+
+    def _dftb(self, runtype=None, response_type="mrsf", nstate=3,
+              parameter_path=None, **keywords):
+        """Use the optional OpenQP-DFTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "dftb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        dftb_schema = OQP_CONFIG_SCHEMA.get("dftb", {})
+        dftb_updates = {}
+        if parameter_path is not None:
+            dftb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is a
+        # [dftb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.dftb(type=...) and silently fall back to response_type.
+        requested_type = str(keywords.pop("type", response_type)).lower()
+        for key in list(keywords.keys()):
+            if key in dftb_schema and key != "type":
+                dftb_updates[key] = keywords.pop(key)
+
+        dftb_type = requested_type
+        tdhf_type = {
+            "ground": "tda",
+            "dftb": "tda",
+            "dftb0": "tda",
+            "noscc": "tda",
+            "ground_noscc": "tda",
+            "tddftb": "tda",
+            "td-dftb": "tda",
+            "tda": "tda",
+            "sf": "sf",
+            "sftddftb": "sf",
+            "sf-tddftb": "sf",
+            "mrsf": "mrsf",
+            "mrsftddftb": "mrsf",
+            "mrsf-tddftb": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("DFTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
+        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
+        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
+        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
+        dftb_updates["type"] = _BACKEND_TYPE.get(dftb_type, dftb_type)
+        self.section("dftb", **dftb_updates)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
+
     def soc(self, nstate=3, functional=None, reference="rohf",
             reference_multiplicity=3, soc_2e=1, scal_rel=2,
             basis=None, **tdhf_keywords):
@@ -864,10 +967,14 @@ class OpenQP:
     def _require_mrsf_theory_for(self, workflow_name):
         method = str(self.config_typed.get("input", {}).get("method", "")).lower()
         response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
-        if method != "tdhf" or response != "mrsf":
+        dftb_type = str(self.config_typed.get("dftb", {}).get("type", "auto")).lower()
+        dftb_mrsf = method == "dftb" and dftb_type in {
+            "auto", "mrsf", "mrsftddftb", "mrsf-tddftb"} and response == "mrsf"
+        if not ((method == "tdhf" and response == "mrsf") or dftb_mrsf):
             raise ValueError(
-                f"{workflow_name} is currently supported only with MRSF-TDDFT. "
-                "Call job.theory('mrsf-tddft', ...) before selecting this workflow."
+                f"{workflow_name} is currently supported only with MRSF-TDDFT "
+                "or MRSF-TDDFTB. Call job.theory('mrsf-tddft', ...) or "
+                "job.dftb(response_type='mrsf', ...) before selecting this workflow."
             )
 
     def _require_reference_scf_theory_for(self, workflow_name):

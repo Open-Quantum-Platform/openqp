@@ -45,6 +45,7 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.openqp_dftb import OpenQPDFTBAdapter
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 import oqp.utils.qmmm as qmmm
 
@@ -403,6 +404,8 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).energy()
         if self.method not in ['hf', 'tdhf', 'mp2']:
             raise ValueError(f'Unknown method type {self.method}')
 
@@ -452,6 +455,9 @@ class SinglePoint(Calculator):
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
 
     def reference(self, do_init_scf=True):
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).reference()
+
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
         # Experimental petite-list reduction (no-op unless
@@ -790,6 +796,9 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
+        if self.method == 'dftb':
+            return OpenQPDFTBAdapter(self.mol).excitation(ref_energy)
+
         # Response-space symmetry blocking (no-op unless
         # [symmetry] use_response_symmetry is enabled).
         if getattr(self.mol, 'symmetry_metadata', None) and \
@@ -882,7 +891,7 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf']:
+        if self.method not in ['hf', 'tdhf', 'dftb']:
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -898,6 +907,8 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+        elif self.method == 'dftb':
+            grads = OpenQPDFTBAdapter(self.mol).gradient(self.grads)
 
         # Petite-list runs produce a skeleton two-electron gradient; project
         # onto the totally symmetric component (exact for 1-dim irreps; all
@@ -1495,12 +1506,74 @@ class BasisOverlap(Calculator):
         # load previous data
         self.load_previous_data()
 
+        if self.mol.config['input']['method'] == 'dftb':
+            # DFTB basis: Slater-Koster cross-geometry overlap from the
+            # openqp-dftb library (the Gaussian path cannot serve it).
+            self.dftb_overlap()
+            return
+
         # compute basis overlap
         self.overlap_func(self.mol)
 
         # align mo before tdhf
         if self.align_type != 'no':
             self.align_mo()
+
+    def dftb_overlap(self):
+        """Cross-geometry MO overlap + MO alignment for method=dftb.
+
+        Mirrors overlap_func + align_mo: computes the column-normalized MO
+        overlap tag from the SK cross overlap, sign-fixes (and optionally
+        reorders) the current MOs blockwise against the previous step, and
+        recomputes the overlap with the aligned MOs.
+        """
+        adapter = OpenQPDFTBAdapter(self.mol)
+        data = self.mol.data
+        dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
+        nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+        mult = int(self.mol.config.get('dftb', {}).get('target_multiplicity', 1))
+        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+
+        def compute():
+            return adapter.states_overlap(
+                np.asarray(data["OQP::xyz_old"]).ravel(),
+                np.asarray(self.mol.get_system(), dtype=float).ravel(),
+                np.asarray(data["OQP::VEC_MO_A_old"]).ravel(),
+                np.asarray(data["OQP::VEC_MO_A"]).ravel(),
+                np.asarray(data["OQP::td_bvec_mo_old"]).ravel(),
+                np.asarray(data["OQP::td_bvec_mo"]).ravel(),
+                noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
+
+        s_mo, _ = compute()
+        data["OQP::overlap_mo_non_orthogonal"] = s_mo
+
+        if self.align_type == 'no':
+            return
+
+        current_mo = copy.deepcopy(np.asarray(data["OQP::VEC_MO_A"]))
+        current_energy = copy.deepcopy(np.asarray(data["OQP::E_MO_A"]))
+        nocc = noca
+
+        occ_order, occ_sign = self.find_vec_order(s_mo[:nocc - 2, : nocc - 2])
+        somo_order, somo_sign = self.find_vec_order(s_mo[nocc - 2: nocc, nocc - 2: nocc])
+        vir_order, vir_sign = self.find_vec_order(s_mo[nocc:, nocc:])
+
+        mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
+        mo_sign = np.concatenate((occ_sign, somo_sign, vir_sign)).reshape((-1, 1))
+
+        current_mo = current_mo * mo_sign
+        if self.align_type == 'reorder':
+            current_mo = current_mo[np.argsort(mo_order)]
+            current_energy = current_energy[np.argsort(mo_order)]
+
+        data["OQP::VEC_MO_A"] = current_mo
+        data["OQP::VEC_MO_B"] = current_mo.copy()
+        data["OQP::E_MO_A"] = current_energy
+        data["OQP::E_MO_B"] = current_energy.copy()
+        dump_log(self.mol, title='PyOQP: Aligning MOs')
+
+        s_mo, _ = compute()
+        data["OQP::overlap_mo_non_orthogonal"] = s_mo
 
     def load_previous_data(self):
         dump_log(self.mol, title='PyOQP: Loading Previous Data')
@@ -1528,8 +1601,11 @@ class BasisOverlap(Calculator):
                     # compute data for previous step
                     self.mol.idx = 2
                     self.mol.update_system(previous_coord)
-                    oqp.library.ints_1e(self.mol)
-                    oqp.library.guess(self.mol)
+                    if self.mol.config['input']['method'] != 'dftb':
+                        # Gaussian-basis integrals/guess; the DFTB backend is
+                        # self-contained and publishes its own tags in energy().
+                        oqp.library.ints_1e(self.mol)
+                        oqp.library.guess(self.mol)
                     SinglePoint(self.mol).energy()
                     LastStep(self.mol).compute(self.mol)
                     previous_xyz = previous_coord
@@ -1655,6 +1731,24 @@ class NACME(BasisOverlap):
 
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
+    def dftb_states_overlap(self):
+        """DFTB state overlap from the ALIGNED MO/X tags (native tag layout)."""
+        adapter = OpenQPDFTBAdapter(self.mol)
+        data = self.mol.data
+        dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
+        nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+        mult = int(self.mol.config.get('dftb', {}).get('target_multiplicity', 1))
+        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        _, s_st = adapter.states_overlap(
+            np.asarray(data["OQP::xyz_old"]).ravel(),
+            np.asarray(self.mol.get_system(), dtype=float).ravel(),
+            np.asarray(data["OQP::VEC_MO_A_old"]).ravel(),
+            np.asarray(data["OQP::VEC_MO_A"]).ravel(),
+            np.asarray(data["OQP::td_bvec_mo_old"]).ravel(),
+            np.asarray(data["OQP::td_bvec_mo"]).ravel(),
+            noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
+        data["OQP::td_states_overlap"] = s_st
+
     def nacme(self):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
@@ -1668,7 +1762,10 @@ class NACME(BasisOverlap):
         self.align_x()
 
         # compute state overlap
-        oqp.get_states_overlap(self.mol)
+        if self.mol.config['input']['method'] == 'dftb':
+            self.dftb_states_overlap()
+        else:
+            oqp.get_states_overlap(self.mol)
         state_overlap = self.mol.data["OQP::td_states_overlap"]
 
         # compute time-derivative nac

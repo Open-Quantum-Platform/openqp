@@ -57,6 +57,12 @@ SCHEMA = {
         "nstate": {"type": int, "default": "1"},
         "multiplicity": {"type": int, "default": "1"},
     },
+    "dftb": {
+        "backend": {"type": _string, "default": "native"},
+        "type": {"type": _string, "default": "auto"},
+        "parameter_path": {"type": str, "default": ""},
+        "nstate": {"type": int, "default": "3"},
+    },
     "mp2": {
         "variant": {"type": _string, "default": "mp2"},
         "same_spin_scale": {"type": float, "default": "1.0"},
@@ -1017,6 +1023,48 @@ $$$$
         self.assertIs(mol, runner.mol)
         self.assertTrue(runner.ran)
 
+
+    def test_dftb_helper_builds_mrsf_tddftb_input(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g", charge=0)
+            .dftb(runtype="grad", response_type="mrsf", nstate=3,
+                  parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "dftb")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["dftb"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["dftb"]["parameter_path"], "/tmp/minimal_hh.opdftb")
+
+    def test_dftb_tda_alias_canonicalizes_backend_type(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb_tda")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .dftb(response_type="tda", parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        config = job.to_input_dict()
+        # backend method name is canonicalized to tddftb; tdhf.type stays tda.
+        self.assertEqual(config["dftb"]["type"], "tddftb")
+        self.assertEqual(config["tdhf"]["type"], "tda")
+
+    def test_dftb_mrsf_permits_soc_and_namd_workflows(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_dftb_soc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .dftb(response_type="mrsf", parameter_path="/tmp/minimal_hh.opdftb")
+        )
+        # The MRSF-TDDFTB workflow guard must accept SOC/NAMD (they are wired for
+        # method=dftb), matching the input-file validation path.
+        job._require_mrsf_theory_for("SOC")
+        job._require_mrsf_theory_for("NAMD")
 
 if __name__ == "__main__":
     unittest.main()

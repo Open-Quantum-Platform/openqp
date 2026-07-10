@@ -1,0 +1,42 @@
+# MRSF-TDDFTB S1 gradient with the optional OpenQP-DFTB backend.
+#
+#    group   keyword          value
+#  --------------------------------------
+#    input   method           dftb
+#    input   runtype          grad
+#    tdhf    type             mrsf
+#    dftb    type             mrsf
+#    dftb    parameter_path   <SKF dir or .opdftb file>
+#
+# The DFTB backend is an optional external library (libopenqp_dftb_c); set
+# [dftb] parameter_path to a Slater-Koster parameter set. See the
+# openqp-docs [dftb] keyword page and the MRSF-TDDFTB workflow page.
+[input]
+system=
+   6   0.000000000   0.000000000   0.000000000
+   1   0.000000000   0.862000000  -0.550000000
+   1   0.000000000  -0.862000000  -0.550000000
+charge=0
+runtype=grad
+basis=sto-3g
+functional=
+method=dftb
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=3
+
+[dftb]
+backend=native
+type=mrsf
+parameter_path=params
+
+[properties]
+grad=1

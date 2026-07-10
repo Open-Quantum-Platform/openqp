@@ -255,6 +255,8 @@ class OpenQpQMMM:
         if self.use_mol:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
+            if str(self.mol.config['input']['method']).lower() == 'dftb':
+                return self._forces_qm_dftb(self.mol, potmm)
             sp = SinglePoint(self.mol)
             sp._prep_guess()
 
@@ -299,6 +301,8 @@ class OpenQpQMMM:
             xyz_atoms = self._build_xyz_string()
             self.oqp_cfg_base["input.system"] = xyz_atoms
             self.op = OPENQP(self.oqp_cfg_base, True)
+            if str(self.op.mol.config['input']['method']).lower() == 'dftb':
+                return self._forces_qm_dftb(self.op.mol, potmm)
             self.op.sp._prep_guess()
 
             self.op.mol.data["OQP::POTMM"] = potmm
@@ -405,6 +409,62 @@ class OpenQpQMMM:
                     self.eqm = energies[i] * 2625.499639 * unit.kilojoule_per_mole
             self.op.mol.save_data()
 
+        return self.eqm, self.gqm, self.pchg_qm
+
+    def _forces_qm_dftb(self, mol, potmm):
+        """QM energy/gradient/charges for method=dftb (openqp-dftb backend).
+
+        Electrostatic embedding contract (see oqp.library.openqp_dftb): setting
+        ``mol.dftb_external_potential`` = POTMM (Hartree/e, one value per QM
+        centre INCLUDING hydrogen link-atom caps, in QM-geometry order) makes
+        the library fold the potential directly into the SCC Hamiltonian, so
+
+          * the returned state energy is the COMPLETE embedded QM energy: it
+            already contains E_ext = sum_A q_A phi_A with q_A the NET atomic
+            charge (valence cores + electrons). Unlike the native ESPF path
+            there is NO separate nuclear ``+ sum_A Z_A phi_A`` term to add
+            (dE/dphi_A = +q_A, verified by finite differences);
+          * the returned analytic gradient is d(E_embedded)/dR_QM at FIXED
+            potential values -- the charge-response (Pulay-type) coupling term
+            is already inside it, so the native ``oqp.grad_esp_qmmm(_excited)``
+            call and the ``OQP::ESPF_GRAD`` addition are SKIPPED;
+          * the classical dphi/dR forces (MM field gradients acting on the QM
+            charges, and the reaction on the MM charges) remain the driver's
+            job: the backend-agnostic ``_coupling_forces`` reads
+            ``OQP::partial_charges``, which the adapter publishes (relaxed net
+            atomic charges of the active state) after the gradient call -- the
+            DFTB analog of the native ``form_esp_charges`` step.
+
+        Only the full-ESPF electrostatic scheme (``espf_full``) and mechanical
+        embedding (``potmm is None``) are supported: the legacy 'split' scheme
+        routes QM point charges through OpenMM, which would double-count the
+        coupling already inside the embedded DFTB energy.
+        """
+        if potmm is not None and not self.espf_full:
+            raise NotImplementedError(
+                "method=dftb QM/MM supports Embedding='electrostatic'/'espf' "
+                "(full-ESPF scheme) or 'mechanical'; the legacy 'split' scheme "
+                "would double-count the coupling embedded in the DFTB energy."
+            )
+
+        mol.dftb_external_potential = (
+            None if potmm is None else np.asarray(potmm, dtype=float)
+        )
+
+        gradient = Gradient(mol)
+        grads = gradient.gradient()   # dispatches to the openqp-dftb adapter
+        # Active state: same [properties] grad selection the native TDHF branch
+        # uses (ground state runs carry grad=[0]).
+        active = max(gradient.grads)
+        eqm_ha = float(mol.energies[active])
+        self.gqm = np.asarray(grads[active], dtype=float) * 49614.75  # Ha/bohr -> kJ/mol/nm
+        # Relaxed net atomic charges of the active state, published by the
+        # adapter after the gradient call (authoritative for the classical
+        # coupling forces).
+        self.pchg_qm = np.array(mol.data["OQP::partial_charges"], dtype=float)
+        self.eqm = eqm_ha * 2625.499639 * unit.kilojoule_per_mole
+        if not self.use_mol:
+            mol.save_data()
         return self.eqm, self.gqm, self.pchg_qm
 
     def _get_mol(self):

@@ -532,6 +532,28 @@ class NAMD_QMMM(NAMD):
         mol = self.mol
         potmm, potqm = self.driver.electrostatic_potential()
 
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # DFTB electrostatic embedding: the openqp-dftb library folds the
+            # per-atom MM potential (Hartree/e) directly into the SCC
+            # Hamiltonian, so there is no ESPF operator / hcore mutation here.
+            # POTQM stays zeroed (same resolution as the native path below).
+            # Only the full-ESPF scheme is supported: the legacy 'split'
+            # scheme would double-count the coupling already inside the
+            # embedded DFTB state energy.
+            if not getattr(self.driver, 'espf_full', False):
+                raise NotImplementedError(
+                    "NAMD QM/MM with method=dftb requires [qmmm] embedding="
+                    "electrostatic/espf (full-ESPF scheme).")
+            mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            sp = SinglePoint(mol)
+            ref = sp.reference()
+            if with_overlap:
+                mol.back_door = (self.prev_xyz, self.prev_data)
+                BasisOverlap(mol).overlap()
+            sp.excitation(ref)
+            LastStep(mol).compute(mol)
+            return potmm, potqm
+
         sp = SinglePoint(mol)
         sp._prep_guess()
         nat = mol.data["natom"]
@@ -564,6 +586,14 @@ class NAMD_QMMM(NAMD):
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # The DFTB analytic gradient is d(E_embedded)/dR at FIXED potential
+            # values: the charge-response (Pulay-type) coupling term is already
+            # inside it, so the native grad_esp_qmmm(_excited)/OQP::ESPF_GRAD
+            # addition is skipped. The adapter has also just published
+            # OQP::partial_charges (relaxed net charges of the active state)
+            # for the classical coupling forces in _total_force.
+            return g
         # ESPF_ROHF=1: use the ROHF reference density for ESPF charges and
         # gradient, matching GAMESS which always fits ESPF from the SCF (ROHF)
         # density regardless of the target excited state.  Combined with
@@ -696,8 +726,19 @@ class NAMD_QMMM(NAMD):
             f_all[m] = f_all[m] + fm[j]
         f_all -= f_all.mean(axis=0)
 
-        eqm = float(mol.energies[self.active]) + float(
-            np.dot(np.array(mol.get_atoms2("charge")), potmm))
+        if str(mol.config['input']['method']).lower() == 'dftb':
+            # The DFTB embedded state energy is already COMPLETE: the library
+            # folds the MM potential into the SCC Hamiltonian and the returned
+            # energy includes the full net-charge coupling
+            #   E_ext = sum_A q_A phi_A   (q_A = NET atomic charge, cores +
+            # electrons; dE/dphi_A = +q_A, verified by finite differences).
+            # The native path below instead carries only the electronic
+            # coupling in the embedded SCF and must add the nuclear term
+            # sum_A Z_A phi_A -- do NOT add it for dftb.
+            eqm = float(mol.energies[self.active])
+        else:
+            eqm = float(mol.energies[self.active]) + float(
+                np.dot(np.array(mol.get_atoms2("charge")), potmm))
         return f_all, eqm + emm
 
     # ------------------------------------------------------------------ #
@@ -856,7 +897,11 @@ class NAMD_SOC(NAMD):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()                     # sets OQP::overlap_mo
 
+        is_dftb = mol.config['input']['method'] == 'dftb'
+
         mol.data.set_tdhf_multiplicity(1)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 1
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -864,13 +909,18 @@ class NAMD_SOC(NAMD):
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 3
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)           # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -895,13 +945,19 @@ class NAMD_SOC(NAMD):
         mol.data.set_tdhf_multiplicity(1)
         mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
-        oqp.get_states_overlap(mol)
+        if mol.config['input']['method'] == 'dftb':
+            _dftb_spatial_overlap(mol, 1)
+        else:
+            oqp.get_states_overlap(mol)
         s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
 
         mol.data.set_tdhf_multiplicity(3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
-        oqp.get_states_overlap(mol)
+        if mol.config['input']['method'] == 'dftb':
+            _dftb_spatial_overlap(mol, 3)
+        else:
+            oqp.get_states_overlap(mol)
         s_t = np.array(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
 
         s = np.zeros((n, n))
@@ -1194,6 +1250,8 @@ class NAMD_SOC(NAMD):
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
             mol.data.set_tdhf_multiplicity(mult)
+            if mol.config['input']['method'] == 'dftb':
+                mol.config['dftb']['target_multiplicity'] = int(mult)
             SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1333,6 +1391,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
         mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1550,7 +1610,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
 
+        is_dftb = mol.config['input']['method'] == 'dftb'
+
         mol.data.set_tdhf_multiplicity(1)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 1
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -1558,13 +1622,18 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
         mol.data.set_tdhf_multiplicity(3)
+        if is_dftb:
+            mol.config['dftb']['target_multiplicity'] = 3
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)            # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -1591,6 +1660,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         pchg_dom = None
         for (mult, state), w in wmap.items():
             mol.data.set_tdhf_multiplicity(mult)
+            if mol.config['input']['method'] == 'dftb':
+                mol.config['dftb']['target_multiplicity'] = int(mult)
             SinglePoint(mol).excitation([self.e_ref])
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1779,6 +1850,8 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
         mol.data.set_tdhf_multiplicity(mult)
+        if mol.config['input']['method'] == 'dftb':
+            mol.config['dftb']['target_multiplicity'] = int(mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1869,3 +1942,49 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                    f'E_kin={ekin:.8f}  hop={hopped}  '
                    f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+
+
+def _dftb_soc_tags(mol):
+    """Build OQP::soc_* tags for method=dftb (one-center SOC + numpy eigh)."""
+    from oqp.library.openqp_dftb import OpenQPDFTBAdapter, HA_TO_WAVENUMBER, FINE_STRUCTURE
+    adapter = OpenQPDFTBAdapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    x_s = np.asarray(data['OQP::td_bvec_mo_s'])
+    x_t = np.asarray(data['OQP::td_bvec_mo_t'])
+    hsoc_re, hsoc_im = adapter.soc_matrix(
+        np.asarray(data['OQP::VEC_MO_A']).ravel(), x_s.ravel(), x_t.ravel(),
+        noca=noca, nocb=nocb)
+    e_s = np.asarray(data['OQP::td_singlet_energies']).ravel()
+    e_t = np.asarray(data['OQP::td_triplet_energies']).ravel()
+    e0 = min(e_s[0], e_t[0])
+    diag = np.concatenate([e_s - e0, np.repeat(e_t - e0, 3)]) * HA_TO_WAVENUMBER
+    dfac = 0.5 * FINE_STRUCTURE ** 2 * HA_TO_WAVENUMBER
+    h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
+    eigenvalues, eigenvectors = np.linalg.eigh(h_total)
+    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
+    data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
+    data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
+    data['OQP::soc_hsoc_re'] = fortran_tag(np.ascontiguousarray(hsoc_re))
+    data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
+
+
+def _dftb_spatial_overlap(mol, multiplicity):
+    """DFTB spatial state overlap for the current td_bvec_mo(_old) tags."""
+    from oqp.library.openqp_dftb import OpenQPDFTBAdapter
+    adapter = OpenQPDFTBAdapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    tlf = int(mol.config.get('tdhf', {}).get('tlf', 2))
+    _, s_st = adapter.states_overlap(
+        np.asarray(data['OQP::xyz_old']).ravel(),
+        np.asarray(mol.get_system(), dtype=float).ravel(),
+        np.asarray(data['OQP::VEC_MO_A_old']).ravel(),
+        np.asarray(data['OQP::VEC_MO_A']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo_old']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo']).ravel(),
+        noca=noca, nocb=nocb, multiplicity=multiplicity, tlf_order=tlf)
+    data['OQP::td_states_overlap'] = s_st
