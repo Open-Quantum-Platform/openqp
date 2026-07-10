@@ -2,6 +2,7 @@
 
 import oqp
 import oqp.library
+from oqp.utils.tb_backends import is_tb_method, tb_section_name
 from oqp.library.single_point import (
     SinglePoint, Gradient, Hessian, LastStep,
     BasisOverlap, NACME, NAC
@@ -163,9 +164,12 @@ def compute_nac(mol):
     NAC(mol).nac()
 
 def compute_soc(mol):
-    if mol.config['input']['method'] == 'dftb':
-        from oqp.library.openqp_dftb import dftb_soc
-        dftb_soc(mol)
+    if is_tb_method(mol.config['input']['method']):
+        if tb_section_name(mol.config) == 'xtb':
+            from oqp.library.openqp_xtb import xtb_soc as tb_soc
+        else:
+            from oqp.library.openqp_dftb import dftb_soc as tb_soc
+        tb_soc(mol)
         LastStep(mol).compute(mol)
         return
 

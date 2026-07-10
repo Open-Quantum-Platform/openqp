@@ -131,6 +131,7 @@ def load_openqp_module():
         "oqp.utils.geometry",
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
+        "oqp.utils.tb_backends",
         "openqp_under_test",
     )
     saved_modules = {name: sys.modules.get(name) for name in stub_names}
@@ -159,6 +160,7 @@ def load_openqp_module():
         _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
+        _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
 
         class FakeMol:
             def __init__(self):

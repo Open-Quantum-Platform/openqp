@@ -45,7 +45,7 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
-from oqp.library.openqp_dftb import OpenQPDFTBAdapter
+from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 import oqp.utils.qmmm as qmmm
 
@@ -404,8 +404,8 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
-        if self.method == 'dftb':
-            return OpenQPDFTBAdapter(self.mol).energy()
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).energy()
         if self.method not in ['hf', 'tdhf', 'mp2']:
             raise ValueError(f'Unknown method type {self.method}')
 
@@ -455,8 +455,8 @@ class SinglePoint(Calculator):
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
 
     def reference(self, do_init_scf=True):
-        if self.method == 'dftb':
-            return OpenQPDFTBAdapter(self.mol).reference()
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).reference()
 
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
@@ -796,8 +796,8 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
-        if self.method == 'dftb':
-            return OpenQPDFTBAdapter(self.mol).excitation(ref_energy)
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).excitation(ref_energy)
 
         # Response-space symmetry blocking (no-op unless
         # [symmetry] use_response_symmetry is enabled).
@@ -891,7 +891,7 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf', 'dftb']:
+        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -907,8 +907,8 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
-        elif self.method == 'dftb':
-            grads = OpenQPDFTBAdapter(self.mol).gradient(self.grads)
+        elif is_tb_method(self.method):
+            grads = make_tb_adapter(self.mol).gradient(self.grads)
 
         # Petite-list runs produce a skeleton two-electron gradient; project
         # onto the totally symmetric component (exact for 1-dim irreps; all
@@ -1506,9 +1506,9 @@ class BasisOverlap(Calculator):
         # load previous data
         self.load_previous_data()
 
-        if self.mol.config['input']['method'] == 'dftb':
-            # DFTB basis: Slater-Koster cross-geometry overlap from the
-            # openqp-dftb library (the Gaussian path cannot serve it).
+        if is_tb_method(self.mol.config['input']['method']):
+            # TB minimal basis: cross-geometry overlap from the TB backend
+            # library (the Gaussian path cannot serve it).
             self.dftb_overlap()
             return
 
@@ -1520,18 +1520,19 @@ class BasisOverlap(Calculator):
             self.align_mo()
 
     def dftb_overlap(self):
-        """Cross-geometry MO overlap + MO alignment for method=dftb.
+        """Cross-geometry MO overlap + MO alignment for the TB backends.
 
-        Mirrors overlap_func + align_mo: computes the column-normalized MO
+        Serves method=dftb and method=xtb through make_tb_adapter. Mirrors
+        overlap_func + align_mo: computes the column-normalized MO
         overlap tag from the SK cross overlap, sign-fixes (and optionally
         reorders) the current MOs blockwise against the previous step, and
         recomputes the overlap with the aligned MOs.
         """
-        adapter = OpenQPDFTBAdapter(self.mol)
+        adapter = make_tb_adapter(self.mol)
         data = self.mol.data
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
-        mult = int(self.mol.config.get('dftb', {}).get('target_multiplicity', 1))
+        mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
         tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
 
         def compute():
@@ -1601,9 +1602,9 @@ class BasisOverlap(Calculator):
                     # compute data for previous step
                     self.mol.idx = 2
                     self.mol.update_system(previous_coord)
-                    if self.mol.config['input']['method'] != 'dftb':
-                        # Gaussian-basis integrals/guess; the DFTB backend is
-                        # self-contained and publishes its own tags in energy().
+                    if not is_tb_method(self.mol.config['input']['method']):
+                        # Gaussian-basis integrals/guess; the TB backends are
+                        # self-contained and publish their own tags in energy().
                         oqp.library.ints_1e(self.mol)
                         oqp.library.guess(self.mol)
                     SinglePoint(self.mol).energy()
@@ -1732,12 +1733,14 @@ class NACME(BasisOverlap):
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
     def dftb_states_overlap(self):
-        """DFTB state overlap from the ALIGNED MO/X tags (native tag layout)."""
-        adapter = OpenQPDFTBAdapter(self.mol)
+        """TB state overlap from the ALIGNED MO/X tags (native tag layout).
+
+        Serves method=dftb and method=xtb through make_tb_adapter."""
+        adapter = make_tb_adapter(self.mol)
         data = self.mol.data
         dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
         nbf, noca, nocb = (int(round(v)) for v in dims[:3])
-        mult = int(self.mol.config.get('dftb', {}).get('target_multiplicity', 1))
+        mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
         tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
         _, s_st = adapter.states_overlap(
             np.asarray(data["OQP::xyz_old"]).ravel(),
@@ -1762,7 +1765,7 @@ class NACME(BasisOverlap):
         self.align_x()
 
         # compute state overlap
-        if self.mol.config['input']['method'] == 'dftb':
+        if is_tb_method(self.mol.config['input']['method']):
             self.dftb_states_overlap()
         else:
             oqp.get_states_overlap(self.mol)

@@ -9,6 +9,7 @@ from oqp.library.single_point import (
     BasisOverlap, NACME, NAC
 )
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
+from oqp.utils.tb_backends import is_tb_method
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
@@ -255,7 +256,7 @@ class OpenQpQMMM:
         if self.use_mol:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
-            if str(self.mol.config['input']['method']).lower() == 'dftb':
+            if is_tb_method(str(self.mol.config['input']['method'])):
                 return self._forces_qm_dftb(self.mol, potmm)
             sp = SinglePoint(self.mol)
             sp._prep_guess()
@@ -301,7 +302,7 @@ class OpenQpQMMM:
             xyz_atoms = self._build_xyz_string()
             self.oqp_cfg_base["input.system"] = xyz_atoms
             self.op = OPENQP(self.oqp_cfg_base, True)
-            if str(self.op.mol.config['input']['method']).lower() == 'dftb':
+            if is_tb_method(str(self.op.mol.config['input']['method'])):
                 return self._forces_qm_dftb(self.op.mol, potmm)
             self.op.sp._prep_guess()
 
@@ -412,7 +413,7 @@ class OpenQpQMMM:
         return self.eqm, self.gqm, self.pchg_qm
 
     def _forces_qm_dftb(self, mol, potmm):
-        """QM energy/gradient/charges for method=dftb (openqp-dftb backend).
+        """QM energy/gradient/charges for the TB backends (method=dftb/xtb).
 
         Electrostatic embedding contract (see oqp.library.openqp_dftb): setting
         ``mol.dftb_external_potential`` = POTMM (Hartree/e, one value per QM
@@ -442,7 +443,7 @@ class OpenQpQMMM:
         """
         if potmm is not None and not self.espf_full:
             raise NotImplementedError(
-                "method=dftb QM/MM supports Embedding='electrostatic'/'espf' "
+                "method=dftb/xtb QM/MM supports Embedding='electrostatic'/'espf' "
                 "(full-ESPF scheme) or 'mechanical'; the legacy 'split' scheme "
                 "would double-count the coupling embedded in the DFTB energy."
             )

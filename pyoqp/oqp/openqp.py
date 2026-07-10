@@ -15,6 +15,7 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.tb_backends import is_tb_method
 
 
 def dump_strings_from_parser(parser):
@@ -967,10 +968,12 @@ class OpenQP:
     def _require_mrsf_theory_for(self, workflow_name):
         method = str(self.config_typed.get("input", {}).get("method", "")).lower()
         response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
-        dftb_type = str(self.config_typed.get("dftb", {}).get("type", "auto")).lower()
-        dftb_mrsf = method == "dftb" and dftb_type in {
+        # TB backends ([dftb]/[xtb] section named after the method): the MRSF
+        # response type may be explicit or derived (type=auto).
+        tb_type = str(self.config_typed.get(method, {}).get("type", "auto")).lower()
+        tb_mrsf = is_tb_method(method) and tb_type in {
             "auto", "mrsf", "mrsftddftb", "mrsf-tddftb"} and response == "mrsf"
-        if not ((method == "tdhf" and response == "mrsf") or dftb_mrsf):
+        if not ((method == "tdhf" and response == "mrsf") or tb_mrsf):
             raise ValueError(
                 f"{workflow_name} is currently supported only with MRSF-TDDFT "
                 "or MRSF-TDDFTB. Call job.theory('mrsf-tddft', ...) or "

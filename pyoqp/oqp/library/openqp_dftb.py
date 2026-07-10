@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import importlib
 import os
 from pathlib import Path
 import shutil
@@ -51,16 +52,34 @@ class _StateResult:
 
 
 class OpenQPDFTBAdapter:
-    """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider."""
+    """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider.
+
+    The backend-identity knobs below are class attributes so the OpenQP-xTB
+    adapter (oqp.library.openqp_xtb) can subclass this adapter and only swap
+    the section name, C-symbol prefix, library basenames, and env vars. The
+    tag names published by _store_wavefunction_tags and the
+    mol.dftb_external_potential attribute are intentionally SHARED by both TB
+    backends (see oqp.utils.tb_backends).
+    """
+
+    SECTION = "dftb"
+    SYMBOL_PREFIX = "openqp_dftb"
+    LIB_BASENAMES = ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so")
+    ENV_LIBRARY = "OPENQP_DFTB_LIBRARY"
+    ENV_PARAMETER = "OPENQP_DFTB_PARAMETER_PATH"
+    PIP_LOCATOR = "openqp_dftb"
+    BACKEND_NAME = "openqp-dftb"      # pip package / diagnostics name
+    DISPLAY_NAME = "OpenQP-DFTB"      # human-readable diagnostics name
+    CACHE_ATTR = "_openqp_dftb_cache"
 
     def __init__(self, mol):
         self.mol = mol
         self.config = mol.config
-        self.dftb = self.config.get("dftb", {})
+        self.dftb = self.config.get(self.SECTION, {})
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
-        if not hasattr(mol, "_openqp_dftb_cache"):
-            mol._openqp_dftb_cache = {}
+        if not hasattr(mol, self.CACHE_ATTR):
+            setattr(mol, self.CACHE_ATTR, {})
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
         # accordingly so generic bookkeeping (get_data tag selection for the
         # NAMD back_door carry, beta-set handling) treats both spin sets.
@@ -179,18 +198,18 @@ class OpenQPDFTBAdapter:
             str(qmmm_flag).strip().lower() in {"true", "1", "on", "yes"})
         if self._external_potential() is not None or is_qmmm:
             raise ValueError(
-                "OpenQP-DFTB QM/MM requires the native backend: the probe "
+                f"{self.DISPLAY_NAME} QM/MM requires the native backend: the probe "
                 "executable neither carries the per-atom external potential "
                 "(electrostatic embedding) nor publishes the relaxed atomic "
                 "charges the QM/MM driver reads to assemble the MM coupling "
                 "forces, so it would return unembedded energies/gradients or "
                 "fail on missing OQP::partial_charges (mechanical embedding). "
-                "Set [dftb] backend=native for QM/MM jobs."
+                f"Set [{self.SECTION}] backend=native for QM/MM jobs."
             )
 
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
         key = self._cache_key(method, state, need_grad=need_grad)
-        cache = self.mol._openqp_dftb_cache
+        cache = getattr(self.mol, self.CACHE_ATTR)
         if key in cache:
             return cache[key]
         # One geometry (+ embedding potential) per cache generation: an MD
@@ -210,7 +229,7 @@ class OpenQPDFTBAdapter:
         elif backend == "probe":
             result = self._run_probe(method, state)
         else:
-            raise ValueError(f"Unknown OpenQP-DFTB backend: {backend}")
+            raise ValueError(f"Unknown {self.DISPLAY_NAME} backend: {backend}")
 
         cache[key] = result
         return result
@@ -267,7 +286,8 @@ class OpenQPDFTBAdapter:
         vec_capacity = mo_capacity * nstate
         response_vectors = (ctypes.c_double * vec_capacity)()
 
-        lib.openqp_dftb_state_gradient(
+        state_gradient = getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient")
+        state_gradient(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             coords_bohr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -289,8 +309,12 @@ class OpenQPDFTBAdapter:
             ctypes.c_int64(int(self.dftb.get("target_multiplicity", 1))),
             ctypes.c_int64(int(bool(self.dftb.get("spin_complete", True)))),
             ctypes.c_int64(int(bool(self.dftb.get("lc_ground_state", False)))),
-            ctypes.c_int64(int(self._lc_gamma_is_erf())),
+            ctypes.c_int64(self._lc_gamma_code()),
             ctypes.c_int64(int(bool(self.dftb.get("zvector", True)))),
+            # C ABI v3 model block (empty for dftb -- the DFTB C ABI is
+            # unchanged; openqp-xtb inserts model/dispersion/halogen_bond/
+            # third_order/spin_scale here, right BEFORE scc_tolerance).
+            *self._model_args(),
             ctypes.c_double(float(self.dftb.get("scc_tolerance", 1.0e-8))),
             ctypes.c_double(float(self.dftb.get("scc_mixing", 0.35))),
             ctypes.c_double(float(self.dftb.get("scc_max_step", 0.5))),
@@ -333,7 +357,7 @@ class OpenQPDFTBAdapter:
             detail = status_message.value.decode("utf-8", errors="replace").strip()
             suffix = f": {detail}" if detail else ""
             raise RuntimeError(
-                f"openqp-dftb native library call failed for method={method}, "
+                f"{self.BACKEND_NAME} native library call failed for method={method}, "
                 f"state={state}, status={status.value}{suffix}"
             )
 
@@ -374,43 +398,46 @@ class OpenQPDFTBAdapter:
         )
 
     def _native_library(self):
-        cache = self.mol._openqp_dftb_cache
+        cache = getattr(self.mol, self.CACHE_ATTR)
         lib = cache.get("__native_library__")
         if lib is not None:
             return lib
         path = self._native_library_path()
+        symbol = f"{self.SYMBOL_PREFIX}_state_gradient"
         try:
             lib = ctypes.CDLL(str(path))
         except OSError as exc:
-            raise RuntimeError(f"Could not load the openqp-dftb library {path}: {exc}") from exc
-        if not hasattr(lib, "openqp_dftb_state_gradient"):
             raise RuntimeError(
-                f"{path} does not export openqp_dftb_state_gradient; "
-                "rebuild openqp-dftb with OPENQP_DFTB_BUILD_SHARED=ON."
+                f"Could not load the {self.BACKEND_NAME} library {path}: {exc}") from exc
+        if not hasattr(lib, symbol):
+            raise RuntimeError(
+                f"{path} does not export {symbol}; "
+                f"rebuild {self.BACKEND_NAME} with {self.PIP_LOCATOR.upper()}_BUILD_SHARED=ON."
             )
-        lib.openqp_dftb_state_gradient.restype = None
+        getattr(lib, symbol).restype = None
         cache["__native_library__"] = lib
         return lib
 
     def _native_library_path(self) -> Path:
-        raw = self.dftb.get("library_path") or os.environ.get("OPENQP_DFTB_LIBRARY")
+        raw = self.dftb.get("library_path") or os.environ.get(self.ENV_LIBRARY)
         if raw:
             path = self._resolve_user_path(raw)
             if Path(path).exists():
                 return Path(path)
-            raise FileNotFoundError(f"openqp-dftb library not found at {path}")
-        # pip-installed openqp-dftb wheel bundles the library next to its
+            raise FileNotFoundError(f"{self.BACKEND_NAME} library not found at {path}")
+        # pip-installed backend wheel bundles the library next to its
         # locator package: the most robust default when nothing is configured.
         try:
-            import openqp_dftb  # noqa: PLC0415
+            locator = importlib.import_module(self.PIP_LOCATOR)
 
-            return Path(openqp_dftb.library_path())
+            return Path(locator.library_path())
         except (ImportError, FileNotFoundError):
             pass
-        # The -DENABLE_OPENQP_DFTB=ON hook stages libopenqp_dftb_c next to the
-        # liboqp that the Python package already resolved. Self-locating installs
-        # and source-tree runs do not set OPENQP_ROOT, so check the RESOLVED
-        # runtime root's lib dir before the OPENQP_ROOT env fallback and PATH.
+        # The -DENABLE_OPENQP_DFTB=ON / -DENABLE_OPENQP_XTB=ON hook stages the
+        # C library next to the liboqp that the Python package already resolved.
+        # Self-locating installs and source-tree runs do not set OPENQP_ROOT, so
+        # check the RESOLVED runtime root's lib dir before the OPENQP_ROOT env
+        # fallback and PATH.
         lib_dirs = []
         resolved_root = getattr(oqp, "oqp_root", "")
         if resolved_root:
@@ -418,7 +445,7 @@ class OpenQPDFTBAdapter:
         oqp_root = os.environ.get("OPENQP_ROOT", "")
         if oqp_root:
             lib_dirs.append(Path(oqp_root) / "lib")
-        for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
+        for name in self.LIB_BASENAMES:
             for lib_dir in lib_dirs:
                 staged = lib_dir / name
                 if staged.exists():
@@ -427,15 +454,15 @@ class OpenQPDFTBAdapter:
             if found:
                 return Path(found)
         message = (
-            "openqp-dftb not found: could not locate libopenqp_dftb_c. "
-            "Install it with `pip install openqp-dftb` (or `pip install "
-            "git+https://github.com/Open-Quantum-Platform/openqp-dftb.git`), "
-            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP "
-            "with -DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
+            f"{self.BACKEND_NAME} not found: could not locate lib{self.SYMBOL_PREFIX}_c. "
+            f"Install it with `pip install {self.BACKEND_NAME}` (or `pip install "
+            f"git+https://github.com/Open-Quantum-Platform/{self.BACKEND_NAME}.git`), "
+            f"set [{self.SECTION}] library_path / {self.ENV_LIBRARY}, or build OpenQP "
+            f"with -DENABLE_{self.PIP_LOCATOR.upper()}=ON to stage it next to liboqp."
         )
         dump_log(
             self.mol,
-            title="PyOQP: openqp-dftb NOT FOUND\n   "
+            title=f"PyOQP: {self.BACKEND_NAME} NOT FOUND\n   "
             + "\n   ".join(textwrap.wrap(message, width=76)),
         )
         raise FileNotFoundError(message)
@@ -464,7 +491,7 @@ class OpenQPDFTBAdapter:
                 self._fmt(self.dftb.get("cam_alpha", 0.0)),
                 self._fmt(self.dftb.get("cam_beta", 1.0)),
                 str(int(self.config.get("input", {}).get("charge", 0))),
-                "erf" if self._lc_gamma_is_erf() else "yukawa",
+                "erf" if self._lc_gamma_code() == 1 else "yukawa",
             ]
             dump_log(
                 self.mol,
@@ -594,7 +621,8 @@ class OpenQPDFTBAdapter:
         mo_old = as_c(mo_old); mo_new = as_c(mo_new)
         x_old = as_c(x_old); x_new = as_c(x_new)
         dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lib.openqp_dftb_states_overlap(
+        states_overlap_fn = getattr(lib, f"{self.SYMBOL_PREFIX}_states_overlap")
+        states_overlap_fn(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             dptr(xyz_old), dptr(xyz_new),
@@ -608,7 +636,7 @@ class OpenQPDFTBAdapter:
         )
         if status.value != 0:
             detail = status_message.value.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"openqp-dftb states_overlap failed: {detail}")
+            raise RuntimeError(f"{self.BACKEND_NAME} states_overlap failed: {detail}")
         # C-order reshape of the Fortran-flat buffers = the native tag layout.
         s_mo = np.frombuffer(overlap_mo, dtype=np.float64).reshape((nbf, nbf)).copy()
         s_st = np.frombuffer(states_overlap, dtype=np.float64).reshape((nstate, nstate)).copy()
@@ -640,7 +668,8 @@ class OpenQPDFTBAdapter:
         as_c = lambda a: np.ascontiguousarray(np.asarray(a, dtype=np.float64).reshape(-1))
         mo = as_c(mo); x_singlet = as_c(x_singlet); x_triplet = as_c(x_triplet)
         dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lib.openqp_dftb_soc_matrix(
+        soc_matrix_fn = getattr(lib, f"{self.SYMBOL_PREFIX}_soc_matrix")
+        soc_matrix_fn(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             dptr(coords_bohr),
@@ -653,7 +682,7 @@ class OpenQPDFTBAdapter:
         )
         if status.value != 0:
             detail = status_message.value.decode("utf-8", errors="replace").strip()
-            raise RuntimeError(f"openqp-dftb soc_matrix failed: {detail}")
+            raise RuntimeError(f"{self.BACKEND_NAME} soc_matrix failed: {detail}")
         # Hermitian: fortran-vs-C reshape only transposes; fix with explicit .T
         re = np.frombuffer(hsoc_re, dtype=np.float64).reshape((dim, dim)).T.copy()
         im = np.frombuffer(hsoc_im, dtype=np.float64).reshape((dim, dim)).T.copy()
@@ -785,9 +814,10 @@ class OpenQPDFTBAdapter:
         return atoms, coords.tobytes(), option_key
 
     def _parameter_path(self) -> str:
-        raw = self.dftb.get("parameter_path") or os.environ.get("OPENQP_DFTB_PARAMETER_PATH")
+        raw = self.dftb.get("parameter_path") or os.environ.get(self.ENV_PARAMETER)
         if not raw:
-            raise ValueError("Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH.")
+            raise ValueError(
+                f"Set [{self.SECTION}] parameter_path or {self.ENV_PARAMETER}.")
         return str(self._resolve_user_path(raw))
 
     def _probe_executable(self) -> str:
@@ -853,11 +883,25 @@ class OpenQPDFTBAdapter:
         solver = str(self.dftb.get("response_solver", "auto")).lower()
         return {"dense": 0, "davidson": 1, "auto": 2}[solver]
 
-    def _lc_gamma_is_erf(self) -> bool:
+    def _lc_gamma_code(self) -> int:
+        """C-ABI code of the long-range gamma kernel: 0=yukawa (default), 1=erf.
+
+        openqp-xtb adds the 'ok' (Ohno-Klopman) kind with code 2 and a
+        different default; see OpenQPXTBAdapter._lc_gamma_code.
+        """
         kernel = str(self.dftb.get("lc_gamma", "yukawa")).lower()
         if kernel not in {"yukawa", "erf"}:
             raise ValueError(f"[dftb] lc_gamma must be yukawa or erf, got {kernel!r}")
-        return kernel == "erf"
+        return {"yukawa": 0, "erf": 1}[kernel]
+
+    def _model_args(self) -> list:
+        """Extra by-value scalars spliced right BEFORE scc_tolerance (C ABI v3).
+
+        The DFTB C ABI is NOT changed: this backend contributes nothing.
+        openqp-xtb returns [model, dispersion, halogen_bond, third_order
+        (int64), spin_scale (double)]; see OpenQPXTBAdapter._model_args.
+        """
+        return []
 
     def _reference_multiplicity(self, method: str) -> int:
         explicit = int(self.dftb.get("reference_multiplicity", 0))
@@ -903,13 +947,18 @@ def dftb_soc(mol):
     same OQP:: tags the native soc_mrsf produces (soc_eval in cm^-1 relative to
     the lowest MCH excitation; soc_hsoc_* raw, without the alpha^2/2 prefactor).
     """
-    adapter = OpenQPDFTBAdapter(mol)
+    return _tb_soc(mol, OpenQPDFTBAdapter)
+
+
+def _tb_soc(mol, adapter_cls):
+    """Backend-generic body of dftb_soc/xtb_soc (see dftb_soc docstring)."""
+    adapter = adapter_cls(mol)
     data = mol.data
-    dftb = mol.config['dftb']
+    dftb = mol.config[adapter_cls.SECTION]
     saved = dftb.get('target_multiplicity', 1)
     try:
         dftb['target_multiplicity'] = 1
-        singlet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        singlet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_singlet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_s = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_s'] = x_s.copy()
@@ -917,7 +966,7 @@ def dftb_soc(mol):
         dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
 
         dftb['target_multiplicity'] = 3
-        triplet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        triplet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_triplet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_t = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_t'] = x_t.copy()
@@ -941,7 +990,7 @@ def dftb_soc(mol):
     h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
     eigenvalues, eigenvectors = np.linalg.eigh(h_total)
 
-    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    fortran_tag = adapter_cls._fortran_tag
     data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
     data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
     data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
