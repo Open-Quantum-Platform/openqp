@@ -210,6 +210,29 @@ class NAMD:
             return t / self.dt
         return (s - s.T) / (2.0 * self.dt)
 
+    def _post_trivial_source(self, active):
+        """Recover the post-trivial-crossing source state used by the Fortran
+        FSSH kernel. The kernel (``namd_trivial_crossing``) may relabel the
+        active state by diabatic following -- to the state with the largest
+        |overlap| to ``active`` -- before it makes the hop decision and applies
+        its bare-gap velocity rescale. This mirrors that relabelling on the same
+        phase-corrected state overlap so the QM/MM ESPF hop correction can
+        reference the same source state. Returns the (1-based) source state,
+        equal to ``active`` when no trivial crossing occurs.
+        """
+        if not self.trivial:
+            return active
+        n = self.nstate
+        s = np.array(self.mol.data["OQP::td_states_overlap"]).reshape((n, n))
+        a = active - 1
+        if abs(s[a, a]) >= self.trivial_thresh:
+            return active
+        col = np.abs(s[a, :])
+        jmax = int(np.argmax(col))
+        if jmax != a and col[jmax] >= self.trivial_thresh:
+            return jmax + 1
+        return active
+
     # ------------------------------------------------------------------ #
     # Fortran FSSH hop
     # ------------------------------------------------------------------ #
@@ -735,6 +758,8 @@ class NAMD_QMMM(NAMD):
             self._state_overlap()
             self.vel = self.v_all[self.qm_atoms].copy()       # hop sees QM velocities
             active_old = self.active
+            epot_old = epot                                    # total E_pot before hop
+            v_all_pre = self.v_all.copy()                      # for a frustrated-hop rollback
             new_active, hopped = self._hop()
             self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
             active_changed = new_active != active_old
@@ -742,6 +767,43 @@ class NAMD_QMMM(NAMD):
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
                 accel_new = f_all / self.m_all[:, None]
+            if hopped and self._post_trivial_source(active_old) == active_old:
+                # The Fortran FSSH kernel rescaled QM velocities for the bare
+                # electronic gap only (namd_eabs = td_energies). With the default
+                # state-dependent ESPF charges the embedding term in E_pot also
+                # changes at an internal-conversion hop, so the electronic-gap
+                # rescale alone leaves E_tot discontinuous by that embedding
+                # energy change. Compensate it with an additional isotropic
+                # full-system rescale, exactly as NAMD_SOC_QMMM.run() does for
+                # ISC hops. de_espf is zero for ESPF_ROHF=1 (state-independent
+                # charges).
+                #
+                # This branch is entered only when no diabatic (trivial) crossing
+                # relabelled the active state in the same step, so active_old is
+                # unambiguously the pre-hop surface the nuclei were propagated on.
+                # When a trivial crossing coincides with the hop the reference
+                # surface is ambiguous (the kernel rescales for the near-
+                # degenerate post-crossing source), so the rescale is skipped:
+                # the omitted ESPF/electronic differences between the near-
+                # degenerate labels are small, and this avoids both mixing two
+                # source surfaces and rolling back a diabatic relabel.
+                de_espf = ((epot_old - epot) +
+                           (float(mol.energies[self.active])
+                            - float(mol.energies[active_old])))
+                ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+                scale2 = 1.0 + de_espf / ekin_all if ekin_all > 0 else 0.0
+                if scale2 <= 0.0:
+                    # An uphill ESPF residual exceeding the available kinetic
+                    # energy cannot be absorbed by a velocity rescale; reject the
+                    # hop (frustrated) and roll back to the pre-hop surface and
+                    # velocities rather than zeroing all velocities.
+                    self.active = active_old
+                    self.v_all = v_all_pre
+                    f_all, epot = self._total_force(potmm)
+                    accel_new = f_all / self.m_all[:, None]
+                    hopped = False
+                elif abs(de_espf) > 1e-10:
+                    self.v_all = self.v_all * np.sqrt(scale2)
 
             accel = accel_new
             self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))

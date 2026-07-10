@@ -1,3 +1,4 @@
+import os
 import openmm.app as app
 import openmm as mm
 import openmm.unit as unit
@@ -522,6 +523,19 @@ class OpenQpQMMM:
         for j, m in enumerate(mm_idx):
             total_forces[m] = total_forces[m] + f_mm[j]
 
+        # Enforce translational invariance (Sum F = 0). The MM-MM force and the
+        # analytic QM<->MM coupling force each already sum to zero (Newton's
+        # third law), so any residual net force is a spurious component of the
+        # QM ESPF gradient (grad_esp_qmmm), whose charge-response term must
+        # vanish under a rigid translation but does not numerically at a
+        # covalent QM/MM boundary (the link-atom row carries a large,
+        # non-invariant contribution that the g/(1-g) redistribution then dumps
+        # onto the MM boundary atom). Removing the mean net force restores
+        # momentum conservation and stops the COM runaway that otherwise makes
+        # link-atom NVE dynamics diverge. This mirrors the split-embedding path
+        # (see compute_force above).
+        total_forces -= np.mean(total_forces, axis=0)
+
         return total_energy, total_forces
 
 
@@ -722,20 +736,80 @@ class OpenQpQMMM:
             return d
         return d - box * np.round(d / box)
 
+    def _mm_charge_shift(self, nb, qm_set):
+        """Link-atom charge-shift (RCD) for covalent QM/MM boundaries.
+
+        The MM atom whose bond to the QM region was cut (the boundary atom M1 =
+        link.mm_index) sits only ~0.3-0.5 A from the capping H, so embedding the
+        QM density in its full point charge over-polarises and can collapse the
+        density onto M1 (a 1/r Coulomb sink -> divergent dynamics). Following the
+        standard redistributed-charge (RCD) scheme (Lin & Truhlar, JPCA 109,
+        3991), zero each M1 charge in the QM-MM electrostatics and spread it
+        equally over its MM-bonded neighbours (M2), preserving the total MM
+        charge. The MM-MM electrostatics (handled by OpenMM at full FF charges)
+        are untouched; only the QM-MM embedding potential and coupling force see
+        the shifted set -- and because both are built from this one charge source
+        they stay mutually consistent, so the force remains -dE/dR.
+
+        Returns {atom_index: shifted_charge_e}; empty for whole-molecule QM (no
+        link atoms) so non-boundary behaviour is byte-for-byte unchanged.
+        Set QMMM_NO_CHARGE_SHIFT=1 to restore the legacy full-field embedding.
+        """
+        if (not self.link_atoms
+                or os.environ.get('QMMM_NO_CHARGE_SHIFT', '').strip() in ('1', 'on')):
+            return {}
+        neigh = {}
+        for b in self.topology.bonds():
+            i1, i2 = b[0].index, b[1].index
+            neigh.setdefault(i1, set()).add(i2)
+            neigh.setdefault(i2, set()).add(i1)
+
+        def _ff_q(i):
+            c, _, _ = nb.getParticleParameters(i)
+            return c.value_in_unit(unit.elementary_charge)
+
+        boundary = set(int(l.mm_index) for l in self.link_atoms)
+        shift = {}
+        # Iterate over the *unique* MM boundary atoms: one atom can be cut by
+        # more than one QM-MM bond (several link atoms share its mm_index), and
+        # its charge must be redistributed only once, not once per severed bond.
+        for m1 in sorted(boundary):
+            # Redistribute only onto MM neighbours that are neither QM nor
+            # another boundary (M1) atom. Excluding all boundary atoms keeps the
+            # result independent of processing order and prevents a zeroed M1
+            # from being handed charge by an adjacent M1 (which would leave a
+            # nonzero near-field point charge that defeats the shift).
+            m2 = [j for j in neigh.get(m1, ())
+                  if j not in qm_set and j not in boundary]
+            if not m2:                       # no eligible neighbour: leave M1 as is
+                continue
+            shift[m1] = 0.0
+            share = _ff_q(m1) / len(m2)      # original FF charge, redistributed once
+            for j in m2:
+                shift[j] = shift.get(j, _ff_q(j)) + share
+        return shift
+
     def _mm_charges_positions_bohr(self):
         """MM (non-QM) force-field charges (e), positions (bohr) and absolute
         atom indices. These carry the classical electrostatics the QM density
-        is embedded in."""
+        is embedded in. Covalent-boundary charges are RCD-shifted (see
+        _mm_charge_shift) so the QM density is not embedded in the M1 boundary
+        atom's near-field point charge."""
         nb = next(f for f in self.mm_systems["sys0"].getForces()
                   if isinstance(f, mm.NonbondedForce))
         qm_set = set(int(i) for i in self.qm_atoms)
+        shift = self._mm_charge_shift(nb, qm_set)
         q, xyz, idx = [], [], []
         for i in range(nb.getNumParticles()):
             if i in qm_set:
                 continue
-            charge, _, _ = nb.getParticleParameters(i)
+            if i in shift:
+                qi = shift[i]
+            else:
+                charge, _, _ = nb.getParticleParameters(i)
+                qi = charge.value_in_unit(unit.elementary_charge)
             p = self.positions[i].value_in_unit(unit.angstrom)
-            q.append(charge.value_in_unit(unit.elementary_charge))
+            q.append(qi)
             xyz.append([c * self._ANG2BOHR for c in p])
             idx.append(i)
         return np.asarray(q), np.asarray(xyz, dtype=float), np.asarray(idx, dtype=int)
