@@ -172,12 +172,19 @@ class OpenQPDFTBAdapter:
         return energies, gradient_map
 
     def _reject_probe_with_embedding(self, backend: str) -> None:
-        if backend == "probe" and self._external_potential() is not None:
+        if backend != "probe":
+            return
+        qmmm_flag = self.config.get("input", {}).get("qmmm_flag", False)
+        is_qmmm = (qmmm_flag is True) or (
+            str(qmmm_flag).strip().lower() in {"true", "1", "on", "yes"})
+        if self._external_potential() is not None or is_qmmm:
             raise ValueError(
-                "OpenQP-DFTB QM/MM electrostatic embedding requires the native "
-                "backend: the probe executable does not carry the per-atom "
-                "external potential, so it would return unembedded energies and "
-                "gradients while the driver assembles embedded coupling forces. "
+                "OpenQP-DFTB QM/MM requires the native backend: the probe "
+                "executable neither carries the per-atom external potential "
+                "(electrostatic embedding) nor publishes the relaxed atomic "
+                "charges the QM/MM driver reads to assemble the MM coupling "
+                "forces, so it would return unembedded energies/gradients or "
+                "fail on missing OQP::partial_charges (mechanical embedding). "
                 "Set [dftb] backend=native for QM/MM jobs."
             )
 
@@ -717,7 +724,17 @@ class OpenQPDFTBAdapter:
             data["OQP::VEC_MO_B"] = mo_tag.copy()
             data["OQP::E_MO_A"] = np.ascontiguousarray(result.mo_energies)
             data["OQP::E_MO_B"] = np.ascontiguousarray(result.mo_energies)
-            self.mol._dftb_mo_tag_geom = geom_key
+            # Only the CURRENT geometry (mol.idx == 1) owns the alignment
+            # marker. BasisOverlap.load_previous_data() evaluates the previous
+            # geometry with SinglePoint.energy() at mol.idx == 2: that call
+            # stores its own MO tags but must NOT advance the marker, or the
+            # later current-geometry excitation() would see a stale marker,
+            # treat the phase/reorder-aligned tags written by dftb_overlap() as
+            # absent, and overwrite them -- corrupting standalone system2
+            # NACME/TDC state overlaps. (put_data() restores the current data
+            # tags but not this plain attribute.)
+            if int(getattr(self.mol, "idx", 1)) == 1:
+                self.mol._dftb_mo_tag_geom = geom_key
         if result.response_vectors is not None:
             data["OQP::td_bvec_mo"] = self._fortran_tag(result.response_vectors)
         data["OQP::dftb_wf_dims"] = np.array(
@@ -731,6 +748,7 @@ class OpenQPDFTBAdapter:
         option_key = (
             v_ext_key,
             self._parameter_path(),
+            str(self.dftb.get("backend", "native")).lower(),
             method,
             state,
             bool(need_grad),
@@ -761,6 +779,8 @@ class OpenQPDFTBAdapter:
             int(self.dftb.get("target_multiplicity", 1)),
             str(self.dftb.get("response_solver", "auto")).lower(),
             int(self.dftb.get("response_max_subspace", 100)),
+            int(self.dftb.get("response_max_iterations", 50)),
+            float(self.dftb.get("response_tolerance", 1.0e-6)),
         )
         return atoms, coords.tobytes(), option_key
 

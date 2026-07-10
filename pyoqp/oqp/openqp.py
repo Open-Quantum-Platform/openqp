@@ -631,7 +631,14 @@ class OpenQP:
                 multiplicity=multiplicity,
                 **keywords,
             )
-        if method_key in {"dftb", "openqp-dftb", "tddftb", "td-dftb"}:
+        if method_key in {"dftb", "openqp-dftb"}:
+            return self.dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tddftb", "td-dftb"}:
             return self.dftb(
                 runtype=runtype,
                 response_type=keywords.pop("response_type", "tddftb"),

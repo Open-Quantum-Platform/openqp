@@ -905,6 +905,21 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             action="Remove properties.scf_prop, or use an all-electron method for SCF properties.",
         )
 
+    if bool(_get(config, "pcm", "enabled", False)):
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            "OpenQP-DFTB does not consume a PCM solvent reaction field; the DFTB "
+            "energy/gradient path returns directly from the adapter and never "
+            "calls ddX/PCM, so enabling PCM would silently produce gas-phase "
+            "DFTB results instead of solvated ones.",
+            value=True,
+            expected="pcm.enabled=false for method=dftb",
+            action="Disable [pcm] enabled for method=dftb, or use an all-electron "
+                   "method for PCM solvation.",
+            wiki=WIKI_HELP["pcm.enabled"],
+        )
+
     if dftb_type not in DFTB_TYPES:
         report.add(
             "ERROR",
