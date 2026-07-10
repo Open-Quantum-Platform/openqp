@@ -34,7 +34,6 @@ SCHEMA = {
         "cutoff": {"type": _string, "default": "NoCutoff"},
         "embedding": {"type": _string, "default": "electrostatic"},
         "rigidwater": {"type": bool, "default": "False"},
-        "frontier_scheme": {"type": _string, "default": "none"},
     },
     "md": {
         "nstep": {"type": int, "default": "100"},
@@ -808,18 +807,6 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
-
-    def test_qmmm_frontier_scheme_sets_section_key(self):
-        openqp = load_openqp_module()
-        job = (
-            openqp.OpenQP(project="qmmm_rcd")
-            .molecule("ala.pdb 8 9 16 17 18", basis="6-31g*")
-            .qmmm(pdb_file="ala.pdb", forcefield="amber14-all.xml",
-                  qm_atoms=[8, 9, 16, 17, 18], embedding="electrostatic",
-                  frontier_scheme="rcd")
-        )
-        config = job.to_input_dict()
-        self.assertEqual(config["qmmm"]["frontier_scheme"], "rcd")
 
     def test_qmmm_normalizes_lists_and_rejects_duplicate_forcefield(self):
         openqp = load_openqp_module()

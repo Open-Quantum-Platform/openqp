@@ -224,7 +224,6 @@ class QMMM_MD:
 
         self.cutoff    = _resolve_cutoff(qmmm_cfg.get("cutoff", "PME"))
         self.embedding = str(qmmm_cfg.get("embedding", "electrostatic"))
-        self.frontier_scheme = str(qmmm_cfg.get("frontier_scheme", "none"))
         self.n_steps   = int(qmmm_cfg.get("n_steps", 1000))
         self.timestep  = float(qmmm_cfg.get("timestep", 1.0)) * unit.femtoseconds
         self.temperature = float(qmmm_cfg.get("temperature", 300.0)) * unit.kelvin
@@ -272,15 +271,6 @@ class QMMM_MD:
             self._apply_xyz_positions(str(qm_atoms_xyz), qm_list)
 
         # ------ store QM config / mol for the driver ----------------------
-        # The outer runtype=md only selects this ground-state QM/MM MD driver
-        # (see pyoqp dispatch); the QM subsystem itself runs a single-point
-        # energy+gradient each step. Force the internal QM runtype to 'energy'
-        # so the QM engine's input check accepts a config that arrived with
-        # runtype=md (config mode; harmless when the key is absent).
-        if isinstance(qm_cfg, dict):
-            for _k in list(qm_cfg):
-                if str(_k).split('.')[-1].strip().lower() == 'runtype':
-                    qm_cfg[_k] = 'energy'
         self.oqp_cfg = qm_cfg
         self.mol     = mol
 
@@ -355,7 +345,6 @@ class QMMM_MD:
             mol=self.mol,
             Cutoff=self.cutoff,
             Embedding=self.embedding,
-            frontier_scheme=self.frontier_scheme,
         )
         self.mm_systems = self.oqp_driver.mm_systems
 
