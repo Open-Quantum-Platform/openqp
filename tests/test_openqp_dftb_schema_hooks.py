@@ -17,7 +17,14 @@ def _import_or_skip(module_name):
         return importlib.import_module(module_name)
     except RuntimeError as exc:
         text = str(exc)
-        if "Cannot locate OpenQP runtime files" in text or "OPENQP_ROOT does not contain" in text:
+        # Skip (rather than fail) when the native runtime is unavailable: either
+        # liboqp cannot be located, or a dependency-light environment has mpi4py
+        # importable but no libmpi to load.
+        if (
+            "Cannot locate OpenQP runtime files" in text
+            or "OPENQP_ROOT does not contain" in text
+            or "cannot load MPI library" in text
+        ):
             for name in list(sys.modules):
                 if name == "oqp" or name.startswith("oqp."):
                     sys.modules.pop(name, None)

@@ -87,6 +87,20 @@ class _WorkflowSectionProxy(_SectionProxy):
         return super().__call__(**kwargs)
 
 
+class _DFTBSectionProxy(_SectionProxy):
+    """Callable [dftb] section proxy.
+
+    ``job.dftb(...)`` runs the DFTB workflow helper (method=dftb plus the
+    response-type plumbing), while ``job.dftb.option`` reads and
+    ``job.dftb.option = value`` writes the [dftb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._dftb(*args, **kwargs)
+
+
 class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
     """Optimization workflow proxy with runtype-aware backend routing."""
 
@@ -237,7 +251,7 @@ class _TheoryProxy:
         return self._owner._theory("tdhf", **kwargs)
 
     def dftb(self, **kwargs):
-        return self._owner.dftb(**kwargs)
+        return self._owner._dftb(**kwargs)
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -632,28 +646,28 @@ class OpenQP:
                 **keywords,
             )
         if method_key in {"dftb", "openqp-dftb"}:
-            return self.dftb(
+            return self._dftb(
                 runtype=runtype,
                 response_type=keywords.pop("response_type", "ground"),
                 nstate=nstate,
                 **keywords,
             )
         if method_key in {"tddftb", "td-dftb"}:
-            return self.dftb(
+            return self._dftb(
                 runtype=runtype,
                 response_type=keywords.pop("response_type", "tddftb"),
                 nstate=nstate,
                 **keywords,
             )
         if method_key in {"sf-tddftb", "sf-td-dftb", "sftddftb"}:
-            return self.dftb(
+            return self._dftb(
                 runtype=runtype,
                 response_type="sf",
                 nstate=nstate,
                 **keywords,
             )
         if method_key in {"mrsf-tddftb", "mrsf-td-dftb", "mrsftddftb"}:
-            return self.dftb(
+            return self._dftb(
                 runtype=runtype,
                 response_type="mrsf",
                 nstate=nstate,
@@ -848,8 +862,18 @@ class OpenQP:
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
 
-    def dftb(self, runtype=None, response_type="mrsf", nstate=3,
-             parameter_path=None, **keywords):
+    @property
+    def dftb(self):
+        """Callable [dftb] section proxy.
+
+        ``job.dftb(...)`` runs the DFTB workflow helper below, while
+        ``job.dftb.option`` / ``job.dftb.option = value`` read and write the
+        [dftb] section like every other schema section.
+        """
+        return _DFTBSectionProxy(self, "dftb")
+
+    def _dftb(self, runtype=None, response_type="mrsf", nstate=3,
+              parameter_path=None, **keywords):
         """Use the optional OpenQP-DFTB backend through the normal OpenQP workflow."""
         input_updates = {"method": "dftb", "functional": ""}
         if runtype is not None:
