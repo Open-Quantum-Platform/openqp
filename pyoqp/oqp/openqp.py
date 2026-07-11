@@ -102,6 +102,20 @@ class _DFTBSectionProxy(_SectionProxy):
         return self._owner._dftb(*args, **kwargs)
 
 
+class _XTBSectionProxy(_SectionProxy):
+    """Callable [xtb] section proxy.
+
+    ``job.xtb(...)`` runs the OpenQP-xTB workflow helper (method=xtb plus the
+    response-type plumbing), while ``job.xtb.option`` reads and
+    ``job.xtb.option = value`` writes the [xtb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._xtb(*args, **kwargs)
+
+
 class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
     """Optimization workflow proxy with runtype-aware backend routing."""
 
@@ -253,6 +267,9 @@ class _TheoryProxy:
 
     def dftb(self, **kwargs):
         return self._owner._dftb(**kwargs)
+
+    def xtb(self, **kwargs):
+        return self._owner._xtb(**kwargs)
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -674,6 +691,34 @@ class OpenQP:
                 nstate=nstate,
                 **keywords,
             )
+        if method_key in {"xtb", "openqp-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tdxtb", "td-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-xtb", "sf-td-xtb", "sfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-xtb", "mrsf-td-xtb", "mrsfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
         if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
             if functional is None:
                 raise ValueError("SF-TDDFT theory requires functional=...")
@@ -699,7 +744,7 @@ class OpenQP:
             )
         raise ValueError(
             "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
-            "sf-tddft, mrsf-tddft, or dftb."
+            "sf-tddft, mrsf-tddft, dftb, or xtb."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -919,6 +964,64 @@ class OpenQP:
         _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
         dftb_updates["type"] = _BACKEND_TYPE.get(dftb_type, dftb_type)
         self.section("dftb", **dftb_updates)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
+
+    @property
+    def xtb(self):
+        """Callable [xtb] section proxy.
+
+        ``job.xtb(...)`` runs the xTB workflow helper below, while
+        ``job.xtb.option`` / ``job.xtb.option = value`` read and write the
+        [xtb] section like every other schema section.
+        """
+        return _XTBSectionProxy(self, "xtb")
+
+    def _xtb(self, runtype=None, response_type="mrsf", nstate=3,
+             parameter_path=None, **keywords):
+        """Use the optional OpenQP-xTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "xtb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        xtb_schema = OQP_CONFIG_SCHEMA.get("xtb", {})
+        xtb_updates = {}
+        if parameter_path is not None:
+            xtb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is an
+        # [xtb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.xtb(type=...) and silently fall back to response_type.
+        requested_type = str(keywords.pop("type", response_type)).lower()
+        for key in list(keywords.keys()):
+            if key in xtb_schema and key != "type":
+                xtb_updates[key] = keywords.pop(key)
+
+        xtb_type = requested_type
+        tdhf_type = {
+            "ground": "tda",
+            "dftb": "tda",
+            "dftb0": "tda",
+            "noscc": "tda",
+            "ground_noscc": "tda",
+            "tddftb": "tda",
+            "td-dftb": "tda",
+            "tda": "tda",
+            "sf": "sf",
+            "sftddftb": "sf",
+            "sf-tddftb": "sf",
+            "mrsf": "mrsf",
+            "mrsftddftb": "mrsf",
+            "mrsf-tddftb": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("xTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
+        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
+        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
+        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
+        xtb_updates["type"] = _BACKEND_TYPE.get(xtb_type, xtb_type)
+        self.section("xtb", **xtb_updates)
         return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
 
     def soc(self, nstate=3, functional=None, reference="rohf",

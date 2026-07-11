@@ -14,6 +14,11 @@
 # (gfn1.opxtb below is a placeholder). Model options default to the full
 # LC-GFN1 Hamiltonian: model=gfn1, dispersion/halogen_bond/third_order on,
 # spin_scale=1.0, lc_gamma=ok with omega=0.3, cam_alpha=0, cam_beta=1.
+#
+# lc_ground_state=true opts the ground-state SCC into the long-range-corrected
+# GFN1 kernel as well (default is false, which corrects only the response). This
+# is the production LC-GFN1 configuration the MRSF reference is built on, so the
+# opt-in flag is exercised here on the native backend.
 [input]
 system=
    8   0.000000000   0.000000000   0.000000000
@@ -40,3 +45,4 @@ nstate=3
 backend=native
 type=mrsf
 parameter_path=gfn1.opxtb
+lc_ground_state=true
