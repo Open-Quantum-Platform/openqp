@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 from pathlib import Path
 import unittest
 
@@ -26,6 +27,31 @@ class TestJsonTdLayout(unittest.TestCase):
         matrix = np.array([[1.0, 2.0], [3.0, 4.0]])
 
         self.assertEqual(JSON_UTILS.json_array("OQP::SM", matrix), matrix.tolist())
+
+    def test_conversion_is_confined_to_json_save_path(self):
+        source = (ROOT / "pyoqp/oqp/molecule/molecule.py").read_text()
+        tree = ast.parse(source)
+        methods = {
+            node.name: node
+            for cls in tree.body
+            if isinstance(cls, ast.ClassDef) and cls.name == "Molecule"
+            for node in cls.body
+            if isinstance(node, ast.FunctionDef)
+        }
+
+        get_data_calls = [
+            node for node in ast.walk(methods["get_data"])
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "json_array"
+        ]
+        save_data_calls = [
+            node for node in ast.walk(methods["save_data"])
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "json_array"
+        ]
+
+        self.assertEqual(get_data_calls, [])
+        self.assertEqual(len(save_data_calls), 1)
 
 
 if __name__ == "__main__":

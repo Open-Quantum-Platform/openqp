@@ -1286,7 +1286,7 @@ class Molecule:
             if key in self.skip_tag[scf_type]:
                 continue
             try:
-                data[key] = json_array(key, self.data[key])
+                data[key] = np.array(self.data[key]).tolist()
 
             except AttributeError:
                 continue
@@ -1591,6 +1591,10 @@ class Molecule:
         else:
             jsonfile = self.log.replace('.log', '.json')
         data = self.get_data()
+        # Keep get_data() in the native tag-array layout for restart, back-door,
+        # and NAMD consumers.  Only the on-disk JSON presentation needs the TD
+        # response-vector axes repaired.
+        data = {key: json_array(key, value) for key, value in data.items()}
         data.update(self.get_results())
         data.update(self.set_config_json())
 
