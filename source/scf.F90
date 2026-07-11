@@ -616,7 +616,7 @@ contains
     ! Only the options relevant to the active converger/features are printed,
     ! to keep the log focused (the previous version dumped every knob always).
     write(IW,'(/5X,"SCF options"/5X,18("-"))')
-    write(IW,'(5X,"SCF type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
+    write(IW,'(5X,"SCF reference type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
                trim(scf_name), infos%control%maxit, infos%control%conv
     if (use_trah) then
       write(IW,'(5X,"Converger = TRAH (trust-region augmented Hessian)")')

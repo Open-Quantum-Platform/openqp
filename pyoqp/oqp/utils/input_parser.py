@@ -45,24 +45,20 @@ class OQPConfigParser(configparser.ConfigParser):
                 raise ValueError(f"Unknown section: {section}")
 
             config[section] = {}
-            if section == 'tests':
-                for option, value in self[section].items():
-                    config[section][option] = value
-            else:
-                valid_options = self.schema[section].keys()
-                for option, value in self[section].items():
-                    if option not in valid_options:
-                        raise ValueError(f"Unknown option: {section}.{option}")
-                    converter = self.schema[section][option]['type']
-                    if converter == bool:
-                        config[section][option] = self.getboolean(section, option)
-                    else:
-                        try:
-                            config[section][option] = converter(value)
-                        except (TypeError, ValueError):
-                            if section == 'pcm' and option == 'epsilon':
-                                config[section][option] = value
-                            else:
-                                raise
+            valid_options = self.schema[section].keys()
+            for option, value in self[section].items():
+                if option not in valid_options:
+                    raise ValueError(f"Unknown option: {section}.{option}")
+                converter = self.schema[section][option]['type']
+                if converter == bool:
+                    config[section][option] = self.getboolean(section, option)
+                else:
+                    try:
+                        config[section][option] = converter(value)
+                    except (TypeError, ValueError):
+                        if section == 'pcm' and option == 'epsilon':
+                            config[section][option] = value
+                        else:
+                            raise
 
         return config

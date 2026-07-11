@@ -88,6 +88,9 @@ OQP_CONFIG_SCHEMA = {
         'constraints': {'type': str, 'default': 'None'},
         'rigidwater': {'type': bool, 'default': 'False'},
         'nsteps': {'type': int, 'default': '1'},
+        # OpenMM QM/MM-MD surface. ``nsteps`` remains the legacy static-driver
+        # spelling; the MD engine intentionally uses the clearer ``n_steps``.
+        'n_steps': {'type': int, 'default': '1000'},
         'timestep': {'type': float, 'default': '1.0'},
         'istate': {'type': int, 'default': '0'},
         # NAMD-QMMM (Runner runtype=namd) keys
@@ -97,6 +100,17 @@ OQP_CONFIG_SCHEMA = {
         'cutoff': {'type': str, 'default': 'NoCutoff'},
         'embedding': {'type': str, 'default': 'electrostatic'},
         'temperature': {'type': float, 'default': '300.0'},
+        'ensemble': {'type': str, 'default': 'nve'},
+        'friction': {'type': float, 'default': '1.0'},
+        'pressure': {'type': float, 'default': '1.0'},
+        'barostat_interval': {'type': int, 'default': '25'},
+        'trajectory_format': {'type': str, 'default': 'pdb'},
+        'trajectory_file': {'type': str, 'default': ''},
+        'log_file': {'type': str, 'default': ''},
+        'report_interval': {'type': int, 'default': '1'},
+        'energy_file': {'type': str, 'default': ''},
+        'qm_atoms_xyz': {'type': str, 'default': ''},
+        'qm_list': {'type': str, 'default': ''},
         # Frontier (M1) charge treatment across a covalent QM/MM cut for ESPF
         # embedding: none (default = full-field, the validated ESPF baseline;
         # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
@@ -281,6 +295,9 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        # Optional per-manifold SOC counts. Zero means use nstate for both.
+        'nstate_s': {'type': int, 'default': '0'},
+        'nstate_t': {'type': int, 'default': '0'},
         'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
@@ -379,6 +396,13 @@ OQP_CONFIG_SCHEMA = {
     'neb': {
         'product': {'type': str, 'default': ''},
         'nimage': {'type': int, 'default': '5'},
+        # geomeTRIC NEB controls (native OQP NEB controls live in [oqp]).
+        'k': {'type': float, 'default': '1.0'},
+        'maxg': {'type': float, 'default': '0.1'},
+        'avgg': {'type': float, 'default': '0.05'},
+        'climb': {'type': float, 'default': '0.5'},
+        'align': {'type': bool, 'default': 'True'},
+        'optep': {'type': bool, 'default': 'False'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
@@ -422,7 +446,7 @@ OQP_CONFIG_SCHEMA = {
         'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction
         'soc_tdc_grad_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add MCH TDC-projected NAC gradient correction
         'grad_wthr': {'type': float, 'default': '0.001'},   # SOC weighted-MCH gradient weight threshold (small -> continuous force)
-        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
+        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T0/T1/...); '' = use active index
         'econs': {'type': bool, 'default': 'False'},        # temporary: per-step velocity rescale to conserve E_tot (band-aid for diagonal-gradient drift)
         'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
         'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
@@ -1326,13 +1350,17 @@ def compute_alpha_beta_electrons(n_e, mult):
 
 def read_system(system):
     system0 = system
-    system = system.split()
+    reference = system.strip()
+    lower_reference = reference.lower()
+    xyz_end = lower_reference.find('.xyz')
+    pdb_end = lower_reference.find('.pdb')
     """Set up atomic data"""
-    if system[0].lower().endswith('.xyz'):
-        if not os.path.exists(system[0]):
-            raise FileNotFoundError("XYZ file %s is not found!" % system[0])
+    if xyz_end >= 0:
+        xyz_path = reference[:xyz_end + 4].strip()
+        if not os.path.exists(xyz_path):
+            raise FileNotFoundError("XYZ file %s is not found!" % xyz_path)
 
-        with open(system[0], 'r') as xyzfile:
+        with open(xyz_path, 'r') as xyzfile:
             system = xyzfile.read().splitlines()
 
         num_atoms = int(system[0])
@@ -1350,14 +1378,16 @@ def read_system(system):
         y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
         z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
         mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
-    elif system[0].lower().endswith('.pdb'):
+    elif pdb_end >= 0:
+        pdb_path = reference[:pdb_end + 4].strip()
+        atom_tokens = reference[pdb_end + 4:].strip().split()
 
-        if not os.path.exists(system[0]):
-            raise FileNotFoundError("PDB file %s is not found!" % system[0])
-        qmmm.pdb_file=system[0]
+        if not os.path.exists(pdb_path):
+            raise FileNotFoundError("PDB file %s is not found!" % pdb_path)
+        qmmm.pdb_file=pdb_path
 
         atom_list = []
-        for i in system[1:]:
+        for i in atom_tokens:
            if i.find('-') != -1:
               start, end = map(int, i.split('-'))
               atom_list.extend(list(range(start, end + 1)))
@@ -1374,7 +1404,9 @@ def read_system(system):
         num_atoms, x, y, z, q, mass = qmmm.openmm_system()
     else:
         system = system0.split("\n")
-        system = system[1:]
+        if system and not system[0].strip():
+            system = system[1:]
+        system = [line for line in system if line.strip()]
         num_atoms = len(system)
         atoms = []
         for i, line in enumerate(system):

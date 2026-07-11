@@ -9,6 +9,7 @@ from oqp.library.single_point import (
     BasisOverlap, NACME, NAC
 )
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
+from oqp.utils.state_labels import is_mrsf, public_state_label
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
     redistribute_frontier_charges, assemble_embedding_sites,
@@ -382,7 +383,9 @@ class OpenQpQMMM:
                 energies = self.op.sp.excitation([self.eqm])
                 grads = np.zeros(( gradient.nstate + 1,  gradient.natom, 3))
                 for i in gradient.grads:
-                    dump_log(gradient.mol, title='PyOQP: Gradient of Root %s' % i)
+                    target = (public_state_label(gradient.mol.config, i)
+                              if is_mrsf(gradient.mol.config) else 'Root %s' % i)
+                    dump_log(gradient.mol, title='PyOQP: Gradient of %s' % target)
                     gradient.mol.data.set_tdhf_target(i)
                     gradient.zvec_func[gradient.td](gradient.mol)
 

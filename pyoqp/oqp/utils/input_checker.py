@@ -374,8 +374,32 @@ def _iter_coordinate_lines(system: str) -> tuple[list[str], str | None]:
 
     first_line = lines[0].strip()
     if first_line:
+        fields = first_line.split()
+        try:
+            is_coordinate = len(fields) >= 4 and all(
+                math.isfinite(float(value)) for value in fields[1:4]
+            )
+        except ValueError:
+            is_coordinate = False
+        if is_coordinate:
+            return [line for line in lines if line.strip()], None
         return [], first_line
     return [line for line in lines[1:] if line.strip()], None
+
+
+def _split_geometry_reference(reference: str) -> tuple[str, list[str]]:
+    """Split an XYZ/PDB reference without breaking paths that contain spaces."""
+    stripped = reference.strip()
+    lower = stripped.lower()
+    for suffix in (".xyz", ".pdb"):
+        end = lower.find(suffix)
+        if end >= 0:
+            end += len(suffix)
+            path = stripped[:end].strip()
+            trailing = stripped[end:].strip().split()
+            return path, trailing
+    tokens = stripped.split()
+    return (tokens[0], tokens[1:]) if tokens else ("", [])
 
 
 def _max_state(values: list[Any]) -> int:
@@ -487,8 +511,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
         # runs append the QM-region atom indices after a .pdb path
         # (e.g. "mol.pdb 9 10 17-19"), so validate the path token alone rather
         # than the whole line (which never exists as a file).
-        tokens = xyz_path.split()
-        path_token = tokens[0]
+        path_token, trailing_tokens = _split_geometry_reference(xyz_path)
         resolved = os.path.abspath(path_token)
         if path_token.lower().endswith(".pdb"):
             if not os.path.exists(resolved):
@@ -501,7 +524,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
                     wiki=WIKI_HELP["input.system"],
                 )
             else:
-                _check_qm_atom_indices(tokens[1:], report)
+                _check_qm_atom_indices(trailing_tokens, report)
         elif not os.path.exists(resolved):
             report.add(
                 "ERROR",
@@ -2179,6 +2202,17 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
+    if hess_type not in {"numerical", "analytical"}:
+        report.add(
+            "ERROR",
+            "hess.type",
+            "Unknown Hessian type.",
+            value=hess_type,
+            expected="numerical or analytical",
+            action="Set [hess] type=numerical or type=analytical.",
+        )
+        return
+
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)
         if capability != "supported":
@@ -2250,6 +2284,17 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     nproc = _get(config, "nac", "nproc", 1)
     states = _as_list(_get(config, "nac", "states", []))
+    nac_type = _as_lower(_get(config, "nac", "type", "numerical"))
+
+    if nac_type != "numerical":
+        report.add(
+            "ERROR",
+            "nac.type",
+            "Analytical NAC vectors are not available.",
+            value=nac_type,
+            expected="numerical",
+            action="Set [nac] type=numerical.",
+        )
 
     if method != "tdhf":
         report.add(

@@ -359,7 +359,7 @@ class OQPTester:
             test_dir = os.path.join(self.base_test_dir, 'SCF')
         elif os.path.isdir(test_path):
             test_dir = test_path
-        elif os.path.isfile(test_path) and test_path.endswith('.inp'):
+        elif os.path.isfile(test_path) and test_path.lower().endswith(('.inp', '.oqp')):
             return [test_path]
         else:
             print(f"Invalid test path: {test_path}")
@@ -369,11 +369,11 @@ class OQPTester:
             os.path.join(root, file)
             for root, _, files in os.walk(test_dir)
             for file in files
-            if file.endswith('.inp')
+            if file.endswith(('.inp', '.oqp')) and not file.endswith('.resolved.oqp')
         ]
         # The full-suite run ('all') skips a few examples that dominate CI
         # wall-clock; they still run when selected explicitly (a directory or a
-        # .inp path). See _skip_in_full_run for which and why.
+        # input-file path). See _skip_in_full_run for which and why.
         if test_path == 'all':
             input_files = [
                 f for f in input_files if not self._skip_in_full_run(f)
@@ -413,7 +413,26 @@ class OQPTester:
 
         Analytical Hessians (type=analytical) and ordinary opt/TS runs are
         unaffected, and the skipped examples still run when invoked explicitly
-        by directory or .inp path."""
+        by directory or explicit input-file path."""
+        if input_file.lower().endswith('.oqp'):
+            try:
+                from oqp.utils.oqp_input import resolve_oqp_file
+                cfg = resolve_oqp_file(input_file, write_resolved=False).legacy_config
+            except (OSError, ValueError):
+                return False
+            input_cfg = cfg.get('input', {})
+            runtype = str(input_cfg.get('runtype', 'energy')).strip().lower()
+            hess_type = str(cfg.get('hess', {}).get('type', '')).strip().lower()
+            qmmm = str(input_cfg.get('qmmm_flag', 'false')).strip().lower() in {
+                'true', '1', 'yes', 'on'
+            }
+            method = str(input_cfg.get('method', 'hf')).strip().lower()
+            return (
+                runtype == 'irc'
+                or (runtype == 'hess' and hess_type != 'analytical')
+                or (qmmm and runtype != 'namd')
+                or method == 'dftb'
+            )
         try:
             with open(input_file, 'r', encoding='utf-8') as fh:
                 text = fh.read().lower().replace(' ', '')
@@ -572,7 +591,7 @@ def _run_isolated_main(argv=None):
     from oqp.pyoqp import MPIManager
 
     parser = argparse.ArgumentParser(description="Run one OpenQP test in isolation")
-    parser.add_argument("--isolated", required=True, help="input .inp file")
+    parser.add_argument("--isolated", required=True, help="input .inp or .oqp file")
     parser.add_argument("--output-dir", required=True, help="shared output dir")
     parser.add_argument("--omp", type=int, default=1, help="OMP threads")
     args = parser.parse_args(argv)

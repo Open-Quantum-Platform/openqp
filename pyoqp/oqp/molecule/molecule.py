@@ -14,6 +14,7 @@ from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
 from oqp.utils.json_utils import json_array
+from oqp.utils.state_labels import is_mrsf, public_state_label
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
 # ``OQP::`` arrays (density/Fock/MO matrices, etc.) and any other non-regression
@@ -828,10 +829,12 @@ class Molecule:
                 energies = None
             terms = result.get('terms') or [lbl.upper() for lbl in result['labels']]
             for istate, term in enumerate(terms):
+                state = (public_state_label(self.config, istate + 1)
+                         if is_mrsf(self.config) else 'state %3d' % (istate + 1))
                 if energies is not None and istate < energies.size:
-                    lines.append(f'   state {istate + 1:3d}  {energies[istate]:14.8f}  {term}')
+                    lines.append(f'   {state:10s}  {energies[istate]:14.8f}  {term}')
                 else:
-                    lines.append(f'   state {istate + 1:3d}  {"":14s}  {term}')
+                    lines.append(f'   {state:10s}  {"":14s}  {term}')
             lines.append('')
             with open(self.log, 'a', encoding='utf-8') as fout:
                 fout.write('\n'.join(lines))
@@ -1741,7 +1744,8 @@ class Molecule:
         """Compare runtime results against the reference, driven by the
         regression registry (an allowlist: exactly the declared quantities for
         this runtype/method/properties are compared)."""
-        ref_file = self.input_file.replace('.inp', '.json')
+        input_stem = os.path.splitext(self.input_file)[0]
+        ref_file = input_stem + '.json'
         runtime_data = self.get_data()
         runtime_data.update(self.get_results())
         runtype, excited, props = self.regression_context()
@@ -1766,7 +1770,7 @@ class Molecule:
         # next to the run log by save_freqs(). Load both lazily.
         ref_side = runtime_side = {}
         if any(e.source == 'sidecar' for e in compare):
-            ref_side = _load_json(self.input_file.replace('.inp', '.hess.json'))
+            ref_side = _load_json(input_stem + '.hess.json')
             runtime_side = _load_json(self.log.replace('.log', '.hess.json'))
 
         _MISSING = object()

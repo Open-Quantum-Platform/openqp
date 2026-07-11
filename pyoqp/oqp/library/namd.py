@@ -66,6 +66,15 @@ _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _NPARAMS = 16
 
 
+def _select_response_manifold(mol, multiplicity):
+    """Synchronize native, config, DFTB, and log-facing target spin state."""
+    mult = int(multiplicity)
+    mol.config['tdhf']['multiplicity'] = mult
+    mol.data.set_tdhf_multiplicity(mult)
+    if mol.config['input']['method'] == 'dftb':
+        mol.config['dftb']['target_multiplicity'] = mult
+
+
 class NAMD:
     """Driver for FSSH nonadiabatic molecular dynamics."""
 
@@ -846,7 +855,7 @@ class NAMD_SOC(NAMD):
         except Exception:
             self.grad_wthr = 0.05
         # optional: choose the initial active state by MCH spin character
-        # (e.g. 'S1') instead of a fixed spin-adiabatic index -- robust when the
+        # (e.g. 'S1' or 'T0') instead of a fixed spin-adiabatic index -- robust when the
         # spin-adiabatic ordering is ambiguous at the start (S/T near-degeneracy)
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
         _ev = mol.config['md'].get('econs', False)
@@ -858,7 +867,7 @@ class NAMD_SOC(NAMD):
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
-        """If [md] init_state names an MCH state (S0/S1/.../T1/T2/...), set the
+        """If [md] init_state names an MCH state (S0/S1/.../T0/T1/...), set the
         active spin-adiabatic state to the adiabat with the largest character of
         that MCH state at t=0 (summing the three Ms sublevels for a triplet).
         Otherwise keep the configured integer active index."""
@@ -870,7 +879,7 @@ class NAMD_SOC(NAMD):
         if mult == 1:
             mch_idx = [n]                                  # singlet root: S0=0, S1=1, ...
         else:
-            base = self.ns + (n - 1) * 3
+            base = self.ns + n * 3
             mch_idx = [base, base + 1, base + 2]           # triplet Ms sublevels
         char = (np.abs(u[mch_idx, :]) ** 2).sum(axis=0)    # character per adiabat
         a = int(np.argmax(char))
@@ -899,18 +908,14 @@ class NAMD_SOC(NAMD):
 
         is_dftb = mol.config['input']['method'] == 'dftb'
 
-        mol.data.set_tdhf_multiplicity(1)
-        if is_dftb:
-            mol.config['dftb']['target_multiplicity'] = 1
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
-        if is_dftb:
-            mol.config['dftb']['target_multiplicity'] = 3
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -942,7 +947,7 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         ns, nt, n = self.ns, self.nt, self.nstate_soc
 
-        mol.data.set_tdhf_multiplicity(1)
+        _select_response_manifold(mol, 1)
         mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
         if mol.config['input']['method'] == 'dftb':
@@ -951,7 +956,7 @@ class NAMD_SOC(NAMD):
             oqp.get_states_overlap(mol)
         s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
 
-        mol.data.set_tdhf_multiplicity(3)
+        _select_response_manifold(mol, 3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
         if mol.config['input']['method'] == 'dftb':
@@ -1104,17 +1109,16 @@ class NAMD_SOC(NAMD):
         state: root 1 = S0, root 2 = S1, ...  (S0 is the lowest eigenvalue of
         the MRSF orbital-Hessian response, so it has a normal MRSF gradient.)
         Hence the singlet block index k maps to target k+1 (k=0->S0, k=1->S1).
-        The triplet block is also 1-based per multiplicity (T1=target 1, ...);
+        The triplet block is also 1-based internally (T0=target 1, ...);
         the three Ms sublevels of a spatial triplet share one target."""
         if k < self.ns:
             return 1, k + 1                               # singlet root: S0=1, S1=2, ...
-        return 3, (k - self.ns) // 3 + 1                  # triplet root: T1=1, T2=2, ...
+        return 3, (k - self.ns) // 3 + 1                  # triplet root: T0=1, T1=2, ...
 
     @staticmethod
     def _mch_label(mult, target):
-        """Human-readable MCH state name for a (mult, MRSF target): singlet
-        target t -> S(t-1) (so target 1 = S0), triplet target t -> T(t)."""
-        return f'S{target - 1}' if mult == 1 else f'T{target}'
+        """Human-readable zero-based MCH state name for an internal target."""
+        return f'S{target - 1}' if mult == 1 else f'T{target - 1}'
 
     def _mch_energies_abs(self):
         """Absolute MCH energies expanded over singlet + triplet Ms sublevels."""
@@ -1249,9 +1253,7 @@ class NAMD_SOC(NAMD):
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
-            if mol.config['input']['method'] == 'dftb':
-                mol.config['dftb']['target_multiplicity'] = int(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1371,7 +1373,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
         if mult == 1:
             active = target + 1                         # S0 -> MCH basis 1
         else:
-            active = self.ns + (target - 1) * 3 + 1      # choose Ms=-1 member
+            active = self.ns + target * 3 + 1            # T0 -> first triplet Ms member
         if not (1 <= active <= self.nstate_soc):
             raise ValueError(f"[md] init_state='{label}' is outside the SOC MCH basis")
         self.active = active
@@ -1390,9 +1392,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
     def _mch_exact_gradient(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
-        if mol.config['input']['method'] == 'dftb':
-            mol.config['dftb']['target_multiplicity'] = int(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1612,18 +1612,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
 
         is_dftb = mol.config['input']['method'] == 'dftb'
 
-        mol.data.set_tdhf_multiplicity(1)
-        if is_dftb:
-            mol.config['dftb']['target_multiplicity'] = 1
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
-        if is_dftb:
-            mol.config['dftb']['target_multiplicity'] = 3
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -1659,9 +1655,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         g = np.zeros((self.natom, 3))
         pchg_dom = None
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
-            if mol.config['input']['method'] == 'dftb':
-                mol.config['dftb']['target_multiplicity'] = int(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1849,9 +1843,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
     def _mch_exact_gradient_qmmm(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
-        if mol.config['input']['method'] == 'dftb':
-            mol.config['dftb']['target_multiplicity'] = int(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()

@@ -22,6 +22,7 @@ OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 PYOQP = ROOT / "pyoqp" / "oqp" / "pyoqp.py"
 QMMM_DRIVER = ROOT / "pyoqp" / "oqp" / "library" / "qmmm_driver.py"
 MRSF_Z_VECTOR = ROOT / "source" / "modules" / "tdhf_mrsf_z_vector.F90"
+SOC_MRSF = ROOT / "source" / "modules" / "soc_mrsf.F90"
 
 
 def load_runfunc_with_namd_stubs():
@@ -149,6 +150,17 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)", src)
         self.assertIn("'soc_du_dt_corr'", src)
         self.assertIn("'soc_tdc_grad_corr'", src)
+
+    def test_mrsf_triplet_labels_are_zero_based_in_soc_and_namd(self):
+        namd = NAMD.read_text()
+        soc = SOC_MRSF.read_text()
+
+        self.assertIn("base = self.ns + n * 3", namd)
+        self.assertIn("return f'S{target - 1}' if mult == 1 else f'T{target - 1}'", namd)
+        self.assertIn("active = self.ns + target * 3 + 1", namd)
+        self.assertIn("'S', ist-1, 'T', jst-1", soc)
+        self.assertIn("'T', ist-1, trim(trip(ims_i)), 'T', jst-1", soc)
+        self.assertIn("'T', (i-ns-1)/3, '( 0)'", soc)
 
     def test_soc_qmmm_hops_rescale_for_espf_energy_change(self):
         src = NAMD.read_text()

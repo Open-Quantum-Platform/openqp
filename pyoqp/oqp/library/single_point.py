@@ -16,7 +16,9 @@ from oqp.utils.mpi_utils import MPIManager, MPIPool
 # DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
 # exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
 # there is no longer a Python <= 3.12 constraint.
-dftd_installed = 'dftd4 (native)' if hasattr(oqp.lib, 'oqp_dftd4_disp') else 'not available'
+dftd_installed = ('dftd4 (native)'
+                  if hasattr(getattr(oqp, 'lib', None), 'oqp_dftd4_disp')
+                  else 'not available')
 
 
 def dftd4_native_disp(atoms, coordinates, functional, do_grad):
@@ -47,6 +49,7 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 from oqp.library.frequency import normal_mode, thermal_analysis
 from oqp.library.openqp_dftb import OpenQPDFTBAdapter
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
+from oqp.utils.state_labels import is_mrsf, public_state_label
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {
@@ -955,7 +958,9 @@ class Gradient(Calculator):
 
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
-            dump_log(self.mol, title='PyOQP: Gradient of Root %s' % i)
+            target = (public_state_label(self.mol.config, i)
+                      if is_mrsf(self.mol.config) else 'Root %s' % i)
+            dump_log(self.mol, title='PyOQP: Gradient of %s' % target)
             self.mol.data.set_tdhf_target(i)
             self.zvec_func[self.td](self.mol)
 
