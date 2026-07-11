@@ -648,6 +648,19 @@ class SinglePoint(Calculator):
         # Drop the primary and de-duplicate while preserving order.
         _seen = set()
         chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
+        # TRAH is not occupation constrained and may rotate a MOM/rstctmo
+        # core-hole reference into a different electronic state.  Keep the
+        # occupation-preserving recovery stages, but never silently enter TRAH
+        # for a restricted-orbital calculation.
+        rstctmo = bool(scf_config.get('rstctmo', False))
+        if rstctmo and 'trah' in chain:
+            chain = [c for c in chain if c != 'trah']
+            dump_log(
+                self.mol,
+                title='PyOQP: TRAH recovery disabled because scf.rstctmo=true; '
+                      'TRAH cannot preserve the requested orbital ordering',
+                section='input',
+            )
         for conv in chain:
             if converged:
                 break
@@ -673,7 +686,8 @@ class SinglePoint(Calculator):
         # is reverted below by restoring the snapshot.
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
-        if converged and stability and primary != 'trah' and (self.method == 'hf' or spin_flip_reference):
+        if (converged and stability and not rstctmo and primary != 'trah'
+                and (self.method == 'hf' or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op

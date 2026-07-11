@@ -72,6 +72,10 @@ def install_single_point_stubs():
     setattr(frequency, "thermal_analysis", lambda *args, **kwargs: None)
     sys.modules["oqp.library.frequency"] = frequency
 
+    openqp_dftb = types.ModuleType("oqp.library.openqp_dftb")
+    setattr(openqp_dftb, "OpenQPDFTBAdapter", type("OpenQPDFTBAdapter", (), {}))
+    sys.modules["oqp.library.openqp_dftb"] = openqp_dftb
+
 
 class FakeData(dict):
     def __init__(self):
@@ -204,6 +208,27 @@ class TestSinglePointScfFallback(unittest.TestCase):
         energy = calc.reference(do_init_scf=False)
 
         self.assertEqual(energy, [-3.0])
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_rstctmo_never_escalates_to_trah(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["rstctmo"] = True
+
+        def scf_never_converges():
+            calc.scf_calls += 1
+            calc.mol.mol_energy.SCF_converged = False
+
+        calc.scf = scf_never_converges
+
+        self.assertFalse(calc._run_scf())
+        self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_rstctmo_disables_requested_trah_stability_pass(self):
+        calc = self.make_calculator()
+        calc.mol.config["scf"]["rstctmo"] = True
+        calc.stability = True
+
+        self.assertTrue(calc._run_scf())
         self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
 
     def test_ml_selector_maps_diis_subtype_to_native_controls(self):
