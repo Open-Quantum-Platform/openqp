@@ -13,6 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
+from oqp.utils.json_utils import json_array
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
 # ``OQP::`` arrays (density/Fock/MO matrices, etc.) and any other non-regression
@@ -1590,6 +1591,10 @@ class Molecule:
         else:
             jsonfile = self.log.replace('.log', '.json')
         data = self.get_data()
+        # Keep get_data() in the native tag-array layout for restart, back-door,
+        # and NAMD consumers.  Only the on-disk JSON presentation needs the TD
+        # response-vector axes repaired.
+        data = {key: json_array(key, value) for key, value in data.items()}
         data.update(self.get_results())
         data.update(self.set_config_json())
 
