@@ -13,6 +13,7 @@ from oqp.utils.mpi_utils import MPIManager
 from oqp.utils.mpi_utils import mpi_get_attr, mpi_dump
 from oqp import ffi
 from oqp.utils import regression as regkeys
+from oqp.utils.json_utils import json_array
 
 # Environment variable that opts JSON dumps into "lean" mode: internal
 # ``OQP::`` arrays (density/Fock/MO matrices, etc.) and any other non-regression
@@ -1285,7 +1286,7 @@ class Molecule:
             if key in self.skip_tag[scf_type]:
                 continue
             try:
-                data[key] = np.array(self.data[key]).tolist()
+                data[key] = json_array(key, self.data[key])
 
             except AttributeError:
                 continue
