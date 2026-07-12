@@ -52,13 +52,22 @@ development install.
 
 - test pyoqp
 
-      openqp --run-tests other: Run tests from the 'other' folder in examples
-      openqp --run-tests all: Run all tests from all folders in examples
-      openqp --run-tests path_to_folder: Run tests from a specific folder
+      openqp --run-tests other                 # examples/other, automatic input selection
+      openqp --run-tests all                   # all examples, automatic input selection
+      openqp --run-tests path_to_folder        # a specific folder
+      openqp --run-tests all --input-format inp
+      openqp --run-tests all --input-format oqp
+      openqp --run-tests all --input-format both
 
-Can be used to run all tests in a specific folder.
+The default `auto` selection prefers concise `.oqp`, retains legacy-only `.inp`
+inputs, and keeps a representative legacy compatibility set. Use `inp`, `oqp`,
+or `both` to choose the syntax within the requested test scope. The historical
+`all` scope keeps its slow/non-self-contained exclusions; an explicit directory
+selects every matching input below that directory. The historical `--run_tests`
+spelling remains supported.
 
-Results, including log files and `test_report.txt`, will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
+Results, including per-input output folders, log files, and `test_report.txt`,
+will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
 
 - run pyoqp with command
 

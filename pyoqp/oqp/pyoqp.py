@@ -516,12 +516,21 @@ def main():
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input', nargs='?', help='Input file (.inp or .oqp)')
-    parser.add_argument('--run_tests', '--test',
+    parser.add_argument('--run_tests', '--run-tests', '--test',
                         dest='run_tests',
                         metavar='path',
                         help='run tests from a specified folder or:\n'
-                             '  all    - Run all tests in examples\n'
+                             '  all    - Run the standard suite in examples\n'
+                             '           (slow/non-self-contained exclusions apply)\n'
                              '  other  - Run tests in examples/other')
+    parser.add_argument('--input-format', '--input_format', '--test-inputs',
+                        dest='test_input_format',
+                        choices=('auto', 'inp', 'oqp', 'both'),
+                        help='input syntax selected by --run_tests:\n'
+                             '  auto   - prefer .oqp; keep representative legacy .inp (default)\n'
+                             '  inp    - select legacy .inp\n'
+                             '  oqp    - select concise .oqp\n'
+                             '  both   - include .inp and .oqp in the selected test scope')
     parser.add_argument('--validate_examples', dest='validate_examples',
                         metavar='dir', nargs='?', const='',
                         help='validate that every example reference under DIR\n'
@@ -547,6 +556,9 @@ def main():
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
 
+    if args.test_input_format is not None and not args.run_tests:
+        parser.error('--input-format is only valid with --run_tests')
+
     if args.generate_reference:
         sys.exit(generate_reference_cli(args.generate_reference))
 
@@ -557,7 +569,13 @@ def main():
         sys.exit(validate_examples_cli(args.validate_examples))
 
     if args.run_tests:
-        report, status = run_tests(args.run_tests)
+        try:
+            report, status = run_tests(
+                args.run_tests,
+                input_format=args.test_input_format or 'auto',
+            )
+        except ValueError as err:
+            parser.error(str(err))
         print(report)
         sys.exit(status)
     if not args.input:
@@ -768,12 +786,13 @@ def validate_examples_cli(examples_dir):
     return 1
 
 
-def run_tests(test_path):
+def run_tests(test_path, *, input_format='auto'):
     """
     Run OQP tests.
 
     Args:
         test_path (str): Path to the test directory or 'all' or 'other'.
+        input_format (str): ``auto`` (default), ``inp``, ``oqp``, or ``both``.
 
     Returns:
         str: Test report.
@@ -791,7 +810,7 @@ def run_tests(test_path):
                        output_dir='openqp_test_tmp',
                        total_cpus=None,
                        omp_threads=omp_threads, mpi_manager=mpi_manager)
-    return tester.run(test_path), tester.status
+    return tester.run(test_path, input_format=input_format), tester.status
 
 
 if __name__ == "__main__":

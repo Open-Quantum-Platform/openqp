@@ -577,15 +577,161 @@ class TestOQPTesterCollection(unittest.TestCase):
         })
         self.assertEqual(selected, expected)
 
+    def test_directory_collection_input_format_matrix(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            representative = root / self.REPRESENTATIVE_LEGACY_DECKS[0]
+            ordinary = root / "HF/ordinary_pair.inp"
+            legacy_only = root / "HF/legacy_only.inp"
+            oqp_only = root / "OQP_INPUT/semantic_only.oqp"
+            for path in (representative, ordinary, legacy_only, oqp_only):
+                self._write(path)
+            self._write(representative.with_suffix(".oqp"))
+            self._write(ordinary.with_suffix(".oqp"))
+            self._write(root / "HF/ignored.resolved.oqp")
+
+            expected = {
+                "auto": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.oqp",
+                    "HF/legacy_only.inp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+                "inp": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    "HF/ordinary_pair.inp",
+                    "HF/legacy_only.inp",
+                },
+                "oqp": {
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.oqp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+                "both": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.inp",
+                    "HF/ordinary_pair.oqp",
+                    "HF/legacy_only.inp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+            }
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_format_matrix_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                for input_format, wanted in expected.items():
+                    with self.subTest(input_format=input_format):
+                        selected_paths = tester._get_input_files(
+                            str(root), input_format=input_format
+                        )
+                        self.assertEqual(selected_paths, sorted(selected_paths))
+                        selected = {
+                            Path(path).relative_to(root).as_posix()
+                            for path in selected_paths
+                        }
+                        self.assertEqual(selected, wanted)
+
+    def test_explicit_file_respects_input_format(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy = root / "job.inp"
+            semantic = root / "job.oqp"
+            resolved = root / "job.resolved.oqp"
+            for path in (legacy, semantic, resolved):
+                self._write(path)
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_explicit_format_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+
+                for input_format in ("auto", "inp", "both"):
+                    with self.subTest(path="inp", input_format=input_format):
+                        self.assertEqual(
+                            tester._get_input_files(
+                                str(legacy), input_format=input_format
+                            ),
+                            [str(legacy)],
+                        )
+                for input_format in ("auto", "oqp", "both"):
+                    with self.subTest(path="oqp", input_format=input_format):
+                        self.assertEqual(
+                            tester._get_input_files(
+                                str(semantic), input_format=input_format
+                            ),
+                            [str(semantic)],
+                        )
+
+                with self.assertRaisesRegex(ValueError, "is .inp"):
+                    tester._get_input_files(str(legacy), input_format="oqp")
+                with self.assertRaisesRegex(ValueError, "is .oqp"):
+                    tester._get_input_files(str(semantic), input_format="inp")
+                with self.assertRaisesRegex(ValueError, "Resolved correction"):
+                    tester._get_input_files(str(resolved), input_format="auto")
+                with self.assertRaisesRegex(ValueError, "Invalid test input format"):
+                    tester._get_input_files(str(root), input_format="xyz")
+
+                empty = root / "empty"
+                empty.mkdir()
+                tester.output_dir = str(root / "output")
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                with self.assertRaisesRegex(ValueError, "No test inputs matched"):
+                    tester.run_tests(str(empty), input_format="oqp")
+
+    def test_all_preserves_standard_full_suite_exclusions_for_each_format(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for stem in ("fast", "slow"):
+                self._write(root / f"HF/{stem}.inp")
+                self._write(root / f"HF/{stem}.oqp")
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_all_scope_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                tester._skip_in_full_run = lambda path: Path(path).stem == "slow"
+                expected = {
+                    "auto": {"HF/fast.oqp"},
+                    "inp": {"HF/fast.inp"},
+                    "oqp": {"HF/fast.oqp"},
+                    "both": {"HF/fast.inp", "HF/fast.oqp"},
+                }
+                for input_format, wanted in expected.items():
+                    with self.subTest(input_format=input_format):
+                        selected = {
+                            Path(path).relative_to(root).as_posix()
+                            for path in tester._get_input_files(
+                                "all", input_format=input_format
+                            )
+                        }
+                        self.assertEqual(selected, wanted)
+
     def test_paired_legacy_run_has_distinct_project_and_log(self):
         class RecordingRunner:
             calls = []
 
             def __init__(self, **kwargs):
                 self.calls.append(kwargs)
+                self.kwargs = kwargs
 
             def run(self, test_mod=False):
-                pass
+                artifact = Path(self.kwargs["log"]).parent / "opt_status.txt"
+                artifact.write_text(self.kwargs["project"])
 
             def test(self):
                 return "matched", 0
@@ -607,6 +753,12 @@ class TestOQPTesterCollection(unittest.TestCase):
                 tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
                 legacy_result = tester.run_single_test(str(legacy))
                 semantic_result = tester.run_single_test(str(semantic))
+                legacy_artifact = (
+                    Path(legacy_result["log_file"]).parent / "opt_status.txt"
+                ).read_text()
+                semantic_artifact = (
+                    Path(semantic_result["log_file"]).parent / "opt_status.txt"
+                ).read_text()
 
         self.assertEqual(legacy_result["project"], "H2O_RHF-HF_ENERGY__legacy")
         self.assertEqual(
@@ -622,6 +774,11 @@ class TestOQPTesterCollection(unittest.TestCase):
             [call["project"] for call in RecordingRunner.calls],
             ["H2O_RHF-HF_ENERGY__legacy", "H2O_RHF-HF_ENERGY"],
         )
+        legacy_dir = Path(legacy_result["log_file"]).parent
+        semantic_dir = Path(semantic_result["log_file"]).parent
+        self.assertNotEqual(legacy_dir, semantic_dir)
+        self.assertEqual(legacy_artifact, "H2O_RHF-HF_ENERGY__legacy")
+        self.assertEqual(semantic_artifact, "H2O_RHF-HF_ENERGY")
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):
         class NoopRunner:

@@ -9,9 +9,10 @@ Author: Konstantin Komarov
 Email: constlike@gmail.com
 Created: Aug 2024
 """
+import hashlib
+import json
 import os
 import sys
-import json
 import time
 import subprocess
 from typing import List, Dict, Any
@@ -43,7 +44,9 @@ class OQPTester:
     This class can run tests from specified directories:
       - 'openqp --run-tests path_to_folder': Run tests from a specific folder
       - 'openqp --run-tests other': Run tests from the 'other' folder in examples
-      - 'openqp --run-tests all': Run all tests from all folders in examples
+      - 'openqp --run-tests all': Run the standard suite across examples,
+        with documented slow/non-self-contained exclusions
+      - '--input-format auto|inp|oqp|both': Select the input syntax to test
     Can be used to run all tests in a specific folder.
 
     Attributes:
@@ -60,6 +63,8 @@ class OQPTester:
         "OQP_ENABLE_DDX",  # ddX / PCM continuum solvation built off
         "openqp-dftb not found",  # optional external openqp-dftb library absent
     )
+
+    _INPUT_FORMATS = frozenset({"auto", "inp", "oqp", "both"})
 
     # Keep a deliberately small cross-section of paired legacy inputs in the
     # ordinary suite.  Their .oqp counterparts exercise the new public syntax;
@@ -114,6 +119,7 @@ class OQPTester:
         self.start_time = None
         self.end_time = None
         self.status = 0
+        self.input_format = "auto"
 
         os.environ['OMP_NUM_THREADS'] = str(self.omp_threads)
 
@@ -121,6 +127,24 @@ class OQPTester:
         if self.mpi_manager.use_mpi:
             return 1
         return max(1, self.total_cpus // self.omp_threads)
+
+    @classmethod
+    def _normalize_input_format(cls, input_format: str = "auto") -> str:
+        """Return a validated test-input selector.
+
+        ``auto`` preserves the normal regression preference: concise ``.oqp``
+        decks, legacy-only ``.inp`` decks, and the small representative legacy
+        compatibility set. The other modes are exact extension filters within
+        the selected path or standard-suite scope.
+        """
+        normalized = str(input_format or "auto").strip().lower()
+        if normalized not in cls._INPUT_FORMATS:
+            choices = ", ".join(sorted(cls._INPUT_FORMATS))
+            raise ValueError(
+                f"Invalid test input format {input_format!r}; "
+                f"choose one of: {choices}"
+            )
+        return normalized
 
     def log(self, message: str):
         """Simple logging function to stdout."""
@@ -183,6 +207,20 @@ class OQPTester:
             return f"{project_name}__legacy"
         return project_name
 
+    def _case_output_dir(self, input_file: str,
+                         project_name: str = None) -> str:
+        """Return a deterministic, isolated output directory for one input.
+
+        Several geometry drivers intentionally write conventional artifact
+        names such as ``opt.xyz`` and ``opt_status.txt``. A test-specific
+        directory therefore protects paired ``.inp``/``.oqp`` jobs, as well as
+        unrelated decks with the same basename, when they run concurrently.
+        """
+        project_name = project_name or self._project_name_for_input(input_file)
+        real_input = os.path.realpath(os.path.abspath(input_file))
+        digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
+        return os.path.join(self.output_dir, f"{project_name}__{digest}")
+
     def run_single_test(self, input_file: str) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
@@ -194,7 +232,9 @@ class OQPTester:
             Dict[str, Any]: Dictionary containing test results.
         """
         project_name = self._project_name_for_input(input_file)
-        log = os.path.join(self.output_dir, f"{project_name}.log")
+        case_output_dir = self._case_output_dir(input_file, project_name)
+        os.makedirs(case_output_dir, exist_ok=True)
+        log = os.path.join(case_output_dir, f"{project_name}.log")
 
         usempi = True if self.mpi_manager.use_mpi > 0 else False
 
@@ -303,7 +343,8 @@ class OQPTester:
         result for that one test rather than letting it crash the whole run.
         """
         project_name = self._project_name_for_input(input_file)
-        log = os.path.join(self.output_dir, f"{project_name}.log")
+        case_output_dir = self._case_output_dir(input_file, project_name)
+        log = os.path.join(case_output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
         cmd = [
@@ -367,23 +408,31 @@ class OQPTester:
             "execution_time": time.perf_counter() - start_time,
         }
 
-    def run_tests(self, test_path: str = 'all'):
+    def run_tests(self, test_path: str = 'all', *, input_format: str = 'auto'):
         """
         Run OpenQP tests based on the specified test path.
 
         Args:
             test_path (str): Path to test directory or specific input file.
                              Use 'all' to run all tests in the base directory.
+            input_format (str): ``auto`` (default), ``inp``, ``oqp``, or
+                                ``both``.
         """
 
+        self.input_format = self._normalize_input_format(input_format)
         self.start_time = time.perf_counter()
         if self.mpi_manager.rank == 0:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
 
-        input_files = self._get_input_files(test_path)
+        input_files = self._get_input_files(
+            test_path, input_format=self.input_format
+        )
         if not input_files:
-            return
+            raise ValueError(
+                f"No test inputs matched --input-format "
+                f"{self.input_format} for: {test_path}"
+            )
 
         if self.mpi_manager.use_mpi:
             for input_file in input_files:
@@ -417,7 +466,9 @@ class OQPTester:
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
 
-    def _get_input_files(self, test_path: str) -> List[str]:
+    def _get_input_files(self, test_path: str, *,
+                         input_format: str = 'auto') -> List[str]:
+        input_format = self._normalize_input_format(input_format)
         if test_path == 'all':
             test_dir = self.base_test_dir
         elif test_path == 'other':
@@ -427,31 +478,55 @@ class OQPTester:
         elif os.path.isdir(test_path):
             test_dir = test_path
         elif os.path.isfile(test_path) and test_path.lower().endswith(('.inp', '.oqp')):
+            lower_path = test_path.lower()
+            if lower_path.endswith('.resolved.oqp'):
+                raise ValueError(
+                    f"Resolved correction files are not regression inputs: {test_path}"
+                )
+            extension = os.path.splitext(lower_path)[1].lstrip('.')
+            if input_format not in {'auto', 'both', extension}:
+                raise ValueError(
+                    f"Test input {test_path} is .{extension}, but "
+                    f"--input-format {input_format} was requested"
+                )
             return [test_path]
         else:
-            print(f"Invalid test path: {test_path}")
-            return []
+            raise ValueError(f"Invalid test path: {test_path}")
 
-        input_files = [
+        candidates = sorted(
             os.path.join(root, file)
             for root, _, files in os.walk(test_dir)
             for file in files
-            if file.endswith(('.inp', '.oqp')) and not file.endswith('.resolved.oqp')
-        ]
-        # A same-stem .oqp is the public counterpart of its legacy .inp and
-        # shares the same reference JSON. Run only the semantic form for most
-        # pairs, but retain the representative compatibility decks above. Their
-        # project/log names receive a __legacy suffix so paired runs cannot race.
-        semantic_stems = {
-            os.path.splitext(path)[0]
-            for path in input_files if path.lower().endswith('.oqp')
-        }
-        input_files = [
-            path for path in input_files
-            if path.lower().endswith('.oqp')
-            or os.path.splitext(path)[0] not in semantic_stems
-            or self._is_legacy_compatibility_deck(path)
-        ]
+            if file.lower().endswith(('.inp', '.oqp'))
+            and not file.lower().endswith('.resolved.oqp')
+        )
+
+        if input_format == 'inp':
+            input_files = [
+                path for path in candidates if path.lower().endswith('.inp')
+            ]
+        elif input_format == 'oqp':
+            input_files = [
+                path for path in candidates if path.lower().endswith('.oqp')
+            ]
+        elif input_format == 'both':
+            input_files = candidates
+        else:
+            # A same-stem .oqp is the public counterpart of its legacy .inp
+            # and shares the same reference JSON. The default auto matrix runs
+            # only the concise form for most pairs, while retaining a small
+            # representative legacy set. Paired legacy project/log names use a
+            # __legacy suffix so those intentional paired runs cannot race.
+            semantic_stems = {
+                os.path.splitext(path)[0]
+                for path in candidates if path.lower().endswith('.oqp')
+            }
+            input_files = [
+                path for path in candidates
+                if path.lower().endswith('.oqp')
+                or os.path.splitext(path)[0] not in semantic_stems
+                or self._is_legacy_compatibility_deck(path)
+            ]
         # The full-suite run ('all') skips a few examples that dominate CI
         # wall-clock; they still run when selected explicitly (a directory or a
         # input-file path). See _skip_in_full_run for which and why.
@@ -459,7 +534,7 @@ class OQPTester:
             input_files = [
                 f for f in input_files if not self._skip_in_full_run(f)
             ]
-        return input_files
+        return sorted(input_files)
 
     @staticmethod
     def _skip_in_full_run(input_file: str) -> bool:
@@ -603,6 +678,7 @@ Execution Date: {execution_date}
 Git Branch Info: {git_branch_info}
 Git Commit Info: {git_commit_info}
 Output dir: {self.output_dir}
+Input format: {getattr(self, 'input_format', 'auto')}
 Total tests: {len(self.results)}
 Passed: {passed}
 Failed: {failed}
@@ -633,23 +709,29 @@ Total execution time: {self.format_time(total_time)}
 
         return summary
 
-    def run(self, test_path: str = 'all') -> str:
+    def run(self, test_path: str = 'all', *, input_format: str = 'auto') -> str:
         """
         Run tests and generate a report.
 
         Args:
             test_path (str): Path to test directory or specific input file.
                              Use 'all' to run all tests in the base directory.
+            input_format (str): ``auto`` (default), ``inp``, ``oqp``, or
+                                ``both``.
 
         Returns:
             str: A formatted string containing the test report.
         """
-        self.log(f"Starting OpenQP tests for: {test_path}")
+        input_format = self._normalize_input_format(input_format)
+        self.log(
+            f"Starting OpenQP tests for: {test_path} "
+            f"(input format: {input_format})"
+        )
 
         if os.path.exists(self.report_file):
             os.remove(self.report_file)
 
-        self.run_tests(test_path)
+        self.run_tests(test_path, input_format=input_format)
         if self.mpi_manager.rank == 0:
             report = self.generate_report()
             self.log("OpenQP tests completed")
