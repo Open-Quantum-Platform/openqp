@@ -1047,7 +1047,14 @@ class Hessian(Calculator):
                         target.write('\n')
             os.remove(native_cphf_log)
 
-    def hessian(self):
+    def hessian(self, analysis=True):
+        """Compute/read the Hessian, optionally skipping vibrational analysis.
+
+        Native TS and IRC drivers need only the Cartesian matrix.  Passing
+        ``analysis=False`` avoids normal modes, IR/Raman property displacements,
+        thermochemistry, and cache output while leaving the standalone Hessian
+        workflow unchanged.
+        """
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
 
         if self.read:
@@ -1063,9 +1070,12 @@ class Hessian(Calculator):
                 dump_log(self.mol, title='PyOQP: numerical hessian calculations failed')
                 return None
             else:
+                self.mol.hessian = np.asarray(hessian, dtype=float)
+                if not analysis:
+                    dump_log(self.mol, title='PyOQP: Hessian Matrix Ready')
+                    return self.mol.hessian
                 freqs, modes, inertia = normal_mode(self.mol.get_system(), self.mol.get_mass(), hessian)
                 self.mol.freqs = freqs
-                self.mol.hessian = hessian
                 self.mol.modes = modes
                 self.mol.inertia = inertia
                 self._compute_vibrational_intensities(modes)
@@ -1080,6 +1090,10 @@ class Hessian(Calculator):
                 # save mol
                 if self.save_mol:
                     self.mol.save_data()
+
+        if not analysis:
+            dump_log(self.mol, title='PyOQP: Hessian Matrix Ready')
+            return np.asarray(hessian, dtype=float)
 
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
         dump_log(
@@ -1100,6 +1114,8 @@ class Hessian(Calculator):
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
+
+        return np.asarray(hessian, dtype=float)
 
     def _native_property_tensors_at(self, coord_bohr):
         """Return native OpenQP dipole (a.u.) and static polarizability at displaced geometry."""

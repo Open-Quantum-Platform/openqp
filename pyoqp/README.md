@@ -4,9 +4,9 @@
 
 ## Features
 
-- Native geometry optimization (`[optimize] lib=oqp`) for minima, TS, MECI,
-  MECP, TCI, NEB, IRC, and MEP paths, with SciPy and geomeTRIC available as
-  optional backends
+- Native geometry optimization for minima, TS, MECI, MECP, TCI, NEB, IRC,
+  and MEP paths. Concise `.oqp` workflows select it automatically; traditional
+  sectioned `.inp` files may still select SciPy or the optional geomeTRIC backend
 - Native Fortran initial guesses: `hcore`, `huckel`, `modhuckel`, `minao`, and `sap` (no external quantum-chemistry package required at runtime)
 - Energy, gradient, state-overlap, and hop-driver interfaces for
   nonadiabatic molecular dynamics
@@ -27,6 +27,12 @@ pip install (see the main [README](../README.md) for details and build options):
       git clone https://github.com/Open-Quantum-Platform/openqp.git
       cd openqp
       pip install .
+
+The default installation contains the complete native optimizer.  Install the
+legacy geomeTRIC compatibility backend only for workflows that explicitly use
+`[optimize] lib=geometric` (notably its constrained optimizer):
+
+      pip install 'OpenQP[geometric]'
 
 No environment variables are required afterwards: the installed package
 locates its own native library and data files, so do not set `OPENQP_ROOT`.
@@ -447,6 +453,10 @@ only by `runtype=md` with `qmmm_flag=True`.
 
 optimize section handle the geometry optimization
 
+This is the traditional sectioned `.inp` interface.  New concise `.oqp` files
+do not expose `lib`; all geometry drivers use the native OpenQP optimizer
+automatically.
+
 - lib // choose the optimization library
 
       oqp         use the native optimizer (default). Supports optimize, ts, meci, mecp, tci, neb, irc, and mep
@@ -533,7 +543,9 @@ optimize section handle the geometry optimization
 
 ### [geometric]
 
-geometric section controls the geomeTRIC optimizer backend when [optimize]lib=geometric
+Legacy optional section controlling geomeTRIC when a traditional `.inp` file
+sets `[optimize] lib=geometric`.  It is not part of the concise `.oqp` grammar;
+install it with `pip install 'OpenQP[geometric]'` when needed.
 
 - coordsys // coordinate system passed to geomeTRIC
 

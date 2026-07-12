@@ -30,6 +30,7 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import re
 import numpy as np
 
 import oqp
@@ -64,6 +65,51 @@ _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _NPARAMS = 16
+
+
+def _parse_soc_init_state(label, ns, nt, *, public_labels=False):
+    """Return ``(multiplicity, zero_based_root, public_label)`` for SOC-NAMD.
+
+    Canonical ``.oqp`` inputs use the public MRSF labels ``S0/T0`` for the
+    lowest roots.  Historical ``[md] init_state`` values, however, numbered
+    triplets as ``T1, T2, ...``.  Keep that legacy spelling working while also
+    accepting ``T0`` as an unambiguous alias for the first legacy triplet.
+    Bounds are checked here so an invalid label never reaches a NumPy index.
+    """
+    text = str(label or "").strip().upper()
+    match = re.fullmatch(r"([ST])(\d+)", text)
+    if match is None:
+        raise ValueError(
+            "[md] init_state must be an MRSF state label such as S0, S1, T0, or T1"
+        )
+
+    manifold, requested = match.group(1), int(match.group(2))
+    if manifold == "S":
+        mult = 1
+        root = requested
+        count = int(ns)
+    else:
+        mult = 3
+        count = int(nt)
+        # .oqp state names are uniformly zero based.  Legacy INI/API decks
+        # historically used T1 for the first triplet; T0 is accepted there as
+        # a transition-friendly alias rather than producing a negative index.
+        root = requested if public_labels else max(0, requested - 1)
+
+    if root < 0 or root >= count:
+        last = max(0, count - 1)
+        if manifold == "T" and not public_labels:
+            valid = "T1" if count == 1 else "T1-T%d" % count
+            valid += " (T0 is also accepted for the first root)"
+        else:
+            valid = "%s0" % manifold if count == 1 else "%s0-%s%d" % (
+                manifold, manifold, last)
+        raise ValueError(
+            "[md] init_state='%s' is outside the SOC MCH basis; available %s states: %s"
+            % (text, manifold, valid)
+        )
+
+    return mult, root, "%s%d" % (manifold, root)
 
 
 def _select_response_manifold(mol, multiplicity):
@@ -874,8 +920,12 @@ class NAMD_SOC(NAMD):
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        n = int(label[1:])
+        mult, n, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             mch_idx = [n]                                  # singlet root: S0=0, S1=1, ...
         else:
@@ -886,9 +936,12 @@ class NAMD_SOC(NAMD):
         self.active = a + 1
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[a] = 1.0 + 0.0j
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
         dump_log(self.mol, title=(
-            f'SOC-NAMD: initial active set to adiabat {self.active} by {label} '
-            f'character ({char[a]*100:.1f}% {label})'))
+            f'SOC-NAMD: initial active set to adiabat {self.active} by {state_note} '
+            f'character ({char[a]*100:.1f}% {public_label})'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc(self, with_overlap=False):
@@ -1368,18 +1421,25 @@ class NAMD_SOC_MCH(NAMD_SOC):
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        target = int(label[1:])
+        mult, target, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             active = target + 1                         # S0 -> MCH basis 1
         else:
             active = self.ns + target * 3 + 1            # T0 -> first triplet Ms member
-        if not (1 <= active <= self.nstate_soc):
-            raise ValueError(f"[md] init_state='{label}' is outside the SOC MCH basis")
         self.active = active
         self.coef[:] = 0.0
         self.coef[self.active - 1] = 1.0 + 0.0j
-        dump_log(self.mol, title=f'SOC-MCH-NAMD: initial active set to MCH state {self._mch_active_label(self.active)}')
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
+        dump_log(self.mol, title=(
+            f'SOC-MCH-NAMD: initial active set to MCH state '
+            f'{self._mch_active_label(self.active)} from {state_note}'))
 
     def _mch_active_label(self, active):
         k = active - 1

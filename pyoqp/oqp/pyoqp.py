@@ -320,6 +320,10 @@ class Runner:
         # initialize mol
         self.mol = Molecule(project, input_file, log, silent=silent)
         self.mol.usempi = usempi
+        # NAMD keeps backward compatibility with legacy [md] triplet labels
+        # (T1 is the first root), while canonical .oqp files use public labels
+        # (T0 is the first root).  Preserve that provenance after lowering.
+        self.mol.oqp_public_state_labels = bool(input_metadata)
         if input_metadata:
             self.mol.oqp_input_source = input_metadata.get("source")
             self.mol.oqp_resolved_input = input_metadata.get("resolved")
@@ -411,8 +415,24 @@ class Runner:
         if test_mod:
             self.mol.config['tests']['exception'] = True
 
-        # Run calculations
-        self.run_func[run_type](self.mol)
+        qmmm_flag = self.mol.config["input"].get("qmmm_flag", False)
+        qmmm_flag = (qmmm_flag is True or
+                     str(qmmm_flag).strip().lower() in {"true", "1", "yes", "on"})
+
+        # The OpenMM QM/MM-MD driver is a distinct workflow from the all-QM
+        # velocity-Verlet driver.  The CLI already dispatches it before Runner;
+        # keep the advertised programmatic Runner(input_file="job.oqp") path
+        # equivalent, and cover legacy programmatic inputs at the same time.
+        if qmmm_flag and str(run_type).strip().lower() == "md":
+            if self.mol.usempi and self.mpi_manager.use_mpi > 0:
+                raise RuntimeError(
+                    "ground-state QM/MM-MD cannot run under MPI; create Runner with usempi=False"
+                )
+            from oqp.library.qmmm_md import QMMM_MD
+            self.qmmm_md = QMMM_MD(mol=self.mol)
+            self.qmmm_md.run()
+        else:
+            self.run_func[run_type](self.mol)
 
         dump_log(self.mol, title='', section='end')
 

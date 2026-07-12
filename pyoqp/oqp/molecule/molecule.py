@@ -23,6 +23,7 @@ from oqp.utils.state_labels import is_mrsf, public_state_label
 # (re)generating committed example *test references*. The full bundle is still
 # written by default so the ``guess=json`` restart workflow keeps working.
 LEAN_JSON_ENV = 'OQP_LEAN_JSON'
+HESSIAN_CACHE_VERSION = 2
 
 
 def _env_wants_lean_json():
@@ -1609,6 +1610,52 @@ class Molecule:
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
 
+    @staticmethod
+    def _hessian_cache_value(value):
+        """Return a deterministic JSON-safe representation for cache signing."""
+        if isinstance(value, dict):
+            return {
+                str(key): Molecule._hessian_cache_value(value[key])
+                for key in sorted(value, key=str)
+            }
+        if isinstance(value, (list, tuple)):
+            return [Molecule._hessian_cache_value(item) for item in value]
+        if isinstance(value, set):
+            return sorted(Molecule._hessian_cache_value(item) for item in value)
+        if isinstance(value, np.ndarray):
+            return Molecule._hessian_cache_value(value.tolist())
+        if isinstance(value, np.generic):
+            return value.item()
+        if value is None or isinstance(value, (bool, int, float, str)):
+            return value
+        return str(value)
+
+    def _hessian_request_signature(self, state):
+        """Versioned electronic-model configuration identity for Hessian reuse."""
+        config = self.config
+        # Include complete model-defining configuration sections so less-visible controls
+        # (custom basis libraries/ispher, grids/CAM, PCM radii/epsilon/mode,
+        # DFTB parameter sets/shifts, response settings, and QM/MM embedding)
+        # cannot silently reuse a Hessian produced by another Hamiltonian.
+        model_sections = (
+            'input', 'mp2', 'guess', 'pcm', 'dftb', 'symmetry', 'scf',
+            'dftgrid', 'tdhf', 'qmmm',
+        )
+        model_config = {}
+        for section in model_sections:
+            section_config = dict(config.get(section, {}))
+            if section == 'input':
+                # Geometry is validated numerically below; runtype and thread
+                # count select a workflow/runtime but do not define H(R).
+                for key in ('system', 'system2', 'runtype', 'omp_threads'):
+                    section_config.pop(key, None)
+            model_config[section] = self._hessian_cache_value(section_config)
+        return {
+            'version': HESSIAN_CACHE_VERSION,
+            'state': int(state),
+            'model_config': model_config,
+        }
+
     @mpi_dump
     def save_freqs(self, state):
         jsonfile = self.log.replace('.log', '.hess.json')
@@ -1617,6 +1664,9 @@ class Molecule:
             'coord': self.get_system().tolist(),
             'mass': self.get_mass().tolist(),
             'energy': self.energies[state],
+            'hessian_cache_version': HESSIAN_CACHE_VERSION,
+            'state': int(state),
+            'hessian_request': self._hessian_request_signature(state),
             'hessian': self.hessian.tolist(),
             'hessian_metadata': self.hessian_metadata,
             'freqs': self.freqs.tolist(),
@@ -1706,21 +1756,135 @@ class Molecule:
         with open(jsonfile, 'r') as indata:
             data = json.load(indata)
 
-        energy = data['energy']
-        hessian = data['hessian']
+        cached_request = data.get('hessian_request')
+        if (data.get('hessian_cache_version') != HESSIAN_CACHE_VERSION
+                or not isinstance(cached_request, dict)
+                or cached_request.get('version') != HESSIAN_CACHE_VERSION):
+            raise ValueError(
+                'cached Hessian lacks a current versioned model-configuration/state identity; '
+                'recompute it with hess.read=false'
+            )
+
+        cached_atoms = np.asarray(data.get('atoms', []), dtype=int).reshape(-1)
+        current_atoms = np.asarray(self.get_atoms(), dtype=int).reshape(-1)
+        if cached_atoms.shape != current_atoms.shape or not np.array_equal(
+                cached_atoms, current_atoms):
+            raise ValueError(
+                'cached Hessian atoms do not match the current molecule'
+            )
+        cached_coord = np.asarray(data.get('coord', []), dtype=float).reshape(-1)
+        current_coord = np.asarray(self.get_system(), dtype=float).reshape(-1)
+        if cached_coord.shape != current_coord.shape or not np.allclose(
+                cached_coord, current_coord, rtol=0.0, atol=1.0e-8):
+            raise ValueError(
+                'cached Hessian geometry does not match the current geometry'
+            )
+        cached_mass = np.asarray(data.get('mass', []), dtype=float).reshape(-1)
+        current_mass = np.asarray(self.get_mass(), dtype=float).reshape(-1)
+        if (cached_mass.shape != current_mass.shape
+                or not np.all(np.isfinite(cached_mass))
+                or not np.allclose(cached_mass, current_mass,
+                                   rtol=0.0, atol=1.0e-12)):
+            raise ValueError(
+                'cached Hessian masses do not match the current isotopic masses'
+            )
+        requested_state = int(self.config.get('hess', {}).get('state', 0))
+        cached_state = data.get('state')
+        if cached_state is not None and int(cached_state) != requested_state:
+            raise ValueError(
+                'cached Hessian state %s does not match requested state %s'
+                % (cached_state, requested_state)
+            )
+        current_request = self._hessian_request_signature(requested_state)
+        if cached_request != current_request:
+            cached_model = cached_request.get('model_config', {})
+            current_model = current_request['model_config']
+            mismatched = [
+                section for section in current_model
+                if cached_model.get(section) != current_model[section]
+            ]
+            if cached_request.get('state') != requested_state:
+                mismatched.append('state')
+            raise ValueError(
+                'cached Hessian electronic-model configuration/state does not match the '
+                'current request (%s)' % ', '.join(sorted(set(mismatched)))
+            )
+
+        try:
+            energy = float(data['energy'])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError('cached Hessian energy must be a finite scalar') from exc
+        if not np.isfinite(energy):
+            raise ValueError('cached Hessian energy must be a finite scalar')
+        hessian = np.asarray(data['hessian'], dtype=float)
+        expected = (current_coord.size, current_coord.size)
+        if hessian.shape != expected or not np.all(np.isfinite(hessian)):
+            raise ValueError(
+                'cached Hessian must be a finite matrix with shape %s' % (expected,)
+            )
+        if not np.allclose(hessian, hessian.T, rtol=1.0e-8, atol=1.0e-10):
+            raise ValueError('cached Hessian matrix must be symmetric')
         self.hessian_metadata = data.get('hessian_metadata', {})
-        freqs = data['freqs']
-        modes = data['modes']
-        inertia = data['inertia']
-        self.infrared_intensities = np.array(data.get('infrared_intensities', []), dtype=float)
-        self.raman_activities = np.array(data.get('raman_activities', []), dtype=float)
-        self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
-        self.infrared_mode_dipole_derivatives = np.array(
+        freqs = np.asarray(data['freqs'], dtype=float)
+        modes = np.asarray(data['modes'], dtype=float)
+        inertia = np.asarray(data['inertia'], dtype=float)
+        if freqs.ndim != 1 or not np.all(np.isfinite(freqs)):
+            raise ValueError('cached frequencies must be a finite one-dimensional array')
+        if freqs.size == 0 and modes.size == 0:
+            modes = np.empty((0, current_coord.size), dtype=float)
+        if (modes.shape != (freqs.size, current_coord.size)
+                or not np.all(np.isfinite(modes))):
+            raise ValueError(
+                'cached normal modes must be a finite array with shape (%d, %d)'
+                % (freqs.size, current_coord.size)
+            )
+        if inertia.shape != (3,) or not np.all(np.isfinite(inertia)):
+            raise ValueError('cached principal moments of inertia must be three finite values')
+
+        infrared = np.asarray(data.get('infrared_intensities', []), dtype=float)
+        raman = np.asarray(data.get('raman_activities', []), dtype=float)
+        for name, values in (
+                ('infrared_intensities', infrared),
+                ('raman_activities', raman)):
+            if (values.ndim != 1 or values.size not in (0, freqs.size)
+                    or not np.all(np.isfinite(values))):
+                raise ValueError(
+                    'cached %s must be empty or a finite value for every mode' % name
+                )
+
+        infrared_derivatives = np.asarray(
             data.get('infrared_mode_dipole_derivatives', []), dtype=float
         )
-        self.raman_mode_polarizability_derivatives = np.array(
+        if infrared_derivatives.size == 0:
+            infrared_derivatives = np.empty((0, 3), dtype=float)
+        if (infrared_derivatives.shape not in ((0, 3), (freqs.size, 3))
+                or not np.all(np.isfinite(infrared_derivatives))):
+            raise ValueError(
+                'cached infrared mode derivatives must have shape (nmode, 3)'
+            )
+
+        raman_derivatives = np.asarray(
             data.get('raman_mode_polarizability_derivatives', []), dtype=float
         )
+        if raman_derivatives.size == 0:
+            raman_derivatives = np.empty((0, 3, 3), dtype=float)
+        if (raman_derivatives.shape not in ((0, 3, 3), (freqs.size, 3, 3))
+                or not np.all(np.isfinite(raman_derivatives))):
+            raise ValueError(
+                'cached Raman mode derivatives must have shape (nmode, 3, 3)'
+            )
+        self.hessian = hessian
+        self.freqs = freqs
+        self.modes = modes
+        self.inertia = inertia
+        if (getattr(self, 'energies', None) is not None
+                and len(self.energies) > requested_state):
+            self.energies[requested_state] = energy
+        self.infrared_intensities = infrared
+        self.raman_activities = raman
+        self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
+        self.infrared_mode_dipole_derivatives = infrared_derivatives
+        self.raman_mode_polarizability_derivatives = raman_derivatives
 
         return energy, hessian, freqs, modes, inertia
 

@@ -257,6 +257,209 @@ class TestOQPEngineConverges(unittest.TestCase):
         self.assertTrue(np.allclose(bl, 2.0, atol=1e-2))
 
 
+class TestOQPEngineInitialHessian(unittest.TestCase):
+    WATER_AT = [8, 1, 1]
+    WATER_X = np.array([[0, 0, 0.12], [0, 1.43, -0.96],
+                        [0, -1.43, -0.96]], float)
+
+    def test_omitted_hessian_keeps_existing_model(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")
+
+        expected = eng.coords.guess_hessian(eng.x)
+
+        self.assertTrue(np.array_equal(eng.H, expected))
+
+    def test_cartesian_hessian_regularizes_only_global_external_subspace(self):
+        h_cart = np.diag(np.linspace(-0.4, 0.8, 9))
+
+        eng = NE.OQPEngine(
+            self.WATER_AT, self.WATER_X, coordsys="cart",
+            initial_hessian=h_cart, project_global_rigid_modes=True,
+        )
+        external = eng._global_external_mass_weighted_basis()
+        p_external = external @ external.T
+        p_internal = np.eye(9) - p_external
+        model = np.eye(9) * 0.5
+        expected = (
+            p_internal @ h_cart @ p_internal
+            + p_external @ model @ p_external
+        )
+
+        self.assertTrue(np.allclose(eng.H, expected, atol=1e-12))
+
+    def test_cartesian_hessian_uses_b_pseudoinverse_in_working_coordinates(self):
+        h_cart = np.diag(np.linspace(0.2, 1.0, 9))
+
+        eng = NE.OQPEngine(
+            self.WATER_AT, self.WATER_X, coordsys="dlc",
+            initial_hessian=h_cart,
+        )
+        bmat = eng.coords.b_matrix(eng.x)
+        g_inverse, _ = eng.coords._g_inverse(bmat)
+        b_pinv = bmat.T @ g_inverse
+        expected = b_pinv.T @ h_cart @ b_pinv
+
+        self.assertTrue(np.allclose(eng.H, expected, atol=1e-12))
+        self.assertTrue(np.allclose(eng.H, eng.H.T, atol=1e-14))
+
+    def test_nonstationary_gradient_adds_internal_coordinate_curvature(self):
+        h_cart = np.diag(np.linspace(0.2, 1.0, 9))
+        gradient = np.linspace(-0.03, 0.04, 9)
+
+        eng = NE.OQPEngine(
+            self.WATER_AT, self.WATER_X, coordsys="dlc",
+            initial_hessian=h_cart, initial_gradient=gradient,
+        )
+        bmat = eng.coords.b_matrix(eng.x)
+        g_inverse, _ = eng.coords._g_inverse(bmat)
+        b_pinv = bmat.T @ g_inverse
+        g_work = eng.coords.grad_to_q(eng.x, gradient)
+        correction = np.zeros_like(h_cart)
+        step = 1.0e-4
+        for column in range(9):
+            xp = eng.x.copy(); xp[column] += step
+            xm = eng.x.copy(); xm[column] -= step
+            dbdx = (eng.coords.b_matrix(xp) - eng.coords.b_matrix(xm)) / (2 * step)
+            correction[:, column] = g_work @ dbdx
+        correction = 0.5 * (correction + correction.T)
+        expected = b_pinv.T @ (h_cart - correction) @ b_pinv
+        uncorrected = b_pinv.T @ h_cart @ b_pinv
+
+        self.assertTrue(np.allclose(eng.H, expected, atol=1e-10))
+        self.assertFalse(np.allclose(eng.H, uncorrected, atol=1e-8))
+
+    def test_redundant_null_space_retains_model_curvature(self):
+        # Four mutually bonded atoms generate more primitive internals than the
+        # 3N-6 physical internal-coordinate rank.
+        atoms = [6, 6, 6, 6]
+        xyz = np.array([[0.0, 0.0, 0.0], [2.0, 0.1, 0.0],
+                        [0.9, 1.7, 0.2], [0.8, 0.6, 1.8]])
+        h_cart = np.eye(12) * 0.5
+
+        eng = NE.OQPEngine(atoms, xyz, coordsys="ric",
+                           initial_hessian=h_cart)
+        bmat = eng.coords.b_matrix(eng.x)
+        g_inverse, _ = eng.coords._g_inverse(bmat)
+        b_pinv = bmat.T @ g_inverse
+        null_projector = np.eye(bmat.shape[0]) - bmat @ b_pinv
+        model = eng.coords.guess_hessian(eng.x)
+        expected = (b_pinv.T @ h_cart @ b_pinv
+                    + null_projector.T @ model @ null_projector)
+
+        self.assertGreater(bmat.shape[0], np.linalg.matrix_rank(bmat))
+        self.assertTrue(np.allclose(eng.H, expected, atol=1e-12))
+
+    def test_injected_hessian_uses_the_optimizer_active_subspace_cutoff(self):
+        class NearNullCoordinates:
+            def b_matrix(self, _x):
+                return np.diag([1.0, 1.0e-4, 1.0])
+
+            def _g_inverse(self, bmat):
+                # Mirrors the RIC relative 1e-6 eigenvalue cutoff: the middle
+                # G eigenvalue is 1e-8 and is deliberately inactive.
+                return np.diag([1.0, 0.0, 1.0]), 2
+
+        eng = NE.OQPEngine([1], np.zeros(3), coordsys="cart")
+        eng.coords = NearNullCoordinates()
+        eng._global_external_mass_weighted_basis = lambda: np.empty((3, 0))
+        model = np.eye(3) * 0.5
+
+        transformed = eng._transform_initial_hessian(np.eye(3), model)
+
+        self.assertTrue(np.allclose(transformed, np.diag([1.0, 0.5, 1.0])))
+
+    def test_real_tric_ts_hessian_does_not_follow_external_zero_mode_noise(self):
+        mass = np.array([15.999, 1.008, 1.008])
+        xyz = np.array([[0.0, 0.0, 0.1], [0.0, 1.4, -0.8],
+                        [0.0, -1.4, -0.8]])
+        vibrational = NI._vibrational_basis(mass, xyz)
+        external_projector = np.eye(9) - vibrational @ vibrational.T
+        mw_hessian = (
+            vibrational @ np.diag([-1.0e-6, 0.5, 0.8]) @ vibrational.T
+            - 1.0e-5 * external_projector
+        )
+        mr = np.repeat(mass, 3)
+        h_cart = mw_hessian * np.sqrt(np.outer(mr, mr))
+
+        eng = NE.OQPEngine(
+            [8, 1, 1], xyz, mode="ts", coordsys="tric",
+            initial_hessian=h_cart, initial_gradient=np.zeros(9), masses=mass,
+            project_global_rigid_modes=True,
+        )
+        values, vectors = np.linalg.eigh(eng.H)
+        bmat = eng.coords.b_matrix(eng.x)
+        g_inverse, _ = eng.coords._g_inverse(bmat)
+        displacement = bmat.T @ (g_inverse @ vectors[:, 0])
+        q_mw = displacement * np.sqrt(mr)
+        q_mw /= np.linalg.norm(q_mw)
+
+        self.assertEqual(np.count_nonzero(values < 0.0), 1)
+        self.assertLess(float(q_mw @ external_projector @ q_mw), 1.0e-6)
+
+    def test_external_regularization_does_not_erase_internal_ric_or_dlc_mode(self):
+        mass = np.array([1.0, 35.0])
+        xyz = np.array([[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]])
+        vibrational = NI._vibrational_basis(mass, xyz)
+        mr = np.repeat(mass, 3)
+        h_cart = (-0.5 * (vibrational @ vibrational.T)) * np.sqrt(
+            np.outer(mr, mr)
+        )
+
+        for coordsys in ("ric", "dlc", "tric"):
+            with self.subTest(coordsys=coordsys):
+                eng = NE.OQPEngine(
+                    [1, 17], xyz, mode="ts", coordsys=coordsys,
+                    initial_hessian=h_cart, initial_gradient=np.zeros(6),
+                    masses=mass, project_global_rigid_modes=True,
+                )
+                self.assertLess(float(np.linalg.eigvalsh(eng.H)[0]), -0.1)
+        self.assertEqual(eng.coordsys, "TRIC->RIC(fallback)")
+
+    def test_initial_hessian_validation(self):
+        valid = np.eye(9)
+        invalid = (
+            (np.eye(8), "shape"),
+            (np.full((9, 9), np.nan), "finite"),
+            (valid + np.triu(np.ones((9, 9)), 1), "symmetric"),
+        )
+
+        for hessian, message in invalid:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    NE.OQPEngine(
+                        self.WATER_AT, self.WATER_X, coordsys="cart",
+                        initial_hessian=hessian,
+                    )
+
+        with self.assertRaisesRegex(ValueError, "initial_gradient must have shape"):
+            NE.OQPEngine(
+                self.WATER_AT, self.WATER_X, coordsys="dlc",
+                initial_hessian=np.eye(9), initial_gradient=np.zeros(8),
+            )
+
+    def test_ts_step_follows_injected_negative_cartesian_mode(self):
+        h_cart = np.diag([-0.5, 0.4, 0.8])
+        eng = NE.OQPEngine(
+            [1], [0.0, 0.0, 0.0], mode="ts", coordsys="cart",
+            initial_hessian=h_cart,
+        )
+
+        step = eng._rfo_step(eng.H, np.array([0.1, 0.1, 0.1]))
+
+        self.assertEqual(int(np.argmax(np.abs(eng._followed))), 0)
+        self.assertNotEqual(step[0], 0.0)
+        self.assertTrue(np.array_equal(eng.H, h_cart))
+
+    def test_ts_follow_mode_has_a_clear_runtime_bound_error(self):
+        eng = NE.OQPEngine(
+            [1], [0.0, 0.0, 0.0], mode="ts", coordsys="cart",
+            follow_mode=3,
+        )
+
+        with self.assertRaisesRegex(ValueError, "out of range for 3"):
+            eng._rfo_step(eng.H, np.array([0.1, 0.1, 0.1]))
+
+
 # --------------------------------------------------------------------------- #
 class TestDispatchAndValidation(unittest.TestCase):
     def test_input_checker_accepts_oqp(self):
@@ -439,6 +642,32 @@ class TestOQPIRC(unittest.TestCase):
         self.assertLess(curv, 0.0)
         self.assertAlmostEqual(abs(mode[0]), 1.0, places=6)
 
+    def test_imaginary_mode_rejects_minimum_and_higher_order_saddle(self):
+        with self.assertRaisesRegex(ValueError, "found 0"):
+            NI.imaginary_mode([1.0], np.diag([1.0, 2.0, 3.0]))
+        with self.assertRaisesRegex(ValueError, "found 2"):
+            NI.imaginary_mode([1.0], np.diag([-4.0, -1.0, 2.0]))
+
+    def test_imaginary_mode_projects_translation_and_rotation_noise(self):
+        mass = np.array([16.0, 1.0, 1.0])
+        xyz = np.array([[0.0, 0.0, 0.1], [0.0, 1.4, -0.8],
+                        [0.0, -1.4, -0.8]])
+        basis = NI._vibrational_basis(mass, xyz)
+        self.assertEqual(basis.shape, (9, 3))
+        vibrational_curvature = np.diag([-0.4, 0.7, 1.1])
+        internal = basis @ vibrational_curvature @ basis.T
+        external_projector = np.eye(9) - basis @ basis.T
+        # Deliberately negative external-mode noise would look like seven
+        # imaginary modes without projection.
+        mw_hessian = internal - 1.0e-5 * external_projector
+        mr = np.repeat(mass, 3)
+        hessian = mw_hessian * np.sqrt(np.outer(mr, mr))
+
+        mode, curvature = NI.imaginary_mode(mass, hessian, coordinates=xyz)
+
+        self.assertAlmostEqual(curvature, -0.4, places=10)
+        self.assertAlmostEqual(np.linalg.norm(mode), 1.0, places=12)
+
     def test_irc_descends_both_directions(self):
         mode, _ = NI.imaginary_mode([1.0], np.diag([-4.0, 2.0, 2.0]))
         for sign, target in ((+1, 1.0), (-1, -1.0)):
@@ -447,9 +676,44 @@ class TestOQPIRC(unittest.TestCase):
             self.assertTrue(res["converged"])
             self.assertLess(abs(res["points"][-1]["x"][0] - target), 0.1)
             es = [p["energy"] for p in res["points"]]
-            # monotonic descent up to the final basin-overshoot point
             self.assertTrue(all(es[i] >= es[i + 1] - 1e-9
-                                for i in range(len(es) - 2)))
+                                for i in range(len(es) - 1)))
+            if res["reason"] == "minimum_bracket":
+                # The uphill fixed-step overshoot is discarded and the lower
+                # accepted side of the bracket is restored.
+                self.assertLessEqual(abs(res["points"][-1]["x"][0]), 1.0)
+
+    def test_last_allowed_point_is_the_last_evaluated_geometry(self):
+        evaluated = []
+
+        def tracked_eg(xf):
+            evaluated.append(np.asarray(xf, dtype=float).copy())
+            return self._eg(xf)
+
+        mode, _ = NI.imaginary_mode([1.0], np.diag([-4.0, 2.0, 2.0]))
+        res = IRC([1.0], [0, 0, 0.0], mode, step=0.08).run(
+            tracked_eg, max_points=1, gtol=1.0e-12,
+        )
+
+        self.assertFalse(res["converged"])
+        self.assertEqual(len(evaluated), 1)
+        self.assertTrue(np.array_equal(evaluated[-1], res["points"][-1]["x"]))
+
+    def test_minimum_bracket_restores_callback_to_lower_point(self):
+        evaluated = []
+
+        def tracked_eg(xf):
+            evaluated.append(np.asarray(xf, dtype=float).copy())
+            return self._eg(xf)
+
+        mode, _ = NI.imaginary_mode([1.0], np.diag([-4.0, 2.0, 2.0]))
+        res = IRC([1.0], [0, 0, 0.0], mode, step=0.08).run(
+            tracked_eg, max_points=80, gtol=1.0e-4,
+        )
+
+        self.assertEqual(res["reason"], "minimum_bracket")
+        self.assertTrue(np.array_equal(evaluated[-1], res["points"][-1]["x"]))
+        self.assertLessEqual(abs(res["points"][-1]["x"][0]), 1.0)
 
 
 class TestOQPMEP(unittest.TestCase):

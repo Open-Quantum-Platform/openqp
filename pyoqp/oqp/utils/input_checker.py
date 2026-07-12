@@ -374,6 +374,13 @@ def _iter_coordinate_lines(system: str) -> tuple[list[str], str | None]:
 
     first_line = lines[0].strip()
     if first_line:
+        # A QM/MM reference such as ``mol.pdb 0 1 2`` also has three finite
+        # numeric fields after its first token.  Recognize supported geometry
+        # filenames before applying the inline-coordinate heuristic.
+        path_token, _ = _split_geometry_reference(first_line)
+        if path_token.lower().endswith((".xyz", ".pdb")):
+            return [], first_line
+
         fields = first_line.split()
         try:
             is_coordinate = len(fields) >= 4 and all(
@@ -1589,7 +1596,7 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     requested = []
     if runtype == "grad":
         requested.extend(_as_list(_get(config, "properties", "grad", [])))
-    if runtype in {"optimize", "mep", "ts"}:
+    if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
     if runtype in {"meci", "mecp"}:
         requested.append(_get(config, "optimize", "istate", 0))
@@ -1820,6 +1827,16 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
 
+    if bool(_get(config, "input", "qmmm_flag", False)):
+        report.add(
+            "ERROR",
+            "input.qmmm_flag",
+            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
+            value=f"qmmm_flag=true/runtype={runtype}",
+            expected="a supported QM/MM energy, md, or namd workflow",
+            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+        )
+
     if lib not in OPT_LIBS:
         report.add(
             "ERROR",
@@ -1827,7 +1844,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy or geometric.",
+            action="Use oqp (recommended), scipy, or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -1842,6 +1859,81 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
+    if lib == "oqp":
+        init_hessian = _as_lower(_get(config, "oqp", "init_hessian", "model"))
+        if init_hessian not in {"model", "numerical", "analytical"}:
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "Unknown native initial-Hessian policy.",
+                value=init_hessian,
+                expected="model, numerical, or analytical",
+                action="Use model unless a fresh numerical or analytical TS Hessian is required.",
+            )
+        elif init_hessian != "model" and runtype != "ts":
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "A real native initial Hessian is currently consumed only by runtype=ts.",
+                value=f"{runtype}/{init_hessian}",
+                expected="runtype=ts",
+                action="Use oqp.init_hessian=model or switch to a native TS search.",
+            )
+        elif init_hessian == "analytical":
+            capability, reason = analytic_hessian_capability(config)
+            if capability != "supported":
+                report.add(
+                    "ERROR", "oqp.init_hessian",
+                    "Analytical native TS initialization is unavailable for this method/state.",
+                    value=init_hessian,
+                    expected="a supported HF/DFT ground-state analytic Hessian",
+                    action=reason,
+                )
+            max_l = _basis_max_angular_momentum(config)
+            if max_l is not None and max_l >= 4:
+                report.add(
+                    "ERROR", "input.basis",
+                    "Analytical native TS initialization supports basis angular momentum only up to L=3.",
+                    value=f"max L={max_l}",
+                    expected="max L <= 3",
+                    action="Use hessian=numerical for this TS search, or choose a basis without g/higher functions.",
+                )
+
+        hess_restart = _get(config, "hess", "restart", False)
+        if (runtype == "irc" and hess_restart) or (
+                runtype == "ts" and init_hessian != "model" and hess_restart):
+            report.add(
+                "ERROR", "hess.restart",
+                "Native TS/IRC Hessian restart artifacts are not yet signed to a geometry and electronic model.",
+                value=hess_restart,
+                expected="False",
+                action="Set [hess] restart=False; standalone numerical Hessian restart remains available.",
+            )
+
+        irc_direction = _as_lower(_get(config, "oqp", "irc_direction", "forward"))
+        if runtype == "irc" and irc_direction not in {"forward", "backward", "reverse"}:
+            report.add(
+                "ERROR", "oqp.irc_direction",
+                "Unknown native IRC direction.",
+                value=irc_direction,
+                expected="forward or backward",
+                action="Set irc_direction=forward or irc_direction=backward.",
+            )
+
+        if runtype in {"irc", "mep"}:
+            path_gtol = _get(config, "oqp", "path_gtol", 1.0e-4)
+            try:
+                path_gtol_value = float(path_gtol)
+                valid_path_gtol = math.isfinite(path_gtol_value) and path_gtol_value > 0
+            except (TypeError, ValueError):
+                valid_path_gtol = False
+            if not valid_path_gtol:
+                report.add(
+                    "ERROR", "oqp.path_gtol",
+                    "Native path gradient tolerance must be positive.",
+                    value=path_gtol,
+                    expected="> 0",
+                    action="Set path_gtol to a positive value such as 1e-4.",
+                )
+
     if method == "hf" and istate > 0:
         report.add(
             "ERROR",
@@ -1852,7 +1944,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Set istate=0 or switch to method=tdhf.",
         )
 
-    if method == "tdhf" and runtype in {"optimize", "mep", "ts"} and istate == 0:
+    if method == "tdhf" and runtype in {"optimize", "mep", "ts", "irc", "neb"} and istate == 0:
         report.add(
             "ERROR",
             "optimize.istate",
@@ -1907,18 +1999,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "optimize.lib",
             "This runtype is not wired to the SciPy optimizer map.",
             value=f"{lib}/{runtype}",
-            expected="geometric",
-            action="Use [optimize] lib=geometric for runtype=ts/irc.",
+            expected="oqp or geometric",
+            action="Use [optimize] lib=oqp (recommended) or lib=geometric for runtype=ts/irc.",
         )
 
     if runtype == "neb" and lib not in {"geometric", "oqp"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is wired through geomeTRIC and the oqp optimizer.",
+            "NEB is wired through the native oqp optimizer and the optional geomeTRIC backend.",
             value=lib,
-            expected="geometric or oqp",
-            action="Set [optimize] lib=geometric or lib=oqp for runtype=neb.",
+            expected="oqp or geometric",
+            action="Set [optimize] lib=oqp (recommended) or lib=geometric for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -1970,6 +2062,7 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
+    lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
     product = _get(config, "neb", "product", "")
     nimage = _get(config, "neb", "nimage", 5)
 
@@ -2026,6 +2119,68 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             expected=">= 3",
             action="Set [neb] nimage=3 or larger.",
         )
+
+    if lib == "oqp":
+        # Keep sectioned legacy inputs as strict as the concise .oqp parser.
+        # These controls are consumed only by the native NEB implementation.
+        numeric_controls = {
+            "spring": (0.05, 0.0, True),
+            "fmax": (2.0e-3, 0.0, False),
+            "frms": (2.0e-3, 0.0, False),
+            "climb_fmax": (0.05, 0.0, False),
+            "neb_dt": (0.5, 0.0, False),
+            "maxmove": (0.2, 0.0, False),
+            "end_fmax": (1.0e-3, 0.0, False),
+        }
+        for key, (default, lower, inclusive) in numeric_controls.items():
+            value = _get(config, "oqp", key, default)
+            try:
+                number = float(value)
+                valid = math.isfinite(number) and (
+                    number >= lower if inclusive else number > lower
+                )
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                relation = ">=" if inclusive else ">"
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB control.",
+                    value=value,
+                    expected=f"a finite number {relation} {lower:g}",
+                    action=f"Set [oqp] {key} to a valid native NEB value.",
+                )
+
+        for key in ("climb", "align", "opt_ends"):
+            value = _get(config, "oqp", key, True)
+            if not isinstance(value, bool):
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB switch.",
+                    value=value,
+                    expected="true or false",
+                    action=f"Set [oqp] {key}=true or false.",
+                )
+
+        climb = _get(config, "oqp", "climb", True)
+        try:
+            fmax = float(_get(config, "oqp", "fmax", 2.0e-3))
+            climb_fmax = float(_get(config, "oqp", "climb_fmax", 0.05))
+        except (TypeError, ValueError):
+            fmax = climb_fmax = float("nan")
+        if (isinstance(climb, bool) and climb
+                and math.isfinite(fmax) and math.isfinite(climb_fmax)
+                and climb_fmax < fmax):
+            report.add(
+                "ERROR",
+                "oqp.climb_fmax",
+                "Climbing-image activation must occur before final NEB convergence.",
+                value=climb_fmax,
+                expected="climb_fmax >= fmax when climb=true",
+                action="Increase climb_fmax or disable climbing-image NEB.",
+            )
 
 
 def _check_soc(config: dict[str, Any], report: CheckReport) -> None:

@@ -371,6 +371,39 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
+    def test_tdhf_irc_state_is_positive_and_within_nstate(self):
+        input_checker = load_module(
+            "input_checker_full_irc_state_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        base = {
+            "input": {"runtype": "irc", "method": "tdhf", "basis": "3-21g",
+                      "system": "\nH 0 0 0\nH 0 0 0.7"},
+            "guess": {},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "multiplicity": 3, "nstate": 2},
+            "properties": {},
+            "optimize": {"lib": "oqp", "istate": 0},
+            "hess": {"type": "numerical", "state": 1, "nproc": 1},
+        }
+
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("TDHF optimization cannot target state 0", report.to_text())
+
+        base["optimize"]["istate"] = 3
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("Requested state index exceeds", report.to_text())
+
+        base["optimize"]["istate"] = 1
+        base["hess"]["restart"] = True
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("restart artifacts are not yet signed", report.to_text())
+
+        base["hess"]["restart"] = False
+        base["input"]["qmmm_flag"] = True
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("not connected to the active QM/MM force backend", report.to_text())
+
     def test_optimize_lib_default_is_oqp(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 

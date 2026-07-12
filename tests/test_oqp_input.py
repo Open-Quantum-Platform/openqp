@@ -558,6 +558,23 @@ def test_qmmm_call_enables_qmmm_and_resolves_local_paths(tmp_path):
     assert legacy["properties"]["grad"] == "0"
 
 
+@pytest.mark.parametrize("spelling", ["nsteps", "n_steps"])
+def test_qmmm_md_step_alias_lowers_to_active_config_key(spelling):
+    _, legacy = _parse(
+        'dft/pbe0/def2-svp geom="qm.xyz" md(S0) qmmm(%s=2)' % spelling
+    )
+    assert legacy["qmmm"]["n_steps"] == "2"
+    assert "nsteps" not in legacy["qmmm"]
+
+
+def test_qmmm_md_step_alias_collision_is_rejected():
+    with pytest.raises(OQPInputError, match="same QM/MM MD step count"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="qm.xyz" md(S0) '
+            'qmmm(nsteps=2,n_steps=3)'
+        )
+
+
 def test_md_requires_qmmm_and_physical_state_cannot_be_overridden():
     with pytest.raises(OQPInputError, match=r"requires qmmm\(\.\.\.\)"):
         oqp_input.parse_canonical_oqp(
@@ -617,6 +634,13 @@ def test_soc_uses_equal_nstate_or_explicit_singlet_triplet_counts():
     assert split["tdhf"]["nstate_s"] == "3"
     assert split["tdhf"]["nstate_t"] == "5"
 
+    _, exact_split = _parse(
+        'mrsf/bhhlyp/6-31g* geom="h2o.xyz" soc '
+        'tdhf(nstate_s=3,nstate_t=5)'
+    )
+    assert exact_split["tdhf"]["nstate_s"] == "3"
+    assert exact_split["tdhf"]["nstate_t"] == "5"
+
     with pytest.raises(OQPInputError, match="requires ns and nt together"):
         oqp_input.parse_canonical_oqp(
             'mrsf/bhhlyp/6-31g* geom="h2o.xyz" soc(ns=3)'
@@ -635,6 +659,31 @@ def test_soc_uses_equal_nstate_or_explicit_singlet_triplet_counts():
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" soc '
             'tdhf(nstate_s=3,nstate_t=5)'
+        )
+
+    with pytest.raises(OQPInputError, match="requires nstate_s and nstate_t together"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf/bhhlyp/6-31g* geom="h2o.xyz" soc tdhf(nstate_s=3)'
+        )
+
+
+@pytest.mark.parametrize("key", ["nstate_s", "nstate_t"])
+@pytest.mark.parametrize("value", ["0", "-1", "2.5", "true", '"2"', "many"])
+def test_exact_tdhf_soc_state_counts_require_positive_integers(key, value):
+    counts = {"nstate_s": "3", "nstate_t": "5"}
+    counts[key] = value
+    with pytest.raises(OQPInputError, match=r"tdhf %s must be a positive integer" % key):
+        oqp_input.parse_canonical_oqp(
+            'mrsf/bhhlyp/6-31g* geom="h2o.xyz" soc '
+            'tdhf(nstate_s=%s,nstate_t=%s)'
+            % (counts["nstate_s"], counts["nstate_t"])
+        )
+
+
+def test_concise_soc_state_counts_reject_non_integer_numbers():
+    with pytest.raises(OQPInputError, match="soc ns must be a positive integer"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf/bhhlyp/6-31g* geom="h2o.xyz" soc(ns=2.5,nt=3)'
         )
 
 
@@ -713,84 +762,121 @@ def test_sf_state_aware_drivers_require_an_explicit_root(driver):
 def test_irc_public_options_lower_to_owning_sections():
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="ts.xyz" '
-        'irc(S0,direction=reverse,step=0.08,maxit=20,hessian=analytical,lib=oqp)'
+        'irc(S0,direction=reverse,step=0.08,gtol=2e-5,maxit=20,hessian=analytical)'
     )
     assert legacy["input"]["runtype"] == "irc"
     assert legacy["optimize"]["istate"] == "0"
     assert legacy["optimize"]["maxit"] == "20"
-    assert legacy["optimize"]["lib"] == "oqp"
-    assert legacy["oqp"]["irc_direction"] == "reverse"
+    assert "lib" not in legacy["optimize"]
+    assert legacy["oqp"]["irc_direction"] == "backward"
     assert legacy["oqp"]["irc_step"] == "0.08"
+    assert legacy["oqp"]["path_gtol"] == "2e-05"
     assert legacy["hess"]["type"] == "analytical"
 
-    _, geometric = _parse(
-        'dft/pbe0/def2-svp geom="ts.xyz" '
-        'irc(S0,direction=forward,hessian=first,lib=geometric)'
-    )
-    assert geometric["geometric"]["hessian"] == "first"
-    assert "hess" not in geometric
-
-    with pytest.raises(OQPInputError, match="irc step=.*only with lib=oqp"):
+    with pytest.raises(OQPInputError, match="native OpenQP optimizer automatically"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" irc(S0,lib=geometric,step=0.1)'
         )
     with pytest.raises(OQPInputError, match="must be numerical or analytical"):
         oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="ts.xyz" irc(S0,lib=oqp,hessian=first)'
+            'dft/pbe0/def2-svp geom="ts.xyz" irc(S0,hessian=first)'
         )
 
 
 def test_neb_workflow_options_lower_to_neb_and_oqp_sections(tmp_path):
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="reactant.xyz" '
-        'neb(S0,product="product.xyz",images=7,spring=0.08,climb=true,maxit=12)',
+        'neb(S0,product="product.xyz",images=7,spring=0.08,climb=true,'
+        'fmax=0.002,frms=0.001,align=true,opt_ends=true,dt=0.4,'
+        'output="final-path.xyz",maxit=12)',
         tmp_path,
     )
     assert legacy["neb"]["product"] == str((tmp_path / "product.xyz").resolve())
     assert legacy["neb"]["nimage"] == "7"
     assert legacy["oqp"]["spring"] == "0.08"
     assert legacy["oqp"]["climb"] == "True"
+    assert legacy["oqp"]["fmax"] == "0.002"
+    assert legacy["oqp"]["frms"] == "0.001"
+    assert legacy["oqp"]["align"] == "True"
+    assert legacy["oqp"]["opt_ends"] == "True"
+    assert legacy["oqp"]["neb_dt"] == "0.4"
+    assert legacy["oqp"]["neb_output"] == str((tmp_path / "final-path.xyz").resolve())
     assert legacy["optimize"]["maxit"] == "12"
 
-    _, geometric = _parse(
-        'dft/pbe0/def2-svp geom="reactant.xyz" '
-        'neb(S0,product="product.xyz",images=7,lib=geometric,k=0.8,maxg=0.2,climb=0.5,align=true)',
-        tmp_path,
-    )
-    assert geometric["neb"]["k"] == "0.8"
-    assert geometric["neb"]["maxg"] == "0.2"
-    assert geometric["neb"]["align"] == "True"
-    assert geometric["neb"]["climb"] == "0.5"
-    with pytest.raises(OQPInputError, match="does not belong to lib=geometric"):
+    with pytest.raises(OQPInputError, match="legacy geomeTRIC NEB option"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="r.xyz" '
-            'neb(S0,product="p.xyz",lib=geometric,spring=0.1)'
+            'neb(S0,product="p.xyz",k=0.1)'
+        )
+    with pytest.raises(OQPInputError, match="climb must be true or false"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="r.xyz" '
+            'neb(S0,product="p.xyz",climb=0.5)'
+        )
+    with pytest.raises(OQPInputError, match="climb_fmax.*greater than or equal"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="r.xyz" '
+            'neb(S0,product="p.xyz",climb=true,fmax=0.01,climb_fmax=0.005)'
+        )
+    with pytest.raises(OQPInputError, match="climb_fmax.*greater than or equal"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="r.xyz" '
+            'neb(S0,product="p.xyz",fmax=0.01) oqp(climb_fmax=0.005)'
         )
 
 
-def test_optimizer_options_are_backend_specific_and_mep_aliases_map_correctly():
-    with pytest.raises(OQPInputError, match="optimizer is used only with lib=scipy"):
+def test_geometry_drivers_are_native_and_mep_aliases_map_correctly():
+    with pytest.raises(OQPInputError, match="legacy SciPy-backend option"):
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" meci(S0,S1,optimizer=bfgs)'
         )
-    with pytest.raises(OQPInputError, match="ts hessian=.*only with lib=geometric"):
+    with pytest.raises(OQPInputError, match="hessian must be model, numerical, or analytical"):
         oqp_input.parse_canonical_oqp(
-            'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,lib=oqp,hessian=first)'
+            'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,hessian=first)'
         )
-
-    _, scipy = _parse(
-        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-        'mep(S0,lib=scipy,points=4,step=0.12)'
-    )
-    assert scipy["optimize"]["mep_maxit"] == "4"
-    assert scipy["optimize"]["step_size"] == "0.12"
 
     _, native = _parse(
         'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
-        'mep(S0,lib=oqp,points=4,step=0.12)'
+        'mep(S0,points=4,step=0.12,gtol=3e-5)'
     )
     assert native["optimize"]["maxit"] == "4"
     assert native["oqp"]["mep_step"] == "0.12"
+    assert native["oqp"]["path_gtol"] == "3e-05"
+
+    _, ts = _parse(
+        'dft/pbe0/def2-svp geom="ts.xyz" '
+        'ts(S0,hessian=numerical,coordsys=dlc,trust=0.1,trust_max=0.3,follow=1)'
+    )
+    assert ts["oqp"] == {
+        "init_hessian": "numerical", "coordsys": "dlc", "trust": "0.1",
+        "trust_max": "0.3", "follow": "1",
+    }
+    with pytest.raises(OQPInputError, match="native OpenQP optimizer automatically"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,lib=geometric)'
+        )
+
+
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        ('dft/pbe0/def2-svp geom="h2o.xyz" energy oqp(init_hessian=analytical)',
+         "not used by the native energy workflow"),
+        ('dft/pbe0/def2-svp geom="ts.xyz" irc(S0) oqp(frms=0.1)',
+         "not used by the native irc workflow"),
+        ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0) oqp(trust=-1)',
+         "0 < trust <= trust_max"),
+        ('dft/pbe0/def2-svp geom="ts.xyz" ts(S0) oqp(follow=-1)',
+         "non-negative mode index"),
+        ('dft/pbe0/def2-svp geom="r.xyz" neb(S0,product="p.xyz") oqp(fmax=nan)',
+         "positive number"),
+        ('dft/pbe0/def2-svp geom="h2o.xyz" opt(S0,trust=nan)',
+         "0 < trust <= trust_max"),
+    ],
+)
+def test_native_exact_section_controls_cannot_be_ignored_or_invalid(text, message):
+    with pytest.raises(OQPInputError, match=message):
+        oqp_input.parse_canonical_oqp(text)
 
 
 def test_ekt_parent_state_uses_physical_mrsf_label():

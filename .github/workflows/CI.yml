@@ -73,7 +73,10 @@ jobs:
             # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
             # native library, header and share/ data into the installed package,
             # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
-            # and runtime deps (numpy/scipy/geometric/...) come from pyproject.
+            # and required runtime deps (numpy/scipy/...) come from pyproject.
+            # geomeTRIC is an optional legacy backend; the non-MPI legs install
+            # its extra below so compatibility remains covered without making it
+            # a requirement for the native-first installation.
             # USE_LIBINT/ENABLE_OPENMP are pyproject defaults (ILP64 is
             # unconditional); CI overrides the build type, the MPI matrix leg,
             # ENABLE_DDX, and the BLAS/LAPACK choice.
@@ -91,8 +94,12 @@ jobs:
             # the upstream hosts intermittently return HTTP 504. The bundled-
             # externals cache persists across retries, so a re-run only re-fetches
             # whatever failed.
+            package="."
+            if [ "${{ matrix.MPI }}" = "OFF" ]; then
+              package=".[geometric]"
+            fi
             n=0
-            until pip install -v . \
+            until pip install -v "$package" \
                 --config-settings=cmake.build-type=Debug \
                 --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \

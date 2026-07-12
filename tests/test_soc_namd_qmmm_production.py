@@ -14,6 +14,8 @@ import types
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNFUNC = ROOT / "pyoqp" / "oqp" / "library" / "runfunc.py"
@@ -116,6 +118,98 @@ def load_runfunc_with_namd_stubs():
     return module, calls, cleanup
 
 
+def load_namd_with_stubs():
+    """Import namd.py without the compiled extension for state-map tests."""
+    logs = []
+    oqp = types.ModuleType("oqp")
+    oqp.__path__ = []
+    library = types.ModuleType("oqp.library")
+    library.__path__ = []
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+    single_point = types.ModuleType("oqp.library.single_point")
+    noop = type("_Noop", (), {})
+    for name in ("SinglePoint", "Gradient", "LastStep", "BasisOverlap", "NACME"):
+        setattr(single_point, name, noop)
+    file_utils = types.ModuleType("oqp.utils.file_utils")
+    setattr(file_utils, "dump_log", lambda *_args, **kwargs: logs.append(kwargs.get("title")))
+
+    modules = {
+        "oqp": oqp,
+        "oqp.library": library,
+        "oqp.library.single_point": single_point,
+        "oqp.utils": utils,
+        "oqp.utils.file_utils": file_utils,
+    }
+    saved = {name: sys.modules.get(name) for name in modules}
+    sys.modules.update(modules)
+
+    def cleanup():
+        for name, value in saved.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value
+
+    spec = importlib.util.spec_from_file_location("namd_state_map_under_test", NAMD)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, logs, cleanup
+
+
+def load_pyoqp_with_stubs():
+    """Import pyoqp.py without native/OpenMM dependencies for Runner tests."""
+    oqp = types.ModuleType("oqp")
+    oqp.__path__ = []
+    library = types.ModuleType("oqp.library")
+    library.__path__ = []
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+
+    file_utils = types.ModuleType("oqp.utils.file_utils")
+    setattr(file_utils, "dump_log", lambda *_args, **_kwargs: None)
+    input_checker = types.ModuleType("oqp.utils.input_checker")
+    setattr(input_checker, "check_input_values", lambda *_args, **_kwargs: None)
+    molecule = types.ModuleType("oqp.molecule")
+    setattr(molecule, "Molecule", type("Molecule", (), {}))
+    runfunc = types.ModuleType("oqp.library.runfunc")
+    for name in (
+        "compute_energy", "compute_grad", "compute_nac", "compute_soc",
+        "compute_geom", "compute_md", "compute_nacme", "compute_properties",
+        "compute_data", "compute_hess", "compute_thermo", "compute_namd",
+    ):
+        setattr(runfunc, name, lambda *_args, **_kwargs: None)
+    mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+    setattr(mpi_utils, "MPIManager", type("MPIManager", (), {"use_mpi": 0, "rank": 0}))
+
+    modules = {
+        "oqp": oqp,
+        "oqp.library": library,
+        "oqp.library.runfunc": runfunc,
+        "oqp.utils": utils,
+        "oqp.utils.file_utils": file_utils,
+        "oqp.utils.input_checker": input_checker,
+        "oqp.utils.mpi_utils": mpi_utils,
+        "oqp.molecule": molecule,
+    }
+    saved = {name: sys.modules.get(name) for name in modules}
+    sys.modules.update(modules)
+
+    def cleanup():
+        for name, value in saved.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value
+
+    spec = importlib.util.spec_from_file_location("pyoqp_runner_under_test", PYOQP)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, cleanup
+
+
 class DummyMol:
     def __init__(self, *, qmmm, soc, soc_basis="adiabatic"):
         self.config = {
@@ -161,6 +255,85 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("'S', ist-1, 'T', jst-1", soc)
         self.assertIn("'T', ist-1, trim(trip(ims_i)), 'T', jst-1", soc)
         self.assertIn("'T', (i-ns-1)/3, '( 0)'", soc)
+
+    def test_soc_namd_preserves_legacy_t1_and_public_t0_state_maps(self):
+        namd, logs, cleanup = load_namd_with_stubs()
+        try:
+            self.assertEqual(namd._parse_soc_init_state("T1", 1, 1), (3, 0, "T0"))
+            self.assertEqual(
+                namd._parse_soc_init_state("T0", 1, 1, public_labels=True),
+                (3, 0, "T0"),
+            )
+            self.assertEqual(
+                namd._parse_soc_init_state("T1", 2, 2, public_labels=True),
+                (3, 1, "T1"),
+            )
+            with self.assertRaisesRegex(ValueError, "outside the SOC MCH basis"):
+                namd._parse_soc_init_state("T1", 1, 1, public_labels=True)
+
+            # Legacy T1 must select the first triplet block in both the
+            # spin-adiabatic character resolver and the explicit MCH path.
+            adiabatic = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+            adiabatic.init_state = "T1"
+            adiabatic.ns = adiabatic.nt = 1
+            adiabatic.nstate_soc = 4
+            adiabatic.mol = types.SimpleNamespace(oqp_public_state_labels=False)
+            adiabatic.coef = np.zeros(4, dtype=complex)
+            adiabatic._resolve_initial_active(np.eye(4, dtype=complex))
+            self.assertEqual(adiabatic.active, 2)
+            self.assertEqual(np.flatnonzero(adiabatic.coef).tolist(), [1])
+
+            mch = namd.NAMD_SOC_MCH.__new__(namd.NAMD_SOC_MCH)
+            mch.init_state = "T1"
+            mch.ns = mch.nt = 1
+            mch.nstate_soc = 4
+            mch.mol = types.SimpleNamespace(oqp_public_state_labels=False)
+            mch.coef = np.zeros(4, dtype=complex)
+            mch._resolve_initial_mch_active()
+            self.assertEqual(mch.active, 2)
+            self.assertEqual(np.flatnonzero(mch.coef).tolist(), [1])
+            self.assertTrue(any("T0 (legacy T1)" in message for message in logs))
+        finally:
+            cleanup()
+
+    def test_programmatic_runner_dispatches_qmmm_md_to_openmm_driver(self):
+        pyoqp, cleanup = load_pyoqp_with_stubs()
+        calls = []
+
+        class QMMM_MD:
+            def __init__(self, *, mol):
+                calls.append(("init", mol))
+
+            def run(self):
+                calls.append(("run", None))
+
+        qmmm_md = types.ModuleType("oqp.library.qmmm_md")
+        setattr(qmmm_md, "QMMM_MD", QMMM_MD)
+        previous = sys.modules.get("oqp.library.qmmm_md")
+        sys.modules["oqp.library.qmmm_md"] = qmmm_md
+        try:
+            mol = types.SimpleNamespace(
+                config={
+                    "input": {"runtype": "md", "qmmm_flag": True},
+                    "tests": {"exception": False},
+                },
+                usempi=False,
+            )
+            runner = pyoqp.Runner.__new__(pyoqp.Runner)
+            runner.mol = mol
+            runner.mpi_manager = types.SimpleNamespace(use_mpi=0)
+            runner.run_func = {"md": lambda _mol: self.fail("compute_md was called")}
+
+            runner.run()
+
+            self.assertEqual(calls, [("init", mol), ("run", None)])
+            self.assertIsInstance(runner.qmmm_md, QMMM_MD)
+        finally:
+            if previous is None:
+                sys.modules.pop("oqp.library.qmmm_md", None)
+            else:
+                sys.modules["oqp.library.qmmm_md"] = previous
+            cleanup()
 
     def test_soc_qmmm_hops_rescale_for_espf_energy_change(self):
         src = NAMD.read_text()

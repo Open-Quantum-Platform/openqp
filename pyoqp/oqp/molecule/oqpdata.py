@@ -40,6 +40,14 @@ def string(strng):
     return strng.lower()
 
 
+def optional_string(strng):
+    """Preserve a non-empty string, but represent an omitted option as None."""
+    if strng is None:
+        return None
+    value = str(strng).strip()
+    return value or None
+
+
 def ispher_mode(strng):
     """Normalize the ispher keyword to one of three modes:
     'auto'  - per-shell AO convention from the basis-set metadata
@@ -109,8 +117,11 @@ OQP_CONFIG_SCHEMA = {
         'log_file': {'type': str, 'default': ''},
         'report_interval': {'type': int, 'default': '1'},
         'energy_file': {'type': str, 'default': ''},
-        'qm_atoms_xyz': {'type': str, 'default': ''},
-        'qm_list': {'type': str, 'default': ''},
+        # These two options are consumed as an optional pair by qmmm_md.  An
+        # empty schema default must remain "not supplied" instead of becoming
+        # an empty filename / integer list in that driver.
+        'qm_atoms_xyz': {'type': optional_string, 'default': ''},
+        'qm_list': {'type': optional_string, 'default': ''},
         # Frontier (M1) charge treatment across a covalent QM/MM cut for ESPF
         # embedding: none (default = full-field, the validated ESPF baseline;
         # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
@@ -381,22 +392,30 @@ OQP_CONFIG_SCHEMA = {
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
         'follow': {'type': int, 'default': '0'},
+        # Optional real Cartesian Hessian used to initialize native P-RFO.
+        # ``model`` preserves the inexpensive Schlegel-model default.
+        'init_hessian': {'type': str, 'default': 'model'},
         'spring': {'type': float, 'default': '0.05'},
         'climb': {'type': bool, 'default': 'True'},
         'fmax': {'type': float, 'default': '2e-3'},
+        'frms': {'type': float, 'default': '2e-3'},
         'climb_fmax': {'type': float, 'default': '0.05'},
         'neb_dt': {'type': float, 'default': '0.5'},
         'maxmove': {'type': float, 'default': '0.2'},
+        'align': {'type': bool, 'default': 'True'},
         'opt_ends': {'type': bool, 'default': 'True'},
         'end_fmax': {'type': float, 'default': '1e-3'},
+        'neb_output': {'type': str, 'default': ''},
         'irc_step': {'type': float, 'default': '0.1'},
         'irc_direction': {'type': str, 'default': 'forward'},
         'mep_step': {'type': float, 'default': '0.1'},
+        'path_gtol': {'type': float, 'default': '1e-4'},
     },
     'neb': {
         'product': {'type': str, 'default': ''},
         'nimage': {'type': int, 'default': '5'},
-        # geomeTRIC NEB controls (native OQP NEB controls live in [oqp]).
+        # Legacy geomeTRIC NEB controls. Concise .oqp routes use the native
+        # spellings in [oqp] and never lower into these backend-specific keys.
         'k': {'type': float, 'default': '1.0'},
         'maxg': {'type': float, 'default': '0.1'},
         'avgg': {'type': float, 'default': '0.05'},

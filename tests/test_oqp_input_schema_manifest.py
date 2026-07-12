@@ -119,8 +119,9 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 214,
-        "route_driver": 91,
+        "generic": 189,
+        "route_driver": 100,
+        "legacy_only": 21,
         "intentional_forbidden": 1,
     }
     assert oqp_input.INTENTIONALLY_FORBIDDEN_SCHEMA_KEYS == {
@@ -136,6 +137,11 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     for section, keys in oqp_input.GENERIC_SCHEMA_KEYS.items():
         for key in sorted(keys):
             default, converter = defaults[section][key]
+            if section == "tdhf" and key in {"nstate_s", "nstate_t"}:
+                # The legacy schema's zero sentinel is not a valid explicit
+                # semantic state count; canonical .oqp requires a positive
+                # integer whenever either split-manifold count is supplied.
+                default = 1
             text = _generic_input(
                 section, key, _value_text(default, converter)
             )
@@ -146,7 +152,30 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
             assert key in lowered.get(section, {}), (section, key, canonical, lowered)
             checked.append((section, key))
 
-    assert len(checked) == 214
+    assert len(checked) == 189
+
+
+def test_legacy_backend_schema_is_recognized_but_not_canonical():
+    oqp_input = _load_oqp_input()
+
+    assert oqp_input.LEGACY_ONLY_SCHEMA_KEYS == {
+        "optimize": frozenset({"lib", "optimizer", "step_size", "step_tol", "mep_maxit"}),
+        "geometric": frozenset({
+            "coordsys", "trust", "tmax", "convergence_set", "prefix",
+            "hessian", "irc_direction", "constraints_file", "enforce", "conmethod",
+        }),
+        "neb": frozenset({"k", "maxg", "avgg", "climb", "align", "optep"}),
+    }
+    for text in (
+        'dft/pbe0/def2-svp geom="h2o.xyz" opt(S0,lib=geometric)',
+        'dft/pbe0/def2-svp geom="h2o.xyz" opt(S0) geometric(coordsys=tric)',
+    ):
+        try:
+            oqp_input.parse_canonical_oqp(text)
+        except oqp_input.OQPInputError as exc:
+            assert "traditional sectioned .inp" in str(exc)
+        else:
+            raise AssertionError("legacy optimizer controls must not enter canonical .oqp")
 
 
 def test_route_driver_manifest_matches_public_driver_coverage():
@@ -155,11 +184,10 @@ def test_route_driver_manifest_matches_public_driver_coverage():
 
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
-        | {"mep_maxit", "istate", "jstate", "kstate", "imult", "jmult"}
+        | {"istate", "jstate", "kstate", "imult", "jmult"}
     )
-    assert owners["neb"] == (
-        set(oqp_input.DRIVER_OPTIONS["neb"]) & oqp_input.OQP_SCHEMA_KEYS["neb"]
-    )
+    assert owners["neb"] == {"product", "nimage"}
+    assert owners["oqp"] == set().union(*oqp_input.OQP_DRIVER_OPTIONS.values())
     assert owners["hess"] == (
         set(oqp_input.DRIVER_OPTIONS["hess"]) | {"state"}
     )

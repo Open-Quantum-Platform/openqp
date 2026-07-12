@@ -40,15 +40,22 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 #### Geometry & Reaction Paths
 
-| Workflow | `runtype` | Backends |
+| Workflow | `runtype` | Default execution |
 | --- | --- | --- |
 | Energy / gradient / Hessian | `energy`, `grad`, `hess` | native |
-| Minimization & transition states | `optimize`, `ts` | `oqp` (native), [geomeTRIC](https://github.com/leeping/geomeTRIC), SciPy |
-| Conical intersections | `meci`, `mecp`, `tci` | `oqp`, geomeTRIC, SciPy |
-| Reaction paths | `irc`, `mep`, `neb` | `oqp`, geomeTRIC, SciPy |
+| Minimization & transition states | `optimize`, `ts` | native OQP |
+| Conical intersections | `meci`, `mecp`, `tci` | native OQP |
+| Reaction paths | `irc`, `mep`, `neb` | native OQP |
 | Nonadiabatic data | `nac`, `nacme` | native |
 
-The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC coordinates with a restricted-step RFO step and needs no external optimizer package.
+The built-in optimizer uses redundant-internal / DLC / TRIC coordinates with
+restricted-step RFO/P-RFO and needs no external optimizer package.  It covers
+all primary geometry and reaction-path workflows above, including aligned,
+endpoint-optimized climbing-image NEB and optional numerical/analytical initial
+Hessians for transition-state searches.  Traditional sectioned `.inp` files
+may still select SciPy or [geomeTRIC](https://github.com/leeping/geomeTRIC);
+geomeTRIC remains an optional compatibility backend for advanced constrained
+optimization.
 
 **Tutorials:** [Geometry optimization & TS](https://open-quantum-platform.github.io/openqp-tutorials/geometry-optimization/) · [Conical intersections](https://open-quantum-platform.github.io/openqp-tutorials/conical-intersections/)
 
@@ -107,6 +114,13 @@ Python API.
 
 ```bash
 pip install openqp
+```
+
+The native optimizer is included by default.  Install the optional legacy
+geomeTRIC backend only when it is needed:
+
+```bash
+pip install 'openqp[geometric]'
 ```
 
 For a source checkout:
