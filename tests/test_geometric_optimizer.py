@@ -3,6 +3,7 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -112,22 +113,46 @@ def section_value(section_text, key):
     return None
 
 
+@contextmanager
 def load_oqp_tester(runner_class, module_name):
     """Load OQPTester with a controlled Runner and no compiled extension."""
-    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    oqp_utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
-    oqp.__path__ = []
-    oqp_utils.__path__ = []
+    module_names = (
+        "oqp",
+        "oqp.utils",
+        "oqp.pyoqp",
+        "oqp.runtime",
+        module_name,
+    )
+    missing = object()
+    saved_modules = {
+        name: sys.modules.get(name, missing)
+        for name in module_names
+    }
 
-    pyoqp = types.ModuleType("oqp.pyoqp")
-    pyoqp.Runner = runner_class
-    sys.modules["oqp.pyoqp"] = pyoqp
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
 
-    runtime = types.ModuleType("oqp.runtime")
-    runtime.resolve_oqp_root = lambda: (str(ROOT), "test")
-    sys.modules["oqp.runtime"] = runtime
+        oqp_utils = types.ModuleType("oqp.utils")
+        oqp_utils.__path__ = []
+        sys.modules["oqp.utils"] = oqp_utils
 
-    return load_module(module_name, "pyoqp/oqp/utils/oqp_tester.py")
+        pyoqp = types.ModuleType("oqp.pyoqp")
+        pyoqp.Runner = runner_class
+        sys.modules["oqp.pyoqp"] = pyoqp
+
+        runtime = types.ModuleType("oqp.runtime")
+        runtime.resolve_oqp_root = lambda: (str(ROOT), "test")
+        sys.modules["oqp.runtime"] = runtime
+
+        yield load_module(module_name, "pyoqp/oqp/utils/oqp_tester.py")
+    finally:
+        for name, module in saved_modules.items():
+            if module is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 class TestOptimizationExampleCaps(unittest.TestCase):
@@ -166,33 +191,22 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
     def setUp(self):
         install_minimal_oqp_stubs()
 
-    def test_only_constrained_optimization_remains_a_geometric_example(self):
-        expected = {
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
-        }
-
-        missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
-        self.assertEqual(missing, [])
-        for name, runtype in expected.items():
-            if not name.endswith(".inp"):
-                continue
-            text = (EXAMPLES_OPT / name).read_text()
-            self.assertIn(runtype, text)
-            self.assertIn("lib=geometric", text)
-            self.assertIn("[geometric]", text)
-
-        geometric_inputs = sorted(path.name for path in EXAMPLES_OPT.glob("*GEOMETRIC.inp"))
-        self.assertEqual(
-            geometric_inputs,
-            ["HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp"],
-        )
+    def test_constrained_optimization_is_now_a_native_example(self):
+        path = EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_OQP.inp"
+        self.assertTrue(path.is_file())
+        self.assertTrue(path.with_suffix(".json").is_file())
+        text = path.read_text()
+        self.assertIn("runtype=optimize", text)
+        self.assertIn("lib=oqp", text)
+        self.assertIn("freeze=distance(1,2)", text)
+        self.assertNotIn("[geometric]", text)
+        self.assertEqual(list(EXAMPLES_OPT.glob("*GEOMETRIC.inp")), [])
 
     def test_primary_geometry_examples_use_the_native_backend(self):
         expected = {
             "H2O_RHF-DFT_OPTIMIZE.inp": "runtype=optimize",
             "H2O_RHF-DFT_OPTIMIZE_OQP.inp": "runtype=optimize",
+            "HCN_RHF-DFT_CONSTRAINED_OQP.inp": "runtype=optimize",
             "C2H4_BHHLYP-MRSFTDDFT_MECI.inp": "runtype=meci",
             "C2H4_BHHLYP-MRSFTDDFT_MECP_OQP.inp": "runtype=mecp",
             "C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp": "runtype=tci",
@@ -265,6 +279,28 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         config = {
             "input": {"runtype": "meci", "method": "tdhf"},
             "optimize": {"lib": "geometric", "istate": 1, "jstate": 2},
+        }
+
+        report = input_checker.CheckReport()
+        input_checker._check_optimize(config, report)
+
+        self.assertTrue(report.ok, report.to_text())
+
+    def test_baeka_states_are_authoritative_over_legacy_pair(self):
+        input_checker = load_module(
+            "input_checker_baeka_states_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {"runtype": "meci", "method": "tdhf"},
+            "tdhf": {"nstate": 4},
+            "optimize": {
+                "lib": "oqp", "meci_search": "baeka",
+                "states": [2, 3, 4],
+                # These legacy pair values are intentionally contradictory;
+                # the multistate list is the BaekA source of truth.
+                "istate": 5, "jstate": 2,
+            },
         }
 
         report = input_checker.CheckReport()
@@ -487,6 +523,156 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         self.assertIs(optimizer.mol, mol)
 
 
+class TestOQPTesterCollection(unittest.TestCase):
+    REPRESENTATIVE_LEGACY_DECKS = (
+        "HF/H2O_RHF-HF_ENERGY.inp",
+        "MP2/h2o_ump2_6-31g.inp",
+        "MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp",
+        "NMR/H2O_RHF-NMR.inp",
+        "OPT/H2O_RHF-DFT_OPTIMIZE_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_BAEKA_OQP.inp",
+    )
+
+    @staticmethod
+    def _write(path, text=""):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def test_collection_keeps_only_representative_paired_legacy_decks(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for relative in self.REPRESENTATIVE_LEGACY_DECKS:
+                legacy = root / relative
+                self._write(legacy)
+                self._write(legacy.with_suffix(".oqp"))
+
+            ordinary_legacy = root / "HF/H2O_RHF-HF_GRADIENT.inp"
+            self._write(ordinary_legacy)
+            self._write(ordinary_legacy.with_suffix(".oqp"))
+            self._write(root / "HF/legacy_only.inp")
+            self._write(root / "HF/ignored.resolved.oqp")
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_collection_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                selected = {
+                    Path(path).relative_to(root).as_posix()
+                    for path in tester._get_input_files(str(root))
+                }
+
+        expected = set(self.REPRESENTATIVE_LEGACY_DECKS)
+        expected.update(
+            str(Path(relative).with_suffix(".oqp"))
+            for relative in self.REPRESENTATIVE_LEGACY_DECKS
+        )
+        expected.update({
+            "HF/H2O_RHF-HF_GRADIENT.oqp",
+            "HF/legacy_only.inp",
+        })
+        self.assertEqual(selected, expected)
+
+    def test_paired_legacy_run_has_distinct_project_and_log(self):
+        class RecordingRunner:
+            calls = []
+
+            def __init__(self, **kwargs):
+                self.calls.append(kwargs)
+
+            def run(self, test_mod=False):
+                pass
+
+            def test(self):
+                return "matched", 0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy = root / "HF/H2O_RHF-HF_ENERGY.inp"
+            semantic = legacy.with_suffix(".oqp")
+            self._write(legacy)
+            self._write(semantic)
+            output_dir = root / "output"
+            output_dir.mkdir()
+
+            with load_oqp_tester(
+                RecordingRunner, "oqp_tester_project_names_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(output_dir)
+                tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
+                legacy_result = tester.run_single_test(str(legacy))
+                semantic_result = tester.run_single_test(str(semantic))
+
+        self.assertEqual(legacy_result["project"], "H2O_RHF-HF_ENERGY__legacy")
+        self.assertEqual(
+            Path(legacy_result["log_file"]).name,
+            "H2O_RHF-HF_ENERGY__legacy.log",
+        )
+        self.assertEqual(semantic_result["project"], "H2O_RHF-HF_ENERGY")
+        self.assertEqual(
+            Path(semantic_result["log_file"]).name,
+            "H2O_RHF-HF_ENERGY.log",
+        )
+        self.assertEqual(
+            [call["project"] for call in RecordingRunner.calls],
+            ["H2O_RHF-HF_ENERGY__legacy", "H2O_RHF-HF_ENERGY"],
+        )
+
+    def test_explicit_source_example_path_keeps_legacy_matrix(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            installed_examples = root / "installed/share/examples"
+            source_examples = root / "checkout/examples"
+            legacy = source_examples / "HF/H2O_RHF-HF_ENERGY.inp"
+            self._write(legacy)
+            self._write(legacy.with_suffix(".oqp"))
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_explicit_source_path_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(installed_examples)
+                selected = {
+                    Path(path).relative_to(source_examples).as_posix()
+                    for path in tester._get_input_files(str(source_examples))
+                }
+
+        self.assertEqual(
+            selected,
+            {
+                "HF/H2O_RHF-HF_ENERGY.inp",
+                "HF/H2O_RHF-HF_ENERGY.oqp",
+            },
+        )
+
+    def test_controlled_runner_modules_are_restored(self):
+        class NoopRunner:
+            pass
+
+        module_name = "oqp_tester_module_restoration_under_test"
+        tracked = ("oqp", "oqp.utils", "oqp.pyoqp", "oqp.runtime", module_name)
+        missing = object()
+        before = {name: sys.modules.get(name, missing) for name in tracked}
+
+        with load_oqp_tester(NoopRunner, module_name):
+            self.assertIs(sys.modules["oqp.pyoqp"].Runner, NoopRunner)
+            self.assertIn(module_name, sys.modules)
+
+        for name, module in before.items():
+            if module is missing:
+                self.assertNotIn(name, sys.modules)
+            else:
+                self.assertIs(sys.modules.get(name), module)
+
+
 class TestOptionalGeometricExample(unittest.TestCase):
     def _run_with_error(self, error):
         class FailingRunner:
@@ -496,19 +682,19 @@ class TestOptionalGeometricExample(unittest.TestCase):
             def run(self, test_mod=False):
                 raise error
 
-        tester_module = load_oqp_tester(
+        with load_oqp_tester(
             FailingRunner,
             f"oqp_tester_geometric_{type(error).__name__}_{id(error)}",
-        )
-        with tempfile.TemporaryDirectory() as output_dir:
-            tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
-            tester.output_dir = output_dir
-            tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
-            return tester.run_single_test(
-                str(EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp")
-            )
+        ) as tester_module:
+            with tempfile.TemporaryDirectory() as output_dir:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = output_dir
+                tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
+                return tester.run_single_test(
+                    str(EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_OQP.inp")
+                )
 
-    def test_missing_optional_geometric_backend_skips_legacy_constraint_example(self):
+    def test_missing_optional_geometric_backend_is_still_a_recognized_adapter_error(self):
         result = self._run_with_error(ModuleNotFoundError(
             "geomeTRIC is required for [optimize] lib=geometric. "
             "Install it with `pip install geometric`."

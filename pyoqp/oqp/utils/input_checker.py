@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import math
 import multiprocessing
 import os
+import re
 from typing import Any
 
 from oqp.utils.mpi_utils import MPIManager
@@ -50,7 +51,7 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"penalty", "ubp", "hybrid"}
+MECI_SEARCH = {"penalty", "ubp", "hybrid", "baeka"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -1599,8 +1600,13 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
     if runtype in {"meci", "mecp"}:
-        requested.append(_get(config, "optimize", "istate", 0))
-        requested.append(_get(config, "optimize", "jstate", 0))
+        search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+        multistates = _as_list(_get(config, "optimize", "states", []))
+        if runtype == "meci" and search == "baeka" and multistates:
+            requested.extend(multistates)
+        else:
+            requested.append(_get(config, "optimize", "istate", 0))
+            requested.append(_get(config, "optimize", "jstate", 0))
     if runtype == "tci":
         requested.append(_get(config, "optimize", "istate", 0))
         requested.append(_get(config, "optimize", "jstate", 0))
@@ -1826,6 +1832,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+    meci_states = _as_list(_get(config, "optimize", "states", []))
 
     if bool(_get(config, "input", "qmmm_flag", False)):
         report.add(
@@ -1860,6 +1867,34 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if lib == "oqp":
+        freeze = str(_get(config, "oqp", "freeze", "") or "").strip()
+        if freeze:
+            if runtype != "optimize":
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Frozen-distance constraints are currently supported only for a native minimum search.",
+                    value=runtype, expected="runtype=optimize",
+                    action="Use a separate opt job for the constrained minimum.",
+                )
+            pattern = re.compile(
+                r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I
+            )
+            items = [item.strip() for item in freeze.split(";") if item.strip()]
+            valid = bool(items)
+            for item in items:
+                match = pattern.fullmatch(item)
+                if not match or int(match.group(1)) < 1 or int(match.group(2)) < 1 \
+                        or int(match.group(1)) == int(match.group(2)):
+                    valid = False
+                    break
+            if not valid:
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Invalid native frozen-distance expression.",
+                    value=freeze, expected="distance(1,2);distance(2,3)",
+                    action="Use one-based distinct atom pairs separated by semicolons.",
+                )
+
         init_hessian = _as_lower(_get(config, "oqp", "init_hessian", "model"))
         if init_hessian not in {"model", "numerical", "analytical"}:
             report.add(
@@ -1964,7 +1999,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected="tdhf or dftb",
                 action="Set [input] method=tdhf or method=dftb and configure the response state space.",
             )
-        if jstate <= istate:
+        if (meci_search != "baeka" or not meci_states) and jstate <= istate:
             report.add(
                 "ERROR",
                 "optimize.jstate",
@@ -1980,7 +2015,113 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use penalty, ubp, or hybrid.",
+                action="Use penalty, ubp, hybrid, or baeka.",
+            )
+        elif meci_search == "baeka":
+            selected = meci_states or [istate, jstate]
+            try:
+                selected = [int(state) for state in selected]
+            except (TypeError, ValueError):
+                selected = []
+            if len(selected) < 2:
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires at least two response roots.",
+                    value=meci_states,
+                    expected="two or more increasing roots",
+                    action="Set states=1,2 or a longer consecutive list.",
+                )
+            elif any(state < 1 for state in selected):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA states must be positive response roots; root 0 is the internal reference.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Use positive response-root indices only.",
+                )
+            elif any(right != left + 1
+                     for left, right in zip(selected, selected[1:])):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires distinct, increasing, consecutive response roots.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Sort the roots and include every intervening state.",
+                )
+            if lib != "oqp":
+                report.add(
+                    "ERROR", "optimize.lib",
+                    "BaekA multistate MECI is implemented by the native oqp optimizer.",
+                    value=lib, expected="oqp",
+                    action="Set [optimize] lib=oqp.",
+                )
+
+            scalar_controls = {
+                "pen_sigma": (1.0, "initial sigma"),
+                "pen_alpha": (0.0, "alpha in Hartree"),
+                "pen_delta": (0.025, "additive delta_beta"),
+                "gap_weight": (1.0, "gap weight"),
+                "energy_gap": (1.0e-4, "outer-span gap tolerance"),
+            }
+            for key, (default, label) in scalar_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    if key == "gap_weight":
+                        valid = math.isfinite(value) and value == 1.0
+                    else:
+                        valid = math.isfinite(value) and (
+                            value > 0 or (key == "pen_alpha" and value == 0)
+                        )
+                except (TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    if key == "gap_weight":
+                        report.add(
+                            "ERROR", "optimize.gap_weight",
+                            "BaekA fixes gap_weight at 1.0; sigma is the published penalty multiplier.",
+                            value=raw, expected="1.0",
+                            action="Set gap_weight=1.0 and adjust pen_sigma if needed.",
+                        )
+                        continue
+                    report.add(
+                        "ERROR", f"optimize.{key}",
+                        f"BaekA {label} must be positive.",
+                        value=raw, expected="> 0",
+                        action=("Use pen_alpha=0.02; alpha has energy units. "
+                                "The legacy zero sentinel also selects 0.02 for BaekA."
+                                if key == "pen_alpha" else "Use a positive value."),
+                    )
+
+            jumps = _get(
+                config, "optimize", "pen_jump",
+                [10, 10, 25, 25, 100, 100, 1000, 1000, 3000],
+            )
+            if isinstance(jumps, str):
+                jumps = [item.strip() for item in jumps.split(",") if item.strip()]
+            elif not isinstance(jumps, (list, tuple)):
+                jumps = [jumps]
+            try:
+                jumps = [float(item) for item in jumps]
+                valid_jumps = bool(jumps) and all(
+                    math.isfinite(item) and item > 0 for item in jumps
+                )
+            except (TypeError, ValueError):
+                valid_jumps = False
+            if not valid_jumps:
+                report.add(
+                    "ERROR", "optimize.pen_jump",
+                    "BaekA beta jump schedule must contain positive values.",
+                    value=jumps, expected="10,10,25,...",
+                    action="Provide a non-empty comma-separated positive schedule.",
+                )
+        elif meci_states:
+            report.add(
+                "ERROR", "optimize.states",
+                "The multistate roots list is used only by meci_search=baeka.",
+                value=meci_states,
+                expected="meci_search=baeka",
+                action="Remove states or select the BaekA algorithm.",
             )
 
     if runtype == "mecp" and imult == jmult:

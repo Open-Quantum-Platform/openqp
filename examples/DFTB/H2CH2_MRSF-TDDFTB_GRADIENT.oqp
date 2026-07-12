@@ -1,0 +1,1 @@
+mrsf-tddftb(nstate=3) geom="../geometries/CH2-e41258125cee.xyz" charge=0 grad(S0) guess(type=huckel) dftb(backend=native,parameter_path=params)

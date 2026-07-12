@@ -71,6 +71,16 @@ def test_soc_summary_reports_counts_for_both_zero_based_manifolds():
     assert "Target spin:" not in text
 
 
+def test_soc_namd_active_is_labeled_as_a_spin_adiabatic_surface():
+    config = mrsf_config(runtype="namd")
+    config["md"].update(soc=True, active=5)
+
+    assert state_labels.requested_states(config) == "spin-adiabatic surface 5"
+    config["md"]["init_state"] = "T0"
+    assert state_labels.requested_states(config) == \
+        "T0 initialization; spin-adiabatic surface 5"
+
+
 def test_start_summary_separates_target_from_internal_reference():
     config = mrsf_config(runtype="optimize")
 

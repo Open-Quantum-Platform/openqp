@@ -61,6 +61,20 @@ class OQPTester:
         "openqp-dftb not found",  # optional external openqp-dftb library absent
     )
 
+    # Keep a deliberately small cross-section of paired legacy inputs in the
+    # ordinary suite.  Their .oqp counterparts exercise the new public syntax;
+    # these .inp decks make sure compatibility does not silently regress while
+    # avoiding a second run of every converted example.
+    _LEGACY_COMPATIBILITY_DECKS = frozenset({
+        "HF/H2O_RHF-HF_ENERGY.inp",
+        "MP2/h2o_ump2_6-31g.inp",
+        "MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp",
+        "NMR/H2O_RHF-NMR.inp",
+        "OPT/H2O_RHF-DFT_OPTIMIZE_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_BAEKA_OQP.inp",
+    })
+
     def __init__(self,
                  base_test_dir: str = None,
                  output_dir: str = None,
@@ -132,6 +146,43 @@ class OQPTester:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return "Unable to retrieve Git information"
 
+    def _is_legacy_compatibility_deck(self, input_file: str) -> bool:
+        """Return whether *input_file* is a selected legacy regression deck."""
+        base_test_dir = getattr(self, "base_test_dir", None)
+        candidates = set()
+        if base_test_dir:
+            try:
+                relative = os.path.relpath(
+                    os.path.abspath(input_file), os.path.abspath(base_test_dir)
+                )
+                candidates.add(relative.replace(os.sep, "/"))
+            except (TypeError, ValueError):
+                pass
+
+        # An explicit source-tree path such as ``--run_tests examples/OPT``
+        # may differ from the installed ``share/examples`` base chosen by the
+        # runner.  Match the stable category/name suffix as well so the same
+        # representative matrix is retained in either layout.
+        try:
+            absolute = os.path.abspath(input_file).replace(os.sep, "/")
+        except (TypeError, ValueError):
+            absolute = ""
+        return bool(candidates & self._LEGACY_COMPATIBILITY_DECKS) or any(
+            absolute.endswith(f"/{deck}")
+            for deck in self._LEGACY_COMPATIBILITY_DECKS
+        )
+
+    def _project_name_for_input(self, input_file: str) -> str:
+        """Return a collision-free project name for a paired legacy input."""
+        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        input_stem, extension = os.path.splitext(input_file)
+        if (
+            extension.lower() == ".inp"
+            and os.path.isfile(f"{input_stem}.oqp")
+        ):
+            return f"{project_name}__legacy"
+        return project_name
+
     def run_single_test(self, input_file: str) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
@@ -142,7 +193,7 @@ class OQPTester:
         Returns:
             Dict[str, Any]: Dictionary containing test results.
         """
-        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        project_name = self._project_name_for_input(input_file)
         log = os.path.join(self.output_dir, f"{project_name}.log")
 
         usempi = True if self.mpi_manager.use_mpi > 0 else False
@@ -251,7 +302,7 @@ class OQPTester:
         that child. We translate a non-zero exit (or a timeout) into an ERROR
         result for that one test rather than letting it crash the whole run.
         """
-        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        project_name = self._project_name_for_input(input_file)
         log = os.path.join(self.output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
@@ -386,6 +437,20 @@ class OQPTester:
             for root, _, files in os.walk(test_dir)
             for file in files
             if file.endswith(('.inp', '.oqp')) and not file.endswith('.resolved.oqp')
+        ]
+        # A same-stem .oqp is the public counterpart of its legacy .inp and
+        # shares the same reference JSON. Run only the semantic form for most
+        # pairs, but retain the representative compatibility decks above. Their
+        # project/log names receive a __legacy suffix so paired runs cannot race.
+        semantic_stems = {
+            os.path.splitext(path)[0]
+            for path in input_files if path.lower().endswith('.oqp')
+        }
+        input_files = [
+            path for path in input_files
+            if path.lower().endswith('.oqp')
+            or os.path.splitext(path)[0] not in semantic_stems
+            or self._is_legacy_compatibility_deck(path)
         ]
         # The full-suite run ('all') skips a few examples that dominate CI
         # wall-clock; they still run when selected explicitly (a directory or a

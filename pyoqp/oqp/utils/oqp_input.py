@@ -88,6 +88,8 @@ class CalculationSpec:
             return {"rks": "RHF", "uks": "UHF", "roks": "ROHF"}[self.model]
         if self.model in {"rhf", "uhf", "rohf"}:
             return self.model.upper()
+        if self.model == "mp2" and "reference" in self.model_options:
+            return str(self.model_options["reference"]).upper()
         mult = int(self.options.get("mult", 1))
         return "RHF" if mult == 1 else "UHF"
 
@@ -265,13 +267,13 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "ekt": _keys("ip ea"),
     "properties": _keys("grad"),
     "optimize": _keys("""
-        maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate
+        maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search pen_sigma pen_alpha
-        pen_incre gap_weight init_scf
+        pen_incre pen_delta pen_jump gap_weight init_scf
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
-        coordsys trust trust_max follow init_hessian spring climb fmax frms
+        coordsys trust trust_max freeze follow init_hessian spring climb fmax frms
         climb_fmax neb_dt maxmove align opt_ends end_fmax neb_output irc_step
         irc_direction mep_step path_gtol
     """),
@@ -400,16 +402,29 @@ TOP_OPTION_ALIASES = {
 _OPT_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
     "energy_shift", "energy_gap", "meci_search", "pen_sigma",
-    "pen_alpha", "pen_incre", "gap_weight", "init_scf",
+    "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
 _NATIVE_ENGINE_OPTIONS = {"coordsys", "trust", "trust_max"}
+_NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
+_MECI_PUBLIC_OPTIONS = {
+    "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
+}
+_MECI_OPTION_ALIASES = {
+    "algorithm": "meci_search",
+    "sigma": "pen_sigma",
+    "alpha": "pen_alpha",
+    "delta_beta": "pen_delta",
+    "beta_schedule": "pen_jump",
+    "gap": "energy_gap",
+}
+_TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "meci": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "optimize": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
+    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mecp": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "tci": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
     "irc": {"maxit", "direction", "step", "irc_step", "hessian", "gtol"},
@@ -444,7 +459,7 @@ DRIVER_OPTIONS = {
 # by the selected native workflow.  This prevents valid-looking but ignored
 # controls such as ``energy oqp(init_hessian=analytical)``.
 OQP_DRIVER_OPTIONS = {
-    "optimize": set(_NATIVE_ENGINE_OPTIONS),
+    "optimize": set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
     "meci": set(_NATIVE_ENGINE_OPTIONS),
     "mecp": set(_NATIVE_ENGINE_OPTIONS),
     "tci": set(_NATIVE_ENGINE_OPTIONS),
@@ -462,7 +477,9 @@ OQP_DRIVER_OPTIONS = {
 # route options from silently overriding section-owned controls.  All advanced
 # settings remain available through exact calls such as ``tdhf(nvdav=30)``.
 RESPONSE_MODEL_OPTIONS = {"nstate"}
-MP2_MODEL_OPTIONS = {"variant", "same_spin_scale", "opposite_spin_scale"}
+MP2_MODEL_OPTIONS = {
+    "reference", "variant", "same_spin_scale", "opposite_spin_scale",
+}
 RESPONSE_MODELS = {
     "mrsf", "mrsf-hf", "mrsf-dftb", "umrsf", "umrsf-hf", "sf", "sf-hf",
     "sf-dftb", "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"
@@ -478,6 +495,12 @@ _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 
 
+def _is_integer(value: Any) -> bool:
+    """Return whether *value* is an actual integer, excluding booleans."""
+
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _is_positive_integer(value: Any) -> bool:
     """Return whether a parsed value is an actual positive integer.
 
@@ -485,7 +508,13 @@ def _is_positive_integer(value: Any) -> bool:
     values such as ``2.5``, ``"2"``, or ``true`` in count fields.
     """
 
-    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+    return _is_integer(value) and value > 0
+
+
+def _is_non_negative_integer(value: Any) -> bool:
+    """Return whether *value* is an integer greater than or equal to zero."""
+
+    return _is_integer(value) and value >= 0
 
 
 def _strip_comments(text: str) -> str:
@@ -907,13 +936,9 @@ def _state_from_value(value: Any, *, keyword: str = "state") -> StateRef:
     if isinstance(value, StateRef):
         return value
     if keyword == "root":
-        try:
-            root = int(value)
-        except (TypeError, ValueError) as exc:
-            raise OQPInputError("root must be a positive integer") from exc
-        if root < 1:
+        if not _is_positive_integer(value):
             raise OQPInputError("root must be a positive integer")
-        return StateRef(root=root)
+        return StateRef(root=value)
     if isinstance(value, str) and _STATE_RE.fullmatch(value):
         return StateRef(label=value.upper())
     raise OQPInputError("Expected a physical state label such as S0, S1, or T0")
@@ -949,6 +974,14 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     }:
         raise OQPInputError("The route requires a basis set")
 
+    if "charge" in spec.options and not _is_integer(spec.options["charge"]):
+        raise OQPInputError("charge must be an integer")
+    if "mult" in spec.options and not _is_positive_integer(spec.options["mult"]):
+        raise OQPInputError("mult must be a positive integer")
+    if "omp_threads" in spec.options and not _is_positive_integer(
+            spec.options["omp_threads"]):
+        raise OQPInputError("omp_threads must be a positive integer")
+
     if model in {"sf", "sf-hf", "sf-dftb"} and not states \
             and driver.name in SF_STATE_AWARE_DRIVERS:
         raise OQPInputError(
@@ -966,16 +999,27 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             "automatic; select the target manifold with S0, T0, or Q0 in the driver."
             % model
         )
-    if model == "rhf" and int(spec.options.get("mult", 1)) != 1:
+    if model == "rhf" and spec.options.get("mult", 1) != 1:
         raise OQPInputError("rhf requires mult=1; use rohf or uhf for an open-shell reference")
-    if model == "rohf" and int(spec.options.get("mult", 1)) < 2:
+    if model == "rohf" and spec.options.get("mult", 1) < 2:
         raise OQPInputError("rohf requires an open-shell mult value such as mult=2 or mult=3")
-    if model == "rks" and int(spec.options.get("mult", 1)) != 1:
+    if model == "rks" and spec.options.get("mult", 1) != 1:
         raise OQPInputError("rks requires mult=1; use roks or uks for open-shell DFT")
-    if model == "roks" and int(spec.options.get("mult", 1)) < 2:
+    if model == "roks" and spec.options.get("mult", 1) < 2:
         raise OQPInputError("roks requires an open-shell mult value such as mult=2 or mult=3")
     if model == "mp2" and driver.name != "energy":
         raise OQPInputError("MP2 currently supports energy() only")
+    if model == "mp2" and "reference" in spec.model_options:
+        reference = str(spec.model_options["reference"]).strip().lower()
+        if reference not in {"rhf", "rohf", "uhf"}:
+            raise OQPInputError("MP2 reference must be rhf, rohf, or uhf")
+        mult = spec.options.get("mult", 1)
+        if reference == "rhf" and mult != 1:
+            raise OQPInputError("MP2 reference=rhf requires mult=1")
+        if reference == "rohf" and mult < 2:
+            raise OQPInputError(
+                "MP2 reference=rohf requires an open-shell mult value such as mult=2 or mult=3"
+            )
     if model in {"umrsf", "umrsf-hf"} and driver.name != "energy":
         raise OQPInputError("UMRSF currently supports energy() only")
     if driver.name == "ekt" and model != "mrsf":
@@ -985,12 +1029,14 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     }:
         raise OQPInputError("%s currently requires an MRSF route" % driver.name)
 
-    expected_counts = {"meci": 2, "mecp": 2, "tci": 3, "nac": 2, "bp": 2, "nacme": 2}
+    expected_counts = {"mecp": 2, "tci": 3, "nac": 2, "bp": 2, "nacme": 2}
+    if driver.name == "meci" and len(states) < 2:
+        raise OQPInputError("meci requires at least two physical states")
     if driver.name in expected_counts and len(states) != expected_counts[driver.name]:
         raise OQPInputError(
             "%s requires exactly %d physical states" % (driver.name, expected_counts[driver.name])
         )
-    if driver.name not in expected_counts and len(states) > 1:
+    if driver.name not in expected_counts and driver.name != "meci" and len(states) > 1:
         raise OQPInputError("%s accepts at most one target state" % driver.name)
     if driver.name == "energy" and states:
         if model not in RESPONSE_MODELS or any(
@@ -1004,7 +1050,92 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if driver.name == "prop" and model not in {"mrsf", "mrsf-hf"}:
         raise OQPInputError("prop([STATE]) currently requires MRSF-TDDFT or MRSF-TDHF")
 
-    options = _driver_options(driver)
+    options = (_normalized_meci_options(driver)
+               if driver.name == "meci" else _driver_options(driver))
+    if driver.name == "meci":
+        algorithm = str(options.get(
+            "meci_search", "baeka" if len(states) > 2 else "penalty"
+        )).strip().lower()
+        if algorithm not in {"penalty", "ubp", "hybrid", "baeka"}:
+            raise OQPInputError(
+                "meci algorithm must be penalty, ubp, hybrid, or baeka"
+            )
+        if len(states) > 2 and algorithm != "baeka":
+            raise OQPInputError(
+                "MECI calculations with more than two states require algorithm=baeka"
+            )
+        if algorithm == "baeka":
+            roots = sorted(_internal_root(model, state) for state in states)
+            if any(right != left + 1 for left, right in zip(roots, roots[1:])):
+                raise OQPInputError(
+                    "BaekA requires consecutive response roots in one spin manifold"
+                )
+            positive = {
+                "pen_sigma": "sigma",
+                "pen_alpha": "alpha",
+                "pen_delta": "delta_beta",
+                "energy_gap": "gap",
+            }
+            baeka_defaults = {
+                "pen_sigma": 1.0,
+                "pen_alpha": 0.02,
+                "pen_delta": 0.025,
+                "energy_gap": 1.0e-4,
+            }
+            for key, label in positive.items():
+                try:
+                    value = float(options.get(key, baeka_defaults[key]))
+                    if not math.isfinite(value) or value <= 0:
+                        raise ValueError
+                except (TypeError, ValueError) as exc:
+                    raise OQPInputError(
+                        "BaekA %s must be a positive number" % label
+                    ) from exc
+            try:
+                gap_weight = float(options.get("gap_weight", 1.0))
+            except (TypeError, ValueError) as exc:
+                raise OQPInputError(
+                    "BaekA gap_weight is fixed at 1.0"
+                ) from exc
+            if not math.isfinite(gap_weight) or gap_weight != 1.0:
+                raise OQPInputError(
+                    "BaekA gap_weight is fixed at 1.0; use sigma for the "
+                    "published penalty multiplier"
+                )
+            if "pen_incre" in options:
+                raise OQPInputError(
+                    "BaekA uses additive delta_beta, not legacy pen_incre"
+                )
+            unused_convergence = {
+                "max_grad", "rmsd_step", "max_step"
+            }.intersection(options)
+            if unused_convergence:
+                raise OQPInputError(
+                    "BaekA convergence does not use %s; remove it and use "
+                    "energy_shift, gap, and rmsd_grad"
+                    % ", ".join(sorted(unused_convergence))
+                )
+            schedule = options.get(
+                "pen_jump", "10,10,25,25,100,100,1000,1000,3000"
+            )
+            if isinstance(schedule, str):
+                schedule = [item.strip() for item in schedule.split(",") if item.strip()]
+            elif not isinstance(schedule, (list, tuple)):
+                schedule = [schedule]
+            try:
+                jumps = [float(item) for item in schedule]
+            except (TypeError, ValueError) as exc:
+                raise OQPInputError(
+                    "BaekA beta_schedule must be a comma-separated list of positive numbers"
+                ) from exc
+            if not jumps or any(not math.isfinite(item) or item <= 0 for item in jumps):
+                raise OQPInputError(
+                    "BaekA beta_schedule must be a comma-separated list of positive numbers"
+                )
+        elif {"pen_delta", "pen_jump"}.intersection(options):
+            raise OQPInputError(
+                "delta_beta and beta_schedule are used only with algorithm=baeka"
+            )
     legacy_backend_options = {
         "lib", "optimizer", "step_size", "step_tol", "mep_maxit",
         "k", "maxg", "avgg", "optep",
@@ -1039,11 +1170,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         )
     if driver.name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         if "maxit" in options:
-            try:
-                if int(options["maxit"]) < 1:
-                    raise ValueError
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("maxit must be a positive integer") from exc
+            if not _is_positive_integer(options["maxit"]):
+                raise OQPInputError("maxit must be a positive integer")
         coordsys = str(options.get("coordsys", "tric")).strip().lower()
         if "coordsys" in options and coordsys not in {
             "auto", "tric", "dlc", "ric", "internal", "cart", "cartesian",
@@ -1060,17 +1188,18 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             if (not math.isfinite(trust) or not math.isfinite(trust_max)
                     or trust <= 0 or trust_max <= 0 or trust > trust_max):
                 raise OQPInputError("trust and trust_max require 0 < trust <= trust_max")
+        if "freeze" in options:
+            if driver.name != "optimize":
+                raise OQPInputError("freeze is currently supported only by opt(...)")
+            _validate_freeze_spec(options["freeze"])
         if driver.name == "mep":
             if "points" in options and "maxit" in options:
                 raise OQPInputError("mep points and maxit specify the same native path limit; use one")
             if "step" in options and "mep_step" in options:
                 raise OQPInputError("mep step and mep_step specify the same native step; use one")
             if "points" in options:
-                try:
-                    if int(options["points"]) < 1:
-                        raise ValueError
-                except (TypeError, ValueError) as exc:
-                    raise OQPInputError("mep points must be a positive integer") from exc
+                if not _is_positive_integer(options["points"]):
+                    raise OQPInputError("mep points must be a positive integer")
             for key in ("step", "mep_step"):
                 if key in options:
                     try:
@@ -1088,11 +1217,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                     raise OQPInputError("mep gtol must be a positive number") from exc
         if driver.name == "ts":
             if "follow" in options:
-                try:
-                    if int(options["follow"]) < 0:
-                        raise ValueError
-                except (TypeError, ValueError) as exc:
-                    raise OQPInputError("ts follow must be a non-negative mode index") from exc
+                if not _is_non_negative_integer(options["follow"]):
+                    raise OQPInputError("ts follow must be a non-negative mode index")
             if "hessian" in options:
                 hessian = str(options["hessian"]).strip().lower()
                 if hessian not in {"model", "numerical", "analytical"}:
@@ -1134,11 +1260,10 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("neb images and nimage specify the same image count; use one")
         for key in ("images", "nimage"):
             if key in options:
-                try:
-                    if int(options[key]) < 3:
-                        raise ValueError
-                except (TypeError, ValueError) as exc:
-                    raise OQPInputError("neb %s must be an integer of at least 3" % key) from exc
+                if not _is_integer(options[key]) or options[key] < 3:
+                    raise OQPInputError(
+                        "neb %s must be an integer of at least 3" % key
+                    )
         if "dt" in options and "neb_dt" in options:
             raise OQPInputError("neb dt and neb_dt specify the same FIRE time step; use one")
         for key in ("climb", "align", "opt_ends"):
@@ -1285,11 +1410,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError("%s requires distinct states" % driver.name)
 
     if "nstate" in spec.model_options:
-        try:
-            nstate = int(spec.model_options["nstate"])
-        except (TypeError, ValueError) as exc:
-            raise OQPInputError("nstate must be a positive integer") from exc
-        if nstate < 1:
+        nstate = spec.model_options["nstate"]
+        if not _is_positive_integer(nstate):
             raise OQPInputError("nstate must be a positive integer")
         roots = [_internal_root(spec.model, state) for state in states]
         if roots and max(roots) > nstate:
@@ -1505,12 +1627,11 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             if (not math.isfinite(trust) or not math.isfinite(trust_max)
                     or trust <= 0 or trust_max <= 0 or trust > trust_max):
                 raise OQPInputError("oqp trust controls require 0 < trust <= trust_max")
+        if "freeze" in oqp_call.kwargs:
+            _validate_freeze_spec(oqp_call.kwargs["freeze"])
         if "follow" in oqp_call.kwargs:
-            try:
-                if int(oqp_call.kwargs["follow"]) < 0:
-                    raise ValueError
-            except (TypeError, ValueError) as exc:
-                raise OQPInputError("oqp.follow must be a non-negative mode index") from exc
+            if not _is_non_negative_integer(oqp_call.kwargs["follow"]):
+                raise OQPInputError("oqp.follow must be a non-negative mode index")
         for key in {
             "spring", "fmax", "frms", "climb_fmax", "neb_dt", "maxmove",
             "end_fmax", "irc_step", "mep_step", "path_gtol",
@@ -1527,7 +1648,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         native_aliases = {
             "coordsys": "coordsys", "trust": "trust", "trust_max": "trust_max",
         }
-        if driver.name == "ts":
+        if driver.name == "optimize":
+            native_aliases.update({"freeze": "freeze"})
+        elif driver.name == "ts":
             native_aliases.update({"follow": "follow", "hessian": "init_hessian"})
         elif driver.name == "mep":
             native_aliases.update({"step": "mep_step", "mep_step": "mep_step"})
@@ -1591,6 +1714,14 @@ def _default_state(spec: CalculationSpec) -> Optional[StateRef]:
         "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
         "dftb", "dftb0",
     }
+    if spec.driver.name == "namd" and {
+        "active", "init_state"
+    }.intersection(_driver_options(spec.driver)):
+        # Numeric ``active`` addresses the NAMD propagation manifold (and, for
+        # SOC, the spin-adiabatic surfaces), while ``init_state`` selects MCH
+        # character.  Either is already a complete selector and must not be
+        # replaced by the default physical state below.
+        return None
     if spec.driver.name in {"namd", "data"} and spec.model not in ground_models:
         if spec.model in {"sf", "sf-hf", "sf-dftb"}:
             return StateRef(root=1)
@@ -1605,6 +1736,50 @@ def _driver_options(driver: CallSpec) -> Dict[str, Any]:
     elif driver.name == "tci":
         state_keys.update({"state1", "state2", "state3", "i", "j", "k"})
     return {key: value for key, value in driver.kwargs.items() if key not in state_keys}
+
+
+def _normalized_meci_options(driver: CallSpec) -> Dict[str, Any]:
+    """Return MECI options using their legacy/configuration key names.
+
+    The concise surface uses readable names such as ``algorithm`` and
+    ``delta_beta``.  Existing spellings such as ``meci_search`` and
+    ``pen_delta`` remain accepted, but specifying both forms is an error rather
+    than a last-one-wins ambiguity.
+    """
+
+    options = _driver_options(driver)
+    normalized: Dict[str, Any] = {}
+    sources: Dict[str, str] = {}
+    for key, value in options.items():
+        target = _MECI_OPTION_ALIASES.get(key, key)
+        if target in normalized:
+            raise OQPInputError(
+                "MECI option '%s' is specified twice through %s and %s"
+                % (target, sources[target], key)
+            )
+        normalized[target] = value
+        sources[target] = key
+    return normalized
+
+
+def _validate_freeze_spec(value: Any) -> str:
+    """Validate the concise native frozen-distance expression."""
+
+    text = str(value).strip()
+    if not text:
+        raise OQPInputError("freeze requires distance(i,j) with one-based atom indices")
+    items = [item.strip() for item in text.split(";") if item.strip()]
+    pattern = re.compile(r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I)
+    if not items:
+        raise OQPInputError("freeze requires distance(i,j) with one-based atom indices")
+    for item in items:
+        match = pattern.fullmatch(item)
+        if not match or int(match.group(1)) < 1 or int(match.group(2)) < 1 \
+                or match.group(1) == match.group(2):
+            raise OQPInputError(
+                "freeze accepts semicolon-separated distance(i,j) pairs with distinct positive indices"
+            )
+    return ";".join(items)
 
 
 def _as_config_string(value: Any) -> str:
@@ -1628,6 +1803,17 @@ def _resolve_path(value: Any, source_dir: Optional[Path]) -> Any:
     # File-backed geometries/products are normally .xyz/.pdb; retain arbitrary
     # one-token names so the existing checker can give its usual file error.
     stripped = value.strip()
+    # QM/MM compact geometry references append atom selectors after the PDB
+    # filename (``system.pdb 1 2 5-8``).  Resolve only the path prefix against
+    # the .oqp source directory and preserve the selector suffix verbatim.
+    pdb_end = stripped.lower().find(".pdb")
+    if pdb_end >= 0:
+        pdb_end += len(".pdb")
+        selector_suffix = stripped[pdb_end:]
+        if selector_suffix.strip():
+            candidate = Path(stripped[:pdb_end]).expanduser()
+            resolved = candidate if candidate.is_absolute() else source_dir / candidate
+            return str(resolved.resolve()) + selector_suffix
     if any(char.isspace() for char in stripped) and not stripped.lower().endswith((".xyz", ".pdb")):
         return value
     candidate = Path(value).expanduser()
@@ -1751,17 +1937,21 @@ def lower_to_legacy(
         put("scf", "type", "uhf")
         put("scf", "multiplicity", 3)
     else:
-        ref_mult = int(spec.options.get("mult", 1))
-        ref_type = {
-            "rhf": "rhf", "uhf": "uhf", "rohf": "rohf",
-            "rks": "rhf", "uks": "uhf", "roks": "rohf",
-        }.get(spec.model, "rhf" if ref_mult == 1 else "uhf")
+        ref_mult = spec.options.get("mult", 1)
+        if spec.model == "mp2" and "reference" in spec.model_options:
+            ref_type = str(spec.model_options["reference"]).strip().lower()
+        else:
+            ref_type = {
+                "rhf": "rhf", "uhf": "uhf", "rohf": "rohf",
+                "rks": "rhf", "uks": "uhf", "roks": "rohf",
+            }.get(spec.model, "rhf" if ref_mult == 1 else "uhf")
         put("scf", "type", ref_type)
         put("scf", "multiplicity", ref_mult)
 
     if spec.model == "mp2":
         for key, value in spec.model_options.items():
-            put("mp2", key, value)
+            if key != "reference":
+                put("mp2", key, value)
 
     if spec.model in RESPONSE_MODELS:
         td_type = {
@@ -1778,7 +1968,7 @@ def lower_to_legacy(
         put("tdhf", "multiplicity", target_mult)
         roots = [_internal_root(spec.model, state) for state in states]
         explicit_nstate = spec.model_options.get("nstate")
-        nstate = int(explicit_nstate) if explicit_nstate is not None else max(roots or [1])
+        nstate = explicit_nstate if explicit_nstate is not None else max(roots or [1])
         put("tdhf", "nstate", nstate)
         for key, value in spec.model_options.items():
             if key != "nstate":
@@ -1792,7 +1982,7 @@ def lower_to_legacy(
             "tda-dftb": "tda", "sf-dftb": "sf", "mrsf-dftb": "mrsf",
         }[spec.model])
         if spec.model in {"dftb", "dftb0", "tddftb", "tda-dftb"}:
-            reference_mult = int(spec.options.get("mult", 1))
+            reference_mult = spec.options.get("mult", 1)
             if "mult" in spec.options or reference_mult != 1:
                 put("dftb", "reference_multiplicity", reference_mult)
         if spec.model in {"tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"}:
@@ -1896,7 +2086,8 @@ def lower_to_legacy(
                     put("oqp", "path_gtol", value)
             elif name == "ts" and key in {"coordsys", "trust", "trust_max", "follow", "hessian"}:
                 put("oqp", "init_hessian" if key == "hessian" else key, value)
-            elif name == "optimize" and key in _NATIVE_ENGINE_OPTIONS:
+            elif name == "optimize" and key in (
+                    _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS):
                 put("oqp", key, value)
             else:
                 put("optimize", key, value)
@@ -1911,6 +2102,21 @@ def lower_to_legacy(
         if name == "mecp":
             put("optimize", "imult", states[0].multiplicity)
             put("optimize", "jmult", states[1].multiplicity)
+        if name == "meci":
+            driver_options = _normalized_meci_options(spec.driver)
+            algorithm = str(driver_options.get(
+                "meci_search", "baeka" if len(roots) > 2 else "penalty"
+            )).strip().lower()
+            driver_options["meci_search"] = algorithm
+            if algorithm == "baeka":
+                put("optimize", "states", roots)
+                driver_options.setdefault("pen_sigma", 1.0)
+                driver_options.setdefault("pen_alpha", 0.02)
+                driver_options.setdefault("pen_delta", 0.025)
+                driver_options.setdefault(
+                    "pen_jump", "10,10,25,25,100,100,1000,1000,3000"
+                )
+                driver_options.setdefault("energy_gap", 1.0e-4)
         for key, value in driver_options.items():
             put("oqp" if key in _NATIVE_ENGINE_OPTIONS else "optimize", key, value)
     elif name in {"hess", "thermo"}:

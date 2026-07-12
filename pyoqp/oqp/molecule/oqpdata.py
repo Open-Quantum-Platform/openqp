@@ -364,6 +364,10 @@ OQP_CONFIG_SCHEMA = {
         'istate': {'type': int, 'default': '1'},
         'jstate': {'type': int, 'default': '2'},
         'kstate': {'type': int, 'default': '3'},
+        # Ordered same-spin response roots for the BaekA multistate MECI
+        # algorithm.  The established two-state algorithms continue to use
+        # istate/jstate, and the legacy tci route keeps kstate.
+        'states': {'type': iarray, 'default': ''},
         'imult': {'type': int, 'default': '1'},
         'jmult': {'type': int, 'default': '3'},
         'energy_shift': {'type': float, 'default': '1e-6'},
@@ -372,6 +376,14 @@ OQP_CONFIG_SCHEMA = {
         'pen_sigma': {'type': float, 'default': '1.0'},
         'pen_alpha': {'type': float, 'default': '0.0'},
         'pen_incre': {'type': float, 'default': '1.0'},
+        # BaekA uses additive penalty updates.  Keep these separate from
+        # pen_incre, whose historical meaning is a multiplicative factor for
+        # the older penalty implementation.
+        'pen_delta': {'type': float, 'default': '0.025'},
+        'pen_jump': {
+            'type': farray,
+            'default': '10,10,25,25,100,100,1000,1000,3000',
+        },
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
     },
@@ -391,6 +403,9 @@ OQP_CONFIG_SCHEMA = {
         'coordsys': {'type': str, 'default': 'tric'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
+        # Native constrained optimization.  Current public syntax accepts one
+        # or more frozen atom-pair distances, e.g. distance(1,2).
+        'freeze': {'type': str, 'default': ''},
         'follow': {'type': int, 'default': '0'},
         # Optional real Cartesian Hessian used to initialize native P-RFO.
         # ``model`` preserves the inexpensive Schlegel-model default.

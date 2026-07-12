@@ -149,14 +149,19 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     rmsd_step=1e-3
     max_grad=3e-4
     max_step=2e-3
-    istate=0
-    jstate=1
+    istate=1
+    jstate=2
+    kstate=3
+    states=
     energy_shift=1e-6
     energy_gap=1e-5
     meci_search=penalty
     pen_sigma=1.0
     pen_alpha=0.0
     pen_incre=1.0
+    pen_delta=0.025
+    pen_jump=10,10,25,25,100,100,1000,1000,3000
+    gap_weight=1.0
     init_scf=False
 
 [hess]
@@ -509,6 +514,10 @@ automatically.
 - jstate // choose the second state for conical intersection optimization
 
       2 (default)
+
+- states // ordered consecutive response roots for BaekA multistate MECI
+
+      empty (default); use 1,2 or 1,2,3,... with meci_search=baeka
     
 - energy_shift // convergence threshold for electronic energy changes
 
@@ -520,9 +529,10 @@ automatically.
     
 - meci-search // choose the algorithm for conical intersection optimization
 
-      penalty    use the modified pentaly method (default)
+      penalty    use the modified penalty method (default)
       ubp        use the update branching plane method
       hybrid     use the penalty function then swith to ubp after energy gap is lower than the threshold
+      baeka      use the additive Baek adaptive penalty for two or more states
     
 - pen_sigma // set the sigma in the penalty function
 
@@ -534,7 +544,20 @@ automatically.
     
 - pen_incre // set the incremental factor in the penalty function
 
-      1.0 (default)
+      1.0 (default); multiplicative legacy control used by runtype=tci,
+      not by meci_search=baeka
+
+- pen_delta // BaekA small additive delta-beta update
+
+      0.025 (default)
+
+- pen_jump // BaekA large additive beta schedule
+
+      10,10,25,25,100,100,1000,1000,3000 (default)
+
+- gap_weight // crossing-search penalty scaling
+
+      1.0 (default); fixed at 1.0 for meci_search=baeka
     
 - init_scf // do initial SCF iteration during geometry optimization
 

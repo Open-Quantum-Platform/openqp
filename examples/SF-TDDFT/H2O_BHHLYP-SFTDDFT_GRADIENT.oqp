@@ -1,0 +1,1 @@
+sf(nstate=3)/bhhlyp/6-31g* geom="../geometries/H2O-0381125c86f2.xyz" charge=0 grad(root=3) guess(type=huckel)

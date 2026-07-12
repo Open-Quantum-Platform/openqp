@@ -288,6 +288,15 @@ def validate_examples(examples_dir):
     failures = []
     inputs = glob.glob(os.path.join(examples_dir, '**', '*.inp'), recursive=True)
     inputs += glob.glob(os.path.join(examples_dir, '**', '*.oqp'), recursive=True)
+    semantic_stems = {
+        os.path.splitext(path)[0]
+        for path in inputs if path.lower().endswith('.oqp')
+    }
+    inputs = [
+        path for path in inputs
+        if path.lower().endswith('.oqp')
+        or os.path.splitext(path)[0] not in semantic_stems
+    ]
     for inp in sorted(path for path in inputs if not path.endswith('.resolved.oqp')):
         ref = os.path.splitext(inp)[0] + '.json'
         if not os.path.exists(ref):

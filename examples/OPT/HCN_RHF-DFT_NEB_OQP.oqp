@@ -1,0 +1,1 @@
+rks/bhhlyp/6-31g* geom="../geometries/CHN-682f5d7d753a.xyz" charge=0 mult=1 neb(S0,maxit=10,product="HCN_RHF-DFT_NEB_OQP_product.xyz",nimage=7,spring=0.1,climb=true,fmax=0.005)

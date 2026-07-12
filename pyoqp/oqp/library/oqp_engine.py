@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 import scipy.linalg as sla
+import re
 
 from oqp.library.oqp_coords import build_coordinates, CartesianCoordinates
 
@@ -56,11 +57,32 @@ class ConvergenceSignal(Exception):
     """Raised by the convergence callback to stop the loop cleanly."""
 
 
+def parse_frozen_distance_spec(value):
+    """Return one-based atom pairs from ``distance(i,j);...`` syntax."""
+    text = str(value or "").strip()
+    if not text:
+        return []
+    pattern = re.compile(r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I)
+    pairs = []
+    for item in (part.strip() for part in text.split(";") if part.strip()):
+        match = pattern.fullmatch(item)
+        if not match:
+            raise ValueError(
+                "freeze must contain semicolon-separated distance(i,j) pairs"
+            )
+        pair = (int(match.group(1)), int(match.group(2)))
+        if pair[0] == pair[1]:
+            raise ValueError("frozen-distance atom indices must be distinct")
+        pairs.append(pair)
+    return pairs
+
+
 class OQPEngine:
     def __init__(self, atoms, x0, mode="min", trust=0.2, trust_min=5.0e-3,
                  trust_max=0.5, maxiter=100, follow_mode=0, coordsys="auto",
                  logger=None, initial_hessian=None, initial_gradient=None,
-                 masses=None, project_global_rigid_modes=False):
+                 masses=None, project_global_rigid_modes=False,
+                 frozen_distances=None):
         """Create an optimization engine.
 
         Parameters
@@ -92,6 +114,11 @@ class OQPEngine:
             OpenQP enables this for non-QM/MM jobs. The standalone default is
             false because an external field or fixed embedding can give genuine
             lab-frame rigid-motion curvature.
+        frozen_distances : sequence of pair, optional
+            One-based atom-index pairs whose initial distances are held fixed.
+            The optimizer projects gradients into the linearized constraint
+            tangent space and applies a SHAKE-like Cartesian correction after
+            every trial step.
         """
         self.atoms = np.asarray(atoms, dtype=int).reshape(-1)
         self.x = np.asarray(x0, dtype=float).reshape(-1)
@@ -105,6 +132,14 @@ class OQPEngine:
             raise ValueError("masses must be a finite positive value for every atom")
         self.sqrt_cartesian_mass = np.sqrt(np.repeat(self.masses, 3))
         self.project_global_rigid_modes = bool(project_global_rigid_modes)
+        self.frozen_distances = self._validate_frozen_distances(
+            frozen_distances or []
+        )
+        xyz0 = self.x.reshape(-1, 3)
+        self._frozen_distance_targets = [
+            float(np.linalg.norm(xyz0[first] - xyz0[second]))
+            for first, second in self.frozen_distances
+        ]
         self.mode = mode
         self.trust = float(trust)
         self.trust_min = float(trust_min)
@@ -143,6 +178,77 @@ class OQPEngine:
                                                      model_hessian,
                                                      initial_gradient)
         self._prev = None
+
+    def _validate_frozen_distances(self, pairs):
+        validated = []
+        natom = self.atoms.size
+        for pair in pairs:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                raise ValueError("each frozen distance must contain two atom indices")
+            try:
+                # Public input uses the chemistry convention: atoms start at 1.
+                first, second = int(pair[0]) - 1, int(pair[1]) - 1
+            except (TypeError, ValueError) as exc:
+                raise ValueError("frozen-distance atom indices must be integers") from exc
+            if first == second or min(first, second) < 0 or max(first, second) >= natom:
+                raise ValueError(
+                    "frozen-distance atom indices must be distinct and between 1 and %d"
+                    % natom
+                )
+            canonical = tuple(sorted((first, second)))
+            if canonical not in validated:
+                validated.append(canonical)
+        return validated
+
+    def _constraint_jacobian(self, x):
+        """Cartesian Jacobian rows for the active frozen distances."""
+        if not self.frozen_distances:
+            return np.zeros((0, self.x.size), dtype=float)
+        xyz = np.asarray(x, dtype=float).reshape(-1, 3)
+        rows = []
+        for first, second in self.frozen_distances:
+            delta = xyz[first] - xyz[second]
+            norm = float(np.linalg.norm(delta))
+            if norm <= 1.0e-14:
+                raise ValueError("cannot freeze a zero atom-pair distance")
+            unit = delta / norm
+            row = np.zeros(self.x.size, dtype=float)
+            row[3 * first:3 * first + 3] = unit
+            row[3 * second:3 * second + 3] = -unit
+            rows.append(row)
+        return np.asarray(rows)
+
+    def _project_constraint_tangent(self, vector, x=None):
+        """Remove Cartesian components normal to all distance constraints."""
+        vector = np.asarray(vector, dtype=float).reshape(-1)
+        jac = self._constraint_jacobian(self.x if x is None else x)
+        if not jac.size:
+            return vector
+        gram = jac @ jac.T
+        coeff = np.linalg.pinv(gram, rcond=1.0e-12) @ (jac @ vector)
+        return vector - jac.T @ coeff
+
+    def _enforce_frozen_distance_values(self, x):
+        """Return coordinates corrected to the stored pair distances."""
+        if not self.frozen_distances:
+            return np.asarray(x, dtype=float).reshape(-1)
+        xyz = np.asarray(x, dtype=float).reshape(-1, 3).copy()
+        for _ in range(50):
+            largest = 0.0
+            for (first, second), target in zip(
+                    self.frozen_distances, self._frozen_distance_targets):
+                delta = xyz[first] - xyz[second]
+                distance = float(np.linalg.norm(delta))
+                if distance <= 1.0e-14:
+                    raise ValueError("cannot enforce a zero atom-pair distance")
+                error = distance - target
+                largest = max(largest, abs(error))
+                correction = 0.5 * error * (delta / distance)
+                xyz[first] -= correction
+                xyz[second] += correction
+            if largest <= 1.0e-12:
+                break
+        return xyz.reshape(-1)
 
     def _transform_initial_hessian(self, initial_hessian, model_hessian,
                                    initial_gradient=None):
@@ -309,9 +415,51 @@ class OQPEngine:
             pass
         return self.x
 
+    def rebase_previous_objective(self, energy, gradient):
+        """Re-evaluate the stored previous point for a changed objective.
+
+        Adaptive objectives may change a scalar parameter between two geometry
+        evaluations.  Their caller can recombine the previous geometry's
+        parameter-independent energy and Cartesian gradient at the new
+        parameter, then use this helper to keep the BFGS secant and trust-ratio
+        comparison on one objective.  The previous geometry is retained with
+        the accepted step so the rebased gradient is transformed in the same
+        coordinate frame in which it was evaluated.
+
+        Returns ``False`` before the first step, when no previous point exists.
+        """
+
+        if self._prev is None:
+            return False
+
+        energy = float(energy)
+        gradient = np.asarray(gradient, dtype=float).reshape(-1)
+        previous_x = np.asarray(self._prev["x"], dtype=float).reshape(-1)
+        if not np.isfinite(energy):
+            raise ValueError("rebased objective energy must be finite")
+        if gradient.shape != previous_x.shape:
+            raise ValueError(
+                "rebased objective gradient must match the previous geometry"
+            )
+        if not np.all(np.isfinite(gradient)):
+            raise ValueError("rebased objective gradient must be finite")
+
+        gradient = self._project_constraint_tangent(gradient, previous_x)
+        gradient_q = self.coords.grad_to_q(previous_x, gradient)
+        displacement_q = self._prev["dq"]
+
+        self._prev["e"] = energy
+        self._prev["g_q"] = gradient_q
+        self._prev["pred"] = float(
+            gradient_q @ displacement_q
+            + 0.5 * displacement_q @ self.H @ displacement_q
+        )
+        return True
+
     # -- one macro-iteration ------------------------------------------------ #
     def _take_step(self, e, g_cart):
         b = self.coords.b_matrix(self.x)
+        g_cart = self._project_constraint_tangent(g_cart, self.x)
         g_q = self.coords.grad_to_q(self.x, g_cart)
 
         if self._prev is not None:
@@ -334,12 +482,15 @@ class OQPEngine:
             if not ok:
                 x_new = self.x + (b.T @ dq) * 0.5
 
+        x_new = self._enforce_frozen_distance_values(x_new)
+
         dq_taken = self.coords.q_displacement(self.coords.q(x_new),
                                               self.coords.q(self.x))
         cart_step = self.coords.cart_rmsd(self.x, x_new)
         pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
         self._prev = {"e": e, "g_q": g_q, "dq": dq_taken,
-                      "pred": pred, "cart_step": cart_step}
+                      "pred": pred, "cart_step": cart_step,
+                      "x": self.x.copy()}
         return x_new
 
     # -- RFO / P-RFO -------------------------------------------------------- #

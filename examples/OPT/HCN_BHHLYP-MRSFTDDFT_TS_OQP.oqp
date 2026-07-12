@@ -1,0 +1,1 @@
+mrsf(nstate=2)/bhhlyp/3-21g geom="../geometries/CHN-d957be87de22.xyz" charge=0 ts(S0,maxit=2,energy_shift=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1,coordsys=dlc,trust=0.05,trust_max=0.1,hessian=model) scf(maxit=30) tdhf(maxit=30)

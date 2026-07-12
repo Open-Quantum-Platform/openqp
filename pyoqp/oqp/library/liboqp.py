@@ -22,8 +22,9 @@ import numpy as np
 
 import os
 
-from oqp.library.libscipy import StateSpecificOpt, MECIOpt, MECPOpt
-from oqp.library.oqp_engine import OQPEngine
+from oqp.library.libscipy import Optimizer, StateSpecificOpt, MECIOpt, MECPOpt
+from oqp.library.baeka import BaekAState
+from oqp.library.oqp_engine import OQPEngine, parse_frozen_distance_spec
 from oqp.library.oqp_neb import NEB
 from oqp.library.neb_utils import _read_xyz, kabsch_align, write_neb_xyz
 from oqp.periodic_table import ELEMENTS_NAME, SYMBOL_MAP
@@ -43,6 +44,7 @@ class _OQPRunner:
             "coordsys": cfg.get("coordsys", "auto"),
             "trust": float(cfg.get("trust", 0.2)),
             "trust_max": float(cfg.get("trust_max", 0.5)),
+            "frozen_distances": parse_frozen_distance_spec(cfg.get("freeze", "")),
             "follow_mode": int(cfg.get("follow", 0)),
         }
 
@@ -73,17 +75,35 @@ class _OQPRunner:
             project_global_rigid_modes=not bool(
                 self.mol.config.get("input", {}).get("qmmm_flag", False)
             ),
+            frozen_distances=opts["frozen_distances"],
         )
         dump_log(
             self.mol,
-            title="PyOQP: OQP optimizer [mode=%s, coordsys=%s, trust=%.3f]"
-            % (self.mode, engine.coordsys, opts["trust"]),
+            title="PyOQP: OQP optimizer [mode=%s, coordsys=%s, trust=%.3f%s]"
+            % (
+                self.mode,
+                engine.coordsys,
+                opts["trust"],
+                ", frozen distances=%s" % len(engine.frozen_distances)
+                if engine.frozen_distances else "",
+            ),
         )
 
         def energy_gradient(coords):
             # one_step updates metrics/pre_coord/pre_energy and returns
             # (energy [Hartree], gradient [Hartree/Bohr]) for the active state.
-            return self.one_step(np.asarray(coords, dtype=float).reshape(-1))
+            energy, gradient = self.one_step(
+                np.asarray(coords, dtype=float).reshape(-1)
+            )
+            if engine.frozen_distances:
+                gradient = engine._project_constraint_tangent(gradient, coords)
+                self.metrics["rmsd_grad"] = float(
+                    np.sqrt(np.mean(np.asarray(gradient) ** 2))
+                )
+                self.metrics["max_grad"] = float(
+                    np.max(np.abs(np.asarray(gradient)))
+                )
+            return energy, gradient
 
         try:
             engine.run(energy_gradient, on_converged=self.check_convergence)
@@ -192,25 +212,244 @@ class OQPMECPOpt(_OQPRunner, MECPOpt):
         MECPOpt.__init__(self, mol)
 
 
+class OQPBaekAOpt(_OQPRunner, Optimizer):
+    r"""Generalized Baek adaptive-penalty CI search for ``N >= 2`` states.
+
+    The selected roots are ordered and only adjacent energy gaps are penalized,
+    removing the redundant outer gap of an all-pairs formulation.  ``sigma`` is
+    increased additively by ``pen_delta`` on ordinary iterations and by the next
+    entry of ``pen_jump`` when the projected objective is locally stationary but
+    the outer-state span still exceeds ``energy_gap``.
+
+    Reference: Y. S. Baek, S. Lee, M. Filatov, and C. H. Choi,
+    J. Phys. Chem. A 125, 1994--2006 (2021),
+    https://doi.org/10.1021/acs.jpca.0c11294.
+    """
+
+    mode = "min"
+
+    def __init__(self, mol, states=None):
+        Optimizer.__init__(self, mol)
+        cfg = mol.config["optimize"]
+
+        if states is None:
+            states = cfg.get("states", [])
+        if isinstance(states, str):
+            states = [item for item in states.replace(",", " ").split() if item]
+        states = [int(state) for state in states]
+        if not states:
+            states = [self.istate, self.jstate]
+        if len(states) < 2:
+            raise ValueError("BaekA requires at least two states")
+        if any(state < 1 for state in states):
+            raise ValueError("BaekA states must be positive response roots")
+        if any(b <= a for a, b in zip(states, states[1:])):
+            raise ValueError("BaekA states must be strictly increasing")
+        if any(b != a + 1 for a, b in zip(states, states[1:])):
+            raise ValueError("BaekA requires consecutive states")
+        self.states = states
+
+        alpha = float(cfg.get("pen_alpha", 0.0))
+        if alpha == 0.0:
+            # The global legacy schema must retain pen_alpha=0 for the older
+            # two-state MECI path.  For BaekA, zero is the method-default
+            # sentinel and maps to the established energy-valued smoothing
+            # parameter; negative values remain invalid.
+            alpha = 0.02
+        if alpha < 0.0:
+            raise ValueError("BaekA pen_alpha must be zero or a positive energy")
+
+        self.alpha = alpha
+        self.delta_beta = float(cfg.get("pen_delta", 0.025))
+        self.jump_schedule = cfg.get(
+            "pen_jump", "10,10,25,25,100,100,1000,1000,3000"
+        )
+        self.weights = float(cfg.get("gap_weight", 1.0))
+        if not np.isfinite(self.weights) or self.weights != 1.0:
+            raise ValueError(
+                "BaekA gap_weight is fixed at 1.0; use pen_sigma for the "
+                "published penalty multiplier"
+            )
+        self.baeka = BaekAState(
+            sigma=float(cfg.get("pen_sigma", 1.0)),
+            alpha=self.alpha,
+            delta_beta=self.delta_beta,
+            beta_schedule=self.jump_schedule,
+            gap_tol=self.energy_gap,
+            tol_f=self.energy_shift,
+            tol_g=self.rmsd_grad,
+            gap_weight=self.weights,
+        )
+        self._baeka_evaluation = None
+        self.metrics.update({
+            "meci_search": "baeka",
+            "states": self.states.copy(),
+            "state_count": len(self.states),
+            "alpha": self.alpha,
+            "delta_beta": self.delta_beta,
+            "jump_schedule": self.baeka.beta_schedule,
+            "tol_f": self.energy_shift,
+            "tol_g": self.rmsd_grad,
+        })
+
+    def optimize(self):
+        """Run BaekA with same-sigma-rebased native RFO/BFGS steps."""
+
+        opts = self._oqp_config()
+        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        engine = OQPEngine(
+            atoms, x0,
+            mode=self.mode,
+            trust=opts["trust"],
+            trust_max=opts["trust_max"],
+            follow_mode=opts["follow_mode"],
+            coordsys=opts["coordsys"],
+            maxiter=self.maxit,
+            masses=np.asarray(self.mol.get_mass(), dtype=float).reshape(-1),
+            project_global_rigid_modes=not bool(
+                self.mol.config.get("input", {}).get("qmmm_flag", False)
+            ),
+        )
+        dump_log(
+            self.mol,
+            title="PyOQP: OQP BaekA optimizer [states=%s, coordsys=%s, trust=%.3f]"
+            % ("/".join(map(str, self.states)), engine.coordsys, opts["trust"]),
+        )
+
+        previous_objective_data = [None]
+
+        def energy_gradient(coords):
+            energy, gradient = self.one_step(
+                np.asarray(coords, dtype=float).reshape(-1)
+            )
+            current_data = self._baeka_evaluation.data
+            previous_data = previous_objective_data[0]
+            if previous_data is not None:
+                # Recombine the previous geometry at the exact sigma of the
+                # objective returned for this geometry.  OQPEngine then forms
+                # its BFGS secant and trust ratio from one common objective
+                # without discarding accumulated curvature.
+                previous_energy = (
+                    previous_data.average_energy
+                    + current_data.sigma * previous_data.penalty
+                )
+                previous_gradient = (
+                    previous_data.average_gradient
+                    + current_data.sigma * previous_data.penalty_gradient
+                )
+                engine.rebase_previous_objective(
+                    previous_energy, previous_gradient
+                )
+            previous_objective_data[0] = current_data
+            return energy, gradient
+
+        engine.run(energy_gradient, on_converged=self.check_convergence)
+
+    def one_step(self, coordinates):
+        self.itr += 1
+        dump_log(self.mol, title="PyOQP: Geometry Optimization Step %s" % self.itr)
+        do_init_scf = True if self.itr == 1 else self.init_scf
+
+        self.mol.update_system(coordinates)
+        energies = self.sp.energy(do_init_scf=do_init_scf)
+        self.grad.grads = self.states.copy()
+        grads = self.grad.gradient()
+        self.mol.energies = energies
+        self.mol.grads = grads
+        energies, grads = self.ls.compute(self.mol, grad_list=self.grad.grads)
+        self.mol.energies = energies
+        self.mol.grads = grads
+
+        selected_energies = np.asarray(
+            [energies[state] for state in self.states], dtype=float
+        )
+        selected_gradients = np.asarray(
+            [np.asarray(grads[state], dtype=float).reshape(-1)
+             for state in self.states],
+            dtype=float,
+        )
+        evaluation = self.baeka.evaluate(selected_energies, selected_gradients)
+        self._baeka_evaluation = evaluation
+        data = evaluation.data
+        tested_data = evaluation.tested_data
+
+        previous_coord = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        current_coord = np.asarray(coordinates, dtype=float).reshape(-1)
+        displacement = current_coord - previous_coord
+        rmsd_step = float(np.sqrt(np.mean(displacement * displacement)))
+        max_step = float(np.max(np.abs(displacement)))
+        rmsd_grad = float(np.sqrt(np.mean(data.gradient * data.gradient)))
+        max_grad = float(np.max(np.abs(data.gradient)))
+
+        self.metrics.update({
+            "itr": self.itr,
+            "sigma": tested_data.sigma,
+            "active_sigma": data.sigma,
+            "next_sigma": evaluation.next_sigma,
+            "effective_sigma": data.effective_sigma,
+            "de": evaluation.delta_f,
+            "gap": tested_data.span,
+            "gaps": tested_data.gaps.copy(),
+            "objective": data.objective,
+            "tested_objective": tested_data.objective,
+            "penalty": tested_data.penalty,
+            "projector_rank": tested_data.projector_rank,
+            "parallel_grad": tested_data.parallel_scaled_norm,
+            "perpendicular_grad": tested_data.perpendicular_norm,
+            "stationary": evaluation.local_stationary,
+            "gap_converged": evaluation.gap_converged,
+            "converged": evaluation.converged,
+            "action": evaluation.action,
+            "jump": evaluation.jump,
+            "jump_index": evaluation.jump_index,
+            "rmsd_step": rmsd_step,
+            "max_step": max_step,
+            "rmsd_grad": rmsd_grad,
+            "max_grad": max_grad,
+        })
+        dump_data(
+            self.mol,
+            (
+                self.itr, self.atoms, current_coord, data.objective,
+                evaluation.delta_f, tested_data.span, tested_data.gaps,
+                tested_data.sigma, data.sigma, rmsd_step, max_step,
+                tested_data.parallel_scaled_norm,
+                tested_data.perpendicular_norm, evaluation.action,
+            ),
+            title="BAEKA",
+            fpath=self.mol.log_path,
+        )
+        self.pre_energy = data.objective
+        self.pre_coord = current_coord.copy()
+        return data.objective, data.gradient
+
+    def check_convergence(self):
+        dump_log(
+            self.mol,
+            title="Geometry Optimization Convergence %s" % self.itr,
+            section="baeka",
+            info=self.metrics,
+        )
+        if self._baeka_evaluation.converged:
+            dump_log(self.mol, title="PyOQP: BaekA Geometry Optimization Has Converged")
+            raise StopIteration
+        if self.itr >= self.maxit:
+            dump_log(
+                self.mol,
+                title="PyOQP: BaekA Geometry Optimization Has Not Converged. "
+                      "Reached The Maximum Iteration",
+            )
+            raise StopIteration
+
+
 class OQPTCIOpt(_OQPRunner, MECIOpt):
-    r"""Three-state conical intersection (TCI) search by adaptive penalty.
+    r"""Legacy three-state CI search retained for input compatibility.
 
-    Generalizes the Levine-Martinez two-state penalty to three states
-    (i < j < k) by penalizing the two consecutive gaps, following the adaptive
-    penalty-function method for three-state CIs with MRSF-TDDFT
-    (Lee, Back, et al., J. Phys. Chem. A 2021, 125, 9580):
-
-        F  = (E_i + E_j + E_k) / 3 + sigma * [ P(g_ji) + P(g_kj) ]
-        P(d)  = d^2 / (d + alpha)
-        P'(d) = (d^2 + 2 alpha d) / (d + alpha)^2
-        dF = (G_i + G_j + G_k) / 3
-             + sigma * [ P'(g_ji) (G_j - G_i) + P'(g_kj) (G_k - G_j) ]
-
-    with g_ji = E_j - E_i, g_kj = E_k - E_j.  ``sigma`` grows by ``pen_incre``
-    each step (the adaptive tightening); ``alpha`` defaults to the RMS of the
-    larger gap-gradient when ``pen_alpha == 0``.  Convergence requires BOTH
-    consecutive gaps below ``energy_gap``.  Reuses ``MECIOpt`` infrastructure;
-    only the objective is three-state.
+    This is the historical OpenQP TCI prototype: it penalizes the two
+    consecutive gaps and multiplies ``sigma`` by ``pen_incre`` every step.
+    The published additive Baek adaptive algorithm is independently selected
+    with ``runtype=meci`` and ``meci_search=baeka``.
     """
 
     mode = "min"

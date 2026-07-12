@@ -282,6 +282,18 @@ def get_optimizer(mol):
     runtype = mol.config['input']['runtype']
     lib = mol.config['optimize']['lib']
 
+    # BaekA generalizes the adjacent-gap adaptive penalty from two to N states.
+    # It is selected as a MECI search algorithm rather than as a separate
+    # backend; the historical three-state ``tci`` spelling remains below.
+    meci_search = str(
+        mol.config['optimize'].get('meci_search', 'penalty')
+    ).strip().lower()
+    if lib == 'oqp' and runtype == 'meci' and meci_search == 'baeka':
+        # Lazy import keeps lightweight dispatcher test doubles compatible;
+        # normal OpenQP installations load the real native class here.
+        from oqp.library.liboqp import OQPBaekAOpt
+        return OQPBaekAOpt(mol)
+
     opt_lib = {
         'scipy': {
             'optimize': StateSpecificOpt,

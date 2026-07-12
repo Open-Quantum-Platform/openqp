@@ -7,6 +7,7 @@ stubs so the compiled OQP backend is not required, mirroring
 """
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -28,20 +29,531 @@ def _load(name, path):
 
 def _load_oqp_modules():
     """Load oqp_coords and oqp_engine without the oqp backend."""
-    for pkg in ("oqp", "oqp.library"):
-        m = sys.modules.get(pkg) or types.ModuleType(pkg)
-        m.__path__ = []
-        sys.modules[pkg] = m
-    nc = _load("oqp.library.oqp_coords", LIB / "oqp_coords.py")
-    ne = _load("oqp.library.oqp_engine", LIB / "oqp_engine.py")
-    nb = _load("oqp.library.oqp_neb", LIB / "oqp_neb.py")
-    ni = _load("oqp.library.oqp_irc", LIB / "oqp_irc.py")
-    return nc, ne, nb, ni
+    package_names = ("oqp", "oqp.library")
+    module_names = (
+        "oqp.library.oqp_coords", "oqp.library.oqp_engine",
+        "oqp.library.oqp_neb", "oqp.library.oqp_irc", "oqp.library.baeka",
+    )
+    saved = {name: sys.modules.get(name) for name in package_names + module_names}
+    try:
+        for pkg in package_names:
+            module = types.ModuleType(pkg)
+            module.__path__ = []
+            sys.modules[pkg] = module
+        nc = _load("oqp.library.oqp_coords", LIB / "oqp_coords.py")
+        ne = _load("oqp.library.oqp_engine", LIB / "oqp_engine.py")
+        nb = _load("oqp.library.oqp_neb", LIB / "oqp_neb.py")
+        ni = _load("oqp.library.oqp_irc", LIB / "oqp_irc.py")
+        ba = _load("oqp.library.baeka", LIB / "baeka.py")
+        return nc, ne, nb, ni, ba
+    finally:
+        # Do not leave the backend-free package stubs in global import state:
+        # later test modules may legitimately import the real Python package.
+        for name, module in saved.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
-NC, NE, NB, NI = _load_oqp_modules()
+NC, NE, NB, NI, BA = _load_oqp_modules()
 NEB = NB.NEB
 IRC = NI.IRC
+
+
+def _restore_modules(saved):
+    for name, module in saved.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
+def _load_baeka_file_utils():
+    """Load the real BAEKA artifact writer with dependency-light stubs."""
+
+    dependency_names = (
+        "oqp", "oqp.molden", "oqp.molden.moldenwriter",
+        "oqp.periodic_table", "oqp.runtime", "oqp.utils",
+        "oqp.utils.constants", "oqp.utils.mpi_utils", "oqp.utils.qmmm",
+        "oqp.utils.state_labels",
+    )
+    saved = {name: sys.modules.get(name) for name in dependency_names}
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
+
+        molden = types.ModuleType("oqp.molden")
+        molden.__path__ = []
+        sys.modules["oqp.molden"] = molden
+        moldenwriter = types.ModuleType("oqp.molden.moldenwriter")
+        moldenwriter.write_frequency = lambda *args, **kwargs: ""
+        sys.modules["oqp.molden.moldenwriter"] = moldenwriter
+
+        periodic_table = types.ModuleType("oqp.periodic_table")
+        periodic_table.SYMBOL_MAP = {1: "H"}
+        periodic_table.ELEMENTS_NAME = {"H": "H"}
+        sys.modules["oqp.periodic_table"] = periodic_table
+
+        runtime = types.ModuleType("oqp.runtime")
+        runtime.basis_search_paths = lambda: []
+        sys.modules["oqp.runtime"] = runtime
+
+        oqp_utils = types.ModuleType("oqp.utils")
+        oqp_utils.__path__ = []
+        sys.modules["oqp.utils"] = oqp_utils
+        constants = types.ModuleType("oqp.utils.constants")
+        constants.ANGSTROM_TO_BOHR = 1.0
+        sys.modules["oqp.utils.constants"] = constants
+        mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+        mpi_utils.mpi_dump = lambda function: function
+        sys.modules["oqp.utils.mpi_utils"] = mpi_utils
+        qmmm = types.ModuleType("oqp.utils.qmmm")
+        qmmm.gradient_qmmm = lambda *args, **kwargs: None
+        sys.modules["oqp.utils.qmmm"] = qmmm
+        state_labels = types.ModuleType("oqp.utils.state_labels")
+        state_labels.format_calculation_request = lambda *args, **kwargs: ""
+        state_labels.is_mrsf = lambda *args, **kwargs: False
+        state_labels.public_method_name = lambda *args, **kwargs: ""
+        state_labels.public_state_label = lambda *args, **kwargs: ""
+        state_labels.spin_name = lambda *args, **kwargs: ""
+        sys.modules["oqp.utils.state_labels"] = state_labels
+
+        return _load(
+            "_oqp_file_utils_baeka_runtime_under_test",
+            ROOT / "pyoqp" / "oqp" / "utils" / "file_utils.py",
+        )
+    finally:
+        _restore_modules(saved)
+
+
+def _load_baeka_runtime(fake_engine, optimizer_base, dump_log, dump_data):
+    """Load OQPBaekAOpt around fakes while retaining its production callback."""
+
+    dependency_names = (
+        "oqp", "oqp.library", "oqp.library.libscipy",
+        "oqp.library.baeka", "oqp.library.oqp_engine",
+        "oqp.library.oqp_neb", "oqp.library.neb_utils",
+        "oqp.periodic_table", "oqp.utils", "oqp.utils.file_utils",
+    )
+    saved = {name: sys.modules.get(name) for name in dependency_names}
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
+        library = types.ModuleType("oqp.library")
+        library.__path__ = []
+        sys.modules["oqp.library"] = library
+        oqp_utils = types.ModuleType("oqp.utils")
+        oqp_utils.__path__ = []
+        sys.modules["oqp.utils"] = oqp_utils
+
+        libscipy = types.ModuleType("oqp.library.libscipy")
+        libscipy.Optimizer = optimizer_base
+        libscipy.StateSpecificOpt = type("StateSpecificOpt", (optimizer_base,), {})
+        libscipy.MECIOpt = type("MECIOpt", (optimizer_base,), {})
+        libscipy.MECPOpt = type("MECPOpt", (optimizer_base,), {})
+        sys.modules["oqp.library.libscipy"] = libscipy
+        sys.modules["oqp.library.baeka"] = BA
+
+        oqp_engine = types.ModuleType("oqp.library.oqp_engine")
+        oqp_engine.OQPEngine = fake_engine
+        oqp_engine.parse_frozen_distance_spec = lambda value: []
+        sys.modules["oqp.library.oqp_engine"] = oqp_engine
+        oqp_neb = types.ModuleType("oqp.library.oqp_neb")
+        oqp_neb.NEB = type("NEB", (), {})
+        sys.modules["oqp.library.oqp_neb"] = oqp_neb
+        neb_utils = types.ModuleType("oqp.library.neb_utils")
+        neb_utils._read_xyz = lambda path: None
+        neb_utils.kabsch_align = lambda reference, mobile: mobile
+        neb_utils.write_neb_xyz = lambda *args, **kwargs: None
+        sys.modules["oqp.library.neb_utils"] = neb_utils
+
+        periodic_table = types.ModuleType("oqp.periodic_table")
+        periodic_table.ELEMENTS_NAME = {"H": "H"}
+        periodic_table.SYMBOL_MAP = {1: "H"}
+        sys.modules["oqp.periodic_table"] = periodic_table
+        file_utils = types.ModuleType("oqp.utils.file_utils")
+        file_utils.dump_log = dump_log
+        file_utils.dump_data = dump_data
+        sys.modules["oqp.utils.file_utils"] = file_utils
+
+        return _load(
+            "_oqp_liboqp_baeka_runtime_under_test",
+            LIB / "liboqp.py",
+        )
+    finally:
+        _restore_modules(saved)
+
+
+# --------------------------------------------------------------------------- #
+class TestBaekAKernel(unittest.TestCase):
+    def test_three_state_objective_uses_only_adjacent_gaps(self):
+        energies = np.array([1.0, 1.2, 1.5])
+        gradients = np.array([[0.1, -0.2], [0.4, 0.3], [-0.1, 0.7]])
+        sigma = 2.0
+        alpha = 0.02
+        result = BA.baeka_objective(
+            energies, gradients, sigma=sigma, alpha=alpha
+        )
+
+        adjacent = (0.2 ** 2 / (0.2 + alpha)
+                    + 0.3 ** 2 / (0.3 + alpha))
+        expected = np.mean(energies) + sigma * adjacent
+        self.assertAlmostEqual(result.objective, expected, places=14)
+        self.assertTrue(np.allclose(result.gaps, [0.2, 0.3]))
+        # The redundant outer gap (E2-E0) must not appear.
+        with_outer = expected + sigma * 0.5 ** 2 / (0.5 + alpha)
+        self.assertNotAlmostEqual(result.objective, with_outer, places=8)
+
+    def test_generalized_objective_has_n_minus_one_gaps(self):
+        energies = np.array([0.0, 0.1, 0.25, 0.7])
+        gradients = np.arange(12.0).reshape(4, 3) / 10.0
+        result = BA.baeka_objective(
+            energies, gradients, sigma=1.0, alpha=0.02
+        )
+        self.assertEqual(result.gaps.shape, (3,))
+        self.assertEqual(result.gap_gradients.shape, (3, 3))
+        self.assertAlmostEqual(result.span, 0.7)
+
+    def test_objective_gradient_matches_finite_difference(self):
+        def surfaces(x):
+            x0, x1 = x
+            energies = np.array([
+                0.10 * x0 * x0 + 0.05 * x1 * x1,
+                0.40 + 0.20 * x0 * x0 + 0.10 * x1 * x1,
+                0.90 + 0.05 * x0 * x0 + 0.30 * x1 * x1,
+            ])
+            gradients = np.array([
+                [0.20 * x0, 0.10 * x1],
+                [0.40 * x0, 0.20 * x1],
+                [0.10 * x0, 0.60 * x1],
+            ])
+            return energies, gradients
+
+        x = np.array([0.31, -0.22])
+        energies, gradients = surfaces(x)
+        analytic = BA.baeka_objective(
+            energies, gradients, sigma=1.7, alpha=0.02
+        ).gradient
+        numeric = np.zeros(2)
+        step = 1.0e-6
+        for coordinate in range(2):
+            xp = x.copy(); xp[coordinate] += step
+            xm = x.copy(); xm[coordinate] -= step
+            ep, gp = surfaces(xp)
+            em, gm = surfaces(xm)
+            fp = BA.baeka_objective(
+                ep, gp, sigma=1.7, alpha=0.02
+            ).objective
+            fm = BA.baeka_objective(
+                em, gm, sigma=1.7, alpha=0.02
+            ).objective
+            numeric[coordinate] = (fp - fm) / (2.0 * step)
+        self.assertLess(np.max(np.abs(analytic - numeric)), 1.0e-9)
+
+    def test_projector_retains_constraints_when_sum_cancels(self):
+        gap_gradients = np.array([[1.0, 0.0], [-1.0, 0.0]])
+        self.assertTrue(np.array_equal(np.sum(gap_gradients, axis=0), [0.0, 0.0]))
+        projector, rank, _ = BA.penalty_projector(gap_gradients)
+        self.assertEqual(rank, 1)
+        self.assertTrue(np.allclose(projector, projector.T))
+        self.assertTrue(np.allclose(projector @ projector, projector))
+        self.assertTrue(np.allclose(projector @ np.array([2.0, 3.0]), [2.0, 0.0]))
+
+    def test_sigma_updates_are_additive_and_same_sigma_delta_is_used(self):
+        state = BA.BaekAState(
+            sigma=1.0,
+            alpha=0.02,
+            delta_beta=0.025,
+            beta_schedule="10,25",
+            gap_tol=1.0e-4,
+            tol_f=1.0e-8,
+            tol_g=1.0e-8,
+        )
+        energies = np.array([0.0, 0.2])
+        gradients = np.zeros((2, 3))
+
+        first = state.evaluate(energies, gradients)
+        self.assertEqual(first.action, "step")
+        self.assertAlmostEqual(first.data.sigma, 1.0)
+        self.assertAlmostEqual(first.next_sigma, 1.025)
+
+        second = state.evaluate(energies, gradients)
+        # Recombining the previous point at current sigma makes delta_F zero;
+        # comparing F(sigma=1.0) directly with F(sigma=1.025) would not.
+        self.assertAlmostEqual(second.delta_f, 0.0, places=15)
+        self.assertTrue(second.local_stationary)
+        self.assertEqual(second.action, "jump")
+        self.assertAlmostEqual(second.tested_sigma, 1.025)
+        self.assertAlmostEqual(second.jump, 10.0)
+        self.assertAlmostEqual(second.tested_data.sigma, 1.025)
+        self.assertAlmostEqual(second.data.sigma, 11.025)
+        self.assertAlmostEqual(second.next_sigma, 11.025)
+
+    def test_tight_gap_converges_without_large_jump(self):
+        state = BA.BaekAState(
+            sigma=1.0,
+            alpha=0.02,
+            delta_beta=0.025,
+            beta_schedule=[10.0],
+            gap_tol=1.0e-4,
+            tol_f=1.0e-8,
+            tol_g=1.0e-8,
+        )
+        energies = np.array([0.0, 5.0e-5])
+        gradients = np.zeros((2, 3))
+        state.evaluate(energies, gradients)
+        result = state.evaluate(energies, gradients)
+        self.assertTrue(result.converged)
+        self.assertEqual(result.action, "converged")
+        self.assertIsNone(result.jump)
+
+    def test_invalid_energy_smoothing_parameter_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "alpha"):
+            BA.baeka_objective(
+                [0.0, 0.1], np.zeros((2, 3)), sigma=1.0, alpha=0.0
+            )
+        with self.assertRaisesRegex(ValueError, "pen_jump"):
+            BA.parse_jump_schedule("10,,25")
+        with self.assertRaisesRegex(ValueError, "gap_weight is fixed at 1.0"):
+            BA.baeka_objective(
+                [0.0, 0.1], np.zeros((2, 3)), sigma=1.0, alpha=0.02,
+                gap_weight=2.0,
+            )
+
+    def test_runtime_rebases_current_sigma_and_appends_baeka_artifacts(self):
+        file_utils = _load_baeka_file_utils()
+        convergence_logs = []
+        artifact_calls = []
+
+        def dump_log(mol, title=None, section=None, info=None):
+            if section == "baeka":
+                convergence_logs.append(dict(info))
+
+        def dump_data(mol, data, title=None, fpath="."):
+            if title == "BAEKA":
+                artifact_calls.append(data)
+            return file_utils.dump_data(
+                mol, data, title=title, fpath=fpath
+            )
+
+        class FakeEngine:
+            instances = []
+
+            def __init__(self, atoms, x0, coordsys="auto", **kwargs):
+                self.x = np.asarray(x0, dtype=float).reshape(-1)
+                self.coordsys = "cart" if coordsys == "auto" else coordsys
+                self.rebases = []
+                self.evaluations = []
+                self.__class__.instances.append(self)
+
+            def rebase_previous_objective(self, energy, gradient):
+                self.rebases.append(
+                    (float(energy), np.asarray(gradient, dtype=float).copy())
+                )
+                return True
+
+            def run(self, energy_gradient, on_converged=None):
+                coordinates = (self.x.copy(), self.x + np.array([0.1, 0.0, 0.0]))
+                for point in coordinates:
+                    self.evaluations.append(energy_gradient(point))
+                    try:
+                        if on_converged is not None:
+                            on_converged()
+                    except StopIteration:
+                        break
+                return coordinates[-1]
+
+        class FakeOptimizer:
+            def __init__(self, mol):
+                cfg = mol.config["optimize"]
+                self.mol = mol
+                self.maxit = int(cfg["maxit"])
+                self.rmsd_grad = float(cfg["rmsd_grad"])
+                self.istate = int(cfg["istate"])
+                self.jstate = int(cfg["jstate"])
+                self.energy_shift = float(cfg["energy_shift"])
+                self.energy_gap = float(cfg["energy_gap"])
+                self.init_scf = bool(cfg["init_scf"])
+                self.natom = 1
+                self.atoms = np.asarray(mol.get_atoms(), dtype=int).reshape(1, 1)
+                self.sp = mol.sp
+                self.grad = mol.grad
+                self.ls = mol.ls
+                self.itr = 0
+                self.pre_energy = 0.0
+                self.pre_coord = mol.get_system().copy()
+                self.metrics = {}
+
+        runtime = _load_baeka_runtime(
+            FakeEngine, FakeOptimizer, dump_log, dump_data
+        )
+
+        class FakeSinglePoint:
+            def __init__(self, mol):
+                self.mol = mol
+                self.init_scf_calls = []
+
+            def energy(self, do_init_scf=False):
+                self.init_scf_calls.append(bool(do_init_scf))
+                return self.mol.surface_energies.copy()
+
+        class FakeGradient:
+            def __init__(self, mol):
+                self.mol = mol
+                self.grads = []
+
+            def gradient(self):
+                return self.mol.surface_gradients.copy()
+
+        class FakeLastStep:
+            @staticmethod
+            def compute(mol, grad_list=None):
+                return mol.energies, mol.grads
+
+        class FakeMolecule:
+            def __init__(self, log_path):
+                self.log_path = str(log_path)
+                self.config = {
+                    "input": {"qmmm_flag": False},
+                    "tdhf": {"nstate": 3},
+                    "oqp": {
+                        "coordsys": "cart", "trust": 0.2,
+                        "trust_max": 0.5, "follow": 0,
+                    },
+                    "optimize": {
+                        "lib": "oqp", "optimizer": "bfgs", "maxit": 2,
+                        "istate": 1, "jstate": 2, "kstate": 3,
+                        "states": [1, 2, 3], "energy_shift": 1.0e-12,
+                        "energy_gap": 1.0e-4, "rmsd_grad": 1.0,
+                        "init_scf": False, "pen_sigma": 1.0,
+                        "pen_alpha": 0.02, "pen_delta": 0.025,
+                        "pen_jump": "10,25", "gap_weight": 1.0,
+                    },
+                }
+                self.data = {"natom": 1}
+                self.coordinates = np.zeros(3)
+                self.surface_energies = np.array([-1.0, 0.0, 0.2, 0.4])
+                self.surface_gradients = np.array([
+                    [[0.0, 0.0, 0.0]],
+                    [[0.0, 0.02, -0.01]],
+                    [[0.1, 0.02, -0.01]],
+                    [[0.2, 0.02, -0.01]],
+                ])
+                self.sp = FakeSinglePoint(self)
+                self.grad = FakeGradient(self)
+                self.ls = FakeLastStep()
+
+            @staticmethod
+            def get_atoms():
+                return np.array([1])
+
+            def get_system(self):
+                return self.coordinates.copy()
+
+            @staticmethod
+            def get_mass():
+                return np.array([1.0])
+
+            def update_system(self, coordinates):
+                self.coordinates = np.asarray(coordinates, dtype=float).copy()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mol = FakeMolecule(tmpdir)
+            optimizer = runtime.OQPBaekAOpt(mol)
+            optimizer.optimize()
+
+            self.assertEqual(mol.sp.init_scf_calls, [True, False])
+            self.assertEqual(len(convergence_logs), 2)
+            first, second = convergence_logs
+            self.assertAlmostEqual(first["sigma"], 1.0)
+            self.assertAlmostEqual(first["active_sigma"], 1.0)
+            self.assertAlmostEqual(first["next_sigma"], 1.025)
+            self.assertAlmostEqual(
+                first["next_sigma"], first["sigma"] + 0.025
+            )
+            self.assertEqual(first["action"], "step")
+            self.assertAlmostEqual(second["sigma"], first["next_sigma"])
+            self.assertAlmostEqual(second["active_sigma"], 11.025)
+            self.assertAlmostEqual(
+                second["active_sigma"], second["sigma"] + 10.0
+            )
+            self.assertAlmostEqual(second["next_sigma"], second["active_sigma"])
+            self.assertEqual(second["action"], "jump")
+
+            engine = FakeEngine.instances[-1]
+            self.assertEqual(len(engine.rebases), 1)
+            selected_energies = mol.surface_energies[[1, 2, 3]]
+            selected_gradients = mol.surface_gradients[[1, 2, 3]].reshape(3, -1)
+            expected_rebase = BA.baeka_objective(
+                selected_energies, selected_gradients,
+                sigma=second["active_sigma"], alpha=0.02,
+            )
+            rebased_energy, rebased_gradient = engine.rebases[0]
+            self.assertAlmostEqual(rebased_energy, expected_rebase.objective)
+            self.assertTrue(np.allclose(rebased_gradient, expected_rebase.gradient))
+            tested_objective = BA.baeka_objective(
+                selected_energies, selected_gradients,
+                sigma=second["sigma"], alpha=0.02,
+            )
+            self.assertNotAlmostEqual(rebased_energy, tested_objective.objective)
+
+            self.assertEqual(len(artifact_calls), 2)
+            self.assertEqual([row[-1] for row in artifact_calls], ["step", "jump"])
+            status_lines = (Path(tmpdir) / "opt_status.txt").read_text().splitlines()
+            status_rows = []
+            for line in status_lines:
+                fields = line.split()
+                if fields and fields[0].isdigit():
+                    status_rows.append(fields)
+            self.assertEqual(len(status_rows), 2)
+            self.assertEqual(
+                [float(row[4]) for row in status_rows], [1.0, 1.025]
+            )
+            self.assertEqual(
+                [float(row[5]) for row in status_rows], [1.0, 11.025]
+            )
+            self.assertEqual([row[10] for row in status_rows], ["step", "jump"])
+            geometry_lines = (Path(tmpdir) / "opt_geom.xyz").read_text().splitlines()
+            self.assertEqual(geometry_lines.count("1"), 2)
+
+
+class TestNativeFrozenDistances(unittest.TestCase):
+    def test_parser_and_engine_preserve_the_initial_distance(self):
+        self.assertEqual(
+            NE.parse_frozen_distance_spec("distance(1,2);r(2,3)"),
+            [(1, 2), (2, 3)],
+        )
+        x0 = np.array([[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]])
+        target = np.array([[0.2, 1.0, 0.0], [1.7, 1.0, 0.0]])
+        engine = NE.OQPEngine(
+            [1, 1], x0, coordsys="cart", trust=0.15, maxiter=10,
+            frozen_distances=[(1, 2)],
+        )
+        seen = []
+
+        def energy_gradient(x):
+            xyz = np.asarray(x).reshape(-1, 3)
+            seen.append(np.linalg.norm(xyz[0] - xyz[1]))
+            displacement = xyz - target
+            return 0.5 * float(np.sum(displacement ** 2)), displacement.reshape(-1)
+
+        result = engine.run(energy_gradient).reshape(-1, 3)
+        self.assertTrue(seen)
+        self.assertLess(max(abs(distance - 2.0) for distance in seen), 1.0e-10)
+        self.assertAlmostEqual(np.linalg.norm(result[0] - result[1]), 2.0, places=10)
+        self.assertGreater(np.mean(result[:, 1]), 0.5)
+
+    def test_constraint_normal_is_removed_from_gradient(self):
+        engine = NE.OQPEngine(
+            [1, 1], [[0, 0, 0], [2, 0, 0]], coordsys="cart",
+            frozen_distances=[(1, 2)],
+        )
+        normal = engine._constraint_jacobian(engine.x)[0]
+        projected = engine._project_constraint_tangent(normal)
+        self.assertLess(np.linalg.norm(projected), 1.0e-12)
 
 
 # --------------------------------------------------------------------------- #
@@ -210,6 +722,38 @@ def _morse(pairs, r_e=2.0, De=0.15, a=1.0):
 
 
 class TestOQPEngineConverges(unittest.TestCase):
+    def test_changed_objective_rebases_previous_point_without_losing_history(self):
+        engine = NE.OQPEngine(
+            [1], [0.0, 0.0, 0.0], coordsys="cart",
+            project_global_rigid_modes=False,
+        )
+        self.assertFalse(
+            engine.rebase_previous_objective(0.0, np.zeros(3))
+        )
+
+        initial_x = engine.x.copy()
+        engine._take_step(1.0, np.array([0.20, -0.10, 0.05]))
+        hessian_before = engine.H.copy()
+        previous_dq = engine._prev["dq"].copy()
+
+        rebased_gradient = np.array([-0.30, 0.25, 0.10])
+        self.assertTrue(
+            engine.rebase_previous_objective(2.5, rebased_gradient)
+        )
+        expected_gradient_q = engine.coords.grad_to_q(
+            initial_x, rebased_gradient
+        )
+        expected_prediction = float(
+            expected_gradient_q @ previous_dq
+            + 0.5 * previous_dq @ hessian_before @ previous_dq
+        )
+
+        self.assertTrue(np.array_equal(engine.H, hessian_before))
+        self.assertTrue(np.array_equal(engine._prev["x"], initial_x))
+        self.assertAlmostEqual(engine._prev["e"], 2.5)
+        self.assertTrue(np.allclose(engine._prev["g_q"], expected_gradient_q))
+        self.assertAlmostEqual(engine._prev["pred"], expected_prediction)
+
     def _optimize(self, atoms, x0, pairs, gtol=1e-4, maxiter=100):
         eg = _morse(pairs)
         eng = NE.OQPEngine(atoms, x0, mode="min", maxiter=maxiter)

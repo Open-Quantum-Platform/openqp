@@ -1,0 +1,1 @@
+rks/pbe/6-31g geom="../geometries/H2O-0381125c86f2.xyz" charge=0 mult=1 d4=false energy guess(type=huckel,save_mol=true) scf(maxit=30,maxdiis=7,mom=true,mom_switch=0.003,conv=1e-06) dftgrid(rad_npts=96,ang_npts=302,pruned="")

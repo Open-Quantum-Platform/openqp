@@ -120,7 +120,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
 
     assert owner_counts == {
         "generic": 189,
-        "route_driver": 100,
+        "route_driver": 104,
         "legacy_only": 21,
         "intentional_forbidden": 1,
     }
@@ -184,7 +184,7 @@ def test_route_driver_manifest_matches_public_driver_coverage():
 
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
-        | {"istate", "jstate", "kstate", "imult", "jmult"}
+        | {"istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}
     assert owners["oqp"] == set().union(*oqp_input.OQP_DRIVER_OPTIONS.values())

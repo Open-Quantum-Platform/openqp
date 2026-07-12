@@ -1,0 +1,1 @@
+rks/bhhlyp/6-31g* geom="../../geometries/CHN-cef1bbffc7f3.xyz" charge=0 mult=1 energy guess(type=huckel,save_mol=false) dftgrid(rad_npts=96,ang_npts=302)

@@ -1,0 +1,1 @@
+mrsf(nstate=25)/bhhlyp/6-31g* geom="../../geometries/CHN-cef1bbffc7f3.xyz" charge=0 energy(S0) guess(type=huckel,save_mol=false,continue_geom=false,swapmo="2,7,8,21") scf(save_molden=true,rstctmo=true) dftgrid(rad_npts=96,ang_npts=302) tdhf(ixcore=7)

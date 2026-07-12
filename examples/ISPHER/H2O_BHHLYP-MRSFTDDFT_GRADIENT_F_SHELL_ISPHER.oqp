@@ -1,0 +1,1 @@
+mrsf(nstate=3)/bhhlyp/cc-pvtz geom="../geometries/H2O-0381125c86f2.xyz" charge=0 ispher=true grad(S2) guess(type=huckel,save_mol=false) scf(conv=1e-08) dftgrid(rad_npts=96,ang_npts=302,pruned="") tdhf(conv=1e-08,zvconv=1e-08)

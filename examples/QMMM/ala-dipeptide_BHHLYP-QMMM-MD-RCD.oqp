@@ -1,0 +1,1 @@
+rks/bhhlyp/6-31g geom="ala.pdb" charge=0 mult=1 md(S0) qmmm(pdb_file="ala.pdb",forcefield_files="amber14-all.xml",qm_atoms="8,9,16,17,18",cutoff=NoCutoff,embedding=electrostatic,frontier_scheme=rcd,n_steps=2,timestep=0.5,ensemble=nve,temperature=300.0)

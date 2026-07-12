@@ -15,7 +15,7 @@ multiplicity=1
 maxit=30
 
 [optimize]
-lib=geometric
+lib=oqp
 istate=0
 maxit=3
 energy_shift=1
@@ -24,13 +24,8 @@ max_grad=1
 rmsd_step=1
 max_step=1
 
-[geometric]
+[oqp]
 coordsys=dlc
 trust=0.05
-tmax=0.05
-hessian=never
-constraints_file=HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints
-enforce=0.0001
-conmethod=0
-convergence_set=GAU
-prefix=hcn_rhf_dft_constrained_geometric
+trust_max=0.05
+freeze=distance(1,2)

@@ -133,6 +133,44 @@ def test_route_options_are_small_and_section_options_are_not_silently_dropped():
         )
 
 
+def test_mp2_reference_is_route_owned_and_lowers_to_scf_type():
+    spec, uhf = _parse(
+        'mp2(reference=uhf,variant=scs-mp2)/6-31g geom="h2o.xyz" '
+        'mult=1 energy'
+    )
+    assert spec.reference_method == "UHF"
+    assert uhf["scf"] == {"type": "uhf", "multiplicity": "1"}
+    assert uhf["mp2"] == {"variant": "scs-mp2"}
+    assert "reference" not in uhf["mp2"]
+    assert "mp2(reference=uhf,variant=scs-mp2)/6-31g" in (
+        oqp_input.render_canonical_oqp(spec)
+    )
+
+    _, rhf = _parse(
+        'mp2(reference=rhf)/cc-pvdz geom="h2o.xyz" mult=1 energy'
+    )
+    _, rohf = _parse(
+        'mp2(reference=rohf)/cc-pvdz geom="o2.xyz" mult=3 energy'
+    )
+    assert rhf["scf"] == {"type": "rhf", "multiplicity": "1"}
+    assert rohf["scf"] == {"type": "rohf", "multiplicity": "3"}
+    assert "mp2" not in rhf
+    assert "mp2" not in rohf
+
+    with pytest.raises(OQPInputError, match="must be rhf, rohf, or uhf"):
+        oqp_input.parse_canonical_oqp(
+            'mp2(reference=rks)/cc-pvdz geom="h2o.xyz" energy'
+        )
+    with pytest.raises(OQPInputError, match="reference=rhf requires mult=1"):
+        oqp_input.parse_canonical_oqp(
+            'mp2(reference=rhf)/cc-pvdz geom="o2.xyz" mult=3 energy'
+        )
+    with pytest.raises(OQPInputError, match="reference=rohf requires"):
+        oqp_input.parse_canonical_oqp(
+            'mp2(reference=rohf)/cc-pvdz geom="h2o.xyz" mult=1 energy'
+        )
+
+
 def test_umrsf_uses_triplet_uhf_reference():
     spec, legacy = _parse(
         'umrsf(nstate=3)/bhhlyp/6-31g* geom="radical.xyz" energy()'
@@ -406,6 +444,16 @@ def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
     assert legacy["neb"]["nimage"] == "7"
 
 
+def test_compact_pdb_geometry_resolves_only_path_prefix(tmp_path):
+    _, legacy = _parse(
+        'dft/pbe0/def2-svp geom="protein model.pdb 9 10 17-19" energy',
+        tmp_path,
+    )
+    assert legacy["input"]["system"] == (
+        str((tmp_path / "protein model.pdb").resolve()) + " 9 10 17-19"
+    )
+
+
 def test_inline_geometry_is_not_mistaken_for_a_relative_filename(tmp_path):
     inline = "8 0.0 0.0 0.0 1 0.0 0.0 1.0"
     _, legacy = _parse(
@@ -607,6 +655,17 @@ def test_md_requires_qmmm_and_physical_state_cannot_be_overridden():
             'dft/pbe0/def2-svp geom="h2o.xyz" grad(S0) '
             'input(qmmm_flag=true)'
         )
+
+
+def test_soc_namd_numeric_active_surface_is_not_rewritten_as_mch_state():
+    _, legacy = _parse(
+        'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2co.xyz" '
+        'namd(active=5,soc=true,nstep=1)'
+    )
+    assert legacy["tdhf"]["nstate"] == "2"
+    assert legacy["md"]["active"] == "5"
+    assert legacy["md"]["soc"] == "True"
+    assert "init_state" not in legacy["md"]
 
 
 def test_d4_is_a_no_argument_modifier():
@@ -854,6 +913,142 @@ def test_geometry_drivers_are_native_and_mep_aliases_map_correctly():
     with pytest.raises(OQPInputError, match="native OpenQP optimizer automatically"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,lib=geometric)'
+        )
+
+
+def test_baeka_is_a_variadic_meci_algorithm_with_safe_defaults():
+    _, two = _parse(
+        'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
+        'meci(S0,S1,algorithm=baeka)'
+    )
+    assert two["input"]["runtype"] == "meci"
+    assert two["optimize"]["meci_search"] == "baeka"
+    assert two["optimize"]["states"] == "1,2"
+    assert two["optimize"]["pen_sigma"] == "1.0"
+    assert two["optimize"]["pen_alpha"] == "0.02"
+    assert two["optimize"]["pen_delta"] == "0.025"
+    assert two["optimize"]["pen_jump"] == "10,10,25,25,100,100,1000,1000,3000"
+    assert two["optimize"]["energy_gap"] == "0.0001"
+
+    spec, four = _parse(
+        'mrsf(nstate=6)/bhhlyp/6-31g* geom="guess.xyz" '
+        'meci(S3,S1,S0,S2,algorithm=baeka,sigma=2,alpha=0.03,'
+        'delta_beta=0.1,beta_schedule="5,10",gap=2e-4)'
+    )
+    assert four["optimize"]["states"] == "1,2,3,4"
+    assert four["optimize"]["pen_sigma"] == "2"
+    assert four["optimize"]["pen_alpha"] == "0.03"
+    assert four["optimize"]["pen_delta"] == "0.1"
+    assert four["optimize"]["pen_jump"] == "5,10"
+    assert four["optimize"]["energy_gap"] == "0.0002"
+    assert "algorithm=baeka" in oqp_input.render_canonical_oqp(spec)
+
+    _, inferred_three = _parse(
+        'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
+        'meci(S0,S1,S2)'
+    )
+    assert inferred_three["optimize"]["meci_search"] == "baeka"
+    assert inferred_three["optimize"]["states"] == "1,2,3"
+
+
+def test_baeka_rejects_ambiguous_or_nonconsecutive_requests():
+    with pytest.raises(OQPInputError, match="more than two states require algorithm=baeka"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,S2,algorithm=penalty)'
+        )
+    with pytest.raises(OQPInputError, match="consecutive response roots"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S2,algorithm=baeka)'
+        )
+    with pytest.raises(OQPInputError, match="specified twice"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,algorithm=baeka,meci_search=baeka)'
+        )
+    with pytest.raises(OQPInputError, match="alpha must be a positive"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,algorithm=baeka,alpha=0)'
+        )
+    with pytest.raises(OQPInputError, match="gap_weight is fixed at 1.0"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,algorithm=baeka,gap_weight=2)'
+        )
+    with pytest.raises(OQPInputError, match="additive delta_beta"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,algorithm=baeka,pen_incre=1.2)'
+        )
+    with pytest.raises(OQPInputError, match="BaekA convergence does not use"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
+            'meci(S0,S1,algorithm=baeka,max_step=0.01)'
+        )
+
+
+@pytest.mark.parametrize("value", ["2.5", "true"])
+def test_count_and_multiplicity_fields_reject_lossy_integer_coercion(value):
+    with pytest.raises(OQPInputError, match="nstate must be a positive integer"):
+        oqp_input.parse_canonical_oqp(
+            f'mrsf(nstate={value})/bhhlyp/6-31g* geom="g.xyz" energy'
+        )
+    with pytest.raises(OQPInputError, match="mult must be a positive integer"):
+        oqp_input.parse_canonical_oqp(
+            f'uhf/6-31g* geom="g.xyz" mult={value} energy'
+        )
+    with pytest.raises(OQPInputError, match="root must be a positive integer"):
+        oqp_input.parse_canonical_oqp(
+            f'sf/bhhlyp/6-31g* geom="g.xyz" grad(root={value})'
+        )
+    with pytest.raises(OQPInputError, match="maxit must be a positive integer"):
+        oqp_input.parse_canonical_oqp(
+            f'dft/pbe0/6-31g* geom="g.xyz" opt(S0,maxit={value})'
+        )
+
+
+def test_tci_retains_legacy_multiplicative_controls():
+    _, legacy = _parse(
+        'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
+        'tci(S0,S1,S2,pen_sigma=2,pen_incre=1.2,energy_gap=0.002)'
+    )
+    optimize = legacy["optimize"]
+    assert optimize["istate"] == "1"
+    assert optimize["jstate"] == "2"
+    assert optimize["kstate"] == "3"
+    assert optimize["pen_sigma"] == "2"
+    assert optimize["pen_incre"] == "1.2"
+    assert optimize["energy_gap"] == "0.002"
+    assert "states" not in optimize
+    assert "meci_search" not in optimize
+    assert "pen_delta" not in optimize
+    assert "pen_jump" not in optimize
+
+    for option in ("meci_search=baeka", "pen_delta=0.025", "pen_jump=10"):
+        with pytest.raises(OQPInputError, match="does not define option"):
+            oqp_input.parse_canonical_oqp(
+                'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
+                f'tci(S0,S1,S2,{option})'
+            )
+
+
+def test_native_minimum_accepts_frozen_distance_constraints():
+    _, legacy = _parse(
+        'dft/bhhlyp/3-21g geom="hcn.xyz" '
+        'opt(S0,freeze="distance(1,2);r(1,3)",coordsys=dlc,trust=0.05)'
+    )
+    assert legacy["input"]["runtype"] == "optimize"
+    assert legacy["oqp"]["freeze"] == "distance(1,2);r(1,3)"
+    with pytest.raises(OQPInputError, match="distinct positive indices"):
+        oqp_input.parse_canonical_oqp(
+            'dft/bhhlyp/3-21g geom="hcn.xyz" opt(S0,freeze="distance(1,1)")'
+        )
+    with pytest.raises(OQPInputError, match="does not define option 'freeze'"):
+        oqp_input.parse_canonical_oqp(
+            'mrsf(nstate=3)/bhhlyp/3-21g geom="hcn.xyz" '
+            'meci(S0,S1,freeze="distance(1,2)")'
         )
 
 

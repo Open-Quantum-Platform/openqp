@@ -385,6 +385,45 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
         )
 
+    if section == 'baeka':
+        states = [
+            (public_state_label(mol.config, state)
+             if is_mrsf(mol.config) else str(state))
+            for state in info['states']
+        ]
+        gaps = ', '.join('%.8e' % float(gap) for gap in info['gaps'])
+        jump = '-' if info['jump'] is None else '%.6f' % float(info['jump'])
+        loginfo += """
+   PyOQP BaekA states:                 %s
+   PyOQP BaekA adjacent gaps:          %s
+   PyOQP BaekA tested sigma:           %14.6f
+   PyOQP BaekA active objective sigma: %14.6f
+   PyOQP BaekA next sigma:             %14.6f
+   PyOQP BaekA active effective sigma: %14.6f
+   PyOQP BaekA alpha (Hartree):        %14.6f
+   PyOQP BaekA delta beta:             %14.6f
+   PyOQP BaekA action / jump:          %14s %14s
+   PyOQP BaekA projector rank:         %14d / %-14d
+   PyOQP same-sigma objective shift:   %14.6e %14.6e %s
+   PyOQP outer-state gap:              %14.6e %14.6e %s
+   PyOQP projected parallel grad/sigma:%14.6e %14.6e %s
+   PyOQP projected perpendicular grad: %14.6e %14.6e %s
+   PyOQP local stationary / gap:       %14s %14s
+
+""" % (
+            ' '.join(map(str, states)),
+            gaps,
+            info['sigma'], info['active_sigma'], info['next_sigma'],
+            info['effective_sigma'],
+            info['alpha'], info['delta_beta'], info['action'], jump,
+            info['projector_rank'], info['state_count'] - 1,
+            info['de'], info['tol_f'], np.abs(info['de']) <= info['tol_f'],
+            info['gap'], info['energy_gap'], info['gap'] <= info['energy_gap'],
+            info['parallel_grad'], info['tol_g'], info['parallel_grad'] <= info['tol_g'],
+            info['perpendicular_grad'], info['tol_g'], info['perpendicular_grad'] <= info['tol_g'],
+            info['stationary'], info['gap_converged'],
+        )
+
     if section == 'penalty':
         state_i = (public_state_label(mol.config, info['istate'])
                    if is_mrsf(mol.config) else info['istate'])
@@ -780,6 +819,76 @@ def dump_data(mol, data, title=None, fpath='.'):
         xyz = write_xyz(atoms, coordinates, (itr, energy))
         status += '%5s %16.8f %16.8f %14.6f %14.6f %14.6f %14.6f\n' % (
             itr, energy, de, rmsd_step, max_step, rmsd_grad, max_grad,
+        )
+
+        with open(f'{fpath}/opt.xyz', 'w') as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_geom.xyz', mode) as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_status.txt', mode) as out:
+            out.write(status)
+
+    if title == 'BAEKA':
+        (itr, atoms, coordinates, objective, de, outer_gap, adjacent_gaps,
+         tested_sigma, active_sigma, rmsd_step, max_step, parallel_grad,
+         perpendicular_grad, action) = data
+        if itr == 1:
+            mode = 'w'
+            status = """%5s %16s %16s %16s %14s %14s %14s %14s %14s %14s %-10s %s
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+""" % (
+                'Step', 'Objective', 'Shift', 'Outer Gap', 'Test Sigma',
+                'Active Sigma', 'RMSD Step', 'Max Step', 'Parallel/sigma',
+                'Perpendicular', 'Action', 'Adjacent Gaps',
+            )
+        else:
+            mode = 'a'
+            status = ''
+
+        gaps = ','.join('%.8e' % float(gap) for gap in adjacent_gaps)
+        xyz = write_xyz(atoms, coordinates, (itr, objective))
+        status += (
+            '%5d %16.8f %16.8e %16.8e %14.6f %14.6f '
+            '%14.6e %14.6e %14.6e %14.6e %-10s %s\n'
+        ) % (
+            itr, objective, de, outer_gap, tested_sigma, active_sigma,
+            rmsd_step, max_step, parallel_grad, perpendicular_grad,
+            action, gaps,
+        )
+
+        with open(f'{fpath}/opt.xyz', 'w') as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_geom.xyz', mode) as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_status.txt', mode) as out:
+            out.write(status)
+
+    if title == 'TCI':
+        (itr, atoms, coordinates, energy, de, max_gap, rmsd_step, max_step,
+         rmsd_grad, max_grad, gap_ji, gap_kj) = data
+        if itr == 1:
+            mode = 'w'
+            status = """%5s %16s %16s %16s %16s %16s %14s %14s %14s %14s
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+""" % (
+                'Step', 'Energy', 'Shift', 'Max Gap', 'Gap J-I', 'Gap K-J',
+                'RMSD Step', 'Max Step', 'RMSD Grad', 'Max Grad',
+            )
+        else:
+            mode = 'a'
+            status = ''
+
+        xyz = write_xyz(atoms, coordinates, (itr, energy))
+        status += (
+            '%5d %16.8f %16.8e %16.8e %16.8e %16.8e '
+            '%14.6e %14.6e %14.6e %14.6e\n'
+        ) % (
+            itr, energy, de, max_gap, gap_ji, gap_kj, rmsd_step, max_step,
+            rmsd_grad, max_grad,
         )
 
         with open(f'{fpath}/opt.xyz', 'w') as out:

@@ -183,7 +183,10 @@ def requested_states(config):
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         return public_state_label(config, opt.get("istate", 1))
     if runtype == "meci":
-        roots = [opt.get("istate", 1), opt.get("jstate", 2)]
+        search = str(opt.get("meci_search", "penalty")).strip().lower()
+        roots = (_int_list(opt.get("states", [])) if search == "baeka" else [])
+        if not roots:
+            roots = [opt.get("istate", 1), opt.get("jstate", 2)]
         return "/".join(public_state_label(config, root) for root in roots)
     if runtype == "tci":
         roots = [opt.get("istate", 1), opt.get("jstate", 2), opt.get("kstate", 3)]
@@ -204,6 +207,14 @@ def requested_states(config):
     if runtype == "namd":
         md = _section(config, "md")
         init_state = str(md.get("init_state", "")).strip()
+        if bool(md.get("soc", False)):
+            active = _int(md.get("active", 1), 1)
+            active_label = "spin-adiabatic surface %d" % active
+            if init_state:
+                return "%s initialization; %s" % (
+                    init_state.upper(), active_label
+                )
+            return active_label
         if init_state:
             return init_state.upper()
         return public_state_label(config, md.get("active", 1))
@@ -215,12 +226,21 @@ def calculation_request_lines(config, source=None, resolved=None):
     inp = _section(config, "input")
     runtype = str(inp.get("runtype", "energy")).lower()
     calculation = _RUN_NAMES.get(runtype, runtype)
+    baeka = (
+        runtype == "meci"
+        and str(_section(config, "optimize").get("meci_search", "")).strip().lower()
+        == "baeka"
+    )
+    if baeka:
+        calculation = "BaekA multistate conical intersection"
     if runtype == "nac" and bool(_section(config, "nac").get("bp", False)):
         calculation = "Branching-plane analysis"
     lines = [
         ("Method", public_method_name(config)),
         ("Calculation", calculation),
     ]
+    if baeka:
+        lines.append(("Algorithm", "Baek adaptive penalty (BaekA)"))
     functional = str(inp.get("functional", "")).strip()
     basis = str(inp.get("basis", "")).strip()
     if functional and basis:
@@ -231,6 +251,9 @@ def calculation_request_lines(config, source=None, resolved=None):
     targets = requested_states(config)
     if targets:
         lines.append(("Physical target state(s)", targets))
+    freeze = str(_section(config, "oqp").get("freeze", "")).strip()
+    if freeze:
+        lines.append(("Frozen distance(s)", freeze))
     if is_mrsf(config):
         target_mult = _int(_section(config, "tdhf").get("multiplicity", 1), 1)
         runtype = str(inp.get("runtype", "energy")).lower()

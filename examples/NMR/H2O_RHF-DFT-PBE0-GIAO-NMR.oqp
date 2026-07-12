@@ -1,0 +1,1 @@
+rks/pbe0/sto-3g geom="../geometries/H2O-0381125c86f2.xyz" charge=0 mult=1 energy guess(type=huckel) dftgrid(rad_type=mhl,rad_npts=99,ang_npts=302) properties(scf_prop=nmr,nmr_gauge=giao)
