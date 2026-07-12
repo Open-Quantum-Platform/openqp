@@ -224,7 +224,11 @@ jobs:
             # hosts intermittently 504; the externals cache persists across
             # retries.
             n=0
-            until pip install -v . \
+            # The macOS jobs run the complete example suite, including the
+            # retained legacy geomeTRIC compatibility cases.  Native OpenQP
+            # users do not need this extra, but CI must install it to exercise
+            # those optional-backend examples.
+            until pip install -v ".[geometric]" \
                 --config-settings=cmake.define.CMAKE_C_COMPILER=gcc-15 \
                 --config-settings=cmake.define.CMAKE_CXX_COMPILER=g++-15 \
                 --config-settings=cmake.define.CMAKE_Fortran_COMPILER=gfortran-15; do
