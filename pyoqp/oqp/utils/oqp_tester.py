@@ -207,6 +207,18 @@ class OQPTester:
             # build without the optional DFTB backend still produces a green suite.
             needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
 
+            # The native optimizer covers the ordinary geometry workflows,
+            # but legacy constrained inputs may still explicitly select the
+            # optional geomeTRIC backend.  Its adapter raises this deliberately
+            # specific import error when the extra is not installed.  Match the
+            # adapter contract rather than every error mentioning "geometric"
+            # so unrelated import bugs remain visible as test failures.
+            needs_geometric_missing = (
+                type(err).__name__ in ('ModuleNotFoundError', 'ImportError')
+                and 'geometric is required for [optimize] lib=geometric'
+                in str(err).lower()
+            )
+
             if needs_openmm_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional OpenMM backend "
@@ -214,6 +226,10 @@ class OQPTester:
             elif needs_dftb_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional openqp-dftb backend "
+                                     "(not installed); skipped")
+            elif needs_geometric_missing:
+                result["status"] = "SKIPPED"
+                result["message"] = ("requires the optional geomeTRIC optimizer "
                                      "(not installed); skipped")
             elif is_irc_maxiter:
                 result["status"] = "PASSED"

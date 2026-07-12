@@ -23,7 +23,7 @@ nstate=5
 maxit=30
 
 [optimize]
-lib=geometric
+lib=oqp
 maxit=2
 istate=1
 jstate=1
@@ -36,9 +36,7 @@ max_grad=1
 rmsd_step=1
 max_step=1
 
-[geometric]
+[oqp]
 coordsys=tric
 trust=0.1
-tmax=0.3
-convergence_set=GAU
-prefix=c2h4_mrsf_mecp_geometric
+trust_max=0.3

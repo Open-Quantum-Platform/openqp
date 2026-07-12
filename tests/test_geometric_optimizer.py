@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -111,6 +112,24 @@ def section_value(section_text, key):
     return None
 
 
+def load_oqp_tester(runner_class, module_name):
+    """Load OQPTester with a controlled Runner and no compiled extension."""
+    oqp = sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    oqp_utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    oqp.__path__ = []
+    oqp_utils.__path__ = []
+
+    pyoqp = types.ModuleType("oqp.pyoqp")
+    pyoqp.Runner = runner_class
+    sys.modules["oqp.pyoqp"] = pyoqp
+
+    runtime = types.ModuleType("oqp.runtime")
+    runtime.resolve_oqp_root = lambda: (str(ROOT), "test")
+    sys.modules["oqp.runtime"] = runtime
+
+    return load_module(module_name, "pyoqp/oqp/utils/oqp_tester.py")
+
+
 class TestOptimizationExampleCaps(unittest.TestCase):
     def test_geometry_path_examples_have_bounded_iterations(self):
         geometry_runtypes = {"optimize", "meci", "mecp", "ts", "irc", "neb", "mep"}
@@ -147,20 +166,8 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
     def setUp(self):
         install_minimal_oqp_stubs()
 
-    def test_geometric_optimizer_examples_are_available(self):
+    def test_only_constrained_optimization_remains_a_geometric_example(self):
         expected = {
-            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.inp": "runtype=optimize",
-            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.json": None,
-            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.inp": "runtype=meci",
-            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.json": None,
-            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.inp": "runtype=mecp",
-            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.json": None,
-            "HCN_RHF-DFT_TS_GEOMETRIC.inp": "runtype=ts",
-            "HCN_RHF-DFT_TS_GEOMETRIC.json": None,
-            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.inp": "runtype=ts",
-            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.json": None,
-            "HCN_RHF-DFT_IRC_GEOMETRIC.inp": "runtype=irc",
-            "HCN_RHF-DFT_IRC_GEOMETRIC.json": None,
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
             "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
@@ -175,6 +182,35 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
             self.assertIn(runtype, text)
             self.assertIn("lib=geometric", text)
             self.assertIn("[geometric]", text)
+
+        geometric_inputs = sorted(path.name for path in EXAMPLES_OPT.glob("*GEOMETRIC.inp"))
+        self.assertEqual(
+            geometric_inputs,
+            ["HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp"],
+        )
+
+    def test_primary_geometry_examples_use_the_native_backend(self):
+        expected = {
+            "H2O_RHF-DFT_OPTIMIZE.inp": "runtype=optimize",
+            "H2O_RHF-DFT_OPTIMIZE_OQP.inp": "runtype=optimize",
+            "C2H4_BHHLYP-MRSFTDDFT_MECI.inp": "runtype=meci",
+            "C2H4_BHHLYP-MRSFTDDFT_MECP_OQP.inp": "runtype=mecp",
+            "C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp": "runtype=tci",
+            "C2H4_BHHLYP-MRSFTDDFT_MEP.inp": "runtype=mep",
+            "HCN_RHF-DFT_TS_OQP.inp": "runtype=ts",
+            "HCN_BHHLYP-MRSFTDDFT_TS_OQP.inp": "runtype=ts",
+            "HCN_RHF-DFT_IRC_OQP.inp": "runtype=irc",
+            "HCN_RHF-DFT_NEB_OQP.inp": "runtype=neb",
+        }
+
+        for name, runtype in expected.items():
+            path = EXAMPLES_OPT / name
+            self.assertTrue(path.is_file(), name)
+            self.assertTrue(path.with_suffix(".json").is_file(), path.with_suffix(".json").name)
+            text = path.read_text()
+            self.assertIn(runtype, text)
+            self.assertNotIn("lib=geometric", text)
+            self.assertNotIn("[geometric]", text)
 
     def test_geometric_config_supports_constraints_file_options(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
@@ -449,6 +485,45 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertIsInstance(optimizer, GeometricIRCOpt)
         self.assertIs(optimizer.mol, mol)
+
+
+class TestOptionalGeometricExample(unittest.TestCase):
+    def _run_with_error(self, error):
+        class FailingRunner:
+            def __init__(self, **kwargs):
+                pass
+
+            def run(self, test_mod=False):
+                raise error
+
+        tester_module = load_oqp_tester(
+            FailingRunner,
+            f"oqp_tester_geometric_{type(error).__name__}_{id(error)}",
+        )
+        with tempfile.TemporaryDirectory() as output_dir:
+            tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+            tester.output_dir = output_dir
+            tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
+            return tester.run_single_test(
+                str(EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp")
+            )
+
+    def test_missing_optional_geometric_backend_skips_legacy_constraint_example(self):
+        result = self._run_with_error(ModuleNotFoundError(
+            "geomeTRIC is required for [optimize] lib=geometric. "
+            "Install it with `pip install geometric`."
+        ))
+
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertIn("optional geomeTRIC optimizer", result["message"])
+
+    def test_unrelated_import_error_remains_visible(self):
+        result = self._run_with_error(
+            ModuleNotFoundError("No module named 'unrelated_backend'")
+        )
+
+        self.assertEqual(result["status"], "ERROR")
+        self.assertIn("unrelated_backend", result["message"])
 
 
 if __name__ == "__main__":

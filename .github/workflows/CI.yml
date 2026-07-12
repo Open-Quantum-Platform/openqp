@@ -74,9 +74,9 @@ jobs:
             # native library, header and share/ data into the installed package,
             # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
             # and required runtime deps (numpy/scipy/...) come from pyproject.
-            # geomeTRIC is an optional legacy backend; the non-MPI legs install
-            # its extra below so compatibility remains covered without making it
-            # a requirement for the native-first installation.
+            # geomeTRIC is an optional legacy backend.  The sole constrained
+            # compatibility example is reported as SKIPPED when that extra is
+            # absent, so the native-first CI installation does not require it.
             # USE_LIBINT/ENABLE_OPENMP are pyproject defaults (ILP64 is
             # unconditional); CI overrides the build type, the MPI matrix leg,
             # ENABLE_DDX, and the BLAS/LAPACK choice.
@@ -94,12 +94,8 @@ jobs:
             # the upstream hosts intermittently return HTTP 504. The bundled-
             # externals cache persists across retries, so a re-run only re-fetches
             # whatever failed.
-            package="."
-            if [ "${{ matrix.MPI }}" = "OFF" ]; then
-              package=".[geometric]"
-            fi
             n=0
-            until pip install -v "$package" \
+            until pip install -v . \
                 --config-settings=cmake.build-type=Debug \
                 --config-settings=cmake.define.LINALG_LIB=OpenBLAS \
                 --config-settings=cmake.define.ENABLE_DDX=ON \
@@ -224,11 +220,7 @@ jobs:
             # hosts intermittently 504; the externals cache persists across
             # retries.
             n=0
-            # The macOS jobs run the complete example suite, including the
-            # retained legacy geomeTRIC compatibility cases.  Native OpenQP
-            # users do not need this extra, but CI must install it to exercise
-            # those optional-backend examples.
-            until pip install -v ".[geometric]" \
+            until pip install -v . \
                 --config-settings=cmake.define.CMAKE_C_COMPILER=gcc-15 \
                 --config-settings=cmake.define.CMAKE_CXX_COMPILER=g++-15 \
                 --config-settings=cmake.define.CMAKE_Fortran_COMPILER=gfortran-15; do
