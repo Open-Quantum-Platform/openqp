@@ -537,6 +537,18 @@ class OpenQpQMMM:
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
+        else:
+            # Mechanical embedding: the QM subsystem sees no MM field, so the
+            # SCF is gas-phase and QM-MM electrostatics is left to OpenMM (via
+            # the QM ESP charges in forces_mm). The embedding arrays must still
+            # exist and be ZERO rather than absent: scf.F90 calls
+            # add_potqm_contributions on every SCF iteration whenever
+            # qmmm_flag is set, and that routine aborts on a missing
+            # OQP::POTQM record ("Record `OQP::POTQM` not found!"). The same
+            # applies to OQP::POTMM via the unconditional grad_esp_qmmm call.
+            # A zero field reproduces gas-phase QM exactly: it adds 0 to hcore,
+            # contributes 0 to the ESPF gradient, and leaves eqm untouched.
+            potmm, potqm = self._zero_embedding()
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
         nqm = len(self.qm_atoms)
@@ -718,6 +730,16 @@ class OpenQpQMMM:
          "simor": simor,
         }
 
+
+    def _zero_embedding(self):
+        """Zero MM potential over every QM centre (real QM atoms + link atoms).
+
+        Used by mechanical embedding, where the QM Hamiltonian is unperturbed by
+        the MM charges. Sized to the QM geometry (natom = nqm + nlink) so it
+        matches the arrays the engine expects.
+        """
+        nqm_c = len(self.qm_atoms) + len(self.link_atoms)
+        return np.zeros(nqm_c), np.zeros((nqm_c, nqm_c))
 
     def _pad_potential_for_link_atoms(self, potmm, potqm):
        """Extend the ESPF embedding arrays to cover hydrogen link atoms.
