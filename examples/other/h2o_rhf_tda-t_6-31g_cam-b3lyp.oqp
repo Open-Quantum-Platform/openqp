@@ -1,0 +1,1 @@
+tda(nstate=10)/cam-b3lyp/6-31g geom="../geometries/H2O-0381125c86f2.xyz" charge=0 mult=1 d4=false grad(T2) guess(type=huckel,save_mol=false) scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=false) dftgrid(rad_npts=96,ang_npts=302,pruned="") tdhf(maxit=30,conv=1e-08,zvconv=1e-08)

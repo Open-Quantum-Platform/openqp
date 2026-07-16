@@ -60,6 +60,7 @@ contains
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use mathlib, only: unpack_matrix
     use tdhf_sf_gradient_mod, only: sf_1e_grad, sf_2e_grad
+    use tdhf_sf_lib, only: mrsf_state_label
 
     implicit none
 
@@ -72,6 +73,8 @@ contains
 
     integer :: nbf, nbf2
     integer :: mrst
+    character(len=12) :: target_label
+    character(len=16) :: method_name
     logical :: roref = .false.
 
     type(dft_grid_t) :: molGrid
@@ -89,34 +92,39 @@ contains
     character(len=*), parameter :: tags_mrsf(1) = (/ character(len=80) :: &
       OQP_td_mrsf_density /)
 
+    dft = infos%control%hamilton == 20
+    if (dft) then
+      method_name = 'MRSF-TDDFT'
+    else
+      method_name = 'MRSF-TDHF'
+    end if
+
     mol_mult = infos%mol_prop%mult
     if (mol_mult/=3) call show_message(&
-            'MRSF-TDDFT are available for ROHF/UHF ref.&
-            &with ONLY triplet multiplicity(mult=3)', with_abort)
+            'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
     if (scf_type==3) roref = .true.
 
-    dft = infos%control%hamilton == 20
+    mrst = infos%tddft%mult
+    target_label = mrsf_state_label(mrst, infos%tddft%target_state)
 
   ! Files open
     open (unit=iw, file=infos%log_filename, position="append")
   !
-    call print_module_info('MRSF_Grad','Computing Gradient of MRSF-TDDFT')
+    call print_module_info('MRSF_Grad','Computing Gradient of '//trim(method_name))
 !
     write(iw,'(/5X,"Gradient options"/&
                 &5X,18("-")/&
-                &5X,"Target State: ",I8/&
-                &,5X,"Note: MRSF-TDDFT can calculate ground state with state number 1."/)')&
-                & infos%tddft%target_state
+                &5X,"Physical target state: ",A/&
+                &5X,"Internal response root: ",I8/)')&
+                & trim(target_label), infos%tddft%target_state
 
   ! Load basis set
     basis => infos%basis
     basis%atoms => infos%atoms
 
    ! Input parameters
-    mrst = infos%tddft%mult
-
   ! Allocate H, S ,T and D matrices
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
@@ -211,6 +219,7 @@ contains
     real(kind=dp), contiguous, target :: p(:,:,:), d(:,:,:), spc(:,:,:), v(:,:)
 
     logical :: urohf, dft
+    character(len=16) :: method_name
     real(kind=dp) :: scale_exch  !> HF scale in Reference
     real(kind=dp) :: scale_exch2 !> HF scale in Response
 
@@ -219,6 +228,11 @@ contains
     class(grd2_compute_data_t), allocatable :: gcomp
 
     dft = infos%control%hamilton == 20 ! dft or hf
+    if (dft) then
+      method_name = 'MRSF-TDDFT'
+    else
+      method_name = 'MRSF-TDHF'
+    end if
     urohf = infos%control%scftype >= 2
 
     scale_exch = 1.0_dp
@@ -234,7 +248,7 @@ contains
 
     if(ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
 
-    write(*, '(/7x,"Fitting parameters for MRSF-TDDFT")')
+    write(*, '(/7x,"Fitting parameters for ",A)') trim(method_name)
     if (.not.infos%dft%cam_flag) then
       write(*, '(10x,"Exact HF exchange:")')
       write(*, '(5x,"Reference: |", t20, f6.3, t29, "|")') scale_exch

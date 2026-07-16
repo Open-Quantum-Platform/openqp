@@ -1,0 +1,1 @@
+mrsf-tddftb(nstate=3) geom="../geometries/C2-d0affeda5215.xyz" charge=0 energy(S0) guess(type=huckel) dftb(backend=native,parameter_path=params,lc_ground_state=true,lc_gamma=erf,omega=0.25,cam_beta=1.2,scc_mixer=trust)

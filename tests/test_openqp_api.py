@@ -96,6 +96,13 @@ SCHEMA = {
         "lib": {"type": _string, "default": "oqp"},
         "istate": {"type": int, "default": "1"},
         "jstate": {"type": int, "default": "2"},
+        "states": {"type": str, "default": ""},
+        "meci_search": {"type": _string, "default": "penalty"},
+        "pen_sigma": {"type": float, "default": "1.0"},
+        "pen_alpha": {"type": float, "default": "0.0"},
+        "pen_delta": {"type": float, "default": "0.025"},
+        "pen_jump": {"type": str, "default": "10,25"},
+        "energy_gap": {"type": float, "default": "1e-5"},
         "maxit": {"type": int, "default": "30"},
     },
     "oqp": {
@@ -567,6 +574,29 @@ $$$$
         self.assertEqual(config["optimize"]["lib"], "oqp")
         self.assertEqual(config["optimize"]["istate"], "1")
         self.assertEqual(config["optimize"]["jstate"], "2")
+
+    def test_meci_public_baeka_aliases_map_to_optimizer_schema(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="baeka").molecule(geometry="water")
+
+        job.workflow.meci(
+            states=[1, 2, 3],
+            algorithm="baeka",
+            sigma=2.0,
+            alpha=0.02,
+            delta_beta=0.05,
+            beta_schedule=[10, 25],
+            gap=1.0e-4,
+        )
+
+        optimize = job.to_input_dict()["optimize"]
+        self.assertEqual(optimize["meci_search"], "baeka")
+        self.assertEqual(optimize["states"], "1,2,3")
+        self.assertEqual(optimize["pen_sigma"], "2.0")
+        self.assertEqual(optimize["pen_alpha"], "0.02")
+        self.assertEqual(optimize["pen_delta"], "0.05")
+        self.assertEqual(optimize["pen_jump"], "10,25")
+        self.assertEqual(optimize["energy_gap"], "0.0001")
 
     def test_workflow_sublevels_set_runtype_and_sections(self):
         openqp = load_openqp_module()

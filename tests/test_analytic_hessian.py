@@ -18,6 +18,9 @@ STUB_MODULES = [
     "oqp.utils.file_utils",
     "oqp.library",
     "oqp.library.frequency",
+    "oqp.library.openqp_dftb",
+    "oqp.utils.state_labels",
+    "oqp.utils.qmmm",
     "oqp.periodic_table",
 ]
 
@@ -76,6 +79,9 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         sys.modules["oqp.utils.matrix"] = matrix
         library = types.ModuleType("oqp.library")
         sys.modules["oqp.library"] = library
+        openqp_dftb = types.ModuleType("oqp.library.openqp_dftb")
+        setattr(openqp_dftb, "OpenQPDFTBAdapter", object)
+        sys.modules["oqp.library.openqp_dftb"] = openqp_dftb
         frequency = types.ModuleType("oqp.library.frequency")
         setattr(frequency, "normal_mode", lambda *args, **kwargs: (np.array([]), np.array([]), np.array([])))
         setattr(frequency, "thermal_analysis", lambda *args, **kwargs: {})
@@ -86,6 +92,11 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         setattr(file_utils, "write_config", lambda *args, **kwargs: None)
         setattr(file_utils, "write_xyz", lambda *args, **kwargs: None)
         sys.modules["oqp.utils.file_utils"] = file_utils
+        state_labels = types.ModuleType("oqp.utils.state_labels")
+        setattr(state_labels, "is_mrsf", lambda *_args, **_kwargs: False)
+        setattr(state_labels, "public_state_label", lambda state, *_args, **_kwargs: f"S{state}")
+        sys.modules["oqp.utils.state_labels"] = state_labels
+        sys.modules["oqp.utils.qmmm"] = types.ModuleType("oqp.utils.qmmm")
         self.single_point = load_module("single_point_analytic_hess_dispatch", "pyoqp/oqp/library/single_point.py")
 
     def tearDown(self):
@@ -141,6 +152,36 @@ class AnalyticHessianNativeDispatchTests(unittest.TestCase):
         hessian.analytical_sf_hess = lambda: ("sf-route", ["stubbed"])
 
         self.assertEqual(hessian.analytical_hess(), ("sf-route", ["stubbed"]))
+
+    def test_matrix_only_hessian_skips_vibrational_analysis_and_cache(self):
+        class Mol:
+            config = {
+                "guess": {"save_mol": False},
+                "properties": {"export": False, "title": ""},
+                "tests": {"exception": True},
+                "hess": {"type": "numerical", "state": 0, "read": False,
+                         "restart": False, "temperature": [298.15], "clean": True,
+                         "dx": 0.01, "nproc": 1},
+                "input": {"method": "hf"},
+                "scf": {"multiplicity": 1},
+                "tdhf": {"type": "rpa", "multiplicity": 1},
+            }
+            energies = np.array([-1.0])
+
+            def save_freqs(self, _state):
+                raise AssertionError("matrix-only Hessian must not write a frequency cache")
+
+        expected = np.diag(np.arange(1.0, 7.0))
+        hessian = self.single_point.Hessian(Mol())
+        hessian.hess_func = lambda: (expected.copy(), ["computed"])
+        self.single_point.normal_mode = lambda *_args, **_kwargs: (
+            (_ for _ in ()).throw(AssertionError("normal-mode analysis must be skipped"))
+        )
+
+        result = hessian.hessian(analysis=False)
+
+        self.assertTrue(np.array_equal(result, expected))
+        self.assertTrue(np.array_equal(hessian.mol.hessian, expected))
 
 
 class AnalyticHessianInputValidationTests(unittest.TestCase):
@@ -231,6 +272,46 @@ class AnalyticHessianInputValidationTests(unittest.TestCase):
 
         self.assertFalse(report.ok)
         self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+
+    def test_mrsf_native_ts_analytical_initial_hessian_is_rejected_in_preflight(self):
+        config = {
+            "input": {"method": "tdhf", "runtype": "ts",
+                      "system": "\nO 0 0 0\nH 0 0 0.9\nH 0 0.7 -0.3",
+                      "basis": "sto-3g"},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "nstate": 3, "multiplicity": 3},
+            "optimize": {"lib": "oqp", "istate": 1},
+            "oqp": {"init_hessian": "analytical"},
+            "hess": {"type": "analytical", "state": 1, "nproc": 1,
+                     "temperature": [298.15]},
+        }
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("Analytical native TS initialization is unavailable", report.to_text())
+        self.assertIn("MRSF-TDDFT analytic Hessian is not implemented", report.to_text())
+
+    def test_native_ts_analytical_initial_hessian_applies_basis_l_gate(self):
+        config = {
+            "input": {"method": "hf", "runtype": "ts",
+                      "system": "\nH 0 0 0\nH 0 0 0.74", "basis": "mock-g"},
+            "scf": {"type": "rhf", "multiplicity": 1},
+            "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+            "optimize": {"lib": "oqp", "istate": 0},
+            "oqp": {"init_hessian": "analytical"},
+            "hess": {"state": 0},
+        }
+        self.input_checker._basis_max_angular_momentum = lambda _config: 4
+
+        report = self.input_checker.check_input_values(
+            config, raise_error=False, emit=False,
+        )
+
+        self.assertFalse(report.ok)
+        self.assertIn("basis angular momentum only up to L=3", report.to_text())
 
     def test_sf_analytical_hessian_has_sf_specific_rejection_message(self):
         config = {

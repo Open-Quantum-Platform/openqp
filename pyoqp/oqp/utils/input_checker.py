@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import math
 import multiprocessing
 import os
+import re
 from typing import Any
 
 from oqp.utils.mpi_utils import MPIManager
@@ -50,7 +51,7 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"penalty", "ubp", "hybrid"}
+MECI_SEARCH = {"penalty", "ubp", "hybrid", "baeka"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -374,8 +375,39 @@ def _iter_coordinate_lines(system: str) -> tuple[list[str], str | None]:
 
     first_line = lines[0].strip()
     if first_line:
+        # A QM/MM reference such as ``mol.pdb 0 1 2`` also has three finite
+        # numeric fields after its first token.  Recognize supported geometry
+        # filenames before applying the inline-coordinate heuristic.
+        path_token, _ = _split_geometry_reference(first_line)
+        if path_token.lower().endswith((".xyz", ".pdb")):
+            return [], first_line
+
+        fields = first_line.split()
+        try:
+            is_coordinate = len(fields) >= 4 and all(
+                math.isfinite(float(value)) for value in fields[1:4]
+            )
+        except ValueError:
+            is_coordinate = False
+        if is_coordinate:
+            return [line for line in lines if line.strip()], None
         return [], first_line
     return [line for line in lines[1:] if line.strip()], None
+
+
+def _split_geometry_reference(reference: str) -> tuple[str, list[str]]:
+    """Split an XYZ/PDB reference without breaking paths that contain spaces."""
+    stripped = reference.strip()
+    lower = stripped.lower()
+    for suffix in (".xyz", ".pdb"):
+        end = lower.find(suffix)
+        if end >= 0:
+            end += len(suffix)
+            path = stripped[:end].strip()
+            trailing = stripped[end:].strip().split()
+            return path, trailing
+    tokens = stripped.split()
+    return (tokens[0], tokens[1:]) if tokens else ("", [])
 
 
 def _max_state(values: list[Any]) -> int:
@@ -487,8 +519,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
         # runs append the QM-region atom indices after a .pdb path
         # (e.g. "mol.pdb 9 10 17-19"), so validate the path token alone rather
         # than the whole line (which never exists as a file).
-        tokens = xyz_path.split()
-        path_token = tokens[0]
+        path_token, trailing_tokens = _split_geometry_reference(xyz_path)
         resolved = os.path.abspath(path_token)
         if path_token.lower().endswith(".pdb"):
             if not os.path.exists(resolved):
@@ -501,7 +532,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
                     wiki=WIKI_HELP["input.system"],
                 )
             else:
-                _check_qm_atom_indices(tokens[1:], report)
+                _check_qm_atom_indices(trailing_tokens, report)
         elif not os.path.exists(resolved):
             report.add(
                 "ERROR",
@@ -1566,11 +1597,16 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     requested = []
     if runtype == "grad":
         requested.extend(_as_list(_get(config, "properties", "grad", [])))
-    if runtype in {"optimize", "mep", "ts"}:
+    if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
     if runtype in {"meci", "mecp"}:
-        requested.append(_get(config, "optimize", "istate", 0))
-        requested.append(_get(config, "optimize", "jstate", 0))
+        search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+        multistates = _as_list(_get(config, "optimize", "states", []))
+        if runtype == "meci" and search == "baeka" and multistates:
+            requested.extend(multistates)
+        else:
+            requested.append(_get(config, "optimize", "istate", 0))
+            requested.append(_get(config, "optimize", "jstate", 0))
     if runtype == "tci":
         requested.append(_get(config, "optimize", "istate", 0))
         requested.append(_get(config, "optimize", "jstate", 0))
@@ -1796,6 +1832,17 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
     meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+    meci_states = _as_list(_get(config, "optimize", "states", []))
+
+    if bool(_get(config, "input", "qmmm_flag", False)):
+        report.add(
+            "ERROR",
+            "input.qmmm_flag",
+            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
+            value=f"qmmm_flag=true/runtype={runtype}",
+            expected="a supported QM/MM energy, md, or namd workflow",
+            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+        )
 
     if lib not in OPT_LIBS:
         report.add(
@@ -1804,7 +1851,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy or geometric.",
+            action="Use oqp (recommended), scipy, or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -1819,6 +1866,109 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
+    if lib == "oqp":
+        freeze = str(_get(config, "oqp", "freeze", "") or "").strip()
+        if freeze:
+            if runtype != "optimize":
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Frozen-distance constraints are currently supported only for a native minimum search.",
+                    value=runtype, expected="runtype=optimize",
+                    action="Use a separate opt job for the constrained minimum.",
+                )
+            pattern = re.compile(
+                r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I
+            )
+            items = [item.strip() for item in freeze.split(";") if item.strip()]
+            valid = bool(items)
+            for item in items:
+                match = pattern.fullmatch(item)
+                if not match or int(match.group(1)) < 1 or int(match.group(2)) < 1 \
+                        or int(match.group(1)) == int(match.group(2)):
+                    valid = False
+                    break
+            if not valid:
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Invalid native frozen-distance expression.",
+                    value=freeze, expected="distance(1,2);distance(2,3)",
+                    action="Use one-based distinct atom pairs separated by semicolons.",
+                )
+
+        init_hessian = _as_lower(_get(config, "oqp", "init_hessian", "model"))
+        if init_hessian not in {"model", "numerical", "analytical"}:
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "Unknown native initial-Hessian policy.",
+                value=init_hessian,
+                expected="model, numerical, or analytical",
+                action="Use model unless a fresh numerical or analytical TS Hessian is required.",
+            )
+        elif init_hessian != "model" and runtype != "ts":
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "A real native initial Hessian is currently consumed only by runtype=ts.",
+                value=f"{runtype}/{init_hessian}",
+                expected="runtype=ts",
+                action="Use oqp.init_hessian=model or switch to a native TS search.",
+            )
+        elif init_hessian == "analytical":
+            capability, reason = analytic_hessian_capability(config)
+            if capability != "supported":
+                report.add(
+                    "ERROR", "oqp.init_hessian",
+                    "Analytical native TS initialization is unavailable for this method/state.",
+                    value=init_hessian,
+                    expected="a supported HF/DFT ground-state analytic Hessian",
+                    action=reason,
+                )
+            max_l = _basis_max_angular_momentum(config)
+            if max_l is not None and max_l >= 4:
+                report.add(
+                    "ERROR", "input.basis",
+                    "Analytical native TS initialization supports basis angular momentum only up to L=3.",
+                    value=f"max L={max_l}",
+                    expected="max L <= 3",
+                    action="Use hessian=numerical for this TS search, or choose a basis without g/higher functions.",
+                )
+
+        hess_restart = _get(config, "hess", "restart", False)
+        if (runtype == "irc" and hess_restart) or (
+                runtype == "ts" and init_hessian != "model" and hess_restart):
+            report.add(
+                "ERROR", "hess.restart",
+                "Native TS/IRC Hessian restart artifacts are not yet signed to a geometry and electronic model.",
+                value=hess_restart,
+                expected="False",
+                action="Set [hess] restart=False; standalone numerical Hessian restart remains available.",
+            )
+
+        irc_direction = _as_lower(_get(config, "oqp", "irc_direction", "forward"))
+        if runtype == "irc" and irc_direction not in {"forward", "backward", "reverse"}:
+            report.add(
+                "ERROR", "oqp.irc_direction",
+                "Unknown native IRC direction.",
+                value=irc_direction,
+                expected="forward or backward",
+                action="Set irc_direction=forward or irc_direction=backward.",
+            )
+
+        if runtype in {"irc", "mep"}:
+            path_gtol = _get(config, "oqp", "path_gtol", 1.0e-4)
+            try:
+                path_gtol_value = float(path_gtol)
+                valid_path_gtol = math.isfinite(path_gtol_value) and path_gtol_value > 0
+            except (TypeError, ValueError):
+                valid_path_gtol = False
+            if not valid_path_gtol:
+                report.add(
+                    "ERROR", "oqp.path_gtol",
+                    "Native path gradient tolerance must be positive.",
+                    value=path_gtol,
+                    expected="> 0",
+                    action="Set path_gtol to a positive value such as 1e-4.",
+                )
+
     if method == "hf" and istate > 0:
         report.add(
             "ERROR",
@@ -1829,7 +1979,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Set istate=0 or switch to method=tdhf.",
         )
 
-    if method == "tdhf" and runtype in {"optimize", "mep", "ts"} and istate == 0:
+    if method == "tdhf" and runtype in {"optimize", "mep", "ts", "irc", "neb"} and istate == 0:
         report.add(
             "ERROR",
             "optimize.istate",
@@ -1849,7 +1999,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected="tdhf or dftb",
                 action="Set [input] method=tdhf or method=dftb and configure the response state space.",
             )
-        if jstate <= istate:
+        if (meci_search != "baeka" or not meci_states) and jstate <= istate:
             report.add(
                 "ERROR",
                 "optimize.jstate",
@@ -1865,7 +2015,113 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use penalty, ubp, or hybrid.",
+                action="Use penalty, ubp, hybrid, or baeka.",
+            )
+        elif meci_search == "baeka":
+            selected = meci_states or [istate, jstate]
+            try:
+                selected = [int(state) for state in selected]
+            except (TypeError, ValueError):
+                selected = []
+            if len(selected) < 2:
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires at least two response roots.",
+                    value=meci_states,
+                    expected="two or more increasing roots",
+                    action="Set states=1,2 or a longer consecutive list.",
+                )
+            elif any(state < 1 for state in selected):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA states must be positive response roots; root 0 is the internal reference.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Use positive response-root indices only.",
+                )
+            elif any(right != left + 1
+                     for left, right in zip(selected, selected[1:])):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires distinct, increasing, consecutive response roots.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Sort the roots and include every intervening state.",
+                )
+            if lib != "oqp":
+                report.add(
+                    "ERROR", "optimize.lib",
+                    "BaekA multistate MECI is implemented by the native oqp optimizer.",
+                    value=lib, expected="oqp",
+                    action="Set [optimize] lib=oqp.",
+                )
+
+            scalar_controls = {
+                "pen_sigma": (1.0, "initial sigma"),
+                "pen_alpha": (0.0, "alpha in Hartree"),
+                "pen_delta": (0.025, "additive delta_beta"),
+                "gap_weight": (1.0, "gap weight"),
+                "energy_gap": (1.0e-4, "outer-span gap tolerance"),
+            }
+            for key, (default, label) in scalar_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    if key == "gap_weight":
+                        valid = math.isfinite(value) and value == 1.0
+                    else:
+                        valid = math.isfinite(value) and (
+                            value > 0 or (key == "pen_alpha" and value == 0)
+                        )
+                except (TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    if key == "gap_weight":
+                        report.add(
+                            "ERROR", "optimize.gap_weight",
+                            "BaekA fixes gap_weight at 1.0; sigma is the published penalty multiplier.",
+                            value=raw, expected="1.0",
+                            action="Set gap_weight=1.0 and adjust pen_sigma if needed.",
+                        )
+                        continue
+                    report.add(
+                        "ERROR", f"optimize.{key}",
+                        f"BaekA {label} must be positive.",
+                        value=raw, expected="> 0",
+                        action=("Use pen_alpha=0.02; alpha has energy units. "
+                                "The legacy zero sentinel also selects 0.02 for BaekA."
+                                if key == "pen_alpha" else "Use a positive value."),
+                    )
+
+            jumps = _get(
+                config, "optimize", "pen_jump",
+                [10, 10, 25, 25, 100, 100, 1000, 1000, 3000],
+            )
+            if isinstance(jumps, str):
+                jumps = [item.strip() for item in jumps.split(",") if item.strip()]
+            elif not isinstance(jumps, (list, tuple)):
+                jumps = [jumps]
+            try:
+                jumps = [float(item) for item in jumps]
+                valid_jumps = bool(jumps) and all(
+                    math.isfinite(item) and item > 0 for item in jumps
+                )
+            except (TypeError, ValueError):
+                valid_jumps = False
+            if not valid_jumps:
+                report.add(
+                    "ERROR", "optimize.pen_jump",
+                    "BaekA beta jump schedule must contain positive values.",
+                    value=jumps, expected="10,10,25,...",
+                    action="Provide a non-empty comma-separated positive schedule.",
+                )
+        elif meci_states:
+            report.add(
+                "ERROR", "optimize.states",
+                "The multistate roots list is used only by meci_search=baeka.",
+                value=meci_states,
+                expected="meci_search=baeka",
+                action="Remove states or select the BaekA algorithm.",
             )
 
     if runtype == "mecp" and imult == jmult:
@@ -1884,18 +2140,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "optimize.lib",
             "This runtype is not wired to the SciPy optimizer map.",
             value=f"{lib}/{runtype}",
-            expected="geometric",
-            action="Use [optimize] lib=geometric for runtype=ts/irc.",
+            expected="oqp or geometric",
+            action="Use [optimize] lib=oqp (recommended) or lib=geometric for runtype=ts/irc.",
         )
 
     if runtype == "neb" and lib not in {"geometric", "oqp"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is wired through geomeTRIC and the oqp optimizer.",
+            "NEB is wired through the native oqp optimizer and the optional geomeTRIC backend.",
             value=lib,
-            expected="geometric or oqp",
-            action="Set [optimize] lib=geometric or lib=oqp for runtype=neb.",
+            expected="oqp or geometric",
+            action="Set [optimize] lib=oqp (recommended) or lib=geometric for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -1947,6 +2203,7 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
+    lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
     product = _get(config, "neb", "product", "")
     nimage = _get(config, "neb", "nimage", 5)
 
@@ -2003,6 +2260,68 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             expected=">= 3",
             action="Set [neb] nimage=3 or larger.",
         )
+
+    if lib == "oqp":
+        # Keep sectioned legacy inputs as strict as the concise .oqp parser.
+        # These controls are consumed only by the native NEB implementation.
+        numeric_controls = {
+            "spring": (0.05, 0.0, True),
+            "fmax": (2.0e-3, 0.0, False),
+            "frms": (2.0e-3, 0.0, False),
+            "climb_fmax": (0.05, 0.0, False),
+            "neb_dt": (0.5, 0.0, False),
+            "maxmove": (0.2, 0.0, False),
+            "end_fmax": (1.0e-3, 0.0, False),
+        }
+        for key, (default, lower, inclusive) in numeric_controls.items():
+            value = _get(config, "oqp", key, default)
+            try:
+                number = float(value)
+                valid = math.isfinite(number) and (
+                    number >= lower if inclusive else number > lower
+                )
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                relation = ">=" if inclusive else ">"
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB control.",
+                    value=value,
+                    expected=f"a finite number {relation} {lower:g}",
+                    action=f"Set [oqp] {key} to a valid native NEB value.",
+                )
+
+        for key in ("climb", "align", "opt_ends"):
+            value = _get(config, "oqp", key, True)
+            if not isinstance(value, bool):
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB switch.",
+                    value=value,
+                    expected="true or false",
+                    action=f"Set [oqp] {key}=true or false.",
+                )
+
+        climb = _get(config, "oqp", "climb", True)
+        try:
+            fmax = float(_get(config, "oqp", "fmax", 2.0e-3))
+            climb_fmax = float(_get(config, "oqp", "climb_fmax", 0.05))
+        except (TypeError, ValueError):
+            fmax = climb_fmax = float("nan")
+        if (isinstance(climb, bool) and climb
+                and math.isfinite(fmax) and math.isfinite(climb_fmax)
+                and climb_fmax < fmax):
+            report.add(
+                "ERROR",
+                "oqp.climb_fmax",
+                "Climbing-image activation must occur before final NEB convergence.",
+                value=climb_fmax,
+                expected="climb_fmax >= fmax when climb=true",
+                action="Increase climb_fmax or disable climbing-image NEB.",
+            )
 
 
 def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
@@ -2179,6 +2498,17 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
+    if hess_type not in {"numerical", "analytical"}:
+        report.add(
+            "ERROR",
+            "hess.type",
+            "Unknown Hessian type.",
+            value=hess_type,
+            expected="numerical or analytical",
+            action="Set [hess] type=numerical or type=analytical.",
+        )
+        return
+
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)
         if capability != "supported":
@@ -2250,6 +2580,17 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     nproc = _get(config, "nac", "nproc", 1)
     states = _as_list(_get(config, "nac", "states", []))
+    nac_type = _as_lower(_get(config, "nac", "type", "numerical"))
+
+    if nac_type != "numerical":
+        report.add(
+            "ERROR",
+            "nac.type",
+            "Analytical NAC vectors are not available.",
+            value=nac_type,
+            expected="numerical",
+            action="Set [nac] type=numerical.",
+        )
 
     if method != "tdhf":
         report.add(

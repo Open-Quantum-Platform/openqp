@@ -4,9 +4,9 @@
 
 ## Features
 
-- Native geometry optimization (`[optimize] lib=oqp`) for minima, TS, MECI,
-  MECP, TCI, NEB, IRC, and MEP paths, with SciPy and geomeTRIC available as
-  optional backends
+- Native geometry optimization for minima, TS, MECI, MECP, TCI, NEB, IRC,
+  and MEP paths. Concise `.oqp` workflows select it automatically; traditional
+  sectioned `.inp` files may still select SciPy or the optional geomeTRIC backend
 - Native Fortran initial guesses: `hcore`, `huckel`, `modhuckel`, `minao`, and `sap` (no external quantum-chemistry package required at runtime)
 - Energy, gradient, state-overlap, and hop-driver interfaces for
   nonadiabatic molecular dynamics
@@ -28,6 +28,12 @@ pip install (see the main [README](../README.md) for details and build options):
       cd openqp
       pip install .
 
+The default installation contains the complete native optimizer.  Install the
+legacy geomeTRIC compatibility backend only for workflows that explicitly use
+`[optimize] lib=geometric` (notably its constrained optimizer):
+
+      pip install 'OpenQP[geometric]'
+
 No environment variables are required afterwards: the installed package
 locates its own native library and data files, so do not set `OPENQP_ROOT`.
 
@@ -46,13 +52,22 @@ development install.
 
 - test pyoqp
 
-      openqp --run-tests other: Run tests from the 'other' folder in examples
-      openqp --run-tests all: Run all tests from all folders in examples
-      openqp --run-tests path_to_folder: Run tests from a specific folder
+      openqp --run-tests other                 # examples/other, automatic input selection
+      openqp --run-tests all                   # all examples, automatic input selection
+      openqp --run-tests path_to_folder        # a specific folder
+      openqp --run-tests all --input-format inp
+      openqp --run-tests all --input-format oqp
+      openqp --run-tests all --input-format both
 
-Can be used to run all tests in a specific folder.
+The default `auto` selection prefers concise `.oqp`, retains legacy-only `.inp`
+inputs, and keeps a representative legacy compatibility set. Use `inp`, `oqp`,
+or `both` to choose the syntax within the requested test scope. The historical
+`all` scope keeps its slow/non-self-contained exclusions; an explicit directory
+selects every matching input below that directory. The historical `--run_tests`
+spelling remains supported.
 
-Results, including log files and `test_report.txt`, will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
+Results, including per-input output folders, log files, and `test_report.txt`,
+will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
 
 - run pyoqp with command
 
@@ -143,14 +158,19 @@ Results, including log files and `test_report.txt`, will be stored in the curren
     rmsd_step=1e-3
     max_grad=3e-4
     max_step=2e-3
-    istate=0
-    jstate=1
+    istate=1
+    jstate=2
+    kstate=3
+    states=
     energy_shift=1e-6
     energy_gap=1e-5
     meci_search=penalty
     pen_sigma=1.0
     pen_alpha=0.0
     pen_incre=1.0
+    pen_delta=0.025
+    pen_jump=10,10,25,25,100,100,1000,1000,3000
+    gap_weight=1.0
     init_scf=False
 
 [hess]
@@ -447,6 +467,10 @@ only by `runtype=md` with `qmmm_flag=True`.
 
 optimize section handle the geometry optimization
 
+This is the traditional sectioned `.inp` interface.  New concise `.oqp` files
+do not expose `lib`; all geometry drivers use the native OpenQP optimizer
+automatically.
+
 - lib // choose the optimization library
 
       oqp         use the native optimizer (default). Supports optimize, ts, meci, mecp, tci, neb, irc, and mep
@@ -499,6 +523,10 @@ optimize section handle the geometry optimization
 - jstate // choose the second state for conical intersection optimization
 
       2 (default)
+
+- states // ordered consecutive response roots for BaekA multistate MECI
+
+      empty (default); use 1,2 or 1,2,3,... with meci_search=baeka
     
 - energy_shift // convergence threshold for electronic energy changes
 
@@ -510,9 +538,10 @@ optimize section handle the geometry optimization
     
 - meci-search // choose the algorithm for conical intersection optimization
 
-      penalty    use the modified pentaly method (default)
+      penalty    use the modified penalty method (default)
       ubp        use the update branching plane method
       hybrid     use the penalty function then swith to ubp after energy gap is lower than the threshold
+      baeka      use the additive Baek adaptive penalty for two or more states
     
 - pen_sigma // set the sigma in the penalty function
 
@@ -524,7 +553,20 @@ optimize section handle the geometry optimization
     
 - pen_incre // set the incremental factor in the penalty function
 
-      1.0 (default)
+      1.0 (default); multiplicative legacy control used by runtype=tci,
+      not by meci_search=baeka
+
+- pen_delta // BaekA small additive delta-beta update
+
+      0.025 (default)
+
+- pen_jump // BaekA large additive beta schedule
+
+      10,10,25,25,100,100,1000,1000,3000 (default)
+
+- gap_weight // crossing-search penalty scaling
+
+      1.0 (default); fixed at 1.0 for meci_search=baeka
     
 - init_scf // do initial SCF iteration during geometry optimization
 
@@ -533,7 +575,9 @@ optimize section handle the geometry optimization
 
 ### [geometric]
 
-geometric section controls the geomeTRIC optimizer backend when [optimize]lib=geometric
+Legacy optional section controlling geomeTRIC when a traditional `.inp` file
+sets `[optimize] lib=geometric`.  It is not part of the concise `.oqp` grammar;
+install it with `pip install 'OpenQP[geometric]'` when needed.
 
 - coordsys // coordinate system passed to geomeTRIC
 

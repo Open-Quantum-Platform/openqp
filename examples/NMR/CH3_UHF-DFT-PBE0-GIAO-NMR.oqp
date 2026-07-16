@@ -1,0 +1,1 @@
+uks/pbe0/sto-3g geom="../geometries/CH3-0b060bed6a1d.xyz" charge=0 mult=2 energy guess(type=huckel) dftgrid(rad_type=mhl,rad_npts=99,ang_npts=302) properties(scf_prop=nmr,nmr_gauge=giao)

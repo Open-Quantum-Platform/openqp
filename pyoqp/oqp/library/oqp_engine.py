@@ -10,8 +10,9 @@ Algorithm (v1):
   with Cartesian fall-back);
 * restricted-step Rational Function Optimization (RFO) for minima and
   partitioned-RFO (P-RFO, eigenvector following) for transition states;
-* Schlegel-type diagonal model Hessian updated with BFGS (minima) or the
-  Bofill SR1/PSB mixture (TS);
+* Schlegel-type diagonal model Hessian, or an optional supplied Cartesian
+  Hessian transformed into working coordinates, updated with BFGS (minima) or
+  the Bofill SR1/PSB mixture (TS);
 * a predictive trust region in Cartesian RMSD, grown/shrunk on the ratio of
   actual to predicted energy change.
 
@@ -24,6 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 import scipy.linalg as sla
+import re
 
 from oqp.library.oqp_coords import build_coordinates, CartesianCoordinates
 
@@ -55,12 +57,89 @@ class ConvergenceSignal(Exception):
     """Raised by the convergence callback to stop the loop cleanly."""
 
 
+def parse_frozen_distance_spec(value):
+    """Return one-based atom pairs from ``distance(i,j);...`` syntax."""
+    text = str(value or "").strip()
+    if not text:
+        return []
+    pattern = re.compile(r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I)
+    pairs = []
+    for item in (part.strip() for part in text.split(";") if part.strip()):
+        match = pattern.fullmatch(item)
+        if not match:
+            raise ValueError(
+                "freeze must contain semicolon-separated distance(i,j) pairs"
+            )
+        pair = (int(match.group(1)), int(match.group(2)))
+        if pair[0] == pair[1]:
+            raise ValueError("frozen-distance atom indices must be distinct")
+        pairs.append(pair)
+    return pairs
+
+
 class OQPEngine:
     def __init__(self, atoms, x0, mode="min", trust=0.2, trust_min=5.0e-3,
                  trust_max=0.5, maxiter=100, follow_mode=0, coordsys="auto",
-                 logger=None):
+                 logger=None, initial_hessian=None, initial_gradient=None,
+                 masses=None, project_global_rigid_modes=False,
+                 frozen_distances=None):
+        """Create an optimization engine.
+
+        Parameters
+        ----------
+        initial_hessian : array_like, optional
+            Cartesian Hessian at ``x0`` with shape ``(3N, 3N)``.  When it is
+            provided, it is transformed into the active working coordinates
+            with the same generalized Wilson-B inverse and rank cutoff used by
+            gradients and back-transformation.  Redundant-coordinate
+            null directions retain their model-Hessian curvature so they do not
+            introduce artificial zero modes.  If omitted, the existing model
+            Hessian is used unchanged.
+        initial_gradient : array_like, optional
+            Cartesian gradient at ``x0``.  When supplied with a Cartesian
+            Hessian, the internal-coordinate transformation includes the
+            gradient/coordinate-curvature correction and is exact away from a
+            stationary point (up to the finite-difference B-matrix derivative).
+            Global translation and rotation directions are removed from a real
+            Hessian and assigned positive model curvature so numerical zero-mode
+            noise cannot become the P-RFO mode followed by a TS search.
+        masses : array_like, optional
+            Per-atom masses used to define the global translation/rotation
+            subspace for a real Hessian. Runtime drivers pass the molecule's
+            actual isotope/custom masses; unit masses are the standalone API
+            default when no real Hessian projection is needed.
+        project_global_rigid_modes : bool, optional
+            Replace global translation/rotation curvature by positive model
+            curvature for an isolated, invariant molecular Hamiltonian. Runtime
+            OpenQP enables this for non-QM/MM jobs. The standalone default is
+            false because an external field or fixed embedding can give genuine
+            lab-frame rigid-motion curvature.
+        frozen_distances : sequence of pair, optional
+            One-based atom-index pairs whose initial distances are held fixed.
+            The optimizer projects gradients into the linearized constraint
+            tangent space and applies a SHAKE-like Cartesian correction after
+            every trial step.
+        """
         self.atoms = np.asarray(atoms, dtype=int).reshape(-1)
         self.x = np.asarray(x0, dtype=float).reshape(-1)
+        if masses is None:
+            self.masses = np.ones(self.atoms.size, dtype=float)
+        else:
+            self.masses = np.asarray(masses, dtype=float).reshape(-1)
+        if (self.masses.shape != self.atoms.shape
+                or not np.all(np.isfinite(self.masses))
+                or np.any(self.masses <= 0.0)):
+            raise ValueError("masses must be a finite positive value for every atom")
+        self.sqrt_cartesian_mass = np.sqrt(np.repeat(self.masses, 3))
+        self.project_global_rigid_modes = bool(project_global_rigid_modes)
+        self.frozen_distances = self._validate_frozen_distances(
+            frozen_distances or []
+        )
+        xyz0 = self.x.reshape(-1, 3)
+        self._frozen_distance_targets = [
+            float(np.linalg.norm(xyz0[first] - xyz0[second]))
+            for first, second in self.frozen_distances
+        ]
         self.mode = mode
         self.trust = float(trust)
         self.trust_min = float(trust_min)
@@ -80,9 +159,242 @@ class OQPEngine:
         if (type(self.coords).__name__ == "CartesianCoordinates"
                 and requested not in ("cart", "cartesian")):
             label = f"{label}->CART(fallback)"
+        elif (requested == "tric"
+              and type(self.coords).__name__ == "RedundantInternalCoordinates"):
+            _, coordinate_rank = self.coords._g_inverse(
+                self.coords.b_matrix(self.x)
+            )
+            if coordinate_rank < self.x.size:
+                label = "TRIC->RIC(fallback)"
+        elif (requested == "dlc"
+              and type(self.coords).__name__ == "RedundantInternalCoordinates"):
+            label = "DLC->RIC(fallback)"
         self.coordsys = label
-        self.H = self.coords.guess_hessian(self.x)
+        model_hessian = self.coords.guess_hessian(self.x)
+        if initial_hessian is None:
+            self.H = model_hessian
+        else:
+            self.H = self._transform_initial_hessian(initial_hessian,
+                                                     model_hessian,
+                                                     initial_gradient)
         self._prev = None
+
+    def _validate_frozen_distances(self, pairs):
+        validated = []
+        natom = self.atoms.size
+        for pair in pairs:
+            if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+                raise ValueError("each frozen distance must contain two atom indices")
+            try:
+                # Public input uses the chemistry convention: atoms start at 1.
+                first, second = int(pair[0]) - 1, int(pair[1]) - 1
+            except (TypeError, ValueError) as exc:
+                raise ValueError("frozen-distance atom indices must be integers") from exc
+            if first == second or min(first, second) < 0 or max(first, second) >= natom:
+                raise ValueError(
+                    "frozen-distance atom indices must be distinct and between 1 and %d"
+                    % natom
+                )
+            canonical = tuple(sorted((first, second)))
+            if canonical not in validated:
+                validated.append(canonical)
+        return validated
+
+    def _constraint_jacobian(self, x):
+        """Cartesian Jacobian rows for the active frozen distances."""
+        if not self.frozen_distances:
+            return np.zeros((0, self.x.size), dtype=float)
+        xyz = np.asarray(x, dtype=float).reshape(-1, 3)
+        rows = []
+        for first, second in self.frozen_distances:
+            delta = xyz[first] - xyz[second]
+            norm = float(np.linalg.norm(delta))
+            if norm <= 1.0e-14:
+                raise ValueError("cannot freeze a zero atom-pair distance")
+            unit = delta / norm
+            row = np.zeros(self.x.size, dtype=float)
+            row[3 * first:3 * first + 3] = unit
+            row[3 * second:3 * second + 3] = -unit
+            rows.append(row)
+        return np.asarray(rows)
+
+    def _project_constraint_tangent(self, vector, x=None):
+        """Remove Cartesian components normal to all distance constraints."""
+        vector = np.asarray(vector, dtype=float).reshape(-1)
+        jac = self._constraint_jacobian(self.x if x is None else x)
+        if not jac.size:
+            return vector
+        gram = jac @ jac.T
+        coeff = np.linalg.pinv(gram, rcond=1.0e-12) @ (jac @ vector)
+        return vector - jac.T @ coeff
+
+    def _enforce_frozen_distance_values(self, x):
+        """Return coordinates corrected to the stored pair distances."""
+        if not self.frozen_distances:
+            return np.asarray(x, dtype=float).reshape(-1)
+        xyz = np.asarray(x, dtype=float).reshape(-1, 3).copy()
+        for _ in range(50):
+            largest = 0.0
+            for (first, second), target in zip(
+                    self.frozen_distances, self._frozen_distance_targets):
+                delta = xyz[first] - xyz[second]
+                distance = float(np.linalg.norm(delta))
+                if distance <= 1.0e-14:
+                    raise ValueError("cannot enforce a zero atom-pair distance")
+                error = distance - target
+                largest = max(largest, abs(error))
+                correction = 0.5 * error * (delta / distance)
+                xyz[first] -= correction
+                xyz[second] += correction
+            if largest <= 1.0e-12:
+                break
+        return xyz.reshape(-1)
+
+    def _transform_initial_hessian(self, initial_hessian, model_hessian,
+                                   initial_gradient=None):
+        """Validate and transform a Cartesian Hessian to working coordinates."""
+        ncart = self.x.size
+        try:
+            h_cart = np.asarray(initial_hessian, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("initial_hessian must be a numeric Cartesian matrix") from exc
+
+        expected = (ncart, ncart)
+        if h_cart.shape != expected:
+            raise ValueError(
+                f"initial_hessian must have shape {expected}, got {h_cart.shape}"
+            )
+        if not np.all(np.isfinite(h_cart)):
+            raise ValueError("initial_hessian must contain only finite values")
+        if not np.allclose(h_cart, h_cart.T, rtol=1.0e-8, atol=1.0e-10):
+            raise ValueError("initial_hessian must be symmetric")
+
+        # Remove harmless roundoff asymmetry before transforming.  For dq = B dx,
+        # the minimum-norm Cartesian displacement is dx = B+ dq; therefore
+        # Hq = (B+)T Hx B+.  In a redundant coordinate system B B+ is the
+        # projector onto the physical internal-coordinate subspace.  Complete
+        # the orthogonal null space with the established model Hessian rather
+        # than leaving spurious zero-curvature modes in the RFO problem.
+        h_cart = 0.5 * (h_cart + h_cart.T)
+        bmat = np.asarray(self.coords.b_matrix(self.x), dtype=float)
+        if isinstance(self.coords, CartesianCoordinates):
+            b_pinv = bmat.T
+            active_rank = ncart
+        else:
+            # Use exactly the optimizer's active internal-coordinate subspace.
+            # np.linalg.pinv has a much looser default cutoff and can amplify a
+            # near-null RIC/DLC direction that grad_to_q/back_transform discard,
+            # which can reorder the P-RFO modes of a real TS Hessian.
+            g_inverse, rank = self.coords._g_inverse(bmat)
+            if rank == 0:
+                raise ValueError(
+                    "initial_hessian cannot be transformed through a rank-zero B matrix"
+                )
+            b_pinv = bmat.T @ g_inverse
+            active_rank = rank
+
+        # Hx = B.T Hq B + sum_i gq_i d2(q_i)/dx2.  The second term vanishes at
+        # a stationary point, but a TS guess can retain a non-negligible
+        # gradient.  Numerically differentiate the already available B matrix
+        # so injected real Hessians preserve curvature/mode ordering there too.
+        coordinate_curvature = np.zeros_like(h_cart)
+        if initial_gradient is not None:
+            try:
+                g_cart = np.asarray(initial_gradient, dtype=float).reshape(-1)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("initial_gradient must be a numeric Cartesian vector") from exc
+            if g_cart.shape != (ncart,):
+                raise ValueError(
+                    "initial_gradient must have shape (%d,), got %s"
+                    % (ncart, g_cart.shape)
+                )
+            if not np.all(np.isfinite(g_cart)):
+                raise ValueError("initial_gradient must contain only finite values")
+            if not isinstance(self.coords, CartesianCoordinates) \
+                    and np.linalg.norm(g_cart) > 0.0:
+                g_work = np.asarray(
+                    self.coords.grad_to_q(self.x, g_cart), dtype=float
+                ).reshape(-1)
+                fd_step = 1.0e-4
+                for column in range(ncart):
+                    xp = self.x.copy()
+                    xm = self.x.copy()
+                    xp[column] += fd_step
+                    xm[column] -= fd_step
+                    dbdx = (
+                        np.asarray(self.coords.b_matrix(xp), dtype=float)
+                        - np.asarray(self.coords.b_matrix(xm), dtype=float)
+                    ) / (2.0 * fd_step)
+                    coordinate_curvature[:, column] = g_work @ dbdx
+                coordinate_curvature = 0.5 * (
+                    coordinate_curvature + coordinate_curvature.T
+                )
+
+        h_work = b_pinv.T @ (h_cart - coordinate_curvature) @ b_pinv
+
+        projector = bmat @ b_pinv
+        null_projector = np.eye(projector.shape[0]) - projector
+        h_work += null_projector.T @ model_hessian @ null_projector
+
+        # A molecular Cartesian Hessian has five or six exact global zero modes.
+        # Numerical Hessians and finite integral thresholds commonly make those
+        # modes slightly negative. TRIC/Cartesian working coordinates retain the
+        # global motions, so those artifacts could sort below the physical TS
+        # vibration and make follow=0 translate/rotate the molecule. Map the
+        # physical rigid-motion displacement subspace through B, remove all
+        # Hessian coupling to it, and restore its established positive model
+        # curvature. Relative fragment motion remains untouched because only
+        # whole-system translation/rotation vectors are included.
+        # RIC/DLC already remove global motions (active_rank < 3N). Their B+
+        # gauge can contain an arbitrary COM component, so applying a second
+        # mass-metric projector would misclassify and erase physical internal
+        # curvature. Only full-rank TRIC/Cartesian coordinates carry the global
+        # modes that require regularization.
+        external_work = np.empty((h_work.shape[0], 0))
+        if self.project_global_rigid_modes and active_rank == ncart:
+            external_mw = self._global_external_mass_weighted_basis()
+            # b_pinv maps a working-coordinate displacement to Cartesian dx.
+            # Left-multiplying by sqrt(M), then projecting onto the mass-weighted
+            # external basis, identifies exactly those working directions whose
+            # realized Cartesian step contains global rigid motion.
+            mass_weighted_back_transform = self.sqrt_cartesian_mass[:, None] * b_pinv
+            external_work = mass_weighted_back_transform.T @ external_mw
+        if external_work.size:
+            left, singular, _ = np.linalg.svd(external_work, full_matrices=False)
+            scale = float(singular[0]) if singular.size else 0.0
+            keep = singular > 1.0e-8 * max(scale, 1.0)
+            if np.any(keep):
+                external_vectors = left[:, keep]
+                external_projector = external_vectors @ external_vectors.T
+                internal_projector = np.eye(h_work.shape[0]) - external_projector
+                h_work = (
+                    internal_projector @ h_work @ internal_projector
+                    + external_projector @ model_hessian @ external_projector
+                )
+        h_work = 0.5 * (h_work + h_work.T)
+        if not np.all(np.isfinite(h_work)):
+            raise ValueError("initial_hessian produced a non-finite working Hessian")
+        return h_work
+
+    def _global_external_mass_weighted_basis(self):
+        """Mass-weighted basis for whole-system rigid motions."""
+        xyz = self.x.reshape(-1, 3)
+        natom = xyz.shape[0]
+        external = np.zeros((3 * natom, 6), dtype=float)
+        centered = xyz - np.average(xyz, axis=0, weights=self.masses)
+        sqrt_mass = np.sqrt(self.masses)
+        for atom, position in enumerate(centered):
+            external[3 * atom:3 * atom + 3, :3] = np.eye(3) * sqrt_mass[atom]
+            for axis in range(3):
+                unit = np.zeros(3)
+                unit[axis] = 1.0
+                external[3 * atom:3 * atom + 3, 3 + axis] = np.cross(
+                    unit, position
+                ) * sqrt_mass[atom]
+        left, singular, _ = np.linalg.svd(external, full_matrices=False)
+        scale = float(singular[0]) if singular.size else 0.0
+        rank = int(np.count_nonzero(singular > 1.0e-10 * max(scale, 1.0)))
+        return left[:, :rank]
 
     # -- public driver ------------------------------------------------------ #
     def run(self, energy_gradient, on_converged=None):
@@ -103,9 +415,51 @@ class OQPEngine:
             pass
         return self.x
 
+    def rebase_previous_objective(self, energy, gradient):
+        """Re-evaluate the stored previous point for a changed objective.
+
+        Adaptive objectives may change a scalar parameter between two geometry
+        evaluations.  Their caller can recombine the previous geometry's
+        parameter-independent energy and Cartesian gradient at the new
+        parameter, then use this helper to keep the BFGS secant and trust-ratio
+        comparison on one objective.  The previous geometry is retained with
+        the accepted step so the rebased gradient is transformed in the same
+        coordinate frame in which it was evaluated.
+
+        Returns ``False`` before the first step, when no previous point exists.
+        """
+
+        if self._prev is None:
+            return False
+
+        energy = float(energy)
+        gradient = np.asarray(gradient, dtype=float).reshape(-1)
+        previous_x = np.asarray(self._prev["x"], dtype=float).reshape(-1)
+        if not np.isfinite(energy):
+            raise ValueError("rebased objective energy must be finite")
+        if gradient.shape != previous_x.shape:
+            raise ValueError(
+                "rebased objective gradient must match the previous geometry"
+            )
+        if not np.all(np.isfinite(gradient)):
+            raise ValueError("rebased objective gradient must be finite")
+
+        gradient = self._project_constraint_tangent(gradient, previous_x)
+        gradient_q = self.coords.grad_to_q(previous_x, gradient)
+        displacement_q = self._prev["dq"]
+
+        self._prev["e"] = energy
+        self._prev["g_q"] = gradient_q
+        self._prev["pred"] = float(
+            gradient_q @ displacement_q
+            + 0.5 * displacement_q @ self.H @ displacement_q
+        )
+        return True
+
     # -- one macro-iteration ------------------------------------------------ #
     def _take_step(self, e, g_cart):
         b = self.coords.b_matrix(self.x)
+        g_cart = self._project_constraint_tangent(g_cart, self.x)
         g_q = self.coords.grad_to_q(self.x, g_cart)
 
         if self._prev is not None:
@@ -128,12 +482,15 @@ class OQPEngine:
             if not ok:
                 x_new = self.x + (b.T @ dq) * 0.5
 
+        x_new = self._enforce_frozen_distance_values(x_new)
+
         dq_taken = self.coords.q_displacement(self.coords.q(x_new),
                                               self.coords.q(self.x))
         cart_step = self.coords.cart_rmsd(self.x, x_new)
         pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
         self._prev = {"e": e, "g_q": g_q, "dq": dq_taken,
-                      "pred": pred, "cart_step": cart_step}
+                      "pred": pred, "cart_step": cart_step,
+                      "x": self.x.copy()}
         return x_new
 
     # -- RFO / P-RFO -------------------------------------------------------- #
@@ -197,6 +554,11 @@ class OQPEngine:
             overlaps = np.abs(v.T @ prev)
             return int(np.argmax(overlaps))
         order = np.argsort(w)
+        if self.follow_mode < 0 or self.follow_mode >= len(order):
+            raise ValueError(
+                "follow_mode=%d is out of range for %d working-coordinate modes"
+                % (self.follow_mode, len(order))
+            )
         return int(order[self.follow_mode])
 
     # -- trust region & step restriction ------------------------------------ #

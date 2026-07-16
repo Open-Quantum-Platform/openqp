@@ -1026,6 +1026,23 @@ class OpenQP:
     def _set_optimize_options(self, **kwargs):
         """Set optimizer options, routing backend-specific keys by lib."""
         requested = dict(kwargs)
+        public_aliases = {
+            "algorithm": "meci_search",
+            "sigma": "pen_sigma",
+            "alpha": "pen_alpha",
+            "delta_beta": "pen_delta",
+            "beta_schedule": "pen_jump",
+            "gap": "energy_gap",
+        }
+        for public, internal in public_aliases.items():
+            if public not in requested:
+                continue
+            if internal in requested:
+                raise ValueError(
+                    f"Optimizer option '{internal}' is specified twice through "
+                    f"'{public}' and '{internal}'."
+                )
+            requested[internal] = requested.pop(public)
         lib_value = requested.pop(
             "lib",
             self.config_typed.get("optimize", {}).get("lib", "oqp"),
@@ -1038,6 +1055,8 @@ class OpenQP:
 
         updates = {"optimize.lib": lib_name}
         for option, value in requested.items():
+            if option in {"states", "pen_jump"} and isinstance(value, (list, tuple)):
+                value = ",".join(str(item) for item in value)
             if option in optimize_schema:
                 updates[f"optimize.{option}"] = value
             elif option in backend_schema:

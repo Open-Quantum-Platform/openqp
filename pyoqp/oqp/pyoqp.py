@@ -11,6 +11,34 @@ import argparse
 from signal import signal, SIGINT, SIG_DFL
 
 
+def _strip_preimport_comments(text):
+    """Strip .inp/.oqp comments without importing the semantic parser."""
+    cleaned = []
+    for line in text.splitlines():
+        quote = None
+        escaped = False
+        kept = []
+        for index, char in enumerate(line):
+            if escaped:
+                kept.append(char)
+                escaped = False
+                continue
+            if char == "\\" and quote:
+                kept.append(char)
+                escaped = True
+                continue
+            if char in {'"', "'"}:
+                quote = None if quote == char else (char if quote is None else quote)
+                kept.append(char)
+                continue
+            if quote is None and char in {"#", "!"} and (
+                    index == 0 or line[index - 1].isspace()):
+                break
+            kept.append(char)
+        cleaned.append("".join(kept))
+    return "\n".join(cleaned)
+
+
 def _apply_omp_threads_from_input(argv):
     """Honour an OpenMP thread-count request from the input file or CLI BEFORE
     the native OpenMP runtime initialises (it caches OMP_NUM_THREADS when liboqp
@@ -38,10 +66,22 @@ def _apply_omp_threads_from_input(argv):
         if inp:
             try:
                 with open(inp, encoding="utf-8", errors="ignore") as fh:
-                    m = re.search(r"(?mi)^[ \t]*omp_threads[ \t]*=[ \t]*(\d+)",
-                                  fh.read())
-                if m:
-                    n = m.group(1)
+                    input_text = _strip_preimport_comments(fh.read())
+                # Legacy INI, canonical .oqp section/top-level options, and a
+                # small controlled-natural-language spelling.  This scan must
+                # stay dependency-free because it runs before liboqp/OpenMP is
+                # imported; the full .oqp parser validates the value later.
+                patterns = (
+                    r"(?mi)^[ \t]*omp_threads[ \t]*=[ \t]*(\d+)",
+                    r"(?i)\bomp_threads[ \t]*=[ \t]*(\d+)",
+                    r"(?i)\b(?:use|with|using)?[ \t]*(\d+)[ \t]+(?:openmp[ \t]+)?threads?\b",
+                    r"(?i)(\d+)[ \t]*(?:개[ \t]*)?(?:스레드|쓰레드)",
+                )
+                for pattern in patterns:
+                    m = re.search(pattern, input_text)
+                    if m:
+                        n = m.group(1)
+                        break
             except OSError:
                 pass
     if n is not None:
@@ -116,6 +156,54 @@ from oqp.library.runfunc import (
 from oqp.utils.mpi_utils import MPIManager
 
 
+def _resolve_semantic_input(input_file, mpi_manager=None, usempi=None):
+    """Resolve a ``.oqp`` file once and return an MPI-safe execution payload.
+
+    Only rank zero may write a correction ``*.resolved.oqp`` artifact.  Prose
+    is never executed; canonical requests are lowered and broadcast so every
+    rank runs exactly the same validated configuration.
+    """
+    from oqp.utils.oqp_input import resolve_oqp_file
+
+    mpi_manager = mpi_manager or MPIManager()
+    broadcast = bool(mpi_manager.use_mpi if usempi is None else
+                     (usempi and mpi_manager.use_mpi))
+    envelope = None
+    if mpi_manager.rank == 0 or not broadcast:
+        try:
+            resolution = resolve_oqp_file(input_file, write_resolved=True)
+            source = str(resolution.source_path or os.path.abspath(input_file))
+            effective = str(resolution.resolved_path or resolution.source_path or input_file)
+            payload = {
+                "source": source,
+                "resolved": effective,
+                "was_natural": bool(resolution.was_natural),
+                "canonical_text": resolution.canonical_text,
+                "legacy_config": {
+                    section: dict(values)
+                    for section, values in resolution.legacy_config.items()
+                },
+            }
+            envelope = {"ok": True, "payload": payload}
+        except Exception as err:
+            envelope = {"ok": False, "error": str(err)}
+    if broadcast:
+        envelope = mpi_manager.bcast(envelope)
+    if not envelope["ok"]:
+        from oqp.utils.oqp_input import OQPInputError
+        raise OQPInputError(envelope["error"])
+    return envelope["payload"]
+
+
+def _flatten_config(config):
+    """Flatten a section dictionary for the legacy ground-state QM/MM driver."""
+    return {
+        "%s.%s" % (section, key): value
+        for section, values in config.items()
+        for key, value in values.items()
+    }
+
+
 def _openqp_build_label():
     """Return a concise OpenQP package/version label for the first log block."""
     try:
@@ -172,7 +260,7 @@ class Runner:
     """
 
     def __init__(self, project=None, input_file=None, log=None,
-                 input_dict=None, silent=0, usempi=True):
+                 input_dict=None, silent=0, usempi=True, input_metadata=None):
         """
         Initialize the OQP Runner.
 
@@ -185,6 +273,23 @@ class Runner:
             usempi (bool): Flag to enable MPI functions
         """
         start_time = time.time()
+
+        self.mpi_manager = MPIManager()
+
+        # Programmatic Runner(input_file="request.oqp") follows the same path as
+        # the CLI.  Supplying input_dict explicitly retains its historical
+        # precedence and does not reinterpret the named file.
+        if input_dict is None and input_file and str(input_file).lower().endswith('.oqp'):
+            input_metadata = _resolve_semantic_input(
+                input_file, self.mpi_manager, usempi=usempi)
+            if input_metadata["was_natural"]:
+                raise ValueError(
+                    "Free-form text is not a runnable .oqp input. Review the corrected "
+                    "one-line file at %s and run that file instead."
+                    % input_metadata["resolved"]
+                )
+            input_file = input_metadata["resolved"]
+            input_dict = input_metadata["legacy_config"]
 
         # Define the mapping of run types to their respective functions
         self.run_func = {
@@ -212,13 +317,20 @@ class Runner:
 
         signal(SIGINT, SIG_DFL)
 
-        self.mpi_manager = MPIManager()
-
         # initialize mol
         self.mol = Molecule(project, input_file, log, silent=silent)
         self.mol.usempi = usempi
+        # NAMD keeps backward compatibility with legacy [md] triplet labels
+        # (T1 is the first root), while canonical .oqp files use public labels
+        # (T0 is the first root).  Preserve that provenance after lowering.
+        self.mol.oqp_public_state_labels = bool(input_metadata)
+        if input_metadata:
+            self.mol.oqp_input_source = input_metadata.get("source")
+            self.mol.oqp_resolved_input = input_metadata.get("resolved")
+            self.mol.oqp_input_was_natural = bool(input_metadata.get("was_natural"))
+            self.mol.oqp_canonical_input = input_metadata.get("canonical_text", "")
 
-        if input_dict:
+        if input_dict is not None:
             self.mol.load_config(input_dict)
         else:
             self.mol.load_config(input_file)
@@ -265,6 +377,7 @@ class Runner:
 
         dump_log(self.mol, title='', section='start',
                  info={"build": _openqp_build_label()})
+        dump_log(self.mol, title='PyOQP: Calculation request', section='calculation')
         dump_log(self.mol, title='PyOQP: Symmetry metadata', section='symmetry')
         self._log_perf_settings()
 
@@ -302,8 +415,24 @@ class Runner:
         if test_mod:
             self.mol.config['tests']['exception'] = True
 
-        # Run calculations
-        self.run_func[run_type](self.mol)
+        qmmm_flag = self.mol.config["input"].get("qmmm_flag", False)
+        qmmm_flag = (qmmm_flag is True or
+                     str(qmmm_flag).strip().lower() in {"true", "1", "yes", "on"})
+
+        # The OpenMM QM/MM-MD driver is a distinct workflow from the all-QM
+        # velocity-Verlet driver.  The CLI already dispatches it before Runner;
+        # keep the advertised programmatic Runner(input_file="job.oqp") path
+        # equivalent, and cover legacy programmatic inputs at the same time.
+        if qmmm_flag and str(run_type).strip().lower() == "md":
+            if self.mol.usempi and self.mpi_manager.use_mpi > 0:
+                raise RuntimeError(
+                    "ground-state QM/MM-MD cannot run under MPI; create Runner with usempi=False"
+                )
+            from oqp.library.qmmm_md import QMMM_MD
+            self.qmmm_md = QMMM_MD(mol=self.mol)
+            self.qmmm_md.run()
+        else:
+            self.run_func[run_type](self.mol)
 
         dump_log(self.mol, title='', section='end')
 
@@ -386,13 +515,22 @@ def main():
     _warn_if_no_openmp()
     parser = argparse.ArgumentParser(description='OQP Runner',
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('input', nargs='?', help='Input file')
-    parser.add_argument('--run_tests', '--test',
+    parser.add_argument('input', nargs='?', help='Input file (.inp or .oqp)')
+    parser.add_argument('--run_tests', '--run-tests', '--test',
                         dest='run_tests',
                         metavar='path',
                         help='run tests from a specified folder or:\n'
-                             '  all    - Run all tests in examples\n'
+                             '  all    - Run the standard suite in examples\n'
+                             '           (slow/non-self-contained exclusions apply)\n'
                              '  other  - Run tests in examples/other')
+    parser.add_argument('--input-format', '--input_format', '--test-inputs',
+                        dest='test_input_format',
+                        choices=('auto', 'inp', 'oqp', 'both'),
+                        help='input syntax selected by --run_tests:\n'
+                             '  auto   - prefer .oqp; keep representative legacy .inp (default)\n'
+                             '  inp    - select legacy .inp\n'
+                             '  oqp    - select concise .oqp\n'
+                             '  both   - include .inp and .oqp in the selected test scope')
     parser.add_argument('--validate_examples', dest='validate_examples',
                         metavar='dir', nargs='?', const='',
                         help='validate that every example reference under DIR\n'
@@ -418,6 +556,9 @@ def main():
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
 
+    if args.test_input_format is not None and not args.run_tests:
+        parser.error('--input-format is only valid with --run_tests')
+
     if args.generate_reference:
         sys.exit(generate_reference_cli(args.generate_reference))
 
@@ -428,7 +569,13 @@ def main():
         sys.exit(validate_examples_cli(args.validate_examples))
 
     if args.run_tests:
-        report, status = run_tests(args.run_tests)
+        try:
+            report, status = run_tests(
+                args.run_tests,
+                input_format=args.test_input_format or 'auto',
+            )
+        except ValueError as err:
+            parser.error(str(err))
         print(report)
         sys.exit(status)
     if not args.input:
@@ -441,7 +588,7 @@ def main():
         sys.exit(1)
 
     input_path = os.path.dirname(input_file)
-    project_name = os.path.basename(input_file).replace('.inp', '')
+    project_name = os.path.splitext(os.path.basename(input_file))[0]
     log = f'{input_path}/{project_name}.log'
 
     mpi_manager = MPIManager()
@@ -454,27 +601,66 @@ def main():
 
     silent = 1 if args.silent else 0
 
+    semantic_input = None
+    input_dict = None
+    if input_file.lower().endswith('.oqp'):
+        try:
+            semantic_input = _resolve_semantic_input(
+                input_file, mpi_manager, usempi=usempi)
+        except (OSError, ValueError) as err:
+            if mpi_manager.rank == 0:
+                print(f'\n   PyOQP .oqp input error: {err}\n')
+            if usempi:
+                mpi_manager.finalize_mpi()
+            sys.exit(2)
+        if semantic_input["was_natural"]:
+            if mpi_manager.rank == 0:
+                print('\n   PyOQP: free-form text was not executed.\n'
+                      '   A corrected one-line .oqp suggestion was written to:\n'
+                      f'   {semantic_input["resolved"]}\n'
+                      '   Review it, then run that canonical file.\n')
+            if usempi:
+                mpi_manager.finalize_mpi()
+            sys.exit(2)
+        input_file = semantic_input["resolved"]
+        input_dict = semantic_input["legacy_config"]
+
     # Detect the OpenMM-based QM/MM-MD mode without importing OpenMM-dependent
     # modules (so plain energy/grad/NAMD runs work without OpenMM installed).
     qmmm_flag = False
-    try:
-        import configparser
-        _cfg = configparser.ConfigParser()
-        _cfg.read(input_file)
-        qmmm_flag = _cfg.getboolean('input', 'qmmm_flag', fallback=False)
-    except Exception:
-        qmmm_flag = False
+    _cfg = None
+    if input_dict is not None:
+        qmmm_flag = str(input_dict.get('input', {}).get('qmmm_flag', 'False')).lower() \
+            in {'true', '1', 'yes', 'on'}
+    else:
+        try:
+            import configparser
+            _cfg = configparser.ConfigParser()
+            _cfg.read(input_file)
+            qmmm_flag = _cfg.getboolean('input', 'qmmm_flag', fallback=False)
+        except Exception:
+            qmmm_flag = False
     # Only the legacy ground-state OpenMM-MD path is handled here. QM/MM energy,
     # gradient, optimization, and NAMD inputs go through Runner so their normal
     # runtype dispatch and read_system paths are preserved.
     runtype_l = ""
-    try:
-        runtype_l = _cfg.get('input', 'runtype', fallback='energy').strip().lower()
-    except Exception:
-        runtype_l = 'energy'
+    if input_dict is not None:
+        runtype_l = str(input_dict.get('input', {}).get('runtype', 'energy')).strip().lower()
+    else:
+        try:
+            runtype_l = _cfg.get('input', 'runtype', fallback='energy').strip().lower()
+        except Exception:
+            runtype_l = 'energy'
     if qmmm_flag and runtype_l == 'md':
+        if usempi:
+            if mpi_manager.rank == 0:
+                print('\n   PyOQP: ground-state QM/MM-MD cannot run under MPI; '
+                      'rerun with --nompi.\n')
+            mpi_manager.finalize_mpi()
+            sys.exit(2)
         from oqp.library.qmmm_md import QMMM_MD
-        md = QMMM_MD(oqp_cfg=input_file)
+        md = QMMM_MD(oqp_cfg=_flatten_config(input_dict) if input_dict is not None
+                     else input_file)
         md.run()
         return
 
@@ -482,6 +668,8 @@ def main():
     oqp_runner = Runner(project=project_name,
                         input_file=input_file,
                         log=log,
+                        input_dict=input_dict,
+                        input_metadata=semantic_input,
                         silent=silent,
                         usempi=usempi,
                         )
@@ -496,7 +684,7 @@ def generate_reference_cli(inputs):
     """(Re)generate lean JSON test references for the given input files.
 
     Runs each input and writes only the regression-registry keys (physics +
-    identity/metadata) next to the .inp, dropping internal OQP:: arrays. This is
+    identity/metadata) next to the input, dropping internal OQP:: arrays. This is
     the supported, repeatable way to add or refresh example references so the
     committed set stays clean, small, and consistent with the registry. The
     written references are validated against the registry before returning.
@@ -512,7 +700,7 @@ def generate_reference_cli(inputs):
             rc = 1
             continue
         project = os.path.splitext(os.path.basename(inp))[0]
-        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        ref = os.path.splitext(inp)[0] + '.json'
         with tempfile.TemporaryDirectory() as tmp:
             runner = Runner(project=project, input_file=inp,
                             log=os.path.join(tmp, project + '.log'),
@@ -527,7 +715,7 @@ def generate_reference_cli(inputs):
     failures = []
     for inp in inputs:
         inp = os.path.abspath(inp)
-        ref = inp[:-4] + '.json' if inp.endswith('.inp') else inp + '.json'
+        ref = os.path.splitext(inp)[0] + '.json'
         if not os.path.exists(ref):
             continue
         runtype, excited, props = regression._context_from_input(inp)
@@ -598,12 +786,13 @@ def validate_examples_cli(examples_dir):
     return 1
 
 
-def run_tests(test_path):
+def run_tests(test_path, *, input_format='auto'):
     """
     Run OQP tests.
 
     Args:
         test_path (str): Path to the test directory or 'all' or 'other'.
+        input_format (str): ``auto`` (default), ``inp``, ``oqp``, or ``both``.
 
     Returns:
         str: Test report.
@@ -621,7 +810,7 @@ def run_tests(test_path):
                        output_dir='openqp_test_tmp',
                        total_cpus=None,
                        omp_threads=omp_threads, mpi_manager=mpi_manager)
-    return tester.run(test_path), tester.status
+    return tester.run(test_path, input_format=input_format), tester.status
 
 
 if __name__ == "__main__":

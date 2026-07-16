@@ -10,6 +10,13 @@ from oqp.runtime import basis_search_paths
 from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.utils.mpi_utils import mpi_dump
 from oqp.utils.qmmm import gradient_qmmm
+from oqp.utils.state_labels import (
+    format_calculation_request,
+    is_mrsf,
+    public_method_name,
+    public_state_label,
+    spin_name,
+)
 
 def try_basis(basis, path=None, fallback='6-31g'):
     """try various basis file locations and return the matching one"""
@@ -189,6 +196,12 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
     
 """ % (natom, charge)
 
+    if section == 'calculation':
+        source = getattr(mol, 'oqp_input_source', None) or getattr(mol, 'input_file', None)
+        resolved = getattr(mol, 'oqp_resolved_input', None)
+        loginfo += '\n%s\n' % format_calculation_request(
+            mol.config, source=source, resolved=resolved)
+
 
     if section == 'symmetry':
         metadata = mol.symmetry_metadata if isinstance(getattr(mol, 'symmetry_metadata', {}), dict) else {}
@@ -222,14 +235,21 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section in ['scf']:
+        mrsf_request = is_mrsf(mol.config)
+        method_display = public_method_name(mol.config) if mrsf_request else method
+        scf_type_label = ('reference type (internal)' if mrsf_request else 'scf type')
+        scf_mult_label = ('reference multiplicity (internal)' if mrsf_request
+                          else 'scf multiplicity')
+        scf_mult_display = ('%s (%s)' % (scf_mult, spin_name(scf_mult))
+                            if mrsf_request else scf_mult)
         loginfo += """
    PyOQP method:                       %s
    PyOQP hf/functional:                %s
    PyOQP basis:                        %s
-   PyOQP scf type:                     %s
+   PyOQP %-30s %s
    PyOQP scf maxit:                    %s
    PyOQP scf forced attempt:           %s
-   PyOQP scf multiplicity:             %s
+   PyOQP %-30s %s
    PyOQP scf convergence:              %s
    PyOQP scf incremental:              %s
    PyOQP diis type:                    %s
@@ -238,7 +258,11 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP vshift:                       %s
 
 """ % (
-            method, functional, basis, scftypes[scf_type], scf_maxit, scf_forced_attempt, scf_mult, scf_conv, scf_incre,
+            method_display, functional, basis,
+            scf_type_label + ':', scftypes[scf_type],
+            scf_maxit, scf_forced_attempt,
+            scf_mult_label + ':', scf_mult_display,
+            scf_conv, scf_incre,
             diis_type,
             cdiis_switch,
             vdiis_vshift_switch,
@@ -246,19 +270,26 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section == 'tdhf':
+        mrsf_request = is_mrsf(mol.config)
+        method_display = public_method_name(mol.config) if mrsf_request else method
+        td_mult_label = ('target spin' if mrsf_request else 'td multiplicity')
+        td_mult_display = ('%s (multiplicity %s)' % (spin_name(td_mult), td_mult)
+                           if mrsf_request else td_mult)
         loginfo += """
    PyOQP method:                       %s
    PyOQP functional:                   %s
    PyOQP td type:                      %s
    PyOQP td maxit:                     %s
    PyOQP td maxit z-vector:            %s
-   PyOQP td multiplicity:              %s
+   PyOQP %-30s %s
    PyOQP td convergence:               %s
    PyOQP td number of states:          %s
    PyOQP td z-vector of convergence:   %s
    PyOQP td dimension of Davidson:     %s
     
-""" % (method, functional, td_type, td_maxit, td_maxit_zv, td_mult, td_conv, td_nstate, td_zvconv, td_nvdav)
+""" % (method_display, functional, td_type, td_maxit, td_maxit_zv,
+         td_mult_label + ':', td_mult_display,
+         td_conv, td_nstate, td_zvconv, td_nvdav)
 
     if section == 'dftd':
         loginfo += """
@@ -270,14 +301,30 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'energy':
         loginfo += '   PyOQP electronic energies\n'
+        # Standalone SOC evaluates singlets first and triplets second; the
+        # legacy ``mol.energies`` array intentionally remains the last (triplet)
+        # ladder for backward compatibility.  Label that array as T0, T1, ...
+        # instead of using the restored default singlet selector.
+        soc_triplet_ladder = (
+            str(mol.config.get('input', {}).get('runtype', '')).lower() == 'soc'
+            and is_mrsf(mol.config)
+        )
         for n, energy in enumerate(info['el']):
-            loginfo += f'   PyOQP state {n:<6} {energy:<16.8f}\n'
+            label = (public_state_label(mol.config, n, multiplicity=3)
+                     if soc_triplet_ladder else
+                     public_state_label(mol.config, n)
+                     if is_mrsf(mol.config) else f'state {n}')
+            loginfo += f'   PyOQP {label:<34} {energy:<16.8f}\n'
 
         d4 = float(info['d4'])
         loginfo += f'\n   PyOQP dftd correction {d4:<16.8f}\n\n'
         loginfo += '   PyOQP dispersion corrected energies\n'
         for n, energy in enumerate(mol.energies):
-            loginfo += f'   PyOQP state {n:<6} {energy:<16.8f}\n'
+            label = (public_state_label(mol.config, n, multiplicity=3)
+                     if soc_triplet_ladder else
+                     public_state_label(mol.config, n)
+                     if is_mrsf(mol.config) else f'state {n}')
+            loginfo += f'   PyOQP {label:<34} {energy:<16.8f}\n'
 
     if section == 'grad':
         if not mol.config['input']['qmmm_flag']:
@@ -285,7 +332,8 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
            loginfo += '   PyOQP electronic gradients\n'
            for n in info['grad_list']:
                grad = write_grad(atoms, info['el'][n])
-               loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
+               label = public_state_label(mol.config, n) if is_mrsf(mol.config) else f'state {n}'
+               loginfo += f'   PyOQP {label:<34}\n{grad}\n'
 
            d4 = info['d4']
            loginfo += f'\n   PyOQP dftd correction\n'
@@ -293,9 +341,12 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
            loginfo += '   PyOQP dispersion corrected gradients\n'
            for n in info['grad_list']:
                grad = write_grad(atoms, mol.grads[n])
-               loginfo += f'   PyOQP state {n:<6}\n{grad}\n'
+               label = public_state_label(mol.config, n) if is_mrsf(mol.config) else f'state {n}'
+               loginfo += f'   PyOQP {label:<34}\n{grad}\n'
 
     if section == 'opt':
+        follow_state = (public_state_label(mol.config, info['istate'])
+                        if is_mrsf(mol.config) else info['istate'])
         loginfo += """
    PyOQP follow state:                 %14s
    PyOQP energy shift:                 %14.6f %14.6f %s
@@ -305,7 +356,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP max grad:                     %14.6f %14.6f %s
 
 """ % (
-            info['istate'], info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
+            follow_state, info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
             info['rmsd_step'], info['target_rmsd_step'], info['rmsd_step'] <= info['target_rmsd_step'],
             info['max_step'], info['target_max_step'], info['max_step'] <= info['target_max_step'],
             info['rmsd_grad'], info['target_rmsd_grad'], info['rmsd_grad'] <= info['target_rmsd_grad'],
@@ -313,6 +364,8 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section == 'cons_sphere':
+        follow_state = (public_state_label(mol.config, info['istate'])
+                        if is_mrsf(mol.config) else info['istate'])
         loginfo += """
    PyOQP follow state:                 %14s
    PyOQP target step:                  %14.6f
@@ -323,7 +376,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP constraint rmsd grad:         %14.6f %14.6f %s
    PyOQP constraint max grad:          %14.6f %14.6f %s   
 """ % (
-            info['istate'], info['step_size'],
+            follow_state, info['step_size'],
             info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
             info['rmsd_step'], info['target_rmsd_step'], info['rmsd_step'] <= info['target_rmsd_step'],
             info['max_step'], info['target_max_step'], info['max_step'] <= info['target_max_step'],
@@ -332,7 +385,50 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
         )
 
+    if section == 'baeka':
+        states = [
+            (public_state_label(mol.config, state)
+             if is_mrsf(mol.config) else str(state))
+            for state in info['states']
+        ]
+        gaps = ', '.join('%.8e' % float(gap) for gap in info['gaps'])
+        jump = '-' if info['jump'] is None else '%.6f' % float(info['jump'])
+        loginfo += """
+   PyOQP BaekA states:                 %s
+   PyOQP BaekA adjacent gaps:          %s
+   PyOQP BaekA tested sigma:           %14.6f
+   PyOQP BaekA active objective sigma: %14.6f
+   PyOQP BaekA next sigma:             %14.6f
+   PyOQP BaekA active effective sigma: %14.6f
+   PyOQP BaekA alpha (Hartree):        %14.6f
+   PyOQP BaekA delta beta:             %14.6f
+   PyOQP BaekA action / jump:          %14s %14s
+   PyOQP BaekA projector rank:         %14d / %-14d
+   PyOQP same-sigma objective shift:   %14.6e %14.6e %s
+   PyOQP outer-state gap:              %14.6e %14.6e %s
+   PyOQP projected parallel grad/sigma:%14.6e %14.6e %s
+   PyOQP projected perpendicular grad: %14.6e %14.6e %s
+   PyOQP local stationary / gap:       %14s %14s
+
+""" % (
+            ' '.join(map(str, states)),
+            gaps,
+            info['sigma'], info['active_sigma'], info['next_sigma'],
+            info['effective_sigma'],
+            info['alpha'], info['delta_beta'], info['action'], jump,
+            info['projector_rank'], info['state_count'] - 1,
+            info['de'], info['tol_f'], np.abs(info['de']) <= info['tol_f'],
+            info['gap'], info['energy_gap'], info['gap'] <= info['energy_gap'],
+            info['parallel_grad'], info['tol_g'], info['parallel_grad'] <= info['tol_g'],
+            info['perpendicular_grad'], info['tol_g'], info['perpendicular_grad'] <= info['tol_g'],
+            info['stationary'], info['gap_converged'],
+        )
+
     if section == 'penalty':
+        state_i = (public_state_label(mol.config, info['istate'])
+                   if is_mrsf(mol.config) else info['istate'])
+        state_j = (public_state_label(mol.config, info['jstate'])
+                   if is_mrsf(mol.config) else info['jstate'])
         loginfo += """
    PyOQP follow state:                 %14s %14s
    PyOQP meci search algorithm:        %14s
@@ -347,7 +443,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP max grad:                     %14.6f %14.6f %s
        
 """ % (
-            info['istate'], info['jstate'],
+            state_i, state_j,
             info['meci_search'],
             info['sigma'], info['alpha'], info['incre'],
             info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
@@ -359,6 +455,10 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section == 'ubp':
+        state_i = (public_state_label(mol.config, info['istate'])
+                   if is_mrsf(mol.config) else info['istate'])
+        state_j = (public_state_label(mol.config, info['jstate'])
+                   if is_mrsf(mol.config) else info['jstate'])
         loginfo += """
    PyOQP follow state:                 %14s %14s
    PyOQP meci search algorithm:        %14s
@@ -372,7 +472,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP max grad:                     %14.6f %14.6f %s
 
 """ % (
-            info['istate'], info['jstate'],
+            state_i, state_j,
             info['meci_search'],
             info['norm'], info['orth'],
             info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
@@ -384,6 +484,12 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section == 'quad':
+        state_i = (public_state_label(
+            mol.config, info['istate'], mol.config['optimize']['imult'])
+            if is_mrsf(mol.config) else info['istate'])
+        state_j = (public_state_label(
+            mol.config, info['jstate'], mol.config['optimize']['jmult'])
+            if is_mrsf(mol.config) else info['jstate'] + info['nstate'])
         loginfo += """
    PyOQP follow state:                 %14s %14s
    PyOQP mecp search algorithm:        %14s
@@ -395,7 +501,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP max grad:                     %14.6f %14.6f %s
 
 """ % (
-            info['istate'], info['jstate'] + info['nstate'],
+            state_i, state_j,
             info['mecp_search'],
             info['de'], info['energy_shift'], np.abs(info['de']) <= info['energy_shift'],
             info['gap'], info['energy_gap'], np.abs(info['gap']) <= info['energy_gap'],
@@ -406,6 +512,8 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         )
 
     if section == 'mep':
+        follow_state = (public_state_label(mol.config, info['istate'])
+                        if is_mrsf(mol.config) else info['istate'])
         loginfo += """
    PyOQP MEP follow state:             %14s
    PyOPQ MEP opt steps:                %14s
@@ -414,7 +522,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
    PyOQP MEP energy:                   %14.6f
    PyOQP MEP energy shift:             %14.6f
    
-""" % (info['istate'], info['itr'], info['status'], info['radius'], info['energy'], info['de'])
+""" % (follow_state, info['itr'], info['status'], info['radius'], info['energy'], info['de'])
 
     if section == 'num_nacv':
         ndim, dx, restart, jobs, nproc, threads = info
@@ -443,7 +551,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             i, j = np.sort(ij)
             gap = energies[j] - energies[i]
             nac = write_grad(atoms, info[i - 1, j - 1])
-            loginfo += f'   PyOQP NAC vector between state {i:<6} {j:<6} in Hartree/Bohr gap: {gap:16.8f}\n{nac}\n'
+            label_i = public_state_label(mol.config, i) if is_mrsf(mol.config) else f'state {i}'
+            label_j = public_state_label(mol.config, j) if is_mrsf(mol.config) else f'state {j}'
+            loginfo += f'   PyOQP NAC vector between {label_i} and {label_j} in Hartree/Bohr gap: {gap:16.8f}\n{nac}\n'
 
     if section == 'dcv':
         atoms = mol.get_atoms()
@@ -453,7 +563,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             i, j = np.sort(ij)
             gap = energies[j] - energies[i]
             dc = write_grad(atoms, info[i - 1, j - 1])
-            loginfo += f'   PyOQP DC vector between state {i:<6} {j:<6} in 1/Bohr gap: {gap:16.8f}\n{dc}\n'
+            label_i = public_state_label(mol.config, i) if is_mrsf(mol.config) else f'state {i}'
+            label_j = public_state_label(mol.config, j) if is_mrsf(mol.config) else f'state {j}'
+            loginfo += f'   PyOQP DC vector between {label_i} and {label_j} in 1/Bohr gap: {gap:16.8f}\n{dc}\n'
 
     if section == 'nacm':
         for i in info:
@@ -478,6 +590,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
     if section == 'num_hess':
         state, ndim, dx, restart, jobs, nproc, threads = info
+        state = public_state_label(mol.config, state) if is_mrsf(mol.config) else state
         loginfo = """
    PyOQP hessian type                  %14s
    PyOQP hessian follow state          %14s
@@ -706,6 +819,76 @@ def dump_data(mol, data, title=None, fpath='.'):
         xyz = write_xyz(atoms, coordinates, (itr, energy))
         status += '%5s %16.8f %16.8f %14.6f %14.6f %14.6f %14.6f\n' % (
             itr, energy, de, rmsd_step, max_step, rmsd_grad, max_grad,
+        )
+
+        with open(f'{fpath}/opt.xyz', 'w') as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_geom.xyz', mode) as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_status.txt', mode) as out:
+            out.write(status)
+
+    if title == 'BAEKA':
+        (itr, atoms, coordinates, objective, de, outer_gap, adjacent_gaps,
+         tested_sigma, active_sigma, rmsd_step, max_step, parallel_grad,
+         perpendicular_grad, action) = data
+        if itr == 1:
+            mode = 'w'
+            status = """%5s %16s %16s %16s %14s %14s %14s %14s %14s %14s %-10s %s
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+""" % (
+                'Step', 'Objective', 'Shift', 'Outer Gap', 'Test Sigma',
+                'Active Sigma', 'RMSD Step', 'Max Step', 'Parallel/sigma',
+                'Perpendicular', 'Action', 'Adjacent Gaps',
+            )
+        else:
+            mode = 'a'
+            status = ''
+
+        gaps = ','.join('%.8e' % float(gap) for gap in adjacent_gaps)
+        xyz = write_xyz(atoms, coordinates, (itr, objective))
+        status += (
+            '%5d %16.8f %16.8e %16.8e %14.6f %14.6f '
+            '%14.6e %14.6e %14.6e %14.6e %-10s %s\n'
+        ) % (
+            itr, objective, de, outer_gap, tested_sigma, active_sigma,
+            rmsd_step, max_step, parallel_grad, perpendicular_grad,
+            action, gaps,
+        )
+
+        with open(f'{fpath}/opt.xyz', 'w') as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_geom.xyz', mode) as out:
+            out.write(xyz)
+
+        with open(f'{fpath}/opt_status.txt', mode) as out:
+            out.write(status)
+
+    if title == 'TCI':
+        (itr, atoms, coordinates, energy, de, max_gap, rmsd_step, max_step,
+         rmsd_grad, max_grad, gap_ji, gap_kj) = data
+        if itr == 1:
+            mode = 'w'
+            status = """%5s %16s %16s %16s %16s %16s %14s %14s %14s %14s
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+""" % (
+                'Step', 'Energy', 'Shift', 'Max Gap', 'Gap J-I', 'Gap K-J',
+                'RMSD Step', 'Max Step', 'RMSD Grad', 'Max Grad',
+            )
+        else:
+            mode = 'a'
+            status = ''
+
+        xyz = write_xyz(atoms, coordinates, (itr, energy))
+        status += (
+            '%5d %16.8f %16.8e %16.8e %16.8e %16.8e '
+            '%14.6e %14.6e %14.6e %14.6e\n'
+        ) % (
+            itr, energy, de, max_gap, gap_ji, gap_kj, rmsd_step, max_step,
+            rmsd_grad, max_grad,
         )
 
         with open(f'{fpath}/opt.xyz', 'w') as out:

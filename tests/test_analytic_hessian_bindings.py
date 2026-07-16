@@ -63,7 +63,7 @@ class TestAnalyticHessianBindings(unittest.TestCase):
         self.assertIn("Native OpenQP HF/DFT Hessian CPHF response prepass", source)
         self.assertIn("call cphf_solve", source)
         self.assertIn("OQP_hf_hessian", source)
-        self.assertIn("reserve_data(OQP_hf_hessian", source)
+        self.assertIn("alloc_or_die(OQP_hf_hessian", source)
         self.assertIn("hess_store = hess_native", source)
         self.assertNotIn("implementation is not available yet", source)
 

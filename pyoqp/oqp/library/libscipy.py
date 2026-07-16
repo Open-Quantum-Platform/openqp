@@ -5,6 +5,7 @@ import numpy as np
 import scipy as sc
 from oqp.library.single_point import SinglePoint, Gradient, LastStep
 from oqp.utils.file_utils import dump_log, dump_data
+from oqp.utils.state_labels import is_mrsf, public_state_label
 import oqp.utils.qmmm as qmmm
 
 class Optimizer:
@@ -643,23 +644,41 @@ class MECPOpt(Optimizer):
         # compute reference
         ref_energy = self.sp.reference(do_init_scf=do_init_scf)
 
-        # set multiplicity for state i
-        dump_log(self.mol, title='PyOQP: PES 1 Mult = %s Root = %s' % (self.imult, self.istate), section='input')
-        self.mol.data.set_tdhf_multiplicity(self.imult)
-        energies_1 = self.sp.excitation(ref_energy)
+        td_config = self.mol.config['tdhf']
+        saved_mult = td_config.get('multiplicity', self.imult)
 
-        # compute gradient for state i
-        self.grad.grads = [self.istate]
-        grads_1 = self.grad.gradient()
+        def select_multiplicity(mult):
+            # Synchronize the Python configuration used by log/state-label
+            # helpers with the native target actually being evaluated.
+            td_config['multiplicity'] = mult
+            self.mol.data.set_tdhf_multiplicity(mult)
 
-        # set multiplicity for state j
-        dump_log(self.mol, title='PyOQP: PES 2 Mult = %s Root = %s' % (self.jmult, self.jstate), section='input')
-        self.mol.data.set_tdhf_multiplicity(self.jmult)
-        energies_2 = self.sp.excitation(ref_energy)
+        try:
+            # set multiplicity for state i
+            pes1 = (public_state_label(self.mol.config, self.istate, self.imult)
+                    if is_mrsf(self.mol.config)
+                    else 'multiplicity %s, root %s' % (self.imult, self.istate))
+            dump_log(self.mol, title='PyOQP: PES 1 = %s' % pes1, section='input')
+            select_multiplicity(self.imult)
+            energies_1 = self.sp.excitation(ref_energy)
 
-        # compute gradient for state j
-        self.grad.grads = [self.jstate]
-        grads_2 = self.grad.gradient()
+            # compute gradient for state i
+            self.grad.grads = [self.istate]
+            grads_1 = self.grad.gradient()
+
+            # set multiplicity for state j
+            pes2 = (public_state_label(self.mol.config, self.jstate, self.jmult)
+                    if is_mrsf(self.mol.config)
+                    else 'multiplicity %s, root %s' % (self.jmult, self.jstate))
+            dump_log(self.mol, title='PyOQP: PES 2 = %s' % pes2, section='input')
+            select_multiplicity(self.jmult)
+            energies_2 = self.sp.excitation(ref_energy)
+
+            # compute gradient for state j
+            self.grad.grads = [self.jstate]
+            grads_2 = self.grad.gradient()
+        finally:
+            select_multiplicity(saved_mult)
 
         # compute dftd4
         self.mol.energies = np.concatenate((energies_1, energies_2[1:]))
@@ -1043,6 +1062,4 @@ class QMMMOpt(Optimizer):
                 dump_log(self.mol,
                          title='PyOQP: Geometry Optimization Has Not Converged. Reached The Maximum Iteration')
                 raise StopIteration
-
-
 

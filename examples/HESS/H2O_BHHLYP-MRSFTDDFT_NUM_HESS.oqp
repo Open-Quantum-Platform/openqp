@@ -1,0 +1,1 @@
+mrsf(nstate=2)/bhhlyp/6-31g* geom="../geometries/H2O-781cba5cd72b.xyz" charge=0 hess(S0,clean=true)

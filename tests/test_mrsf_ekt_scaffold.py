@@ -190,8 +190,9 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("OQP::mrsf_ekt_orbitals_mo", molecule)
         self.assertIn("mrsf_ekt", molecule)
         self.assertIn("ebe_ev", molecule)
-        self.assertIn("call infos%dat%reserve_data(OQP_mrsf_ekt_eigenvalues", fortran)
-        self.assertIn("call tagarray_get_data(infos%dat, OQP_mrsf_ekt_eigenvalues", fortran)
+        self.assertIn("call infos%dat%alloc_or_die(OQP_mrsf_ekt_eigenvalues", fortran)
+        self.assertIn("eig_store = eig", fortran)
+        self.assertIn("strength_store = strengths", fortran)
 
     def test_structured_mrsf_ekt_json_trims_unused_root_slots(self):
         molecule = read("pyoqp/oqp/molecule/molecule.py")
@@ -203,19 +204,21 @@ class TestMRSFEKTScaffold(unittest.TestCase):
 
     def test_run_tests_checks_structured_mrsf_ekt_values(self):
         molecule = read("pyoqp/oqp/molecule/molecule.py")
+        regression = read("pyoqp/oqp/utils/regression.py")
 
         self.assertIn("'mrsf_ekt_ip'", molecule)
         self.assertIn("'mrsf_ekt_ea'", molecule)
-        self.assertIn("required_ref_keys", molecule)
         self.assertIn("'mrsf_ekt'", molecule)
-        self.assertIn("missing reference {key", molecule)
+        self.assertIn("missing reference {e.key", molecule)
         self.assertIn("OQP::mrsf_ekt_density_mo", molecule)
         self.assertIn("OQP::mrsf_ekt_eigenvalues", molecule)
         self.assertIn("def compare_data", molecule)
         self.assertIn("isinstance(data_1, dict)", molecule)
         self.assertIn("arr_1.shape != arr_2.shape", molecule)
-        self.assertIn("np.max(np.abs(arr_1 - arr_2))", molecule)
-        self.assertIn("key in ('orbitals_mo', 'dyson_orbitals_mo')", molecule)
+        self.assertIn("diff = float(np.max(absdiff))", molecule)
+        self.assertIn("RegKey('mrsf_ekt'", regression)
+        self.assertIn("runtypes=frozenset({'ekt'}), required=True", regression)
+        self.assertIn("skip_sub=('orbitals_mo', 'dyson_orbitals_mo')", regression)
 
 
 if __name__ == "__main__":

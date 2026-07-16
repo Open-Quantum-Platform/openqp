@@ -906,9 +906,22 @@ def dftb_soc(mol):
     adapter = OpenQPDFTBAdapter(mol)
     data = mol.data
     dftb = mol.config['dftb']
+    tdhf = mol.config['tdhf']
     saved = dftb.get('target_multiplicity', 1)
+    saved_mult = int(tdhf.get('multiplicity', 1))
+    saved_nstate = int(tdhf.get('nstate', 1))
+    ns = int(tdhf.get('nstate_s', 0)) or saved_nstate
+    nt = int(tdhf.get('nstate_t', 0)) or saved_nstate
+
+    def select_manifold(mult, nstate):
+        dftb['target_multiplicity'] = mult
+        tdhf['multiplicity'] = mult
+        tdhf['nstate'] = nstate
+        data.set_tdhf_multiplicity(mult)
+        data.set_tdhf_nstate(nstate)
+
     try:
-        dftb['target_multiplicity'] = 1
+        select_manifold(1, ns)
         singlet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
         data['OQP::td_singlet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_s = np.asarray(data['OQP::td_bvec_mo']).copy()
@@ -916,13 +929,17 @@ def dftb_soc(mol):
         mo_tag = np.asarray(data['OQP::VEC_MO_A']).copy()
         dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
 
-        dftb['target_multiplicity'] = 3
+        select_manifold(3, nt)
         triplet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
         data['OQP::td_triplet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_t = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_t'] = x_t.copy()
     finally:
         dftb['target_multiplicity'] = saved
+        tdhf['multiplicity'] = saved_mult
+        tdhf['nstate'] = saved_nstate
+        data.set_tdhf_multiplicity(saved_mult)
+        data.set_tdhf_nstate(saved_nstate)
 
     mol.singlet_energies = singlet_energies
     mol.triplet_energies = triplet_energies

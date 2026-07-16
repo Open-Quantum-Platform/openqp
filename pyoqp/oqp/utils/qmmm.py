@@ -5,9 +5,11 @@ try:
     import openmm.app as app
     import openmm.unit as unit
     _HAVE_OPENMM = True
-except ModuleNotFoundError:
+    _OPENMM_IMPORT_ERROR = None
+except ImportError as exc:
     mm = app = unit = None
     _HAVE_OPENMM = False
+    _OPENMM_IMPORT_ERROR = exc
 import os
 import numpy as np
 import math
@@ -72,7 +74,19 @@ else:
 
 #!----------------------------------------------------------------------
 
+def _require_openmm():
+   """Raise a clean optional-backend error at the QM/MM boundary."""
+
+   if not _HAVE_OPENMM:
+      raise ModuleNotFoundError(
+         "openmm is required for QM/MM calculations; install the optional "
+         "OpenMM backend"
+      ) from _OPENMM_IMPORT_ERROR
+
+
 def _openmm_from_oqp(force_field,nonbondedMethod,constraints,water):
+
+   _require_openmm()
 
    if nonbondedMethod == 'NoCutoff':
       electrostatics = app.NoCutoff
@@ -238,6 +252,7 @@ def openmm_dump(pdbfile=None):
 # Date: 31/07/2024
 #
 
+   _require_openmm()
    app.PDBFile.writeFile(pdb0.topology, pdb0.positions, file=pdbfile)
    for atom in pdb0.topology.atoms():
       i=atom.index
@@ -251,6 +266,8 @@ def openmm_update_system(coordinates):
 # Author: Miquel Huix-Rotllant
 # Date: 31/07/2024
 #
+
+   _require_openmm()
 
 ############
 ## Update coordinates
@@ -269,6 +286,8 @@ def openmm_init(atom_list):
 # Author: Miquel Huix-Rotllant
 # Date: 31/07/2024
 #
+
+   _require_openmm()
 
 ### Check if atom list is ok
    if len(atom_list) == 0: exit(f"\nError!! Atom list not defined!\n")
@@ -304,6 +323,8 @@ def openmm_system():
 # Author: Miquel Huix-Rotllant
 # Date: 31/07/2024
 #
+   _require_openmm()
+
 ### Reset data to be returned
    num_atoms = 0 #Number of atoms (QM+link atoms)
    q = [] #Atomic numbers (QM+link atoms)
