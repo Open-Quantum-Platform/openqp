@@ -1,0 +1,1 @@
+mrsf-tddftb(nstate=3) geom="../geometries/C4H6-e783f4d884c7.xyz" charge=0 grad(S1) dftb(model=dtcam-tb,parameter_path="")

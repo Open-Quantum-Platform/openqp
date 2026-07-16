@@ -15,11 +15,16 @@ system=
 charge=0
 runtype=optimize
 method=dftb
+[scf]
+type=rohf
+multiplicity=3
+
 [dftb]
 model=dtcam-tb
 type=mrsf
 parameter_path=
 [tdhf]
+type=mrsf
 nstate=3
 [optimize]
 lib=oqp

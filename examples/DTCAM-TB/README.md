@@ -22,12 +22,22 @@ at the OB2W0PT3 SKF directory containing the official `spinw.txt`.
 State convention: physical S0 is singlet response root 1; S1/S2 are roots
 2/3. The high-spin ROKS determinant is only the auxiliary reference.
 
-MECI note: the example uses `meci_search=hybrid` (penalty -> updated
-branching plane). A Baeck-An-type coupling-free algorithm is not yet
-available in OpenQP's MECI drivers.
+MECI note: the example uses `meci_search=baeka` (BaekA: mean-state energy
+plus adjacent-gap penalties with an additive beta schedule; Baek, Lee,
+Filatov, Choi, J. Phys. Chem. A 2021, 125, 1994), which closes the seam far
+more reliably than the classic multiplicative penalty walk. Like every
+optimization example it is capped for the test suite (maxit=30,
+energy_gap=1e-4); for production raise maxit (~500) and keep the 1e-5
+default gap. From this start BaekA drives the S1/S0 gap
+0.248 -> ~1e-3 hartree within 300 steps.
 
 Files:
-- `BUTADIENE_DTCAMTB_ENERGY.inp`      vertical S0/S1/S2 energies
-- `BUTADIENE_DTCAMTB_S1_GRADIENT.inp` analytic S1 gradient
-- `BUTADIENE_DTCAMTB_S1_OPTIMIZE.inp` S1 (1^1Bu+) minimum optimization
-- `ETHYLENE_DTCAMTB_S1S0_MECI.inp`    S1/S0 twisted-pyramidalized MECI
+- `BUTADIENE_DTCAMTB_ENERGY.inp`          vertical S0/S1/S2 energies
+- `BUTADIENE_DTCAMTB_EXPLICIT_ENERGY.inp` the same operator as explicit keys
+  (no `model=`); must reproduce the preset digit for digit
+- `BUTADIENE_DTCAMTB_S1_GRADIENT.inp`     analytic S1 gradient
+- `BUTADIENE_DTCAMTB_S1_OPTIMIZE.inp`     S1 (1^1Bu+) minimum optimization
+- `ETHYLENE_DTCAMTB_S1S0_MECI.inp`        S1/S0 twisted-pyramidalized MECI (BaekA)
+
+Every `.inp` has a committed one-line `.oqp` companion (the concise input
+format); both parse to the same calculation.

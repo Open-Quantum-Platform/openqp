@@ -19,9 +19,14 @@ system=
 charge=0
 runtype=energy
 method=dftb
+[scf]
+type=rohf
+multiplicity=3
+
 [dftb]
 model=dtcam-tb
 type=mrsf
 parameter_path=
 [tdhf]
+type=mrsf
 nstate=3
