@@ -1,0 +1,28 @@
+# DTCAM-TB S1/S0 minimum-energy conical intersection of ethylene
+# (the twisted-pyramidalized MECI of the Lee et al. benchmark set).
+# States are physical singlet response roots: istate=1 (S0), jstate=2 (S1).
+# meci_search=hybrid runs the penalty method and switches to the
+# updated-branching-plane step once the gap closes.
+[input]
+system=
+   6   0.000000   0.000000   0.669500
+   6   0.000000   0.000000  -0.669500
+   1   0.000000   0.928900   1.232100
+   1   0.000000  -0.928900   1.232100
+   1   0.000000   0.928900  -1.232100
+   1   0.000000  -0.928900  -1.232100
+charge=0
+runtype=meci
+method=dftb
+[dftb]
+model=dtcam-tb
+type=mrsf
+parameter_path=
+[tdhf]
+nstate=3
+[optimize]
+lib=oqp
+istate=1
+jstate=2
+meci_search=hybrid
+maxit=200

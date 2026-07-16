@@ -1,0 +1,27 @@
+# DTCAM-TB (MRSF-TDDFTB) vertical energies of s-trans butadiene.
+# model=dtcam-tb resolves the complete published operator and the fast
+# numerical protocol inside openqp-dftb; set parameter_path to the OB2W0PT3
+# SKF directory (with the official OB2 v1.1.0 spinw.txt alongside), or export
+# OPENQP_DFTB_PARAMETER_PATH instead.
+# Physical S0 is singlet response root 1; S1/S2 are roots 2/3.
+[input]
+system=
+   6   0.605000   0.398000   0.000000
+   6  -0.605000  -0.398000   0.000000
+   6   1.832000  -0.116000   0.000000
+   6  -1.832000   0.116000   0.000000
+   1   0.472000   1.479000   0.000000
+   1  -0.472000  -1.479000   0.000000
+   1   2.725000   0.506000   0.000000
+   1  -2.725000  -0.506000   0.000000
+   1   1.992000  -1.193000   0.000000
+   1  -1.992000   1.193000   0.000000
+charge=0
+runtype=energy
+method=dftb
+[dftb]
+model=dtcam-tb
+type=mrsf
+parameter_path=
+[tdhf]
+nstate=3

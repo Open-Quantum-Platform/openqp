@@ -342,6 +342,9 @@ EXEMPT_FLAGS = {
     'md.econs': 'per-step velocity rescale to conserve E_tot; numerical stabilizer sub-knob',
     'md.soc_du_dt_corr': 'SOC adiabatic-basis dU/dt gradient correction; diagnostic numerical sub-knob',
     'md.soc_tdc_grad_corr': 'SOC adiabatic-basis TDC-projected gradient correction; diagnostic numerical sub-knob',
+    'dftb.response_global_hybrid': 'DTCAM development diagnostic (decoupled full-range response '
+                                   'gamma); production operator selection goes through [dftb] '
+                                   'model presets and is covered by the openqp-dftb golden suite',
 }
 
 # section.option -> reason. Real capability, tracked gap (needs an example).

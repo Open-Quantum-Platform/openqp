@@ -1,0 +1,27 @@
+# DTCAM-TB analytic gradient of physical S1 (singlet response root 2) of
+# s-trans butadiene. The gradient uses the relaxed Z-vector formulation
+# (single pair-space solve). See BUTADIENE_DTCAMTB_ENERGY.inp for the
+# parameter_path convention.
+[input]
+system=
+   6   0.605000   0.398000   0.000000
+   6  -0.605000  -0.398000   0.000000
+   6   1.832000  -0.116000   0.000000
+   6  -1.832000   0.116000   0.000000
+   1   0.472000   1.479000   0.000000
+   1  -0.472000  -1.479000   0.000000
+   1   2.725000   0.506000   0.000000
+   1  -2.725000  -0.506000   0.000000
+   1   1.992000  -1.193000   0.000000
+   1  -1.992000   1.193000   0.000000
+charge=0
+runtype=grad
+method=dftb
+[dftb]
+model=dtcam-tb
+type=mrsf
+parameter_path=
+[tdhf]
+nstate=3
+[properties]
+grad=2

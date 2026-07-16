@@ -68,7 +68,7 @@ def test_shared_xyz_catalog_is_real_cartesian_geometry_only():
     run = _run()
     assets = run.catalog.ordered_assets()
 
-    assert len(assets) == 25
+    assert len(assets) == 27
     assert all(asset.name.endswith(".xyz") for asset in assets)
     assert all("pdb" not in asset.name.lower() for asset in assets)
     for asset in assets:

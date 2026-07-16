@@ -59,6 +59,11 @@ class OpenQPDFTBAdapter:
         self.dftb = self.config.get("dftb", {})
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
+        # Named operator preset ([dftb] model=...). The published parameter
+        # vector lives in openqp-dftb (single source of truth) and is applied
+        # by the native library; the input checker forbids mixing a model
+        # with individual operator keys.
+        self._preset_bytes = str(self.dftb.get("model", "")).strip().encode("ascii")
         if not hasattr(mol, "_openqp_dftb_cache"):
             mol._openqp_dftb_cache = {}
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
@@ -305,6 +310,24 @@ class OpenQPDFTBAdapter:
             ctypes.c_double(float(self.dftb.get("mrsf_shift_co", 0.0))),
             ctypes.c_double(float(self.dftb.get("mrsf_shift_ov", 0.0))),
             ctypes.c_double(float(self.dftb.get("mrsf_shift_cv", 0.0))),
+            # Full DTCAM operator surface (capi ABI v2); defaults equal the
+            # openqp-dftb type defaults so pre-existing inputs are
+            # bit-identical. The preset (model=) is applied last inside
+            # openqp-dftb and overrides the individual knobs.
+            ctypes.c_double(float(self.dftb.get("c_mrsf", -1.0))),
+            ctypes.c_int64(int(bool(self.dftb.get("response_global_hybrid", False)))),
+            ctypes.c_double(float(self.dftb.get("onsite_exchange_scale", 0.0))),
+            ctypes.c_double(float(self.dftb.get("w_scale", 1.0))),
+            ctypes.c_double(float(self.dftb.get("response_w_scale", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_omega", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_cam_alpha", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_cam_beta", -1.0))),
+            ctypes.c_double(float(self.dftb.get("c_mrsf_oo", -1.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_ss", 0.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_sp", 0.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
+            self._preset_bytes,
+            ctypes.c_int32(len(self._preset_bytes)),
             ctypes.c_int64(n_ext),
             ext_potential,
             ctypes.byref(reference_energy),
@@ -387,6 +410,23 @@ class OpenQPDFTBAdapter:
             raise RuntimeError(
                 f"{path} does not export openqp_dftb_state_gradient; "
                 "rebuild openqp-dftb with OPENQP_DFTB_BUILD_SHARED=ON."
+            )
+        # The state-gradient arguments are passed by value with no argtypes
+        # metadata, so an adapter/library revision mismatch would silently
+        # read garbage. Require the exact ABI generation this adapter emits
+        # (a library without the version symbol predates the check).
+        abi_probe = getattr(lib, "openqp_dftb_capi_abi_version", None)
+        if abi_probe is not None:
+            abi_probe.restype = ctypes.c_int64
+            abi_version = int(abi_probe())
+        else:
+            abi_version = 1
+        if abi_version != 2:
+            raise RuntimeError(
+                f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
+                "OpenQP adapter requires version 2 (full DTCAM operator surface + "
+                "model presets). Rebuild openqp-dftb from a source revision that "
+                "provides capi ABI v2."
             )
         lib.openqp_dftb_state_gradient.restype = None
         cache["__native_library__"] = lib
@@ -781,6 +821,22 @@ class OpenQPDFTBAdapter:
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
             float(self.dftb.get("response_tolerance", 1.0e-6)),
+            # DTCAM operator surface + preset: a Python workflow may retune
+            # these on the same molecule, so cached results must not outlive
+            # them.
+            str(self.dftb.get("model", "")).strip().lower(),
+            float(self.dftb.get("c_mrsf", -1.0)),
+            float(self.dftb.get("c_mrsf_oo", -1.0)),
+            bool(self.dftb.get("response_global_hybrid", False)),
+            float(self.dftb.get("onsite_exchange_scale", 0.0)),
+            float(self.dftb.get("w_scale", 1.0)),
+            float(self.dftb.get("response_w_scale", -1.0)),
+            float(self.dftb.get("response_omega", -1.0)),
+            float(self.dftb.get("response_cam_alpha", -1.0)),
+            float(self.dftb.get("response_cam_beta", -1.0)),
+            float(self.dftb.get("onsite_ss", 0.0)),
+            float(self.dftb.get("onsite_sp", 0.0)),
+            float(self.dftb.get("onsite_pp", 0.0)),
         )
         return atoms, coords.tobytes(), option_key
 
