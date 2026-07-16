@@ -209,6 +209,24 @@ OQP_CONFIG_SCHEMA = {
         'mrsf_shift_co': {'type': float, 'default': '0.0'},
         'mrsf_shift_ov': {'type': float, 'default': '0.0'},
         'mrsf_shift_cv': {'type': float, 'default': '0.0'},
+        # Full DTCAM operator surface (native backend). Defaults equal the
+        # openqp-dftb type defaults, so omitting them is bit-identical.
+        # model= applies a named published preset (resolved inside
+        # openqp-dftb, single source of truth); the input checker forbids
+        # combining it with individual operator keys.
+        'model': {'type': string, 'default': ''},
+        'c_mrsf': {'type': float, 'default': '-1.0'},
+        'c_mrsf_oo': {'type': float, 'default': '-1.0'},
+        'response_global_hybrid': {'type': bool, 'default': 'False'},
+        'onsite_exchange_scale': {'type': float, 'default': '0.0'},
+        'w_scale': {'type': float, 'default': '1.0'},
+        'response_w_scale': {'type': float, 'default': '-1.0'},
+        'response_omega': {'type': float, 'default': '-1.0'},
+        'response_cam_alpha': {'type': float, 'default': '-1.0'},
+        'response_cam_beta': {'type': float, 'default': '-1.0'},
+        'onsite_ss': {'type': float, 'default': '0.0'},
+        'onsite_sp': {'type': float, 'default': '0.0'},
+        'onsite_pp': {'type': float, 'default': '0.0'},
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {

@@ -119,7 +119,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 189,
+        "generic": 202,
         "route_driver": 104,
         "legacy_only": 21,
         "intentional_forbidden": 1,
@@ -152,7 +152,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
             assert key in lowered.get(section, {}), (section, key, canonical, lowered)
             checked.append((section, key))
 
-    assert len(checked) == 189
+    assert len(checked) == 202
 
 
 def test_legacy_backend_schema_is_recognized_but_not_canonical():

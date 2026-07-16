@@ -1,0 +1,1 @@
+mrsf-tddftb(nstate=3) geom="../geometries/C2H4-25af03d76164.xyz" charge=0 meci(S0,S1,algorithm=baeka,gap=0.0001,maxit=30) dftb(model=dtcam-tb,parameter_path="")

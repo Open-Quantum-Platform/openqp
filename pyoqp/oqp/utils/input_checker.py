@@ -38,6 +38,26 @@ DFTB_TYPES = {
     "mrsf", "mrsftddftb", "mrsf-tddftb",
 }
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
+
+DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb"}
+# Keys a [dftb] model preset fixes; the checker refuses to combine them with
+# model= (the preset overrides them inside openqp-dftb, so a user-tuned value
+# would be silently discarded).
+DFTB_MODEL_LOCKED_KEYS = (
+    "omega", "cam_alpha", "cam_beta", "lc_gamma", "lc_ground_state",
+    "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
+    "response_cam_beta", "c_mrsf", "c_mrsf_oo", "response_global_hybrid",
+    "onsite_exchange_scale", "spc", "spc_coco", "spc_ovov", "spc_coov",
+    "onsite_ss", "onsite_sp", "onsite_pp",
+    "mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv",
+    "scc_mixer", "scc_mixing", "scc_history", "scc_max_step",
+)
+# New-generation operator keys the probe CLI never forwards (native only).
+DFTB_NATIVE_ONLY_KEYS = (
+    "c_mrsf", "c_mrsf_oo", "response_global_hybrid", "onsite_exchange_scale",
+    "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
+    "response_cam_beta", "onsite_ss", "onsite_sp", "onsite_pp",
+)
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -830,6 +850,24 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
             )
 
 
+def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
+    """True when a [dftb] key differs from its schema default (i.e. the user
+    tuned it). The parsed config always carries defaults, so presence alone
+    cannot distinguish user intent."""
+    from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+    spec = OQP_CONFIG_SCHEMA.get("dftb", {}).get(key)
+    if spec is None:
+        return False
+    value = _get(config, "dftb", key, None)
+    if value is None:
+        return False
+    default_raw = spec.get("default", "")
+    try:
+        return abs(float(value) - float(default_raw)) > 1e-300
+    except (TypeError, ValueError):
+        return str(value).strip().lower() != str(default_raw).strip().lower()
+
+
 def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method != "dftb":
@@ -910,6 +948,9 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
         _sc = _get(config, "dftb", "spin_complete", True)
         if (_sc is False) or (str(_sc).lower() in ("false", "0", "off", "no")):
             _probe_unforwarded.append("spin_complete")
+        for _op in DFTB_NATIVE_ONLY_KEYS:
+            if _dftb_key_customized(config, _op):
+                _probe_unforwarded.append(_op)
         if _probe_unforwarded:
             report.add(
                 "ERROR",
@@ -919,8 +960,43 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
                 value=", ".join(_probe_unforwarded),
                 expected="native",
                 action="Use [dftb] backend=native for target_multiplicity, "
-                       "per-channel spc_*, mrsf_shift_*, lc_ground_state, or "
-                       "zvector=false.",
+                       "per-channel spc_*, mrsf_shift_*, lc_ground_state, "
+                       "zvector=false, or the DTCAM operator keys.",
+            )
+
+    model = _as_lower(_get(config, "dftb", "model", ""))
+    if model:
+        if model not in DFTB_MODELS:
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "Unknown OpenQP-DFTB operator model preset.",
+                value=model,
+                expected=", ".join(sorted(DFTB_MODELS)),
+                action="Use model=dtcam-tb, or omit model and set the operator keys individually.",
+            )
+        if backend == "probe":
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "Operator model presets require the native backend.",
+                value=backend,
+                expected="native",
+                action="Use backend=native (presets are resolved inside openqp-dftb).",
+            )
+        conflicting = [
+            key for key in DFTB_MODEL_LOCKED_KEYS
+            if _dftb_key_customized(config, key)
+        ]
+        if conflicting:
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "A model preset fixes the complete operator and numerical protocol; "
+                "individual operator keys cannot be combined with it.",
+                value=", ".join(conflicting),
+                expected=f"model={model} with no tuned operator keys",
+                action="Remove the listed [dftb] keys or drop model= to tune manually.",
             )
 
     scf_prop = _as_list(_get(config, "properties", "scf_prop", []))
@@ -1160,6 +1236,20 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             value=runtype,
             expected=", ".join(sorted(allowed_runtype)),
             action="Use energy, grad, data, optimize, meci, or mep until Hessian/NAC/SOC DFTB hooks are implemented.",
+        )
+
+    # [properties] nac also routes into the NAC state-overlap path (e.g. inside
+    # runtype=data), not only the standalone nac/nacme runtypes gated above.
+    props_nac = _as_list(_get(config, "properties", "nac", []))
+    if props_nac and "nac" not in allowed_runtype and runtype not in {"nac", "nacme", "bp"}:
+        report.add(
+            "ERROR",
+            "properties.nac",
+            "OpenQP-DFTB NAC requested via [properties] nac requires the "
+            "MRSF-TDDFTB state-overlap backend.",
+            value=", ".join(str(v) for v in props_nac),
+            expected="tdhf.type=mrsf (and dftb.type auto/mrsf)",
+            action="Use tdhf.type=mrsf for DFTB nonadiabatic couplings, or drop properties.nac.",
         )
 
     ground_like = dftb_type in {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}

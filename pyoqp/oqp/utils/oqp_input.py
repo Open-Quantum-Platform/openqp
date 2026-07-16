@@ -220,6 +220,9 @@ GENERIC_SCHEMA_KEYS = {
         response_solver spc spc_coco spc_ovov spc_coov omega cam_alpha
         cam_beta lc_gamma lc_ground_state zvector spin_complete mrsf_shift_oo
         mrsf_shift_co mrsf_shift_ov mrsf_shift_cv timeout
+        model c_mrsf c_mrsf_oo response_global_hybrid onsite_exchange_scale
+        w_scale response_w_scale response_omega response_cam_alpha
+        response_cam_beta onsite_ss onsite_sp onsite_pp
     """),
     "symmetry": _keys("""
         enabled point_group subgroup label_mo label_states label_modes
