@@ -1806,6 +1806,11 @@ def _resolve_path(value: Any, source_dir: Optional[Path]) -> Any:
     # File-backed geometries/products are normally .xyz/.pdb; retain arbitrary
     # one-token names so the existing checker can give its usual file error.
     stripped = value.strip()
+    # An empty value means "unset" (for example dftb.parameter_path resolving
+    # the bundled default); Path("") would otherwise lower it to the .oqp
+    # source directory itself.
+    if not stripped:
+        return value
     # QM/MM compact geometry references append atom selectors after the PDB
     # filename (``system.pdb 1 2 5-8``).  Resolve only the path prefix against
     # the .oqp source directory and preserve the selector suffix verbatim.

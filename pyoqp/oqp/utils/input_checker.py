@@ -50,7 +50,14 @@ DFTB_MODEL_LOCKED_KEYS = (
     "onsite_exchange_scale", "spc", "spc_coco", "spc_ovov", "spc_coov",
     "onsite_ss", "onsite_sp", "onsite_pp",
     "mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv",
+    # The preset also fixes the numerical protocol (openqp-dftb
+    # openqp_dftb_apply_dtcam_tb_preset): Broyden mixing, SCC budget and
+    # tolerance, the Davidson response solver, and the Z-vector gradient
+    # path. Keys the preset does NOT touch (response_tolerance,
+    # response_max_iterations, response_max_subspace, nstate, ...) stay
+    # user-tunable and are deliberately absent here.
     "scc_mixer", "scc_mixing", "scc_history", "scc_max_step",
+    "scc_tolerance", "max_scc_iterations", "response_solver", "zvector",
 )
 # New-generation operator keys the probe CLI never forwards (native only).
 DFTB_NATIVE_ONLY_KEYS = (
