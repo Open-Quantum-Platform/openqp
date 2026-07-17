@@ -1,0 +1,290 @@
+"""Regression tests for the historical openqp-dftb C ABI-v1 adapter."""
+
+from __future__ import annotations
+
+import ctypes
+import importlib.util
+from pathlib import Path
+import sys
+import types
+import unittest
+from unittest import mock
+
+import numpy as np
+
+
+ROOT = Path(__file__).resolve().parents[1]
+MODULE_PATH = ROOT / "pyoqp" / "oqp" / "library" / "openqp_dftb.py"
+
+
+def _load_adapter_module():
+    """Load the adapter with a dependency-light oqp package stub."""
+    oqp = types.ModuleType("oqp")
+    oqp.__path__ = []
+    oqp.oqp_root = ""
+
+    periodic_table = types.ModuleType("oqp.periodic_table")
+    periodic_table.ELEMENTS_NAME = ["X", "H"]
+
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+    constants = types.ModuleType("oqp.utils.constants")
+    constants.ANGSTROM_TO_BOHR = 0.529177210903
+    file_utils = types.ModuleType("oqp.utils.file_utils")
+    file_utils.dump_log = lambda *args, **kwargs: None
+    state_labels = types.ModuleType("oqp.utils.state_labels")
+    state_labels.canonical_dftb_type = lambda value: str(value).lower()
+    state_labels.resolved_dftb_type = (
+        lambda config: str(config.get("dftb", {}).get("type", "ground")).lower()
+    )
+
+    stubs = {
+        "oqp": oqp,
+        "oqp.periodic_table": periodic_table,
+        "oqp.utils": utils,
+        "oqp.utils.constants": constants,
+        "oqp.utils.file_utils": file_utils,
+        "oqp.utils.state_labels": state_labels,
+    }
+    saved = {name: sys.modules.get(name) for name in stubs}
+    sys.modules.update(stubs)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_openqp_dftb_abi1_test_module", MODULE_PATH
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for name, previous in saved.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
+
+
+ADAPTER_MODULE = _load_adapter_module()
+
+
+class _FakeMolecule:
+    def __init__(self, *, runtype="grad", dftb_updates=None):
+        dftb = {
+            "backend": "native",
+            "type": "mrsf",
+            "parameter_path": "/tmp/minimal.opdftb",
+            "scc_mixer": "auto",
+            "scc_history": 9,
+            "max_scc_iterations": 321,
+            "response_max_iterations": 41,
+            "response_max_subspace": 73,
+            "response_solver": "davidson",
+            "reference_multiplicity": 3,
+            "target_multiplicity": 1,
+            "spin_complete": True,
+            "lc_ground_state": False,
+            "lc_gamma": "yukawa",
+            "zvector": True,
+            "scc_tolerance": 2.0e-9,
+            "scc_mixing": 0.27,
+            "scc_max_step": 0.44,
+            "response_tolerance": 3.0e-7,
+            "spc": 0.5,
+            "spc_coco": 0.51,
+            "spc_ovov": 0.52,
+            "spc_coov": 0.53,
+            "omega": 0.31,
+            "cam_alpha": 0.02,
+            "cam_beta": 0.98,
+            "mrsf_shift_oo": 0.01,
+            "mrsf_shift_co": 0.02,
+            "mrsf_shift_ov": 0.03,
+            "mrsf_shift_cv": 0.04,
+        }
+        if dftb_updates:
+            dftb.update(dftb_updates)
+        self.config = {
+            "input": {
+                "charge": -1,
+                "runtype": runtype,
+                "qmmm_flag": False,
+            },
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "nstate": 2},
+            "properties": {"grad": [2]},
+            "optimize": {},
+            "dftb": dftb,
+        }
+        self.data = {"natom": 2}
+
+    @staticmethod
+    def get_atoms():
+        return np.array([1, 1], dtype=np.int64)
+
+    @staticmethod
+    def get_system():
+        return np.array([0.0, 0.0, 0.0, 0.0, 0.0, 1.4], dtype=np.float64)
+
+
+class _RecordingABI1Function:
+    def __init__(self):
+        self.calls = []
+        self.restype = object()
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if len(args) != 63:
+            raise AssertionError(f"ABI v1 requires exactly 63 arguments, got {len(args)}")
+
+        ctypes.cast(args[42], ctypes.POINTER(ctypes.c_double))[0] = -1.25
+        ctypes.cast(args[43], ctypes.POINTER(ctypes.c_double))[0] = -1.05
+        ctypes.cast(args[44], ctypes.POINTER(ctypes.c_double))[0] = 0.20
+        ctypes.cast(args[45], ctypes.POINTER(ctypes.c_double))[0] = 0.02
+        for index, value in enumerate((1.0, 2.0, 3.0, 4.0, 5.0, 6.0)):
+            args[46][index] = value
+        ctypes.cast(args[47], ctypes.POINTER(ctypes.c_int64))[0] = 2
+        args[48][0], args[48][1] = -1.05, -0.95
+        args[49][0], args[49][1] = 0.02, 0.03
+        args[50][0], args[50][1] = 0.1, -0.1
+        ctypes.cast(args[51], ctypes.POINTER(ctypes.c_int64))[0] = 2
+        ctypes.cast(args[52], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        ctypes.cast(args[53], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        ctypes.cast(args[54], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        args[56][0], args[56][1] = -0.5, 0.2
+        for index, value in enumerate((1.0, 0.0, 0.0, 1.0)):
+            args[57][index] = value
+        args[59][0], args[59][1] = 0.7, 0.8
+        args[60].value = b""
+        ctypes.cast(args[62], ctypes.POINTER(ctypes.c_int64))[0] = 0
+
+
+class _FakeLibrary:
+    def __init__(self):
+        self.openqp_dftb_state_gradient = _RecordingABI1Function()
+        self.openqp_dftb_states_overlap = object()
+        self.openqp_dftb_soc_matrix = object()
+
+
+class OpenQPDFTBABI1Tests(unittest.TestCase):
+    def _adapter_with_abi1(self, **mol_kwargs):
+        mol = _FakeMolecule(**mol_kwargs)
+        adapter = ADAPTER_MODULE.OpenQPDFTBAdapter(mol)
+        library = _FakeLibrary()
+        mol._openqp_dftb_cache["__native_library__"] = library
+        mol._openqp_dftb_cache["__native_abi_version__"] = 1
+        return adapter, library
+
+    def test_unversioned_library_is_classified_as_abi1(self):
+        adapter, library = self._adapter_with_abi1()
+        adapter.mol._openqp_dftb_cache.clear()
+        adapter._native_library_path = lambda: Path("/tmp/libopenqp_dftb_c.fake")
+
+        with mock.patch.object(ADAPTER_MODULE.ctypes, "CDLL", return_value=library):
+            loaded = adapter._native_library()
+
+        self.assertIs(loaded, library)
+        self.assertEqual(adapter.mol._openqp_dftb_cache["__native_abi_version__"], 1)
+        self.assertIsNone(library.openqp_dftb_state_gradient.restype)
+
+    def test_precontract_unversioned_layout_is_rejected_safely(self):
+        adapter, library = self._adapter_with_abi1()
+        adapter.mol._openqp_dftb_cache.clear()
+        adapter._native_library_path = lambda: Path("/tmp/libopenqp_dftb_c.fake")
+        del library.openqp_dftb_states_overlap
+        del library.openqp_dftb_soc_matrix
+
+        with mock.patch.object(ADAPTER_MODULE.ctypes, "CDLL", return_value=library):
+            with self.assertRaisesRegex(
+                RuntimeError, r"lacks the stable ABI-v1 marker.*cannot be identified safely"
+            ):
+                adapter._native_library()
+
+    def test_abi1_call_uses_historical_63_argument_layout(self):
+        adapter, library = self._adapter_with_abi1(
+            dftb_updates={
+                "c_mrsf": 0.71,
+                "response_global_hybrid": True,
+                "onsite_exchange_scale": 0.19,
+            }
+        )
+
+        result = adapter._run_native("mrsf", 2, need_grad=True)
+
+        self.assertEqual(len(library.openqp_dftb_state_gradient.calls), 1)
+        args = library.openqp_dftb_state_gradient.calls[0]
+        self.assertEqual(len(args), 63)
+
+        # Stable ABI-v1 layout documented when ABI v2 was introduced in
+        # openqp-dftb commit 26ddd5a (its exact predecessor is 4beaa864).
+        self.assertIsInstance(args[0], ctypes.c_int64)
+        self.assertEqual(args[0].value, 2)
+        self.assertEqual([args[1][i] for i in range(2)], [1, 1])
+        self.assertEqual([args[2][i] for i in range(6)], [0.0, 0.0, 0.0, 0.0, 0.0, 1.4])
+        self.assertEqual(args[3], b"/tmp/minimal.opdftb")
+        self.assertIsInstance(args[4], ctypes.c_int32)
+        self.assertEqual(args[4].value, len(args[3]))
+        self.assertEqual(args[5], b"mrsf")
+        self.assertEqual(args[7].value, 2)    # root
+        self.assertEqual(args[8].value, 2)    # requested roots
+        self.assertEqual(args[9].value, 1)    # need gradient
+        self.assertEqual(args[10].value, -1)  # molecular charge
+        self.assertEqual(args[11].value, 3)   # auto SCC mixer
+        self.assertEqual(args[12].value, 9)
+        self.assertEqual(args[13].value, 321)
+        self.assertEqual(args[14].value, 41)
+        self.assertEqual(args[15].value, 73)
+        self.assertEqual(args[16].value, 1)   # Davidson
+        self.assertEqual(args[17].value, 3)   # high-spin reference
+        self.assertEqual(args[18].value, 1)   # target multiplicity
+        self.assertAlmostEqual(args[23].value, 2.0e-9)
+        self.assertAlmostEqual(args[36].value, 0.04)
+        self.assertAlmostEqual(args[37].value, 0.71)
+        self.assertEqual(args[38].value, 1)
+        self.assertAlmostEqual(args[39].value, 0.19)
+        self.assertEqual(args[40].value, 0)
+        self.assertIsInstance(args[61], ctypes.c_int32)
+        self.assertEqual(args[61].value, 1024)
+
+        self.assertEqual(result.reference_energy, -1.25)
+        self.assertEqual(result.state_energy, -1.05)
+        self.assertEqual(result.excitation_energy, 0.20)
+        self.assertEqual(result.spin_square, 0.02)
+        np.testing.assert_array_equal(
+            result.gradient_bohr,
+            np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        )
+        np.testing.assert_array_equal(result.all_state_energies, [-1.05, -0.95])
+        np.testing.assert_array_equal(result.all_spin_squares, [0.02, 0.03])
+        np.testing.assert_array_equal(result.relaxed_charges, [0.1, -0.1])
+        np.testing.assert_array_equal(result.mo_energies, [-0.5, 0.2])
+        np.testing.assert_array_equal(result.mo_coefficients, np.eye(2))
+        np.testing.assert_array_equal(result.response_vectors, [[0.7, 0.8]])
+
+    def test_abi1_rejects_post_v1_operator_knobs_before_call(self):
+        adapter, library = self._adapter_with_abi1(
+            dftb_updates={"c_mrsf_oo": 0.7, "response_omega": 0.21}
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError, r"C ABI v1.*c_mrsf_oo=0\.7.*response_omega=0\.21"
+        ):
+            adapter._run_native("mrsf", 1, need_grad=False)
+
+        self.assertEqual(library.openqp_dftb_state_gradient.calls, [])
+
+    def test_abi1_forwards_qmmm_embedding_and_relaxed_charges(self):
+        adapter, library = self._adapter_with_abi1()
+        adapter.mol.dftb_external_potential = np.array([0.1, -0.1])
+
+        result = adapter._run_native("ground", 0, need_grad=True)
+
+        args = library.openqp_dftb_state_gradient.calls[0]
+        self.assertEqual(args[40].value, 2)
+        self.assertEqual([args[41][i] for i in range(2)], [0.1, -0.1])
+        np.testing.assert_array_equal(result.relaxed_charges, [0.1, -0.1])
+
+
+if __name__ == "__main__":
+    unittest.main()

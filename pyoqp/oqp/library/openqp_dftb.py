@@ -76,6 +76,21 @@ def _call_with_native_diagnostics(callback, *, print_level, state_spectrum):
                 else:
                     os.environ[name] = value
 
+# C ABI v1 includes embedding/exports and the first three DTCAM controls
+# (c_mrsf, response_global_hybrid, onsite_exchange_scale). These later v2
+# controls are the only current options its shorter argument list cannot carry.
+_ABI1_UNSUPPORTED_OPTION_DEFAULTS = {
+    "c_mrsf_oo": -1.0,
+    "w_scale": 1.0,
+    "response_w_scale": -1.0,
+    "response_omega": -1.0,
+    "response_cam_alpha": -1.0,
+    "response_cam_beta": -1.0,
+    "onsite_ss": 0.0,
+    "onsite_sp": 0.0,
+    "onsite_pp": 0.0,
+}
+
 
 def _bundled_parameter_path() -> str | None:
     """Bundled OB2W0PT3 default of the installed openqp-dftb wheel, if any.
@@ -267,9 +282,12 @@ class OpenQPDFTBAdapter:
         generation = (key[0], key[1], key[2][0])
         if cache.get("__generation__") != generation:
             library = cache.get("__native_library__")
+            library_abi = cache.get("__native_abi_version__")
             cache.clear()
             if library is not None:
                 cache["__native_library__"] = library
+            if library_abi is not None:
+                cache["__native_abi_version__"] = library_abi
             cache["__generation__"] = generation
 
         backend = str(self.dftb.get("backend", "native")).lower()
@@ -299,6 +317,7 @@ class OpenQPDFTBAdapter:
             parameter_path=parameter_path,
             library_path=str(getattr(lib, "_name", "")),
         )
+        abi_version = int(self.mol._openqp_dftb_cache["__native_abi_version__"])
         natom = self.natom
         atoms = np.ascontiguousarray(
             np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
@@ -343,86 +362,51 @@ class OpenQPDFTBAdapter:
         vec_capacity = mo_capacity * nstate
         response_vectors = (ctypes.c_double * vec_capacity)()
 
-        native_call = lambda: lib.openqp_dftb_state_gradient(
-            ctypes.c_int64(natom),
-            atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
-            coords_bohr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            parameter,
-            ctypes.c_int32(len(parameter)),
-            method_name,
-            ctypes.c_int32(len(method_name)),
-            ctypes.c_int64(int(state)),
-            ctypes.c_int64(int(max(1, self.nstate))),
-            ctypes.c_int64(int(bool(need_grad))),
-            ctypes.c_int64(int(self.config.get("input", {}).get("charge", 0))),
-            ctypes.c_int64(self._scc_mixer_code()),
-            ctypes.c_int64(int(self.dftb.get("scc_history", 12))),
-            ctypes.c_int64(int(self.dftb.get("max_scc_iterations", 1200))),
-            ctypes.c_int64(int(self.dftb.get("response_max_iterations", 50))),
-            ctypes.c_int64(int(self.dftb.get("response_max_subspace", 100))),
-            ctypes.c_int64(self._response_solver_code()),
-            ctypes.c_int64(self._reference_multiplicity(method)),
-            ctypes.c_int64(int(self.dftb.get("target_multiplicity", 1))),
-            ctypes.c_int64(int(bool(self.dftb.get("spin_complete", True)))),
-            ctypes.c_int64(int(bool(self.dftb.get("lc_ground_state", False)))),
-            ctypes.c_int64(int(self._lc_gamma_is_erf())),
-            ctypes.c_int64(int(bool(self.dftb.get("zvector", True)))),
-            ctypes.c_double(float(self.dftb.get("scc_tolerance", 1.0e-8))),
-            ctypes.c_double(float(self.dftb.get("scc_mixing", 0.35))),
-            ctypes.c_double(float(self.dftb.get("scc_max_step", 0.5))),
-            ctypes.c_double(float(self.dftb.get("response_tolerance", 1.0e-6))),
-            ctypes.c_double(self._spc_channel("spc_coco")),
-            ctypes.c_double(self._spc_channel("spc_ovov")),
-            ctypes.c_double(self._spc_channel("spc_coov")),
-            ctypes.c_double(float(self.dftb.get("omega", 0.3))),
-            ctypes.c_double(float(self.dftb.get("cam_alpha", 0.0))),
-            ctypes.c_double(float(self.dftb.get("cam_beta", 1.0))),
-            ctypes.c_double(float(self.dftb.get("mrsf_shift_oo", 0.0))),
-            ctypes.c_double(float(self.dftb.get("mrsf_shift_co", 0.0))),
-            ctypes.c_double(float(self.dftb.get("mrsf_shift_ov", 0.0))),
-            ctypes.c_double(float(self.dftb.get("mrsf_shift_cv", 0.0))),
-            # Full DTCAM operator surface (capi ABI v2); defaults equal the
-            # openqp-dftb type defaults so pre-existing inputs are
-            # bit-identical. The preset (model=) is applied last inside
-            # openqp-dftb and overrides the individual knobs.
-            ctypes.c_double(float(self.dftb.get("c_mrsf", -1.0))),
-            ctypes.c_int64(int(bool(self.dftb.get("response_global_hybrid", False)))),
-            ctypes.c_double(float(self.dftb.get("onsite_exchange_scale", 0.0))),
-            ctypes.c_double(float(self.dftb.get("w_scale", 1.0))),
-            ctypes.c_double(float(self.dftb.get("response_w_scale", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_omega", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_cam_alpha", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_cam_beta", -1.0))),
-            ctypes.c_double(float(self.dftb.get("c_mrsf_oo", -1.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_ss", 0.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_sp", 0.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
-            self._preset_bytes,
-            ctypes.c_int32(len(self._preset_bytes)),
-            ctypes.c_int64(n_ext),
-            ext_potential,
-            ctypes.byref(reference_energy),
-            ctypes.byref(state_energy),
-            ctypes.byref(excitation_energy),
-            ctypes.byref(spin_square),
-            gradient,
-            ctypes.byref(n_roots_out),
-            all_state_energies,
-            all_spin_squares,
-            relaxed_charges,
-            ctypes.byref(nbf_out),
-            ctypes.byref(noca_out),
-            ctypes.byref(nocb_out),
-            ctypes.byref(vec_dim_out),
-            ctypes.c_int64(mo_capacity),
-            mo_energies,
-            mo_coefficients,
-            ctypes.c_int64(vec_capacity),
-            response_vectors,
-            status_message,
-            ctypes.c_int32(1024),
-            ctypes.byref(status),
-        )
+        call_kwargs = {
+            "natom": natom,
+            "atoms": atoms,
+            "coords_bohr": coords_bohr,
+            "parameter": parameter,
+            "method_name": method_name,
+            "state": state,
+            "need_grad": need_grad,
+            "n_ext": n_ext,
+            "ext_potential": ext_potential,
+            "reference_energy": reference_energy,
+            "state_energy": state_energy,
+            "excitation_energy": excitation_energy,
+            "spin_square": spin_square,
+            "gradient": gradient,
+            "n_roots_out": n_roots_out,
+            "all_state_energies": all_state_energies,
+            "all_spin_squares": all_spin_squares,
+            "relaxed_charges": relaxed_charges,
+            "nbf_out": nbf_out,
+            "noca_out": noca_out,
+            "nocb_out": nocb_out,
+            "vec_dim_out": vec_dim_out,
+            "mo_capacity": mo_capacity,
+            "mo_energies": mo_energies,
+            "mo_coefficients": mo_coefficients,
+            "vec_capacity": vec_capacity,
+            "response_vectors": response_vectors,
+            "status_message": status_message,
+            "status": status,
+        }
+
+        def native_call():
+            if abi_version == 1:
+                self._call_state_gradient_abi1(
+                    lib.openqp_dftb_state_gradient, **call_kwargs
+                )
+            else:
+                self._call_state_gradient_current(
+                    lib.openqp_dftb_state_gradient, **call_kwargs
+                )
+
+        if abi_version == 1:
+            self._validate_abi1_request()
+
         state_spectrum = (
             method not in _GROUND_TYPES
             and not need_grad
@@ -445,13 +429,12 @@ class OpenQPDFTBAdapter:
                     "text": native_trace,
                 },
             )
-        if status.value != 0:
-            detail = status_message.value.decode("utf-8", errors="replace").strip()
-            suffix = f": {detail}" if detail else ""
-            raise RuntimeError(
-                f"openqp-dftb native library call failed for method={method}, "
-                f"state={state}, status={status.value}{suffix}"
-            )
+        self._raise_native_status(
+            method=method,
+            state=state,
+            status=status,
+            status_message=status_message,
+        )
 
         gradient_bohr = np.frombuffer(gradient, dtype=np.float64).reshape((natom, 3)).copy()
         n_roots = int(n_roots_out.value)
@@ -490,6 +473,162 @@ class OpenQPDFTBAdapter:
             response_vectors=vecs,
         )
 
+    def _state_gradient_common_arguments(self, values):
+        """Arguments shared by every state-gradient ABI (slots 1--37)."""
+        return [
+            ctypes.c_int64(values["natom"]),
+            values["atoms"].ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
+            values["coords_bohr"].ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            values["parameter"],
+            ctypes.c_int32(len(values["parameter"])),
+            values["method_name"],
+            ctypes.c_int32(len(values["method_name"])),
+            ctypes.c_int64(int(values["state"])),
+            ctypes.c_int64(int(max(1, self.nstate))),
+            ctypes.c_int64(int(bool(values["need_grad"]))),
+            ctypes.c_int64(int(self.config.get("input", {}).get("charge", 0))),
+            ctypes.c_int64(self._scc_mixer_code()),
+            ctypes.c_int64(int(self.dftb.get("scc_history", 12))),
+            ctypes.c_int64(int(self.dftb.get("max_scc_iterations", 1200))),
+            ctypes.c_int64(int(self.dftb.get("response_max_iterations", 50))),
+            ctypes.c_int64(int(self.dftb.get("response_max_subspace", 100))),
+            ctypes.c_int64(self._response_solver_code()),
+            ctypes.c_int64(
+                self._reference_multiplicity(
+                    values["method_name"].decode("ascii")
+                )
+            ),
+            ctypes.c_int64(int(self.dftb.get("target_multiplicity", 1))),
+            ctypes.c_int64(int(bool(self.dftb.get("spin_complete", True)))),
+            ctypes.c_int64(int(bool(self.dftb.get("lc_ground_state", False)))),
+            ctypes.c_int64(int(self._lc_gamma_is_erf())),
+            ctypes.c_int64(int(bool(self.dftb.get("zvector", True)))),
+            ctypes.c_double(float(self.dftb.get("scc_tolerance", 1.0e-8))),
+            ctypes.c_double(float(self.dftb.get("scc_mixing", 0.35))),
+            ctypes.c_double(float(self.dftb.get("scc_max_step", 0.5))),
+            ctypes.c_double(float(self.dftb.get("response_tolerance", 1.0e-6))),
+            ctypes.c_double(self._spc_channel("spc_coco")),
+            ctypes.c_double(self._spc_channel("spc_ovov")),
+            ctypes.c_double(self._spc_channel("spc_coov")),
+            ctypes.c_double(float(self.dftb.get("omega", 0.3))),
+            ctypes.c_double(float(self.dftb.get("cam_alpha", 0.0))),
+            ctypes.c_double(float(self.dftb.get("cam_beta", 1.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_oo", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_co", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_ov", 0.0))),
+            ctypes.c_double(float(self.dftb.get("mrsf_shift_cv", 0.0))),
+        ]
+
+    @staticmethod
+    def _state_gradient_output_arguments(values):
+        """Embedding and result tail shared by ABI v1 and current ABIs."""
+        return [
+            ctypes.c_int64(values["n_ext"]),
+            values["ext_potential"],
+            ctypes.byref(values["reference_energy"]),
+            ctypes.byref(values["state_energy"]),
+            ctypes.byref(values["excitation_energy"]),
+            ctypes.byref(values["spin_square"]),
+            values["gradient"],
+            ctypes.byref(values["n_roots_out"]),
+            values["all_state_energies"],
+            values["all_spin_squares"],
+            values["relaxed_charges"],
+            ctypes.byref(values["nbf_out"]),
+            ctypes.byref(values["noca_out"]),
+            ctypes.byref(values["nocb_out"]),
+            ctypes.byref(values["vec_dim_out"]),
+            ctypes.c_int64(values["mo_capacity"]),
+            values["mo_energies"],
+            values["mo_coefficients"],
+            ctypes.c_int64(values["vec_capacity"]),
+            values["response_vectors"],
+            values["status_message"],
+            ctypes.c_int32(1024),
+            ctypes.byref(values["status"]),
+        ]
+
+    def _call_state_gradient_abi1(self, function, **values) -> None:
+        """Call the stable 63-argument openqp-dftb C ABI v1.
+
+        ABI v1 includes the first DTCAM controls, QM/MM embedding, all-root
+        results, relaxed charges, and wavefunction exports. ABI v2 inserted
+        later DTCAM/preset arguments immediately before the shared result tail,
+        so dispatching only on an accepted version number would shift pointers.
+        """
+        function(
+            *self._state_gradient_common_arguments(values),
+            ctypes.c_double(float(self.dftb.get("c_mrsf", -1.0))),
+            ctypes.c_int64(
+                int(bool(self.dftb.get("response_global_hybrid", False)))
+            ),
+            ctypes.c_double(
+                float(self.dftb.get("onsite_exchange_scale", 0.0))
+            ),
+            *self._state_gradient_output_arguments(values),
+        )
+
+    def _call_state_gradient_current(self, function, **values) -> None:
+        """Call the ABI-v2/v3 state-gradient layout."""
+        function(
+            *self._state_gradient_common_arguments(values),
+            ctypes.c_double(float(self.dftb.get("c_mrsf", -1.0))),
+            ctypes.c_int64(
+                int(bool(self.dftb.get("response_global_hybrid", False)))
+            ),
+            ctypes.c_double(
+                float(self.dftb.get("onsite_exchange_scale", 0.0))
+            ),
+            ctypes.c_double(float(self.dftb.get("w_scale", 1.0))),
+            ctypes.c_double(float(self.dftb.get("response_w_scale", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_omega", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_cam_alpha", -1.0))),
+            ctypes.c_double(float(self.dftb.get("response_cam_beta", -1.0))),
+            ctypes.c_double(float(self.dftb.get("c_mrsf_oo", -1.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_ss", 0.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_sp", 0.0))),
+            ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
+            self._preset_bytes,
+            ctypes.c_int32(len(self._preset_bytes)),
+            *self._state_gradient_output_arguments(values),
+        )
+
+    def _validate_abi1_request(self) -> None:
+        """Reject features that cannot be represented by the ABI-v1 call."""
+        limitations = []
+
+        model = str(self.dftb.get("model", "")).strip()
+        if model:
+            limitations.append(f"model={model!r}")
+
+        for key, default in _ABI1_UNSUPPORTED_OPTION_DEFAULTS.items():
+            value = self.dftb.get(key, default)
+            if isinstance(default, bool):
+                differs = bool(value) is not default
+            else:
+                differs = float(value) != default
+            if differs:
+                limitations.append(f"{key}={value!r}")
+
+        if limitations:
+            detail = ", ".join(limitations)
+            raise RuntimeError(
+                "The loaded openqp-dftb library provides C ABI v1, which cannot "
+                f"represent: {detail}. Install openqp-dftb >= 0.2.0 (C ABI v3) "
+                "or reset the unsupported option(s) to their ABI-v1 defaults."
+            )
+
+    @staticmethod
+    def _raise_native_status(*, method, state, status, status_message) -> None:
+        if status.value == 0:
+            return
+        detail = status_message.value.decode("utf-8", errors="replace").strip()
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(
+            f"openqp-dftb native library call failed for method={method}, "
+            f"state={state}, status={status.value}{suffix}"
+        )
+
     def _native_library(self):
         cache = self.mol._openqp_dftb_cache
         lib = cache.get("__native_library__")
@@ -507,24 +646,40 @@ class OpenQPDFTBAdapter:
             )
         # The state-gradient arguments are passed by value with no argtypes
         # metadata, so an adapter/library revision mismatch would silently
-        # read garbage. Require the exact ABI generation this adapter emits
-        # (a library without the version symbol predates the check).
+        # read garbage. Detect the ABI before the first call and dispatch its
+        # exact argument layout. The released v1 predates the version symbol.
         abi_probe = getattr(lib, "openqp_dftb_capi_abi_version", None)
         if abi_probe is not None:
             abi_probe.restype = ctypes.c_int64
             abi_version = int(abi_probe())
         else:
+            # Stable ABI v1 shipped alongside these two C exports. Earlier
+            # unversioned development snapshots used other argument layouts
+            # and cannot be distinguished by inspecting state_gradient itself.
+            abi1_markers = (
+                "openqp_dftb_states_overlap",
+                "openqp_dftb_soc_matrix",
+            )
+            missing_markers = [
+                symbol for symbol in abi1_markers if not hasattr(lib, symbol)
+            ]
+            if missing_markers:
+                missing = ", ".join(missing_markers)
+                raise RuntimeError(
+                    f"{path} has no openqp-dftb C ABI version symbol and lacks "
+                    f"the stable ABI-v1 marker export(s): {missing}. Its "
+                    "state-gradient argument layout cannot be identified "
+                    "safely; install openqp-dftb >= 0.2.0."
+                )
             abi_version = 1
-        if abi_version not in (2, 3):
+        if abi_version not in (1, 2, 3):
             raise RuntimeError(
                 f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
-                "OpenQP adapter requires version 2 or 3 (the v2 full DTCAM operator "
-                "surface; v3 only adds the bundled-parameter default resolution and "
-                "keeps the state-gradient argument list unchanged). Rebuild "
-                "openqp-dftb from a source revision that provides capi ABI v2/v3."
+                "OpenQP adapter supports only versions 1, 2, and 3."
             )
         lib.openqp_dftb_state_gradient.restype = None
         cache["__native_library__"] = lib
+        cache["__native_abi_version__"] = abi_version
         return lib
 
     def _native_library_path(self) -> Path:
