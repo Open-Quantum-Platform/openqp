@@ -100,12 +100,14 @@ def test_adapter_logs_one_settings_block_for_all_states(monkeypatch):
             parameter_path="/parameters/OB2W0PT3",
             library_path="/wheel/libopenqp_dftb_c.dylib",
             abi_version=3,
+            capabilities=7,
         )
 
     assert len(calls) == 1
     assert calls[0][1]["section"] == "dftb"
     assert calls[0][1]["info"]["parameter_path"] == "/parameters/OB2W0PT3"
     assert calls[0][1]["info"]["abi_version"] == 3
+    assert calls[0][1]["info"]["capabilities"] == 7
 
 
 def test_native_diagnostics_capture_fd_and_restore_environment(monkeypatch):
@@ -123,6 +125,30 @@ def test_native_diagnostics_capture_fd_and_restore_environment(monkeypatch):
     assert "davidson_end" in text
     assert os.environ["OPENQP_DFTB_SCC_TRACE"] == "previous"
     assert "OPENQP_DFTB_STATE_SPECTRUM" not in os.environ
+
+
+def test_unadvertised_native_diagnostics_are_not_requested(monkeypatch):
+    calls = []
+    module = _load_adapter(monkeypatch, calls)
+    seen = {}
+
+    def inspect_environment():
+        for name in module._NATIVE_DIAGNOSTIC_ENV:
+            seen[name] = os.environ[name]
+
+    module._call_with_native_diagnostics(
+        inspect_environment,
+        print_level=2,
+        state_spectrum=False,
+        structured_trace=False,
+    )
+
+    assert seen == {
+        "OPENQP_DFTB_SCC_TRACE": "0",
+        "OPENQP_DFTB_SOLVER_TRACE": "0",
+        "OPENQP_ZVEC_TRACE": "0",
+        "OPENQP_DFTB_STATE_SPECTRUM": "0",
+    }
 
 
 def test_bundled_parameter_resolution_is_silent(monkeypatch):

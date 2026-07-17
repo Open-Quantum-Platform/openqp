@@ -19,7 +19,12 @@ import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
 from oqp.utils.file_utils import dump_log
-from oqp.utils.state_labels import canonical_dftb_type, resolved_dftb_type
+from oqp.utils.state_labels import (
+    DFTB_CAP_STATE_SPECTRUM,
+    DFTB_CAP_STRUCTURED_TRACE,
+    canonical_dftb_type,
+    resolved_dftb_type,
+)
 
 
 _GROUND_TYPES = {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
@@ -32,7 +37,8 @@ _NATIVE_DIAGNOSTIC_ENV = (
 )
 
 
-def _call_with_native_diagnostics(callback, *, print_level, state_spectrum):
+def _call_with_native_diagnostics(
+        callback, *, print_level, state_spectrum, structured_trace=True):
     """Run one native call while capturing flushed Fortran stdout.
 
     The C ABI predates structured diagnostics.  Its optional trace hooks write
@@ -41,7 +47,8 @@ def _call_with_native_diagnostics(callback, *, print_level, state_spectrum):
     Environment and descriptor changes are process-global; serialize them
     within this Python process and restore both even on failure.
     """
-    level = max(0, min(2, int(print_level)))
+    requested_level = max(0, min(2, int(print_level)))
+    level = requested_level if structured_trace else 0
     updates = {
         "OPENQP_DFTB_SCC_TRACE": str(level),
         "OPENQP_DFTB_SOLVER_TRACE": str(level),
@@ -283,11 +290,14 @@ class OpenQPDFTBAdapter:
         if cache.get("__generation__") != generation:
             library = cache.get("__native_library__")
             library_abi = cache.get("__native_abi_version__")
+            library_capabilities = cache.get("__native_capabilities__")
             cache.clear()
             if library is not None:
                 cache["__native_library__"] = library
             if library_abi is not None:
                 cache["__native_abi_version__"] = library_abi
+            if library_capabilities is not None:
+                cache["__native_capabilities__"] = library_capabilities
             cache["__generation__"] = generation
 
         backend = str(self.dftb.get("backend", "native")).lower()
@@ -311,6 +321,9 @@ class OpenQPDFTBAdapter:
         """
         lib = self._native_library()
         abi_version = int(self.mol._openqp_dftb_cache["__native_abi_version__"])
+        capabilities = int(
+            self.mol._openqp_dftb_cache.get("__native_capabilities__", 0)
+        )
         parameter_path = self._parameter_path()
         self._log_settings_once(
             method,
@@ -318,6 +331,7 @@ class OpenQPDFTBAdapter:
             parameter_path=parameter_path,
             library_path=str(getattr(lib, "_name", "")),
             abi_version=abi_version,
+            capabilities=capabilities,
         )
         natom = self.natom
         atoms = np.ascontiguousarray(
@@ -412,11 +426,13 @@ class OpenQPDFTBAdapter:
             method not in _GROUND_TYPES
             and not need_grad
             and bool(self.dftb.get("state_to_state_spectrum", True))
+            and bool(capabilities & DFTB_CAP_STATE_SPECTRUM)
         )
         native_trace = _call_with_native_diagnostics(
             native_call,
             print_level=int(self.dftb.get("print_level", 1)),
             state_spectrum=state_spectrum,
+            structured_trace=bool(capabilities & DFTB_CAP_STRUCTURED_TRACE),
         )
         if native_trace.strip():
             dump_log(
@@ -634,6 +650,9 @@ class OpenQPDFTBAdapter:
         cache = self.mol._openqp_dftb_cache
         lib = cache.get("__native_library__")
         if lib is not None:
+            if "__native_capabilities__" not in cache:
+                cache["__native_capabilities__"] = \
+                    self._native_capabilities(lib)
             return lib
         path = self._native_library_path()
         try:
@@ -681,7 +700,23 @@ class OpenQPDFTBAdapter:
         lib.openqp_dftb_state_gradient.restype = None
         cache["__native_library__"] = lib
         cache["__native_abi_version__"] = abi_version
+        cache["__native_capabilities__"] = self._native_capabilities(lib)
         return lib
+
+    @staticmethod
+    def _native_capabilities(lib) -> int:
+        """Return additive native capabilities; a missing symbol means none."""
+        probe = getattr(lib, "openqp_dftb_capi_capabilities", None)
+        if probe is None:
+            return 0
+        probe.restype = ctypes.c_int64
+        capabilities = int(probe())
+        if capabilities < 0:
+            raise RuntimeError(
+                "openqp-dftb returned a negative C capability mask: "
+                f"{capabilities}"
+            )
+        return capabilities
 
     def _native_library_path(self) -> Path:
         raw = self.dftb.get("library_path") or os.environ.get("OPENQP_DFTB_LIBRARY")
@@ -788,6 +823,7 @@ class OpenQPDFTBAdapter:
         library_path: str = "",
         executable: str = "",
         abi_version: int | None = None,
+        capabilities: int | None = None,
     ) -> None:
         """Write one settings block per distinct DFTB request, not per state."""
         signature = (
@@ -797,6 +833,7 @@ class OpenQPDFTBAdapter:
             library_path,
             executable,
             abi_version,
+            capabilities,
             tuple(sorted((str(key), repr(value)) for key, value in self.dftb.items())),
             tuple(sorted(
                 (str(key), repr(value))
@@ -820,6 +857,7 @@ class OpenQPDFTBAdapter:
                 "library_path": library_path,
                 "executable": executable,
                 "abi_version": abi_version,
+                "capabilities": capabilities,
             },
         )
 

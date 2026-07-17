@@ -212,6 +212,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             library_path=details.get('library_path'),
             executable=details.get('executable'),
             abi_version=details.get('abi_version'),
+            capabilities=details.get('capabilities'),
         )
 
     if section == 'dftb_runtime':

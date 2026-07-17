@@ -195,6 +195,20 @@ def test_dftb_mrsf_labels_use_backend_target_multiplicity():
     assert state_labels.public_state_label(config, 1) == "T0"
     assert state_labels.requested_states(config) == "T0-T2"
     assert state_labels.dftb_target_description(config) == "T0-T2"
+    text = state_labels.format_calculation_request(config)
+    assert "Target spin:                 triplet" in text
+
+
+def test_explicit_ground_dftb_ignores_stale_mrsf_response_defaults():
+    config = dftb_config("ground", td_type="mrsf", nstate=4)
+
+    assert not state_labels.is_mrsf(config)
+    assert state_labels.public_state_label(config, 0) == "state 0"
+    text = state_labels.format_calculation_request(config)
+    assert "Method:                      DFTB" in text
+    assert "Physical target state(s):    S0 ground state" in text
+    assert "Target spin:" not in text
+    assert "State labels:" not in text
 
 
 def test_sf_reference_multiplicity_one_logs_effective_triplet_reference():
@@ -247,6 +261,57 @@ def test_dftb_settings_are_grouped_and_report_resolved_paths():
     assert "trah (requested)" in text
     assert "davidson (requested)" in text
     assert "Relaxed Z-vector:" in text
+
+
+def test_zero_capability_mask_never_claims_new_native_features():
+    config = dftb_config("mrsf", td_type="mrsf", nstate=3)
+    config["dftb"]["state_to_state_spectrum"] = True
+
+    text = state_labels.format_dftb_settings(
+        config,
+        backend="native",
+        library_path="/wheel/libopenqp_dftb_c.dylib",
+        abi_version=3,
+        capabilities=0,
+    )
+
+    assert "C API ABI:                  3" in text
+    assert "C API capabilities:         none advertised" in text
+    assert "structured progress tracing" in text
+    assert "loaded library (C ABI 3) does not advertise all-pair state spectrum" in text
+    assert "loaded library (C ABI 3) does not advertise final trust-region SCC recovery" in text
+
+
+def test_advertised_capabilities_enable_native_feature_summary():
+    config = dftb_config("mrsf", td_type="mrsf", nstate=3)
+    text = state_labels.format_dftb_settings(
+        config,
+        backend="native",
+        abi_version=3,
+        capabilities=(
+            state_labels.DFTB_CAP_STRUCTURED_TRACE
+            | state_labels.DFTB_CAP_STATE_SPECTRUM
+            | state_labels.DFTB_CAP_SCC_FINAL_TRUST
+        ),
+    )
+
+    assert "structured trace, state spectrum, SCC final trust recovery" in text
+    assert "Native progress trace:      level 1" in text
+    assert "State-to-state spectrum:    yes (unrelaxed TDA/state interaction)" in text
+    assert "final charge/spin trust-TRAH pass when eligible" in text
+
+
+def test_probe_settings_do_not_advertise_native_trace_or_spectrum():
+    config = dftb_config("mrsf", td_type="mrsf", nstate=3)
+    text = state_labels.format_dftb_settings(
+        config,
+        backend="probe",
+        executable="/tmp/openqp_dftb_probe",
+    )
+
+    assert "Native progress trace:" not in text
+    assert "State-to-state spectrum:    requested; unavailable with probe backend" in text
+    assert "Failed-cycle recovery:      unavailable with probe backend" in text
 
 
 def test_dftb_preset_log_does_not_claim_schema_defaults_are_effective():

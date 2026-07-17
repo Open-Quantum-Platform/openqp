@@ -1,4 +1,4 @@
-"""Regression tests for the historical openqp-dftb C ABI-v1 adapter."""
+"""Regression tests for versioned openqp-dftb C ABI adapter layouts."""
 
 from __future__ import annotations
 
@@ -33,6 +33,9 @@ def _load_adapter_module():
     file_utils = types.ModuleType("oqp.utils.file_utils")
     file_utils.dump_log = lambda *args, **kwargs: None
     state_labels = types.ModuleType("oqp.utils.state_labels")
+    state_labels.DFTB_CAP_STRUCTURED_TRACE = 1
+    state_labels.DFTB_CAP_STATE_SPECTRUM = 2
+    state_labels.DFTB_CAP_SCC_FINAL_TRUST = 4
     state_labels.canonical_dftb_type = lambda value: str(value).lower()
     state_labels.resolved_dftb_type = (
         lambda config: str(config.get("dftb", {}).get("type", "ground")).lower()
@@ -167,13 +170,75 @@ class _FakeLibrary:
         self.openqp_dftb_soc_matrix = object()
 
 
-class OpenQPDFTBABI1Tests(unittest.TestCase):
+class _IntegerProbe:
+    def __init__(self, value):
+        self.value = value
+        self.restype = object()
+
+    def __call__(self):
+        return self.value
+
+
+class _RecordingCurrentFunction:
+    def __init__(self):
+        self.calls = []
+        self.restype = object()
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        if len(args) != 74:
+            raise AssertionError(
+                f"ABI v2/v3 requires exactly 74 arguments, got {len(args)}"
+            )
+
+        ctypes.cast(args[53], ctypes.POINTER(ctypes.c_double))[0] = -1.25
+        ctypes.cast(args[54], ctypes.POINTER(ctypes.c_double))[0] = -1.05
+        ctypes.cast(args[55], ctypes.POINTER(ctypes.c_double))[0] = 0.20
+        ctypes.cast(args[56], ctypes.POINTER(ctypes.c_double))[0] = 0.02
+        for index, value in enumerate((1.0, 2.0, 3.0, 4.0, 5.0, 6.0)):
+            args[57][index] = value
+        ctypes.cast(args[58], ctypes.POINTER(ctypes.c_int64))[0] = 2
+        args[59][0], args[59][1] = -1.05, -0.95
+        args[60][0], args[60][1] = 0.02, 0.03
+        args[61][0], args[61][1] = 0.1, -0.1
+        ctypes.cast(args[62], ctypes.POINTER(ctypes.c_int64))[0] = 2
+        ctypes.cast(args[63], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        ctypes.cast(args[64], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        ctypes.cast(args[65], ctypes.POINTER(ctypes.c_int64))[0] = 1
+        args[67][0], args[67][1] = -0.5, 0.2
+        for index, value in enumerate((1.0, 0.0, 0.0, 1.0)):
+            args[68][index] = value
+        args[70][0], args[70][1] = 0.7, 0.8
+        args[71].value = b""
+        ctypes.cast(args[73], ctypes.POINTER(ctypes.c_int64))[0] = 0
+
+
+class _FakeCurrentLibrary:
+    def __init__(self, *, capabilities=7):
+        self.openqp_dftb_state_gradient = _RecordingCurrentFunction()
+        self.openqp_dftb_capi_abi_version = _IntegerProbe(3)
+        if capabilities is not None:
+            self.openqp_dftb_capi_capabilities = _IntegerProbe(capabilities)
+
+
+class OpenQPDFTBABITests(unittest.TestCase):
     def _adapter_with_abi1(self, **mol_kwargs):
         mol = _FakeMolecule(**mol_kwargs)
         adapter = ADAPTER_MODULE.OpenQPDFTBAdapter(mol)
         library = _FakeLibrary()
         mol._openqp_dftb_cache["__native_library__"] = library
         mol._openqp_dftb_cache["__native_abi_version__"] = 1
+        return adapter, library
+
+    def _adapter_with_current(self, *, capabilities=7, **mol_kwargs):
+        mol = _FakeMolecule(**mol_kwargs)
+        adapter = ADAPTER_MODULE.OpenQPDFTBAdapter(mol)
+        library = _FakeCurrentLibrary(capabilities=capabilities)
+        mol._openqp_dftb_cache["__native_library__"] = library
+        mol._openqp_dftb_cache["__native_abi_version__"] = 3
+        mol._openqp_dftb_cache["__native_capabilities__"] = (
+            0 if capabilities is None else capabilities
+        )
         return adapter, library
 
     def test_unversioned_library_is_classified_as_abi1(self):
@@ -186,7 +251,56 @@ class OpenQPDFTBABI1Tests(unittest.TestCase):
 
         self.assertIs(loaded, library)
         self.assertEqual(adapter.mol._openqp_dftb_cache["__native_abi_version__"], 1)
+        self.assertEqual(adapter.mol._openqp_dftb_cache["__native_capabilities__"], 0)
         self.assertIsNone(library.openqp_dftb_state_gradient.restype)
+
+    def test_optional_capability_symbol_is_probed_and_cached(self):
+        adapter, library = self._adapter_with_current()
+        adapter.mol._openqp_dftb_cache.clear()
+        adapter._native_library_path = lambda: Path("/tmp/libopenqp_dftb_c.fake")
+
+        with mock.patch.object(ADAPTER_MODULE.ctypes, "CDLL", return_value=library):
+            adapter._native_library()
+
+        self.assertEqual(
+            adapter.mol._openqp_dftb_cache["__native_capabilities__"], 7
+        )
+        self.assertIs(
+            library.openqp_dftb_capi_capabilities.restype, ctypes.c_int64
+        )
+
+    def test_missing_capability_symbol_means_zero_even_for_abi3(self):
+        adapter, library = self._adapter_with_current(capabilities=None)
+        adapter.mol._openqp_dftb_cache.clear()
+        adapter._native_library_path = lambda: Path("/tmp/libopenqp_dftb_c.fake")
+
+        with mock.patch.object(ADAPTER_MODULE.ctypes, "CDLL", return_value=library):
+            adapter._native_library()
+
+        self.assertEqual(
+            adapter.mol._openqp_dftb_cache["__native_capabilities__"], 0
+        )
+
+    def test_cache_generation_preserves_native_capabilities(self):
+        adapter, library = self._adapter_with_current()
+        sentinel = object()
+        adapter._cache_key = lambda *args, **kwargs: (
+            ("H", "H"), b"new-geometry", (b"embedding",)
+        )
+        adapter._run_native = lambda *args, **kwargs: sentinel
+
+        result = adapter._run_state("mrsf", 1, need_grad=False)
+
+        self.assertIs(result, sentinel)
+        self.assertIs(
+            adapter.mol._openqp_dftb_cache["__native_library__"], library
+        )
+        self.assertEqual(
+            adapter.mol._openqp_dftb_cache["__native_abi_version__"], 3
+        )
+        self.assertEqual(
+            adapter.mol._openqp_dftb_cache["__native_capabilities__"], 7
+        )
 
     def test_precontract_unversioned_layout_is_rejected_safely(self):
         adapter, library = self._adapter_with_abi1()
@@ -284,6 +398,51 @@ class OpenQPDFTBABI1Tests(unittest.TestCase):
         self.assertEqual(args[40].value, 2)
         self.assertEqual([args[41][i] for i in range(2)], [0.1, -0.1])
         np.testing.assert_array_equal(result.relaxed_charges, [0.1, -0.1])
+
+    def test_current_call_uses_exact_74_argument_layout_and_slots(self):
+        adapter, library = self._adapter_with_current(
+            dftb_updates={
+                "c_mrsf": 0.71,
+                "response_global_hybrid": True,
+                "onsite_exchange_scale": 0.19,
+                "w_scale": 0.91,
+                "response_w_scale": 0.81,
+                "response_omega": 0.21,
+                "response_cam_alpha": 0.11,
+                "response_cam_beta": 0.61,
+                "c_mrsf_oo": 0.41,
+                "onsite_ss": 0.01,
+                "onsite_sp": 0.02,
+                "onsite_pp": 0.03,
+                "model": "dtcam-tb",
+            }
+        )
+
+        result = adapter._run_native("mrsf", 2, need_grad=True)
+
+        calls = library.openqp_dftb_state_gradient.calls
+        self.assertEqual(len(calls), 1)
+        args = calls[0]
+        self.assertEqual(len(args), 74)
+        self.assertAlmostEqual(args[37].value, 0.71)
+        self.assertEqual(args[38].value, 1)
+        self.assertAlmostEqual(args[39].value, 0.19)
+        self.assertAlmostEqual(args[40].value, 0.91)
+        self.assertAlmostEqual(args[41].value, 0.81)
+        self.assertAlmostEqual(args[42].value, 0.21)
+        self.assertAlmostEqual(args[43].value, 0.11)
+        self.assertAlmostEqual(args[44].value, 0.61)
+        self.assertAlmostEqual(args[45].value, 0.41)
+        self.assertAlmostEqual(args[46].value, 0.01)
+        self.assertAlmostEqual(args[47].value, 0.02)
+        self.assertAlmostEqual(args[48].value, 0.03)
+        self.assertEqual(args[49], b"dtcam-tb")
+        self.assertEqual(args[50].value, len(args[49]))
+        self.assertEqual(args[51].value, 0)
+        self.assertIsInstance(args[72], ctypes.c_int32)
+        self.assertEqual(args[72].value, 1024)
+        self.assertEqual(result.reference_energy, -1.25)
+        np.testing.assert_array_equal(result.all_state_energies, [-1.05, -0.95])
 
 
 if __name__ == "__main__":

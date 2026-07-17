@@ -68,6 +68,14 @@ _DFTB_METHOD_NAMES = {
     "mrsf": "MRSF-TDDFTB",
 }
 
+# Additive openqp-dftb C capability-mask bits.  These assignments are part of
+# the public C contract and deliberately do not follow the state-gradient ABI
+# version: an optional feature may be added without changing that argument
+# list.
+DFTB_CAP_STRUCTURED_TRACE = 1
+DFTB_CAP_STATE_SPECTRUM = 2
+DFTB_CAP_SCC_FINAL_TRUST = 4
+
 
 def _section(config, name):
     value = config.get(name, {}) if isinstance(config, dict) else {}
@@ -220,6 +228,7 @@ def format_dftb_settings(
     library_path=None,
     executable=None,
     abi_version=None,
+    capabilities=None,
 ):
     """Format one concise, grouped summary of effective DFTB request settings.
 
@@ -232,6 +241,36 @@ def format_dftb_settings(
     method = resolved_dftb_type(config)
     requested_backend = str(dftb.get("backend", "native")).strip().lower()
     actual_backend = str(backend or requested_backend).strip().lower()
+    if actual_backend == "probe":
+        # The command-line probe exposes energies/gradients only.  It has no
+        # C capability symbol and does not forward the native diagnostic
+        # environment hooks.
+        effective_capabilities = 0
+    elif capabilities is not None:
+        effective_capabilities = int(capabilities)
+    elif abi_version is not None:
+        # Once a native library has been loaded, a missing optional symbol is
+        # authoritatively the zero mask, including for ABI 3 builds predating
+        # capability discovery.
+        effective_capabilities = 0
+    else:
+        effective_capabilities = None
+
+    def has_capability(bit):
+        return (
+            effective_capabilities is not None
+            and bool(effective_capabilities & bit)
+        )
+
+    def unavailable_capability(label):
+        if actual_backend == "probe":
+            return "unavailable with probe backend"
+        if effective_capabilities is None:
+            return "availability checked after native library load"
+        abi = " (C ABI %s)" % abi_version if abi_version is not None else ""
+        return "unavailable; loaded library%s does not advertise %s" % (
+            abi, label)
+
     backend_text = actual_backend
     if requested_backend != actual_backend:
         backend_text += " (requested: %s)" % requested_backend
@@ -241,15 +280,36 @@ def format_dftb_settings(
     method_rows = [
         ("Method", dftb_method_name(config)),
         ("Backend", backend_text),
-        ("Native print level", dftb.get("print_level", 1)),
         ("Parameters", parameter_path or dftb.get("parameter_path") or "bundled default"),
         ("Reference", dftb_reference_description(config)),
         ("Target", dftb_target_description(config)),
     ]
+    if actual_backend == "native":
+        level = dftb.get("print_level", 1)
+        if effective_capabilities is None or has_capability(
+                DFTB_CAP_STRUCTURED_TRACE):
+            trace_text = "level %s" % level
+        else:
+            trace_text = "requested level %s; %s" % (
+                level,
+                unavailable_capability("structured progress tracing"),
+            )
+        method_rows.insert(2, ("Native progress trace", trace_text))
     if library_path:
         method_rows.insert(2, ("Shared library", library_path))
     if abi_version is not None:
         method_rows.insert(3, ("C API ABI", abi_version))
+    if actual_backend == "native" and effective_capabilities is not None:
+        names = []
+        for bit, name in (
+            (DFTB_CAP_STRUCTURED_TRACE, "structured trace"),
+            (DFTB_CAP_STATE_SPECTRUM, "state spectrum"),
+            (DFTB_CAP_SCC_FINAL_TRUST, "SCC final trust recovery"),
+        ):
+            if effective_capabilities & bit:
+                names.append(name)
+        capability_text = ", ".join(names) if names else "none advertised"
+        method_rows.insert(4, ("C API capabilities", capability_text))
     if executable:
         method_rows.insert(2, ("Probe executable", executable))
     groups.append(("calculation", method_rows))
@@ -260,7 +320,6 @@ def format_dftb_settings(
         scc_rows = [
             ("Enabled", "yes"),
             ("Protocol", "%s preset (resolved by openqp-dftb backend)" % model),
-            ("Failed-cycle recovery", "final charge/spin trust-TRAH pass when eligible"),
         ]
     else:
         mixer = str(dftb.get("scc_mixer", "auto")).strip().lower()
@@ -274,8 +333,13 @@ def format_dftb_settings(
                 dftb.get("scc_history", 12),
                 _display_number(dftb.get("scc_max_step", 0.5)),
             )),
-            ("Failed-cycle recovery", "final charge/spin trust-TRAH pass when eligible"),
         ]
+    if method != "ground_noscc":
+        if has_capability(DFTB_CAP_SCC_FINAL_TRUST):
+            recovery = "final charge/spin trust-TRAH pass when eligible"
+        else:
+            recovery = unavailable_capability("final trust-region SCC recovery")
+        scc_rows.append(("Failed-cycle recovery", recovery))
     groups.append(("SCC", scc_rows))
 
     if method not in {"ground", "ground_noscc"}:
@@ -299,11 +363,16 @@ def format_dftb_settings(
             )
         else:
             groups[-1][1].append(("Response manifold", "closed-shell singlet TDA"))
-        groups[-1][1].append((
-            "State-to-state spectrum",
-            "%s (unrelaxed TDA/state interaction)"
-            % _yes_no(dftb.get("state_to_state_spectrum", True)),
-        ))
+        spectrum_requested = bool(dftb.get("state_to_state_spectrum", True))
+        if not spectrum_requested:
+            spectrum_text = "no"
+        elif has_capability(DFTB_CAP_STATE_SPECTRUM):
+            spectrum_text = "yes (unrelaxed TDA/state interaction)"
+        else:
+            spectrum_text = "requested; %s" % unavailable_capability(
+                "all-pair state spectrum"
+            )
+        groups[-1][1].append(("State-to-state spectrum", spectrum_text))
         zvector = (
             "%s preset (resolved by openqp-dftb backend)" % model
             if model else _yes_no(dftb.get("zvector", True))
@@ -364,6 +433,8 @@ def format_dftb_settings(
 
 def is_mrsf(config):
     """True for MRSF/UMRSF response calculations, including TD-DFTB."""
+    if str(_section(config, "input").get("method", "")).strip().lower() == "dftb":
+        return resolved_dftb_type(config) == "mrsf"
     return response_type(config) in {"mrsf", "umrsf"}
 
 
@@ -560,7 +631,7 @@ def calculation_request_lines(config, source=None, resolved=None):
     if is_dftb_request:
         lines.append(("Reference", dftb_reference_description(config)))
     if is_mrsf(config):
-        target_mult = _int(_section(config, "tdhf").get("multiplicity", 1), 1)
+        target_mult = _target_multiplicity(config)
         runtype = str(inp.get("runtype", "energy")).lower()
         multi_spin = runtype in {"soc", "mecp"} or (
             runtype == "namd" and bool(_section(config, "md").get("soc", False))
