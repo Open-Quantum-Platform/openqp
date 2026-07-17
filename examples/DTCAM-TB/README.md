@@ -16,8 +16,11 @@ A model preset is all-inclusive: combining it with individual `[dftb]`
 operator keys is rejected by the input checker. Omit `model=` to tune the
 operator manually.
 
-Parameters: point `[dftb] parameter_path` (or `OPENQP_DFTB_PARAMETER_PATH`)
-at the OB2W0PT3 SKF directory containing the official `spinw.txt`.
+Parameters: nothing to configure with a current openqp-dftb wheel -- it
+ships the bundled OB2W0PT3 SKF set (official `spinw.txt` included), which is
+resolved automatically when `[dftb] parameter_path` is empty and
+`OPENQP_DFTB_PARAMETER_PATH` is unset. Point either knob at another
+`.opdftb`/SKF directory to override the bundled default.
 
 State convention: physical S0 is singlet response root 1; S1/S2 are roots
 2/3. The high-spin ROKS determinant is only the auxiliary reference.
