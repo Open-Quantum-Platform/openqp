@@ -50,7 +50,14 @@ DFTB_MODEL_LOCKED_KEYS = (
     "onsite_exchange_scale", "spc", "spc_coco", "spc_ovov", "spc_coov",
     "onsite_ss", "onsite_sp", "onsite_pp",
     "mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv",
+    # The preset also fixes the numerical protocol (openqp-dftb
+    # openqp_dftb_apply_dtcam_tb_preset): Broyden mixing, SCC budget and
+    # tolerance, the Davidson response solver, and the Z-vector gradient
+    # path. Keys the preset does NOT touch (response_tolerance,
+    # response_max_iterations, response_max_subspace, nstate, ...) stay
+    # user-tunable and are deliberately absent here.
     "scc_mixer", "scc_mixing", "scc_history", "scc_max_step",
+    "scc_tolerance", "max_scc_iterations", "response_solver", "zvector",
 )
 # New-generation operator keys the probe CLI never forwards (native only).
 DFTB_NATIVE_ONLY_KEYS = (
@@ -91,7 +98,7 @@ WIKI_HELP = {
     "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
     "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
-    "dftb.parameter_path": "Set [dftb] parameter_path to an .opdftb file or an SKF parameter directory; OPENQP_DFTB_PARAMETER_PATH may also provide it.",
+    "dftb.parameter_path": "Set [dftb] parameter_path to an .opdftb file or an SKF parameter directory; OPENQP_DFTB_PARAMETER_PATH may also provide it. When neither is set, the bundled openqp-dftb parameter set (OB2W0PT3 with the official spinw.txt) is used automatically if installed.",
     "dftb.namd": "OpenQP-DFTB can provide NAMD surface data through runtype=data. NAC/NACME requires an implemented DFTB state-overlap backend.",
 }
 
@@ -1071,14 +1078,28 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if not parameter_path and not os.environ.get("OPENQP_DFTB_PARAMETER_PATH"):
-        report.add(
-            "ERROR",
-            "dftb.parameter_path",
-            "OpenQP-DFTB requires an explicit parameter source.",
-            expected=".opdftb file or SKF directory",
-            action="Set [dftb] parameter_path, or export OPENQP_DFTB_PARAMETER_PATH.",
-            wiki=WIKI_HELP["dftb.parameter_path"],
-        )
+        # The openqp-dftb wheel ships a bundled default parameter set
+        # (OB2W0PT3 with the official spinw.txt); when it is resolvable the
+        # runtime uses it automatically and no explicit source is required.
+        bundled = None
+        try:
+            import openqp_dftb  # noqa: PLC0415
+
+            bundled = openqp_dftb.default_parameter_path()
+        except (ImportError, AttributeError, FileNotFoundError):
+            bundled = None
+        if not bundled:
+            report.add(
+                "ERROR",
+                "dftb.parameter_path",
+                "OpenQP-DFTB requires an explicit parameter source.",
+                expected=".opdftb file or SKF directory",
+                action=(
+                    "Set [dftb] parameter_path, export OPENQP_DFTB_PARAMETER_PATH, or "
+                    "install an openqp-dftb wheel that ships the bundled parameter set."
+                ),
+                wiki=WIKI_HELP["dftb.parameter_path"],
+            )
 
     if backend == "probe" and not executable and not os.environ.get("OPENQP_DFTB_STATE_GRADIENT_PROBE"):
         report.add(

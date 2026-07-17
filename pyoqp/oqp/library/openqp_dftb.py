@@ -29,6 +29,22 @@ _EXCITED_METHOD_BY_TDHF_TYPE = {
 _GROUND_TYPES = {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
 
 
+def _bundled_parameter_path() -> str | None:
+    """Bundled OB2W0PT3 default of the installed openqp-dftb wheel, if any.
+
+    The wheel ships the SKF set plus the official shell-resolved spinw.txt
+    (required by every W kernel) next to its locator package; wheels that
+    predate the bundled data simply lack the accessor.
+    """
+    try:
+        import openqp_dftb  # noqa: PLC0415
+
+        return openqp_dftb.default_parameter_path()
+    except (ImportError, AttributeError, FileNotFoundError):
+        return None
+
+
+
 @dataclass(frozen=True)
 class _StateResult:
     state: int
@@ -421,12 +437,13 @@ class OpenQPDFTBAdapter:
             abi_version = int(abi_probe())
         else:
             abi_version = 1
-        if abi_version != 2:
+        if abi_version not in (2, 3):
             raise RuntimeError(
                 f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
-                "OpenQP adapter requires version 2 (full DTCAM operator surface + "
-                "model presets). Rebuild openqp-dftb from a source revision that "
-                "provides capi ABI v2."
+                "OpenQP adapter requires version 2 or 3 (the v2 full DTCAM operator "
+                "surface; v3 only adds the bundled-parameter default resolution and "
+                "keeps the state-gradient argument list unchanged). Rebuild "
+                "openqp-dftb from a source revision that provides capi ABI v2/v3."
             )
         lib.openqp_dftb_state_gradient.restype = None
         cache["__native_library__"] = lib
@@ -842,9 +859,20 @@ class OpenQPDFTBAdapter:
 
     def _parameter_path(self) -> str:
         raw = self.dftb.get("parameter_path") or os.environ.get("OPENQP_DFTB_PARAMETER_PATH")
-        if not raw:
-            raise ValueError("Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH.")
-        return str(self._resolve_user_path(raw))
+        if raw:
+            return str(self._resolve_user_path(raw))
+        bundled = _bundled_parameter_path()
+        if bundled:
+            dump_log(
+                self.mol,
+                title="PyOQP: OpenQP-DFTB bundled parameter set (parameter_path not set)\n   "
+                + bundled,
+            )
+            return bundled
+        raise ValueError(
+            "Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH "
+            "(this openqp-dftb installation ships no bundled parameter set)."
+        )
 
     def _probe_executable(self) -> str:
         raw = self.dftb.get("executable") or os.environ.get("OPENQP_DFTB_STATE_GRADIENT_PROBE")

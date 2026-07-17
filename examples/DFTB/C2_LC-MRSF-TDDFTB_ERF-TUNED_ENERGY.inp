@@ -2,7 +2,9 @@
 # operator (omega=0.25, cam_beta=1.2), which restores the MRSF-TDDFT
 # bright/dark state ordering. The lc_ground_state flag turns on the
 # long-range-corrected ROKS reference; the trust mixer is recommended for
-# the cam_beta>1 SCC.
+# the cam_beta>1 SCC. With parameter_path empty the bundled openqp-dftb
+# OB2W0PT3 SKF set (official spinw.txt included) is resolved automatically;
+# set parameter_path or OPENQP_DFTB_PARAMETER_PATH only to override it.
 [input]
 system=
    6   0.000000000   0.000000000   0.000000000
@@ -27,7 +29,7 @@ nstate=3
 [dftb]
 backend=native
 type=mrsf
-parameter_path=params
+parameter_path=
 lc_ground_state=true
 lc_gamma=erf
 omega=0.25
