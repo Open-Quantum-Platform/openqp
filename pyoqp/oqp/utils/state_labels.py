@@ -219,6 +219,7 @@ def format_dftb_settings(
     parameter_path=None,
     library_path=None,
     executable=None,
+    abi_version=None,
 ):
     """Format one concise, grouped summary of effective DFTB request settings.
 
@@ -247,6 +248,8 @@ def format_dftb_settings(
     ]
     if library_path:
         method_rows.insert(2, ("Shared library", library_path))
+    if abi_version is not None:
+        method_rows.insert(3, ("C API ABI", abi_version))
     if executable:
         method_rows.insert(2, ("Probe executable", executable))
     groups.append(("calculation", method_rows))

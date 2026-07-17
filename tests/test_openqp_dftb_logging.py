@@ -99,11 +99,13 @@ def test_adapter_logs_one_settings_block_for_all_states(monkeypatch):
             backend="native",
             parameter_path="/parameters/OB2W0PT3",
             library_path="/wheel/libopenqp_dftb_c.dylib",
+            abi_version=3,
         )
 
     assert len(calls) == 1
     assert calls[0][1]["section"] == "dftb"
     assert calls[0][1]["info"]["parameter_path"] == "/parameters/OB2W0PT3"
+    assert calls[0][1]["info"]["abi_version"] == 3
 
 
 def test_native_diagnostics_capture_fd_and_restore_environment(monkeypatch):

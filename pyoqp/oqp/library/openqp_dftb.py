@@ -310,14 +310,15 @@ class OpenQPDFTBAdapter:
         state gradient back. No OpenQP build coupling, no Fortran module seam.
         """
         lib = self._native_library()
+        abi_version = int(self.mol._openqp_dftb_cache["__native_abi_version__"])
         parameter_path = self._parameter_path()
         self._log_settings_once(
             method,
             backend="native",
             parameter_path=parameter_path,
             library_path=str(getattr(lib, "_name", "")),
+            abi_version=abi_version,
         )
-        abi_version = int(self.mol._openqp_dftb_cache["__native_abi_version__"])
         natom = self.natom
         atoms = np.ascontiguousarray(
             np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
@@ -786,6 +787,7 @@ class OpenQPDFTBAdapter:
         parameter_path: str,
         library_path: str = "",
         executable: str = "",
+        abi_version: int | None = None,
     ) -> None:
         """Write one settings block per distinct DFTB request, not per state."""
         signature = (
@@ -794,6 +796,7 @@ class OpenQPDFTBAdapter:
             parameter_path,
             library_path,
             executable,
+            abi_version,
             tuple(sorted((str(key), repr(value)) for key, value in self.dftb.items())),
             tuple(sorted(
                 (str(key), repr(value))
@@ -816,6 +819,7 @@ class OpenQPDFTBAdapter:
                 "parameter_path": parameter_path,
                 "library_path": library_path,
                 "executable": executable,
+                "abi_version": abi_version,
             },
         )
 
