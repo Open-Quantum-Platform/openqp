@@ -192,6 +192,11 @@ OQP_CONFIG_SCHEMA = {
         'response_max_iterations': {'type': int, 'default': '50'},
         'response_max_subspace': {'type': int, 'default': '100'},
         'response_solver': {'type': string, 'default': 'auto'},
+        # 0: quiet native kernels, 1: stages/summaries, 2: iteration detail.
+        'print_level': {'type': int, 'default': '1'},
+        # Upward root-pair oscillator strengths (unrelaxed
+        # TDA/state-interaction approximation).
+        'state_to_state_spectrum': {'type': bool, 'default': 'True'},
         'spc': {'type': float, 'default': '0.5'},
         'spc_coco': {'type': float, 'default': '-999.0'},
         'spc_ovov': {'type': float, 'default': '-999.0'},

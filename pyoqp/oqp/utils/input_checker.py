@@ -1044,6 +1044,55 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             action="Use auto to derive the DFTB response type from [tdhf] type, or set it explicitly.",
         )
 
+    explicit_response_types = {
+        "tddftb": {"rpa", "tda"},
+        "sf": {"sf"},
+        "mrsf": {"mrsf"},
+    }
+    compatible_tdhf_types = explicit_response_types.get(dftb_type_canon)
+    if (
+        dftb_type != "auto"
+        and compatible_tdhf_types is not None
+        and td_type not in compatible_tdhf_types
+    ):
+        report.add(
+            "ERROR",
+            "dftb.type",
+            "Explicit OpenQP-DFTB response type conflicts with [tdhf] type.",
+            value={"dftb.type": dftb_type, "tdhf.type": td_type},
+            expected="tdhf.type=" + "/".join(sorted(compatible_tdhf_types)),
+            action="Align [dftb] type with [tdhf] type, or use [dftb] type=auto.",
+        )
+
+    auto_ground = (
+        dftb_type == "auto"
+        and (
+            (runtype in {"energy", "grad"} and not any(int(state) > 0 for state in grad_states))
+            or (runtype in {"optimize", "mep"} and int(istate) == 0)
+        )
+    )
+    conventional_tddftb = dftb_type_canon == "tddftb" or (
+        dftb_type == "auto" and td_type in {"rpa", "tda"} and not auto_ground
+    )
+    if conventional_tddftb:
+        target_mult = int(_get(config, "dftb", "target_multiplicity", 1))
+        reference_mult = int(_get(config, "dftb", "reference_multiplicity", 0))
+        td_mult = int(_get(config, "tdhf", "multiplicity", 1))
+        if target_mult != 1 or td_mult != 1 or reference_mult not in {0, 1}:
+            report.add(
+                "ERROR",
+                "dftb.target_multiplicity",
+                "Conventional TD-DFTB currently implements a closed-shell singlet "
+                "reference and singlet TDA response only.",
+                value={
+                    "reference": reference_mult or 1,
+                    "dftb_target": target_mult,
+                    "tdhf_target": td_mult,
+                },
+                expected="reference and target multiplicity 1",
+                action="Use SF-TDDFTB or MRSF-TDDFTB for triplet-state calculations.",
+            )
+
     lc_gamma = _as_lower(_get(config, "dftb", "lc_gamma", "yukawa"))
     if lc_gamma not in {"yukawa", "erf"}:
         report.add(
@@ -1064,6 +1113,17 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             value=response_solver,
             expected="auto, dense, or davidson",
             action="Use auto unless you need to force a specific eigensolver.",
+        )
+
+    print_level = int(_get(config, "dftb", "print_level", 1))
+    if print_level not in {0, 1, 2}:
+        report.add(
+            "ERROR",
+            "dftb.print_level",
+            "Unknown OpenQP-DFTB native trace level.",
+            value=print_level,
+            expected="0, 1, or 2",
+            action="Use 0 for quiet, 1 for stage summaries, or 2 for iteration detail.",
         )
 
     target_multiplicity = int(_get(config, "dftb", "target_multiplicity", 1))

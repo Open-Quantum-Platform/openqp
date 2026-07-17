@@ -1,0 +1,1 @@
+mrsf-tddftb(nstate=3) geom="../geometries/CH2-e41258125cee.xyz" energy(S0) dftb(backend=native,parameter_path="")

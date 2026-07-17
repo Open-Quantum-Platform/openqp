@@ -8,8 +8,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
+import threading
 
 import numpy as np
 
@@ -17,16 +19,62 @@ import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
 from oqp.utils.file_utils import dump_log
+from oqp.utils.state_labels import canonical_dftb_type, resolved_dftb_type
 
-
-_EXCITED_METHOD_BY_TDHF_TYPE = {
-    "rpa": "tddftb",
-    "tda": "tddftb",
-    "sf": "sf",
-    "mrsf": "mrsf",
-}
 
 _GROUND_TYPES = {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
+_NATIVE_DIAGNOSTIC_LOCK = threading.RLock()
+_NATIVE_DIAGNOSTIC_ENV = (
+    "OPENQP_DFTB_SCC_TRACE",
+    "OPENQP_DFTB_SOLVER_TRACE",
+    "OPENQP_ZVEC_TRACE",
+    "OPENQP_DFTB_STATE_SPECTRUM",
+)
+
+
+def _call_with_native_diagnostics(callback, *, print_level, state_spectrum):
+    """Run one native call while capturing flushed Fortran stdout.
+
+    The C ABI predates structured diagnostics.  Its optional trace hooks write
+    to the preconnected Fortran output unit, so capture file descriptor 1 for
+    the duration of the call and return the text for the normal OpenQP log.
+    Environment and descriptor changes are process-global; serialize them
+    within this Python process and restore both even on failure.
+    """
+    level = max(0, min(2, int(print_level)))
+    updates = {
+        "OPENQP_DFTB_SCC_TRACE": str(level),
+        "OPENQP_DFTB_SOLVER_TRACE": str(level),
+        "OPENQP_ZVEC_TRACE": str(level),
+        "OPENQP_DFTB_STATE_SPECTRUM": "1" if state_spectrum else "0",
+    }
+
+    with _NATIVE_DIAGNOSTIC_LOCK:
+        previous = {name: os.environ.get(name) for name in _NATIVE_DIAGNOSTIC_ENV}
+        for name, value in updates.items():
+            os.environ[name] = value
+        saved_stdout = None
+        try:
+            sys.stdout.flush()
+            saved_stdout = os.dup(1)
+            with tempfile.TemporaryFile(mode="w+b") as capture:
+                os.dup2(capture.fileno(), 1)
+                try:
+                    callback()
+                finally:
+                    # Core trace and spectrum writers flush their Fortran
+                    # output unit; restore stdout before decoding the capture.
+                    os.dup2(saved_stdout, 1)
+                capture.seek(0)
+                return capture.read().decode("utf-8", errors="replace")
+        finally:
+            if saved_stdout is not None:
+                os.close(saved_stdout)
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 def _bundled_parameter_path() -> str | None:
@@ -244,6 +292,13 @@ class OpenQPDFTBAdapter:
         state gradient back. No OpenQP build coupling, no Fortran module seam.
         """
         lib = self._native_library()
+        parameter_path = self._parameter_path()
+        self._log_settings_once(
+            method,
+            backend="native",
+            parameter_path=parameter_path,
+            library_path=str(getattr(lib, "_name", "")),
+        )
         natom = self.natom
         atoms = np.ascontiguousarray(
             np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
@@ -251,7 +306,7 @@ class OpenQPDFTBAdapter:
         coords_bohr = np.ascontiguousarray(
             np.asarray(self.mol.get_system(), dtype=np.float64).reshape(-1)
         )
-        parameter = self._parameter_path().encode("utf-8")
+        parameter = parameter_path.encode("utf-8")
         method_name = self._probe_method_name(method).encode("ascii")
 
         reference_energy = ctypes.c_double()
@@ -288,7 +343,7 @@ class OpenQPDFTBAdapter:
         vec_capacity = mo_capacity * nstate
         response_vectors = (ctypes.c_double * vec_capacity)()
 
-        lib.openqp_dftb_state_gradient(
+        native_call = lambda: lib.openqp_dftb_state_gradient(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             coords_bohr.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -368,6 +423,28 @@ class OpenQPDFTBAdapter:
             ctypes.c_int32(1024),
             ctypes.byref(status),
         )
+        state_spectrum = (
+            method not in _GROUND_TYPES
+            and not need_grad
+            and bool(self.dftb.get("state_to_state_spectrum", True))
+        )
+        native_trace = _call_with_native_diagnostics(
+            native_call,
+            print_level=int(self.dftb.get("print_level", 1)),
+            state_spectrum=state_spectrum,
+        )
+        if native_trace.strip():
+            dump_log(
+                self.mol,
+                title="PyOQP: OpenQP-DFTB native progress",
+                section="dftb_runtime",
+                info={
+                    "method": canonical_dftb_type(method),
+                    "state": int(state),
+                    "gradient": bool(need_grad),
+                    "text": native_trace,
+                },
+            )
         if status.value != 0:
             detail = status_message.value.decode("utf-8", errors="replace").strip()
             suffix = f": {detail}" if detail else ""
@@ -401,6 +478,7 @@ class OpenQPDFTBAdapter:
             gradient_bohr=gradient_bohr,
             excitation_energy=float(excitation_energy.value) if state > 0 else None,
             spin_square=float(spin_square.value) if state > 0 else None,
+            stdout=native_trace,
             all_state_energies=all_e,
             all_spin_squares=all_s2,
             relaxed_charges=np.frombuffer(relaxed_charges, dtype=np.float64).copy(),
@@ -500,6 +578,12 @@ class OpenQPDFTBAdapter:
     def _run_probe(self, method: str, state: int) -> _StateResult:
         executable = self._probe_executable()
         parameter_path = self._parameter_path()
+        self._log_settings_once(
+            method,
+            backend="probe",
+            parameter_path=parameter_path,
+            executable=executable,
+        )
         with tempfile.TemporaryDirectory(prefix="openqp-dftb-") as tmpdir:
             xyz_path = Path(tmpdir) / "molecule.xyz"
             self._write_xyz(xyz_path)
@@ -523,12 +607,6 @@ class OpenQPDFTBAdapter:
                 str(int(self.config.get("input", {}).get("charge", 0))),
                 "erf" if self._lc_gamma_is_erf() else "yukawa",
             ]
-            dump_log(
-                self.mol,
-                title="PyOQP: OpenQP-DFTB state calculation",
-                section="dftb",
-                info=[method, state, parameter_path],
-            )
             completed = subprocess.run(
                 cmd,
                 check=False,
@@ -544,6 +622,47 @@ class OpenQPDFTBAdapter:
                 f"method={method}, state={state}, rc={completed.returncode}\n{tail}"
             )
         return self._parse_probe_output(state, completed.stdout)
+
+    def _log_settings_once(
+        self,
+        method: str,
+        *,
+        backend: str,
+        parameter_path: str,
+        library_path: str = "",
+        executable: str = "",
+    ) -> None:
+        """Write one settings block per distinct DFTB request, not per state."""
+        signature = (
+            canonical_dftb_type(method),
+            backend,
+            parameter_path,
+            library_path,
+            executable,
+            tuple(sorted((str(key), repr(value)) for key, value in self.dftb.items())),
+            tuple(sorted(
+                (str(key), repr(value))
+                for key, value in self.config.get("tdhf", {}).items()
+            )),
+        )
+        logged = getattr(self.mol, "_openqp_dftb_logged_settings", None)
+        if logged is None:
+            logged = set()
+            self.mol._openqp_dftb_logged_settings = logged
+        if signature in logged:
+            return
+        logged.add(signature)
+        dump_log(
+            self.mol,
+            title="PyOQP: OpenQP-DFTB settings",
+            section="dftb",
+            info={
+                "backend": backend,
+                "parameter_path": parameter_path,
+                "library_path": library_path,
+                "executable": executable,
+            },
+        )
 
     def _parse_probe_output(self, state: int, stdout: str) -> _StateResult:
         reference_energy = None
@@ -587,32 +706,10 @@ class OpenQPDFTBAdapter:
         )
 
     def _resolved_method(self) -> str:
-        explicit = str(self.dftb.get("type", "auto")).strip().lower()
-        if explicit and explicit != "auto":
-            return explicit
-
-        runtype = str(self.config.get("input", {}).get("runtype", "energy")).lower()
-        istate = int(self.config.get("optimize", {}).get("istate", 0))
-        if runtype in {"optimize", "mep"} and istate == 0:
-            return "ground"
-
-        td_type = str(self.config.get("tdhf", {}).get("type", "tda")).lower()
-
-        # A plain energy/gradient run that targets no excited state and does not
-        # explicitly request an open-shell (SF/MRSF) response is a ground-state
-        # DFTB job. An explicit tdhf.type=sf/mrsf is honored even for
-        # runtype=energy, so it is NOT collapsed to ground here.
-        if runtype in {"energy", "grad"} and td_type in {"rpa", "tda"}:
-            grad_states = [int(x) for x in self.config.get("properties", {}).get("grad", [])]
-            if not any(s > 0 for s in grad_states):
-                return "ground"
-
-        try:
-            return _EXCITED_METHOD_BY_TDHF_TYPE[td_type]
-        except KeyError as exc:
-            raise ValueError(
-                f"Cannot derive OpenQP-DFTB response type from tdhf.type={td_type!r}."
-            ) from exc
+        method = resolved_dftb_type(self.config)
+        if method not in {"ground", "ground_noscc", "tddftb", "sf", "mrsf"}:
+            raise ValueError(f"Unknown OpenQP-DFTB calculation type: {method!r}.")
+        return method
 
     def _effective_nstate(self) -> int:
         config = self.config
@@ -838,6 +935,8 @@ class OpenQPDFTBAdapter:
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
             float(self.dftb.get("response_tolerance", 1.0e-6)),
+            int(self.dftb.get("print_level", 1)),
+            bool(self.dftb.get("state_to_state_spectrum", True)),
             # DTCAM operator surface + preset: a Python workflow may retune
             # these on the same molecule, so cached results must not outlive
             # them.
@@ -863,11 +962,6 @@ class OpenQPDFTBAdapter:
             return str(self._resolve_user_path(raw))
         bundled = _bundled_parameter_path()
         if bundled:
-            dump_log(
-                self.mol,
-                title="PyOQP: OpenQP-DFTB bundled parameter set (parameter_path not set)\n   "
-                + bundled,
-            )
             return bundled
         raise ValueError(
             "Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH "
@@ -914,20 +1008,7 @@ class OpenQPDFTBAdapter:
 
     @staticmethod
     def _probe_method_name(method: str) -> str:
-        # Normalize every accepted [dftb] type alias to one of the backend's
-        # method names (ground variants, tddftb, sf, mrsf). The input checker
-        # accepts spellings such as tda/td-dftb/sftddftb/mrsftddftb; the native
-        # C API does not recognize all of them, so canonicalize here.
-        method = method.lower()
-        canon = {
-            "dftb": "ground", "ground": "ground",
-            "dftb0": "ground_noscc", "noscc": "ground_noscc",
-            "ground_noscc": "ground_noscc",
-            "tddftb": "tddftb", "tda": "tddftb", "td-dftb": "tddftb", "rpa": "tddftb",
-            "sf": "sf", "sftddftb": "sf", "sf-tddftb": "sf",
-            "mrsf": "mrsf", "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
-        }
-        return canon.get(method, method)
+        return canonical_dftb_type(method)
 
     @staticmethod
     def _fmt(value) -> str:
@@ -945,9 +1026,9 @@ class OpenQPDFTBAdapter:
 
     def _reference_multiplicity(self, method: str) -> int:
         explicit = int(self.dftb.get("reference_multiplicity", 0))
-        if explicit > 0:
-            return explicit
-        return 3 if method in {"sf", "sftddftb", "sf-tddftb", "mrsf", "mrsftddftb", "mrsf-tddftb"} else 1
+        if canonical_dftb_type(method) in {"sf", "mrsf"}:
+            return explicit if explicit > 1 else 3
+        return explicit if explicit > 0 else 1
 
     def _spc_channel(self, key: str) -> float:
         value = self.dftb.get(key, None)

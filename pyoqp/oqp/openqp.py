@@ -15,6 +15,7 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.state_labels import canonical_dftb_type
 
 
 def dump_strings_from_parser(parser):
@@ -252,6 +253,18 @@ class _TheoryProxy:
 
     def dftb(self, **kwargs):
         return self._owner._dftb(**kwargs)
+
+    def ground_dftb(self, **kwargs):
+        return self._owner.ground_dftb(**kwargs)
+
+    def tddftb(self, **kwargs):
+        return self._owner.tddftb(**kwargs)
+
+    def sf_tddftb(self, **kwargs):
+        return self._owner.sf_tddftb(**kwargs)
+
+    def mrsf_tddftb(self, **kwargs):
+        return self._owner.mrsf_tddftb(**kwargs)
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -872,6 +885,22 @@ class OpenQP:
         """
         return _DFTBSectionProxy(self, "dftb")
 
+    def tddftb(self, **kwargs):
+        """Use the conventional singlet TD-DFTB (TDA) response helper."""
+        return self._dftb(response_type="tddftb", **kwargs)
+
+    def ground_dftb(self, **kwargs):
+        """Use the ground-state SCC-DFTB helper explicitly."""
+        return self._dftb(response_type="ground", **kwargs)
+
+    def sf_tddftb(self, **kwargs):
+        """Use the spin-flip TD-DFTB response helper."""
+        return self._dftb(response_type="sf", **kwargs)
+
+    def mrsf_tddftb(self, **kwargs):
+        """Use the mixed-reference spin-flip TD-DFTB response helper."""
+        return self._dftb(response_type="mrsf", **kwargs)
+
     def _dftb(self, runtype=None, response_type="mrsf", nstate=3,
               parameter_path=None, **keywords):
         """Use the optional OpenQP-DFTB backend through the normal OpenQP workflow."""
@@ -887,37 +916,25 @@ class OpenQP:
         # Resolve the response type BEFORE draining schema keywords: `type` is a
         # [dftb] schema key, so the generic drain below would otherwise consume
         # an explicit job.dftb(type=...) and silently fall back to response_type.
-        requested_type = str(keywords.pop("type", response_type)).lower()
+        requested_type = canonical_dftb_type(keywords.pop("type", response_type))
         for key in list(keywords.keys()):
             if key in dftb_schema and key != "type":
                 dftb_updates[key] = keywords.pop(key)
 
-        dftb_type = requested_type
         tdhf_type = {
             "ground": "tda",
-            "dftb": "tda",
-            "dftb0": "tda",
-            "noscc": "tda",
             "ground_noscc": "tda",
             "tddftb": "tda",
-            "td-dftb": "tda",
-            "tda": "tda",
             "sf": "sf",
-            "sftddftb": "sf",
-            "sf-tddftb": "sf",
             "mrsf": "mrsf",
-            "mrsftddftb": "mrsf",
-            "mrsf-tddftb": "mrsf",
         }.get(requested_type)
         if tdhf_type is None:
             raise ValueError("DFTB response_type must be ground, tddftb, sf, or mrsf.")
 
-        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
-        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
-        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
-        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
-        dftb_updates["type"] = _BACKEND_TYPE.get(dftb_type, dftb_type)
+        dftb_updates["type"] = requested_type
         self.section("dftb", **dftb_updates)
+        if requested_type in {"sf", "mrsf"}:
+            self.scf(type="rohf", multiplicity=3)
         return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
 
     def soc(self, nstate=3, functional=None, reference="rohf",
