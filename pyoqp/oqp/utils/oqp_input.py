@@ -122,8 +122,8 @@ class CalculationSpec:
             "mp2": "MP2",
             "dftb": "DFTB",
             "dftb0": "DFTB0",
-            "tddftb": "TD-DFTB",
-            "tda-dftb": "TDA-TDDFTB",
+            "tddftb": "TD-DFTB (TDA)",
+            "tda-dftb": "TD-DFTB (TDA)",
             "sf-dftb": "SF-TDDFTB",
             "mrsf-dftb": "MRSF-TDDFTB",
             "mrsf-hf": "MRSF-TDHF",
@@ -217,7 +217,8 @@ GENERIC_SCHEMA_KEYS = {
         backend parameter_path library_path executable scc_tolerance scc_mixer
         scc_mixing scc_history scc_max_step max_scc_iterations
         response_tolerance response_max_iterations response_max_subspace
-        response_solver spc spc_coco spc_ovov spc_coov omega cam_alpha
+        response_solver print_level state_to_state_spectrum
+        spc spc_coco spc_ovov spc_coov omega cam_alpha
         cam_beta lc_gamma lc_ground_state zvector spin_complete mrsf_shift_oo
         mrsf_shift_co mrsf_shift_ov mrsf_shift_cv timeout
         model c_mrsf c_mrsf_oo response_global_hybrid onsite_exchange_scale
@@ -1377,6 +1378,12 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "SF-TDDFT states are not safely labelable before the run; use root=N"
             )
+        if model in {"tddftb", "tda-dftb"} and state.label and \
+                state.label.startswith("T"):
+            raise OQPInputError(
+                "Conventional TD-DFTB currently supports singlet targets only; "
+                "use sf-tddftb or mrsf-tddftb for triplet-state calculations"
+            )
         if model in {
             "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
             "dftb", "dftb0",
@@ -1968,7 +1975,7 @@ def lower_to_legacy(
             "sf": "sf", "sf-hf": "sf", "sf-dftb": "sf",
             "tddft": "rpa", "tdhf": "rpa",
             "tda": "tda", "tda-hf": "tda", "tda-dftb": "tda",
-            "tddftb": "rpa",
+            "tddftb": "tda",
         }[spec.model]
         put("tdhf", "type", td_type)
         multiplicities = [state.multiplicity for state in states if state.multiplicity]
@@ -1986,8 +1993,8 @@ def lower_to_legacy(
         "dftb", "dftb0", "tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"
     }:
         put("dftb", "type", {
-            "dftb": "auto", "dftb0": "ground_noscc", "tddftb": "tddftb",
-            "tda-dftb": "tda", "sf-dftb": "sf", "mrsf-dftb": "mrsf",
+            "dftb": "ground", "dftb0": "ground_noscc", "tddftb": "tddftb",
+            "tda-dftb": "tddftb", "sf-dftb": "sf", "mrsf-dftb": "mrsf",
         }[spec.model])
         if spec.model in {"dftb", "dftb0", "tddftb", "tda-dftb"}:
             reference_mult = spec.options.get("mult", 1)

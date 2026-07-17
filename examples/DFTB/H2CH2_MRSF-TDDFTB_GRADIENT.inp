@@ -1,4 +1,4 @@
-# MRSF-TDDFTB S1 gradient with the optional OpenQP-DFTB backend.
+# MRSF-TDDFTB S0 gradient with the optional OpenQP-DFTB backend.
 #
 #    group   keyword          value
 #  --------------------------------------

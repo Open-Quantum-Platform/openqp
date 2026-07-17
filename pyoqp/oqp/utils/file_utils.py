@@ -12,6 +12,7 @@ from oqp.utils.mpi_utils import mpi_dump
 from oqp.utils.qmmm import gradient_qmmm
 from oqp.utils.state_labels import (
     format_calculation_request,
+    format_dftb_settings,
     is_mrsf,
     public_method_name,
     public_state_label,
@@ -201,6 +202,36 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         resolved = getattr(mol, 'oqp_resolved_input', None)
         loginfo += '\n%s\n' % format_calculation_request(
             mol.config, source=source, resolved=resolved)
+
+    if section == 'dftb':
+        details = info if isinstance(info, dict) else {}
+        loginfo += '\n%s\n' % format_dftb_settings(
+            mol.config,
+            backend=details.get('backend'),
+            parameter_path=details.get('parameter_path'),
+            library_path=details.get('library_path'),
+            executable=details.get('executable'),
+            abi_version=details.get('abi_version'),
+            capabilities=details.get('capabilities'),
+        )
+
+    if section == 'dftb_runtime':
+        details = info if isinstance(info, dict) else {}
+        native_text = str(details.get('text', '')).strip()
+        loginfo += (
+            "\n   Native call: method=%s  state=%s  gradient=%s\n"
+            "   ------------------------------------------------------------\n"
+            % (
+                details.get('method', 'unknown'),
+                details.get('state', '?'),
+                _to_yes_no(details.get('gradient', False)),
+            )
+        )
+        if native_text:
+            loginfo += ''.join(
+                '   %s\n' % line for line in native_text.splitlines()
+            )
+        loginfo += '\n'
 
 
     if section == 'symmetry':

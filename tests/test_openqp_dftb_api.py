@@ -34,7 +34,7 @@ load_openqp_module = _load_api_helpers().load_openqp_module
 
 
 class TestOpenQPDftbAPI(unittest.TestCase):
-    def test_dftb_helper_defaults_to_mrsf_response(self):
+    def test_dftb_helper_preserves_legacy_mrsf_default(self):
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="h2_dftb")
@@ -49,6 +49,14 @@ class TestOpenQPDftbAPI(unittest.TestCase):
         self.assertEqual(config["dftb"]["parameter_path"], "mio-1-1")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["nstate"], "4")
+        self.assertEqual(config["scf"]["type"], "rohf")
+
+        ground = (
+            openqp.OpenQP(project="h2_explicit_ground_dftb")
+            .molecule("H 0 0 0; H 0 0 0.74")
+            .ground_dftb(parameter_path="mio-1-1")
+        )
+        self.assertEqual(ground.to_input_dict()["dftb"]["type"], "ground")
 
     def test_dftb_helper_maps_response_and_noscc_aliases(self):
         openqp = load_openqp_module()
@@ -68,7 +76,7 @@ class TestOpenQPDftbAPI(unittest.TestCase):
             .dftb(response_type="noscc", parameter_path="mio-1-1")
         )
         config = noscc.to_input_dict()
-        self.assertEqual(config["dftb"]["type"], "noscc")
+        self.assertEqual(config["dftb"]["type"], "ground_noscc")
         self.assertEqual(config["tdhf"]["type"], "tda")
 
         ground_noscc = (
@@ -109,23 +117,61 @@ class TestOpenQPDftbAPI(unittest.TestCase):
     def test_theory_namespace_dftb_response_families(self):
         openqp = load_openqp_module()
 
+        legacy_mrsf = (
+            openqp.OpenQP(project="h2_dftb")
+            .molecule("H 0 0 0; H 0 0 0.74")
+            .theory.dftb(parameter_path="mio-1-1")
+        )
+        self.assertEqual(legacy_mrsf.to_input_dict()["dftb"]["type"], "mrsf")
+
+        ground = (
+            openqp.OpenQP(project="h2_ground_dftb")
+            .molecule("H 0 0 0; H 0 0 0.74")
+            .theory.ground_dftb(parameter_path="mio-1-1")
+        )
+        self.assertEqual(ground.to_input_dict()["dftb"]["type"], "ground")
+
         mrsf = (
             openqp.OpenQP(project="h2_mrsf_dftb")
             .molecule("H 0 0 0; H 0 0 0.74")
-            .theory.dftb(response_type="mrsf", parameter_path="mio-1-1")
+            .theory.mrsf_tddftb(parameter_path="mio-1-1")
         )
         config = mrsf.to_input_dict()
         self.assertEqual(config["dftb"]["type"], "mrsf")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["scf"]["type"], "rohf")
+        self.assertEqual(config["scf"]["multiplicity"], "3")
 
         sf = (
             openqp.OpenQP(project="h2_sf_dftb")
             .molecule("H 0 0 0; H 0 0 0.74")
-            .theory("sf-tddftb", parameter_path="mio-1-1")
+            .theory.sf_tddftb(parameter_path="mio-1-1")
         )
         config = sf.to_input_dict()
         self.assertEqual(config["dftb"]["type"], "sf")
         self.assertEqual(config["tdhf"]["type"], "sf")
+
+        conventional = (
+            openqp.OpenQP(project="h2_tddftb")
+            .molecule("H 0 0 0; H 0 0 0.74")
+            .theory.tddftb(nstate=2, parameter_path="mio-1-1")
+        )
+        config = conventional.to_input_dict()
+        self.assertEqual(config["dftb"]["type"], "tddftb")
+        self.assertEqual(config["tdhf"]["type"], "tda")
+
+    def test_top_level_dftb_response_helpers_are_symmetric(self):
+        openqp = load_openqp_module()
+
+        for helper, expected in (
+            ("ground_dftb", "ground"),
+            ("tddftb", "tddftb"),
+            ("sf_tddftb", "sf"),
+            ("mrsf_tddftb", "mrsf"),
+        ):
+            job = openqp.OpenQP(project=helper)
+            getattr(job, helper)(nstate=2, parameter_path="mio-1-1")
+            self.assertEqual(job.to_input_dict()["dftb"]["type"], expected)
 
     def test_workflow_soc_accepts_dftb_mrsf(self):
         openqp = load_openqp_module()

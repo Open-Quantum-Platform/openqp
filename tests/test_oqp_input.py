@@ -11,7 +11,8 @@ import pytest
 # Importing oqp normally loads liboqp.  The semantic parser intentionally has no
 # native dependency, so exercise it directly to keep these tests fast and usable
 # in source-only documentation/editor environments.
-MODULE_PATH = Path(__file__).parents[1] / "pyoqp" / "oqp" / "utils" / "oqp_input.py"
+ROOT = Path(__file__).parents[1]
+MODULE_PATH = ROOT / "pyoqp" / "oqp" / "utils" / "oqp_input.py"
 SPEC = importlib.util.spec_from_file_location("_openqp_semantic_input", MODULE_PATH)
 oqp_input = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = oqp_input
@@ -1102,6 +1103,7 @@ def test_dftb_route_types_and_open_shell_reference_reach_adapter():
         'dftb(parameter_path="minimal.opdftb")'
     )
     assert td["dftb"]["type"] == "tddftb"
+    assert td["tdhf"]["type"] == "tda"
 
     _, ground = _parse(
         'dftb geom="radical.xyz" mult=2 energy() '
@@ -1113,10 +1115,10 @@ def test_dftb_route_types_and_open_shell_reference_reach_adapter():
 @pytest.mark.parametrize(
     "route,expected_type",
     [
-        ("dftb", "auto"),
+        ("dftb", "ground"),
         ("dftb0", "ground_noscc"),
         ("tddftb(nstate=2)", "tddftb"),
-        ("tda-tddftb(nstate=2)", "tda"),
+        ("tda-tddftb(nstate=2)", "tddftb"),
     ],
 )
 def test_default_dftb_reference_multiplicity_is_not_forwarded_to_probe(route, expected_type):
@@ -1151,25 +1153,53 @@ def test_dftb0_route_and_alias_lower_to_non_scc_ground_state():
     assert legacy["properties"]["grad"] == "0"
 
 
-def test_tda_tddftb_route_preserves_tda_and_physical_triplet_mapping():
+def test_tda_tddftb_route_is_canonical_tda_singlet_response():
     spec, legacy = _parse(
-        'tddftb-tda(nstate=3) geom="h2o.xyz" grad(T0) '
+        'tddftb-tda(nstate=3) geom="h2o.xyz" grad(S1) '
         'dftb(parameter_path="minimal.opdftb")'
     )
 
     assert spec.model == "tda-dftb"
-    assert spec.physical_method == "TDA-TDDFTB"
+    assert spec.physical_method == "TD-DFTB (TDA)"
     assert oqp_input.render_canonical_oqp(spec).startswith("tda-tddftb(nstate=3) ")
     assert legacy["tdhf"]["type"] == "tda"
-    assert legacy["tdhf"]["multiplicity"] == "3"
-    assert legacy["dftb"]["type"] == "tda"
-    assert legacy["dftb"]["target_multiplicity"] == "3"
+    assert legacy["tdhf"]["multiplicity"] == "1"
+    assert legacy["dftb"]["type"] == "tddftb"
+    assert legacy["dftb"]["target_multiplicity"] == "1"
     assert legacy["properties"]["grad"] == "1"
 
-    with pytest.raises(OQPInputError, match="singlet or triplet"):
+    with pytest.raises(OQPInputError, match="supports singlet targets only"):
         oqp_input.parse_canonical_oqp(
-            'tda-tddftb(nstate=3) geom="h2o.xyz" grad(Q0)'
+            'tda-tddftb(nstate=3) geom="h2o.xyz" grad(T0)'
         )
+
+
+def test_conventional_tddftb_triplet_is_rejected_with_spin_flip_guidance():
+    with pytest.raises(OQPInputError, match="use sf-tddftb or mrsf-tddftb"):
+        oqp_input.parse_canonical_oqp(
+            'tddftb(nstate=3) geom="h2o.xyz" grad(T1)'
+        )
+
+
+@pytest.mark.parametrize(
+    "filename,expected_model,expected_type",
+    [
+        ("H2_DFTB_ENERGY.oqp", "dftb", "ground"),
+        ("H2O_TDDFTB_ENERGY.oqp", "tddftb", "tddftb"),
+        ("CH2_SF-TDDFTB_ENERGY.oqp", "sf-dftb", "sf"),
+        ("CH2_MRSF-TDDFTB_ENERGY.oqp", "mrsf-dftb", "mrsf"),
+    ],
+)
+def test_minimal_dftb_family_examples_parse(filename, expected_model, expected_type):
+    example_dir = ROOT / "examples" / "DFTB"
+    text = (example_dir / filename).read_text(encoding="utf-8")
+
+    spec = oqp_input.parse_canonical_oqp(text)
+    legacy = oqp_input.lower_to_legacy(spec, source_dir=example_dir)
+
+    assert spec.model == expected_model
+    assert legacy["input"]["method"] == "dftb"
+    assert legacy["dftb"]["type"] == expected_type
 
 
 def test_sf_tddftb_route_uses_high_spin_reference_and_explicit_root():
