@@ -457,37 +457,81 @@ class OQPEngine:
         return True
 
     # -- one macro-iteration ------------------------------------------------ #
+    def _bounded_cartesian_recovery(self, gradient):
+        """Reject an unstable internal step and take one bounded Cartesian step.
+
+        A failed DLC/RIC back-transformation must never contaminate the stored
+        secant pair or Hessian.  The next macroiteration can build a normal
+        internal step again from this finite geometry.
+        """
+        self.trust = max(self.trust * 0.5, self.trust_min)
+        self.H = self.coords.guess_hessian(self.x)
+        self._prev = None
+        gradient = np.asarray(gradient, dtype=float).reshape(-1)
+        if not np.all(np.isfinite(gradient)):
+            return self.x.copy()
+        # Normalize in two stages to avoid overflowing the norm of a very
+        # large, yet finite, electronic gradient.
+        scale = float(np.max(np.abs(gradient)))
+        if scale <= 1.0e-300 or not np.isfinite(scale):
+            return self.x.copy()
+        direction = gradient / scale
+        rms = float(np.sqrt(np.mean(direction * direction)))
+        if rms <= 1.0e-14 or not np.isfinite(rms):
+            return self.x.copy()
+        return self._enforce_frozen_distance_values(
+            self.x - direction * (self.trust / rms)
+        )
+
     def _take_step(self, e, g_cart):
         b = self.coords.b_matrix(self.x)
         g_cart = self._project_constraint_tangent(g_cart, self.x)
+        if (not np.isfinite(e) or not np.all(np.isfinite(b))
+                or not np.all(np.isfinite(g_cart))
+                or not np.all(np.isfinite(self.H))):
+            return self._bounded_cartesian_recovery(g_cart)
         g_q = self.coords.grad_to_q(self.x, g_cart)
+        if not np.all(np.isfinite(g_q)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         if self._prev is not None:
             s = self._prev["dq"]
             y = g_q - self._prev["g_q"]
-            self.H = self._update_hessian(self.H, s, y)
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                self.H = self._update_hessian(self.H, s, y)
+            if not np.all(np.isfinite(self.H)):
+                return self._bounded_cartesian_recovery(g_cart)
             actual = e - self._prev["e"]
             pred = self._prev["pred"]
             self._update_trust(actual, pred, self._prev["cart_step"])
 
         dq = self._rfo_step(self.H, g_q)
         dq = self._restrict_to_trust(b, dq)
+        if not np.all(np.isfinite(dq)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         x_new, ok = self.coords.back_transform(self.x, dq)
         if not ok:
-            # Shrink and retry once; otherwise fall back to a plain scaled step.
+            # Shrink and retry once; otherwise use a finite Cartesian recovery.
             self.trust = max(self.trust * 0.5, self.trust_min)
             dq = self._restrict_to_trust(b, dq)
             x_new, ok = self.coords.back_transform(self.x, dq)
             if not ok:
-                x_new = self.x + (b.T @ dq) * 0.5
+                return self._bounded_cartesian_recovery(g_cart)
 
         x_new = self._enforce_frozen_distance_values(x_new)
+        if not np.all(np.isfinite(x_new)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         dq_taken = self.coords.q_displacement(self.coords.q(x_new),
                                               self.coords.q(self.x))
         cart_step = self.coords.cart_rmsd(self.x, x_new)
-        pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
+        if not np.all(np.isfinite(dq_taken)) or not np.isfinite(cart_step):
+            return self._bounded_cartesian_recovery(g_cart)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
+        if not np.isfinite(pred):
+            return self._bounded_cartesian_recovery(g_cart)
         self._prev = {"e": e, "g_q": g_q, "dq": dq_taken,
                       "pred": pred, "cart_step": cart_step,
                       "x": self.x.copy()}
@@ -565,9 +609,16 @@ class OQPEngine:
     def _restrict_to_trust(self, b, dq):
         # Estimate the Cartesian motion of this internal step and scale so its
         # RMSD does not exceed the trust radius.
+        if not np.all(np.isfinite(b)) or not np.all(np.isfinite(dq)):
+            return np.full_like(dq, np.nan)
         ginv, _ = self.coords._g_inverse(b) if hasattr(self.coords, "_g_inverse") \
             else (np.eye(b.shape[0]), 0)
-        dx = b.T @ (ginv @ dq) if hasattr(self.coords, "_g_inverse") else dq
+        if not np.all(np.isfinite(ginv)):
+            return np.full_like(dq, np.nan)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            dx = b.T @ (ginv @ dq) if hasattr(self.coords, "_g_inverse") else dq
+        if not np.all(np.isfinite(dx)):
+            return np.full_like(dq, np.nan)
         rmsd = float(np.sqrt(np.mean(dx ** 2)))
         if rmsd > self.trust and rmsd > 1.0e-14:
             dq = dq * (self.trust / rmsd)

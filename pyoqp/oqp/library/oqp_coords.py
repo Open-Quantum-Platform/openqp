@@ -356,6 +356,8 @@ class RedundantInternalCoordinates:
         """
         x = np.asarray(x, dtype=float).reshape(-1, 3)
         q_target = self.q(x) + dq
+        if not np.all(np.isfinite(q_target)):
+            return x.reshape(-1), False
         x_cur = x.copy()
         prev_norm = None
         best = x_cur.copy()
@@ -363,7 +365,12 @@ class RedundantInternalCoordinates:
             b = self.b_matrix(x_cur)
             ginv, _ = self._g_inverse(b)
             dq_remain = self.q_displacement(q_target, self.q(x_cur))
+            if (not np.all(np.isfinite(b)) or not np.all(np.isfinite(ginv))
+                    or not np.all(np.isfinite(dq_remain))):
+                return best.reshape(-1), False
             err = np.linalg.norm(dq_remain)
+            if not np.isfinite(err):
+                return best.reshape(-1), False
             if prev_norm is not None and err > prev_norm * 1.0001 + 1.0e-10:
                 # Diverging: return the best Cartesian step found so far.
                 return best.reshape(-1), False
@@ -371,8 +378,12 @@ class RedundantInternalCoordinates:
             best = x_cur.copy()
             if err < tol:
                 return x_cur.reshape(-1), True
-            dx = (b.T @ (ginv @ dq_remain)).reshape(-1, 3)
-            x_cur = x_cur + dx
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                dx = (b.T @ (ginv @ dq_remain)).reshape(-1, 3)
+                x_next = x_cur + dx
+            if not np.all(np.isfinite(dx)) or not np.all(np.isfinite(x_next)):
+                return best.reshape(-1), False
+            x_cur = x_next
         # Did not fully converge; accept the closest geometry but flag it.
         return best.reshape(-1), prev_norm is not None and prev_norm < 1.0e-3
 
@@ -439,6 +450,8 @@ class DelocalizedInternalCoordinates:
     def back_transform(self, x, dq, tol=1.0e-6, maxiter=50):
         x = np.asarray(x, dtype=float).reshape(-1, 3)
         s_target = self.q(x) + dq
+        if not np.all(np.isfinite(s_target)):
+            return x.reshape(-1), False
         x_cur = x.copy()
         prev = None
         best = x_cur.copy()
@@ -446,14 +459,24 @@ class DelocalizedInternalCoordinates:
             b = self.b_matrix(x_cur)
             ginv, _ = self._g_inverse(b)
             ds = s_target - self.q(x_cur)
+            if (not np.all(np.isfinite(b)) or not np.all(np.isfinite(ginv))
+                    or not np.all(np.isfinite(ds))):
+                return best.reshape(-1), False
             err = np.linalg.norm(ds)
+            if not np.isfinite(err):
+                return best.reshape(-1), False
             if prev is not None and err > prev * 1.0001 + 1.0e-10:
                 return best.reshape(-1), False
             prev = err
             best = x_cur.copy()
             if err < tol:
                 return x_cur.reshape(-1), True
-            x_cur = x_cur + (b.T @ (ginv @ ds)).reshape(-1, 3)
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                dx = (b.T @ (ginv @ ds)).reshape(-1, 3)
+                x_next = x_cur + dx
+            if not np.all(np.isfinite(dx)) or not np.all(np.isfinite(x_next)):
+                return best.reshape(-1), False
+            x_cur = x_next
         return best.reshape(-1), prev is not None and prev < 1.0e-3
 
     def cart_rmsd(self, x, x_new):

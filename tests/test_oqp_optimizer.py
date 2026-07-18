@@ -10,6 +10,7 @@ import sys
 import tempfile
 import types
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -796,6 +797,16 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
 
+    def test_dlc_back_transform_rejects_overflow_without_poisoning_geometry(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        huge_step = np.full(len(ic.q(self.WATER_X)), 1.0e308)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new, ok = ic.back_transform(self.WATER_X, huge_step)
+        self.assertFalse(ok)
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertTrue(np.allclose(x_new, self.WATER_X.reshape(-1)))
+
     def test_multifragment_tric(self):
         # Two well-separated triangular C3 fragments (each non-collinear, so
         # rotation is well defined): TRIC must span the full 3N = 18.
@@ -941,6 +952,18 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
     WATER_AT = [8, 1, 1]
     WATER_X = np.array([[0, 0, 0.12], [0, 1.43, -0.96],
                         [0, -1.43, -0.96]], float)
+
+    def test_failed_internal_back_transform_uses_finite_cartesian_recovery(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
+                           trust=0.1)
+        original = eng.x.copy()
+        eng.coords.back_transform = lambda x, dq: (np.asarray(x).copy(), False)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.linspace(-0.1, 0.1, 9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertFalse(np.allclose(x_new, original))
+        self.assertIsNone(eng._prev)
 
     def test_omitted_hessian_keeps_existing_model(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")
