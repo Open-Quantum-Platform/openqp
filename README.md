@@ -115,13 +115,6 @@ Python API.
 pip install openqp
 ```
 
-The native optimizer is included by default.  Install the optional legacy
-geomeTRIC backend only when it is needed:
-
-```bash
-pip install 'openqp[geometric]'
-```
-
 For a source checkout:
 
 ```bash
