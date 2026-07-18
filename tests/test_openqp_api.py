@@ -838,6 +838,8 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "9 10 17 18 19")
 
     def test_qmmm_frontier_scheme_sets_section_key(self):
         openqp = load_openqp_module()
@@ -874,15 +876,16 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="socnamd_qmmm")
-            .molecule("chromo.pdb 0 1 2 3 4", basis="6-31g*")
+            .molecule("chromo.pdb 0-4", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
-            .qmmm(qm_atoms="0-4", cutoff="PME")
+            .qmmm(cutoff="PME")
         )
         job.workflow.namd(soc=True, soc_basis="mch", nstep=200, dt=0.5, init_state="S1")
         config = job.to_input_dict()
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
         self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["md"]["soc"], "True")
         self.assertEqual(config["md"]["soc_basis"], "mch")

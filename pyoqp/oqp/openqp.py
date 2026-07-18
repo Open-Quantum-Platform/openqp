@@ -474,9 +474,10 @@ class OpenQP:
 
         Sets ``[input] qmmm_flag=true`` and populates ``[qmmm]``. The QM geometry
         and atom selection come from ``job.molecule("file.pdb <indices>")``.
-        When ``pdb_file`` is omitted, it is inferred from that molecular-system
-        value for both single-point and molecular-dynamics workflows. Combine
-        with ``job.workflow.namd(...)`` for (SOC-)NAMD-QMMM dynamics.
+        When ``pdb_file`` or ``qm_atoms`` is omitted, it is inferred from that
+        molecular-system value for both single-point and molecular-dynamics
+        workflows. Combine with ``job.workflow.namd(...)`` for
+        (SOC-)NAMD-QMMM dynamics.
 
         ``forcefield`` is an alias for the ``[qmmm] forcefield_files`` list.
         ``qm_atoms`` accepts a string (``"0-2"`` / ``"0 1 2"``) or a list of
@@ -500,9 +501,12 @@ class OpenQP:
             ff = ",".join(str(item) for item in ff)
         if isinstance(qm_atoms, (list, tuple)):
             qm_atoms = " ".join(str(index) for index in qm_atoms)
+        system = self.config_str.get("input", {}).get("system")
+        inferred_pdb, inferred_qm_atoms = self._qmmm_selection_from_system(system)
         if pdb_file is None:
-            system = self.config_str.get("input", {}).get("system")
-            pdb_file = self._pdb_file_from_system(system)
+            pdb_file = inferred_pdb
+        if qm_atoms is None:
+            qm_atoms = inferred_qm_atoms
 
         self.set(**{"input.qmmm_flag": True})
         updates = {}
@@ -526,18 +530,21 @@ class OpenQP:
         return self
 
     @staticmethod
-    def _pdb_file_from_system(system):
-        """Return the PDB prefix from ``input.system`` when one is present."""
+    def _qmmm_selection_from_system(system):
+        """Return the PDB path and atom selector from ``input.system``."""
         if not isinstance(system, str):
-            return None
+            return None, None
         first_line = next(
             (line.strip() for line in system.splitlines() if line.strip()),
             "",
         )
         if not first_line:
-            return None
-        candidate = first_line.split()[0]
-        return candidate if candidate.lower().endswith(".pdb") else None
+            return None, None
+        fields = first_line.split()
+        if not fields[0].lower().endswith(".pdb"):
+            return None, None
+        selector = " ".join(fields[1:]) or None
+        return fields[0], selector
 
     @staticmethod
     def _looks_like_basis(value):
