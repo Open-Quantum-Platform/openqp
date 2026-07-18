@@ -286,8 +286,13 @@ def get_optimizer(mol):
     # It is selected as a MECI search algorithm rather than as a separate
     # backend; the historical three-state ``tci`` spelling remains below.
     meci_search = str(
-        mol.config['optimize'].get('meci_search', 'penalty')
+        mol.config['optimize'].get('meci_search', 'auto')
     ).strip().lower()
+    if lib == 'oqp' and runtype == 'meci' and meci_search == 'auto':
+        # Lazy import preserves compatibility with lightweight dispatcher test
+        # doubles and keeps the automatic orchestration native-only.
+        from oqp.library.liboqp import OQPAutoMECIOpt
+        return OQPAutoMECIOpt(mol)
     if lib == 'oqp' and runtype == 'meci' and meci_search == 'baeka':
         # Lazy import keeps lightweight dispatcher test doubles compatible;
         # normal OpenQP installations load the real native class here.

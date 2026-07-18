@@ -1,6 +1,5 @@
 rhf/3-21g
 d4=false
-energy
 guess(type=sap,save_mol=false)
 scf(maxit=30,maxdiis=5,conv=1e-08,save_molden=false)
 dftgrid(rad_npts=96,ang_npts=302,pruned="")

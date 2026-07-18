@@ -593,7 +593,20 @@ class OQPEngine:
         sy = float(s @ y)
         hs = h @ s
         shs = float(s @ hs)
-        if sy > 1.0e-12 and shs > 1.0e-12:
+        if shs <= 1.0e-12:
+            return h
+        # Powell damping keeps the minimum-search Hessian positive definite
+        # when a noisy/flat electronic surface violates the raw BFGS curvature
+        # condition.  Previously those updates were simply skipped, leaving a
+        # stale model Hessian that could drive repeated oscillatory steps.
+        if sy < 0.2 * shs:
+            denominator = shs - sy
+            if denominator <= 1.0e-14:
+                return h
+            theta = 0.8 * shs / denominator
+            y = theta * y + (1.0 - theta) * hs
+            sy = float(s @ y)
+        if sy > 1.0e-12:
             h = h + np.outer(y, y) / sy - np.outer(hs, hs) / shs
         return h
 

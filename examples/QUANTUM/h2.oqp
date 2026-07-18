@@ -1,4 +1,3 @@
 rhf/sto-3g
-energy
 guess(type=huckel)
 geom="../geometries/H2-069e977a383f.xyz"

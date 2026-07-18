@@ -87,7 +87,7 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"penalty", "ubp", "hybrid", "baeka"}
+MECI_SEARCH = {"auto", "penalty", "ubp", "hybrid", "baeka"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -1854,9 +1854,9 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
     if runtype in {"meci", "mecp"}:
-        search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+        search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
         multistates = _as_list(_get(config, "optimize", "states", []))
-        if runtype == "meci" and search == "baeka" and multistates:
+        if runtype == "meci" and search in {"auto", "baeka"} and multistates:
             requested.extend(multistates)
         else:
             requested.append(_get(config, "optimize", "istate", 0))
@@ -2085,7 +2085,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     kstate = _get(config, "optimize", "kstate", 0)
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
-    meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+    meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
     meci_states = _as_list(_get(config, "optimize", "states", []))
 
     if bool(_get(config, "input", "qmmm_flag", False)):
@@ -2121,6 +2121,42 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if lib == "oqp":
+        auto_recovery = _get(config, "oqp", "auto_recovery", True)
+        if not isinstance(auto_recovery, bool):
+            report.add(
+                "ERROR", "oqp.auto_recovery",
+                "Native optimizer recovery must be a boolean.",
+                value=auto_recovery, expected="true or false",
+                action="Set [oqp] auto_recovery=true to enable the safe restart.",
+            )
+        recovery_maxit = _get(config, "oqp", "recovery_maxit", 30)
+        try:
+            valid_recovery_maxit = int(recovery_maxit) > 0
+        except (TypeError, ValueError):
+            valid_recovery_maxit = False
+        if not valid_recovery_maxit:
+            report.add(
+                "ERROR", "oqp.recovery_maxit",
+                "Native optimizer recovery needs a positive step budget.",
+                value=recovery_maxit, expected="a positive integer",
+                action="Set [oqp] recovery_maxit=30 or another positive integer.",
+            )
+        recovery_trust = _get(config, "oqp", "recovery_trust", 0.02)
+        try:
+            valid_recovery_trust = (
+                math.isfinite(float(recovery_trust))
+                and float(recovery_trust) > 0.0
+            )
+        except (TypeError, ValueError):
+            valid_recovery_trust = False
+        if not valid_recovery_trust:
+            report.add(
+                "ERROR", "oqp.recovery_trust",
+                "Native optimizer recovery trust radius must be positive.",
+                value=recovery_trust, expected="a finite positive number",
+                action="Set [oqp] recovery_trust=0.02.",
+            )
+
         freeze = str(_get(config, "oqp", "freeze", "") or "").strip()
         if freeze:
             if runtype != "optimize":
@@ -2253,7 +2289,8 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected="tdhf or dftb",
                 action="Set [input] method=tdhf or method=dftb and configure the response state space.",
             )
-        if (meci_search != "baeka" or not meci_states) and jstate <= istate:
+        if (meci_search not in {"auto", "baeka"} or not meci_states) \
+                and jstate <= istate:
             report.add(
                 "ERROR",
                 "optimize.jstate",
@@ -2269,9 +2306,9 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use penalty, ubp, hybrid, or baeka.",
+                action="Use auto (recommended), penalty, ubp, hybrid, or baeka.",
             )
-        elif meci_search == "baeka":
+        elif meci_search in {"auto", "baeka"}:
             selected = meci_states or [istate, jstate]
             try:
                 selected = [int(state) for state in selected]
@@ -2302,7 +2339,8 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                     expected="1,2 or 1,2,3,...",
                     action="Sort the roots and include every intervening state.",
                 )
-            if lib != "oqp":
+            if lib != "oqp" and (
+                    meci_search == "baeka" or len(selected) > 2):
                 report.add(
                     "ERROR", "optimize.lib",
                     "BaekA multistate MECI is implemented by the native oqp optimizer.",

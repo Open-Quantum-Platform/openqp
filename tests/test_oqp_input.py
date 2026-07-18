@@ -238,12 +238,30 @@ def test_one_primary_driver_only_and_no_grad_opt_fallback():
         )
 
 
-def test_no_driver_defaults_to_explicitly_rendered_energy():
+def test_no_driver_defaults_to_implicit_energy_and_renderer_keeps_it_implicit():
     spec, legacy = _parse('dft/pbe0/def2-svp geom="h2o.xyz" charge=0')
     assert spec.driver.name == "energy"
     assert spec.driver.explicit is False
     assert legacy["input"]["runtype"] == "energy"
-    assert "\nenergy\n" in oqp_input.render_canonical_oqp(spec)
+    rendered = oqp_input.render_canonical_oqp(spec)
+    assert "\nenergy\n" not in rendered
+    assert rendered == 'dft/pbe0/def2-svp\ngeom="h2o.xyz"\n'
+
+
+def test_explicit_bare_energy_renders_as_the_same_implicit_default():
+    implicit, _ = _parse('dft/pbe0/def2-svp geom="h2o.xyz"')
+    explicit, _ = _parse('dft/pbe0/def2-svp geom="h2o.xyz" energy()')
+    assert oqp_input.render_canonical_oqp(explicit) == (
+        oqp_input.render_canonical_oqp(implicit)
+    )
+
+
+def test_energy_state_selector_is_not_dropped():
+    spec, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" energy(T0)'
+    )
+    assert legacy["tdhf"]["multiplicity"] == "3"
+    assert "\nenergy(T0)\n" in oqp_input.render_canonical_oqp(spec)
 
 
 @pytest.mark.parametrize("driver", ["opt", "opt()"])
@@ -369,7 +387,6 @@ H 0 1 0
 
     assert rendered == (
         "hf/sto-3g\n"
-        "energy\n"
         'geom="""\n'
         "O 0 0 0\n"
         "H 0 0 1\n"
@@ -406,7 +423,6 @@ def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses()
     rendered = oqp_input.render_canonical_oqp(spec)
     assert rendered == (
         "dft/pbe0/def2-svp\n"
-        "energy\n"
         "pcm\n"
         "nmr\n"
         "d4\n"
@@ -1001,7 +1017,7 @@ def test_irc_public_options_lower_to_owning_sections():
     assert legacy["oqp"]["path_gtol"] == "2e-05"
     assert legacy["hess"]["type"] == "analytical"
 
-    with pytest.raises(OQPInputError, match="native OpenQP optimizer automatically"):
+    with pytest.raises(OQPInputError, match="does not define option 'lib'"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" irc(S0,lib=geometric,step=0.1)'
         )
@@ -1079,13 +1095,87 @@ def test_geometry_drivers_are_native_and_mep_aliases_map_correctly():
         "init_hessian": "numerical", "coordsys": "dlc", "trust": "0.1",
         "trust_max": "0.3", "follow": "1",
     }
-    with pytest.raises(OQPInputError, match="native OpenQP optimizer automatically"):
+    with pytest.raises(OQPInputError, match="does not define option 'lib'"):
         oqp_input.parse_canonical_oqp(
             'dft/pbe0/def2-svp geom="ts.xyz" ts(S0,lib=geometric)'
         )
 
 
+def test_readable_opt_supports_native_recovery_and_explicit_geometric_backend():
+    native_text = """
+mrsf-tddftb(nstate=3)
+opt(S0,lib=oqp,maxit=100,auto_recovery=true,recovery_maxit=40,recovery_trust=0.02)
+dftb(model=dtcam-tb)
+geom="c60.xyz"
+"""
+    native_spec, native = _parse(native_text)
+    assert native["optimize"]["lib"] == "oqp"
+    assert native["oqp"]["auto_recovery"] == "True"
+    assert native["oqp"]["recovery_maxit"] == "40"
+    assert native["oqp"]["recovery_trust"] == "0.02"
+    rendered_native = oqp_input.render_canonical_oqp(native_spec)
+    assert "\nopt(S0,lib=oqp," in rendered_native
+    assert rendered_native.rstrip().endswith('geom="c60.xyz"')
+
+    geometric_text = """
+mrsf-tddftb(nstate=3)
+opt(S0,lib=geometric,maxit=200,coordsys=dlc,trust=0.02,tmax=0.05,
+    convergence_set=GAU,hessian=never)
+dftb(model=dtcam-tb)
+geom="c60.xyz"
+"""
+    geometric_spec, geometric = _parse(geometric_text)
+    assert geometric["optimize"]["lib"] == "geometric"
+    assert geometric["geometric"] == {
+        "coordsys": "dlc",
+        "trust": "0.02",
+        "tmax": "0.05",
+        "convergence_set": "GAU",
+        "hessian": "never",
+    }
+    reparsed_geometric = oqp_input.parse_canonical_oqp(
+        oqp_input.render_canonical_oqp(geometric_spec)
+    )
+    assert reparsed_geometric.driver == geometric_spec.driver
+    assert reparsed_geometric.modifiers == geometric_spec.modifiers
+    assert reparsed_geometric.options == geometric_spec.options
+
+
+@pytest.mark.parametrize(
+    "options,message",
+    [
+        ("lib=scipy", "must be oqp or geometric"),
+        ("lib=geometric,trust=0.2,tmax=0.1", "0 < trust <= tmax"),
+        ("lib=geometric,trust_max=0.2", "native lib=oqp option"),
+        ("lib=oqp,tmax=0.1", "only with opt.*lib=geometric"),
+        ("lib=oqp,auto_recovery=1", "must be true or false"),
+        ("lib=oqp,recovery_maxit=0", "positive integer"),
+    ],
+)
+def test_readable_opt_rejects_backend_option_mismatches(options, message):
+    with pytest.raises(OQPInputError, match=message):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp opt(S0,%s) geom="h2o.xyz"' % options
+        )
+
+
 def test_baeka_is_a_variadic_meci_algorithm_with_safe_defaults():
+    _, automatic_two = _parse(
+        'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" meci(S0,S1)'
+    )
+    assert automatic_two["optimize"]["meci_search"] == "auto"
+
+    _, automatic_with_penalty_controls = _parse(
+        'mrsf-tddftb(nstate=2)\n'
+        'meci(S0,S1,pen_incre=1.2,max_grad=0.01,'
+        'rmsd_step=0.02,max_step=0.03)\n'
+        'geom="guess.xyz"'
+    )
+    assert automatic_with_penalty_controls["optimize"]["meci_search"] == "auto"
+    assert automatic_with_penalty_controls["optimize"]["pen_incre"] == "1.2"
+    assert automatic_with_penalty_controls["optimize"]["max_grad"] == "0.01"
+    assert automatic_two["optimize"]["states"] == "1,2"
+
     _, two = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="guess.xyz" '
         'meci(S0,S1,algorithm=baeka)'
@@ -1121,7 +1211,10 @@ def test_baeka_is_a_variadic_meci_algorithm_with_safe_defaults():
 
 
 def test_baeka_rejects_ambiguous_or_nonconsecutive_requests():
-    with pytest.raises(OQPInputError, match="more than two states require algorithm=baeka"):
+    with pytest.raises(
+        OQPInputError,
+        match="more than two states require algorithm=auto or algorithm=baeka",
+    ):
         oqp_input.parse_canonical_oqp(
             'mrsf(nstate=5)/bhhlyp/6-31g* geom="g.xyz" '
             'meci(S0,S1,S2,algorithm=penalty)'

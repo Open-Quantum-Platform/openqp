@@ -306,6 +306,11 @@ class MECIOpt(Optimizer):
         super().__init__(mol)
 
         self.meci_search = mol.config['optimize']['meci_search']
+        # ``auto`` is orchestrated by the native OQP backend.  Other backends
+        # retain their established two-state penalty objective rather than
+        # failing while constructing the shared MECI objective.
+        if self.meci_search == 'auto':
+            self.meci_search = 'penalty'
         self.sigma = mol.config['optimize']['pen_sigma']
         self.alpha = mol.config['optimize']['pen_alpha']
         self.incre = mol.config['optimize']['pen_incre']
@@ -1062,4 +1067,3 @@ class QMMMOpt(Optimizer):
                 dump_log(self.mol,
                          title='PyOQP: Geometry Optimization Has Not Converged. Reached The Maximum Iteration')
                 raise StopIteration
-

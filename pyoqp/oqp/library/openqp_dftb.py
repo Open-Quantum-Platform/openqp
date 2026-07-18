@@ -353,7 +353,8 @@ class OpenQPDFTBAdapter:
         backend = str(self.dftb.get("backend", "native")).lower()
         self._reject_probe_with_embedding(backend)
         if backend in {"native", "auto"}:
-            result = self._run_native(method, state, need_grad=need_grad)
+            result = self._run_native_with_scc_recovery(
+                method, state, need_grad=need_grad)
         elif backend == "probe":
             result = self._run_probe(method, state)
         else:
@@ -361,6 +362,74 @@ class OpenQPDFTBAdapter:
 
         cache[key] = result
         return result
+
+    @staticmethod
+    def _is_scc_nonconvergence(error: RuntimeError) -> bool:
+        """Return whether a native failure is specifically an SCC failure.
+
+        Parameter, ABI, response, and gradient failures must not be hidden by
+        changing an unrelated electronic optimizer.  The native ground-state
+        drivers use the phrases below for both closed- and open-shell SCC
+        exhaustion.
+        """
+        message = str(error).lower()
+        return (
+            "scc" in message
+            and (
+                "did not converge" in message
+                or "not converged" in message
+                or "nonconver" in message
+            )
+        )
+
+    @staticmethod
+    def _scc_recovery_ladder(primary: str) -> tuple[str, ...]:
+        """Minimal per-geometry SCC ladder, ending in charge/orbital TRAH."""
+        primary = str(primary).lower()
+        if primary in {"trust", "trah"}:
+            return (primary,)
+        if primary in {"broyden", "diis"}:
+            return (primary, "trust")
+        if primary in {"anderson", "pulay"}:
+            return (primary, "broyden", "trust")
+        if primary == "linear":
+            return (primary, "anderson", "broyden", "trust")
+        # The native auto mixer starts from Anderson/Pulay.  Make the two
+        # genuinely different fallbacks explicit after it is exhausted.
+        return (primary, "broyden", "trust")
+
+    def _run_native_with_scc_recovery(
+            self, method: str, state: int, *, need_grad: bool) -> _StateResult:
+        """Retry SCC failures at this geometry, then restore the primary mixer.
+
+        Geometry optimizers construct a fresh adapter at each evaluation, but
+        ``dftb`` is the molecule's shared configuration dictionary.  Restoring
+        it in ``finally`` is therefore essential: a geometry that needed
+        Broyden or TRAH must not force the next geometry to start there.
+        """
+        primary = str(self.dftb.get("scc_mixer", "auto")).lower()
+        ladder = self._scc_recovery_ladder(primary)
+        try:
+            for attempt, mixer in enumerate(ladder):
+                self.dftb["scc_mixer"] = mixer
+                try:
+                    return self._run_native(method, state, need_grad=need_grad)
+                except RuntimeError as error:
+                    if not self._is_scc_nonconvergence(error) or attempt + 1 == len(ladder):
+                        raise
+                    next_mixer = ladder[attempt + 1]
+                    dump_log(
+                        self.mol,
+                        title=(
+                            "PyOQP: DFTB SCC recovery at the current geometry\n"
+                            f"   {mixer} did not converge; retrying with {next_mixer}.\n"
+                            f"   The next geometry will restart with {primary}."
+                        ),
+                    )
+        finally:
+            self.dftb["scc_mixer"] = primary
+
+        raise AssertionError("DFTB SCC recovery ladder exhausted unexpectedly")
 
     def _run_native(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
         """Call libopenqp_dftb_c (the standalone openqp-dftb shared C API) in-process.

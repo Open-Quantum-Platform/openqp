@@ -318,15 +318,16 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "ekt": _keys("ip ea"),
     "properties": _keys("grad"),
     "optimize": _keys("""
-        maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
+        lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
         imult jmult energy_shift energy_gap meci_search pen_sigma pen_alpha
         pen_incre pen_delta pen_jump gap_weight init_scf
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
-        coordsys trust trust_max freeze follow init_hessian spring climb fmax frms
-        climb_fmax neb_dt maxmove align opt_ends end_fmax neb_output irc_step
-        irc_direction mep_step path_gtol
+        coordsys trust trust_max auto_recovery recovery_maxit recovery_trust
+        freeze follow init_hessian spring climb fmax frms climb_fmax neb_dt
+        maxmove align opt_ends end_fmax neb_output irc_step irc_direction
+        mep_step path_gtol
     """),
     "hess": _keys("type state dx nproc read restart temperature clean"),
     "nac": _keys("type dt dx bp nproc restart clean states align"),
@@ -344,7 +345,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
 # native OpenQP geometry engine.  Keeping these keys in the inventory preserves
 # the legacy schema without exposing them as canonical top-level options.
 LEGACY_ONLY_SCHEMA_KEYS = {
-    "optimize": _keys("lib optimizer step_size step_tol mep_maxit"),
+    "optimize": _keys("optimizer step_size step_tol mep_maxit"),
     "geometric": _keys("""
         coordsys trust tmax convergence_set prefix hessian irc_direction
         constraints_file enforce conmethod
@@ -447,16 +448,24 @@ TOP_OPTION_ALIASES = {
 
 # Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
-# workflow options that may live directly in the primary call.  Backend names
-# are deliberately absent: concise ``.oqp`` geometry workflows always use the
-# native OpenQP engine.  Traditional ``.inp`` files retain backend selection.
+# workflow options that may live directly in the primary call.
 _OPT_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
     "energy_shift", "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
-_NATIVE_ENGINE_OPTIONS = {"coordsys", "trust", "trust_max"}
+_NATIVE_ENGINE_OPTIONS = {
+    "coordsys", "trust", "trust_max",
+    "auto_recovery", "recovery_maxit", "recovery_trust",
+}
 _NATIVE_CONSTRAINT_OPTIONS = {"freeze"}
+_GEOMETRIC_ENGINE_OPTIONS = {
+    "coordsys", "trust", "tmax", "convergence_set", "hessian",
+}
+_OPTIMIZER_BACKEND_OPTIONS = (
+    {"lib"} | _NATIVE_ENGINE_OPTIONS | _NATIVE_CONSTRAINT_OPTIONS
+    | _GEOMETRIC_ENGINE_OPTIONS
+)
 _MECI_PUBLIC_OPTIONS = {
     "algorithm", "sigma", "alpha", "delta_beta", "beta_schedule", "gap",
 }
@@ -472,7 +481,7 @@ _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
-    "optimize": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | set(_NATIVE_CONSTRAINT_OPTIONS),
+    "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mecp": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
@@ -1159,6 +1168,13 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         )
     if driver.name not in expected_counts and driver.name != "meci" and len(states) > 1:
         raise OQPInputError("%s accepts at most one target state" % driver.name)
+    if driver.name == "meci":
+        roots_with_spin = [
+            (state.multiplicity, _internal_root(model, state))
+            for state in states
+        ]
+        if len(set(roots_with_spin)) != len(roots_with_spin):
+            raise OQPInputError("meci requires distinct states")
     if driver.name == "energy" and states:
         if model not in RESPONSE_MODELS or any(
             state.label is None or state.physical_index != 0 for state in states
@@ -1175,17 +1191,18 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                if driver.name == "meci" else _driver_options(driver))
     if driver.name == "meci":
         algorithm = str(options.get(
-            "meci_search", "baeka" if len(states) > 2 else "penalty"
+            "meci_search", "baeka" if len(states) > 2 else "auto"
         )).strip().lower()
-        if algorithm not in {"penalty", "ubp", "hybrid", "baeka"}:
+        if algorithm not in {"auto", "penalty", "ubp", "hybrid", "baeka"}:
             raise OQPInputError(
-                "meci algorithm must be penalty, ubp, hybrid, or baeka"
+                "meci algorithm must be auto, penalty, ubp, hybrid, or baeka"
             )
-        if len(states) > 2 and algorithm != "baeka":
+        if len(states) > 2 and algorithm not in {"auto", "baeka"}:
             raise OQPInputError(
-                "MECI calculations with more than two states require algorithm=baeka"
+                "MECI calculations with more than two states require "
+                "algorithm=auto or algorithm=baeka"
             )
-        if algorithm == "baeka":
+        if algorithm in {"auto", "baeka"}:
             roots = sorted(_internal_root(model, state) for state in states)
             if any(right != left + 1 for left, right in zip(roots, roots[1:])):
                 raise OQPInputError(
@@ -1223,13 +1240,18 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                     "BaekA gap_weight is fixed at 1.0; use sigma for the "
                     "published penalty multiplier"
                 )
-            if "pen_incre" in options:
+            # ``auto`` starts with the historical penalty objective, where
+            # pen_incre and the ordinary geometry convergence thresholds are
+            # still meaningful.  They become invalid only for a direct BaekA
+            # request, which has no conventional penalty phase.
+            if algorithm == "baeka" and "pen_incre" in options:
                 raise OQPInputError(
                     "BaekA uses additive delta_beta, not legacy pen_incre"
                 )
-            unused_convergence = {
-                "max_grad", "rmsd_step", "max_step"
-            }.intersection(options)
+            unused_convergence = (
+                {"max_grad", "rmsd_step", "max_step"}.intersection(options)
+                if algorithm == "baeka" else set()
+            )
             if unused_convergence:
                 raise OQPInputError(
                     "BaekA convergence does not use %s; remove it and use "
@@ -1255,24 +1277,19 @@ def _validate_semantics(spec: CalculationSpec) -> None:
                 )
         elif {"pen_delta", "pen_jump"}.intersection(options):
             raise OQPInputError(
-                "delta_beta and beta_schedule are used only with algorithm=baeka"
+                "delta_beta and beta_schedule are used only with "
+                "algorithm=auto or algorithm=baeka"
             )
     legacy_backend_options = {
-        "lib", "optimizer", "step_size", "step_tol", "mep_maxit",
+        "optimizer", "step_size", "step_tol", "mep_maxit",
         "k", "maxg", "avgg", "optep",
     }.intersection(options)
     if legacy_backend_options:
         key = sorted(legacy_backend_options)[0]
-        if key == "lib":
-            raise OQPInputError(
-                ".oqp uses the native OpenQP optimizer automatically; remove lib. "
-                "For geomeTRIC or SciPy, use a traditional sectioned .inp file "
-                "with [optimize] lib=geometric or lib=scipy."
-            )
         if key in {"optimizer", "step_size", "step_tol", "mep_maxit"}:
             raise OQPInputError(
                 "%s is a legacy SciPy-backend option. Concise .oqp workflows "
-                "use the native OpenQP optimizer automatically." % key
+                "support lib=oqp or lib=geometric." % key
             )
         replacement = {
             "k": "spring", "maxg": "fmax", "avgg": "frms", "optep": "opt_ends",
@@ -1289,6 +1306,32 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             "%s does not define option '%s'; use the exact legacy section call for advanced options"
             % (driver.name, key)
         )
+    backend = str(options.get("lib", "oqp")).strip().lower()
+    if driver.name == "optimize":
+        if backend not in {"oqp", "geometric"}:
+            raise OQPInputError(
+                "opt lib must be oqp or geometric in concise .oqp input"
+            )
+        if backend == "geometric":
+            native_only = {
+                "trust_max", "auto_recovery", "recovery_maxit",
+                "recovery_trust", "freeze",
+            }.intersection(options)
+            if native_only:
+                raise OQPInputError(
+                    "%s is a native lib=oqp option; use geomeTRIC tmax or a "
+                    "traditional constraints file as appropriate"
+                    % sorted(native_only)[0]
+                )
+        else:
+            geometric_only = {
+                "tmax", "convergence_set", "hessian",
+            }.intersection(options)
+            if geometric_only:
+                raise OQPInputError(
+                    "%s is available only with opt(...,lib=geometric)"
+                    % sorted(geometric_only)[0]
+                )
     if driver.name in {"optimize", "meci", "mecp", "tci", "mep", "ts", "irc", "neb"}:
         if "maxit" in options:
             if not _is_positive_integer(options["maxit"]):
@@ -1300,7 +1343,20 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             raise OQPInputError(
                 "coordsys must be auto, tric, dlc, ric, internal, cart, or cartesian"
             )
-        if {"trust", "trust_max"}.intersection(options):
+        if driver.name == "optimize" and backend == "geometric":
+            try:
+                trust = float(options.get("trust", 0.1))
+                tmax = float(options.get("tmax", 0.3))
+            except (TypeError, ValueError) as exc:
+                raise OQPInputError(
+                    "geomeTRIC trust and tmax must be positive numbers"
+                ) from exc
+            if (not math.isfinite(trust) or not math.isfinite(tmax)
+                    or trust <= 0 or tmax <= 0 or trust > tmax):
+                raise OQPInputError(
+                    "geomeTRIC trust and tmax require 0 < trust <= tmax"
+                )
+        elif {"trust", "trust_max"}.intersection(options):
             try:
                 trust = float(options.get("trust", 0.2))
                 trust_max = float(options.get("trust_max", 0.5))
@@ -1309,6 +1365,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             if (not math.isfinite(trust) or not math.isfinite(trust_max)
                     or trust <= 0 or trust_max <= 0 or trust > trust_max):
                 raise OQPInputError("trust and trust_max require 0 < trust <= trust_max")
+        if "auto_recovery" in options and not isinstance(
+                options["auto_recovery"], bool):
+            raise OQPInputError("auto_recovery must be true or false")
+        if "recovery_maxit" in options and not _is_positive_integer(
+                options["recovery_maxit"]):
+            raise OQPInputError("recovery_maxit must be a positive integer")
+        if "recovery_trust" in options:
+            try:
+                recovery_trust = float(options["recovery_trust"])
+                if not math.isfinite(recovery_trust) or recovery_trust <= 0:
+                    raise ValueError
+            except (TypeError, ValueError) as exc:
+                raise OQPInputError(
+                    "recovery_trust must be a positive number"
+                ) from exc
         if "freeze" in options:
             if driver.name != "optimize":
                 raise OQPInputError("freeze is currently supported only by opt(...)")
@@ -2203,8 +2274,16 @@ def lower_to_legacy(
             put("properties", key, value)
     elif name in {"optimize", "mep", "ts", "irc", "neb"}:
         put("optimize", "istate", roots[0] if roots else 0)
+        optimizer_backend = str(
+            driver_options.get("lib", "oqp")
+        ).strip().lower()
         for key, value in driver_options.items():
-            if name == "neb" and key in {"product", "images", "nimage"}:
+            if name == "optimize" and key == "lib":
+                put("optimize", "lib", optimizer_backend)
+            elif (name == "optimize" and optimizer_backend == "geometric"
+                  and key in _GEOMETRIC_ENGINE_OPTIONS):
+                put("geometric", key, value)
+            elif name == "neb" and key in {"product", "images", "nimage"}:
                 target_key = "nimage" if key in {"images", "nimage"} else "product"
                 if target_key == "product":
                     value = _resolve_path(value, source_dir)
@@ -2256,10 +2335,10 @@ def lower_to_legacy(
         if name == "meci":
             driver_options = _normalized_meci_options(spec.driver)
             algorithm = str(driver_options.get(
-                "meci_search", "baeka" if len(roots) > 2 else "penalty"
+                "meci_search", "baeka" if len(roots) > 2 else "auto"
             )).strip().lower()
             driver_options["meci_search"] = algorithm
-            if algorithm == "baeka":
+            if algorithm in {"auto", "baeka"}:
                 put("optimize", "states", roots)
                 driver_options.setdefault("pen_sigma", 1.0)
                 driver_options.setdefault("pen_alpha", 0.02)
@@ -2411,9 +2490,13 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         for call in spec.modifiers
         if (normalized := _normalize_default_section_call(call)) is not None
     ]
-    calls = [_render_call(driver)] + [
-        _render_call(call) for call in normalized_modifiers
-    ]
+    # A bare energy calculation is the language default.  Keep an explicit
+    # energy state selector (for example energy(T0)), but do not make generated
+    # inputs repeat an otherwise empty ``energy`` driver line.
+    calls = []
+    if driver.name != "energy" or _driver_states(driver) or _driver_options(driver):
+        calls.append(_render_call(driver))
+    calls.extend(_render_call(call) for call in normalized_modifiers)
     geometry_parts = [
         "%s=%s" % (key, _render_geometry_value(spec.options[key]))
         for key in ("geom", "geom2")

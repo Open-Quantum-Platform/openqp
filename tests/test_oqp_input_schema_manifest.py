@@ -120,8 +120,8 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
 
     assert owner_counts == {
         "generic": 204,
-        "route_driver": 104,
-        "legacy_only": 21,
+        "route_driver": 108,
+        "legacy_only": 20,
         "intentional_forbidden": 1,
     }
     assert oqp_input.INTENTIONALLY_FORBIDDEN_SCHEMA_KEYS == {
@@ -161,27 +161,37 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     assert len(checked) == 204
 
 
-def test_legacy_backend_schema_is_recognized_but_not_canonical():
+def test_geometric_backend_is_canonical_only_through_opt_driver_options():
     oqp_input = _load_oqp_input()
 
     assert oqp_input.LEGACY_ONLY_SCHEMA_KEYS == {
-        "optimize": frozenset({"lib", "optimizer", "step_size", "step_tol", "mep_maxit"}),
+        "optimize": frozenset({"optimizer", "step_size", "step_tol", "mep_maxit"}),
         "geometric": frozenset({
             "coordsys", "trust", "tmax", "convergence_set", "prefix",
             "hessian", "irc_direction", "constraints_file", "enforce", "conmethod",
         }),
         "neb": frozenset({"k", "maxg", "avgg", "climb", "align", "optep"}),
     }
-    for text in (
-        'dft/pbe0/def2-svp geom="h2o.xyz" opt(S0,lib=geometric)',
-        'dft/pbe0/def2-svp geom="h2o.xyz" opt(S0) geometric(coordsys=tric)',
-    ):
-        try:
-            oqp_input.parse_canonical_oqp(text)
-        except oqp_input.OQPInputError as exc:
-            assert "traditional sectioned .inp" in str(exc)
-        else:
-            raise AssertionError("legacy optimizer controls must not enter canonical .oqp")
+    spec = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp opt(S0,lib=geometric,coordsys=dlc) geom="h2o.xyz"'
+    )
+    assert oqp_input.lower_to_legacy(spec)["optimize"]["lib"] == "geometric"
+    try:
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp opt(S0) geometric(coordsys=tric) geom="h2o.xyz"'
+        )
+    except oqp_input.OQPInputError as exc:
+        assert "traditional sectioned .inp" in str(exc)
+    else:
+        raise AssertionError("exact geometric(...) remains a legacy section call")
+
+
+def test_native_optimization_and_meci_defaults_are_automatic():
+    defaults = _schema_defaults_from_ast()
+
+    assert defaults["oqp"]["coordsys"] == ("auto", "str")
+    assert defaults["oqp"]["auto_recovery"] == ("True", "bool")
+    assert defaults["optimize"]["meci_search"] == ("auto", "str")
 
 
 def test_route_driver_manifest_matches_public_driver_coverage():
@@ -190,7 +200,7 @@ def test_route_driver_manifest_matches_public_driver_coverage():
 
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
-        | {"istate", "jstate", "kstate", "states", "imult", "jmult"}
+        | {"lib", "istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}
     assert owners["oqp"] == set().union(*oqp_input.OQP_DRIVER_OPTIONS.values())

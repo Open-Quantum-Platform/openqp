@@ -1,5 +1,4 @@
 rks/bhhlyp/6-31g*
-energy
 guess(type=huckel)
 dftgrid(rad_type=becke)
 properties(scf_prop="el_mom,mulliken,lowdin,resp")

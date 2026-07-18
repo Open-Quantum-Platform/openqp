@@ -395,7 +395,10 @@ OQP_CONFIG_SCHEMA = {
         'jmult': {'type': int, 'default': '3'},
         'energy_shift': {'type': float, 'default': '1e-6'},
         'energy_gap': {'type': float, 'default': '1e-5'},
-        'meci_search': {'type': str, 'default': 'penalty'},
+        # Native two-state searches start inexpensively with the conventional
+        # penalty and escalate to BaekA only when needed; multistate searches
+        # select BaekA directly. Other backends map auto to their penalty path.
+        'meci_search': {'type': str, 'default': 'auto'},
         'pen_sigma': {'type': float, 'default': '1.0'},
         'pen_alpha': {'type': float, 'default': '0.0'},
         'pen_incre': {'type': float, 'default': '1.0'},
@@ -423,9 +426,18 @@ OQP_CONFIG_SCHEMA = {
         'conmethod': {'type': int, 'default': '0'},
     },
     'oqp': {
-        'coordsys': {'type': str, 'default': 'tric'},
+        # ``auto`` is resolved by the shared native optimizer for every
+        # electronic method: DLC-RFO generally minimizes macro-iterations,
+        # with a smaller trust profile for large/flat systems.
+        'coordsys': {'type': str, 'default': 'auto'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
+        # A failed/stalled native minimum search is restarted from its
+        # lowest-energy geometry with a fresh model Hessian, DLC coordinates,
+        # and a smaller trust radius.  This stays entirely inside lib=oqp.
+        'auto_recovery': {'type': bool, 'default': 'True'},
+        'recovery_maxit': {'type': int, 'default': '30'},
+        'recovery_trust': {'type': float, 'default': '0.02'},
         # Native constrained optimization.  Current public syntax accepts one
         # or more frozen atom-pair distances, e.g. distance(1,2).
         'freeze': {'type': str, 'default': ''},
