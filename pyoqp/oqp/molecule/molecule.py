@@ -1406,7 +1406,7 @@ class Molecule:
                     energies, dtype=float).ravel().tolist()
                 data['energy'] = data['energies'][0]
             for key in ('dftb_excited_states', 'dftb_energy_components',
-                        'dftb_resolved_options',
+                        'dftb_resolved_options', 'dftb_mo',
                         'dftb_mulliken', 'dftb_relaxed_mulliken'):
                 value = getattr(self, key, None)
                 if value:

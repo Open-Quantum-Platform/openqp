@@ -347,6 +347,56 @@ def test_state_configurations_render_before_summary_table():
     assert "Spin-adapted" not in dftb_trace.format_excited_state_summary(summary)
 
 
+def test_mo_table_shows_occupations_labels_and_markers():
+    mo = {
+        "reference": "high-spin ROKS reference",
+        "energies": [-0.9, -0.5, -0.4, -0.3, -0.1],
+        "occupations": [2, 2, 1, 1, 0],
+        "labels": ["ag", "bu", "au", "bg", "ag"],
+        "noca": 4,
+        "nocb": 2,
+    }
+    text = dftb_trace.format_mo_table(mo)
+
+    assert "Molecular orbitals (high-spin ROKS reference)" in text
+    assert "Irrep" in text
+    lines = text.splitlines()
+    assert any("(SOMO)" in line and "Au" in line for line in lines)
+    assert any("(SOMO)" in line and "Bg" in line for line in lines)
+    assert any("(HOMO)" in line and "Bu" in line for line in lines)
+    assert any("(LUMO)" in line for line in lines)
+
+    # Without labels the Irrep column disappears but the table still renders.
+    mo["labels"] = None
+    text = dftb_trace.format_mo_table(mo)
+    assert "Irrep" not in text and "(SOMO)" in text
+
+
+def test_state_irreps_appear_in_headers_and_summary():
+    summary = {
+        "method": "mrsf",
+        "state_labels": ["S0", "S1"],
+        "state_energies": [-10.4, -10.2],
+        "spin_squares": [0.0, 0.0],
+        "oscillator": {},
+        "transitions": [],
+        "configurations": {
+            "S0": [{"index": 1, "coeff": 0.99, "occ": 12, "vir": 11}],
+            "S1": [{"index": 2, "coeff": 0.70, "occ": 11, "vir": 11}],
+        },
+        "state_irreps": {"S0": "ag", "S1": "bu"},
+        "reference_energy": -10.0,
+        "reference_label": "Reference: high-spin ROKS (internal)",
+    }
+    text = dftb_trace.format_excited_state_summary(summary)
+
+    assert "Sym = Ag" in text
+    assert "Sym = Bu" in text
+    summary_rows = [line for line in text.splitlines()
+                    if line.strip().startswith("S1")]
+    assert summary_rows and "Bu" in summary_rows[-1]
+
+
 def test_charge_block_lists_atoms_and_dipole():
     text = dftb_trace.format_charge_block(
         ["C", "H"], [-0.1, 0.1], [0.0, 0.2, 0.0],

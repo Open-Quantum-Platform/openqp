@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import itertools
 import os
 from pathlib import Path
 import shutil
@@ -477,15 +478,21 @@ class OpenQPDFTBAdapter:
         step_times = (time.process_time() - step_cpu_start,
                       time.perf_counter() - step_wall_start)
         charge_info = None
+        mo_info = None
         if status.value == 0:
             charge_info = self._stash_mulliken_charges(
                 method, state, need_grad,
                 np.frombuffer(relaxed_charges, dtype=np.float64)[:natom],
                 atoms,
             )
+            if not need_grad:
+                mo_info = self._stash_orbital_info(
+                    method, int(nbf_out.value), int(noca_out.value),
+                    int(nocb_out.value), mo_energies, mo_coefficients)
         if native_trace.strip():
             self._log_native_progress(method, state, need_grad, native_trace,
                                       charge_info=charge_info,
+                                      mo_info=mo_info,
                                       step_times=step_times)
         self._raise_native_status(
             method=method,
@@ -602,7 +609,7 @@ class OpenQPDFTBAdapter:
                      section="text", info={"text": text})
 
     def _log_native_progress(self, method, state, need_grad, native_trace,
-                             charge_info=None, step_times=None):
+                             charge_info=None, mo_info=None, step_times=None):
         """Render the captured native trace as OpenQP-style iteration tables.
 
         openqp-dftb cannot append to the OpenQP log itself (the log unit
@@ -658,6 +665,11 @@ class OpenQPDFTBAdapter:
                 scc_blocks.append(charge_block)
             if scc_blocks:
                 sections.append(("PyOQP: DFTB SCC steps", scc_blocks))
+            if mo_info is not None:
+                mo_text = dftb_trace.format_mo_table(mo_info)
+                if mo_text:
+                    sections.append(("PyOQP: DFTB molecular orbitals",
+                                     [mo_text]))
             response_blocks = [
                 dftb_trace.format_davidson_block(
                     solve, dftb_method_name(self.config))
@@ -725,6 +737,105 @@ class OpenQPDFTBAdapter:
     # excitation analysis (the native MRSF-TDDFT log uses the same cutoff).
     _CONFIGURATION_COEFF_CUTOFF = 0.05
 
+    def _dftb_shells(self, nbf):
+        """Reconstruct the minimal-SK shell list [(atom, l, pure)], or None.
+
+        The C API does not export the per-AO map, but the minimal valence
+        basis is deterministic per element (1 = s, 4 = s+p, 9 = s+p+d AOs)
+        and shells are stored per atom in ascending l.  The assignment is
+        accepted only when exactly ONE per-element size combination matches
+        the exported nbf; d elements are declined because the SK d-component
+        order has not been validated against the labeler's convention.
+        """
+        atoms = [int(z) for z in np.asarray(self.mol.get_atoms()).reshape(-1)]
+        elements = sorted(set(atoms))
+        counts = {z: atoms.count(z) for z in elements}
+        matches = [
+            dict(zip(elements, sizes))
+            for sizes in itertools.product((1, 4, 9), repeat=len(elements))
+            if sum(counts[z] * size for z, size in zip(elements, sizes)) == nbf
+        ]
+        if len(matches) != 1:
+            return None
+        assignment = matches[0]
+        if any(size == 9 for size in assignment.values()):
+            return None
+        shells = []
+        # The labeler indexes detection permutations with the shell's atom
+        # index directly, so atoms are 0-based here.
+        for atom_index, z in enumerate(atoms):
+            for l in range({1: 1, 4: 2}[assignment[z]]):
+                shells.append((atom_index, l, True))
+        return shells
+
+    def _mo_symmetry_labels(self, coefficients, nbf):
+        """Abelian irrep label per MO when symmetry labeling is active.
+
+        Reuses the geometry-based point-group detection and the metadata-only
+        irrep assigner of the native path.  The DFTB s/p AO component order
+        (y, z, x) matches the labeler's CCA m-ascending spherical convention,
+        and the AO overlap follows from the complete orthonormal MO set as
+        S = (C C^T)^-1.  Any failure returns None (labeling is optional).
+        """
+        meta = getattr(self.mol, "symmetry_metadata", None) or {}
+        if not meta or meta.get("status", "disabled") == "disabled":
+            return None
+        if not meta.get("label_mo", True):
+            return None
+        detection = meta.get("detection")
+        if not detection:
+            return None
+        shells = self._dftb_shells(nbf)
+        if shells is None:
+            return None
+        try:
+            from oqp.library.symmetry import assign_mo_irreps  # noqa: PLC0415
+
+            overlap = np.linalg.inv(coefficients @ coefficients.T)
+            tolerance = max(float(meta.get("tolerance", 1.0e-5)), 1.0e-4)
+            result = assign_mo_irreps(
+                coefficients, overlap, shells,
+                detection["operations"], detection["character_table"],
+                tolerance=tolerance,
+                matrix_key="matrix_input_frame",
+            )
+            meta.setdefault("mo_labels", {})["dftb"] = result
+            labels = list(result.get("labels", []))
+            return labels or None
+        except Exception as exc:
+            # Metadata only: record why labeling was skipped, never fail.
+            meta.setdefault("mo_labels", {})["dftb"] = {
+                "status": "error", "error": str(exc),
+            }
+            return None
+
+    def _stash_orbital_info(self, method, nbf, noca, nocb,
+                            mo_energies, mo_coefficients):
+        """Record MO energies/occupations (+irrep labels) for log and JSON."""
+        if nbf <= 0:
+            return None
+        energies = np.frombuffer(mo_energies, dtype=np.float64)[:nbf].copy()
+        coefficients = np.frombuffer(
+            mo_coefficients, dtype=np.float64)[: nbf * nbf].reshape(
+            (nbf, nbf), order="F").copy()
+        occupations = [2 if index <= nocb else (1 if index <= noca else 0)
+                       for index in range(1, nbf + 1)]
+        labels = self._mo_symmetry_labels(coefficients, nbf)
+        if canonical_dftb_type(method) in {"sf", "mrsf"}:
+            reference = "high-spin ROKS reference"
+        else:
+            reference = "SCC reference"
+        mo_info = {
+            "reference": reference,
+            "energies": [float(value) for value in energies],
+            "occupations": occupations,
+            "labels": labels,
+            "noca": int(noca),
+            "nocb": int(nocb),
+        }
+        self.mol.dftb_mo = mo_info
+        return mo_info
+
     def _state_configurations(self, result, labels):
         """Dominant SF/MRSF amplitudes per state, keyed by public label."""
         vectors = result.response_vectors
@@ -751,6 +862,39 @@ class OpenQPDFTBAdapter:
                 })
             configurations[label] = entries
         return configurations
+
+    def _state_irreps(self, configurations, mo_labels, noca, nocb):
+        """State irrep from the dominant configuration (abelian groups).
+
+        The SF/MRSF CSF is the reference determinant with one alpha-occupied
+        electron moved to a beta-virtual orbital, so its irrep is the product
+        of the reference irrep (the singly occupied orbitals) with the hole
+        and particle irreps.  Metadata only; any failure returns {}.
+        """
+        meta = getattr(self.mol, "symmetry_metadata", None) or {}
+        detection = meta.get("detection")
+        if not detection:
+            return {}
+        try:
+            from oqp.library.symmetry import product_irrep  # noqa: PLC0415
+
+            table = detection["character_table"]
+            somos = [mo_labels[index - 1]
+                     for index in range(int(nocb) + 1, int(noca) + 1)]
+            reference = product_irrep(somos, table) if somos else None
+            irreps = {}
+            for label, entries in configurations.items():
+                if not entries:
+                    continue
+                dominant = max(entries, key=lambda entry: abs(entry["coeff"]))
+                factors = [mo_labels[dominant["occ"] - 1],
+                           mo_labels[dominant["vir"] - 1]]
+                if reference:
+                    factors.append(reference)
+                irreps[label] = product_irrep(factors, table)
+            return irreps
+        except Exception:
+            return {}
 
     def _excited_state_summary(self, result):
         """Build the excited-state summary payload from one response solve."""
@@ -808,6 +952,11 @@ class OpenQPDFTBAdapter:
         configurations = {}
         if canonical in {"mrsf", "sf"}:
             configurations = self._state_configurations(result, labels)
+        state_irreps = {}
+        mo_labels = (getattr(self.mol, "dftb_mo", None) or {}).get("labels")
+        if configurations and mo_labels:
+            state_irreps = self._state_irreps(
+                configurations, mo_labels, result.noca, result.nocb)
 
         return {
             "method": canonical,
@@ -817,6 +966,7 @@ class OpenQPDFTBAdapter:
             "oscillator": oscillator,
             "transitions": transitions,
             "configurations": configurations,
+            "state_irreps": state_irreps,
             "approximation": approximation,
             "reference_label": reference_label,
             "reference_energy": reference_energy,
