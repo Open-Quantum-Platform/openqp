@@ -17,6 +17,21 @@ from oqp.library.qmmm_connectivity import (
 import oqp
 
 
+_VALID_EMBEDDINGS = {
+    "mechanical", "electrostatic", "espf", "espf_full", "split",
+}
+
+
+def _normalize_embedding(value):
+    embedding = str(value).strip().lower()
+    if embedding not in _VALID_EMBEDDINGS:
+        choices = ", ".join(sorted(_VALID_EMBEDDINGS))
+        raise ValueError(
+            f"Unknown QM/MM embedding '{value}'. Choices: {choices}"
+        )
+    return embedding
+
+
 def unpack_lower_tri_single(packed_atom, nbf):
     """
     Unpack a single lower-triangular packed array (length nbf*(nbf+1)/2)
@@ -144,7 +159,7 @@ class OpenQpQMMM:
         # calculation (the engine already sees the atoms in topology order).
         self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
         self.Cutoff = Cutoff
-        self.Embedding = Embedding
+        self.Embedding = _normalize_embedding(Embedding)
 
         self.use_mol = mol is not None
 
@@ -163,7 +178,7 @@ class OpenQpQMMM:
         # whole-molecule and covalent-boundary QM regions, so it is the default
         # for electrostatic embedding. ("split" selects the legacy scheme that
         # routes QM charges through OpenMM point charges -- kept for reference.)
-        self.espf_full = str(Embedding).lower() in (
+        self.espf_full = self.Embedding in (
             "espf", "espf_full", "electrostatic")
 
         # QM/MM boundary connectivity: hydrogen link atoms capping any covalent
@@ -256,7 +271,11 @@ class OpenQpQMMM:
             # ---- Mol mode ------------------------------------------------
             self._update_mol_positions()
             if str(self.mol.config['input']['method']).lower() == 'dftb':
-                return self._forces_qm_dftb(self.mol, potmm)
+                # Native AO-based methods need explicit zero POTMM/POTQM
+                # records in mechanical QM/MM, but the DFTB adapter uses
+                # ``None`` as the gas-phase/mechanical contract.
+                dftb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.mol, dftb_potmm)
             sp = SinglePoint(self.mol)
             sp._prep_guess()
 
@@ -302,7 +321,8 @@ class OpenQpQMMM:
             self.oqp_cfg_base["input.system"] = xyz_atoms
             self.op = OPENQP(self.oqp_cfg_base, True)
             if str(self.op.mol.config['input']['method']).lower() == 'dftb':
-                return self._forces_qm_dftb(self.op.mol, potmm)
+                dftb_potmm = None if self.Embedding == "mechanical" else potmm
+                return self._forces_qm_dftb(self.op.mol, dftb_potmm)
             self.op.sp._prep_guess()
 
             self.op.mol.data["OQP::POTMM"] = potmm
@@ -537,7 +557,7 @@ class OpenQpQMMM:
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
             potmm, potqm = self.electrostatic_potential()
-        else:
+        elif self.Embedding == "mechanical":
             # Mechanical embedding: the QM subsystem sees no MM field, so the
             # SCF is gas-phase and QM-MM electrostatics is left to OpenMM (via
             # the QM ESP charges in forces_mm). The embedding arrays must still
@@ -549,6 +569,8 @@ class OpenQpQMMM:
             # A zero field reproduces gas-phase QM exactly: it adds 0 to hcore,
             # contributes 0 to the ESPF gradient, and leaves eqm untouched.
             potmm, potqm = self._zero_embedding()
+        else:  # guarded in __init__; retain a local invariant for long-lived objects
+            raise ValueError(f"Unknown QM/MM embedding '{self.Embedding}'")
 
         eqm, gqm, pchg_qm = self.forces_qm_openqp(potmm=potmm, potqm=potqm)
         nqm = len(self.qm_atoms)

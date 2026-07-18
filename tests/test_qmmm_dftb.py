@@ -33,6 +33,8 @@ fixtures; the tests skip cleanly when any of these is absent.
 
 import os
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
@@ -57,7 +59,7 @@ except Exception:  # pragma: no cover - optional dependency
     _HAVE_OPENMM = False
 
 try:
-    from oqp.library.qmmm_driver import OpenQpQMMM
+    from oqp.library.qmmm_driver import OpenQpQMMM, _normalize_embedding
     _HAVE_OQP = True
 except Exception:  # pragma: no cover - uncompiled backend / missing OPENQP_ROOT
     _HAVE_OQP = False
@@ -253,6 +255,35 @@ def _dftb_cfg(parameter_path, *, excited=False):
     else:
         cfg.update({"properties.grad": "0", "dftb.type": "ground", "scf.type": "rhf"})
     return cfg
+
+
+@unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP,
+                     "OpenMM or compiled OpenQP backend unavailable")
+class TestQMMMDFTBEmbeddingDispatch(unittest.TestCase):
+    def test_mechanical_embedding_passes_none_to_dftb(self):
+        driver = object.__new__(OpenQpQMMM)
+        driver.use_mol = True
+        driver.Embedding = "mechanical"
+        driver.mol = SimpleNamespace(
+            config={"input": {"method": "dftb"}}
+        )
+        driver._update_mol_positions = mock.Mock()
+        expected = object()
+        driver._forces_qm_dftb = mock.Mock(return_value=expected)
+
+        result = driver.forces_qm_openqp(
+            potmm=np.zeros(2), potqm=np.zeros((2, 2))
+        )
+
+        self.assertIs(result, expected)
+        driver._forces_qm_dftb.assert_called_once_with(driver.mol, None)
+
+    def test_unknown_embedding_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown QM/MM embedding"):
+            _normalize_embedding("electrostatc")
+
+    def test_embedding_is_case_normalized(self):
+        self.assertEqual(_normalize_embedding(" Mechanical "), "mechanical")
 
 
 @unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP, "OpenMM or compiled OpenQP backend unavailable")
