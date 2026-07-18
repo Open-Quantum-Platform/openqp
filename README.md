@@ -52,10 +52,9 @@ The built-in optimizer uses redundant-internal / DLC / TRIC coordinates with
 restricted-step RFO/P-RFO and needs no external optimizer package.  It covers
 all primary geometry and reaction-path workflows above, including aligned,
 endpoint-optimized climbing-image NEB and optional numerical/analytical initial
-Hessians for transition-state searches.  Traditional sectioned `.inp` files
-may still select SciPy or [geomeTRIC](https://github.com/leeping/geomeTRIC);
-geomeTRIC remains an optional compatibility backend for advanced constrained
-optimization.
+Hessians for transition-state searches. SciPy and
+[geomeTRIC](https://github.com/leeping/geomeTRIC) remain optional compatibility
+backends for advanced constrained optimization.
 
 **Tutorials:** [Geometry optimization & TS](https://open-quantum-platform.github.io/openqp-tutorials/geometry-optimization/) · [Conical intersections](https://open-quantum-platform.github.io/openqp-tutorials/conical-intersections/)
 
@@ -136,22 +135,20 @@ The package install keeps the Python wrapper, native library, headers, and data 
 ### First Run
 
 ```bash
-openqp examples/HF/H2O_RHF-HF_ENERGY.inp          # OpenMP / sequential run
-mpirun -np <n> openqp any_example_file.inp        # MPI run
+openqp examples/HF/H2O_RHF-HF_ENERGY.oqp          # OpenMP / sequential run
+mpirun -np <n> openqp any_example_file.oqp        # MPI run
 openqp --run_tests all                            # default mixed regression suite
 ```
 
-Every legacy example has a concise `.oqp` companion. Select which input syntax
-the regression runner uses with `--input-format`:
+Every legacy example has a concise `.oqp` companion. To run the regression
+suite exclusively with concise inputs, use `--input-format`:
 
 ```bash
-openqp --run_tests all --input-format inp         # standard suite through .inp
 openqp --run_tests all --input-format oqp         # standard suite through .oqp
-openqp --run_tests all --input-format both        # both syntaxes in that suite
 ```
 
 Omitting the selector uses `auto`: it prefers `.oqp`, retains any legacy-only
-`.inp`, and keeps a small representative `.inp` compatibility set. The
+inputs, and keeps a small representative legacy compatibility set. The
 historical `all` scope still excludes unusually slow or non-self-contained
 examples; selecting an explicit directory applies the requested format to every
 input in that directory. Each calculation receives an isolated output folder,
