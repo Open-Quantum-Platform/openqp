@@ -303,6 +303,15 @@ class TestNativeRecoveryLadder(unittest.TestCase):
         self.assertTrue(
             optimizer._native_progress_stalled(flat_high_gradient)
         )
+        self.assertTrue(optimizer._is_electronic_nonconvergence(
+            RuntimeError(
+                "openqp-dftb LC density-matrix CPHF did not converge; "
+                "residual 5.1"
+            )
+        ))
+        self.assertFalse(optimizer._is_electronic_nonconvergence(
+            RuntimeError("openqp-dftb parameter set is incomplete")
+        ))
 
         def fail_electronics(_coordinates):
             optimizer.itr += 1

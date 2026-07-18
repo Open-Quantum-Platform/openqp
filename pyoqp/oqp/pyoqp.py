@@ -48,11 +48,16 @@ def _apply_omp_threads_from_input(argv):
       * CLI:   --omp N   (or --omp=N)
       * input: a line  `omp_threads = N`  (typically in the [input] section)
 
-    The value sets OMP_NUM_THREADS (threads per process / MPI rank).  If neither
-    is given, the existing environment / built-in default is left untouched.
+    The value sets OMP_NUM_THREADS (threads per process / MPI rank).  For a
+    native DFTB input, it also seeds MKL_NUM_THREADS when the user has not set
+    it explicitly: the DFTB eigensolver manages its dense-MKL region locally,
+    while its Davidson sigma columns remain pinned to one BLAS thread.  If
+    neither source is given, the existing environment / built-in default is
+    left untouched.
     """
     import re
     n = None
+    input_text = ""
     for i, a in enumerate(argv):
         if a in ("--omp", "--omp-threads") and i + 1 < len(argv):
             n = argv[i + 1]
@@ -60,13 +65,13 @@ def _apply_omp_threads_from_input(argv):
         if a.startswith("--omp="):
             n = a.split("=", 1)[1]
             break
-    if n is None:
-        inp = next((a for a in argv[1:]
-                    if not a.startswith("-") and os.path.isfile(a)), None)
-        if inp:
-            try:
-                with open(inp, encoding="utf-8", errors="ignore") as fh:
-                    input_text = _strip_preimport_comments(fh.read())
+    inp = next((a for a in argv[1:]
+                if not a.startswith("-") and os.path.isfile(a)), None)
+    if inp:
+        try:
+            with open(inp, encoding="utf-8", errors="ignore") as fh:
+                input_text = _strip_preimport_comments(fh.read())
+            if n is None:
                 # Legacy INI, canonical .oqp section/top-level options, and a
                 # small controlled-natural-language spelling.  This scan must
                 # stay dependency-free because it runs before liboqp/OpenMP is
@@ -82,8 +87,8 @@ def _apply_omp_threads_from_input(argv):
                     if m:
                         n = m.group(1)
                         break
-            except OSError:
-                pass
+        except OSError:
+            pass
     if n is not None:
         try:
             ni = int(n)
@@ -91,6 +96,14 @@ def _apply_omp_threads_from_input(argv):
             return
         if ni >= 1:
             os.environ["OMP_NUM_THREADS"] = str(ni)
+            native_dftb = bool(re.search(r"(?i)\b[a-z0-9-]*dftb\b", input_text))
+            if native_dftb:
+                # Respect an explicit BLAS policy.  When it is absent, seed
+                # MKL before the runtime loads so the dense reference
+                # eigensolver can use the requested cores.  The DFTB library
+                # locally serializes narrow Davidson sigma columns, avoiding
+                # nested OMP x MKL oversubscription in the response stage.
+                os.environ.setdefault("MKL_NUM_THREADS", str(ni))
 
 
 def _set_threading_defaults():
@@ -138,11 +151,11 @@ def _set_threading_defaults():
         os.environ.setdefault(key, value)
 
 
-# Establish conservative BLAS/OMP defaults first (setdefault, so they never
-# override an explicit environment), then honour an explicit per-rank thread
-# request from --omp / omp_threads, which hard-sets OMP_NUM_THREADS and wins.
-_set_threading_defaults()
+# Honour explicit per-rank threading before populating conservative defaults:
+# this lets an input request seed the DFTB/MKL dense-eigensolver policy while
+# preserving every user-exported thread setting.
 _apply_omp_threads_from_input(sys.argv)
+_set_threading_defaults()
 
 import oqp
 from oqp.utils.file_utils import dump_log

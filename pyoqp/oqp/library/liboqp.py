@@ -405,7 +405,9 @@ class _OQPRunner:
             return True
         solver = any(
             token in message
-            for token in ("scf", "scc", "tdhf", "response", "z-vector", "zvector")
+            for token in (
+                "scf", "scc", "tdhf", "response", "cphf", "z-vector", "zvector",
+            )
         )
         exhausted = any(
             token in message
