@@ -140,6 +140,9 @@ def test_nmr_qmmm_and_nacme_edge_cases_preserve_intent():
     nmr = _result(run, "NMR/H2O_RHF-NMR.inp")
     compact_qmmm = _result(run, "QMMM/ala.inp")
     qmmm_without_system = _result(run, "QMMM/run.inp")
+    qmmm_same_pdb = _result(
+        run, "QMMM/ala-dipeptide_BHHLYP-QMMM-MD-RCD.inp"
+    )
     soc_namd = _result(
         run, "QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp"
     )
@@ -168,7 +171,10 @@ def test_nmr_qmmm_and_nacme_edge_cases_preserve_intent():
         + " 9 10 17 18 19"
     )
     assert 'geom="water_dimer.pdb"' in qmmm_without_system.text
+    assert "pdb_file" not in qmmm_without_system.text
     assert "synthesized geom from qmmm.pdb_file" in qmmm_without_system.warnings
+    assert 'geom="ala.pdb"' in qmmm_same_pdb.text
+    assert "pdb_file" not in qmmm_same_pdb.text
     lowered_md = converter.oqp_input.lower_to_legacy(
         converter.oqp_input.parse_canonical_oqp(qmmm_without_system.text),
         source_dir=qmmm_without_system.target.parent,

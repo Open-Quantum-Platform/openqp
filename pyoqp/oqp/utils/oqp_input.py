@@ -18,6 +18,7 @@ import ast
 import difflib
 import json
 import math
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -158,6 +159,31 @@ def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
         kwargs.pop("parameter_path")
     if not call.args and not kwargs:
         return None
+    return CallSpec(call.name, call.args, kwargs, call.explicit)
+
+
+def _normalize_geometry_owned_section_call(
+    call: CallSpec,
+    geometry: Any,
+) -> CallSpec:
+    """Remove section values already supplied by the compact geometry."""
+
+    if call.name != "qmmm" or "pdb_file" not in call.kwargs:
+        return call
+    geometry_pdb = _qmmm_pdb_from_geometry(geometry, source_dir=None)
+    explicit_pdb = call.kwargs["pdb_file"]
+    if not isinstance(geometry_pdb, str) or not isinstance(explicit_pdb, str):
+        return call
+    normalized_geometry = os.path.normcase(
+        os.path.normpath(os.path.expanduser(geometry_pdb.strip()))
+    )
+    normalized_explicit = os.path.normcase(
+        os.path.normpath(os.path.expanduser(explicit_pdb.strip()))
+    )
+    if normalized_geometry != normalized_explicit:
+        return call
+    kwargs = dict(call.kwargs)
+    kwargs.pop("pdb_file")
     return CallSpec(call.name, call.args, kwargs, call.explicit)
 
 
@@ -2457,7 +2483,10 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
     option_parts.extend("%s=%s" % (key, _render_value(spec.options[key])) for key in extra)
     driver = _normalize_driver_defaults(spec.model, spec.driver)
     normalized_modifiers = [
-        normalized
+        _normalize_geometry_owned_section_call(
+            normalized,
+            spec.options.get("geom"),
+        )
         for call in spec.modifiers
         if (normalized := _normalize_default_section_call(call)) is not None
     ]
