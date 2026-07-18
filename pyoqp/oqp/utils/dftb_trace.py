@@ -1017,6 +1017,59 @@ def final_energy_label(summary, index, default):
     return default
 
 
+def _display_irrep(irrep):
+    """Human display form of an irrep label ('ag' -> 'Ag'; 'mixed' as-is)."""
+    text = str(irrep or "")
+    if not text or text in {"mixed", "?"}:
+        return text
+    return text[:1].upper() + text[1:]
+
+
+def format_mo_table(mo):
+    """Molecular-orbital table: index, occupation, energies, irrep, markers."""
+    energies = mo.get("energies") or []
+    if not len(energies):
+        return ""
+    occupations = mo.get("occupations") or []
+    labels = mo.get("labels") or []
+    noca = int(mo.get("noca") or 0)
+    nocb = int(mo.get("nocb") or 0)
+    has_labels = bool(labels)
+    lines = ["   Molecular orbitals (%s)"
+             % mo.get("reference", "SCC reference")]
+    rule = "   " + "-" * (60 if has_labels else 50)
+    lines.append(rule)
+    header = "      MO   Occ      Energy (Ha)     Energy (eV)"
+    if has_labels:
+        header += "     Irrep"
+    lines.append(header)
+    lines.append(rule)
+    open_shell = noca > nocb
+    for index, energy in enumerate(energies, start=1):
+        occupation = (occupations[index - 1]
+                      if index - 1 < len(occupations) else 0)
+        row = "   %5d   %3d   %14.8f   %12.4f" % (
+            index, int(occupation), energy, energy * HARTREE_TO_EV)
+        if has_labels:
+            label = labels[index - 1] if index - 1 < len(labels) else ""
+            row += "   %7s" % _display_irrep(label)
+        if open_shell:
+            if nocb < index <= noca:
+                row += "   (SOMO)"
+            elif index == nocb and nocb > 0:
+                row += "   (HOMO)"
+            elif index == noca + 1:
+                row += "   (LUMO)"
+        else:
+            if index == noca and noca > 0:
+                row += "   (HOMO)"
+            elif index == noca + 1:
+                row += "   (LUMO)"
+        lines.append(row)
+    lines.append(rule)
+    return "\n".join(lines)
+
+
 def spin_flip_pair(index, noca, nocb):
     """Map a 1-based spin-flip amplitude index to (occ, vir) MO numbers.
 
@@ -1036,6 +1089,7 @@ def format_state_configurations(summary):
     labels = summary.get("state_labels") or []
     energies = summary.get("state_energies") or []
     spins = summary.get("spin_squares") or []
+    state_irreps = summary.get("state_irreps") or {}
     base = energies[0] if energies else None
     lines = ["     Spin-adapted spin-flip excitations", ""]
     for position, label in enumerate(labels):
@@ -1048,6 +1102,8 @@ def format_state_configurations(summary):
                 (energies[position] - base) * HARTREE_TO_EV)
         if position < len(spins) and spins[position] is not None:
             header += "     <S^2> = %7.4f" % spins[position]
+        if state_irreps.get(label):
+            header += "     Sym = %s" % _display_irrep(state_irreps[label])
         lines.append(header)
         lines.append("         #      Coeff        OCC       VIR")
         lines.append("       ----   ---------     -----     -----")
@@ -1090,17 +1146,19 @@ def format_excited_state_summary(summary):
     configurations_text = format_state_configurations(summary)
     if configurations_text:
         lines.extend([configurations_text, ""])
+    state_irreps = summary.get("state_irreps") or {}
     lines.extend(["     Summary table", ""])
-    lines.append("   State        Energy        Excitation   <S^2>"
+    lines.append("   State   Sym       Energy        Excitation   <S^2>"
                  "          Transition dipole (a.u.)        Oscillator")
-    lines.append("                Hartree           eV               "
+    lines.append("                     Hartree           eV               "
                  "      X          Y          Z       Abs.    strength")
-    rule = "   " + "-" * 100
+    rule = "   " + "-" * 108
     lines.append(rule)
     base = energies[0] if len(energies) else None
     for position, label in enumerate(labels):
         energy = energies[position] if position < len(energies) else None
-        row = "   %-6s" % label
+        row = "   %-6s%-8s" % (
+            label, _display_irrep(state_irreps.get(label, "")))
         row += ("%18.10f" % energy) if energy is not None else " " * 18
         if energy is not None and base is not None:
             row += "%12.6f" % ((energy - base) * HARTREE_TO_EV)
