@@ -390,6 +390,22 @@ class OpenQPDFTBABITests(unittest.TestCase):
         np.testing.assert_array_equal(result.mo_coefficients, np.eye(2))
         np.testing.assert_array_equal(result.response_vectors, [[0.7, 0.8]])
 
+    def test_abi1_skips_the_production_model_default(self):
+        # A C ABI v1 library cannot carry model presets, so the production
+        # default must be skipped (NOT materialized then rejected): legacy
+        # no-model inputs keep their explicit-keys meaning.
+        adapter, library = self._adapter_with_abi1()
+        adapter.mol.config["input"]["method"] = "dftb"
+
+        adapter._resolve_model_default()
+
+        self.assertEqual(adapter.dftb.get("model", ""), "")
+        self.assertEqual(adapter._preset_bytes, b"")
+        self.assertTrue(adapter.mol._dftb_model_default_resolved)
+        # And the ABI-v1 call still proceeds without a model limitation.
+        adapter._run_native("mrsf", 1, need_grad=False)
+        self.assertEqual(len(library.openqp_dftb_state_gradient.calls), 1)
+
     def test_abi1_rejects_post_v1_operator_knobs_before_call(self):
         adapter, library = self._adapter_with_abi1(
             dftb_updates={"c_mrsf_oo": 0.7, "response_omega": 0.21}

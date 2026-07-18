@@ -291,7 +291,33 @@ class OpenQPDFTBAdapter:
                 "Set [dftb] backend=native for QM/MM jobs."
             )
 
+    def _resolve_model_default(self) -> None:
+        """Materialize the production [dftb] model default, ABI permitting.
+
+        The default is decided here -- after the native library is loaded --
+        rather than at input parsing, because a C ABI v1 library cannot carry
+        model presets at all: materializing the default unconditionally would
+        abort previously working no-model ABI-v1 jobs.  On ABI v1 the default
+        is simply skipped and the input keeps its explicit-keys meaning; an
+        explicit user-provided model on ABI v1 still fails loudly in
+        _validate_abi1_request.
+        """
+        if getattr(self.mol, "_dftb_model_default_resolved", False):
+            return
+        backend = str(self.dftb.get("backend", "native")).lower()
+        if backend not in {"native", "auto"}:
+            return
+        lib = self._native_library()  # noqa: F841 -- caches the ABI version
+        self.mol._dftb_model_default_resolved = True
+        if int(self.mol._openqp_dftb_cache["__native_abi_version__"]) == 1:
+            return
+        from oqp.utils.input_checker import apply_dftb_model_default  # noqa: PLC0415
+        model = apply_dftb_model_default(self.config)
+        if model:
+            self._preset_bytes = model.encode("ascii")
+
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
+        self._resolve_model_default()
         key = self._cache_key(method, state, need_grad=need_grad)
         cache = self.mol._openqp_dftb_cache
         if key in cache:

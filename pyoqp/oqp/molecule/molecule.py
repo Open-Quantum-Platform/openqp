@@ -1481,11 +1481,6 @@ class Molecule:
         # Validate the configuration and apply it
         config = parser.validate()
 
-        # Production DFTB defaults: no model= and no hand-tuned operator keys
-        # means DTCAM-TB for MRSF-TDDFTB and the DFTB+ protocol otherwise.
-        from oqp.utils.input_checker import apply_dftb_model_default
-        apply_dftb_model_default(config)
-
         return config
 
     def load_config(self, input_source):
