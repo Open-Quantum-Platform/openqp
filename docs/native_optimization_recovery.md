@@ -52,6 +52,14 @@ ordinary minima, penalty MECI/MECP, and two- or multistate BaekA:
 4. A final bounded stage uses Cartesian coordinates and half the recovery
    trust (or returns to DLC if Cartesian was already used).
 
+Within an individual engine attempt, a non-finite internal-coordinate
+back-transformation, step prediction, Hessian update, or MECI/BaekA objective
+rebase is rejected before it can enter the quasi-Newton history. The engine
+then switches that attempt to bounded Cartesian steps, resets its model
+Hessian, and leaves the outer recovery ladder free to retry fresh internal
+coordinates from the best finite geometry. This applies equally to minima and
+MECI/MECP objectives.
+
 Explicit `coordsys`, `trust`, and `trust_max` values bypass the automatic
 initial profile. `auto_recovery=false` disables the phase handoff and recovery
 stages.

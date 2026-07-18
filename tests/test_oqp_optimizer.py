@@ -964,6 +964,34 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(x_new)))
         self.assertFalse(np.allclose(x_new, original))
         self.assertIsNone(eng._prev)
+        self.assertEqual(eng.nonfinite_step_rejections, 1)
+        self.assertIn("CART(nonfinite recovery)", eng.coordsys)
+
+    def test_nonfinite_hessian_switches_to_cartesian_recovery(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
+                           trust=0.1)
+        eng.H.fill(np.inf)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.linspace(-0.1, 0.1, 9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertEqual(eng.nonfinite_step_rejections, 1)
+        self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+
+    def test_meci_objective_rebase_drops_nonfinite_secant_history(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        eng._prev = {
+            "x": eng.x.copy(), "dq": np.ones(3), "g_q": np.zeros(3),
+            "e": 0.0, "pred": 0.0, "cart_step": 0.01,
+        }
+        eng.H.fill(np.inf)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            rebased = eng.rebase_previous_objective(
+                0.0, np.linspace(-0.1, 0.1, 9)
+            )
+        self.assertFalse(rebased)
+        self.assertIsNone(eng._prev)
 
     def test_omitted_hessian_keeps_existing_model(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")

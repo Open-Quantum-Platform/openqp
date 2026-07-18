@@ -170,6 +170,7 @@ class OQPEngine:
               and type(self.coords).__name__ == "RedundantInternalCoordinates"):
             label = "DLC->RIC(fallback)"
         self.coordsys = label
+        self.nonfinite_step_rejections = 0
         model_hessian = self.coords.guess_hessian(self.x)
         if initial_hessian is None:
             self.H = model_hessian
@@ -447,13 +448,23 @@ class OQPEngine:
         gradient = self._project_constraint_tangent(gradient, previous_x)
         gradient_q = self.coords.grad_to_q(previous_x, gradient)
         displacement_q = self._prev["dq"]
+        if (not np.all(np.isfinite(self.H))
+                or not np.all(np.isfinite(gradient_q))
+                or not np.all(np.isfinite(displacement_q))):
+            self._prev = None
+            return False
 
         self._prev["e"] = energy
         self._prev["g_q"] = gradient_q
-        self._prev["pred"] = float(
-            gradient_q @ displacement_q
-            + 0.5 * displacement_q @ self.H @ displacement_q
-        )
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            predicted = float(
+                gradient_q @ displacement_q
+                + 0.5 * displacement_q @ self.H @ displacement_q
+            )
+        if not np.isfinite(predicted):
+            self._prev = None
+            return False
+        self._prev["pred"] = predicted
         return True
 
     # -- one macro-iteration ------------------------------------------------ #
@@ -464,7 +475,15 @@ class OQPEngine:
         secant pair or Hessian.  The next macroiteration can build a normal
         internal step again from this finite geometry.
         """
+        self.nonfinite_step_rejections += 1
         self.trust = max(self.trust * 0.5, self.trust_min)
+        # An internal-coordinate map that has already overflowed is not a
+        # useful basis for the next trial point.  Switch this engine instance
+        # permanently to Cartesian coordinates; the outer native ladder may
+        # later restart a fresh DLC/TRIC model from the retained best geometry.
+        if not isinstance(self.coords, CartesianCoordinates):
+            self.coords = CartesianCoordinates(self.atoms.size)
+            self.coordsys = "%s->CART(nonfinite recovery)" % self.coordsys
         self.H = self.coords.guess_hessian(self.x)
         self._prev = None
         gradient = np.asarray(gradient, dtype=float).reshape(-1)
@@ -625,7 +644,8 @@ class OQPEngine:
         return dq
 
     def _update_trust(self, actual, pred, cart_step):
-        if abs(pred) < 1.0e-14:
+        if (not np.isfinite(actual) or not np.isfinite(pred)
+                or not np.isfinite(cart_step) or abs(pred) < 1.0e-14):
             return
         ratio = actual / pred
         if ratio < 0.25:
