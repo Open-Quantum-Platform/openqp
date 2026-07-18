@@ -584,12 +584,19 @@ class OQPEngine:
 
         x_new, ok = self.coords.back_transform(self.x, dq)
         if not ok:
-            # Shrink and retry once; otherwise use a finite Cartesian recovery.
+            # Shrink and retry once.  A finite, merely unconverged internal
+            # transform is common enough that it must retain the historical
+            # projected fallback (and the current internal-coordinate model).
+            # Reserve the Cartesian reset for an actually non-finite fallback.
             self.trust = max(self.trust * 0.5, self.trust_min)
             dq = self._restrict_to_trust(b, dq)
             x_new, ok = self.coords.back_transform(self.x, dq)
             if not ok:
-                return self._bounded_cartesian_recovery(g_cart)
+                with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                    x_fallback = self.x + (b.T @ dq) * 0.5
+                if not np.all(np.isfinite(x_fallback)):
+                    return self._bounded_cartesian_recovery(g_cart)
+                x_new = x_fallback
 
         x_new = self._enforce_frozen_distance_values(x_new)
         if not np.all(np.isfinite(x_new)):

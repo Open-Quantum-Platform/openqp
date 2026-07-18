@@ -1,5 +1,5 @@
 mrsf(nstate=5)/bhhlyp/6-31g*
-meci(S0,S1,maxit=1,energy_shift=1,gap=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1)
+meci(S0,S1,maxit=1,algorithm=penalty,energy_shift=1,gap=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1,auto_recovery=false)
 scf(maxit=30)
 tdhf(maxit=30)
 geom="../geometries/C2H4-41911fceceb6.xyz"

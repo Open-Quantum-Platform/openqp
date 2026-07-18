@@ -42,3 +42,4 @@ rmsd_grad=2e-3
 coordsys=auto
 trust=0.15
 trust_max=0.5
+auto_recovery=false

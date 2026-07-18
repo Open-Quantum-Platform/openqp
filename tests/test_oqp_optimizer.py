@@ -966,7 +966,7 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
     WATER_X = np.array([[0, 0, 0.12], [0, 1.43, -0.96],
                         [0, -1.43, -0.96]], float)
 
-    def test_failed_internal_back_transform_uses_finite_cartesian_recovery(self):
+    def test_finite_failed_back_transform_preserves_internal_model(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
                            trust=0.1)
         original = eng.x.copy()
@@ -976,9 +976,10 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
             x_new = eng._take_step(0.0, np.linspace(-0.1, 0.1, 9))
         self.assertTrue(np.all(np.isfinite(x_new)))
         self.assertFalse(np.allclose(x_new, original))
-        self.assertIsNone(eng._prev)
-        self.assertEqual(eng.nonfinite_step_rejections, 1)
-        self.assertIn("CART(nonfinite recovery)", eng.coordsys)
+        self.assertIsNotNone(eng._prev)
+        self.assertEqual(eng.nonfinite_step_rejections, 0)
+        self.assertIsInstance(eng.coords, NC.DelocalizedInternalCoordinates)
+        self.assertNotIn("CART(nonfinite recovery)", eng.coordsys)
 
     def test_nonfinite_hessian_switches_to_cartesian_recovery(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
