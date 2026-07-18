@@ -1,1 +1,5 @@
-rhf/sto-3g geom="../geometries/H2O-0381125c86f2.xyz" charge=0 mult=1 energy guess(type=huckel) properties(scf_prop=nmr)
+rhf/sto-3g
+energy
+guess(type=huckel)
+properties(scf_prop=nmr)
+geom="../geometries/H2O-0381125c86f2.xyz"

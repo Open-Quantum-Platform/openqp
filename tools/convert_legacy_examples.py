@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate concise, one-line ``.oqp`` companions for legacy examples.
+"""Generate concise, readable ``.oqp`` companions for legacy examples.
 
 This is deliberately an example migration tool, not a second runtime parser.
 It consumes every explicitly written legacy keyword, builds the public

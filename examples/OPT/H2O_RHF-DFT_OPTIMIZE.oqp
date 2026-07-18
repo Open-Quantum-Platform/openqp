@@ -1,1 +1,3 @@
-rks/bhhlyp/6-31g* geom="../geometries/H2O-781cba5cd72b.xyz" charge=0 mult=1 opt(S0,maxit=1)
+rks/bhhlyp/6-31g*
+opt(maxit=1)
+geom="../geometries/H2O-781cba5cd72b.xyz"

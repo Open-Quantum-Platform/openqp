@@ -1,1 +1,7 @@
-uhf/6-31g* geom="../geometries/H4O2-6c06eba36ab5.xyz" charge=0 mult=1 d4=false grad(S0) guess(type=huckel,save_mol=false) scf(maxit=40,maxdiis=5,conv=1e-06,save_molden=false) dftgrid(rad_npts=96,ang_npts=302,pruned="")
+uhf/6-31g*
+d4=false
+grad
+guess(type=huckel,save_mol=false)
+scf(maxit=40,maxdiis=5,conv=1e-06,save_molden=false)
+dftgrid(rad_npts=96,ang_npts=302,pruned="")
+geom="../geometries/H4O2-6c06eba36ab5.xyz"

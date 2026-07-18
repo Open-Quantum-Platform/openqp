@@ -1,1 +1,5 @@
-mrsf(nstate=2)/bhhlyp/6-31g* geom="../geometries/CH2O-2bc62dda4b8a.xyz" charge=0 namd(T0,nstep=1,dt=0.5,substep=50,init_temp=300,velocity=maxwell,seed=3,decoherence=edc,trivial=true,soc=false) guess(type=huckel) qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff,embedding=electrostatic)
+mrsf(nstate=2)/bhhlyp/6-31g*
+namd(T0,nstep=1,dt=0.5,substep=50,init_temp=300,velocity=maxwell,seed=3,decoherence=edc,trivial=true,soc=false)
+guess(type=huckel)
+qmmm(pdb_file="formaldehyde_water.pdb",forcefield_files="formaldehyde.xml tip3p.xml",qm_atoms="0-3",cutoff=NoCutoff,embedding=electrostatic)
+geom="../geometries/CH2O-2bc62dda4b8a.xyz"

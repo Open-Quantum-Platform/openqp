@@ -29,7 +29,6 @@ nstate=3
 [dftb]
 backend=native
 type=mrsf
-parameter_path=
 lc_ground_state=true
 lc_gamma=erf
 omega=0.25

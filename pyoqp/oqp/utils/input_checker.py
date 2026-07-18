@@ -1235,11 +1235,11 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             report.add(
                 "ERROR",
                 "dftb.parameter_path",
-                "OpenQP-DFTB requires an explicit parameter source.",
-                expected=".opdftb file or SKF directory",
+                "OpenQP-DFTB could not resolve a parameter source.",
+                expected="bundled parameters, an .opdftb file, or an SKF directory",
                 action=(
-                    "Set [dftb] parameter_path, export OPENQP_DFTB_PARAMETER_PATH, or "
-                    "install an openqp-dftb wheel that ships the bundled parameter set."
+                    "Install an openqp-dftb wheel with bundled parameters, set "
+                    "[dftb] parameter_path, or export OPENQP_DFTB_PARAMETER_PATH."
                 ),
                 wiki=WIKI_HELP["dftb.parameter_path"],
             )

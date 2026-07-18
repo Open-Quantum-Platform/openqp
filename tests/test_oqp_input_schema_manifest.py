@@ -119,7 +119,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 202,
+        "generic": 204,
         "route_driver": 104,
         "legacy_only": 21,
         "intentional_forbidden": 1,
@@ -132,6 +132,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
 def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
     oqp_input = _load_oqp_input()
     defaults = _schema_defaults_from_ast()
+    concise_dftb_defaults = {("dftb", "backend"), ("dftb", "parameter_path")}
 
     checked = []
     for section, keys in oqp_input.GENERIC_SCHEMA_KEYS.items():
@@ -149,10 +150,15 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
             canonical = oqp_input.render_canonical_oqp(first)
             reparsed = oqp_input.parse_canonical_oqp(canonical)
             lowered = oqp_input.lower_to_legacy(reparsed)
-            assert key in lowered.get(section, {}), (section, key, canonical, lowered)
+            if (section, key) in concise_dftb_defaults:
+                assert key not in lowered.get(section, {})
+            else:
+                assert key in lowered.get(section, {}), (
+                    section, key, canonical, lowered
+                )
             checked.append((section, key))
 
-    assert len(checked) == 202
+    assert len(checked) == 204
 
 
 def test_legacy_backend_schema_is_recognized_but_not_canonical():
