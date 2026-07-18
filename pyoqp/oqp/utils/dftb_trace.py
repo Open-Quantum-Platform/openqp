@@ -1017,6 +1017,47 @@ def final_energy_label(summary, index, default):
     return default
 
 
+def spin_flip_pair(index, noca, nocb):
+    """Map a 1-based spin-flip amplitude index to (occ, vir) MO numbers.
+
+    The exported SF/MRSF response vectors are ``amplitudes(noca, n_virt_beta)``
+    flattened column-major: index = (vir - nocb - 1) * noca + occ, with occ an
+    alpha-occupied MO (1..noca) and vir a beta-virtual MO (nocb+1..nbf).
+    """
+    position = int(index) - 1
+    return position % int(noca) + 1, int(nocb) + position // int(noca) + 1
+
+
+def format_state_configurations(summary):
+    """AE-style per-state dominant configurations (coeff, OCC -> VIR)."""
+    configurations = summary.get("configurations") or {}
+    if not any(configurations.values()):
+        return ""
+    labels = summary.get("state_labels") or []
+    energies = summary.get("state_energies") or []
+    spins = summary.get("spin_squares") or []
+    base = energies[0] if energies else None
+    lines = ["     Spin-adapted spin-flip excitations", ""]
+    for position, label in enumerate(labels):
+        entries = configurations.get(label)
+        if not entries:
+            continue
+        header = "   State %-6s" % label
+        if base is not None and position < len(energies):
+            header += "  VEE = %10.6f eV" % (
+                (energies[position] - base) * HARTREE_TO_EV)
+        if position < len(spins) and spins[position] is not None:
+            header += "     <S^2> = %7.4f" % spins[position]
+        lines.append(header)
+        lines.append("         #      Coeff        OCC       VIR")
+        lines.append("       ----   ---------     -----     -----")
+        for entry in entries:
+            lines.append("      %5d   %9.6f     %5d  ->  %4d" % (
+                entry["index"], entry["coeff"], entry["occ"], entry["vir"]))
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def format_excited_state_summary(summary):
     """The OpenQP-style excited-state summary + state-to-state tables.
 
@@ -1045,7 +1086,11 @@ def format_excited_state_summary(summary):
         text += "%11.4f" % (entry.get("oscillator") or 0.0)
         return text
 
-    lines = ["     Summary table", ""]
+    lines = []
+    configurations_text = format_state_configurations(summary)
+    if configurations_text:
+        lines.extend([configurations_text, ""])
+    lines.extend(["     Summary table", ""])
     lines.append("   State        Energy        Excitation   <S^2>"
                  "          Transition dipole (a.u.)        Oscillator")
     lines.append("                Hartree           eV               "
