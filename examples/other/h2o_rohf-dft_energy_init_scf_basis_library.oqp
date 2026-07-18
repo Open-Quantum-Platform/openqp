@@ -1,7 +1,6 @@
 roks/bhhlyp/library
 mult=3
 library="c1 aug-cc-pVDZ\nc2 aug-cc-pVDZ\nh1 cc-pvdz\nh2 cc-pvdz"
-energy
 guess(type=huckel,save_mol=true)
 scf(init_basis=library,init_library="c1 6-31g\nc2 cc-pvdz\nh1 6-31g*\nh2 3-21g",init_scf=rhf,init_it=3,save_molden=true)
 dftgrid(rad_type=becke)

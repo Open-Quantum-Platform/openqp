@@ -60,6 +60,15 @@ def install_single_point_stubs():
     setattr(file_utils, "write_xyz", lambda *args, **kwargs: None)
     sys.modules["oqp.utils.file_utils"] = file_utils
 
+    state_labels = types.ModuleType("oqp.utils.state_labels")
+    setattr(state_labels, "is_mrsf", lambda config: False)
+    setattr(
+        state_labels,
+        "public_state_label",
+        lambda config, state, **kwargs: f"state {int(state)}",
+    )
+    sys.modules["oqp.utils.state_labels"] = state_labels
+
     qmmm = types.ModuleType("oqp.utils.qmmm")
     sys.modules["oqp.utils.qmmm"] = qmmm
 
@@ -187,6 +196,28 @@ class TestSinglePointScfFallback(unittest.TestCase):
 
         self.assertEqual(energy, [-3.0])
         self.assertEqual(calc.mol.data.convergers, ["diis", "soscf", "diis"])
+
+    def test_next_geometry_restarts_from_diis_after_trah_recovery(self):
+        calc = self.make_calculator()
+
+        def scf_needs_trah():
+            calc.scf_calls += 1
+            # Each geometry requires DIIS, SOSCF, then TRAH.
+            calc.mol.mol_energy.energy = -1.0 - calc.scf_calls
+            calc.mol.mol_energy.SCF_converged = calc.scf_calls % 3 == 0
+
+        calc.scf = scf_needs_trah
+
+        calc.reference(do_init_scf=False)
+        calc.reference(do_init_scf=False)
+
+        self.assertEqual(
+            calc.mol.data.convergers,
+            [
+                "diis", "soscf", "trah", "diis",
+                "diis", "soscf", "trah", "diis",
+            ],
+        )
 
     def test_escalation_override_replaces_default_ladder(self):
         # scf.escalation overrides the default DIIS->SOSCF->TRAH chain with an

@@ -76,7 +76,7 @@ def _load_baeka_file_utils():
         "oqp", "oqp.molden", "oqp.molden.moldenwriter",
         "oqp.periodic_table", "oqp.runtime", "oqp.utils",
         "oqp.utils.constants", "oqp.utils.mpi_utils", "oqp.utils.qmmm",
-        "oqp.utils.state_labels",
+        "oqp.utils.state_labels", "oqp.utils.dftb_trace",
     )
     saved = {name: sys.modules.get(name) for name in dependency_names}
     try:
@@ -112,8 +112,14 @@ def _load_baeka_file_utils():
         qmmm = types.ModuleType("oqp.utils.qmmm")
         qmmm.gradient_qmmm = lambda *args, **kwargs: None
         sys.modules["oqp.utils.qmmm"] = qmmm
+        dftb_trace = types.ModuleType("oqp.utils.dftb_trace")
+        dftb_trace.final_energy_annotation = lambda *args, **kwargs: ""
+        dftb_trace.final_energy_header = lambda *args, **kwargs: ""
+        dftb_trace.final_energy_label = lambda *args, **kwargs: ""
+        sys.modules["oqp.utils.dftb_trace"] = dftb_trace
         state_labels = types.ModuleType("oqp.utils.state_labels")
         state_labels.format_calculation_request = lambda *args, **kwargs: ""
+        state_labels.format_dftb_settings = lambda *args, **kwargs: ""
         state_labels.is_mrsf = lambda *args, **kwargs: False
         state_labels.public_method_name = lambda *args, **kwargs: ""
         state_labels.public_state_label = lambda *args, **kwargs: ""
@@ -188,6 +194,135 @@ def _load_baeka_runtime(fake_engine, optimizer_base, dump_log, dump_data):
 
 
 # --------------------------------------------------------------------------- #
+class TestNativeRecoveryLadder(unittest.TestCase):
+    def test_electronic_failure_rejects_geometry_and_walks_shared_ladder(self):
+        logs = []
+
+        class FakeEngine:
+            instances = []
+
+            def __init__(
+                    self, atoms, x0, coordsys="auto", trust=0.2,
+                    trust_max=0.5, frozen_distances=None, **kwargs):
+                self.x = np.asarray(x0, dtype=float).reshape(-1)
+                self.coordsys = str(coordsys).upper()
+                self.trust = float(trust)
+                self.trust_max = float(trust_max)
+                self.frozen_distances = list(frozen_distances or [])
+                self.__class__.instances.append(self)
+
+            def run(self, energy_gradient, on_converged=None):
+                try:
+                    energy_gradient(self.x)
+                except StopIteration:
+                    pass
+                return self.x
+
+        class FakeOptimizer:
+            def __init__(self, mol):
+                cfg = mol.config["optimize"]
+                self.mol = mol
+                self.maxit = int(cfg["maxit"])
+                self.itr = 0
+                self.pre_energy = 0.0
+                self.pre_coord = mol.get_system().copy()
+                self.metrics = {}
+                self.energy_shift = 1.0e-6
+                self.energy_gap = 1.0e-5
+                self.rmsd_step = 1.0e-3
+                self.max_step = 2.0e-3
+                self.rmsd_grad = 1.0e-4
+                self.max_grad = 3.0e-4
+
+        runtime = _load_baeka_runtime(
+            FakeEngine,
+            FakeOptimizer,
+            lambda mol, title=None, **kwargs: logs.append(title or ""),
+            lambda *args, **kwargs: None,
+        )
+
+        class FakeMolecule:
+            def __init__(self):
+                self.config = {
+                    "input": {"qmmm_flag": False, "runtype": "optimize"},
+                    "optimize": {"maxit": 30},
+                    "oqp": {
+                        "coordsys": "auto",
+                        "trust": 0.2,
+                        "trust_max": 0.5,
+                        "auto_recovery": True,
+                        "recovery_maxit": 2,
+                        "recovery_trust": 0.02,
+                        "freeze": "",
+                        "follow": 0,
+                    },
+                }
+                self.coordinates = np.zeros((30, 3))
+
+            @staticmethod
+            def get_atoms():
+                return np.ones(30, dtype=int)
+
+            @staticmethod
+            def get_mass():
+                return np.ones(30)
+
+            def get_system(self):
+                return self.coordinates.copy()
+
+            def update_system(self, coordinates):
+                self.coordinates = np.asarray(coordinates, dtype=float).reshape(30, 3)
+
+        optimizer = runtime.OQPOpt(FakeMolecule())
+
+        improving_oscillation = [
+            {
+                "rmsd_grad": value,
+                "rmsd_step": step,
+                "de": (-1.0 if index % 2 else 1.0) * 1.0e-4,
+            }
+            for index, (value, step) in enumerate([
+                (0.0049, 0.0277), (0.0034, 0.0187),
+                (0.0027, 0.0093), (0.0045, 0.0075),
+                (0.0030, 0.0059), (0.0037, 0.0081),
+                (0.0023, 0.0050), (0.0052, 0.0081),
+            ])
+        ]
+        self.assertFalse(
+            optimizer._native_progress_stalled(improving_oscillation)
+        )
+        flat_high_gradient = [
+            {
+                "rmsd_grad": 0.01,
+                "rmsd_step": 0.001,
+                "de": (-1.0 if index % 2 else 1.0) * 1.0e-4,
+            }
+            for index in range(8)
+        ]
+        self.assertTrue(
+            optimizer._native_progress_stalled(flat_high_gradient)
+        )
+
+        def fail_electronics(_coordinates):
+            optimizer.itr += 1
+            raise RuntimeError("SCF did not converge at this geometry")
+
+        optimizer.one_step = fail_electronics
+        optimizer.check_convergence = lambda: None
+        optimizer.optimize()
+
+        self.assertEqual(
+            [engine.coordsys for engine in FakeEngine.instances],
+            ["DLC", "CART", "DLC"],
+        )
+        self.assertEqual(
+            [engine.trust for engine in FakeEngine.instances],
+            [0.02, 0.02, 0.01],
+        )
+        self.assertTrue(any("Rejecting that geometry" in log for log in logs))
+        self.assertTrue(any("Last electronic failure" in log for log in logs))
+
+
 class TestBaekAKernel(unittest.TestCase):
     def test_three_state_objective_uses_only_adjacent_gaps(self):
         energies = np.array([1.0, 1.2, 1.5])
@@ -422,6 +557,7 @@ class TestBaekAKernel(unittest.TestCase):
                     "oqp": {
                         "coordsys": "cart", "trust": 0.2,
                         "trust_max": 0.5, "follow": 0,
+                        "auto_recovery": False,
                     },
                     "optimize": {
                         "lib": "oqp", "optimizer": "bfgs", "maxit": 2,

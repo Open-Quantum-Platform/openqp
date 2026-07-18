@@ -164,7 +164,7 @@ will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
     states=
     energy_shift=1e-6
     energy_gap=1e-5
-    meci_search=penalty
+    meci_search=auto
     pen_sigma=1.0
     pen_alpha=0.0
     pen_incre=1.0
@@ -526,7 +526,7 @@ automatically.
 
 - states // ordered consecutive response roots for BaekA multistate MECI
 
-      empty (default); use 1,2 or 1,2,3,... with meci_search=baeka
+      empty (default); use 1,2 or 1,2,3,... with meci_search=auto or baeka
     
 - energy_shift // convergence threshold for electronic energy changes
 
@@ -538,7 +538,9 @@ automatically.
     
 - meci-search // choose the algorithm for conical intersection optimization
 
-      penalty    use the modified penalty method (default)
+      auto       native default: short two-state penalty then BaekA if needed;
+                 multistate searches select BaekA directly
+      penalty    use the modified penalty method
       ubp        use the update branching plane method
       hybrid     use the penalty function then swith to ubp after energy gap is lower than the threshold
       baeka      use the additive Baek adaptive penalty for two or more states

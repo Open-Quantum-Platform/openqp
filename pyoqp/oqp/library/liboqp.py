@@ -44,6 +44,9 @@ class _OQPRunner:
             "coordsys": cfg.get("coordsys", "auto"),
             "trust": float(cfg.get("trust", 0.2)),
             "trust_max": float(cfg.get("trust_max", 0.5)),
+            "auto_recovery": bool(cfg.get("auto_recovery", True)),
+            "recovery_maxit": int(cfg.get("recovery_maxit", 30)),
+            "recovery_trust": float(cfg.get("recovery_trust", 0.02)),
             "frozen_distances": parse_frozen_distance_spec(cfg.get("freeze", "")),
             "follow_mode": int(cfg.get("follow", 0)),
         }
@@ -53,62 +56,399 @@ class _OQPRunner:
         self._initial_hessian_gradient = None
         return None
 
-    def optimize(self):
-        opts = self._oqp_config()
-        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
-        x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+    def _resolve_initial_profile(self, atoms, opts):
+        """Resolve the iteration-efficient native default shared by all methods.
 
-        initial_hessian = self._initial_hessian()
-        engine = OQPEngine(
-            atoms, x0,
-            mode=self.mode,
-            trust=opts["trust"],
-            trust_max=opts["trust_max"],
-            follow_mode=opts["follow_mode"],
-            coordsys=opts["coordsys"],
-            # OQPEngine's own loop is a backstop; the OQP convergence test
-            # (which raises StopIteration at maxit) governs termination.
-            maxiter=self.maxit,
-            initial_hessian=initial_hessian,
-            initial_gradient=getattr(self, "_initial_hessian_gradient", None),
-            masses=np.asarray(self.mol.get_mass(), dtype=float).reshape(-1),
-            project_global_rigid_modes=not bool(
-                self.mol.config.get("input", {}).get("qmmm_flag", False)
-            ),
-            frozen_distances=opts["frozen_distances"],
+        An explicit coordinate system is an expert override and leaves the
+        supplied trust controls untouched.  The schema defaults ``trust=0.2``
+        and ``trust_max=0.5`` act as placeholders only while ``coordsys=auto``.
+        This preserves concise input while allowing explicit values to opt out.
+        """
+        resolved = dict(opts)
+        if str(resolved["coordsys"]).strip().lower() != "auto":
+            return resolved
+
+        natom = int(np.asarray(atoms).size)
+        default_trust = np.isclose(resolved["trust"], 0.2)
+        default_trust_max = np.isclose(resolved["trust_max"], 0.5)
+        if natom >= 30:
+            # C60 validation converged in 38 macroiterations when this robust
+            # small-trust DLC profile was used directly, versus 54 iterations
+            # for a 14-step TRIC prephase followed by DLC.  Start with the
+            # measured lower-iteration route and reserve coordinate switching
+            # for an actual stall, electronic failure, or iteration limit.
+            resolved["coordsys"] = "dlc"
+            resolved["precondition_steps"] = 0
+            if default_trust:
+                resolved["trust"] = 0.02
+            if default_trust_max:
+                resolved["trust_max"] = 0.05
+            profile = "large/flat"
+        else:
+            resolved["coordsys"] = "dlc"
+            resolved["precondition_steps"] = 0
+            if default_trust:
+                resolved["trust"] = 0.10
+            if default_trust_max:
+                resolved["trust_max"] = 0.30
+            profile = "molecular"
+
+        # Keep a user-supplied single trust value valid when trust_max was left
+        # at its schema default and the automatic cap would otherwise be lower.
+        resolved["trust_max"] = max(
+            float(resolved["trust"]), float(resolved["trust_max"])
         )
         dump_log(
             self.mol,
-            title="PyOQP: OQP optimizer [mode=%s, coordsys=%s, trust=%.3f%s]"
-            % (
-                self.mode,
-                engine.coordsys,
-                opts["trust"],
-                ", frozen distances=%s" % len(engine.frozen_distances)
-                if engine.frozen_distances else "",
+            title=(
+                "PyOQP: Native automatic optimization profile selected "
+                "[%s, atoms=%d, coordsys=%s, trust=%.3f, trust_max=%.3f%s]"
+                % (
+                    profile,
+                    natom,
+                    resolved["coordsys"].upper(),
+                    resolved["trust"],
+                    resolved["trust_max"],
+                    ", handoff after %d steps" % resolved["precondition_steps"]
+                    if resolved["precondition_steps"] else "",
+                )
             ),
         )
+        return resolved
 
-        def energy_gradient(coords):
-            # one_step updates metrics/pre_coord/pre_energy and returns
-            # (energy [Hartree], gradient [Hartree/Bohr]) for the active state.
-            energy, gradient = self.one_step(
-                np.asarray(coords, dtype=float).reshape(-1)
+    def optimize(self):
+        opts = self._oqp_config()
+        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        opts = self._resolve_initial_profile(atoms, opts)
+        x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        public_maxit = self.maxit
+        precondition_steps = int(opts.get("precondition_steps", 0))
+        initial_steps = (
+            min(public_maxit, precondition_steps)
+            if precondition_steps > 0 else public_maxit
+        )
+        self.maxit = initial_steps
+
+        initial_hessian = self._initial_hessian()
+        masses = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        isolated = not bool(
+            self.mol.config.get("input", {}).get("qmmm_flag", False)
+        )
+        history = []
+        best = {
+            "energy": float("inf"),
+            "coords": x0.copy(),
+            "evaluated": False,
+        }
+
+        def run_attempt(coords, *, coordsys, trust, trust_max, maxiter,
+                        hessian=None, gradient=None, recovery=False):
+            engine = OQPEngine(
+                atoms, coords,
+                mode=self.mode,
+                trust=trust,
+                trust_max=trust_max,
+                follow_mode=opts["follow_mode"],
+                coordsys=coordsys,
+                # OQPEngine's own loop is a backstop; the OQP convergence test
+                # (which raises StopIteration at maxit) governs termination.
+                maxiter=maxiter,
+                initial_hessian=hessian,
+                initial_gradient=gradient,
+                masses=masses,
+                project_global_rigid_modes=isolated,
+                frozen_distances=opts["frozen_distances"],
             )
-            if engine.frozen_distances:
-                gradient = engine._project_constraint_tangent(gradient, coords)
-                self.metrics["rmsd_grad"] = float(
-                    np.sqrt(np.mean(np.asarray(gradient) ** 2))
-                )
-                self.metrics["max_grad"] = float(
-                    np.max(np.abs(np.asarray(gradient)))
-                )
-            return energy, gradient
+            dump_log(
+                self.mol,
+                title=(
+                    "PyOQP: OQP %soptimizer "
+                    "[mode=%s, coordsys=%s, trust=%.3f%s]"
+                    % (
+                        "recovery " if recovery else "",
+                        self.mode,
+                        engine.coordsys,
+                        trust,
+                        ", frozen distances=%s" % len(engine.frozen_distances)
+                        if engine.frozen_distances else "",
+                    )
+                ),
+            )
 
-        try:
-            engine.run(energy_gradient, on_converged=self.check_convergence)
-        except StopIteration:
-            pass
+            stalled = [False]
+            electronic_failure = [None]
+
+            def energy_gradient(current_coords):
+                # one_step updates metrics/pre_coord/pre_energy and returns
+                # (energy [Hartree], gradient [Hartree/Bohr]) for the active state.
+                flat_coords = np.asarray(current_coords, dtype=float).reshape(-1)
+                try:
+                    energy, gradient_now = self.one_step(flat_coords)
+                except Exception as error:
+                    if not self._is_electronic_nonconvergence(error):
+                        raise
+                    electronic_failure[0] = error
+                    dump_log(
+                        self.mol,
+                        title=(
+                            "PyOQP: Electronic solver did not converge at the "
+                            "trial geometry. Rejecting that geometry and "
+                            "advancing the native geometry-recovery ladder.\n"
+                            "   %s" % error
+                        ),
+                    )
+                    raise StopIteration from error
+                if engine.frozen_distances:
+                    gradient_now = engine._project_constraint_tangent(
+                        gradient_now, flat_coords
+                    )
+                    self.metrics["rmsd_grad"] = float(
+                        np.sqrt(np.mean(np.asarray(gradient_now) ** 2))
+                    )
+                    self.metrics["max_grad"] = float(
+                        np.max(np.abs(np.asarray(gradient_now)))
+                    )
+                if float(energy) < best["energy"]:
+                    best["energy"] = float(energy)
+                    best["coords"] = flat_coords.copy()
+                    best["evaluated"] = True
+                history.append({
+                    "energy": float(energy),
+                    "de": float(self.metrics.get("de", 0.0)),
+                    "rmsd_step": float(self.metrics.get("rmsd_step", 0.0)),
+                    "rmsd_grad": float(self.metrics.get("rmsd_grad", 0.0)),
+                })
+                return energy, gradient_now
+
+            def convergence_and_progress():
+                self.check_convergence()
+                if (not recovery and opts["auto_recovery"]
+                        and self.mol.config["input"]["runtype"] == "optimize"
+                        and self._native_progress_stalled(history)):
+                    stalled[0] = True
+                    dump_log(
+                        self.mol,
+                        title=(
+                            "PyOQP: Native optimizer detected oscillatory or "
+                            "stalled progress; preparing an internal recovery"
+                        ),
+                    )
+                    raise StopIteration
+
+            engine.run(energy_gradient, on_converged=convergence_and_progress)
+            return engine, stalled[0], electronic_failure[0]
+
+        engine, stalled, electronic_failure = run_attempt(
+            x0,
+            coordsys=opts["coordsys"],
+            trust=opts["trust"],
+            trust_max=opts["trust_max"],
+            maxiter=initial_steps,
+            hessian=initial_hessian,
+            gradient=getattr(self, "_initial_hessian_gradient", None),
+        )
+
+        if self._native_metrics_converged():
+            return
+        if not opts["auto_recovery"]:
+            self._retain_best_native_geometry(best)
+            self._log_native_nonconvergence(history, recovery=False)
+            return
+
+        original_maxit = public_maxit
+        remaining = max(original_maxit - self.itr, 0)
+        recovery_steps = max(remaining, opts["recovery_maxit"])
+        self.maxit = self.itr + recovery_steps
+        recovery_coordsys = self._recovery_coordsys(opts["coordsys"])
+        recovery_trust = min(opts["recovery_trust"], opts["trust_max"])
+        recovery_trust_max = min(
+            # C60 and other flat, highly symmetric surfaces become noisy when
+            # a successful small step immediately grows back to a large move.
+            # A 2.5x ceiling matches the independently converged DLC recipe
+            # (trust=0.02, trust_max=0.05) while still allowing adaptation.
+            opts["trust_max"], max(recovery_trust, 2.5 * recovery_trust)
+        )
+        recovery_coords = np.asarray(best["coords"], dtype=float).reshape(-1)
+        self.mol.update_system(recovery_coords.reshape((-1, 3)))
+        self.pre_coord = recovery_coords.copy()
+        if best["evaluated"]:
+            self.pre_energy = float(best["energy"])
+
+        if electronic_failure is not None:
+            reason = "electronic nonconvergence at a trial geometry"
+        elif precondition_steps > 0 and self.itr >= initial_steps:
+            reason = "the automatic large-system preconditioning phase"
+        else:
+            reason = "stalled/oscillatory progress" if stalled else "iteration limit"
+        dump_log(
+            self.mol,
+            title=(
+                "PyOQP: Native optimization recovery selected after %s. "
+                "Restarting the lowest-energy geometry with %s coordinates, "
+                "trust=%.3f, and a fresh model Hessian for up to %d steps"
+                % (reason, recovery_coordsys.upper(), recovery_trust, recovery_steps)
+            ),
+        )
+        _, _, recovery_electronic_failure = run_attempt(
+            recovery_coords,
+            coordsys=recovery_coordsys,
+            trust=recovery_trust,
+            trust_max=recovery_trust_max,
+            maxiter=recovery_steps,
+            recovery=True,
+        )
+        if self._native_metrics_converged():
+            return
+
+        # A redundant-internal restart can still struggle when the topology
+        # changes or when nearly dependent coordinates develop.  Finish the
+        # bounded recovery ladder in Cartesian coordinates with a tighter
+        # trust radius (or return to DLC if Cartesian was the first recovery).
+        final_coordsys = "cart" if recovery_coordsys != "cart" else "dlc"
+        final_trust = max(recovery_trust * 0.5, 5.0e-3)
+        final_trust_max = min(
+            recovery_trust_max, max(final_trust, 2.5 * final_trust)
+        )
+        self._retain_best_native_geometry(best)
+        final_coords = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        self.maxit = self.itr + recovery_steps
+        dump_log(
+            self.mol,
+            title=(
+                "PyOQP: Native recovery stage 1 remained unconverged. "
+                "Restarting the best geometry with %s coordinates, trust=%.3f, "
+                "and a fresh Hessian for a final %d-step attempt"
+                % (
+                    final_coordsys.upper(),
+                    final_trust,
+                    recovery_steps,
+                )
+            ),
+        )
+        _, _, final_electronic_failure = run_attempt(
+            final_coords,
+            coordsys=final_coordsys,
+            trust=final_trust,
+            trust_max=final_trust_max,
+            maxiter=recovery_steps,
+            recovery=True,
+        )
+        if not self._native_metrics_converged():
+            self._retain_best_native_geometry(best)
+            self._log_native_nonconvergence(
+                history,
+                recovery=True,
+                electronic_failure=(
+                    final_electronic_failure
+                    or recovery_electronic_failure
+                    or electronic_failure
+                ),
+            )
+
+    def _native_metrics_converged(self):
+        """Mirror the established optimizer tests without relying on log text."""
+        metrics = self.metrics
+        standard = (
+            abs(float(metrics.get("de", float("inf")))) <= self.energy_shift
+            and float(metrics.get("rmsd_step", float("inf"))) <= self.rmsd_step
+            and float(metrics.get("max_step", float("inf"))) <= self.max_step
+            and float(metrics.get("rmsd_grad", float("inf"))) <= self.rmsd_grad
+            and float(metrics.get("max_grad", float("inf"))) <= self.max_grad
+        )
+        runtype = str(
+            self.mol.config.get("input", {}).get("runtype", "optimize")
+        ).lower()
+        if runtype in {"meci", "mecp", "tci"}:
+            standard = (
+                standard
+                and abs(float(metrics.get("gap", float("inf")))) <= self.energy_gap
+            )
+        return bool(standard)
+
+    def _native_progress_stalled(self, history):
+        """Detect a high-gradient oscillation early enough to recover in-budget."""
+        if len(history) < 8:
+            return False
+        recent = history[-8:]
+        gradients = np.asarray([item["rmsd_grad"] for item in recent], dtype=float)
+        if not np.all(np.isfinite(gradients)):
+            return True
+        # Once a trajectory is within a few multiples of the requested
+        # gradient it is normally cheaper to let quasi-Newton curvature finish
+        # than to discard it.  This guard preserves the measured 38-step C60
+        # DLC path instead of restarting near the tight-gradient regime.
+        if np.min(gradients) <= 5.0 * self.rmsd_grad:
+            return False
+        uphill = sum(item["de"] > max(self.energy_shift, 1.0e-8) for item in recent)
+        alternating = sum(
+            np.sign(recent[index]["de"]) != np.sign(recent[index - 1]["de"])
+            for index in range(1, len(recent))
+            if recent[index]["de"] != 0.0 and recent[index - 1]["de"] != 0.0
+        )
+        oldest_best = float(np.min(gradients[:4]))
+        newest_best = float(np.min(gradients[-4:]))
+        plateau = newest_best >= 0.95 * oldest_best
+        small_steps = float(np.median(
+            [item["rmsd_step"] for item in recent[-4:]]
+        )) <= max(5.0 * self.rmsd_step, 5.0e-3)
+        return bool(
+            plateau
+            and ((uphill >= 3 and alternating >= 4) or small_steps)
+        )
+
+    @staticmethod
+    def _is_electronic_nonconvergence(error):
+        """Recognize solver exhaustion that can be cured by rejecting a step."""
+        name = error.__class__.__name__.lower()
+        message = str(error).lower()
+        if "notconverged" in name:
+            return True
+        solver = any(
+            token in message
+            for token in ("scf", "scc", "tdhf", "response", "z-vector", "zvector")
+        )
+        exhausted = any(
+            token in message
+            for token in ("did not converge", "not converged", "nonconver")
+        )
+        return bool(solver and exhausted)
+
+    @staticmethod
+    def _recovery_coordsys(coordsys):
+        requested = str(coordsys or "auto").strip().lower()
+        return "cart" if requested == "dlc" else "dlc"
+
+    def _retain_best_native_geometry(self, best):
+        coords = np.asarray(best["coords"], dtype=float).reshape(-1)
+        self.mol.update_system(coords.reshape((-1, 3)))
+        self.pre_coord = coords.copy()
+        if best.get("evaluated", np.isfinite(best["energy"])):
+            self.pre_energy = float(best["energy"])
+
+    def _log_native_nonconvergence(
+            self, history, *, recovery, electronic_failure=None):
+        metrics = self.metrics
+        electronic_detail = (
+            " Last electronic failure: %s." % electronic_failure
+            if electronic_failure is not None else ""
+        )
+        dump_log(
+            self.mol,
+            title=(
+                "PyOQP: Native optimization%s did not converge "
+                "(RMS gradient %.3e, max gradient %.3e, RMS step %.3e). "
+                "The best geometry was retained.%s Suggested next actions: "
+                "increase maxit/recovery_maxit, lower recovery_trust, or "
+                "explicitly select lib=geometric for an independent backend."
+                % (
+                    " after internal recovery" if recovery else "",
+                    float(metrics.get("rmsd_grad", float("nan"))),
+                    float(metrics.get("max_grad", float("nan"))),
+                    float(metrics.get("rmsd_step", float("nan"))),
+                    electronic_detail,
+                )
+            ),
+        )
 
 
 class OQPOpt(_OQPRunner, StateSpecificOpt):
@@ -203,6 +543,136 @@ class OQPMECIOpt(_OQPRunner, MECIOpt):
         MECIOpt.__init__(self, mol)
 
 
+class OQPAutoMECIOpt:
+    """Native MECI strategy that escalates a two-state search to BaekA.
+
+    A short conventional penalty phase is inexpensive and usually reaches the
+    crossing seam quickly.  If it does not satisfy both geometry and gap
+    criteria, the lowest-objective geometry retained by :class:`OQPMECIOpt` is
+    handed to the Baek adaptive penalty algorithm.  For three or more states,
+    BaekA is the only well-defined implementation and is selected directly.
+    """
+
+    def __init__(self, mol):
+        self.mol = mol
+        self.metrics = {}
+        self.penalty_optimizer = None
+        self.baeka_optimizer = None
+
+    @staticmethod
+    def _selected_states(optimize_config):
+        states = optimize_config.get("states", [])
+        if isinstance(states, str):
+            states = [
+                item for item in states.replace(",", " ").split() if item
+            ]
+        states = [int(state) for state in states]
+        if not states:
+            states = [
+                int(optimize_config.get("istate", 1)),
+                int(optimize_config.get("jstate", 2)),
+            ]
+        return states
+
+    def optimize(self):
+        optimize_config = self.mol.config["optimize"]
+        native_config = self.mol.config.get("oqp", {})
+        states = self._selected_states(optimize_config)
+        total_steps = max(1, int(optimize_config.get("maxit", 30)))
+        recovery_steps = max(
+            1, int(native_config.get("recovery_maxit", 30))
+        )
+
+        missing = object()
+        saved = {
+            ("optimize", "meci_search"):
+                optimize_config.get("meci_search", missing),
+            ("optimize", "states"): optimize_config.get("states", missing),
+            ("optimize", "maxit"): optimize_config.get("maxit", missing),
+            ("oqp", "auto_recovery"):
+                native_config.get("auto_recovery", missing),
+        }
+
+        def restore():
+            for (section_name, key), value in saved.items():
+                section = self.mol.config[section_name]
+                if value is missing:
+                    section.pop(key, None)
+                else:
+                    section[key] = value
+
+        try:
+            if len(states) > 2:
+                dump_log(
+                    self.mol,
+                    title=(
+                        "PyOQP: Automatic MECI selected BaekA directly for "
+                        "%d states" % len(states)
+                    ),
+                )
+                optimize_config["meci_search"] = "baeka"
+                optimize_config["states"] = states
+                self.baeka_optimizer = OQPBaekAOpt(self.mol)
+                self.baeka_optimizer.optimize()
+                self.metrics = self.baeka_optimizer.metrics
+                return
+
+            # Reserve most of the public maxit budget for the adaptive method.
+            # Ten penalty steps are enough to establish a useful seam-directed
+            # geometry at the standard maxit=30, while very small user budgets
+            # remain respected.
+            penalty_steps = min(20, max(3, total_steps // 3))
+            penalty_steps = min(penalty_steps, total_steps)
+            optimize_config["meci_search"] = "penalty"
+            optimize_config["maxit"] = penalty_steps
+            native_config["auto_recovery"] = False
+
+            dump_log(
+                self.mol,
+                title=(
+                    "PyOQP: Automatic two-state MECI phase 1/2: penalty "
+                    "search for up to %d steps" % penalty_steps
+                ),
+            )
+            self.penalty_optimizer = OQPMECIOpt(self.mol)
+            self.penalty_optimizer.optimize()
+            self.metrics = self.penalty_optimizer.metrics
+            if self.penalty_optimizer._native_metrics_converged():
+                dump_log(
+                    self.mol,
+                    title=(
+                        "PyOQP: Automatic MECI converged in the penalty phase; "
+                        "BaekA escalation was not needed"
+                    ),
+                )
+                return
+
+            baeka_steps = max(
+                total_steps - int(self.penalty_optimizer.itr),
+                recovery_steps,
+            )
+            optimize_config["meci_search"] = "baeka"
+            optimize_config["states"] = states
+            optimize_config["maxit"] = baeka_steps
+            native_config["auto_recovery"] = (
+                True if saved[("oqp", "auto_recovery")] is missing
+                else bool(saved[("oqp", "auto_recovery")])
+            )
+            dump_log(
+                self.mol,
+                title=(
+                    "PyOQP: Automatic two-state MECI phase 2/2: penalty "
+                    "criteria were not met; restarting the retained geometry "
+                    "with BaekA for up to %d steps" % baeka_steps
+                ),
+            )
+            self.baeka_optimizer = OQPBaekAOpt(self.mol)
+            self.baeka_optimizer.optimize()
+            self.metrics = self.baeka_optimizer.metrics
+        finally:
+            restore()
+
+
 class OQPMECPOpt(_OQPRunner, MECPOpt):
     """MECP search: minimize the gap-penalty objective with the oqp engine."""
 
@@ -281,6 +751,11 @@ class OQPBaekAOpt(_OQPRunner, Optimizer):
             gap_weight=self.weights,
         )
         self._baeka_evaluation = None
+        self._baeka_best = {
+            "score": float("inf"),
+            "coords": np.asarray(self.pre_coord, dtype=float).reshape(-1).copy(),
+            "objective": float(self.pre_energy),
+        }
         self.metrics.update({
             "meci_search": "baeka",
             "states": self.states.copy(),
@@ -297,54 +772,180 @@ class OQPBaekAOpt(_OQPRunner, Optimizer):
 
         opts = self._oqp_config()
         atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        opts = self._resolve_initial_profile(atoms, opts)
         x0 = np.asarray(self.pre_coord, dtype=float).reshape(-1)
-        engine = OQPEngine(
-            atoms, x0,
-            mode=self.mode,
+        public_maxit = self.maxit
+        precondition_steps = int(opts.get("precondition_steps", 0))
+        initial_steps = (
+            min(public_maxit, precondition_steps)
+            if precondition_steps > 0 else public_maxit
+        )
+        self.maxit = initial_steps
+        masses = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        isolated = not bool(
+            self.mol.config.get("input", {}).get("qmmm_flag", False)
+        )
+
+        def run_attempt(coords, *, coordsys, trust, trust_max, maxiter,
+                        recovery=False):
+            engine = OQPEngine(
+                atoms, coords,
+                mode=self.mode,
+                trust=trust,
+                trust_max=trust_max,
+                follow_mode=opts["follow_mode"],
+                coordsys=coordsys,
+                maxiter=maxiter,
+                masses=masses,
+                project_global_rigid_modes=isolated,
+            )
+            dump_log(
+                self.mol,
+                title=(
+                    "PyOQP: OQP BaekA %soptimizer "
+                    "[states=%s, coordsys=%s, trust=%.3f]"
+                    % (
+                        "recovery " if recovery else "",
+                        "/".join(map(str, self.states)),
+                        engine.coordsys,
+                        trust,
+                    )
+                ),
+            )
+
+            previous_objective_data = [None]
+            electronic_failure = [None]
+
+            def energy_gradient(current_coords):
+                try:
+                    energy, gradient = self.one_step(
+                        np.asarray(current_coords, dtype=float).reshape(-1)
+                    )
+                except Exception as error:
+                    if not self._is_electronic_nonconvergence(error):
+                        raise
+                    electronic_failure[0] = error
+                    dump_log(
+                        self.mol,
+                        title=(
+                            "PyOQP: Electronic solver did not converge at the "
+                            "BaekA trial geometry. Rejecting that geometry and "
+                            "advancing the native geometry-recovery ladder.\n"
+                            "   %s" % error
+                        ),
+                    )
+                    raise StopIteration from error
+                current_data = self._baeka_evaluation.data
+                previous_data = previous_objective_data[0]
+                if previous_data is not None:
+                    # Recombine the previous geometry at the exact sigma of the
+                    # objective returned for this geometry. OQPEngine then
+                    # forms its BFGS secant and trust ratio from one objective.
+                    previous_energy = (
+                        previous_data.average_energy
+                        + current_data.sigma * previous_data.penalty
+                    )
+                    previous_gradient = (
+                        previous_data.average_gradient
+                        + current_data.sigma * previous_data.penalty_gradient
+                    )
+                    engine.rebase_previous_objective(
+                        previous_energy, previous_gradient
+                    )
+                previous_objective_data[0] = current_data
+                return energy, gradient
+
+            engine.run(energy_gradient, on_converged=self.check_convergence)
+            return engine, electronic_failure[0]
+
+        _, electronic_failure = run_attempt(
+            x0,
+            coordsys=opts["coordsys"],
             trust=opts["trust"],
             trust_max=opts["trust_max"],
-            follow_mode=opts["follow_mode"],
-            coordsys=opts["coordsys"],
-            maxiter=self.maxit,
-            masses=np.asarray(self.mol.get_mass(), dtype=float).reshape(-1),
-            project_global_rigid_modes=not bool(
-                self.mol.config.get("input", {}).get("qmmm_flag", False)
-            ),
+            maxiter=initial_steps,
         )
+        if self._baeka_evaluation is not None \
+                and self._baeka_evaluation.converged:
+            return
+        if not opts["auto_recovery"]:
+            self._retain_best_baeka_geometry()
+            self._log_baeka_nonconvergence(recovery=False)
+            return
+
+        remaining = max(public_maxit - self.itr, 0)
+        recovery_steps = max(remaining, opts["recovery_maxit"])
+        self.maxit = self.itr + recovery_steps
+        recovery_coordsys = self._recovery_coordsys(opts["coordsys"])
+        recovery_trust = min(opts["recovery_trust"], opts["trust_max"])
+        recovery_trust_max = min(
+            opts["trust_max"], max(recovery_trust, 2.5 * recovery_trust)
+        )
+        self._retain_best_baeka_geometry()
+        recovery_coords = np.asarray(self.pre_coord, dtype=float).reshape(-1)
         dump_log(
             self.mol,
-            title="PyOQP: OQP BaekA optimizer [states=%s, coordsys=%s, trust=%.3f]"
-            % ("/".join(map(str, self.states)), engine.coordsys, opts["trust"]),
+            title=(
+                "PyOQP: BaekA did not meet both seam-gap and projected-gradient "
+                "criteria. Restarting its best normalized score with %s "
+                "coordinates, trust=%.3f, and a fresh Hessian for %d steps"
+                % (
+                    recovery_coordsys.upper(),
+                    recovery_trust,
+                    recovery_steps,
+                )
+            ),
         )
+        _, recovery_electronic_failure = run_attempt(
+            recovery_coords,
+            coordsys=recovery_coordsys,
+            trust=recovery_trust,
+            trust_max=recovery_trust_max,
+            maxiter=recovery_steps,
+            recovery=True,
+        )
+        if self._baeka_evaluation is not None \
+                and self._baeka_evaluation.converged:
+            return
 
-        previous_objective_data = [None]
-
-        def energy_gradient(coords):
-            energy, gradient = self.one_step(
-                np.asarray(coords, dtype=float).reshape(-1)
+        # Use the same bounded geometry-recovery structure as ordinary
+        # MRSF-TDDFT/MRSF-TDDFTB minima and two-state penalty MECIs.
+        final_coordsys = "cart" if recovery_coordsys != "cart" else "dlc"
+        final_trust = max(recovery_trust * 0.5, 5.0e-3)
+        final_trust_max = min(
+            recovery_trust_max, max(final_trust, 2.5 * final_trust)
+        )
+        self._retain_best_baeka_geometry()
+        final_coords = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        self.maxit = self.itr + recovery_steps
+        dump_log(
+            self.mol,
+            title=(
+                "PyOQP: BaekA recovery stage 1 remained unconverged. "
+                "Restarting its best normalized score with %s coordinates, "
+                "trust=%.3f, and a fresh Hessian for a final %d-step attempt"
+                % (final_coordsys.upper(), final_trust, recovery_steps)
+            ),
+        )
+        _, final_electronic_failure = run_attempt(
+            final_coords,
+            coordsys=final_coordsys,
+            trust=final_trust,
+            trust_max=final_trust_max,
+            maxiter=recovery_steps,
+            recovery=True,
+        )
+        if self._baeka_evaluation is None \
+                or not self._baeka_evaluation.converged:
+            self._retain_best_baeka_geometry()
+            self._log_baeka_nonconvergence(
+                recovery=True,
+                electronic_failure=(
+                    final_electronic_failure
+                    or recovery_electronic_failure
+                    or electronic_failure
+                ),
             )
-            current_data = self._baeka_evaluation.data
-            previous_data = previous_objective_data[0]
-            if previous_data is not None:
-                # Recombine the previous geometry at the exact sigma of the
-                # objective returned for this geometry.  OQPEngine then forms
-                # its BFGS secant and trust ratio from one common objective
-                # without discarding accumulated curvature.
-                previous_energy = (
-                    previous_data.average_energy
-                    + current_data.sigma * previous_data.penalty
-                )
-                previous_gradient = (
-                    previous_data.average_gradient
-                    + current_data.sigma * previous_data.penalty_gradient
-                )
-                engine.rebase_previous_objective(
-                    previous_energy, previous_gradient
-                )
-            previous_objective_data[0] = current_data
-            return energy, gradient
-
-        engine.run(energy_gradient, on_converged=self.check_convergence)
 
     def one_step(self, coordinates):
         self.itr += 1
@@ -381,6 +982,16 @@ class OQPBaekAOpt(_OQPRunner, Optimizer):
         max_step = float(np.max(np.abs(displacement)))
         rmsd_grad = float(np.sqrt(np.mean(data.gradient * data.gradient)))
         max_grad = float(np.max(np.abs(data.gradient)))
+        score = max(
+            float(tested_data.span) / max(float(self.energy_gap), 1.0e-16),
+            rmsd_grad / max(float(self.rmsd_grad), 1.0e-16),
+        )
+        if np.isfinite(score) and score < self._baeka_best["score"]:
+            self._baeka_best = {
+                "score": score,
+                "coords": current_coord.copy(),
+                "objective": float(data.objective),
+            }
 
         self.metrics.update({
             "itr": self.itr,
@@ -423,6 +1034,35 @@ class OQPBaekAOpt(_OQPRunner, Optimizer):
         self.pre_energy = data.objective
         self.pre_coord = current_coord.copy()
         return data.objective, data.gradient
+
+    def _retain_best_baeka_geometry(self):
+        coords = np.asarray(self._baeka_best["coords"], dtype=float).reshape(-1)
+        self.mol.update_system(coords.reshape((-1, 3)))
+        self.pre_coord = coords.copy()
+        self.pre_energy = float(self._baeka_best["objective"])
+
+    def _log_baeka_nonconvergence(
+            self, *, recovery, electronic_failure=None):
+        electronic_detail = (
+            " Last electronic failure: %s." % electronic_failure
+            if electronic_failure is not None else ""
+        )
+        dump_log(
+            self.mol,
+            title=(
+                "PyOQP: BaekA%s did not converge (gap %.3e, RMS projected "
+                "gradient %.3e, normalized best score %.3e). The best geometry "
+                "was retained.%s Increase maxit/recovery_maxit or reduce "
+                "recovery_trust if a tighter seam point is required."
+                % (
+                    " after internal recovery" if recovery else "",
+                    float(self.metrics.get("gap", float("nan"))),
+                    float(self.metrics.get("rmsd_grad", float("nan"))),
+                    float(self._baeka_best["score"]),
+                    electronic_detail,
+                )
+            ),
+        )
 
     def check_convergence(self):
         dump_log(

@@ -578,8 +578,11 @@ def requested_states(config):
     if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         return public_state_label(config, opt.get("istate", 1))
     if runtype == "meci":
-        search = str(opt.get("meci_search", "penalty")).strip().lower()
-        roots = (_int_list(opt.get("states", [])) if search == "baeka" else [])
+        search = str(opt.get("meci_search", "auto")).strip().lower()
+        roots = (
+            _int_list(opt.get("states", []))
+            if search in {"auto", "baeka"} else []
+        )
         if not roots:
             roots = [opt.get("istate", 1), opt.get("jstate", 2)]
         return "/".join(public_state_label(config, root) for root in roots)
@@ -626,8 +629,15 @@ def calculation_request_lines(config, source=None, resolved=None):
         and str(_section(config, "optimize").get("meci_search", "")).strip().lower()
         == "baeka"
     )
+    auto_meci = (
+        runtype == "meci"
+        and str(_section(config, "optimize").get("meci_search", "")).strip().lower()
+        == "auto"
+    )
     if baeka:
         calculation = "BaekA multistate conical intersection"
+    elif auto_meci:
+        calculation = "Automatic conical intersection search"
     if runtype == "nac" and bool(_section(config, "nac").get("bp", False)):
         calculation = "Branching-plane analysis"
     lines = [
@@ -636,6 +646,8 @@ def calculation_request_lines(config, source=None, resolved=None):
     ]
     if baeka:
         lines.append(("Algorithm", "Baek adaptive penalty (BaekA)"))
+    elif auto_meci:
+        lines.append(("Algorithm", "penalty → BaekA on nonconvergence"))
     is_dftb_request = str(inp.get("method", "")).strip().lower() == "dftb"
     if not is_dftb_request:
         functional = str(inp.get("functional", "")).strip()

@@ -1,5 +1,4 @@
 rks/bhhlyp/aug-cc-pvdz-pp;aug-cc-pvdz
-energy
 guess(type=huckel,save_mol=false)
 dftgrid(rad_type=becke)
 geom="../geometries/BrH-a6a9d6f6a6f3.xyz"

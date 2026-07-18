@@ -253,6 +253,10 @@ class OpenQPDFTBABITests(unittest.TestCase):
         mol._openqp_dftb_cache["__native_capabilities__"] = (
             0 if capabilities is None else capabilities
         )
+        # These ABI layout tests load the adapter with a deliberately minimal
+        # package stub, not the input-checker module that materializes the
+        # production model default.
+        mol._dftb_model_default_resolved = True
         return adapter, library
 
     def test_unversioned_library_is_classified_as_abi1(self):
@@ -315,6 +319,52 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(
             adapter.mol._openqp_dftb_cache["__native_capabilities__"], 7
         )
+
+    def test_scc_failure_escalates_only_for_current_geometry(self):
+        adapter, _ = self._adapter_with_current()
+        result = object()
+        calls = []
+
+        def run_native(*args, **kwargs):
+            mixer = adapter.dftb["scc_mixer"]
+            calls.append(mixer)
+            if mixer != "trust":
+                raise RuntimeError(
+                    "openqp-dftb restricted open-shell SCC cycle did not converge")
+            return result
+
+        adapter._run_native = run_native
+
+        first = adapter._run_state("mrsf", 1, need_grad=False)
+        self.assertIs(first, result)
+        self.assertEqual(calls, ["auto", "broyden", "trust"])
+        self.assertEqual(adapter.dftb["scc_mixer"], "auto")
+
+        # Change geometry/cache generation.  Even though the previous geometry
+        # needed TRAH, this one must start from the configured primary again.
+        adapter.mol.get_system = lambda: np.array(
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.5], dtype=np.float64)
+        calls.clear()
+        second = adapter._run_state("mrsf", 1, need_grad=False)
+        self.assertIs(second, result)
+        self.assertEqual(calls, ["auto", "broyden", "trust"])
+        self.assertEqual(adapter.dftb["scc_mixer"], "auto")
+
+    def test_non_scc_native_failure_is_not_retried(self):
+        adapter, _ = self._adapter_with_current()
+        calls = []
+
+        def run_native(*args, **kwargs):
+            calls.append(adapter.dftb["scc_mixer"])
+            raise RuntimeError("openqp-dftb parameter set is incomplete")
+
+        adapter._run_native = run_native
+
+        with self.assertRaisesRegex(RuntimeError, "parameter set"):
+            adapter._run_state("mrsf", 1, need_grad=False)
+
+        self.assertEqual(calls, ["auto"])
+        self.assertEqual(adapter.dftb["scc_mixer"], "auto")
 
     def test_precontract_unversioned_layout_is_rejected_safely(self):
         adapter, library = self._adapter_with_abi1()

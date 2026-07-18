@@ -92,6 +92,12 @@ def install_runfunc_stubs():
     for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
                  "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
         setattr(liboqp, _cls, type(_cls, (), {}))
+
+    class OQPAutoMECIOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
+    liboqp.OQPAutoMECIOpt = OQPAutoMECIOpt
     sys.modules["oqp.library.liboqp"] = liboqp
 
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
@@ -344,6 +350,25 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         optimizer = runfunc.get_optimizer(mol)
 
         self.assertIsInstance(optimizer, GeometricMECIOpt)
+        self.assertIs(optimizer.mol, mol)
+
+    def test_get_optimizer_dispatches_native_auto_meci(self):
+        install_runfunc_stubs()
+        runfunc = load_module(
+            "runfunc_native_auto_meci_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+        auto_class = sys.modules["oqp.library.liboqp"].OQPAutoMECIOpt
+        mol = types.SimpleNamespace(
+            config={
+                "input": {"runtype": "meci"},
+                "optimize": {"lib": "oqp", "meci_search": "auto"},
+            }
+        )
+
+        optimizer = runfunc.get_optimizer(mol)
+
+        self.assertIsInstance(optimizer, auto_class)
         self.assertIs(optimizer.mol, mol)
 
     def test_input_checker_accepts_geometric_for_mecp(self):
