@@ -40,6 +40,19 @@ def _load_adapter_module():
     state_labels.resolved_dftb_type = (
         lambda config: str(config.get("dftb", {}).get("type", "ground")).lower()
     )
+    state_labels.dftb_method_name = lambda config: "DFTB"
+    state_labels.public_state_label = (
+        lambda config, root, **kwargs: "state %d" % int(root)
+    )
+
+    trace_spec = importlib.util.spec_from_file_location(
+        "oqp.utils.dftb_trace",
+        ROOT / "pyoqp" / "oqp" / "utils" / "dftb_trace.py",
+    )
+    assert trace_spec is not None and trace_spec.loader is not None
+    dftb_trace = importlib.util.module_from_spec(trace_spec)
+    trace_spec.loader.exec_module(dftb_trace)
+    utils.dftb_trace = dftb_trace
 
     stubs = {
         "oqp": oqp,
@@ -48,6 +61,7 @@ def _load_adapter_module():
         "oqp.utils.constants": constants,
         "oqp.utils.file_utils": file_utils,
         "oqp.utils.state_labels": state_labels,
+        "oqp.utils.dftb_trace": dftb_trace,
     }
     saved = {name: sys.modules.get(name) for name in stubs}
     sys.modules.update(stubs)
@@ -375,6 +389,22 @@ class OpenQPDFTBABITests(unittest.TestCase):
         np.testing.assert_array_equal(result.mo_energies, [-0.5, 0.2])
         np.testing.assert_array_equal(result.mo_coefficients, np.eye(2))
         np.testing.assert_array_equal(result.response_vectors, [[0.7, 0.8]])
+
+    def test_abi1_skips_the_production_model_default(self):
+        # A C ABI v1 library cannot carry model presets, so the production
+        # default must be skipped (NOT materialized then rejected): legacy
+        # no-model inputs keep their explicit-keys meaning.
+        adapter, library = self._adapter_with_abi1()
+        adapter.mol.config["input"]["method"] = "dftb"
+
+        adapter._resolve_model_default()
+
+        self.assertEqual(adapter.dftb.get("model", ""), "")
+        self.assertEqual(adapter._preset_bytes, b"")
+        self.assertTrue(adapter.mol._dftb_model_default_resolved)
+        # And the ABI-v1 call still proceeds without a model limitation.
+        adapter._run_native("mrsf", 1, need_grad=False)
+        self.assertEqual(len(library.openqp_dftb_state_gradient.calls), 1)
 
     def test_abi1_rejects_post_v1_operator_knobs_before_call(self):
         adapter, library = self._adapter_with_abi1(

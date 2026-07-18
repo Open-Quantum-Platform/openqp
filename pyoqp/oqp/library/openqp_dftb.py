@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import itertools
 import os
 from pathlib import Path
 import shutil
@@ -12,17 +13,21 @@ import sys
 import tempfile
 import textwrap
 import threading
+import time
 
 import numpy as np
 
 import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
+from oqp.utils import dftb_trace
 from oqp.utils.file_utils import dump_log
 from oqp.utils.state_labels import (
     DFTB_CAP_STATE_SPECTRUM,
     DFTB_CAP_STRUCTURED_TRACE,
     canonical_dftb_type,
+    dftb_method_name,
+    public_state_label,
     resolved_dftb_type,
 )
 
@@ -48,7 +53,10 @@ def _call_with_native_diagnostics(
     within this Python process and restore both even on failure.
     """
     requested_level = max(0, min(2, int(print_level)))
-    level = requested_level if structured_trace else 0
+    # The per-iteration records the OpenQP-style tables are built from are
+    # emitted at native trace level 2 only; request them whenever progress is
+    # wanted at all and let the Python formatter decide how much to show.
+    level = 2 if (structured_trace and requested_level > 0) else 0
     updates = {
         "OPENQP_DFTB_SCC_TRACE": str(level),
         "OPENQP_DFTB_SOLVER_TRACE": str(level),
@@ -159,8 +167,12 @@ class OpenQPDFTBAdapter:
         # Named operator preset ([dftb] model=...). The published parameter
         # vector lives in openqp-dftb (single source of truth) and is applied
         # by the native library; the input checker forbids mixing a model
-        # with individual operator keys.
-        self._preset_bytes = str(self.dftb.get("model", "")).strip().encode("ascii")
+        # with individual operator keys.  'none' is the explicit opt-out of
+        # the SF/MRSF dtcam-tb default (materialized in Molecule.get_config).
+        preset = str(self.dftb.get("model", "")).strip()
+        if preset.lower() == "none":
+            preset = ""
+        self._preset_bytes = preset.encode("ascii")
         if not hasattr(mol, "_openqp_dftb_cache"):
             mol._openqp_dftb_cache = {}
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
@@ -261,6 +273,7 @@ class OpenQPDFTBAdapter:
                     if 0 < state <= self.nstate:
                         energies[state] = result.state_energy
             self._store_wavefunction_tags(base)
+            self._dump_excited_state_summary(base)
 
         gradient_map = {}
         if need_grad:
@@ -290,7 +303,33 @@ class OpenQPDFTBAdapter:
                 "Set [dftb] backend=native for QM/MM jobs."
             )
 
+    def _resolve_model_default(self) -> None:
+        """Materialize the production [dftb] model default, ABI permitting.
+
+        The default is decided here -- after the native library is loaded --
+        rather than at input parsing, because a C ABI v1 library cannot carry
+        model presets at all: materializing the default unconditionally would
+        abort previously working no-model ABI-v1 jobs.  On ABI v1 the default
+        is simply skipped and the input keeps its explicit-keys meaning; an
+        explicit user-provided model on ABI v1 still fails loudly in
+        _validate_abi1_request.
+        """
+        if getattr(self.mol, "_dftb_model_default_resolved", False):
+            return
+        backend = str(self.dftb.get("backend", "native")).lower()
+        if backend not in {"native", "auto"}:
+            return
+        lib = self._native_library()  # noqa: F841 -- caches the ABI version
+        self.mol._dftb_model_default_resolved = True
+        if int(self.mol._openqp_dftb_cache["__native_abi_version__"]) == 1:
+            return
+        from oqp.utils.input_checker import apply_dftb_model_default  # noqa: PLC0415
+        model = apply_dftb_model_default(self.config)
+        if model:
+            self._preset_bytes = model.encode("ascii")
+
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
+        self._resolve_model_default()
         key = self._cache_key(method, state, need_grad=need_grad)
         cache = self.mol._openqp_dftb_cache
         if key in cache:
@@ -439,24 +478,33 @@ class OpenQPDFTBAdapter:
             and bool(self.dftb.get("state_to_state_spectrum", True))
             and bool(capabilities & DFTB_CAP_STATE_SPECTRUM)
         )
+        step_wall_start = time.perf_counter()
+        step_cpu_start = time.process_time()
         native_trace = _call_with_native_diagnostics(
             native_call,
             print_level=int(self.dftb.get("print_level", 1)),
             state_spectrum=state_spectrum,
             structured_trace=bool(capabilities & DFTB_CAP_STRUCTURED_TRACE),
         )
-        if native_trace.strip():
-            dump_log(
-                self.mol,
-                title="PyOQP: OpenQP-DFTB native progress",
-                section="dftb_runtime",
-                info={
-                    "method": canonical_dftb_type(method),
-                    "state": int(state),
-                    "gradient": bool(need_grad),
-                    "text": native_trace,
-                },
+        step_times = (time.process_time() - step_cpu_start,
+                      time.perf_counter() - step_wall_start)
+        charge_info = None
+        mo_info = None
+        if status.value == 0:
+            charge_info = self._stash_mulliken_charges(
+                method, state, need_grad,
+                np.frombuffer(relaxed_charges, dtype=np.float64)[:natom],
+                atoms,
             )
+            if not need_grad:
+                mo_info = self._stash_orbital_info(
+                    method, int(nbf_out.value), int(noca_out.value),
+                    int(nocb_out.value), mo_energies, mo_coefficients)
+        if native_trace.strip():
+            self._log_native_progress(method, state, need_grad, native_trace,
+                                      charge_info=charge_info,
+                                      mo_info=mo_info,
+                                      step_times=step_times)
         self._raise_native_status(
             method=method,
             state=state,
@@ -499,6 +547,466 @@ class OpenQPDFTBAdapter:
             mo_energies=mo_e,
             mo_coefficients=mo_c,
             response_vectors=vecs,
+        )
+
+    def _public_target_label(self, state):
+        """Public label for a response root (S1, T0, ...; 'state N' fallback)."""
+        label = public_state_label(self.config, state)
+        if label.startswith("state "):
+            label = "state %d" % int(state)
+        return label
+
+    def _stash_mulliken_charges(self, method, state, need_grad, charges, atoms):
+        """Record net Mulliken charges + point-charge dipole on the molecule.
+
+        On energy calls the native library returns the converged SCC reference
+        charges; on excited-state gradient calls it returns the Z-vector
+        relaxed charges of the target state.  Both are stored for the results
+        JSON; the returned dict feeds the log block.
+        """
+        charges = [float(value) for value in charges]
+        coords = np.asarray(self.mol.get_system(),
+                            dtype=np.float64).reshape(-1, 3)
+        dipole = dftb_trace.point_charge_dipole(charges, coords)
+        symbols = [ELEMENTS_NAME[int(z)].strip() for z in atoms]
+        if need_grad and int(state) > 0:
+            title = ("Relaxed Mulliken charges (%s)"
+                     % self._public_target_label(state))
+            self.mol.dftb_relaxed_mulliken = {
+                "state": int(state),
+                "charges": charges,
+                "dipole_au": dipole,
+            }
+        else:
+            if canonical_dftb_type(method) in {"sf", "mrsf"}:
+                reference = "high-spin ROKS reference"
+            else:
+                reference = "SCC reference"
+            title = "Mulliken atomic charges (%s)" % reference
+            self.mol.dftb_mulliken = {
+                "reference": reference,
+                "charges": charges,
+                "dipole_au": dipole,
+            }
+        return {
+            "title": title,
+            "symbols": symbols,
+            "charges": charges,
+            "dipole": dipole,
+        }
+
+    def _timing_footer(self, step_times):
+        """Native-OpenQP style step + cumulative CPU/wall timing lines."""
+        if step_times is None:
+            return ""
+        step_cpu, step_wall = step_times
+        start = getattr(self.mol, "start_time", None)
+        total_wall = (time.time() - start) if start else step_wall
+        return dftb_trace.format_step_timing(
+            step_cpu, step_wall, time.process_time(), total_wall)
+
+    def _dump_effective_options(self, parsed):
+        """Report the preset-resolved native options once per distinct set."""
+        options = parsed.get("resolved_options")
+        if not options:
+            return
+        self.mol.dftb_resolved_options = options
+        if getattr(self.mol, "_dftb_resolved_options_logged", None) == options:
+            return
+        self.mol._dftb_resolved_options_logged = options
+        text = dftb_trace.format_resolved_options(options)
+        if text:
+            dump_log(self.mol, title="PyOQP: DFTB effective options",
+                     section="text", info={"text": text})
+
+    def _log_native_progress(self, method, state, need_grad, native_trace,
+                             charge_info=None, mo_info=None, step_times=None):
+        """Render the captured native trace as OpenQP-style iteration tables.
+
+        openqp-dftb cannot append to the OpenQP log itself (the log unit
+        belongs to liboqp), so its structured stdout records are parsed here
+        and written in the same style as the native SCF/Davidson/Z-vector
+        sections of an OpenQP log.  The state-to-state spectrum block is NOT
+        printed here: it is stored and reported after the excited-state
+        summary table.
+        """
+        print_level = max(0, int(self.dftb.get("print_level", 1)))
+        if print_level == 0:
+            return
+        verbose = print_level >= 2
+        parsed = dftb_trace.parse_native_trace(native_trace)
+        if parsed.get("energy_components"):
+            self.mol.dftb_energy_components = parsed["energy_components"]
+        if not any(parsed[key] for key in (
+                "scc_passes", "davidson", "zvector", "zvector_dense")):
+            # Nothing structured (old library or probe-style text): keep the
+            # raw capture so no diagnostic is silently dropped.
+            dump_log(
+                self.mol,
+                title="PyOQP: OpenQP-DFTB native progress",
+                section="dftb_runtime",
+                info={
+                    "method": canonical_dftb_type(method),
+                    "state": int(state),
+                    "gradient": bool(need_grad),
+                    "text": native_trace,
+                },
+            )
+            return
+
+        extra = dftb_trace.format_other_lines(parsed) if verbose else ""
+        charge_block = ""
+        if charge_info is not None:
+            charge_block = dftb_trace.format_charge_block(
+                charge_info["symbols"], charge_info["charges"],
+                charge_info["dipole"], charge_info["title"])
+        if not need_grad:
+            self._dump_effective_options(parsed)
+            sections = []
+            scc_blocks = []
+            scc_text = dftb_trace.format_scc_block(parsed, verbose=verbose)
+            if scc_text:
+                scc_blocks.append(scc_text)
+            components_text = dftb_trace.format_energy_components(
+                parsed.get("energy_components"),
+                reference_label="converged SCC reference")
+            if components_text:
+                scc_blocks.append(components_text)
+            if charge_block:
+                scc_blocks.append(charge_block)
+            if scc_blocks:
+                sections.append(("PyOQP: DFTB SCC steps", scc_blocks))
+            if mo_info is not None:
+                mo_text = dftb_trace.format_mo_table(mo_info)
+                if mo_text:
+                    sections.append(("PyOQP: DFTB molecular orbitals",
+                                     [mo_text]))
+            response_blocks = [
+                dftb_trace.format_davidson_block(
+                    solve, dftb_method_name(self.config))
+                for solve in parsed["davidson"]
+            ]
+            if response_blocks:
+                sections.append(("PyOQP: DFTB response steps",
+                                 response_blocks))
+            if extra:
+                sections.append(("PyOQP: DFTB native diagnostics", [extra]))
+            timing = self._timing_footer(step_times)
+            if timing and sections:
+                sections[-1][1].append(timing)
+            for title, blocks in sections:
+                dump_log(self.mol, title=title, section="text",
+                         info={"text": "\n\n".join(blocks)})
+            return
+
+        # Gradient call: the reference/response are merely re-solved for the
+        # requested state, so summarize them in one line each and give the
+        # Z-vector solve the full iteration table.
+        blocks = []
+        if verbose:
+            blocks.append("   Native call: method=%s  state=%s  gradient=yes"
+                          % (canonical_dftb_type(method), int(state)))
+            scc_text = dftb_trace.format_scc_block(parsed, verbose=True)
+            if scc_text:
+                blocks.append(scc_text)
+            blocks.extend(
+                dftb_trace.format_davidson_block(
+                    solve, dftb_method_name(self.config))
+                for solve in parsed["davidson"])
+        else:
+            summary_lines = []
+            scc_lines = dftb_trace.format_scc_summary_lines(parsed)
+            if scc_lines:
+                summary_lines.extend(scc_lines.splitlines())
+            summary_lines.extend(dftb_trace.collapse_repeats(
+                [dftb_trace.format_davidson_summary_line(solve)
+                 for solve in parsed["davidson"]]))
+            if summary_lines:
+                blocks.append("\n".join(summary_lines))
+        blocks.extend(dftb_trace.format_zvector_block(solve)
+                      for solve in parsed["zvector"])
+        blocks.extend(dftb_trace.format_zvector_dense_block(solve)
+                      for solve in parsed["zvector_dense"])
+        if charge_block:
+            blocks.append(charge_block)
+        if extra:
+            blocks.append(extra)
+        timing = self._timing_footer(step_times)
+        if timing:
+            blocks.append(timing)
+        if not blocks:
+            return
+        if state > 0:
+            title = ("PyOQP: DFTB gradient steps (%s)"
+                     % self._public_target_label(state))
+        else:
+            title = "PyOQP: DFTB gradient steps (ground state)"
+        dump_log(self.mol, title=title, section="text",
+                 info={"text": "\n\n".join(block for block in blocks if block)})
+
+    # Configurations below this |coefficient| stay out of the per-state
+    # excitation analysis (the native MRSF-TDDFT log uses the same cutoff).
+    _CONFIGURATION_COEFF_CUTOFF = 0.05
+
+    def _dftb_shells(self, nbf):
+        """Reconstruct the minimal-SK shell list [(atom, l, pure)], or None.
+
+        The C API does not export the per-AO map, but the minimal valence
+        basis is deterministic per element (1 = s, 4 = s+p, 9 = s+p+d AOs)
+        and shells are stored per atom in ascending l.  The assignment is
+        accepted only when exactly ONE per-element size combination matches
+        the exported nbf; d elements are declined because the SK d-component
+        order has not been validated against the labeler's convention.
+        """
+        atoms = [int(z) for z in np.asarray(self.mol.get_atoms()).reshape(-1)]
+        elements = sorted(set(atoms))
+        counts = {z: atoms.count(z) for z in elements}
+        matches = [
+            dict(zip(elements, sizes))
+            for sizes in itertools.product((1, 4, 9), repeat=len(elements))
+            if sum(counts[z] * size for z, size in zip(elements, sizes)) == nbf
+        ]
+        if len(matches) != 1:
+            return None
+        assignment = matches[0]
+        if any(size == 9 for size in assignment.values()):
+            return None
+        shells = []
+        # The labeler indexes detection permutations with the shell's atom
+        # index directly, so atoms are 0-based here.
+        for atom_index, z in enumerate(atoms):
+            for l in range({1: 1, 4: 2}[assignment[z]]):
+                shells.append((atom_index, l, True))
+        return shells
+
+    def _mo_symmetry_labels(self, coefficients, nbf):
+        """Abelian irrep label per MO when symmetry labeling is active.
+
+        Reuses the geometry-based point-group detection and the metadata-only
+        irrep assigner of the native path.  The DFTB s/p AO component order
+        (y, z, x) matches the labeler's CCA m-ascending spherical convention,
+        and the AO overlap follows from the complete orthonormal MO set as
+        S = (C C^T)^-1.  Any failure returns None (labeling is optional).
+        """
+        meta = getattr(self.mol, "symmetry_metadata", None) or {}
+        if not meta or meta.get("status", "disabled") == "disabled":
+            return None
+        if not meta.get("label_mo", True):
+            return None
+        detection = meta.get("detection")
+        if not detection:
+            return None
+        shells = self._dftb_shells(nbf)
+        if shells is None:
+            return None
+        try:
+            from oqp.library.symmetry import assign_mo_irreps  # noqa: PLC0415
+
+            overlap = np.linalg.inv(coefficients @ coefficients.T)
+            tolerance = max(float(meta.get("tolerance", 1.0e-5)), 1.0e-4)
+            result = assign_mo_irreps(
+                coefficients, overlap, shells,
+                detection["operations"], detection["character_table"],
+                tolerance=tolerance,
+                matrix_key="matrix_input_frame",
+            )
+            meta.setdefault("mo_labels", {})["dftb"] = result
+            labels = list(result.get("labels", []))
+            return labels or None
+        except Exception as exc:
+            # Metadata only: record why labeling was skipped, never fail.
+            meta.setdefault("mo_labels", {})["dftb"] = {
+                "status": "error", "error": str(exc),
+            }
+            return None
+
+    def _stash_orbital_info(self, method, nbf, noca, nocb,
+                            mo_energies, mo_coefficients):
+        """Record MO energies/occupations (+irrep labels) for log and JSON."""
+        if nbf <= 0:
+            return None
+        energies = np.frombuffer(mo_energies, dtype=np.float64)[:nbf].copy()
+        coefficients = np.frombuffer(
+            mo_coefficients, dtype=np.float64)[: nbf * nbf].reshape(
+            (nbf, nbf), order="F").copy()
+        occupations = [2 if index <= nocb else (1 if index <= noca else 0)
+                       for index in range(1, nbf + 1)]
+        labels = self._mo_symmetry_labels(coefficients, nbf)
+        if canonical_dftb_type(method) in {"sf", "mrsf"}:
+            reference = "high-spin ROKS reference"
+        else:
+            reference = "SCC reference"
+        mo_info = {
+            "reference": reference,
+            "energies": [float(value) for value in energies],
+            "occupations": occupations,
+            "labels": labels,
+            "noca": int(noca),
+            "nocb": int(nocb),
+        }
+        self.mol.dftb_mo = mo_info
+        return mo_info
+
+    def _state_configurations(self, result, labels):
+        """Dominant SF/MRSF amplitudes per state, keyed by public label."""
+        vectors = result.response_vectors
+        noca, nocb, nbf = int(result.noca), int(result.nocb), int(result.nbf)
+        if vectors is None or noca <= 0 or nbf <= nocb:
+            return {}
+        if vectors.shape[0] != noca * (nbf - nocb):
+            return {}
+        configurations = {}
+        for position, label in enumerate(labels):
+            if position >= vectors.shape[1]:
+                break
+            column = vectors[:, position]
+            entries = []
+            for raw_index in np.nonzero(
+                    np.abs(column) >= self._CONFIGURATION_COEFF_CUTOFF)[0]:
+                index = int(raw_index) + 1
+                occ, vir = dftb_trace.spin_flip_pair(index, noca, nocb)
+                entries.append({
+                    "index": index,
+                    "coeff": float(column[raw_index]),
+                    "occ": occ,
+                    "vir": vir,
+                })
+            configurations[label] = entries
+        return configurations
+
+    def _state_irreps(self, configurations, mo_labels, noca, nocb):
+        """State irrep from the dominant configuration (abelian groups).
+
+        The SF/MRSF CSF is the reference determinant with one alpha-occupied
+        electron moved to a beta-virtual orbital, so its irrep is the product
+        of the reference irrep (the singly occupied orbitals) with the hole
+        and particle irreps.  Metadata only; any failure returns {}.
+        """
+        meta = getattr(self.mol, "symmetry_metadata", None) or {}
+        detection = meta.get("detection")
+        if not detection:
+            return {}
+        try:
+            from oqp.library.symmetry import product_irrep  # noqa: PLC0415
+
+            table = detection["character_table"]
+            somos = [mo_labels[index - 1]
+                     for index in range(int(nocb) + 1, int(noca) + 1)]
+            reference = product_irrep(somos, table) if somos else None
+            irreps = {}
+            for label, entries in configurations.items():
+                if not entries:
+                    continue
+                dominant = max(entries, key=lambda entry: abs(entry["coeff"]))
+                factors = [mo_labels[dominant["occ"] - 1],
+                           mo_labels[dominant["vir"] - 1]]
+                if reference:
+                    factors.append(reference)
+                irreps[label] = product_irrep(factors, table)
+            return irreps
+        except Exception:
+            return {}
+
+    def _excited_state_summary(self, result):
+        """Build the excited-state summary payload from one response solve."""
+        method = self._resolved_method()
+        if method in _GROUND_TYPES or result.all_state_energies is None:
+            return None
+        canonical = canonical_dftb_type(method)
+        energies = [float(value) for value in result.all_state_energies]
+        n_roots = len(energies)
+        if n_roots == 0:
+            return None
+        spins = ([float(value) for value in result.all_spin_squares]
+                 if result.all_spin_squares is not None else [])
+        parsed = dftb_trace.parse_native_trace(result.stdout or "")
+        spectrum = parsed.get("spectrum")
+
+        if canonical == "mrsf":
+            labels = [public_state_label(self.config, root)
+                      for root in range(1, n_roots + 1)]
+            prefix = labels[0][0] if labels and labels[0][1:].isdigit() else "S"
+            reference_label = "Reference: high-spin ROKS (internal)"
+            reference_energy = result.reference_energy
+        elif canonical == "sf":
+            labels = ["root %d" % root for root in range(1, n_roots + 1)]
+            prefix = None
+            reference_label = "Reference: high-spin ROKS (internal)"
+            reference_energy = result.reference_energy
+        else:
+            # Closed-shell TDDFTB: the reference IS S0; roots are S1..Sn.
+            labels = ["S0"] + ["S%d" % root for root in range(1, n_roots + 1)]
+            energies = [float(result.reference_energy)] + energies
+            spins = [0.0] + spins
+            prefix = "S"
+            reference_label = None
+            reference_energy = None
+
+        oscillator = {}
+        transitions = []
+        approximation = ""
+        if spectrum:
+            approximation = spectrum.get("approximation", "")
+            oscillator = {
+                label: row for label, row in dftb_trace.spectrum_from_ground(
+                    spectrum, prefix).items()
+            }
+            transitions = [{
+                "initial": dftb_trace.map_spectrum_label(row["initial"], prefix),
+                "final": dftb_trace.map_spectrum_label(row["final"], prefix),
+                "de_ev": row["de_ev"],
+                "dipole": row["dipole"],
+                "dipole_xyz": row.get("dipole_xyz"),
+                "oscillator": row["oscillator"],
+            } for row in spectrum.get("rows", [])]
+
+        configurations = {}
+        if canonical in {"mrsf", "sf"}:
+            configurations = self._state_configurations(result, labels)
+        state_irreps = {}
+        mo_labels = (getattr(self.mol, "dftb_mo", None) or {}).get("labels")
+        if configurations and mo_labels:
+            state_irreps = self._state_irreps(
+                configurations, mo_labels, result.noca, result.nocb)
+
+        return {
+            "method": canonical,
+            "state_labels": labels,
+            "state_energies": energies,
+            "spin_squares": spins,
+            "oscillator": oscillator,
+            "transitions": transitions,
+            "configurations": configurations,
+            "state_irreps": state_irreps,
+            "approximation": approximation,
+            "reference_label": reference_label,
+            "reference_energy": reference_energy,
+        }
+
+    def _dump_excited_state_summary(self, base):
+        """Report state energies + oscillator data once per response solve.
+
+        This runs at the END of the energy stage, so the summary table (and
+        the state-to-state spectrum after it) appear in the log BEFORE any
+        'Entering Gradient Calculation' section, mirroring the native OpenQP
+        TDDFT summary placement.
+        """
+        summary = self._excited_state_summary(base)
+        if summary is None:
+            return
+        self.mol.dftb_excited_states = summary
+        key = self._cache_key(self._resolved_method(), base.state,
+                              need_grad=False)
+        if getattr(self.mol, "_dftb_summary_logged_key", None) == key:
+            return
+        self.mol._dftb_summary_logged_key = key
+        if max(0, int(self.dftb.get("print_level", 1))) == 0:
+            return
+        dump_log(
+            self.mol,
+            title="PyOQP: %s Excited States" % dftb_method_name(self.config),
+            section="text",
+            info={"text": dftb_trace.format_excited_state_summary(summary)},
         )
 
     def _state_gradient_common_arguments(self, values):

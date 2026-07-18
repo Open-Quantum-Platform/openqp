@@ -10,6 +10,11 @@ from oqp.runtime import basis_search_paths
 from oqp.utils.constants import ANGSTROM_TO_BOHR
 from oqp.utils.mpi_utils import mpi_dump
 from oqp.utils.qmmm import gradient_qmmm
+from oqp.utils.dftb_trace import (
+    final_energy_annotation,
+    final_energy_header,
+    final_energy_label,
+)
 from oqp.utils.state_labels import (
     format_calculation_request,
     format_dftb_settings,
@@ -215,6 +220,12 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             capabilities=details.get('capabilities'),
         )
 
+    if section == 'text':
+        # Pre-formatted body (e.g. the DFTB iteration tables built by
+        # oqp.utils.dftb_trace); the banner comes from the title above.
+        details = info if isinstance(info, dict) else {}
+        loginfo += '\n%s\n' % str(details.get('text', '')).rstrip()
+
     if section == 'dftb_runtime':
         details = info if isinstance(info, dict) else {}
         native_text = str(details.get('text', '')).strip()
@@ -340,22 +351,38 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             str(mol.config.get('input', {}).get('runtype', '')).lower() == 'soc'
             and is_mrsf(mol.config)
         )
-        for n, energy in enumerate(info['el']):
+        # DFTB response runs stash their excited-state summary (VEE eV,
+        # transition dipole, oscillator strength) for the final table.
+        dftb_summary = (getattr(mol, 'dftb_excited_states', None)
+                        if method == 'dftb' and not soc_triplet_ladder
+                        else None)
+        header = final_energy_header(dftb_summary)
+        if header:
+            loginfo += (f'   PyOQP {"State":<34} {"Total (Hartree)":<16}'
+                        f'{header}\n')
+
+        def energy_label(n):
             label = (public_state_label(mol.config, n, multiplicity=3)
                      if soc_triplet_ladder else
                      public_state_label(mol.config, n)
                      if is_mrsf(mol.config) else f'state {n}')
-            loginfo += f'   PyOQP {label:<34} {energy:<16.8f}\n'
+            return final_energy_label(dftb_summary, n, label)
+
+        for n, energy in enumerate(info['el']):
+            annotation = final_energy_annotation(dftb_summary, n)
+            loginfo += (f'   PyOQP {energy_label(n):<34} {energy:<16.8f}'
+                        f'{annotation}\n')
 
         d4 = float(info['d4'])
         loginfo += f'\n   PyOQP dftd correction {d4:<16.8f}\n\n'
         loginfo += '   PyOQP dispersion corrected energies\n'
+        if header:
+            loginfo += (f'   PyOQP {"State":<34} {"Total (Hartree)":<16}'
+                        f'{header}\n')
         for n, energy in enumerate(mol.energies):
-            label = (public_state_label(mol.config, n, multiplicity=3)
-                     if soc_triplet_ladder else
-                     public_state_label(mol.config, n)
-                     if is_mrsf(mol.config) else f'state {n}')
-            loginfo += f'   PyOQP {label:<34} {energy:<16.8f}\n'
+            annotation = final_energy_annotation(dftb_summary, n)
+            loginfo += (f'   PyOQP {energy_label(n):<34} {energy:<16.8f}'
+                        f'{annotation}\n')
 
     if section == 'grad':
         if not mol.config['input']['qmmm_flag']:
