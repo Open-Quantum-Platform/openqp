@@ -728,6 +728,22 @@ class TestInternalCoordinates(unittest.TestCase):
             self.assertLess(self._fd_brow(NC.Angle(0, 1, 2), x), 1e-6)
             self.assertLess(self._fd_brow(NC.Dihedral(0, 1, 2, 3), x), 1e-6)
 
+    def test_collapsed_primitive_is_finite_and_warning_free(self):
+        x = np.zeros((3, 3))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            bond = NC.Bond(0, 1)
+            angle = NC.Angle(0, 1, 2)
+            bond_deriv = bond.derivatives(x)
+            angle_value = angle.value(x)
+            angle_deriv = angle.derivatives(x)
+        # The invalid derivative row is intentional: it forces an existing
+        # internal-coordinate engine into bounded Cartesian recovery instead
+        # of silently accepting a zero gradient direction.
+        self.assertFalse(np.all(np.isfinite([d for _, d in bond_deriv])))
+        self.assertTrue(np.isfinite(angle_value))
+        self.assertFalse(np.all(np.isfinite([d for _, d in angle_deriv])))
+
     def test_bmatrix_matches_fd_water_and_ethane(self):
         cases = [
             ([8, 1, 1], np.array([[0, 0, 0.12], [0, 1.43, -0.96],
@@ -805,6 +821,56 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertIsInstance(ic, NC.DelocalizedInternalCoordinates)
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
+
+    def test_dlc_linear_algebra_is_warning_free(self):
+        """Coordinate products must not leak handled Accelerate FP flags."""
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            q = ic.q(self.WATER_X)
+            b = ic.b_matrix(self.WATER_X)
+            gq = ic.grad_to_q(self.WATER_X, np.ones(9))
+            hessian = ic.guess_hessian(self.WATER_X)
+        self.assertTrue(np.all(np.isfinite(q)))
+        self.assertTrue(np.all(np.isfinite(b)))
+        self.assertTrue(np.all(np.isfinite(gq)))
+        self.assertTrue(np.all(np.isfinite(hessian)))
+
+    def test_dlc_g_inverse_rejects_overflowing_metric(self):
+        """An overflowing B B^T metric must request coordinate fallback."""
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        b = np.full_like(ic.b_matrix(self.WATER_X), 1.0e308)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            g_inverse, rank = ic._g_inverse(b)
+        self.assertEqual(rank, 0)
+        self.assertTrue(np.array_equal(g_inverse, np.zeros_like(g_inverse)))
+
+    def test_dlc_g_inverse_rejects_overflowing_symmetrization(self):
+        """Finite G must remain safe when G + G.T would overflow."""
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        b = np.full_like(ic.b_matrix(self.WATER_X), 9.0e153)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            g_inverse, rank = ic._g_inverse(b)
+        self.assertEqual(rank, 0)
+        self.assertTrue(np.array_equal(g_inverse, np.zeros_like(g_inverse)))
+
+    def test_dlc_rank_zero_gradient_requests_recovery(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        b = np.full_like(ic.b_matrix(self.WATER_X), 9.0e153)
+        ic.b_matrix = lambda _x: b
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        self.assertTrue(np.all(np.isnan(gradient)))
+
+    def test_safe_matmul_suppresses_handled_overflow(self):
+        left = np.full((2, 2), 1.0e308)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            product = NC._safe_matmul(left, left)
+        self.assertFalse(np.all(np.isfinite(product)))
 
     def test_internal_back_transform_rejects_overflow_without_poisoning_geometry(self):
         for coordsys in ("ric", "dlc"):
@@ -991,6 +1057,18 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(x_new)))
         self.assertEqual(eng.nonfinite_step_rejections, 1)
         self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+
+    def test_collapsed_internal_geometry_switches_to_cartesian_recovery(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X.copy(), coordsys="dlc",
+                           trust=0.1)
+        eng.x[:] = 0.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.ones(9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertEqual(eng.nonfinite_step_rejections, 1)
+        self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+        self.assertFalse(np.allclose(x_new, np.zeros(9)))
 
     def test_trust_restriction_scales_huge_finite_step_without_overflow(self):
         eng = NE.OQPEngine([1], [0.0, 0.0, 0.0], coordsys="cart",
