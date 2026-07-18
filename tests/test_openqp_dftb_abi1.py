@@ -271,6 +271,7 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(adapter.mol._openqp_dftb_cache["__native_abi_version__"], 1)
         self.assertEqual(adapter.mol._openqp_dftb_cache["__native_capabilities__"], 0)
         self.assertIsNone(library.openqp_dftb_state_gradient.restype)
+        self.assertEqual(len(library.openqp_dftb_state_gradient.argtypes), 63)
 
     def test_optional_capability_symbol_is_probed_and_cached(self):
         adapter, library = self._adapter_with_current()
@@ -286,6 +287,14 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertIs(
             library.openqp_dftb_capi_capabilities.restype, ctypes.c_int64
         )
+        self.assertEqual(len(library.openqp_dftb_state_gradient.argtypes), 74)
+
+    def test_current_ctypes_signature_keeps_qmmm_fields_before_outputs(self):
+        signature = ADAPTER_MODULE._state_gradient_argtypes(3)
+        self.assertEqual(len(signature), 74)
+        self.assertIs(signature[51], ctypes.c_int64)
+        self.assertEqual(signature[52], ctypes.POINTER(ctypes.c_double))
+        self.assertEqual(signature[53], ctypes.POINTER(ctypes.c_double))
 
     def test_missing_capability_symbol_means_zero_even_for_abi3(self):
         adapter, library = self._adapter_with_current(capabilities=None)

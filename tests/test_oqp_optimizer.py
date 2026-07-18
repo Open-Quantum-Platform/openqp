@@ -1193,6 +1193,25 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
 
 # --------------------------------------------------------------------------- #
 class TestDispatchAndValidation(unittest.TestCase):
+    _IMPORT_STATE = (
+        "oqp", "oqp.utils", "oqp.utils.mpi_utils", "oqp.utils.input_checker",
+        "oqp.utils.perf_levels",
+    )
+
+    def setUp(self):
+        # The dispatcher tests load input_checker around lightweight module
+        # stubs.  Preserve the real package imports so they cannot leak into
+        # later integration tests (notably QM/MM, which imports perf_levels).
+        self._saved_import_state = {
+            name: sys.modules.get(name) for name in self._IMPORT_STATE
+        }
+        utils = types.ModuleType("oqp.utils")
+        utils.__path__ = []
+        sys.modules["oqp.utils"] = utils
+
+    def tearDown(self):
+        _restore_modules(self._saved_import_state)
+
     def test_input_checker_accepts_oqp(self):
         # input_checker only needs a tiny mpi_utils stub.
         utils = sys.modules.setdefault("oqp.utils",
