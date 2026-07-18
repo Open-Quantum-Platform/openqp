@@ -115,6 +115,17 @@ def _bundled_parameter_path() -> str | None:
 
 
 
+def _bundled_parameter_path() -> str | None:
+    """Return the installed openqp-dftb default parameter set, if available."""
+
+    try:
+        import openqp_dftb  # noqa: PLC0415
+
+        return openqp_dftb.default_parameter_path()
+    except (ImportError, AttributeError, FileNotFoundError):
+        return None
+
+
 @dataclass(frozen=True)
 class _StateResult:
     state: int

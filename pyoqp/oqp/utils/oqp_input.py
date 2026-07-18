@@ -146,6 +146,27 @@ class OQPResolution:
     resolved_path: Optional[Path] = None
 
 
+def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
+    """Remove concise section options whose runtime defaults say the same thing."""
+
+    if call.name != "dftb":
+        return call
+    kwargs = dict(call.kwargs)
+    if str(kwargs.get("backend", "")).strip().lower() == "native":
+        kwargs.pop("backend")
+    if "parameter_path" in kwargs and not str(kwargs["parameter_path"]).strip():
+        kwargs.pop("parameter_path")
+    if not call.args and not kwargs:
+        return None
+    return CallSpec(call.name, call.args, kwargs, call.explicit)
+
+
+DEFAULT_SINGLET_MODELS = {
+    "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
+    "tddft", "tda", "tdhf", "tda-hf",
+}
+
+
 # Calls in this set are mutually exclusive.  Everything else is a modifier or
 # a direct legacy-section call.  Aliases are normalized before counting, so
 # ``grad(...) opt(...)`` is always rejected rather than silently picking one.
@@ -295,7 +316,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
 # backend selection and geomeTRIC/SciPy controls.  The concise ``.oqp`` format
 # intentionally hides those implementation details and always selects the
 # native OpenQP geometry engine.  Keeping these keys in the inventory preserves
-# the legacy schema without exposing them as canonical one-line options.
+# the legacy schema without exposing them as canonical top-level options.
 LEGACY_ONLY_SCHEMA_KEYS = {
     "optimize": _keys("lib optimizer step_size step_tol mep_maxit"),
     "geometric": _keys("""
@@ -398,7 +419,7 @@ TOP_OPTION_ALIASES = {
     "threads": "omp_threads",
 }
 
-# Public one-line driver signatures.  State selectors (positional S0/S1/T0 or
+# Public compact-input driver signatures. State selectors (positional S0/S1/T0 or
 # ``root=N`` for SF) are handled separately; the sets below are the concise
 # workflow options that may live directly in the primary call.  Backend names
 # are deliberately absent: concise ``.oqp`` geometry workflows always use the
@@ -841,13 +862,15 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         single = text.strip()
         if single.startswith("#") and "/" in single:
             raise OQPInputError(
-                "A leading '#' route marker is not used in .oqp. Remove '#' and keep the one-line command."
+                "A leading '#' route marker is not used in .oqp. Remove '#'; "
+                "the route may be followed by options and calls on the same or later lines."
             )
         raise OQPInputError("Empty .oqp input")
     if cleaned.startswith("["):
         raise OQPInputError(
             "Sectioned [input]/[scf] syntax belongs in a legacy .inp file. "
-            "Use a one-line .oqp command such as dft/pbe0/def2-svp h2o.xyz energy."
+            "Use compact .oqp syntax such as dft/pbe0/def2-svp, energy, and "
+            "geom=\"h2o.xyz\" on one or more lines."
         )
     tokens = _split_top_level(cleaned)
     model, model_options, functional, basis = _parse_route(tokens[0])
@@ -882,7 +905,18 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             canonical_key = TOP_OPTION_ALIASES[key]
             if canonical_key in options:
                 raise OQPInputError("Duplicate top-level option: %s" % canonical_key)
-            options[canonical_key] = _parse_value(value)
+            parsed_value = _parse_value(value)
+            if canonical_key in {"geom", "geom2"} and value.lstrip().startswith(
+                ('"""', "'''")
+            ):
+                # Triple-quoted geometry blocks are formatted with the opening
+                # and closing delimiter on their own lines. Those presentation
+                # newlines are not part of the molecular coordinates.
+                if parsed_value.startswith("\n"):
+                    parsed_value = parsed_value[1:]
+                if parsed_value.endswith("\n"):
+                    parsed_value = parsed_value[:-1]
+            options[canonical_key] = parsed_value
         else:
             calls.append(_parse_call(token))
 
@@ -897,6 +931,14 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
         if basis and flat != basis:
             raise OQPInputError("Conflicting basis values in route and options")
         basis = flat
+    if _is_integer(options.get("charge")) and options["charge"] == 0:
+        options.pop("charge")
+    if (
+        model in DEFAULT_SINGLET_MODELS
+        and _is_integer(options.get("mult"))
+        and options["mult"] == 1
+    ):
+        options.pop("mult")
 
     primary: List[CallSpec] = []
     modifiers: List[CallSpec] = []
@@ -907,7 +949,11 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
                 PRIMARY_ALIASES[normalized], call.args, dict(call.kwargs), call.explicit
             ))
         elif normalized in SECTION_NAMES or normalized in {"nmr", "ir", "raman", "d4"}:
-            modifiers.append(CallSpec(normalized, call.args, dict(call.kwargs)))
+            normalized_call = _normalize_default_section_call(
+                CallSpec(normalized, call.args, dict(call.kwargs))
+            )
+            if normalized_call is not None:
+                modifiers.append(normalized_call)
         else:
             choices = list(PRIMARY_ALIASES) + list(SECTION_NAMES) + ["nmr", "ir", "raman", "d4"]
             close = difflib.get_close_matches(normalized, choices, n=1, cutoff=0.6)
@@ -922,6 +968,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             % names
         )
     driver = primary[0] if primary else CallSpec("energy", explicit=False)
+    driver = _normalize_driver_defaults(model, driver)
     spec = CalculationSpec(
         model=model,
         functional=functional,
@@ -963,6 +1010,50 @@ def _driver_states(driver: CallSpec) -> Tuple[StateRef, ...]:
     if "root" in driver.kwargs:
         states.append(_state_from_value(driver.kwargs["root"], keyword="root"))
     return tuple(states)
+
+
+def _normalize_ground_state_driver(model: str, driver: CallSpec) -> CallSpec:
+    """Make an explicit HF/DFT ``S0`` selector equal to the omitted default.
+
+    Ground-state HF and DFT have only one physical surface, so ``grad(S0)`` and
+    ``opt(S0)`` carry no more information than ``grad`` and ``opt``. Removing
+    the redundant selector here gives both spellings the same canonical form,
+    while leaving response-method state labels untouched.
+    """
+
+    if model not in {"dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf"}:
+        return driver
+    if driver.name not in {"grad", "optimize"}:
+        return driver
+    states = _driver_states(driver)
+    if len(states) != 1 or states[0].label != "S0":
+        return driver
+
+    kwargs = dict(driver.kwargs)
+    if driver.args:
+        args: Tuple[Any, ...] = ()
+    elif "state" in kwargs:
+        kwargs.pop("state")
+        args = driver.args
+    else:
+        return driver
+    return CallSpec(driver.name, args, kwargs, driver.explicit)
+
+
+def _normalize_driver_defaults(model: str, driver: CallSpec) -> CallSpec:
+    """Remove driver options that exactly reproduce public runtime defaults."""
+
+    driver = _normalize_ground_state_driver(model, driver)
+    maxit = driver.kwargs.get("maxit")
+    if (
+        driver.name != "optimize"
+        or not _is_integer(maxit)
+        or maxit != 30
+    ):
+        return driver
+    kwargs = dict(driver.kwargs)
+    kwargs.pop("maxit")
+    return CallSpec(driver.name, driver.args, kwargs, driver.explicit)
 
 
 def _validate_semantics(spec: CalculationSpec) -> None:
@@ -1859,6 +1950,19 @@ def _normalize_geometry(value: Any, source_dir: Optional[Path]) -> Any:
     )
 
 
+def _qmmm_pdb_from_geometry(value: Any, source_dir: Optional[Path]) -> Optional[str]:
+    """Extract the PDB path from ``geom="system.pdb ATOM-SELECTION"``."""
+
+    if not isinstance(value, str) or "\n" in value:
+        return None
+    stripped = value.strip()
+    pdb_end = stripped.lower().find(".pdb")
+    if pdb_end < 0:
+        return None
+    pdb_path = stripped[:pdb_end + len(".pdb")]
+    return str(_resolve_path(pdb_path, source_dir))
+
+
 def _resolve_search_path_list(value: Any, source_dir: Optional[Path]) -> Any:
     """Resolve explicit/local files while preserving package search names."""
 
@@ -2057,6 +2161,12 @@ def lower_to_legacy(
             put(call.name, target_key, value)
         if call.name == "qmmm":
             put("input", "qmmm_flag", True)
+            if "pdb_file" not in call.kwargs:
+                inferred_pdb = _qmmm_pdb_from_geometry(
+                    spec.options.get("geom"), source_dir
+                )
+                if inferred_pdb is not None:
+                    put("qmmm", "pdb_file", inferred_pdb)
 
     roots = [_internal_root(spec.model, state) for state in states]
     driver_options = _driver_options(spec.driver)
@@ -2201,6 +2311,14 @@ def _render_value(value: Any) -> str:
     return str(value)
 
 
+def _render_geometry_value(value: Any) -> str:
+    """Render inline coordinates as a readable triple-quoted atom block."""
+
+    if isinstance(value, str) and "\n" in value and '"""' not in value:
+        return '"""\n%s\n"""' % value.strip("\n")
+    return _render_value(value)
+
+
 def _render_call(call: CallSpec) -> str:
     args = [_render_value(value) for value in call.args]
     args.extend("%s=%s" % (key, _render_value(value)) for key, value in call.kwargs.items())
@@ -2213,7 +2331,13 @@ def _render_call(call: CallSpec) -> str:
 
 
 def render_canonical_oqp(spec: CalculationSpec) -> str:
-    """Render a stable one-line canonical request that reparses identically."""
+    """Render stable, readable canonical input that reparses identically.
+
+    The route, options, driver, and modifiers are written as separate logical
+    lines. Geometry is deliberately last; inline coordinates use a
+    triple-quoted block with one atom per source line. The parser also accepts
+    the equivalent single-line spelling.
+    """
 
     model_args = ",".join(
         "%s=%s" % (key, _render_value(value)) for key, value in spec.model_options.items()
@@ -2231,17 +2355,42 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
     elif spec.basis:
         route += "/" + spec.basis
     option_order = (
-        "geom", "geom2", "charge", "mult", "library", "ispher",
-        "perf", "d4", "qmmm_flag", "omp_threads",
+        "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
+        "omp_threads",
     )
     option_parts = [
         "%s=%s" % (key, _render_value(spec.options[key]))
-        for key in option_order if key in spec.options
+        for key in option_order
+        if key in spec.options
+        and not (
+            key == "charge"
+            and _is_integer(spec.options[key])
+            and spec.options[key] == 0
+        )
+        and not (
+            key == "mult"
+            and spec.model in DEFAULT_SINGLET_MODELS
+            and _is_integer(spec.options[key])
+            and spec.options[key] == 1
+        )
     ]
-    extra = sorted(set(spec.options) - set(option_order))
+    extra = sorted(set(spec.options) - set(option_order) - {"geom", "geom2"})
     option_parts.extend("%s=%s" % (key, _render_value(spec.options[key])) for key in extra)
-    calls = [_render_call(spec.driver)] + [_render_call(call) for call in spec.modifiers]
-    return " ".join([route] + option_parts + calls) + "\n"
+    driver = _normalize_driver_defaults(spec.model, spec.driver)
+    normalized_modifiers = [
+        normalized
+        for call in spec.modifiers
+        if (normalized := _normalize_default_section_call(call)) is not None
+    ]
+    calls = [_render_call(driver)] + [
+        _render_call(call) for call in normalized_modifiers
+    ]
+    geometry_parts = [
+        "%s=%s" % (key, _render_geometry_value(spec.options[key]))
+        for key in ("geom", "geom2")
+        if key in spec.options
+    ]
+    return "\n".join([route] + option_parts + calls + geometry_parts) + "\n"
 
 
 def _natural_model(text: str) -> Optional[str]:
@@ -2429,6 +2578,7 @@ def compile_natural_request(text: str) -> CalculationSpec:
         if images:
             driver_kwargs["images"] = int(images.group(1))
     driver = CallSpec(driver_name, tuple(args), driver_kwargs)
+    driver = _normalize_driver_defaults(model, driver)
 
     modifiers: List[CallSpec] = []
     conv = re.search(

@@ -1,1 +1,4 @@
-rhf/sto-3g geom="../geometries/H2-069e977a383f.xyz" charge=0 mult=1 energy guess(type=huckel)
+rhf/sto-3g
+energy
+guess(type=huckel)
+geom="../geometries/H2-069e977a383f.xyz"

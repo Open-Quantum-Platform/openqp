@@ -285,7 +285,7 @@ class Runner:
             if input_metadata["was_natural"]:
                 raise ValueError(
                     "Free-form text is not a runnable .oqp input. Review the corrected "
-                    "one-line file at %s and run that file instead."
+                    "canonical file at %s and run that file instead."
                     % input_metadata["resolved"]
                 )
             input_file = input_metadata["resolved"]
@@ -616,7 +616,7 @@ def main():
         if semantic_input["was_natural"]:
             if mpi_manager.rank == 0:
                 print('\n   PyOQP: free-form text was not executed.\n'
-                      '   A corrected one-line .oqp suggestion was written to:\n'
+                      '   A corrected canonical .oqp suggestion was written to:\n'
                       f'   {semantic_input["resolved"]}\n'
                       '   Review it, then run that canonical file.\n')
             if usempi:

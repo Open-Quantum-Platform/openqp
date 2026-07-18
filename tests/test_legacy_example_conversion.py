@@ -52,10 +52,12 @@ def test_every_current_legacy_example_is_convertible_and_committed():
         assert result.target == result.source.with_suffix(".oqp")
         assert result.target.is_file(), result.target.relative_to(ROOT)
         assert result.target.read_text(encoding="utf-8") == result.text
-        assert "\n" not in result.text.rstrip("\n")
+        assert "\n" in result.text.rstrip("\n")
+        assert "\ngeom=" in result.text
+        assert "charge=0" not in result.text
         reparsed = converter.oqp_input.parse_canonical_oqp(result.text)
         assert converter.oqp_input.render_canonical_oqp(reparsed) == result.text
-        # Compilation is also exercised: a syntactically valid line must still
+        # Compilation is also exercised: a syntactically valid file must still
         # lower into an executable legacy request.
         converter.oqp_input.lower_to_legacy(
             reparsed, source_dir=result.target.parent
@@ -116,7 +118,8 @@ def test_native_workflows_use_public_concise_options():
         run, "OPT/C2H4_BHHLYP-MRSFTDDFT_MEP.inp"
     ).text
 
-    assert 'opt(S0,' in constrained
+    assert "\nopt(" in constrained
+    assert "opt(S0" not in constrained
     assert 'freeze="distance(1,2)"' in constrained
     assert "geometric" not in constrained.lower()
     assert "meci(S0,S1,S2," in baeka
@@ -187,7 +190,7 @@ def test_ump2_reference_survives_example_conversion():
     run = _run()
     ump2 = _result(run, "MP2/h2o_ump2_6-31g.inp")
 
-    assert ump2.text.startswith("mp2(reference=uhf)/6-31g ")
+    assert ump2.text.startswith("mp2(reference=uhf)/6-31g\n")
     lowered = converter.oqp_input.lower_to_legacy(
         converter.oqp_input.parse_canonical_oqp(ump2.text),
         source_dir=ump2.target.parent,

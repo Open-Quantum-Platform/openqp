@@ -1,1 +1,7 @@
-rks/bhhlyp/lanl2dz geom="../geometries/BrH-a6a9d6f6a6f3.xyz" charge=0 mult=1 ispher=true grad(S0) guess(type=huckel,save_mol=false) scf(conv=1e-08) dftgrid(rad_npts=96,ang_npts=302,pruned="")
+rks/bhhlyp/lanl2dz
+ispher=true
+grad
+guess(type=huckel,save_mol=false)
+scf(conv=1e-08)
+dftgrid(rad_npts=96,ang_npts=302,pruned="")
+geom="../geometries/BrH-a6a9d6f6a6f3.xyz"

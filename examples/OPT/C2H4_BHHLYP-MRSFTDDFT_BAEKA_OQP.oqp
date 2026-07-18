@@ -1,1 +1,5 @@
-mrsf(nstate=5)/bhhlyp/6-31g* geom="../geometries/C2H4-41911fceceb6.xyz" charge=0 meci(S0,S1,S2,maxit=1,algorithm=baeka,sigma=1.0,alpha=0.02,delta_beta=0.025,beta_schedule="10,10,25,25,100,100,1000,1000,3000",gap=0.0001,energy_shift=1e-06,rmsd_grad=0.002,coordsys=auto,trust=0.15,trust_max=0.5) scf(maxit=30) tdhf(maxit=30)
+mrsf(nstate=5)/bhhlyp/6-31g*
+meci(S0,S1,S2,maxit=1,algorithm=baeka,sigma=1.0,alpha=0.02,delta_beta=0.025,beta_schedule="10,10,25,25,100,100,1000,1000,3000",gap=0.0001,energy_shift=1e-06,rmsd_grad=0.002,coordsys=auto,trust=0.15,trust_max=0.5)
+scf(maxit=30)
+tdhf(maxit=30)
+geom="../geometries/C2H4-41911fceceb6.xyz"

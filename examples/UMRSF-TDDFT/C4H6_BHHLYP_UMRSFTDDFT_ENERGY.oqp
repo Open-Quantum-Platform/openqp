@@ -1,1 +1,6 @@
-umrsf(nstate=10)/bhhlyp/6-31g* geom="../geometries/C4H6-0a0dabfd2a8a.xyz" charge=0 energy(S0) guess(save_mol=false) scf(converger_type=diis,maxit=200) dftgrid(rad_npts=90,ang_npts=302)
+umrsf(nstate=10)/bhhlyp/6-31g*
+energy(S0)
+guess(save_mol=false)
+scf(converger_type=diis,maxit=200)
+dftgrid(rad_npts=90,ang_npts=302)
+geom="../geometries/C4H6-0a0dabfd2a8a.xyz"

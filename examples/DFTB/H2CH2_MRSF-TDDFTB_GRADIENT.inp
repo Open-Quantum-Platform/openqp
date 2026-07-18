@@ -38,7 +38,6 @@ nstate=3
 [dftb]
 backend=native
 type=mrsf
-parameter_path=
 
 [properties]
 grad=1
