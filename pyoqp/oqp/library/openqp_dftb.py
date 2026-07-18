@@ -12,17 +12,21 @@ import sys
 import tempfile
 import textwrap
 import threading
+import time
 
 import numpy as np
 
 import oqp
 from oqp.periodic_table import ELEMENTS_NAME
 from oqp.utils.constants import ANGSTROM_TO_BOHR as BOHR_TO_ANGSTROM
+from oqp.utils import dftb_trace
 from oqp.utils.file_utils import dump_log
 from oqp.utils.state_labels import (
     DFTB_CAP_STATE_SPECTRUM,
     DFTB_CAP_STRUCTURED_TRACE,
     canonical_dftb_type,
+    dftb_method_name,
+    public_state_label,
     resolved_dftb_type,
 )
 
@@ -48,7 +52,10 @@ def _call_with_native_diagnostics(
     within this Python process and restore both even on failure.
     """
     requested_level = max(0, min(2, int(print_level)))
-    level = requested_level if structured_trace else 0
+    # The per-iteration records the OpenQP-style tables are built from are
+    # emitted at native trace level 2 only; request them whenever progress is
+    # wanted at all and let the Python formatter decide how much to show.
+    level = 2 if (structured_trace and requested_level > 0) else 0
     updates = {
         "OPENQP_DFTB_SCC_TRACE": str(level),
         "OPENQP_DFTB_SOLVER_TRACE": str(level),
@@ -148,8 +155,12 @@ class OpenQPDFTBAdapter:
         # Named operator preset ([dftb] model=...). The published parameter
         # vector lives in openqp-dftb (single source of truth) and is applied
         # by the native library; the input checker forbids mixing a model
-        # with individual operator keys.
-        self._preset_bytes = str(self.dftb.get("model", "")).strip().encode("ascii")
+        # with individual operator keys.  'none' is the explicit opt-out of
+        # the SF/MRSF dtcam-tb default (materialized in Molecule.get_config).
+        preset = str(self.dftb.get("model", "")).strip()
+        if preset.lower() == "none":
+            preset = ""
+        self._preset_bytes = preset.encode("ascii")
         if not hasattr(mol, "_openqp_dftb_cache"):
             mol._openqp_dftb_cache = {}
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
@@ -250,6 +261,7 @@ class OpenQPDFTBAdapter:
                     if 0 < state <= self.nstate:
                         energies[state] = result.state_energy
             self._store_wavefunction_tags(base)
+            self._dump_excited_state_summary(base)
 
         gradient_map = {}
         if need_grad:
@@ -279,7 +291,33 @@ class OpenQPDFTBAdapter:
                 "Set [dftb] backend=native for QM/MM jobs."
             )
 
+    def _resolve_model_default(self) -> None:
+        """Materialize the production [dftb] model default, ABI permitting.
+
+        The default is decided here -- after the native library is loaded --
+        rather than at input parsing, because a C ABI v1 library cannot carry
+        model presets at all: materializing the default unconditionally would
+        abort previously working no-model ABI-v1 jobs.  On ABI v1 the default
+        is simply skipped and the input keeps its explicit-keys meaning; an
+        explicit user-provided model on ABI v1 still fails loudly in
+        _validate_abi1_request.
+        """
+        if getattr(self.mol, "_dftb_model_default_resolved", False):
+            return
+        backend = str(self.dftb.get("backend", "native")).lower()
+        if backend not in {"native", "auto"}:
+            return
+        lib = self._native_library()  # noqa: F841 -- caches the ABI version
+        self.mol._dftb_model_default_resolved = True
+        if int(self.mol._openqp_dftb_cache["__native_abi_version__"]) == 1:
+            return
+        from oqp.utils.input_checker import apply_dftb_model_default  # noqa: PLC0415
+        model = apply_dftb_model_default(self.config)
+        if model:
+            self._preset_bytes = model.encode("ascii")
+
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
+        self._resolve_model_default()
         key = self._cache_key(method, state, need_grad=need_grad)
         cache = self.mol._openqp_dftb_cache
         if key in cache:
@@ -428,24 +466,27 @@ class OpenQPDFTBAdapter:
             and bool(self.dftb.get("state_to_state_spectrum", True))
             and bool(capabilities & DFTB_CAP_STATE_SPECTRUM)
         )
+        step_wall_start = time.perf_counter()
+        step_cpu_start = time.process_time()
         native_trace = _call_with_native_diagnostics(
             native_call,
             print_level=int(self.dftb.get("print_level", 1)),
             state_spectrum=state_spectrum,
             structured_trace=bool(capabilities & DFTB_CAP_STRUCTURED_TRACE),
         )
-        if native_trace.strip():
-            dump_log(
-                self.mol,
-                title="PyOQP: OpenQP-DFTB native progress",
-                section="dftb_runtime",
-                info={
-                    "method": canonical_dftb_type(method),
-                    "state": int(state),
-                    "gradient": bool(need_grad),
-                    "text": native_trace,
-                },
+        step_times = (time.process_time() - step_cpu_start,
+                      time.perf_counter() - step_wall_start)
+        charge_info = None
+        if status.value == 0:
+            charge_info = self._stash_mulliken_charges(
+                method, state, need_grad,
+                np.frombuffer(relaxed_charges, dtype=np.float64)[:natom],
+                atoms,
             )
+        if native_trace.strip():
+            self._log_native_progress(method, state, need_grad, native_trace,
+                                      charge_info=charge_info,
+                                      step_times=step_times)
         self._raise_native_status(
             method=method,
             state=state,
@@ -488,6 +529,287 @@ class OpenQPDFTBAdapter:
             mo_energies=mo_e,
             mo_coefficients=mo_c,
             response_vectors=vecs,
+        )
+
+    def _public_target_label(self, state):
+        """Public label for a response root (S1, T0, ...; 'state N' fallback)."""
+        label = public_state_label(self.config, state)
+        if label.startswith("state "):
+            label = "state %d" % int(state)
+        return label
+
+    def _stash_mulliken_charges(self, method, state, need_grad, charges, atoms):
+        """Record net Mulliken charges + point-charge dipole on the molecule.
+
+        On energy calls the native library returns the converged SCC reference
+        charges; on excited-state gradient calls it returns the Z-vector
+        relaxed charges of the target state.  Both are stored for the results
+        JSON; the returned dict feeds the log block.
+        """
+        charges = [float(value) for value in charges]
+        coords = np.asarray(self.mol.get_system(),
+                            dtype=np.float64).reshape(-1, 3)
+        dipole = dftb_trace.point_charge_dipole(charges, coords)
+        symbols = [ELEMENTS_NAME[int(z)].strip() for z in atoms]
+        if need_grad and int(state) > 0:
+            title = ("Relaxed Mulliken charges (%s)"
+                     % self._public_target_label(state))
+            self.mol.dftb_relaxed_mulliken = {
+                "state": int(state),
+                "charges": charges,
+                "dipole_au": dipole,
+            }
+        else:
+            if canonical_dftb_type(method) in {"sf", "mrsf"}:
+                reference = "high-spin ROKS reference"
+            else:
+                reference = "SCC reference"
+            title = "Mulliken atomic charges (%s)" % reference
+            self.mol.dftb_mulliken = {
+                "reference": reference,
+                "charges": charges,
+                "dipole_au": dipole,
+            }
+        return {
+            "title": title,
+            "symbols": symbols,
+            "charges": charges,
+            "dipole": dipole,
+        }
+
+    def _timing_footer(self, step_times):
+        """Native-OpenQP style step + cumulative CPU/wall timing lines."""
+        if step_times is None:
+            return ""
+        step_cpu, step_wall = step_times
+        start = getattr(self.mol, "start_time", None)
+        total_wall = (time.time() - start) if start else step_wall
+        return dftb_trace.format_step_timing(
+            step_cpu, step_wall, time.process_time(), total_wall)
+
+    def _dump_effective_options(self, parsed):
+        """Report the preset-resolved native options once per distinct set."""
+        options = parsed.get("resolved_options")
+        if not options:
+            return
+        self.mol.dftb_resolved_options = options
+        if getattr(self.mol, "_dftb_resolved_options_logged", None) == options:
+            return
+        self.mol._dftb_resolved_options_logged = options
+        text = dftb_trace.format_resolved_options(options)
+        if text:
+            dump_log(self.mol, title="PyOQP: DFTB effective options",
+                     section="text", info={"text": text})
+
+    def _log_native_progress(self, method, state, need_grad, native_trace,
+                             charge_info=None, step_times=None):
+        """Render the captured native trace as OpenQP-style iteration tables.
+
+        openqp-dftb cannot append to the OpenQP log itself (the log unit
+        belongs to liboqp), so its structured stdout records are parsed here
+        and written in the same style as the native SCF/Davidson/Z-vector
+        sections of an OpenQP log.  The state-to-state spectrum block is NOT
+        printed here: it is stored and reported after the excited-state
+        summary table.
+        """
+        print_level = max(0, int(self.dftb.get("print_level", 1)))
+        if print_level == 0:
+            return
+        verbose = print_level >= 2
+        parsed = dftb_trace.parse_native_trace(native_trace)
+        if parsed.get("energy_components"):
+            self.mol.dftb_energy_components = parsed["energy_components"]
+        if not any(parsed[key] for key in (
+                "scc_passes", "davidson", "zvector", "zvector_dense")):
+            # Nothing structured (old library or probe-style text): keep the
+            # raw capture so no diagnostic is silently dropped.
+            dump_log(
+                self.mol,
+                title="PyOQP: OpenQP-DFTB native progress",
+                section="dftb_runtime",
+                info={
+                    "method": canonical_dftb_type(method),
+                    "state": int(state),
+                    "gradient": bool(need_grad),
+                    "text": native_trace,
+                },
+            )
+            return
+
+        extra = dftb_trace.format_other_lines(parsed) if verbose else ""
+        charge_block = ""
+        if charge_info is not None:
+            charge_block = dftb_trace.format_charge_block(
+                charge_info["symbols"], charge_info["charges"],
+                charge_info["dipole"], charge_info["title"])
+        if not need_grad:
+            self._dump_effective_options(parsed)
+            sections = []
+            scc_blocks = []
+            scc_text = dftb_trace.format_scc_block(parsed, verbose=verbose)
+            if scc_text:
+                scc_blocks.append(scc_text)
+            components_text = dftb_trace.format_energy_components(
+                parsed.get("energy_components"),
+                reference_label="converged SCC reference")
+            if components_text:
+                scc_blocks.append(components_text)
+            if charge_block:
+                scc_blocks.append(charge_block)
+            if scc_blocks:
+                sections.append(("PyOQP: DFTB SCC steps", scc_blocks))
+            response_blocks = [
+                dftb_trace.format_davidson_block(
+                    solve, dftb_method_name(self.config))
+                for solve in parsed["davidson"]
+            ]
+            if response_blocks:
+                sections.append(("PyOQP: DFTB response steps",
+                                 response_blocks))
+            if extra:
+                sections.append(("PyOQP: DFTB native diagnostics", [extra]))
+            timing = self._timing_footer(step_times)
+            if timing and sections:
+                sections[-1][1].append(timing)
+            for title, blocks in sections:
+                dump_log(self.mol, title=title, section="text",
+                         info={"text": "\n\n".join(blocks)})
+            return
+
+        # Gradient call: the reference/response are merely re-solved for the
+        # requested state, so summarize them in one line each and give the
+        # Z-vector solve the full iteration table.
+        blocks = []
+        if verbose:
+            blocks.append("   Native call: method=%s  state=%s  gradient=yes"
+                          % (canonical_dftb_type(method), int(state)))
+            scc_text = dftb_trace.format_scc_block(parsed, verbose=True)
+            if scc_text:
+                blocks.append(scc_text)
+            blocks.extend(
+                dftb_trace.format_davidson_block(
+                    solve, dftb_method_name(self.config))
+                for solve in parsed["davidson"])
+        else:
+            summary_lines = []
+            scc_lines = dftb_trace.format_scc_summary_lines(parsed)
+            if scc_lines:
+                summary_lines.extend(scc_lines.splitlines())
+            summary_lines.extend(dftb_trace.collapse_repeats(
+                [dftb_trace.format_davidson_summary_line(solve)
+                 for solve in parsed["davidson"]]))
+            if summary_lines:
+                blocks.append("\n".join(summary_lines))
+        blocks.extend(dftb_trace.format_zvector_block(solve)
+                      for solve in parsed["zvector"])
+        blocks.extend(dftb_trace.format_zvector_dense_block(solve)
+                      for solve in parsed["zvector_dense"])
+        if charge_block:
+            blocks.append(charge_block)
+        if extra:
+            blocks.append(extra)
+        timing = self._timing_footer(step_times)
+        if timing:
+            blocks.append(timing)
+        if not blocks:
+            return
+        if state > 0:
+            title = ("PyOQP: DFTB gradient steps (%s)"
+                     % self._public_target_label(state))
+        else:
+            title = "PyOQP: DFTB gradient steps (ground state)"
+        dump_log(self.mol, title=title, section="text",
+                 info={"text": "\n\n".join(block for block in blocks if block)})
+
+    def _excited_state_summary(self, result):
+        """Build the excited-state summary payload from one response solve."""
+        method = self._resolved_method()
+        if method in _GROUND_TYPES or result.all_state_energies is None:
+            return None
+        canonical = canonical_dftb_type(method)
+        energies = [float(value) for value in result.all_state_energies]
+        n_roots = len(energies)
+        if n_roots == 0:
+            return None
+        spins = ([float(value) for value in result.all_spin_squares]
+                 if result.all_spin_squares is not None else [])
+        parsed = dftb_trace.parse_native_trace(result.stdout or "")
+        spectrum = parsed.get("spectrum")
+
+        if canonical == "mrsf":
+            labels = [public_state_label(self.config, root)
+                      for root in range(1, n_roots + 1)]
+            prefix = labels[0][0] if labels and labels[0][1:].isdigit() else "S"
+            reference_label = "Reference: high-spin ROKS (internal)"
+            reference_energy = result.reference_energy
+        elif canonical == "sf":
+            labels = ["root %d" % root for root in range(1, n_roots + 1)]
+            prefix = None
+            reference_label = "Reference: high-spin ROKS (internal)"
+            reference_energy = result.reference_energy
+        else:
+            # Closed-shell TDDFTB: the reference IS S0; roots are S1..Sn.
+            labels = ["S0"] + ["S%d" % root for root in range(1, n_roots + 1)]
+            energies = [float(result.reference_energy)] + energies
+            spins = [0.0] + spins
+            prefix = "S"
+            reference_label = None
+            reference_energy = None
+
+        oscillator = {}
+        transitions = []
+        approximation = ""
+        if spectrum:
+            approximation = spectrum.get("approximation", "")
+            oscillator = {
+                label: row for label, row in dftb_trace.spectrum_from_ground(
+                    spectrum, prefix).items()
+            }
+            transitions = [{
+                "initial": dftb_trace.map_spectrum_label(row["initial"], prefix),
+                "final": dftb_trace.map_spectrum_label(row["final"], prefix),
+                "de_ev": row["de_ev"],
+                "dipole": row["dipole"],
+                "dipole_xyz": row.get("dipole_xyz"),
+                "oscillator": row["oscillator"],
+            } for row in spectrum.get("rows", [])]
+
+        return {
+            "method": canonical,
+            "state_labels": labels,
+            "state_energies": energies,
+            "spin_squares": spins,
+            "oscillator": oscillator,
+            "transitions": transitions,
+            "approximation": approximation,
+            "reference_label": reference_label,
+            "reference_energy": reference_energy,
+        }
+
+    def _dump_excited_state_summary(self, base):
+        """Report state energies + oscillator data once per response solve.
+
+        This runs at the END of the energy stage, so the summary table (and
+        the state-to-state spectrum after it) appear in the log BEFORE any
+        'Entering Gradient Calculation' section, mirroring the native OpenQP
+        TDDFT summary placement.
+        """
+        summary = self._excited_state_summary(base)
+        if summary is None:
+            return
+        self.mol.dftb_excited_states = summary
+        key = self._cache_key(self._resolved_method(), base.state,
+                              need_grad=False)
+        if getattr(self.mol, "_dftb_summary_logged_key", None) == key:
+            return
+        self.mol._dftb_summary_logged_key = key
+        if max(0, int(self.dftb.get("print_level", 1))) == 0:
+            return
+        dump_log(
+            self.mol,
+            title="PyOQP: %s Excited States" % dftb_method_name(self.config),
+            section="text",
+            info={"text": dftb_trace.format_excited_state_summary(summary)},
         )
 
     def _state_gradient_common_arguments(self, values):

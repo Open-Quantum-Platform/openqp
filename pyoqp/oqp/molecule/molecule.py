@@ -1392,6 +1392,26 @@ class Molecule:
         data['hess'] = np.array(self.get_hess()).tolist()
         data.update(self.get_mrsf_ekt_results())
 
+        # OpenQP-DFTB backend results.  The DFTB adapter is pure Python, so
+        # liboqp's mol_energy struct (the 'energy' scalar above) is never
+        # populated on this path; surface the adapter results explicitly:
+        # total state energies, the excited-state summary (VEE in eV,
+        # transition dipoles, oscillator strengths), the reference energy
+        # decomposition, and Mulliken charges + point-charge dipole.
+        if str(self.config.get('input', {}).get('method', '')
+               ).strip().lower() == 'dftb':
+            energies = getattr(self, 'energies', None)
+            if energies is not None and np.asarray(energies).size:
+                data['energies'] = np.asarray(
+                    energies, dtype=float).ravel().tolist()
+                data['energy'] = data['energies'][0]
+            for key in ('dftb_excited_states', 'dftb_energy_components',
+                        'dftb_resolved_options',
+                        'dftb_mulliken', 'dftb_relaxed_mulliken'):
+                value = getattr(self, key, None)
+                if value:
+                    data[key] = value
+
         return data
 
     @mpi_get_attr
