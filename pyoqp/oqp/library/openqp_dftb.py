@@ -107,6 +107,46 @@ _ABI1_UNSUPPORTED_OPTION_DEFAULTS = {
 }
 
 
+def _state_gradient_argtypes(abi_version: int) -> list[object]:
+    """Return the exact ctypes signature of ``openqp_dftb_state_gradient``.
+
+    The C entry point is a fixed-arity Fortran ``bind(C)`` routine.  Leaving
+    it untyped makes ctypes use its permissive foreign-call path; an argument
+    layout drift can then corrupt native pointers instead of producing a
+    Python exception.  The explicit signature also matters on arm64, where
+    fixed and variadic foreign calls use different ABI classification rules.
+    """
+    i64 = ctypes.c_int64
+    i32 = ctypes.c_int32
+    f64 = ctypes.c_double
+    p_i64 = ctypes.POINTER(i64)
+    p_f64 = ctypes.POINTER(f64)
+
+    # slots 1--37 in _state_gradient_common_arguments
+    common = [
+        i64, p_i64, p_f64, ctypes.c_char_p, i32, ctypes.c_char_p, i32,
+        *([i64] * 16),
+        *([f64] * 14),
+    ]
+    # c_mrsf, response_global_hybrid, onsite_exchange_scale
+    controls = [f64, i64, f64]
+    if abi_version != 1:
+        # ABI v2/v3 extended DTCAM controls and the preset name.
+        controls.extend([
+            *([f64] * 9), ctypes.c_char_p, i32,
+        ])
+    # n_ext_pot/ext_potential followed by the result/output tail.
+    tail = [
+        i64, p_f64,
+        p_f64, p_f64, p_f64, p_f64, p_f64,
+        p_i64, p_f64, p_f64, p_f64,
+        p_i64, p_i64, p_i64, p_i64,
+        i64, p_f64, p_f64, i64, p_f64,
+        ctypes.c_char_p, i32, p_i64,
+    ]
+    return common + controls + tail
+
+
 def _bundled_parameter_path() -> str | None:
     """Bundled OB2W0PT3 default of the installed openqp-dftb wheel, if any.
 
@@ -1252,10 +1292,8 @@ class OpenQPDFTBAdapter:
                 f"{path} does not export openqp_dftb_state_gradient; "
                 "rebuild openqp-dftb with OPENQP_DFTB_BUILD_SHARED=ON."
             )
-        # The state-gradient arguments are passed by value with no argtypes
-        # metadata, so an adapter/library revision mismatch would silently
-        # read garbage. Detect the ABI before the first call and dispatch its
-        # exact argument layout. The released v1 predates the version symbol.
+        # Detect the ABI before the first call and install its exact fixed
+        # ctypes signature. The released v1 predates the version symbol.
         abi_probe = getattr(lib, "openqp_dftb_capi_abi_version", None)
         if abi_probe is not None:
             abi_probe.restype = ctypes.c_int64
@@ -1285,6 +1323,9 @@ class OpenQPDFTBAdapter:
                 f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
                 "OpenQP adapter supports only versions 1, 2, and 3."
             )
+        lib.openqp_dftb_state_gradient.argtypes = _state_gradient_argtypes(
+            abi_version
+        )
         lib.openqp_dftb_state_gradient.restype = None
         cache["__native_library__"] = lib
         cache["__native_abi_version__"] = abi_version

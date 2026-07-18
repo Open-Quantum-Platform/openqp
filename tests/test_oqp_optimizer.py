@@ -10,6 +10,7 @@ import sys
 import tempfile
 import types
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -302,6 +303,15 @@ class TestNativeRecoveryLadder(unittest.TestCase):
         self.assertTrue(
             optimizer._native_progress_stalled(flat_high_gradient)
         )
+        self.assertTrue(optimizer._is_electronic_nonconvergence(
+            RuntimeError(
+                "openqp-dftb LC density-matrix CPHF did not converge; "
+                "residual 5.1"
+            )
+        ))
+        self.assertFalse(optimizer._is_electronic_nonconvergence(
+            RuntimeError("openqp-dftb parameter set is incomplete")
+        ))
 
         def fail_electronics(_coordinates):
             optimizer.itr += 1
@@ -796,6 +806,20 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
 
+    def test_internal_back_transform_rejects_overflow_without_poisoning_geometry(self):
+        for coordsys in ("ric", "dlc"):
+            with self.subTest(coordsys=coordsys):
+                ic = NC.build_coordinates(
+                    self.WATER_AT, self.WATER_X, coordsys=coordsys
+                )
+                huge_step = np.full(len(ic.q(self.WATER_X)), 1.0e308)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", RuntimeWarning)
+                    x_new, ok = ic.back_transform(self.WATER_X, huge_step)
+                self.assertFalse(ok)
+                self.assertTrue(np.all(np.isfinite(x_new)))
+                self.assertTrue(np.allclose(x_new, self.WATER_X.reshape(-1)))
+
     def test_multifragment_tric(self):
         # Two well-separated triangular C3 fragments (each non-collinear, so
         # rotation is well defined): TRIC must span the full 3N = 18.
@@ -941,6 +965,74 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
     WATER_AT = [8, 1, 1]
     WATER_X = np.array([[0, 0, 0.12], [0, 1.43, -0.96],
                         [0, -1.43, -0.96]], float)
+
+    def test_finite_failed_back_transform_preserves_internal_model(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
+                           trust=0.1)
+        original = eng.x.copy()
+        eng.coords.back_transform = lambda x, dq: (np.asarray(x).copy(), False)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.linspace(-0.1, 0.1, 9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertFalse(np.allclose(x_new, original))
+        self.assertIsNotNone(eng._prev)
+        self.assertEqual(eng.nonfinite_step_rejections, 0)
+        self.assertIsInstance(eng.coords, NC.DelocalizedInternalCoordinates)
+        self.assertNotIn("CART(nonfinite recovery)", eng.coordsys)
+
+    def test_nonfinite_hessian_switches_to_cartesian_recovery(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc",
+                           trust=0.1)
+        eng.H.fill(np.inf)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.linspace(-0.1, 0.1, 9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertEqual(eng.nonfinite_step_rejections, 1)
+        self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+
+    def test_trust_restriction_scales_huge_finite_step_without_overflow(self):
+        eng = NE.OQPEngine([1], [0.0, 0.0, 0.0], coordsys="cart",
+                           trust=0.1)
+        huge_step = np.array([1.0e200, -5.0e199, 2.5e199])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            restricted = eng._restrict_to_trust(np.eye(3), huge_step)
+        self.assertTrue(np.all(np.isfinite(restricted)))
+        self.assertGreater(np.max(np.abs(restricted)), 0.0)
+        self.assertLessEqual(NC._scaled_rms(restricted), eng.trust)
+
+    def test_ts_cartesian_recovery_preserves_eigenvector_following(self):
+        h_cart = np.diag([-0.5, 0.4, 0.8])
+        eng = NE.OQPEngine(
+            [1], [0.0, 0.0, 0.0], mode="ts", coordsys="cart",
+            trust=0.1, initial_hessian=h_cart,
+        )
+        eng.coords.back_transform = lambda x, dq: (np.asarray(x).copy(), False)
+        gradient = np.array([0.1, 0.2, 0.3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, gradient)
+        displacement = x_new - eng.x
+        self.assertGreater(displacement[0] * gradient[0], 0.0)
+        self.assertLess(np.dot(displacement[1:], gradient[1:]), 0.0)
+        self.assertTrue(np.all(np.isfinite(x_new)))
+
+    def test_meci_objective_rebase_drops_nonfinite_secant_history(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        eng._prev = {
+            "x": eng.x.copy(), "dq": np.ones(3), "g_q": np.zeros(3),
+            "e": 0.0, "pred": 0.0, "cart_step": 0.01,
+        }
+        eng.H.fill(np.inf)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            rebased = eng.rebase_previous_objective(
+                0.0, np.linspace(-0.1, 0.1, 9)
+            )
+        self.assertFalse(rebased)
+        self.assertIsNone(eng._prev)
 
     def test_omitted_hessian_keeps_existing_model(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")
@@ -1142,6 +1234,25 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
 
 # --------------------------------------------------------------------------- #
 class TestDispatchAndValidation(unittest.TestCase):
+    _IMPORT_STATE = (
+        "oqp", "oqp.utils", "oqp.utils.mpi_utils", "oqp.utils.input_checker",
+        "oqp.utils.perf_levels",
+    )
+
+    def setUp(self):
+        # The dispatcher tests load input_checker around lightweight module
+        # stubs.  Preserve the real package imports so they cannot leak into
+        # later integration tests (notably QM/MM, which imports perf_levels).
+        self._saved_import_state = {
+            name: sys.modules.get(name) for name in self._IMPORT_STATE
+        }
+        utils = types.ModuleType("oqp.utils")
+        utils.__path__ = []
+        sys.modules["oqp.utils"] = utils
+
+    def tearDown(self):
+        _restore_modules(self._saved_import_state)
+
     def test_input_checker_accepts_oqp(self):
         # input_checker only needs a tiny mpi_utils stub.
         utils = sys.modules.setdefault("oqp.utils",

@@ -271,6 +271,7 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(adapter.mol._openqp_dftb_cache["__native_abi_version__"], 1)
         self.assertEqual(adapter.mol._openqp_dftb_cache["__native_capabilities__"], 0)
         self.assertIsNone(library.openqp_dftb_state_gradient.restype)
+        self.assertEqual(len(library.openqp_dftb_state_gradient.argtypes), 63)
 
     def test_optional_capability_symbol_is_probed_and_cached(self):
         adapter, library = self._adapter_with_current()
@@ -286,6 +287,14 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertIs(
             library.openqp_dftb_capi_capabilities.restype, ctypes.c_int64
         )
+        self.assertEqual(len(library.openqp_dftb_state_gradient.argtypes), 74)
+
+    def test_current_ctypes_signature_keeps_qmmm_fields_before_outputs(self):
+        signature = ADAPTER_MODULE._state_gradient_argtypes(3)
+        self.assertEqual(len(signature), 74)
+        self.assertIs(signature[51], ctypes.c_int64)
+        self.assertEqual(signature[52], ctypes.POINTER(ctypes.c_double))
+        self.assertEqual(signature[53], ctypes.POINTER(ctypes.c_double))
 
     def test_missing_capability_symbol_means_zero_even_for_abi3(self):
         adapter, library = self._adapter_with_current(capabilities=None)
@@ -523,6 +532,22 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(args[72].value, 1024)
         self.assertEqual(result.reference_energy, -1.25)
         np.testing.assert_array_equal(result.all_state_energies, [-1.05, -0.95])
+
+    def test_current_layout_keeps_qmmm_potential_before_output_pointers(self):
+        adapter, library = self._adapter_with_current()
+        adapter.mol.dftb_external_potential = np.array([0.1, -0.1])
+
+        adapter._run_native("ground", 0, need_grad=True)
+
+        args = library.openqp_dftb_state_gradient.calls[0]
+        # ABI-v2/v3 puts these between the preset fields (49--50) and the
+        # reference-energy output pointer (53). Keeping the position explicit
+        # prevents a native crash from a silently shifted ctypes call.
+        self.assertEqual(args[51].value, 2)
+        self.assertEqual([args[52][i] for i in range(2)], [0.1, -0.1])
+        self.assertAlmostEqual(
+            ctypes.cast(args[53], ctypes.POINTER(ctypes.c_double))[0], -1.25
+        )
 
 
 if __name__ == "__main__":
