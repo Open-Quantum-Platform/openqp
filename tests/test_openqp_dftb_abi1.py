@@ -524,6 +524,22 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(result.reference_energy, -1.25)
         np.testing.assert_array_equal(result.all_state_energies, [-1.05, -0.95])
 
+    def test_current_layout_keeps_qmmm_potential_before_output_pointers(self):
+        adapter, library = self._adapter_with_current()
+        adapter.mol.dftb_external_potential = np.array([0.1, -0.1])
+
+        adapter._run_native("ground", 0, need_grad=True)
+
+        args = library.openqp_dftb_state_gradient.calls[0]
+        # ABI-v2/v3 puts these between the preset fields (49--50) and the
+        # reference-energy output pointer (53). Keeping the position explicit
+        # prevents a native crash from a silently shifted ctypes call.
+        self.assertEqual(args[51].value, 2)
+        self.assertEqual([args[52][i] for i in range(2)], [0.1, -0.1])
+        self.assertAlmostEqual(
+            ctypes.cast(args[53], ctypes.POINTER(ctypes.c_double))[0], -1.25
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
