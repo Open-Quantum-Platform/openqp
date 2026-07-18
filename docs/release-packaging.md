@@ -23,10 +23,16 @@ wheel jobs use the default `~/Library/Caches/openqp/externals` location.
 ## Release Checklist
 
 1. Update `project.version` in `pyproject.toml`.
-2. Create and push a matching tag, for example `v1.2.0`.
-3. Publish a GitHub Release from that tag.
-4. Wait for the full wheel workflow to finish.
-5. Confirm that the release assets and PyPI files include the expected wheels.
+2. Synchronize the version in `CMakeLists.txt` and `pyoqp/setup.py`, then run
+   `python -m unittest tests.test_release_metadata`.
+3. Write detailed release notes as described below and include them in the
+   release-preparation pull request for review.
+4. Merge the release-preparation pull request only after its checks pass.
+5. Create and push a matching tag, for example `v1.2.0`.
+6. Publish a GitHub Release from that tag using the reviewed release notes.
+7. Wait for the full wheel workflow to finish, then confirm that the GitHub
+   Release assets and PyPI files include the expected wheels and source
+   distribution.
 
 The workflow verifies that the GitHub Release tag is exactly `v` plus the
 `pyproject.toml` version. For example, `version = "1.2.0"` must be released as
@@ -35,6 +41,54 @@ The workflow verifies that the GitHub Release tag is exactly `v` plus the
 Pushing a `v*` tag by itself does not start this workflow. Publish a GitHub
 Release from the tag instead, so the full wheel build and PyPI upload happen
 once from the release event.
+
+## Release Notes Requirements
+
+Every release must describe the complete change set since the previous release,
+not just the version bump or a short list of highlights.
+
+1. Generate GitHub's candidate notes between the previous and new tags to
+   collect merged pull requests and contributors.
+2. Audit `git log <previous-tag>..HEAD` as well, because direct commits and
+   multi-commit pull requests may not appear as separate entries in generated
+   notes.
+3. Reconcile the two lists so every merged pull request and every user-visible
+   direct commit is represented exactly once.
+4. Organize the notes under these headings where applicable:
+   - Highlights
+   - New features and scientific capabilities
+   - Performance improvements
+   - Bug fixes and reliability
+   - Packaging, platforms, and CI
+   - Documentation and developer experience
+5. Explain the user or developer impact of each item and link it to its pull
+   request or commit. Call out changed defaults, compatibility constraints,
+   optional dependencies, migration steps, and known limitations explicitly.
+6. End with contributor acknowledgements and a full comparison link between
+   the two release tags.
+
+Use the following structure for the reviewed release-note document and the
+GitHub Release body:
+
+```markdown
+# OpenQP vX.Y.Z
+
+## Highlights
+
+## New features and scientific capabilities
+
+## Performance improvements
+
+## Bug fixes and reliability
+
+## Packaging, platforms, and CI
+
+## Documentation and developer experience
+
+## Contributors
+
+**Full changelog:** https://github.com/Open-Quantum-Platform/openqp/compare/vPREVIOUS...vX.Y.Z
+```
 
 ## PyPI Trusted Publishing
 
