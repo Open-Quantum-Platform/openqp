@@ -129,7 +129,6 @@ The package install keeps the Python wrapper, native library, headers, and data 
 
 ```bash
 openqp examples/HF/H2O_RHF-HF_ENERGY.oqp          # OpenMP / sequential run
-openqp --run_tests all                            # default mixed regression suite
 ```
 
 Every legacy example has a concise `.oqp` companion. To run the regression
