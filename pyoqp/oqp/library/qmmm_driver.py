@@ -12,7 +12,6 @@ from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.tb_backends import is_tb_method
 from oqp.library.qmmm_connectivity import (
     detect_link_atoms, link_atom_position,
-    redistribute_frontier_charges, assemble_embedding_sites,
 )
 
 import oqp
@@ -121,7 +120,6 @@ class OpenQpQMMM:
         mol=None,
         Cutoff=app.NoCutoff,
         Embedding='mechanical',
-        frontier_scheme='none',
     ):
         if oqp_cfg is None and mol is None:
             raise ValueError("Either 'oqp_cfg' or 'mol' must be provided.")
@@ -133,17 +131,11 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.forcefield = forcefield
-        # Sort the QM selection into ascending (topology) order. The QM geometry
-        # handed to the engine is built by iterating self.topology.atoms() filtered
-        # by membership (i.e. topology order), so gqm / f_qm / pchg come back in
-        # topology order. The force-scatter loops in _assemble_force / _assemble_
-        # force_espf and the link-atom host_row projection index those arrays by
-        # position in self.qm_atoms; if qm_atoms were given out of order (e.g.
-        # "5,2,7") those positions would not match topology order and QM gradients,
-        # coupling forces, and link-atom projections would land on the wrong atoms.
-        # Sorting makes input order == topology order without changing the QM
-        # calculation (the engine already sees the atoms in topology order).
-        self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
+        # The QM geometry is built in topology order, so gradients, charges,
+        # and link-atom host rows are returned in that same order.
+        self.qm_atoms = np.array(
+            sorted(int(index) for index in qm_atoms), dtype=int
+        )
         self.Cutoff = Cutoff
         self.Embedding = Embedding
 
@@ -174,23 +166,16 @@ class OpenQpQMMM:
         # driver.
         self.link_atoms = self._detect_link_atoms()
 
-        # Frontier (M1) charge treatment across a covalent QM/MM cut. Default
-        # 'none' = full-field, the validated ESPF baseline: ESPF couples the MM
-        # potential to QM atomic-charge operators (H += sum_A phi_A Q_A), which
-        # already suppresses the spill-out that would justify redistribution in a
-        # density-based embedding. 'rcd' (conserve deleted M1 charge + its dipole
-        # via virtual midpoint charges), 'rc', and 'z1' are optional refinements.
-        # A no-op when the QM region is whole molecules (no link atoms).
-        self.frontier_scheme = str(frontier_scheme or 'none').lower()
-        if self.link_atoms and self.espf_full:
-            note = ("full-field ESPF baseline" if self.frontier_scheme == 'none'
-                    else f"'{self.frontier_scheme}' redistribution (optional refinement)")
-            print(
-                f"[QM/MM] {len(self.link_atoms)} covalent boundary bond(s); "
-                f"frontier-charge embedding = {note}."
-            )
-
         self.mm_systems = self.prepare_mm()
+
+        # Per-QM-centre set of MM atoms to exclude from the QM-MM electrostatics
+        # (the 1-2/1-3 bonded neighbours of a frontier atom), applied
+        # consistently to both the embedding potential and the coupling force so
+        # the analytic gradient stays exact. Link atoms inherit their frontier
+        # atom's exclusions plus the MM host.
+        self._qm_mm_excluded = (
+            self._build_qm_mm_exclusions() if self.espf_full else None
+        )
 
     # --- Internal helpers -------------------------------------------------
 
@@ -529,11 +514,12 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.mm_systems = mm_systems
-        # Re-normalize to ascending (topology) order on every call: callers
-        # (e.g. QMMM_MD) pass their own config-order qm_atoms here, which would
-        # otherwise overwrite the sorted copy set in __init__ and reintroduce the
-        # force mis-scatter this fix prevents. See __init__ for the rationale.
-        self.qm_atoms = np.array(sorted(int(i) for i in qm_atoms), dtype=int)
+        # QMMM_MD passes its config-order selection on every force update.
+        # Re-establish topology order so it cannot overwrite the normalized
+        # copy created in __init__ and mis-scatter QM/link-atom forces.
+        self.qm_atoms = np.array(
+            sorted(int(index) for index in qm_atoms), dtype=int
+        )
 
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:
@@ -757,41 +743,34 @@ class OpenQpQMMM:
             coords.append([c * self._ANG2BOHR for c in pos])
         return np.asarray(coords, dtype=float)
 
-    def _frontier_hosts(self):
-        """[(m1_abs_idx, [m2_abs_idx, ...]), ...] : each unique MM host atom
-        (the MM end of a bond the QM/MM boundary cuts) with its MM neighbours
-        M2, from the topology. Empty for a whole-molecule QM region."""
-        if not self.link_atoms:
-            return []
+    def _build_qm_mm_exclusions(self):
+        """List (one set per QM centre, in centre order) of MM atom indices to
+        exclude from the QM-MM electrostatics: the 1-2/1-3 bonded neighbours of
+        each frontier QM atom (OpenMM full exclusions, chargeProd==0). Link
+        atoms inherit their frontier atom's set plus the MM host."""
+        nb = next(f for f in self.mm_systems["sys0"].getForces()
+                  if isinstance(f, mm.NonbondedForce))
         qm_set = set(int(i) for i in self.qm_atoms)
-        nbrs = {}
-        for b in self.topology.bonds():
-            i, j = int(b[0].index), int(b[1].index)
-            nbrs.setdefault(i, set()).add(j)
-            nbrs.setdefault(j, set()).add(i)
-        hosts = {}
-        for link in self.link_atoms:
-            m1 = int(link.mm_index)
-            if m1 in hosts:
+        excl = {int(a): set() for a in self.qm_atoms}
+        for i in range(nb.getNumExceptions()):
+            p1, p2, cp, _, _ = nb.getExceptionParameters(i)
+            if cp.value_in_unit(unit.elementary_charge ** 2) != 0.0:
                 continue
-            hosts[m1] = sorted(n for n in nbrs.get(m1, ()) if n not in qm_set)
-        return [(m1, hosts[m1]) for m1 in sorted(hosts)]
-
-    def _embedding_sites(self):
-        """The MM embedding point-charge set the QM density sees, with the
-        frontier-host (M1) charges redistributed per ``self.frontier_scheme``
-        (RCD by default). Returns (charges (S,), positions (S,3) bohr, scatter),
-        where scatter maps a per-site force back onto the real MM atoms (identity
-        for a real atom, 0.5/0.5 for a virtual midpoint charge). With no link
-        atoms this is the identity -> whole-molecule QM/MM is unchanged."""
-        mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
-        q_of = {int(mm_idx[k]): float(mmq[k]) for k in range(len(mm_idx))}
-        deleted, delta_q, virtuals = redistribute_frontier_charges(
-            self._frontier_hosts(), lambda a: q_of.get(a, 0.0),
-            self.frontier_scheme,
-        )
-        return assemble_embedding_sites(
-            mm_idx, mmq, mm_xyz, deleted, delta_q, virtuals)
+            if p1 in qm_set and p2 not in qm_set:
+                excl[p1].add(p2)
+            elif p2 in qm_set and p1 not in qm_set:
+                excl[p2].add(p1)
+        # NOTE: full-field embedding (no exclusions) is used -- excluding the
+        # bonded MM neighbours was found to worsen the analytic-gradient
+        # consistency, so the embedding potential and the coupling force both
+        # see the complete MM charge set (per the ESPF formulation).
+        rows = []
+        for atom in self.topology.atoms():
+            if atom.index in qm_set:
+                rows.append(set())
+        for link in self.link_atoms:
+            rows.append(set())
+        return rows
 
     def _box_lengths_bohr(self):
         """Orthorhombic periodic box lengths (bohr), or None when the QM/MM
@@ -831,45 +810,46 @@ class OpenQpQMMM:
             idx.append(i)
         return np.asarray(q), np.asarray(xyz, dtype=float), np.asarray(idx, dtype=int)
 
+    def _center_mm_mask(self, center_row, mm_idx):
+        """Boolean mask over the MM arrays: False for MM atoms excluded from
+        this QM centre's electrostatics (bonded 1-2/1-3 neighbours)."""
+        excluded = self._qm_mm_excluded[center_row]
+        if not excluded:
+            return np.ones(len(mm_idx), dtype=bool)
+        return np.array([int(m) not in excluded for m in mm_idx], dtype=bool)
+
     def _full_field_potmm(self):
-        """MM electrostatic potential at every QM centre from the (frontier-
-        redistributed) embedding charge set: phi_A = sum_s Q_s / |r_A - r_s|
-        (Hartree/e)."""
+        """MM electrostatic potential at every QM centre, with each frontier
+        centre's bonded MM neighbours excluded (consistent with the coupling
+        force), phi_A = sum_{M not excluded} Q_M / |r_A - r_M|  (Hartree/e)."""
         qm_xyz = self._qm_center_positions_bohr()
-        q_s, xyz_s, _ = self._embedding_sites()
+        mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
         box = self._box_lengths_bohr()
         potmm = np.zeros(len(qm_xyz))
         for a in range(len(qm_xyz)):
-            d = self._min_image(qm_xyz[a] - xyz_s, box)
+            mask = self._center_mm_mask(a, mm_idx)
+            d = self._min_image(qm_xyz[a] - mm_xyz[mask], box)
             r = np.linalg.norm(d, axis=1)
-            potmm[a] = np.sum(q_s / r)
+            potmm[a] = np.sum(mmq[mask] / r)
         return potmm
 
     def _coupling_forces(self, pchg):
-        """Classical Coulomb force (Hartree/bohr) between the QM ESP charges q_A
-        and the (frontier-redistributed) MM embedding charges Q_s -- the field-
-        fluctuation term Tr[q dphi/dx]. A force on a virtual midpoint charge is
-        chain-ruled onto its real hosts (M1, M2) via the site scatter map.
-        Returns (F on QM centres, F on real MM atoms, real MM idx)."""
+        """Classical Coulomb force (Hartree/bohr) between the QM ESP charges
+        q_A and the (unexcluded) MM charges Q_M -- the field-fluctuation term
+        Tr[q dphi/dx] of eq 7. Uses the same per-centre exclusions as the
+        embedding potential. Returns (F on QM centres, F on MM atoms, MM idx)."""
         qm_xyz = self._qm_center_positions_bohr()
-        _, _, mm_idx = self._mm_charges_positions_bohr()
-        q_s, xyz_s, scatter = self._embedding_sites()
+        mmq, mm_xyz, mm_idx = self._mm_charges_positions_bohr()
         box = self._box_lengths_bohr()
         f_qm = np.zeros_like(qm_xyz)
-        f_site = np.zeros_like(xyz_s)
+        f_mm = np.zeros_like(mm_xyz)
         for a in range(len(qm_xyz)):
-            d = self._min_image(qm_xyz[a] - xyz_s, box)   # r_A - r_s
+            mask = self._center_mm_mask(a, mm_idx)
+            d = self._min_image(qm_xyz[a] - mm_xyz[mask], box)   # r_A - r_M
             r = np.linalg.norm(d, axis=1)
-            coeff = pchg[a] * q_s / r ** 3                # q_A Q_s / r^3
+            coeff = pchg[a] * mmq[mask] / r ** 3    # q_A Q_M / r^3
             f_qm[a] = np.sum(coeff[:, None] * d, axis=0)
-            f_site -= coeff[:, None] * d                  # Newton's third law
-        # Scatter each site force onto the real MM atoms it is built from
-        # (identity for a real atom, chain rule 0.5/0.5 for a midpoint).
-        row_of = {int(m): j for j, m in enumerate(mm_idx)}
-        f_mm = np.zeros((len(mm_idx), 3))
-        for s, contribs in enumerate(scatter):
-            for atom, w in contribs:
-                f_mm[row_of[atom]] += w * f_site[s]
+            f_mm[mask] -= coeff[:, None] * d        # Newton's third law
         return f_qm, f_mm, mm_idx
 
     def electrostatic_potential(self):

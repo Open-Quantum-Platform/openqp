@@ -13,6 +13,7 @@ load), so it is skipped in environments without them.
 
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,6 +42,23 @@ class TestQMAtomsOrder(unittest.TestCase):
             pdb.positions, pdb.topology, ff, shuffled, oqp_cfg={},
             Cutoff=app.NoCutoff, Embedding="electrostatic",
         )
+        self.assertEqual(list(drv.qm_atoms), sorted(shuffled))
+
+    def test_compute_force_restores_topology_order(self):
+        drv = object.__new__(OpenQpQMMM)
+        drv.Embedding = "electrostatic"
+        drv.espf_full = True
+        drv.electrostatic_potential = mock.Mock(
+            return_value=(None, None)
+        )
+        drv.forces_qm_openqp = mock.Mock(
+            return_value=(0.0, None, object())
+        )
+        drv._assemble_force_espf = mock.Mock(return_value=(0.0, None))
+
+        shuffled = [16, 8, 18, 9, 17]
+        drv.compute_force(None, None, None, shuffled)
+
         self.assertEqual(list(drv.qm_atoms), sorted(shuffled))
 
 

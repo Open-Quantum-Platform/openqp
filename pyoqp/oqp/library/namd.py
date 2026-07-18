@@ -392,7 +392,6 @@ class NAMD_QMMM(NAMD):
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff
         embedding = str(q['embedding']).strip()
-        frontier_scheme = str(q.get('frontier_scheme', 'none')).strip()
 
         self.pdb = app.PDBFile(pdb_file)
         self.forcefield = app.ForceField(*ff_files)
@@ -404,7 +403,6 @@ class NAMD_QMMM(NAMD):
             mol=mol,
             Cutoff=self.cutoff,
             Embedding=embedding,
-            frontier_scheme=frontier_scheme,
         )
         self.mm = self.driver.mm_systems
 
