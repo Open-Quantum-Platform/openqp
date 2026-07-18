@@ -776,6 +776,20 @@ geom="chromophore_water.pdb 0-14"
     assert legacy["qmmm"]["pdb_file"] == pdb
     assert "pdb_file" not in oqp_input.render_canonical_oqp(spec)
 
+    redundant = oqp_input.parse_canonical_oqp(
+        text.replace(
+            'qmmm(forcefield_files=',
+            'qmmm(pdb_file="chromophore_water.pdb",forcefield_files=',
+        )
+    )
+    assert "pdb_file" not in oqp_input.render_canonical_oqp(redundant)
+
+    distinct = oqp_input.parse_canonical_oqp(
+        'dft/pbe0/def2-svp energy '
+        'qmmm(pdb_file="environment.pdb") geom="qm.xyz"'
+    )
+    assert 'pdb_file="environment.pdb"' in oqp_input.render_canonical_oqp(distinct)
+
 
 @pytest.mark.parametrize("spelling", ["nsteps", "n_steps"])
 def test_qmmm_md_step_alias_lowers_to_active_config_key(spelling):
