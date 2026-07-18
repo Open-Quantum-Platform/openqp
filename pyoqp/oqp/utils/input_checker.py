@@ -42,11 +42,13 @@ DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "tr
 DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
                "dftb+", "dftbplus", "dftb_plus"}
 # Production defaults when no model= is named and no preset-locked key is
-# tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; every other SCC
-# route (ground, TD-DFTB, SF) runs the DFTB+ compatibility protocol.  DFTB0
-# (ground_noscc) stays preset-free.
+# tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; the other
+# OPEN-SHELL SCC routes (SF, open-shell ground) run the DFTB+ compatibility
+# protocol.  Closed-shell routes (singlet ground, TD-DFTB) and DFTB0 stay
+# preset-free: LC-DFTB2 is not implemented for the restricted reference, and
+# the native library rejects lc_ground_state there.
 DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
-DFTB_MODEL_DEFAULT_OTHER = "dftb+"
+DFTB_MODEL_DEFAULT_OPEN_SHELL = "dftb+"
 # Keys a [dftb] model preset fixes; the checker refuses to combine them with
 # model= (the preset overrides them inside openqp-dftb, so a user-tuned value
 # would be silently discarded).
@@ -885,12 +887,13 @@ def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
 def apply_dftb_model_default(config: dict[str, Any]) -> str:
     """Materialize the production default [dftb] model preset.
 
-    MRSF-TDDFTB defaults to the published DTCAM-TB operator; every other SCC
-    route (ground SCC-DFTB, closed-shell TD-DFTB, SF-TDDFTB) defaults to the
-    DFTB+ compatibility protocol.  ``model=none`` keeps the explicit-keys
-    route, and any tuned preset-locked key implies manual operator control
-    (legacy inputs keep meaning what they said).  DFTB0 (non-SCC) stays
-    preset-free.  Returns the effective model string.
+    MRSF-TDDFTB defaults to the published DTCAM-TB operator; the other
+    open-shell SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
+    compatibility protocol.  Closed-shell routes (singlet ground, TD-DFTB)
+    and DFTB0 stay preset-free because the restricted reference has no
+    long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
+    and any tuned preset-locked key implies manual operator control (legacy
+    inputs keep meaning what they said).  Returns the effective model string.
     """
     if _as_lower(_get(config, "input", "method", "hf")) != "dftb":
         return ""
@@ -910,13 +913,20 @@ def apply_dftb_model_default(config: dict[str, Any]) -> str:
         return ""
     from oqp.utils.state_labels import resolved_dftb_type  # noqa: PLC0415
     route = resolved_dftb_type(config)
-    if route == "ground_noscc":
-        return ""
     if any(_dftb_key_customized(config, key)
            for key in DFTB_MODEL_LOCKED_KEYS):
         return ""
-    dftb["model"] = (DFTB_MODEL_DEFAULT_MRSF if route == "mrsf"
-                     else DFTB_MODEL_DEFAULT_OTHER)
+    if route == "mrsf":
+        dftb["model"] = DFTB_MODEL_DEFAULT_MRSF
+    elif route == "sf" or (
+            route == "ground"
+            and _get(config, "dftb", "reference_multiplicity", 0)
+            and int(_get(config, "dftb", "reference_multiplicity", 0)) > 1):
+        dftb["model"] = DFTB_MODEL_DEFAULT_OPEN_SHELL
+    else:
+        # Closed-shell routes (singlet ground, TD-DFTB) and DFTB0: the
+        # restricted reference has no LC yet, so no preset default.
+        return ""
     return dftb["model"]
 
 
@@ -1041,6 +1051,29 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
                 expected="native",
                 action="Use backend=native (presets are resolved inside openqp-dftb).",
             )
+        # LC-DFTB2 exists only for the spin-polarized (ROKS) reference; the
+        # native library rejects lc_ground_state on the closed-shell
+        # restricted path, so surface that at input time for LC presets.
+        if model in {"dftb+", "dftbplus", "dftb_plus"} and \
+                dftb_type_canon in {"ground", "ground_noscc", "tddftb"}:
+            reference_multiplicity = _get(
+                config, "dftb", "reference_multiplicity", 0)
+            try:
+                reference_multiplicity = int(reference_multiplicity)
+            except (TypeError, ValueError):
+                reference_multiplicity = 0
+            if reference_multiplicity <= 1:
+                report.add(
+                    "ERROR",
+                    "dftb.model",
+                    "model=dftb+ sets an LC-DFTB2 (lc_ground_state) "
+                    "reference, which is only implemented for the "
+                    "spin-polarized (ROKS) path.",
+                    value=f"{model} with closed-shell type={dftb_type_canon}",
+                    expected="an SF/MRSF route or reference_multiplicity > 1",
+                    action="Use type=sf/mrsf, set reference_multiplicity > 1, "
+                           "or drop model= (closed-shell runs stay preset-free).",
+                )
         conflicting = [
             key for key in DFTB_MODEL_LOCKED_KEYS
             if _dftb_key_customized(config, key)

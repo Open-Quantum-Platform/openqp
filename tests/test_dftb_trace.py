@@ -62,9 +62,9 @@ openqp_dftb_energy_components total -1.04652311259000E+001 electronic -1.0700000
 
 DFTB state-to-state oscillator strengths
   Approximation: unrelaxed TDA/state interaction, length gauge, DFTB Mulliken-monopole transition dipoles
-  Initial  Final      Delta E (eV)    mu_x (a.u.)    mu_y (a.u.)    mu_z (a.u.)      |mu| (a.u.)                f
-  root 1   root 2         6.951845       0.000000       2.504000       0.000000         2.504000     1.067900E+000
-  root 1   root 3         7.376022       0.000000       0.000000       0.000000         0.000000     0.000000E+000
+  Initial  Final      Delta E (eV)      |mu| (a.u.)                f    mu_x (a.u.)    mu_y (a.u.)    mu_z (a.u.)
+  root 1   root 2         6.951845         2.504000     1.067900E+000       0.000000       2.504000       0.000000
+  root 1   root 3         7.376022         0.000000     0.000000E+000       0.000000       0.000000       0.000000
 """
 
 

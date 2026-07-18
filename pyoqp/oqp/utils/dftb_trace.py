@@ -34,8 +34,9 @@ _SCC_PASS_TITLES = {
 }
 
 _SPECTRUM_HEADER = "DFTB state-to-state oscillator strengths"
-# Old printers wrote 3 numbers per row (dE, |mu|, f); current ones write 6
-# (dE, mu_x, mu_y, mu_z, |mu|, f).
+# Old printers wrote 3 numbers per row (dE, |mu|, f); current ones APPEND the
+# dipole components (dE, |mu|, f, mu_x, mu_y, mu_z) so positional parsers of
+# the historical layout keep reading the same fields.
 _SPECTRUM_ROW = re.compile(
     r"^\s*(S\d+|root \d+)\s+(S\d+|root \d+)((?:\s+[-+0-9.EeDd]+){3,6})\s*$"
 )
@@ -407,15 +408,10 @@ def _parse_spectrum(lines, index):
                 "initial": match.group(1),
                 "final": match.group(2),
                 "de_ev": numbers[0],
-                "dipole_xyz": None,
+                "dipole": numbers[1] if len(numbers) > 1 else None,
+                "oscillator": numbers[2] if len(numbers) > 2 else None,
+                "dipole_xyz": numbers[3:6] if len(numbers) >= 6 else None,
             }
-            if len(numbers) >= 6:
-                row["dipole_xyz"] = numbers[1:4]
-                row["dipole"] = numbers[4]
-                row["oscillator"] = numbers[5]
-            else:
-                row["dipole"] = numbers[1] if len(numbers) > 1 else None
-                row["oscillator"] = numbers[2] if len(numbers) > 2 else None
             spectrum["rows"].append(row)
             index += 1
             continue
