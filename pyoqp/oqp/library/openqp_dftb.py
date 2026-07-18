@@ -721,6 +721,37 @@ class OpenQPDFTBAdapter:
         dump_log(self.mol, title=title, section="text",
                  info={"text": "\n\n".join(block for block in blocks if block)})
 
+    # Configurations below this |coefficient| stay out of the per-state
+    # excitation analysis (the native MRSF-TDDFT log uses the same cutoff).
+    _CONFIGURATION_COEFF_CUTOFF = 0.05
+
+    def _state_configurations(self, result, labels):
+        """Dominant SF/MRSF amplitudes per state, keyed by public label."""
+        vectors = result.response_vectors
+        noca, nocb, nbf = int(result.noca), int(result.nocb), int(result.nbf)
+        if vectors is None or noca <= 0 or nbf <= nocb:
+            return {}
+        if vectors.shape[0] != noca * (nbf - nocb):
+            return {}
+        configurations = {}
+        for position, label in enumerate(labels):
+            if position >= vectors.shape[1]:
+                break
+            column = vectors[:, position]
+            entries = []
+            for raw_index in np.nonzero(
+                    np.abs(column) >= self._CONFIGURATION_COEFF_CUTOFF)[0]:
+                index = int(raw_index) + 1
+                occ, vir = dftb_trace.spin_flip_pair(index, noca, nocb)
+                entries.append({
+                    "index": index,
+                    "coeff": float(column[raw_index]),
+                    "occ": occ,
+                    "vir": vir,
+                })
+            configurations[label] = entries
+        return configurations
+
     def _excited_state_summary(self, result):
         """Build the excited-state summary payload from one response solve."""
         method = self._resolved_method()
@@ -774,6 +805,10 @@ class OpenQPDFTBAdapter:
                 "oscillator": row["oscillator"],
             } for row in spectrum.get("rows", [])]
 
+        configurations = {}
+        if canonical in {"mrsf", "sf"}:
+            configurations = self._state_configurations(result, labels)
+
         return {
             "method": canonical,
             "state_labels": labels,
@@ -781,6 +816,7 @@ class OpenQPDFTBAdapter:
             "spin_squares": spins,
             "oscillator": oscillator,
             "transitions": transitions,
+            "configurations": configurations,
             "approximation": approximation,
             "reference_label": reference_label,
             "reference_energy": reference_energy,

@@ -306,6 +306,47 @@ def test_timing_footer_format():
     assert "0.013" in text and "0.700" in text
 
 
+def test_spin_flip_pair_mapping_is_column_major():
+    # amplitudes(noca, n_virt_beta) flattened column-major:
+    # index = (vir - nocb - 1) * noca + occ.
+    noca, nocb = 12, 10
+    assert dftb_trace.spin_flip_pair(1, noca, nocb) == (1, 11)
+    assert dftb_trace.spin_flip_pair(12, noca, nocb) == (12, 11)
+    assert dftb_trace.spin_flip_pair(13, noca, nocb) == (1, 12)
+    assert dftb_trace.spin_flip_pair(26, noca, nocb) == (2, 13)
+
+
+def test_state_configurations_render_before_summary_table():
+    summary = {
+        "method": "mrsf",
+        "state_labels": ["S0", "S1"],
+        "state_energies": [-10.4652311259, -10.2097555403],
+        "spin_squares": [0.009, 0.0],
+        "oscillator": {},
+        "transitions": [],
+        "configurations": {
+            "S0": [{"index": 131, "coeff": 0.981013, "occ": 11, "vir": 20}],
+            "S1": [
+                {"index": 11, "coeff": -0.171425, "occ": 11, "vir": 11},
+                {"index": 132, "coeff": 0.953585, "occ": 12, "vir": 20},
+            ],
+        },
+        "reference_energy": -10.0480223817,
+        "reference_label": "Reference: high-spin ROKS (internal)",
+    }
+    text = dftb_trace.format_excited_state_summary(summary)
+
+    assert "Spin-adapted spin-flip excitations" in text
+    assert text.index("Spin-adapted spin-flip excitations") \
+        < text.index("Summary table")
+    assert "0.981013" in text and "11  ->    20" in text
+    assert "-0.171425" in text
+    assert "<S^2> =" in text and "VEE =" in text
+    # States with no dominant configurations are simply omitted.
+    summary["configurations"] = {"S0": [], "S1": []}
+    assert "Spin-adapted" not in dftb_trace.format_excited_state_summary(summary)
+
+
 def test_charge_block_lists_atoms_and_dipole():
     text = dftb_trace.format_charge_block(
         ["C", "H"], [-0.1, 0.1], [0.0, 0.2, 0.0],
