@@ -40,3 +40,4 @@ max_step=1
 coordsys=tric
 trust=0.1
 trust_max=0.3
+auto_recovery=false

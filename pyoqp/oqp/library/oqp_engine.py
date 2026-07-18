@@ -27,7 +27,12 @@ import numpy as np
 import scipy.linalg as sla
 import re
 
-from oqp.library.oqp_coords import build_coordinates, CartesianCoordinates
+from oqp.library.oqp_coords import (
+    build_coordinates,
+    CartesianCoordinates,
+    _scaled_norm,
+    _scaled_rms,
+)
 
 # All dense linear algebra in this module is routed through LAPACK
 # (scipy.linalg / numpy.linalg) and BLAS-3 GEMM (the ``@`` operators on the
@@ -170,6 +175,7 @@ class OQPEngine:
               and type(self.coords).__name__ == "RedundantInternalCoordinates"):
             label = "DLC->RIC(fallback)"
         self.coordsys = label
+        self.nonfinite_step_rejections = 0
         model_hessian = self.coords.guess_hessian(self.x)
         if initial_hessian is None:
             self.H = model_hessian
@@ -447,47 +453,164 @@ class OQPEngine:
         gradient = self._project_constraint_tangent(gradient, previous_x)
         gradient_q = self.coords.grad_to_q(previous_x, gradient)
         displacement_q = self._prev["dq"]
+        if (not np.all(np.isfinite(self.H))
+                or not np.all(np.isfinite(gradient_q))
+                or not np.all(np.isfinite(displacement_q))):
+            self._prev = None
+            return False
 
         self._prev["e"] = energy
         self._prev["g_q"] = gradient_q
-        self._prev["pred"] = float(
-            gradient_q @ displacement_q
-            + 0.5 * displacement_q @ self.H @ displacement_q
-        )
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            predicted = float(
+                gradient_q @ displacement_q
+                + 0.5 * displacement_q @ self.H @ displacement_q
+            )
+        if not np.isfinite(predicted):
+            self._prev = None
+            return False
+        self._prev["pred"] = predicted
         return True
 
     # -- one macro-iteration ------------------------------------------------ #
+    def _cartesian_follow_direction(self):
+        """Map the current TS mode into Cartesian space before model reset."""
+        if self.mode != "ts":
+            return None
+        b = self.coords.b_matrix(self.x)
+        if not np.all(np.isfinite(b)):
+            return None
+
+        followed = getattr(self, "_followed", None)
+        if followed is None:
+            if (self.H.shape != (b.shape[0], b.shape[0])
+                    or not np.all(np.isfinite(self.H))):
+                return None
+            w, v = _sym_eigh(self.H)
+            followed = v[:, self._select_follow_mode(w, v)]
+        followed = np.asarray(followed, dtype=float).reshape(-1)
+        if followed.size != b.shape[0] or not np.all(np.isfinite(followed)):
+            return None
+
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            if hasattr(self.coords, "_g_inverse"):
+                ginv, _ = self.coords._g_inverse(b)
+                direction = b.T @ (ginv @ followed)
+            else:
+                direction = followed.copy()
+        norm = _scaled_norm(direction)
+        if not np.isfinite(norm) or norm <= 1.0e-14:
+            return None
+        return direction / norm
+
+    def _bounded_cartesian_recovery(self, gradient):
+        """Reject an unstable internal step and take one bounded Cartesian step.
+
+        A failed DLC/RIC back-transformation must never contaminate the stored
+        secant pair or Hessian.  A TS search preserves its followed mode while
+        changing coordinate systems, then takes a bounded Cartesian P-RFO step
+        rather than silently turning into a minimization.
+        """
+        self.nonfinite_step_rejections += 1
+        self.trust = max(self.trust * 0.5, self.trust_min)
+        followed_cart = self._cartesian_follow_direction()
+        # An internal-coordinate map that has already overflowed is not a
+        # useful basis for the next trial point.  Switch this engine instance
+        # permanently to Cartesian coordinates; the outer native ladder may
+        # later restart a fresh DLC/TRIC model from the retained best geometry.
+        if not isinstance(self.coords, CartesianCoordinates):
+            self.coords = CartesianCoordinates(self.atoms.size)
+            self.coordsys = "%s->CART(nonfinite recovery)" % self.coordsys
+        self.H = self.coords.guess_hessian(self.x)
+        self._prev = None
+        gradient = np.asarray(gradient, dtype=float).reshape(-1)
+        if not np.all(np.isfinite(gradient)):
+            return self.x.copy()
+        # Normalize in two stages to avoid overflowing the norm of a very
+        # large, yet finite, electronic gradient.
+        scale = float(np.max(np.abs(gradient)))
+        if scale <= 1.0e-300 or not np.isfinite(scale):
+            return self.x.copy()
+        scaled_gradient = gradient / scale
+        if self.mode == "ts":
+            if followed_cart is None:
+                # Without a trustworthy mode, holding the accepted geometry is
+                # safer than taking a downhill step away from the saddle.  The
+                # outer recovery ladder can rebuild a fresh TS model.
+                self._followed = None
+                return self.x.copy()
+            curvature = max(float(np.max(np.diag(self.H))), 1.0e-3)
+            self.H = (
+                self.H
+                - 2.0 * curvature * np.outer(followed_cart, followed_cart)
+            )
+            self._followed = followed_cart
+            direction = self._prfo_step(self.H, scaled_gradient)
+        else:
+            direction = -scaled_gradient
+        rms = _scaled_rms(direction)
+        if rms <= 1.0e-14 or not np.isfinite(rms):
+            return self.x.copy()
+        return self._enforce_frozen_distance_values(
+            self.x + direction * (self.trust / rms)
+        )
+
     def _take_step(self, e, g_cart):
         b = self.coords.b_matrix(self.x)
         g_cart = self._project_constraint_tangent(g_cart, self.x)
+        if (not np.isfinite(e) or not np.all(np.isfinite(b))
+                or not np.all(np.isfinite(g_cart))
+                or not np.all(np.isfinite(self.H))):
+            return self._bounded_cartesian_recovery(g_cart)
         g_q = self.coords.grad_to_q(self.x, g_cart)
+        if not np.all(np.isfinite(g_q)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         if self._prev is not None:
             s = self._prev["dq"]
             y = g_q - self._prev["g_q"]
-            self.H = self._update_hessian(self.H, s, y)
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                self.H = self._update_hessian(self.H, s, y)
+            if not np.all(np.isfinite(self.H)):
+                return self._bounded_cartesian_recovery(g_cart)
             actual = e - self._prev["e"]
             pred = self._prev["pred"]
             self._update_trust(actual, pred, self._prev["cart_step"])
 
         dq = self._rfo_step(self.H, g_q)
         dq = self._restrict_to_trust(b, dq)
+        if not np.all(np.isfinite(dq)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         x_new, ok = self.coords.back_transform(self.x, dq)
         if not ok:
-            # Shrink and retry once; otherwise fall back to a plain scaled step.
+            # Shrink and retry once.  A finite, merely unconverged internal
+            # transform is common enough that it must retain the historical
+            # projected fallback (and the current internal-coordinate model).
+            # Reserve the Cartesian reset for an actually non-finite fallback.
             self.trust = max(self.trust * 0.5, self.trust_min)
             dq = self._restrict_to_trust(b, dq)
             x_new, ok = self.coords.back_transform(self.x, dq)
             if not ok:
-                x_new = self.x + (b.T @ dq) * 0.5
+                with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                    x_fallback = self.x + (b.T @ dq) * 0.5
+                if not np.all(np.isfinite(x_fallback)):
+                    return self._bounded_cartesian_recovery(g_cart)
+                x_new = x_fallback
 
         x_new = self._enforce_frozen_distance_values(x_new)
+        if not np.all(np.isfinite(x_new)):
+            return self._bounded_cartesian_recovery(g_cart)
 
         dq_taken = self.coords.q_displacement(self.coords.q(x_new),
                                               self.coords.q(self.x))
         cart_step = self.coords.cart_rmsd(self.x, x_new)
-        pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
+        if not np.all(np.isfinite(dq_taken)) or not np.isfinite(cart_step):
+            return self._bounded_cartesian_recovery(g_cart)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            pred = float(g_q @ dq_taken + 0.5 * dq_taken @ self.H @ dq_taken)
+        if not np.isfinite(pred):
+            return self._bounded_cartesian_recovery(g_cart)
         self._prev = {"e": e, "g_q": g_q, "dq": dq_taken,
                       "pred": pred, "cart_step": cart_step,
                       "x": self.x.copy()}
@@ -511,7 +634,7 @@ class OQPEngine:
         vec = v[:, 0]
         if abs(vec[-1]) < 1.0e-10:
             # Degenerate scaling: fall back to a damped steepest-descent step.
-            return -g / (np.linalg.norm(g) + 1.0)
+            return -g / (_scaled_norm(g) + 1.0)
         return vec[:n] / vec[n]
 
     def _prfo_step(self, h, g):
@@ -565,16 +688,26 @@ class OQPEngine:
     def _restrict_to_trust(self, b, dq):
         # Estimate the Cartesian motion of this internal step and scale so its
         # RMSD does not exceed the trust radius.
+        if not np.all(np.isfinite(b)) or not np.all(np.isfinite(dq)):
+            return np.full_like(dq, np.nan)
         ginv, _ = self.coords._g_inverse(b) if hasattr(self.coords, "_g_inverse") \
             else (np.eye(b.shape[0]), 0)
-        dx = b.T @ (ginv @ dq) if hasattr(self.coords, "_g_inverse") else dq
-        rmsd = float(np.sqrt(np.mean(dx ** 2)))
+        if not np.all(np.isfinite(ginv)):
+            return np.full_like(dq, np.nan)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            dx = b.T @ (ginv @ dq) if hasattr(self.coords, "_g_inverse") else dq
+        if not np.all(np.isfinite(dx)):
+            return np.full_like(dq, np.nan)
+        rmsd = _scaled_rms(dx)
+        if not np.isfinite(rmsd):
+            return np.full_like(dq, np.nan)
         if rmsd > self.trust and rmsd > 1.0e-14:
             dq = dq * (self.trust / rmsd)
         return dq
 
     def _update_trust(self, actual, pred, cart_step):
-        if abs(pred) < 1.0e-14:
+        if (not np.isfinite(actual) or not np.isfinite(pred)
+                or not np.isfinite(cart_step) or abs(pred) < 1.0e-14):
             return
         ratio = actual / pred
         if ratio < 0.25:
