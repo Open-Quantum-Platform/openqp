@@ -40,6 +40,15 @@ def _load_adapter(monkeypatch, calls):
     monkeypatch.setitem(sys.modules, labels_spec.name, labels)
     labels_spec.loader.exec_module(labels)
 
+    trace_path = ROOT / "pyoqp" / "oqp" / "utils" / "dftb_trace.py"
+    trace_spec = importlib.util.spec_from_file_location(
+        "oqp.utils.dftb_trace", trace_path
+    )
+    trace = importlib.util.module_from_spec(trace_spec)
+    monkeypatch.setitem(sys.modules, trace_spec.name, trace)
+    trace_spec.loader.exec_module(trace)
+    utils.dftb_trace = trace
+
     adapter_path = ROOT / "pyoqp" / "oqp" / "library" / "openqp_dftb.py"
     adapter_spec = importlib.util.spec_from_file_location(
         "_openqp_dftb_logging_under_test", adapter_path

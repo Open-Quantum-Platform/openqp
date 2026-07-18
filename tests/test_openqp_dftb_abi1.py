@@ -40,6 +40,19 @@ def _load_adapter_module():
     state_labels.resolved_dftb_type = (
         lambda config: str(config.get("dftb", {}).get("type", "ground")).lower()
     )
+    state_labels.dftb_method_name = lambda config: "DFTB"
+    state_labels.public_state_label = (
+        lambda config, root, **kwargs: "state %d" % int(root)
+    )
+
+    trace_spec = importlib.util.spec_from_file_location(
+        "oqp.utils.dftb_trace",
+        ROOT / "pyoqp" / "oqp" / "utils" / "dftb_trace.py",
+    )
+    assert trace_spec is not None and trace_spec.loader is not None
+    dftb_trace = importlib.util.module_from_spec(trace_spec)
+    trace_spec.loader.exec_module(dftb_trace)
+    utils.dftb_trace = dftb_trace
 
     stubs = {
         "oqp": oqp,
@@ -48,6 +61,7 @@ def _load_adapter_module():
         "oqp.utils.constants": constants,
         "oqp.utils.file_utils": file_utils,
         "oqp.utils.state_labels": state_labels,
+        "oqp.utils.dftb_trace": dftb_trace,
     }
     saved = {name: sys.modules.get(name) for name in stubs}
     sys.modules.update(stubs)

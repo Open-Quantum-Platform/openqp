@@ -39,7 +39,14 @@ DFTB_TYPES = {
 }
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
 
-DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb"}
+DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
+               "dftb+", "dftbplus", "dftb_plus"}
+# Production defaults when no model= is named and no preset-locked key is
+# tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; every other SCC
+# route (ground, TD-DFTB, SF) runs the DFTB+ compatibility protocol.  DFTB0
+# (ground_noscc) stays preset-free.
+DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
+DFTB_MODEL_DEFAULT_OTHER = "dftb+"
 # Keys a [dftb] model preset fixes; the checker refuses to combine them with
 # model= (the preset overrides them inside openqp-dftb, so a user-tuned value
 # would be silently discarded).
@@ -875,6 +882,44 @@ def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
         return str(value).strip().lower() != str(default_raw).strip().lower()
 
 
+def apply_dftb_model_default(config: dict[str, Any]) -> str:
+    """Materialize the production default [dftb] model preset.
+
+    MRSF-TDDFTB defaults to the published DTCAM-TB operator; every other SCC
+    route (ground SCC-DFTB, closed-shell TD-DFTB, SF-TDDFTB) defaults to the
+    DFTB+ compatibility protocol.  ``model=none`` keeps the explicit-keys
+    route, and any tuned preset-locked key implies manual operator control
+    (legacy inputs keep meaning what they said).  DFTB0 (non-SCC) stays
+    preset-free.  Returns the effective model string.
+    """
+    if _as_lower(_get(config, "input", "method", "hf")) != "dftb":
+        return ""
+    dftb = config.get("dftb")
+    if not isinstance(dftb, dict):
+        return ""
+    model = _as_lower(_get(config, "dftb", "model", ""))
+    if model == "none":
+        dftb["model"] = ""
+        return ""
+    if model:
+        return model
+    # Presets are resolved inside the native library; the probe backend
+    # cannot carry them, so it keeps the explicit-keys route.
+    if _as_lower(_get(config, "dftb", "backend", "native")) not in {
+            "native", "auto"}:
+        return ""
+    from oqp.utils.state_labels import resolved_dftb_type  # noqa: PLC0415
+    route = resolved_dftb_type(config)
+    if route == "ground_noscc":
+        return ""
+    if any(_dftb_key_customized(config, key)
+           for key in DFTB_MODEL_LOCKED_KEYS):
+        return ""
+    dftb["model"] = (DFTB_MODEL_DEFAULT_MRSF if route == "mrsf"
+                     else DFTB_MODEL_DEFAULT_OTHER)
+    return dftb["model"]
+
+
 def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     if method != "dftb":
@@ -972,6 +1017,9 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     model = _as_lower(_get(config, "dftb", "model", ""))
+    if model == "none":
+        # Explicit opt-out of the SF/MRSF dtcam-tb default: explicit-keys route.
+        model = ""
     if model:
         if model not in DFTB_MODELS:
             report.add(
@@ -980,7 +1028,9 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown OpenQP-DFTB operator model preset.",
                 value=model,
                 expected=", ".join(sorted(DFTB_MODELS)),
-                action="Use model=dtcam-tb, or omit model and set the operator keys individually.",
+                action="Use model=dtcam-tb (DTCAM-TB paper vector), "
+                       "model=dftb+ (DFTB+ default LC-DFTB protocol), or "
+                       "omit model and set the operator keys individually.",
             )
         if backend == "probe":
             report.add(

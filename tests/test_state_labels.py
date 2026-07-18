@@ -230,7 +230,8 @@ def test_conventional_tddftb_log_omits_inactive_sf_and_cam_controls():
     config = dftb_config("tddftb", nstate=3)
     text = state_labels.format_dftb_settings(config, backend="native")
 
-    assert "Response manifold:          closed-shell singlet TDA" in text
+    assert "Response manifold:" in text
+    assert "closed-shell singlet TDA" in text
     assert "Spin completion:" not in text
     assert "Gamma kernel / omega:" not in text
     assert "CAM alpha / beta:" not in text
@@ -251,11 +252,11 @@ def test_dftb_settings_are_grouped_and_report_resolved_paths():
         library_path="/site-packages/openqp_dftb/libopenqp_dftb_c.dylib",
     )
 
-    assert "DFTB calculation settings" in text
-    assert "DFTB SCC settings" in text
-    assert "DFTB response settings" in text
-    assert "DFTB gradient settings" in text
-    assert "DFTB operator settings" in text
+    assert "   Calculation\n" in text
+    assert "   SCC\n" in text
+    assert "   Response\n" in text
+    assert "   Gradient\n" in text
+    assert "   Operator\n" in text
     assert "MRSF-TDDFTB" in text
     assert "/parameters/OB2W0PT3" in text
     assert "trah (requested)" in text
@@ -275,8 +276,8 @@ def test_zero_capability_mask_never_claims_new_native_features():
         capabilities=0,
     )
 
-    assert "C API ABI:                  3" in text
-    assert "C API capabilities:         none advertised" in text
+    assert "C API ABI:" in text
+    assert "none advertised" in text
     assert "structured progress tracing" in text
     assert "loaded library (C ABI 3) does not advertise all-pair state spectrum" in text
     assert "loaded library (C ABI 3) does not advertise final trust-region SCC recovery" in text
@@ -296,8 +297,9 @@ def test_advertised_capabilities_enable_native_feature_summary():
     )
 
     assert "structured trace, state spectrum, SCC final trust recovery" in text
-    assert "Native progress trace:      level 1" in text
-    assert "State-to-state spectrum:    yes (unrelaxed TDA/state interaction)" in text
+    assert "Native progress trace:" in text
+    assert "level 1" in text
+    assert "yes (unrelaxed TDA/state interaction)" in text
     assert "final charge/spin trust-TRAH pass when eligible" in text
 
 
@@ -310,14 +312,16 @@ def test_probe_settings_do_not_advertise_native_trace_or_spectrum():
     )
 
     assert "Native progress trace:" not in text
-    assert "State-to-state spectrum:    requested; unavailable with probe backend" in text
-    assert "Failed-cycle recovery:      unavailable with probe backend" in text
+    assert "requested; unavailable with probe backend" in text
+    assert "Failed-cycle recovery:" in text
+    assert "unavailable with probe backend" in text
 
 
 def test_dftb_preset_log_does_not_claim_schema_defaults_are_effective():
     config = dftb_config("mrsf", td_type="mrsf", model="dtcam-tb")
     text = state_labels.format_dftb_settings(config, backend="native")
 
-    assert "dtcam-tb preset (resolved by openqp-dftb backend)" in text
+    assert "dtcam-tb preset" in text
+    assert "dtcam-tb (operator resolved by openqp-dftb backend)" in text
     assert "Mixer:" not in text
     assert "CAM alpha / beta:" not in text

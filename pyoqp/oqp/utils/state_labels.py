@@ -76,6 +76,12 @@ DFTB_CAP_STRUCTURED_TRACE = 1
 DFTB_CAP_STATE_SPECTRUM = 2
 DFTB_CAP_SCC_FINAL_TRUST = 4
 
+# Named operator presets published by openqp-dftb ([dftb] model=...).  The
+# parameter vectors themselves live in openqp-dftb (src/openqp_dftb_presets.F90,
+# the single source of truth) and are reported back through the
+# openqp_dftb_resolved_options record; this tuple only feeds the settings log.
+DFTB_KNOWN_PRESETS = ("dtcam-tb", "dftb+")
+
 
 def _section(config, name):
     value = config.get(name, {}) if isinstance(config, dict) else {}
@@ -275,6 +281,9 @@ def format_dftb_settings(
     if requested_backend != actual_backend:
         backend_text += " (requested: %s)" % requested_backend
     model = str(dftb.get("model", "")).strip()
+    if model.lower() == "none":
+        # Explicit opt-out of the SF/MRSF dtcam-tb default.
+        model = ""
 
     groups = []
     method_rows = [
@@ -319,7 +328,7 @@ def format_dftb_settings(
     elif model:
         scc_rows = [
             ("Enabled", "yes"),
-            ("Protocol", "%s preset (resolved by openqp-dftb backend)" % model),
+            ("Protocol", "%s preset" % model),
         ]
     else:
         mixer = str(dftb.get("scc_mixer", "auto")).strip().lower()
@@ -344,7 +353,7 @@ def format_dftb_settings(
 
     if method not in {"ground", "ground_noscc"}:
         solver = (
-            "%s preset (resolved by openqp-dftb backend)" % model
+            "%s preset" % model
             if model else
             "%s (requested)" % str(dftb.get("response_solver", "auto")).lower()
         )
@@ -374,7 +383,7 @@ def format_dftb_settings(
             )
         groups[-1][1].append(("State-to-state spectrum", spectrum_text))
         zvector = (
-            "%s preset (resolved by openqp-dftb backend)" % model
+            "%s preset" % model
             if model else _yes_no(dftb.get("zvector", True))
         )
         groups.append(("gradient", [("Relaxed Z-vector", zvector)]))
@@ -382,11 +391,13 @@ def format_dftb_settings(
     if model:
         operator_rows = [
             ("Model preset", "%s (operator resolved by openqp-dftb backend)" % model),
+            ("Effective values", "reported under 'DFTB effective options'"),
         ]
     elif method == "ground_noscc":
         operator_rows = [("Hamiltonian", "non-SCC DFTB0")]
     else:
         operator_rows = [
+            ("Model preset", "none (explicit [dftb] keys; schema defaults)"),
             ("LC ground state", _yes_no(dftb.get("lc_ground_state", False))),
         ]
         if method in {"sf", "mrsf"} or bool(dftb.get("lc_ground_state", False)):
@@ -419,16 +430,28 @@ def format_dftb_settings(
                         "mrsf_shift_ov", "mrsf_shift_cv",
                     )
                 )))
+    if method != "ground_noscc":
+        operator_rows.append(
+            ("Available presets", ", ".join(DFTB_KNOWN_PRESETS))
+        )
     groups.append(("operator", operator_rows))
 
-    lines = []
+    titles = {
+        "calculation": "Calculation",
+        "SCC": "SCC",
+        "response": "Response",
+        "gradient": "Gradient",
+        "operator": "Operator",
+    }
+    blocks = []
     for group, rows in groups:
-        lines.append("   PyOQP DFTB %s settings" % group)
+        lines = ["   %s" % titles.get(group, group.capitalize())]
         lines.extend(
-            "   PyOQP   %-27s %s" % (label + ":", value)
+            "     %-29s %s" % (label + ":", value)
             for label, value in rows
         )
-    return "\n".join(lines)
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def is_mrsf(config):
