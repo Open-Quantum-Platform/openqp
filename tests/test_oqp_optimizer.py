@@ -737,9 +737,12 @@ class TestInternalCoordinates(unittest.TestCase):
             bond_deriv = bond.derivatives(x)
             angle_value = angle.value(x)
             angle_deriv = angle.derivatives(x)
-        self.assertTrue(np.all(np.isfinite([d for _, d in bond_deriv])))
+        # The invalid derivative row is intentional: it forces an existing
+        # internal-coordinate engine into bounded Cartesian recovery instead
+        # of silently accepting a zero gradient direction.
+        self.assertFalse(np.all(np.isfinite([d for _, d in bond_deriv])))
         self.assertTrue(np.isfinite(angle_value))
-        self.assertTrue(np.all(np.isfinite([d for _, d in angle_deriv])))
+        self.assertFalse(np.all(np.isfinite([d for _, d in angle_deriv])))
 
     def test_bmatrix_matches_fd_water_and_ethane(self):
         cases = [
@@ -842,6 +845,25 @@ class TestTRICandDLC(unittest.TestCase):
             g_inverse, rank = ic._g_inverse(b)
         self.assertEqual(rank, 0)
         self.assertTrue(np.array_equal(g_inverse, np.zeros_like(g_inverse)))
+
+    def test_dlc_g_inverse_rejects_overflowing_symmetrization(self):
+        """Finite G must remain safe when G + G.T would overflow."""
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        b = np.full_like(ic.b_matrix(self.WATER_X), 9.0e153)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            g_inverse, rank = ic._g_inverse(b)
+        self.assertEqual(rank, 0)
+        self.assertTrue(np.array_equal(g_inverse, np.zeros_like(g_inverse)))
+
+    def test_dlc_rank_zero_gradient_requests_recovery(self):
+        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
+        b = np.full_like(ic.b_matrix(self.WATER_X), 9.0e153)
+        ic.b_matrix = lambda _x: b
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            gradient = ic.grad_to_q(self.WATER_X, np.ones(9))
+        self.assertTrue(np.all(np.isnan(gradient)))
 
     def test_safe_matmul_suppresses_handled_overflow(self):
         left = np.full((2, 2), 1.0e308)
@@ -1035,6 +1057,18 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(x_new)))
         self.assertEqual(eng.nonfinite_step_rejections, 1)
         self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+
+    def test_collapsed_internal_geometry_switches_to_cartesian_recovery(self):
+        eng = NE.OQPEngine(self.WATER_AT, self.WATER_X.copy(), coordsys="dlc",
+                           trust=0.1)
+        eng.x[:] = 0.0
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, np.ones(9))
+        self.assertTrue(np.all(np.isfinite(x_new)))
+        self.assertEqual(eng.nonfinite_step_rejections, 1)
+        self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+        self.assertFalse(np.allclose(x_new, np.zeros(9)))
 
     def test_trust_restriction_scales_huge_finite_step_without_overflow(self):
         eng = NE.OQPEngine([1], [0.0, 0.0, 0.0], coordsys="cart",

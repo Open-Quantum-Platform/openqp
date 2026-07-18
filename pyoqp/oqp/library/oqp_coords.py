@@ -138,11 +138,13 @@ class Bond:
         u = x[i] - x[j]
         r = np.linalg.norm(u)
         # A trial geometry can collapse a bond while an optimizer is
-        # recovering from a rejected electronic step.  Returning a zero row
-        # marks this primitive unusable; the rank checks then select a
-        # Cartesian fallback without emitting 1/r RuntimeWarnings.
+        # recovering from a rejected electronic step.  Returning a non-finite
+        # row marks this primitive unusable; the rank checks then select a
+        # Cartesian fallback without emitting 1/r RuntimeWarnings.  A zero
+        # row would instead look like a valid, finite gradient direction and
+        # could silently stall an already-created DLC/RIC engine.
         if not np.isfinite(r) or r <= 1.0e-12:
-            z = np.zeros(3)
+            z = np.full(3, np.nan)
             return [(i, z), (j, z.copy())]
         u = u / r
         return [(i, u), (j, -u)]
@@ -177,7 +179,7 @@ class Angle:
         lv = np.linalg.norm(v)
         if (not np.isfinite(lu) or not np.isfinite(lv)
                 or lu <= 1.0e-12 or lv <= 1.0e-12):
-            z = np.zeros(3)
+            z = np.full(3, np.nan)
             return [(i, z), (j, z.copy()), (k, z.copy())]
         u = u / lu
         v = v / lv
@@ -418,7 +420,9 @@ class RedundantInternalCoordinates:
 
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
-        ginv, _ = self._g_inverse(b)
+        ginv, rank = self._g_inverse(b)
+        if rank == 0 and b.shape[0]:
+            return np.full(b.shape[0], np.nan, dtype=float)
         return _safe_matmul(ginv, _safe_matmul(
             b, np.asarray(gx, dtype=float).reshape(-1)))
 
@@ -502,7 +506,11 @@ class DelocalizedInternalCoordinates:
             g = np.dot(b, b.T)
         if not np.all(np.isfinite(g)):
             raise ValueError("non-finite DLC metric")
-        w, v = np.linalg.eigh(0.5 * (g + g.T))
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            g = 0.5 * g + 0.5 * g.T
+        if not np.all(np.isfinite(g)):
+            raise ValueError("non-finite DLC metric")
+        w, v = np.linalg.eigh(g)
         u = v[:, w > eig_tol]
         return cls(ric, u, ric.q(x))
 
@@ -521,8 +529,13 @@ class DelocalizedInternalCoordinates:
         if not np.all(np.isfinite(g)):
             n = b.shape[0]
             return np.zeros((n, n)), 0
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            g = 0.5 * g + 0.5 * g.T
+        if not np.all(np.isfinite(g)):
+            n = b.shape[0]
+            return np.zeros((n, n)), 0
         try:
-            w, v = np.linalg.eigh(0.5 * (g + g.T))
+            w, v = np.linalg.eigh(g)
         except (np.linalg.LinAlgError, ValueError):
             n = b.shape[0]
             return np.zeros((n, n)), 0
@@ -532,7 +545,9 @@ class DelocalizedInternalCoordinates:
 
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
-        ginv, _ = self._g_inverse(b)
+        ginv, rank = self._g_inverse(b)
+        if rank == 0 and b.shape[0]:
+            return np.full(b.shape[0], np.nan, dtype=float)
         return _safe_matmul(ginv, _safe_matmul(
             b, np.asarray(gx, dtype=float).reshape(-1)))
 
