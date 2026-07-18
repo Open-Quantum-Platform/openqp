@@ -1,0 +1,41 @@
+# One-step DFTB/OpenMM QM/MM MD across a covalent alanine-dipeptide boundary.
+#
+# QM atoms 8,9,16,17,18 (zero based) cut covalent bonds and therefore exercise
+# the hydrogen-link-atom/full-ESPF path introduced for method=dftb. This is a
+# run-only optional-backend example: it needs OpenMM, libopenqp_dftb_c, and a
+# compatible DFTB parameter set at [dftb] parameter_path.
+[input]
+system=
+charge=0
+runtype=md
+basis=sto-3g
+functional=
+method=dftb
+qmmm_flag=true
+
+[guess]
+type=huckel
+
+[scf]
+type=rhf
+multiplicity=1
+
+[dftb]
+backend=native
+type=ground
+parameter_path=params
+
+[properties]
+grad=0
+
+[qmmm]
+pdb_file=ala.pdb
+forcefield_files=amber14-all.xml
+qm_atoms=8,9,16,17,18
+cutoff=NoCutoff
+embedding=electrostatic
+n_steps=1
+timestep=0.1
+temperature=300.0
+ensemble=nve
+report_interval=1

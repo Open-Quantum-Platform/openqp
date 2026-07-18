@@ -134,6 +134,15 @@ def _extract_qmmm_config(oqp_cfg=None, mol=None):
     return qmmm, qm_cfg
 
 
+def _qm_subcall_config(qm_cfg):
+    """Return a QM-only config for one force evaluation inside outer MD."""
+    if qm_cfg is None:
+        return None
+    normalized = dict(qm_cfg)
+    normalized["input.runtype"] = "energy"
+    return normalized
+
+
 # ======================================================================
 #  QMMM_MD
 # ======================================================================
@@ -202,6 +211,10 @@ class QMMM_MD:
 
         # ------ split qmmm.* settings from QM settings --------------------
         qmmm_cfg, qm_cfg = _extract_qmmm_config(oqp_cfg=oqp_cfg, mol=mol)
+        # The outer QMMM_MD owns the MD loop. Each OpenQP construction below is
+        # only an energy/gradient subcall, so it must not recursively dispatch
+        # the original input.runtype=md through the ordinary input checker.
+        qm_cfg = _qm_subcall_config(qm_cfg)
 
         # ------ extract QM/MM parameters with defaults --------------------
         pdb_file = qmmm_cfg.get("pdb_file")

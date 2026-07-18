@@ -131,7 +131,11 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.forcefield = forcefield
-        self.qm_atoms = np.array(qm_atoms, dtype=int)
+        # The QM geometry is built in topology order, so gradients, charges,
+        # and link-atom host rows are returned in that same order.
+        self.qm_atoms = np.array(
+            sorted(int(index) for index in qm_atoms), dtype=int
+        )
         self.Cutoff = Cutoff
         self.Embedding = Embedding
 
@@ -510,7 +514,12 @@ class OpenQpQMMM:
         self.positions = positions
         self.topology = topology
         self.mm_systems = mm_systems
-        self.qm_atoms = qm_atoms
+        # QMMM_MD passes its config-order selection on every force update.
+        # Re-establish topology order so it cannot overwrite the normalized
+        # copy created in __init__ and mis-scatter QM/link-atom forces.
+        self.qm_atoms = np.array(
+            sorted(int(index) for index in qm_atoms), dtype=int
+        )
 
         potmm = potqm = None
         if self.Embedding in ("electrostatic", "split") or self.espf_full:

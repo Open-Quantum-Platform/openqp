@@ -34,6 +34,14 @@ the [SOC-NAMD-QMMM workflow](https://open-quantum-platform.github.io/openqp-docs
 and the `[md]` / `[qmmm]` keyword pages in the manual for the full input
 contract and the compact `job.qmmm(...)` / `job.workflow.namd(...)` Python API.
 
+## Tight-binding covalent-boundary QM/MM
+
+`alanine_DFTB-QMMM-MD.inp` is a one-step, run-only example of native DFTB
+embedded in OpenMM across a covalent alanine-dipeptide boundary. It exercises
+the hydrogen link-atom and full-ESPF force path with a QM selection normalized
+into topology order. It requires OpenMM, `libopenqp_dftb_c`, and a compatible
+parameter set at `[dftb] parameter_path`.
+
 ## Single-point / ground-state QM/MM
 
 `ala.inp` and `2E4E_RHF-DFT-QMMM_energy.inp` are QM/MM single-point energy decks
