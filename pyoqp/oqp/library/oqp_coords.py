@@ -73,6 +73,24 @@ def _cartesian_rmsd(x, x_new):
     return _scaled_rms(displacement)
 
 
+def _safe_matmul(left, right):
+    """Multiply coordinate matrices without leaking handled FP exceptions.
+
+    Accelerate's ``matmul`` implementation on macOS can report divide by
+    zero/overflow/invalid warnings for a BLAS product even when the inputs
+    are finite.  Genuine overflow is also possible while recovering from a
+    bad geometry.  Both cases are handled by the callers through their
+    finite-value checks, so keep the product quiet and let them select a
+    fallback coordinate system instead of emitting a warning from NumPy.
+
+    Coordinate transformations only pass vectors and two-dimensional
+    matrices here; ``dot`` has the same semantics for those operands and is
+    less prone to the Accelerate warning behaviour than the ``@`` ufunc.
+    """
+    with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+        return np.dot(left, right)
+
+
 # Cordero et al. covalent radii (Angstrom), Dalton Trans. 2008, 2832.
 # Indexed by atomic number; entry 0 is a placeholder.
 _COVALENT_RADII_ANG = [
@@ -119,6 +137,13 @@ class Bond:
         i, j = self.atoms
         u = x[i] - x[j]
         r = np.linalg.norm(u)
+        # A trial geometry can collapse a bond while an optimizer is
+        # recovering from a rejected electronic step.  Returning a zero row
+        # marks this primitive unusable; the rank checks then select a
+        # Cartesian fallback without emitting 1/r RuntimeWarnings.
+        if not np.isfinite(r) or r <= 1.0e-12:
+            z = np.zeros(3)
+            return [(i, z), (j, z.copy())]
         u = u / r
         return [(i, u), (j, -u)]
 
@@ -134,8 +159,13 @@ class Angle:
         i, j, k = self.atoms
         u = x[i] - x[j]
         v = x[k] - x[j]
-        u /= np.linalg.norm(u)
-        v /= np.linalg.norm(v)
+        lu = np.linalg.norm(u)
+        lv = np.linalg.norm(v)
+        if (not np.isfinite(lu) or not np.isfinite(lv)
+                or lu <= 1.0e-12 or lv <= 1.0e-12):
+            return 0.0
+        u /= lu
+        v /= lv
         c = float(np.clip(np.dot(u, v), -1.0, 1.0))
         return float(np.arccos(c))
 
@@ -145,6 +175,10 @@ class Angle:
         v = x[k] - x[j]
         lu = np.linalg.norm(u)
         lv = np.linalg.norm(v)
+        if (not np.isfinite(lu) or not np.isfinite(lv)
+                or lu <= 1.0e-12 or lv <= 1.0e-12):
+            z = np.zeros(3)
+            return [(i, z), (j, z.copy()), (k, z.copy())]
         u = u / lu
         v = v / lv
         c = float(np.clip(np.dot(u, v), -1.0, 1.0))
@@ -222,10 +256,10 @@ def _rotation_vector(X, X0):
     """
     Xc = X - X.mean(axis=0)
     X0c = X0 - X0.mean(axis=0)
-    h = X0c.T @ Xc
+    h = _safe_matmul(X0c.T, Xc)
     u, _, vt = np.linalg.svd(h)
-    d = np.sign(np.linalg.det(vt.T @ u.T))
-    rot = vt.T @ np.diag([1.0, 1.0, d]) @ u.T
+    d = np.sign(np.linalg.det(_safe_matmul(vt.T, u.T)))
+    rot = _safe_matmul(_safe_matmul(vt.T, np.diag([1.0, 1.0, d])), u.T)
     return _rotmat_to_expmap(rot)
 
 
@@ -356,8 +390,18 @@ class RedundantInternalCoordinates:
         # this medium-size B B^T product even when B and the resulting G matrix
         # are fully finite.  np.dot routes to the same BLAS product but does not
         # leak those false-positive fenv flags.
-        g = np.dot(b, b.T)
-        w, v = np.linalg.eigh(g)
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            g = np.dot(b, b.T)
+        # A finite, but very large, B-matrix can still overflow in G = B B^T
+        # (for example after a near-coincident bond).  Treat this exactly like
+        # a non-finite B: no usable internal subspace remains, so the caller
+        # can fall back to a safer coordinate representation.
+        if not np.all(np.isfinite(g)):
+            return np.zeros((nq, nq)), 0
+        try:
+            w, v = np.linalg.eigh(g)
+        except (np.linalg.LinAlgError, ValueError):
+            return np.zeros((nq, nq)), 0
         # Relative cutoff: drop near-null eigenvalues so the pseudo-inverse does
         # not divide by ~0 (an absolute cutoff lets tiny-but-positive eigenvalues
         # through and blows the G-inverse up on ill-conditioned, near-linear sets).
@@ -375,7 +419,8 @@ class RedundantInternalCoordinates:
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
         ginv, _ = self._g_inverse(b)
-        return ginv @ (b @ np.asarray(gx, dtype=float).reshape(-1))
+        return _safe_matmul(ginv, _safe_matmul(
+            b, np.asarray(gx, dtype=float).reshape(-1)))
 
     def guess_hessian(self, x):
         diag = np.array([_GUESS_FC[p.kind] for p in self.primitives])
@@ -419,7 +464,8 @@ class RedundantInternalCoordinates:
             if err < tol:
                 return x_cur.reshape(-1), True
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-                dx = (b.T @ (ginv @ dq_remain)).reshape(-1, 3)
+                dx = _safe_matmul(
+                    b.T, _safe_matmul(ginv, dq_remain)).reshape(-1, 3)
                 x_next = x_cur + dx
             if not np.all(np.isfinite(dx)) or not np.all(np.isfinite(x_next)):
                 return best.reshape(-1), False
@@ -452,7 +498,10 @@ class DelocalizedInternalCoordinates:
     @classmethod
     def from_ric(cls, ric, x, eig_tol=1.0e-6):
         b = ric.b_matrix(x)
-        g = np.dot(b, b.T)
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            g = np.dot(b, b.T)
+        if not np.all(np.isfinite(g)):
+            raise ValueError("non-finite DLC metric")
         w, v = np.linalg.eigh(0.5 * (g + g.T))
         u = v[:, w > eig_tol]
         return cls(ric, u, ric.q(x))
@@ -461,14 +510,22 @@ class DelocalizedInternalCoordinates:
         return self.ric.q_displacement(self.ric.q(x), self.q_ref)
 
     def q(self, x):
-        return self.U.T @ self._disp_prim(x)
+        return _safe_matmul(self.U.T, self._disp_prim(x))
 
     def b_matrix(self, x):
-        return self.U.T @ self.ric.b_matrix(x)
+        return _safe_matmul(self.U.T, self.ric.b_matrix(x))
 
     def _g_inverse(self, b, eig_tol=1.0e-8):
-        g = np.dot(b, b.T)
-        w, v = np.linalg.eigh(0.5 * (g + g.T))
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            g = np.dot(b, b.T)
+        if not np.all(np.isfinite(g)):
+            n = b.shape[0]
+            return np.zeros((n, n)), 0
+        try:
+            w, v = np.linalg.eigh(0.5 * (g + g.T))
+        except (np.linalg.LinAlgError, ValueError):
+            n = b.shape[0]
+            return np.zeros((n, n)), 0
         keep = w > eig_tol
         inv = np.dot(v[:, keep] / w[keep], v[:, keep].T)
         return inv, int(np.count_nonzero(keep))
@@ -476,11 +533,12 @@ class DelocalizedInternalCoordinates:
     def grad_to_q(self, x, gx):
         b = self.b_matrix(x)
         ginv, _ = self._g_inverse(b)
-        return ginv @ (b @ np.asarray(gx, dtype=float).reshape(-1))
+        return _safe_matmul(ginv, _safe_matmul(
+            b, np.asarray(gx, dtype=float).reshape(-1)))
 
     def guess_hessian(self, x):
         diag = np.array([_GUESS_FC[p.kind] for p in self.ric.primitives])
-        return self.U.T @ (diag[:, None] * self.U)
+        return _safe_matmul(self.U.T, diag[:, None] * self.U)
 
     def q_displacement(self, q2, q1):
         return np.asarray(q2, dtype=float) - np.asarray(q1, dtype=float)
@@ -510,7 +568,8 @@ class DelocalizedInternalCoordinates:
             if err < tol:
                 return x_cur.reshape(-1), True
             with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-                dx = (b.T @ (ginv @ ds)).reshape(-1, 3)
+                dx = _safe_matmul(
+                    b.T, _safe_matmul(ginv, ds)).reshape(-1, 3)
                 x_next = x_cur + dx
             if not np.all(np.isfinite(dx)) or not np.all(np.isfinite(x_next)):
                 return best.reshape(-1), False
