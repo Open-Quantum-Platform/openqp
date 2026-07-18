@@ -2,6 +2,7 @@
 
 import ast
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -18,12 +19,15 @@ def _load_preimport_helpers():
         "_apply_omp_threads_from_input",
         "_set_threading_defaults",
     }
-    nodes = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))]
-    nodes.extend(
+    nodes = [
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name in names
-    )
-    namespace = {"__name__": "_pyoqp_preimport_threading_test"}
+    ]
+    namespace = {
+        "__name__": "_pyoqp_preimport_threading_test",
+        "os": os,
+        "sys": sys,
+    }
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE), "exec"), namespace)
     return namespace
 

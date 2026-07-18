@@ -806,15 +806,19 @@ class TestTRICandDLC(unittest.TestCase):
         self.assertEqual(len(ic.q(self.WATER_X)), 3)  # 3N-6 active coords
         self.assertLess(self._bmatrix_fd(ic, self.WATER_X), 1e-6)
 
-    def test_dlc_back_transform_rejects_overflow_without_poisoning_geometry(self):
-        ic = NC.build_coordinates(self.WATER_AT, self.WATER_X, coordsys="dlc")
-        huge_step = np.full(len(ic.q(self.WATER_X)), 1.0e308)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", RuntimeWarning)
-            x_new, ok = ic.back_transform(self.WATER_X, huge_step)
-        self.assertFalse(ok)
-        self.assertTrue(np.all(np.isfinite(x_new)))
-        self.assertTrue(np.allclose(x_new, self.WATER_X.reshape(-1)))
+    def test_internal_back_transform_rejects_overflow_without_poisoning_geometry(self):
+        for coordsys in ("ric", "dlc"):
+            with self.subTest(coordsys=coordsys):
+                ic = NC.build_coordinates(
+                    self.WATER_AT, self.WATER_X, coordsys=coordsys
+                )
+                huge_step = np.full(len(ic.q(self.WATER_X)), 1.0e308)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", RuntimeWarning)
+                    x_new, ok = ic.back_transform(self.WATER_X, huge_step)
+                self.assertFalse(ok)
+                self.assertTrue(np.all(np.isfinite(x_new)))
+                self.assertTrue(np.allclose(x_new, self.WATER_X.reshape(-1)))
 
     def test_multifragment_tric(self):
         # Two well-separated triangular C3 fragments (each non-collinear, so
@@ -986,6 +990,33 @@ class TestOQPEngineInitialHessian(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(x_new)))
         self.assertEqual(eng.nonfinite_step_rejections, 1)
         self.assertIsInstance(eng.coords, NC.CartesianCoordinates)
+
+    def test_trust_restriction_scales_huge_finite_step_without_overflow(self):
+        eng = NE.OQPEngine([1], [0.0, 0.0, 0.0], coordsys="cart",
+                           trust=0.1)
+        huge_step = np.array([1.0e200, -5.0e199, 2.5e199])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            restricted = eng._restrict_to_trust(np.eye(3), huge_step)
+        self.assertTrue(np.all(np.isfinite(restricted)))
+        self.assertGreater(np.max(np.abs(restricted)), 0.0)
+        self.assertLessEqual(NC._scaled_rms(restricted), eng.trust)
+
+    def test_ts_cartesian_recovery_preserves_eigenvector_following(self):
+        h_cart = np.diag([-0.5, 0.4, 0.8])
+        eng = NE.OQPEngine(
+            [1], [0.0, 0.0, 0.0], mode="ts", coordsys="cart",
+            trust=0.1, initial_hessian=h_cart,
+        )
+        eng.coords.back_transform = lambda x, dq: (np.asarray(x).copy(), False)
+        gradient = np.array([0.1, 0.2, 0.3])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            x_new = eng._take_step(0.0, gradient)
+        displacement = x_new - eng.x
+        self.assertGreater(displacement[0] * gradient[0], 0.0)
+        self.assertLess(np.dot(displacement[1:], gradient[1:]), 0.0)
+        self.assertTrue(np.all(np.isfinite(x_new)))
 
     def test_meci_objective_rebase_drops_nonfinite_secant_history(self):
         eng = NE.OQPEngine(self.WATER_AT, self.WATER_X, coordsys="dlc")

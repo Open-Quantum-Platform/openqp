@@ -27,7 +27,12 @@ import numpy as np
 import scipy.linalg as sla
 import re
 
-from oqp.library.oqp_coords import build_coordinates, CartesianCoordinates
+from oqp.library.oqp_coords import (
+    build_coordinates,
+    CartesianCoordinates,
+    _scaled_norm,
+    _scaled_rms,
+)
 
 # All dense linear algebra in this module is routed through LAPACK
 # (scipy.linalg / numpy.linalg) and BLAS-3 GEMM (the ``@`` operators on the
@@ -468,15 +473,47 @@ class OQPEngine:
         return True
 
     # -- one macro-iteration ------------------------------------------------ #
+    def _cartesian_follow_direction(self):
+        """Map the current TS mode into Cartesian space before model reset."""
+        if self.mode != "ts":
+            return None
+        b = self.coords.b_matrix(self.x)
+        if not np.all(np.isfinite(b)):
+            return None
+
+        followed = getattr(self, "_followed", None)
+        if followed is None:
+            if (self.H.shape != (b.shape[0], b.shape[0])
+                    or not np.all(np.isfinite(self.H))):
+                return None
+            w, v = _sym_eigh(self.H)
+            followed = v[:, self._select_follow_mode(w, v)]
+        followed = np.asarray(followed, dtype=float).reshape(-1)
+        if followed.size != b.shape[0] or not np.all(np.isfinite(followed)):
+            return None
+
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            if hasattr(self.coords, "_g_inverse"):
+                ginv, _ = self.coords._g_inverse(b)
+                direction = b.T @ (ginv @ followed)
+            else:
+                direction = followed.copy()
+        norm = _scaled_norm(direction)
+        if not np.isfinite(norm) or norm <= 1.0e-14:
+            return None
+        return direction / norm
+
     def _bounded_cartesian_recovery(self, gradient):
         """Reject an unstable internal step and take one bounded Cartesian step.
 
         A failed DLC/RIC back-transformation must never contaminate the stored
-        secant pair or Hessian.  The next macroiteration can build a normal
-        internal step again from this finite geometry.
+        secant pair or Hessian.  A TS search preserves its followed mode while
+        changing coordinate systems, then takes a bounded Cartesian P-RFO step
+        rather than silently turning into a minimization.
         """
         self.nonfinite_step_rejections += 1
         self.trust = max(self.trust * 0.5, self.trust_min)
+        followed_cart = self._cartesian_follow_direction()
         # An internal-coordinate map that has already overflowed is not a
         # useful basis for the next trial point.  Switch this engine instance
         # permanently to Cartesian coordinates; the outer native ladder may
@@ -494,12 +531,28 @@ class OQPEngine:
         scale = float(np.max(np.abs(gradient)))
         if scale <= 1.0e-300 or not np.isfinite(scale):
             return self.x.copy()
-        direction = gradient / scale
-        rms = float(np.sqrt(np.mean(direction * direction)))
+        scaled_gradient = gradient / scale
+        if self.mode == "ts":
+            if followed_cart is None:
+                # Without a trustworthy mode, holding the accepted geometry is
+                # safer than taking a downhill step away from the saddle.  The
+                # outer recovery ladder can rebuild a fresh TS model.
+                self._followed = None
+                return self.x.copy()
+            curvature = max(float(np.max(np.diag(self.H))), 1.0e-3)
+            self.H = (
+                self.H
+                - 2.0 * curvature * np.outer(followed_cart, followed_cart)
+            )
+            self._followed = followed_cart
+            direction = self._prfo_step(self.H, scaled_gradient)
+        else:
+            direction = -scaled_gradient
+        rms = _scaled_rms(direction)
         if rms <= 1.0e-14 or not np.isfinite(rms):
             return self.x.copy()
         return self._enforce_frozen_distance_values(
-            self.x - direction * (self.trust / rms)
+            self.x + direction * (self.trust / rms)
         )
 
     def _take_step(self, e, g_cart):
@@ -574,7 +627,7 @@ class OQPEngine:
         vec = v[:, 0]
         if abs(vec[-1]) < 1.0e-10:
             # Degenerate scaling: fall back to a damped steepest-descent step.
-            return -g / (np.linalg.norm(g) + 1.0)
+            return -g / (_scaled_norm(g) + 1.0)
         return vec[:n] / vec[n]
 
     def _prfo_step(self, h, g):
@@ -638,7 +691,9 @@ class OQPEngine:
             dx = b.T @ (ginv @ dq) if hasattr(self.coords, "_g_inverse") else dq
         if not np.all(np.isfinite(dx)):
             return np.full_like(dq, np.nan)
-        rmsd = float(np.sqrt(np.mean(dx ** 2)))
+        rmsd = _scaled_rms(dx)
+        if not np.isfinite(rmsd):
+            return np.full_like(dq, np.nan)
         if rmsd > self.trust and rmsd > 1.0e-14:
             dq = dq * (self.trust / rmsd)
         return dq
