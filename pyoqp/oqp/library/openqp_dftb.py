@@ -444,6 +444,15 @@ class OpenQPDFTBAdapter:
             )
         )
 
+    @staticmethod
+    def _is_reference_branch_loss(error: RuntimeError) -> bool:
+        """Recognize an ABI-v4 ROKS anchor that is no longer transferable."""
+        message = str(error).lower()
+        return (
+            "fixed-reference orbital branch lost" in message
+            or ("reference orbital" in message and "overlap" in message)
+        )
+
     def _scc_recovery_ladder(self, primary: str) -> tuple[str, ...]:
         """Return a bounded per-geometry ladder for SCC failures.
 
@@ -509,6 +518,60 @@ class OpenQPDFTBAdapter:
                 try:
                     return self._run_native(method, state, need_grad=need_grad)
                 except RuntimeError as error:
+                    if self._is_reference_branch_loss(error):
+                        # ABI-v4 continuation protects the ROKS state label,
+                        # but a large step or near-degeneracy can make the
+                        # previous two-SOMO reference unassignable.  Retry
+                        # this same geometry cold before rejecting it.  This
+                        # keeps ABI-v4 result fields while providing the
+                        # robust no-anchor behaviour of ABI-v3 for this one
+                        # electronic evaluation.
+                        marker = "_openqp_dftb_disable_reference_anchor_once"
+                        previous_marker = getattr(self.mol, marker, False)
+                        cold_ladder = self._scc_recovery_ladder(primary)
+                        # The old anchor is precisely the reference that was
+                        # rejected.  Do not reuse it on the next geometry if
+                        # the cold solve has to fall through to a later
+                        # recovery stage.
+                        self.mol._openqp_dftb_reference_anchor = None
+                        had_marker = hasattr(self.mol, marker)
+                        setattr(self.mol, marker, True)
+                        try:
+                            for cold_attempt, cold_mixer in enumerate(cold_ladder):
+                                self.dftb["scc_mixer"] = cold_mixer
+                                try:
+                                    dump_log(
+                                        self.mol,
+                                        title=(
+                                            "PyOQP: ABI-v4 reference orbital "
+                                            "branch lost; retrying the same "
+                                            f"geometry without the anchor "
+                                            f"({cold_mixer})"
+                                        ),
+                                    )
+                                    return self._run_native(
+                                        method, state, need_grad=need_grad
+                                    )
+                                except RuntimeError as cold_error:
+                                    if (not self._is_scc_nonconvergence(cold_error)
+                                            or cold_attempt + 1 == len(cold_ladder)):
+                                        raise
+                                    next_cold = cold_ladder[cold_attempt + 1]
+                                    dump_log(
+                                        self.mol,
+                                        title=(
+                                            "PyOQP: DFTB cold SCC recovery at "
+                                            "the current geometry\n"
+                                            f"   {cold_mixer} did not converge; "
+                                            f"retrying with {next_cold}."
+                                        ),
+                                    )
+                        finally:
+                            if had_marker:
+                                setattr(self.mol, marker, previous_marker)
+                            else:
+                                delattr(self.mol, marker)
+                            self.dftb["scc_mixer"] = mixer
                     if not self._is_scc_nonconvergence(error) or attempt + 1 == len(ladder):
                         raise
                     next_mixer = ladder[attempt + 1]
@@ -551,6 +614,12 @@ class OpenQPDFTBAdapter:
         """Return ABI-v4 continuation arrays, or safe one-element sentinels."""
         empty = np.zeros(1, dtype=np.float64)
         if abi_version < 4 or canonical_dftb_type(method) not in {"sf", "mrsf"}:
+            return 0, empty, empty
+
+        # A branch-loss recovery is scoped to one native call.  Keep ABI-v4
+        # enabled for normal calls, but allow the cold retry to reproduce the
+        # robust ABI-v3 no-anchor behaviour without discarding ABI-v4 outputs.
+        if getattr(self.mol, "_openqp_dftb_disable_reference_anchor_once", False):
             return 0, empty, empty
 
         anchor = getattr(self.mol, "_openqp_dftb_reference_anchor", None)
