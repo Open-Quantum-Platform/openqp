@@ -443,6 +443,26 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(calls, ["trah", "broyden"])
         self.assertEqual(adapter.dftb["scc_mixer"], "trah")
 
+    def test_displaced_reference_starts_explicit_trah_on_broyden(self):
+        adapter, _ = self._adapter_with_current(
+            dftb_updates={"scc_mixer": "trah"}
+        )
+        result = object()
+        calls = []
+        adapter.mol._openqp_dftb_cache["__native_abi_version__"] = 4
+        adapter._native_reference_inputs = lambda *args, **kwargs: (
+            2, np.zeros(6), np.eye(2).ravel(order="F")
+        )
+
+        def run_native(*args, **kwargs):
+            calls.append(adapter.dftb["scc_mixer"])
+            return result
+
+        adapter._run_native = run_native
+        self.assertIs(adapter._run_state("mrsf", 1, need_grad=True), result)
+        self.assertEqual(calls, ["broyden"])
+        self.assertEqual(adapter.dftb["scc_mixer"], "trah")
+
     def test_precontract_unversioned_layout_is_rejected_safely(self):
         adapter, library = self._adapter_with_abi1()
         adapter.mol._openqp_dftb_cache.clear()

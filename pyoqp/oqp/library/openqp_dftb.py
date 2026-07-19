@@ -480,6 +480,22 @@ class OpenQPDFTBAdapter:
         """
         primary = str(self.dftb.get("scc_mixer", "auto")).lower()
         ladder = self._scc_recovery_ladder(primary)
+        # ABI-v4 continuation deliberately disables *orbital* TRAH at a
+        # displaced geometry: rotating the anchored orbitals would invalidate
+        # their cross-geometry assignment.  In that situation an explicit
+        # ``trah`` request would otherwise spend the whole trust budget in the
+        # less suitable charge/spin path before reaching the Broyden method
+        # that is stable for C60-like geometry steps.  Start with Broyden for
+        # this one anchored point, while retaining the user's primary mixer
+        # for the next geometry and as a fallback if Broyden itself fails.
+        if primary in {"trust", "trah"}:
+            abi_version = int(self.mol._openqp_dftb_cache.get(
+                "__native_abi_version__", 0
+            ))
+            if self._native_reference_inputs(
+                    method, abi_version, need_grad=need_grad
+            )[0] > 0:
+                ladder = ("broyden", primary)
         try:
             for attempt, mixer in enumerate(ladder):
                 self.dftb["scc_mixer"] = mixer
