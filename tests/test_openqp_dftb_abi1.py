@@ -463,6 +463,23 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(calls, ["broyden"])
         self.assertEqual(adapter.dftb["scc_mixer"], "trah")
 
+    def test_large_explicit_trah_starts_on_charge_space_broyden(self):
+        adapter, _ = self._adapter_with_current(
+            dftb_updates={"scc_mixer": "trah"}
+        )
+        adapter.natom = 60
+        result = object()
+        calls = []
+
+        def run_native(*args, **kwargs):
+            calls.append(adapter.dftb["scc_mixer"])
+            return result
+
+        adapter._run_native = run_native
+        self.assertIs(adapter._run_state("mrsf", 1, need_grad=False), result)
+        self.assertEqual(calls, ["broyden"])
+        self.assertEqual(adapter.dftb["scc_mixer"], "trah")
+
     def test_precontract_unversioned_layout_is_rejected_safely(self):
         adapter, library = self._adapter_with_abi1()
         adapter.mol._openqp_dftb_cache.clear()

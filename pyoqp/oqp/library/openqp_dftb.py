@@ -200,6 +200,11 @@ class _StateResult:
 
 
 class OpenQPDFTBAdapter:
+    # Orbital TRAH carries the full virtual spectrum through every micro-step;
+    # beyond this compact-molecule boundary the charge-space Broyden path is
+    # both cheaper and more reliable (C60 is the smallest reproducible case).
+    _TRAH_ORBITAL_MAX_ATOMS = 48
+
     """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider."""
 
     def __init__(self, mol):
@@ -488,7 +493,9 @@ class OpenQPDFTBAdapter:
         # that is stable for C60-like geometry steps.  Start with Broyden for
         # this one anchored point, while retaining the user's primary mixer
         # for the next geometry and as a fallback if Broyden itself fails.
-        if primary in {"trust", "trah"}:
+        if primary in {"trust", "trah"} and self.natom > self._TRAH_ORBITAL_MAX_ATOMS:
+            ladder = ("broyden", primary)
+        elif primary in {"trust", "trah"}:
             abi_version = int(self.mol._openqp_dftb_cache.get(
                 "__native_abi_version__", 0
             ))
