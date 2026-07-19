@@ -802,14 +802,23 @@ class StateSpecificOpt(Optimizer):
 
         target_converger = self.mol.config['scf']['converger_type']
         try:
-            # compute energy. If SCF falls back to alternative_scf (e.g. TRAH),
-            # keep that recovered reference through the matching excited-state
-            # gradient/Z-vector evaluation for this geometry only.
-            energies = self.sp.energy(do_init_scf=do_init_scf, restore_scf_converger=False)
-
-            # compute gradient
             self.grad.grads = [self.istate]
-            grads = self.grad.gradient()
+            if self.method == 'dftb':
+                # OpenQP-DFTB's analytic-gradient C call also returns the
+                # complete, matching state-energy spectrum.  Use that single
+                # solve for optimization so an independent energy-only ROKS
+                # cycle cannot select a different open-shell branch.
+                grads = self.grad.gradient()
+                energies = np.asarray(self.mol.energies, dtype=float)
+            else:
+                # If SCF falls back to alternative_scf (e.g. TRAH), keep that
+                # recovered reference through the matching excited-state
+                # gradient/Z-vector evaluation for this geometry only.
+                energies = self.sp.energy(
+                    do_init_scf=do_init_scf,
+                    restore_scf_converger=False,
+                )
+                grads = self.grad.gradient()
             self.mol.energies = energies
             self.mol.grads = grads
 

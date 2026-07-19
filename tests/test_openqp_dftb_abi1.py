@@ -296,6 +296,46 @@ class OpenQPDFTBABITests(unittest.TestCase):
         self.assertEqual(signature[52], ctypes.POINTER(ctypes.c_double))
         self.assertEqual(signature[53], ctypes.POINTER(ctypes.c_double))
 
+    def test_abi4_signature_and_displaced_reference_anchor(self):
+        signature = ADAPTER_MODULE._state_gradient_argtypes(4)
+        self.assertEqual(len(signature), 78)
+        # ABI-v4 inserts nbf/geometry/MOs/threshold immediately before the
+        # historical external-potential pair and output tail.
+        self.assertIs(signature[51], ctypes.c_int64)
+        self.assertIs(signature[52], ctypes.POINTER(ctypes.c_double))
+        self.assertIs(signature[53], ctypes.POINTER(ctypes.c_double))
+        self.assertIs(signature[54], ctypes.c_double)
+        self.assertIs(signature[55], ctypes.c_int64)
+
+        adapter, _ = self._adapter_with_current()
+        adapter.mol._openqp_dftb_cache["__native_abi_version__"] = 4
+        anchor = {
+            "signature": adapter._reference_anchor_signature("mrsf"),
+            "nbf": 2,
+            "coords": adapter.mol.get_system().copy(),
+            "mos": np.eye(2),
+        }
+        adapter.mol._openqp_dftb_reference_anchor = anchor
+
+        # Re-solving an unchanged geometry deliberately starts a strict SCC
+        # solve; anchoring is only for the next displaced optimization point.
+        nbf, coords, mos = adapter._native_reference_inputs(
+            "mrsf", 4, need_grad=True
+        )
+        self.assertEqual(nbf, 0)
+        self.assertEqual(coords.size, 1)
+        self.assertEqual(mos.size, 1)
+
+        adapter.mol.get_system = lambda: np.array(
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.5], dtype=np.float64
+        )
+        nbf, coords, mos = adapter._native_reference_inputs(
+            "mrsf", 4, need_grad=True
+        )
+        self.assertEqual(nbf, 2)
+        np.testing.assert_array_equal(coords, anchor["coords"])
+        np.testing.assert_array_equal(mos, np.eye(2).ravel(order="F"))
+
     def test_missing_capability_symbol_means_zero_even_for_abi3(self):
         adapter, library = self._adapter_with_current(capabilities=None)
         adapter.mol._openqp_dftb_cache.clear()
@@ -374,6 +414,14 @@ class OpenQPDFTBABITests(unittest.TestCase):
 
         self.assertEqual(calls, ["auto"])
         self.assertEqual(adapter.dftb["scc_mixer"], "auto")
+
+    def test_dtcam_auto_recovery_skips_duplicate_broyden_pass(self):
+        adapter, _ = self._adapter_with_current(
+            dftb_updates={"model": "dtcam-tb"}
+        )
+        self.assertEqual(
+            adapter._scc_recovery_ladder("auto"), ("auto", "trust")
+        )
 
     def test_precontract_unversioned_layout_is_rejected_safely(self):
         adapter, library = self._adapter_with_abi1()
