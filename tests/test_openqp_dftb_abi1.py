@@ -259,6 +259,27 @@ class OpenQPDFTBABITests(unittest.TestCase):
         mol._dftb_model_default_resolved = True
         return adapter, library
 
+    def test_gradient_energy_backfill_does_not_request_unneeded_gradients(self):
+        adapter, _ = self._adapter_with_current()
+        calls = []
+
+        def fake_run(method, state, *, need_grad):
+            calls.append((int(state), bool(need_grad)))
+            return ADAPTER_MODULE._StateResult(
+                state=int(state),
+                reference_energy=-1.25,
+                state_energy=-1.05 + 0.1 * int(state),
+                gradient_bohr=np.zeros((2, 3)),
+            )
+
+        adapter._run_state = fake_run
+        adapter._store_wavefunction_tags = lambda result: None
+
+        adapter._evaluate([1], need_grad=True)
+
+        self.assertIn((1, True), calls)
+        self.assertIn((2, False), calls)
+
     def test_unversioned_library_is_classified_as_abi1(self):
         adapter, library = self._adapter_with_abi1()
         adapter.mol._openqp_dftb_cache.clear()

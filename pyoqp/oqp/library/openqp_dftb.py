@@ -336,7 +336,7 @@ class OpenQPDFTBAdapter:
                     result = results.get(state)
                     if result is None:
                         result = self._run_state(
-                            method, state, need_grad=need_grad
+                            method, state, need_grad=False
                         )
                         results[state] = result
                     if 0 < state <= self.nstate:
