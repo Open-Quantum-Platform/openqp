@@ -51,7 +51,10 @@ DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
 DFTB_MODEL_DEFAULT_OPEN_SHELL = "dftb+"
 # Keys a [dftb] model preset fixes; the checker refuses to combine them with
 # model= (the preset overrides them inside openqp-dftb, so a user-tuned value
-# would be silently discarded).
+# would be silently discarded).  ``scc_mixer`` is intentionally excluded:
+# selecting the first-try convergence algorithm (Broyden versus charge/spin
+# TRAH) is a numerical recovery choice, and the native C API applies that
+# explicit override after loading the operator preset.
 DFTB_MODEL_LOCKED_KEYS = (
     "omega", "cam_alpha", "cam_beta", "lc_gamma", "lc_ground_state",
     "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
@@ -65,7 +68,7 @@ DFTB_MODEL_LOCKED_KEYS = (
     # path. Keys the preset does NOT touch (response_tolerance,
     # response_max_iterations, response_max_subspace, nstate, ...) stay
     # user-tunable and are deliberately absent here.
-    "scc_mixer", "scc_mixing", "scc_history", "scc_max_step",
+    "scc_mixing", "scc_history", "scc_max_step",
     "scc_tolerance", "max_scc_iterations", "response_solver", "zvector",
 )
 # New-generation operator keys the probe CLI never forwards (native only).
@@ -1082,8 +1085,8 @@ def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
             report.add(
                 "ERROR",
                 "dftb.model",
-                "A model preset fixes the complete operator and numerical protocol; "
-                "individual operator keys cannot be combined with it.",
+                "A model preset fixes the operator and numerical protocol; "
+                "only the explicit SCC mixer override is allowed.",
                 value=", ".join(conflicting),
                 expected=f"model={model} with no tuned operator keys",
                 action="Remove the listed [dftb] keys or drop model= to tune manually.",

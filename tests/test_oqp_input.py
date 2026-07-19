@@ -1141,6 +1141,18 @@ geom="c60.xyz"
     assert reparsed_geometric.options == geometric_spec.options
 
 
+def test_dftb_preset_allows_explicit_first_try_trah_mixer():
+    """A DTCAM operator may select TRAH without disabling SCC or the preset."""
+    spec, config = _parse("""
+mrsf-tddftb(nstate=3)
+dftb(model=dtcam-tb,scc_mixer=trah)
+geom="alanine-dipeptide.xyz"
+""")
+    assert config["dftb"]["model"] == "dtcam-tb"
+    assert config["dftb"]["scc_mixer"] == "trah"
+    assert "scc_mixer=trah" in oqp_input.render_canonical_oqp(spec)
+
+
 @pytest.mark.parametrize(
     "options,message",
     [
