@@ -135,10 +135,6 @@ def _state_gradient_argtypes(abi_version: int) -> list[object]:
         controls.extend([
             *([f64] * 9), ctypes.c_char_p, i32,
         ])
-    if abi_version >= 4:
-        # Fixed-anchor ROKS continuation: previous AO dimension, geometry,
-        # and column-major AO-MO coefficients. A zero dimension disables it.
-        controls.extend([i64, p_f64, p_f64, f64])
     # n_ext_pot/ext_potential followed by the result/output tail.
     tail = [
         i64, p_f64,
@@ -200,11 +196,6 @@ class _StateResult:
 
 
 class OpenQPDFTBAdapter:
-    # Orbital TRAH carries the full virtual spectrum through every micro-step;
-    # beyond this compact-molecule boundary the charge-space Broyden path is
-    # both cheaper and more reliable (C60 is the smallest reproducible case).
-    _TRAH_ORBITAL_MAX_ATOMS = 48
-
     """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider."""
 
     def __init__(self, mol):
@@ -298,52 +289,39 @@ class OpenQPDFTBAdapter:
             requested = sorted(set(requested) | set(range(1, self.nstate + 1)))
 
         results = {}
-        gradient_map = {}
+        if method not in _GROUND_TYPES:
+            # C API v2 returns every response root from ONE solve.
+            base = self._run_state(method, min(requested), need_grad=False)
+            for state in requested:
+                results[state] = base
 
-        if need_grad:
-            # The native gradient call already returns the reference energy,
-            # every response-root energy, wavefunction tags, and the requested
-            # analytic gradient.  Re-running an energy-only SCC first can land
-            # on a different open-shell solution and pair its energy with the
-            # wrong derivative.  Build the objective from the gradient call
-            # itself so every optimization point is one electronic solution.
-            for state in states:
-                run_method = ground_method if state == 0 else method
-                result = self._run_state(run_method, state, need_grad=True)
-                results[state] = result
-                gradient_map[state] = result.gradient_bohr
-            base = results[min(states)]
-        else:
-            if method not in _GROUND_TYPES:
-                # Current C APIs return every response root from ONE solve.
-                base = self._run_state(method, min(requested), need_grad=False)
-                for state in requested:
-                    results[state] = base
-            if method in _GROUND_TYPES or 0 in states:
-                results[0] = self._run_state(ground_method, 0, need_grad=False)
-            base = results[0] if method in _GROUND_TYPES else base
+        if method in _GROUND_TYPES or 0 in states:
+            results[0] = self._run_state(ground_method, 0, need_grad=False)
 
         if method in _GROUND_TYPES:
-            energies = np.array([base.state_energy], dtype=float)
+            energies = np.array([results[0].state_energy], dtype=float)
         else:
             energies = np.zeros(self.nstate + 1, dtype=float)
             energies[0] = base.reference_energy
-            if (base.all_state_energies is not None
-                    and len(base.all_state_energies) >= self.nstate):
+            if base.all_state_energies is not None and len(base.all_state_energies) >= self.nstate:
                 energies[1:] = base.all_state_energies[: self.nstate]
             else:
+                # probe backend fallback: one call per state
                 for state in requested:
-                    result = results.get(state)
-                    if result is None:
-                        result = self._run_state(
-                            method, state, need_grad=False
-                        )
-                        results[state] = result
+                    result = self._run_state(method, state, need_grad=False)
+                    results[state] = result
                     if 0 < state <= self.nstate:
                         energies[state] = result.state_energy
             self._store_wavefunction_tags(base)
-            if not need_grad:
-                self._dump_excited_state_summary(base)
+            self._dump_excited_state_summary(base)
+
+        gradient_map = {}
+        if need_grad:
+            for state in states:
+                run_method = ground_method if state == 0 else method
+                gradient_result = self._run_state(run_method, state, need_grad=True)
+                results[state] = gradient_result
+                gradient_map[state] = gradient_result.gradient_bohr
 
         self._last_results = results
         return energies, gradient_map
@@ -444,34 +422,20 @@ class OpenQPDFTBAdapter:
             )
         )
 
-    def _scc_recovery_ladder(self, primary: str) -> tuple[str, ...]:
-        """Return a bounded per-geometry ladder for SCC failures.
-
-        ``trust``/``trah`` is a useful first choice for difficult references,
-        but a displaced geometry can make its trust model temporarily
-        ill-conditioned (C60 is a reproducible example).  In that case an
-        explicit TRAH request must still be recoverable: retry the same
-        physical SCC problem with Broyden, and only then use the charge/spin
-        trust rescue.  The configured mixer is restored after this geometry,
-        so a rescue never silently changes the next optimization point.
-        """
+    @staticmethod
+    def _scc_recovery_ladder(primary: str) -> tuple[str, ...]:
+        """Minimal per-geometry SCC ladder, ending in charge/orbital TRAH."""
         primary = str(primary).lower()
         if primary in {"trust", "trah"}:
-            return (primary, "broyden")
+            return (primary,)
         if primary in {"broyden", "diis"}:
             return (primary, "trust")
         if primary in {"anderson", "pulay"}:
             return (primary, "broyden", "trust")
         if primary == "linear":
             return (primary, "anderson", "broyden", "trust")
-        # ``auto`` is resolved by the native preset.  For DTCAM-TB that is
-        # already the production Broyden recipe, so retrying with an explicit
-        # Broyden pass would repeat the same potentially 4000-iteration solve.
-        # Escalate directly to charge/spin TRAH instead.  A manually configured
-        # no-preset ``auto`` route still gets the explicit Broyden intermediate.
-        preset = str(self.dftb.get("model", "")).strip().lower()
-        if primary == "auto" and preset in {"dtcam-tb", "dtcam_tb", "dtcamtb"}:
-            return (primary, "trust")
+        # The native auto mixer starts from Anderson/Pulay.  Make the two
+        # genuinely different fallbacks explicit after it is exhausted.
         return (primary, "broyden", "trust")
 
     def _run_native_with_scc_recovery(
@@ -485,24 +449,6 @@ class OpenQPDFTBAdapter:
         """
         primary = str(self.dftb.get("scc_mixer", "auto")).lower()
         ladder = self._scc_recovery_ladder(primary)
-        # ABI-v4 continuation deliberately disables *orbital* TRAH at a
-        # displaced geometry: rotating the anchored orbitals would invalidate
-        # their cross-geometry assignment.  In that situation an explicit
-        # ``trah`` request would otherwise spend the whole trust budget in the
-        # less suitable charge/spin path before reaching the Broyden method
-        # that is stable for C60-like geometry steps.  Start with Broyden for
-        # this one anchored point, while retaining the user's primary mixer
-        # for the next geometry and as a fallback if Broyden itself fails.
-        if primary in {"trust", "trah"} and self.natom > self._TRAH_ORBITAL_MAX_ATOMS:
-            ladder = ("broyden", primary)
-        elif primary in {"trust", "trah"}:
-            abi_version = int(self.mol._openqp_dftb_cache.get(
-                "__native_abi_version__", 0
-            ))
-            if self._native_reference_inputs(
-                    method, abi_version, need_grad=need_grad
-            )[0] > 0:
-                ladder = ("broyden", primary)
         try:
             for attempt, mixer in enumerate(ladder):
                 self.dftb["scc_mixer"] = mixer
@@ -524,80 +470,6 @@ class OpenQPDFTBAdapter:
             self.dftb["scc_mixer"] = primary
 
         raise AssertionError("DFTB SCC recovery ladder exhausted unexpectedly")
-
-    def _reference_anchor_signature(self, method: str):
-        """Physical reference settings that must match a continued ROKS SCF."""
-        v_ext = self._external_potential()
-        return (
-            canonical_dftb_type(method),
-            tuple(int(z) for z in np.asarray(self.mol.get_atoms()).reshape(-1)),
-            self._parameter_path(),
-            int(self.config.get("input", {}).get("charge", 0)),
-            self._reference_multiplicity(method),
-            str(self.dftb.get("model", "")).strip().lower(),
-            bool(self.dftb.get("lc_ground_state", False)),
-            str(self.dftb.get("lc_gamma", "yukawa")).lower(),
-            float(self.dftb.get("omega", 0.3)),
-            float(self.dftb.get("cam_alpha", 0.0)),
-            float(self.dftb.get("cam_beta", 1.0)),
-            float(self.dftb.get("w_scale", 1.0)),
-            b"" if v_ext is None else np.ascontiguousarray(
-                v_ext, dtype=np.float64
-            ).tobytes(),
-        )
-
-    def _native_reference_inputs(
-            self, method: str, abi_version: int, *, need_grad: bool):
-        """Return ABI-v4 continuation arrays, or safe one-element sentinels."""
-        empty = np.zeros(1, dtype=np.float64)
-        if abi_version < 4 or canonical_dftb_type(method) not in {"sf", "mrsf"}:
-            return 0, empty, empty
-
-        anchor = getattr(self.mol, "_openqp_dftb_reference_anchor", None)
-        if not anchor or anchor.get("signature") != \
-                self._reference_anchor_signature(method):
-            return 0, empty, empty
-
-        nbf = int(anchor.get("nbf", 0))
-        coords = np.asarray(anchor.get("coords", []), dtype=np.float64).reshape(-1)
-        mos = np.asarray(anchor.get("mos", []), dtype=np.float64)
-        if (nbf <= 0 or coords.size != 3 * self.natom
-                or mos.shape != (nbf, nbf)
-                or not np.all(np.isfinite(coords))
-                or not np.all(np.isfinite(mos))):
-            return 0, empty, empty
-        current = np.ascontiguousarray(
-            self.mol.get_system(), dtype=np.float64
-        ).reshape(-1)
-        if np.array_equal(coords, current):
-            # A fresh strict solve at the unchanged geometry supplies a
-            # consistent energy/gradient pair. Re-anchoring that same
-            # determinant can overconstrain an unstable open-shell block.
-            return 0, empty, empty
-        return (
-            nbf,
-            np.ascontiguousarray(coords),
-            np.ascontiguousarray(mos.ravel(order="F")),
-        )
-
-    def _update_native_reference_anchor(
-            self, method: str, result: _StateResult) -> None:
-        """Keep the last converged ROKS orbitals for the next geometry/call."""
-        if canonical_dftb_type(method) not in {"sf", "mrsf"}:
-            return
-        mos = result.mo_coefficients
-        nbf = int(result.nbf)
-        if (mos is None or nbf <= 0 or np.asarray(mos).shape != (nbf, nbf)
-                or not np.all(np.isfinite(mos))):
-            return
-        self.mol._openqp_dftb_reference_anchor = {
-            "signature": self._reference_anchor_signature(method),
-            "nbf": nbf,
-            "coords": np.ascontiguousarray(
-                self.mol.get_system(), dtype=np.float64
-            ).reshape(-1).copy(),
-            "mos": np.asarray(mos, dtype=np.float64).copy(),
-        }
 
     def _run_native(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
         """Call libopenqp_dftb_c (the standalone openqp-dftb shared C API) in-process.
@@ -663,10 +535,6 @@ class OpenQPDFTBAdapter:
         mo_coefficients = (ctypes.c_double * mo_capacity)()
         vec_capacity = mo_capacity * nstate
         response_vectors = (ctypes.c_double * vec_capacity)()
-        reference_nbf, reference_coords, reference_mos = \
-            self._native_reference_inputs(
-                method, abi_version, need_grad=need_grad
-            )
 
         call_kwargs = {
             "natom": natom,
@@ -696,9 +564,6 @@ class OpenQPDFTBAdapter:
             "mo_coefficients": mo_coefficients,
             "vec_capacity": vec_capacity,
             "response_vectors": response_vectors,
-            "reference_nbf": reference_nbf,
-            "reference_coords": reference_coords,
-            "reference_mos": reference_mos,
             "status_message": status_message,
             "status": status,
         }
@@ -706,10 +571,6 @@ class OpenQPDFTBAdapter:
         def native_call():
             if abi_version == 1:
                 self._call_state_gradient_abi1(
-                    lib.openqp_dftb_state_gradient, **call_kwargs
-                )
-            elif abi_version >= 4:
-                self._call_state_gradient_abi4(
                     lib.openqp_dftb_state_gradient, **call_kwargs
                 )
             else:
@@ -778,7 +639,7 @@ class OpenQPDFTBAdapter:
         if vec_dim > 0 and n_roots > 0:
             vecs = np.frombuffer(response_vectors, dtype=np.float64)[: vec_dim * n_roots].reshape(
                 (vec_dim, n_roots), order="F").copy()
-        result = _StateResult(
+        return _StateResult(
             state=state,
             reference_energy=float(reference_energy.value),
             state_energy=float(state_energy.value),
@@ -796,8 +657,6 @@ class OpenQPDFTBAdapter:
             mo_coefficients=mo_c,
             response_vectors=vecs,
         )
-        self._update_native_reference_anchor(method, result)
-        return result
 
     def _public_target_label(self, state):
         """Public label for a response root (S1, T0, ...; 'state N' fallback)."""
@@ -1379,44 +1238,6 @@ class OpenQPDFTBAdapter:
             *self._state_gradient_output_arguments(values),
         )
 
-    def _call_state_gradient_abi4(self, function, **values) -> None:
-        """Call ABI v4 with a previous-geometry ROKS reference anchor."""
-        function(
-            *self._state_gradient_common_arguments(values),
-            ctypes.c_double(float(self.dftb.get("c_mrsf", -1.0))),
-            ctypes.c_int64(
-                int(bool(self.dftb.get("response_global_hybrid", False)))
-            ),
-            ctypes.c_double(
-                float(self.dftb.get("onsite_exchange_scale", 0.0))
-            ),
-            ctypes.c_double(float(self.dftb.get("w_scale", 1.0))),
-            ctypes.c_double(float(self.dftb.get("response_w_scale", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_omega", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_cam_alpha", -1.0))),
-            ctypes.c_double(float(self.dftb.get("response_cam_beta", -1.0))),
-            ctypes.c_double(float(self.dftb.get("c_mrsf_oo", -1.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_ss", 0.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_sp", 0.0))),
-            ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
-            self._preset_bytes,
-            ctypes.c_int32(len(self._preset_bytes)),
-            ctypes.c_int64(values["reference_nbf"]),
-            values["reference_coords"].ctypes.data_as(
-                ctypes.POINTER(ctypes.c_double)
-            ),
-            values["reference_mos"].ctypes.data_as(
-                ctypes.POINTER(ctypes.c_double)
-            ),
-            # Reject an optimization point when the transported two-SOMO
-            # branch has lost its fixed-reference character.  Passing zero
-            # disabled a diagnostic that the native kernel already computed,
-            # allowing a smooth-looking SCC convergence on a different ROKS
-            # determinant and a discontinuous S0 energy/gradient.
-            ctypes.c_double(0.20),
-            *self._state_gradient_output_arguments(values),
-        )
-
     def _validate_abi1_request(self) -> None:
         """Reject features that cannot be represented by the ABI-v1 call."""
         limitations = []
@@ -1497,10 +1318,10 @@ class OpenQPDFTBAdapter:
                     "safely; install openqp-dftb >= 0.2.0."
                 )
             abi_version = 1
-        if abi_version not in (1, 2, 3, 4):
+        if abi_version not in (1, 2, 3):
             raise RuntimeError(
                 f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
-                "OpenQP adapter supports only versions 1, 2, 3, and 4."
+                "OpenQP adapter supports only versions 1, 2, and 3."
             )
         lib.openqp_dftb_state_gradient.argtypes = _state_gradient_argtypes(
             abi_version
