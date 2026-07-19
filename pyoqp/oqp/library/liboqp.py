@@ -411,16 +411,9 @@ class _OQPRunner:
         )
         exhausted = any(
             token in message
-            for token in (
-                "did not converge", "not converged", "nonconver",
-                "fixed-reference orbital branch lost",
-            )
+            for token in ("did not converge", "not converged", "nonconver")
         )
-        branch_tracking = (
-            "fixed-reference orbital branch" in message
-            or ("reference orbital" in message and "overlap" in message)
-        )
-        return bool((solver and exhausted) or branch_tracking)
+        return bool(solver and exhausted)
 
     @staticmethod
     def _recovery_coordsys(coordsys):
