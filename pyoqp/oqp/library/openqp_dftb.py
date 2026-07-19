@@ -440,10 +440,19 @@ class OpenQPDFTBAdapter:
         )
 
     def _scc_recovery_ladder(self, primary: str) -> tuple[str, ...]:
-        """Minimal per-geometry SCC ladder, ending in charge/orbital TRAH."""
+        """Return a bounded per-geometry ladder for SCC failures.
+
+        ``trust``/``trah`` is a useful first choice for difficult references,
+        but a displaced geometry can make its trust model temporarily
+        ill-conditioned (C60 is a reproducible example).  In that case an
+        explicit TRAH request must still be recoverable: retry the same
+        physical SCC problem with Broyden, and only then use the charge/spin
+        trust rescue.  The configured mixer is restored after this geometry,
+        so a rescue never silently changes the next optimization point.
+        """
         primary = str(primary).lower()
         if primary in {"trust", "trah"}:
-            return (primary,)
+            return (primary, "broyden")
         if primary in {"broyden", "diis"}:
             return (primary, "trust")
         if primary in {"anderson", "pulay"}:
