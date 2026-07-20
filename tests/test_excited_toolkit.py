@@ -70,6 +70,62 @@ def test_participation_ratio_bounds():
     assert abs(descriptors.participation_ratio([0.25] * 4) - 4.0) < 1e-12
 
 
+class _PhysicalPairStates:
+    """Two-root fixture whose auxiliary-reference amplitudes must not be used."""
+
+    nstates = 2
+    nbf = 2
+    S = np.eye(2)
+    C = np.eye(2)
+    energies = np.array([-10.0, -9.8])
+
+    class _Mol:
+        @staticmethod
+        def get_atoms():
+            return np.array([8, 6])
+
+    mol = _Mol()
+
+    @staticmethod
+    def tdm_mo(i, j):
+        assert (i, j) == (0, 1)
+        # Row = particle AO (C p_z), column = hole AO (O p_x).
+        return np.array([[0.0, 0.0], [1.0, 0.0]])
+
+    @classmethod
+    def tdm_ao(cls, i, j):
+        return cls.tdm_mo(i, j)
+
+    @staticmethod
+    def amplitude_matrix(_n):
+        raise AssertionError("physical-root analysis used the high-spin reference")
+
+
+class _TwoAO:
+    nbf = 2
+    ao_atom = np.array([0, 1])
+    # O p_x is in the xy plane; C p_z is perpendicular.
+    ao_index = [(0, (1, 0, 0), 1.0), (1, (0, 0, 1), 1.0)]
+    coords = np.array([[0.0, 0.0, 0.0], [1.2, 0.0, 0.0]])
+
+
+def test_fragment_ct_uses_physical_root_pair_and_orientation():
+    result = descriptors.fragment_ct_matrix(
+        _PhysicalPairStates(), _TwoAO(), 1, [[0], [1]], ref=0)
+    np.testing.assert_allclose(result["Omega"], [[0.0, 1.0], [0.0, 0.0]])
+    assert result["le_fraction"] == 0.0
+    assert result["ct_fraction"] == 1.0
+    assert result["pair"] == (0, 1)
+
+
+def test_fragment_ct_rejects_incomplete_or_overlapping_partition():
+    states, ao = _PhysicalPairStates(), _TwoAO()
+    with pytest.raises(ValueError, match="do not assign"):
+        descriptors.fragment_ct_matrix(states, ao, 1, [[0]])
+    with pytest.raises(ValueError, match="more than one"):
+        descriptors.fragment_ct_matrix(states, ao, 1, [[0], [0, 1]])
+
+
 # --------------------------------------------------------------------------
 # GTO evaluator guard  (Codex finding: spherical shells unsupported)
 # --------------------------------------------------------------------------
@@ -116,6 +172,7 @@ def test_interop_public_api_shape():
     import oqp.interop as I
     for name in ("MRSFExcitedStates", "nto_excitation", "attachment_detachment",
                  "participation_ratio", "tozer_lambda", "fragment_ct_matrix",
+                 "analyze_mrsf_transition", "infer_molecular_plane",
                  "CubeExporter", "to_qcschema", "validate_qcschema",
                  "dump_fcidump", "verify_fcidump_fci", "from_openqp",
                  "parse_output", "parse_pyscf_tddft", "compare_results"):

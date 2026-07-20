@@ -4,10 +4,10 @@
 * ``tozer_lambda`` -- Tozer's Lambda: NTO-weighted spatial overlap of the
   hole/particle moduli (Lambda in [0,1]; high = local, low = charge transfer).
 * ``fragment_ct_matrix`` -- Plasser/Lischka Omega matrix from the Loewdin-
-  orthogonalized spin-flip transition density, partitioned over atom fragments.
+  orthogonalized physical-root state-interaction 1-TDM, partitioned over atom
+  fragments.
 """
 import numpy as np
-from scipy.linalg import sqrtm
 
 __all__ = ["participation_ratio", "tozer_lambda", "fragment_ct_matrix"]
 
@@ -49,41 +49,79 @@ def tozer_lambda(ao, nto_exc, grid_points, dV, weight_thresh=1.0e-8):
     return lam, {"O_k": O, "weights": wk, "norm_hole": norm_h, "norm_part": norm_p}
 
 
-def fragment_ct_matrix(states, ao, n, fragments):
-    """Fragment charge-transfer Omega matrix for excitation to root ``n``.
+def _lowdin_sqrt(overlap, threshold=1.0e-12):
+    """Symmetric positive-semidefinite square root of an AO overlap matrix."""
+    values, vectors = np.linalg.eigh(np.asarray(overlap, dtype=float))
+    if values.size and values.min() < -threshold:
+        raise ValueError("AO overlap matrix is not positive semidefinite")
+    values = np.clip(values, 0.0, None)
+    return (vectors * np.sqrt(values)) @ vectors.T
 
-    ``fragments``: list of lists of 0-based atom indices.  Builds the AO
-    spin-flip transition density T = C_occ X^{(n)} C_vir^T, Loewdin-orthogonalizes
-    (Ttil = S^{1/2} T S^{1/2}), and sums Ttil_{mu,nu}^2 over fragment blocks.
-    Row index = hole fragment, column index = particle fragment."""
-    X = states.amplitude_matrix(n)                      # (noca, nvirb)
-    C = states.C
-    na, nb, nbf = states.na, states.nb, states.nbf
-    T_ao = C[:, :na] @ X @ C[:, nb:nbf].T               # (nbf, nbf)
-    Shalf = np.real(sqrtm(states.S))
+
+def _fragment_map(ao_atom, fragments):
+    """Validate a disjoint, complete atom partition and return AO fragments."""
+    atom_frag = {}
+    for frag, atoms in enumerate(fragments):
+        if not atoms:
+            raise ValueError(f"fragment {frag} is empty")
+        for atom in atoms:
+            atom = int(atom)
+            if atom in atom_frag:
+                raise ValueError(f"atom {atom} occurs in more than one fragment")
+            atom_frag[atom] = frag
+    missing = sorted(set(np.asarray(ao_atom, dtype=int)) - set(atom_frag))
+    if missing:
+        raise ValueError(f"fragments do not assign AO-bearing atoms {missing}")
+    return np.array([atom_frag[int(atom)] for atom in ao_atom], dtype=int)
+
+
+def fragment_ct_matrix(states, ao, n, fragments, ref=0):
+    """Fragment charge-transfer matrix for the physical ``ref -> n`` transition.
+
+    ``fragments`` is a disjoint partition of 0-based atom indices.  The genuine
+    MRSF state-interaction 1-TDM is Loewdin-orthogonalized as
+    ``Ttilde = S^(1/2) T_AO S^(1/2)`` and
+
+    ``Omega[A, B] = sum_(mu in B, nu in A) |Ttilde[mu, nu]|^2``.
+
+    Rows therefore identify the *hole* fragment and columns the *particle*
+    fragment.  This function deliberately does not use ``amplitude_matrix``:
+    that matrix describes a response root relative to the auxiliary high-spin
+    determinant, whereas ``tdm_ao(ref, n)`` describes the requested pair of
+    physical MRSF roots.
+    """
+    ref = int(ref)
+    n = int(n)
+    if ref == n:
+        raise ValueError("fragment CT analysis requires two different states")
+    if not (0 <= ref < states.nstates and 0 <= n < states.nstates):
+        raise IndexError("state index is outside the MRSF root range")
+
+    T_ao = np.asarray(states.tdm_ao(ref, n), dtype=float)
+    if T_ao.shape != (states.nbf, states.nbf):
+        raise ValueError("state-interaction AO transition density has the wrong shape")
+    Shalf = _lowdin_sqrt(states.S)
     Ttil = Shalf @ T_ao @ Shalf
-    P = Ttil ** 2                                       # element-wise CT weights
+    P = np.abs(Ttil) ** 2
 
     nfrag = len(fragments)
-    # map atom -> fragment
-    atom_frag = {}
-    for f, atoms in enumerate(fragments):
-        for a in atoms:
-            atom_frag[int(a)] = f
-    ao_frag = np.array([atom_frag[int(a)] for a in ao.ao_atom])
+    ao_frag = _fragment_map(ao.ao_atom, fragments)
 
     Omega = np.zeros((nfrag, nfrag))
     for A in range(nfrag):
-        rows = ao_frag == A
+        hole_columns = ao_frag == A
         for B in range(nfrag):
-            cols = ao_frag == B
-            Omega[A, B] = P[np.ix_(rows, cols)].sum()
+            particle_rows = ao_frag == B
+            Omega[A, B] = P[np.ix_(particle_rows, hole_columns)].sum()
     total = P.sum()
+    local = float(np.trace(Omega) / total) if total > 0 else 0.0
     return {
+        "pair": (ref, n),
         "Omega": Omega,
         "total": float(total),
         "hole_pop": Omega.sum(axis=1),       # per-fragment hole population
         "particle_pop": Omega.sum(axis=0),   # per-fragment particle population
-        "ct_fraction": float(1.0 - np.trace(Omega) / total) if total > 0 else 0.0,
-        "amplitude_norm": float((X ** 2).sum()),
+        "le_fraction": local,
+        "ct_fraction": 1.0 - local if total > 0 else 0.0,
+        "transition_density_orthogonalized": Ttil,
     }
