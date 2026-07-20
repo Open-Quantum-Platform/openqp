@@ -1,0 +1,26 @@
+name: Request Mohsen review
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-review:
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'mohsenkor'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request @mohsenkor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          gh api --method POST
+          "repos/${GH_REPO}/pulls/${PR_NUMBER}/requested_reviewers"
+          --raw-field 'reviewers[]=mohsenkor'
