@@ -186,3 +186,78 @@ collapse and the failed double-fold experiment.
 State 1 / state 3 are NOT cleaner test cases: they also carry ~99.8% SOMO-row
 amplitude (SOMO1->SOMO2 and SOMO->virt), so the same fold contamination applies;
 state 2 is merely the extreme (pure ground pair).
+
+================================================================================
+## 2026-06-17 — ORACLE CLOSED. The analytic amplitude term = the matvec-A bilinear.
+================================================================================
+
+RESULT (p11_poc_gaugefree.py): the semi-numerical amplitude term of the working
+analytical NAC (benchmark_full_nac.py d_amp = X_I^T dX_J, the ONE non-analytic
+piece) is reproduced by the matvec operator form
+    d_amp(I,J) = X0_I^T (dA/dR) X0_J / (Omega_J - Omega_I)
+for ALL THREE pairs to the FD floor:
+    (1,2) cos=+1.00000000 ratio=1.000000 resid 1.9e-7 (0.000%)
+    (1,3) cos=+1.00000000 ratio=1.000001 resid 3.7e-8 (0.000%)   [headline |d_amp|=0.0284]
+    (2,3) cos=+1.00000000 ratio=1.000023 resid 1.5e-5 (0.003%)
+I=J diagonal self-test (gmo_validate.py) STILL cos=+1.0 / 1e-15. No Fortran edited.
+
+KEY CORRECTIONS to the prior synthesis (which was BLOCKED on an antisymmetric-sp lead):
+ 1. The test_QZ "deficiency" (D=coded-numeric, cos -0.9997 etc.) was a RED HERRING:
+    test_QZ's hand-rolled numeric reference (sum_K Omega_K <Z|X_K>^2 with SVD MO
+    alignment) is NOT the validated oracle. The REAL oracle is the benchmark's
+    semi-numerical d_amp = X0_I^T dX_J (TLF FD of displaced eigenvector amps), which
+    drives the cos=1.0 total NAC. test_QZ's symmetric polarization Gfull(Z) is a
+    DIFFERENT object (gradient of the quadratic form, not X_I^T dX_J).
+ 2. The matvec A in the full 90-dim amplitude space is SYMMETRIC to |A-A^T|=2.8e-13
+    (eigvalsh gives exactly Om). So the "input-vs-output SOMO fold makes A
+    non-symmetric / antisymmetric-sp is the missing physics" hypothesis is WRONG:
+    A is symmetric, the PT identity X_I^T dX_J = X_I^T dA X_J/(Omega_J-Omega_I) is
+    exact, and the genuinely-new object is NOT antisymmetric.
+ 3. The whole rotation-space / seam machinery was the wrong arena. The amplitude
+    term is a NUCLEAR derivative of A; the clean evaluation is gauge-free.
+
+THE TWO THINGS THAT ACTUALLY CLOSED IT (both pure gauge fixes in the FD harness,
+NOT physics — the operator X_I^T dA X_J/gap was correct all along):
+ (a) GAUGE-FREE A-transport: build the displaced matvec A column-by-column (A is
+     linear at int2e_cutoff=1e-20), transport it into the FIXED reference MO frame
+     A_ref = T^T A_disp T (T = amplitude-space rep of the per-block orbital
+     transport), FD A_ref, contract with FIXED X0. This removes the quadratic
+     gauge-contamination of the naive X_I(R)^T A(R) X_J(R) bilinear FD (which only
+     ever closed 2 of 3 pairs in any per-state-sign gauge).
+ (b) The orbital transport block Q must be SIGN-CONTINUOUS: use LOEWDIN symmetric
+     orthogonalization Q = sub (sub^T sub)^{-1/2} of the ref x displaced MO-overlap
+     sub-block, NOT the SVD Procrustes Vt^T W^T (whose per-direction sign flip
+     corrupted (1,2)/(1,3)). Loewdin alone took (1,3),(2,3) to cos=1.0 exact and
+     (1,2) to cos=1.0 ratio=0.7090 (=1/sqrt2).
+ (c) The remaining (1,2) 1/sqrt2: the spin-adapted GROUND-CONFIG slot ijlr1 does
+     NOT transport like a plain grid entry. transport_T must UNFOLD ijlr1 into the
+     two SOMO-SOMO determinant slots (+/-1/sqrt2), transport in the DETERMINANT
+     grid, then REFOLD (sqrt2 back on ijlr1, ijlr2 slot empty) — exactly the
+     benchmark's displaced_amps fold handling. This restored the sqrt2 ONLY for
+     the SOMO-sector pair (1,2) (state1=SOMO2->SOMO1 idx5, state2=ground ijlr1 idx4,
+     both in the folded SOMO block); (1,3)/(2,3) involve state3 (SOMO->virt, idx17)
+     outside the fold and were unaffected. Final: ALL THREE cos=1.0 ratio=1.0.
+
+WHY (1,2) needed sqrt2 but (2,3) did not (both contain the ground state 2): the
+fold couples states whose dominant configs BOTH live in the SOMO-SOMO block.
+state1(idx5 SOMO2->SOMO1) and state2(idx4 ground SOMO1->SOMO1) are both in-block ->
+sqrt2. state3(idx17 SOMO->virt) is out-of-block -> no fold factor.
+
+FORTRAN PORT (mechanical, the milestone is the operator validation above):
+ - The analytic dA/dR is the matvec A's nuclear derivative = the standard CPHF
+   orbital-response (U^x) of the frozen-Fock matvec, which the project's validated
+   analytic-gradient machinery already computes. Replace the displaced-SCF FD by
+   the U^x response: dA = d(orbital)A via the existing z-vector/CPHF, contracted
+   with the exported kernels (nac_gmo/nac_gchan/nac_fa/nac_fb). The SOMO fold
+   (unfold->transport->refold) maps to applying mrsfxvec on the ground-config slot
+   in the interstate contraction — i.e. the bilinear must fold the SOMO-SOMO sector
+   exactly as mrsfxvec does on input. No new export needed; the kernels suffice.
+ - Validation gate for the port: reproduce p11_poc_gaugefree.py's three cos=1.0
+   ratio=1.0 against p11_damp_oracle.npz, keep gmo_validate I=J at 1e-15, keep the
+   gradient anchor O dE/dZ=-0.182993575.
+
+Scripts: p11_poc_gaugefree.py (THE closing PoC), p11_poc.py (per-state-sign gauge,
+shows 2/3 + the gauge diagnosis), p11_damp_analytic.py (naive bilinear FD, the
+gauge-sensitivity demo), p11_grad_decomp.py / p11_ab1_nuclear.py (nuclear RHS-piece
+decompositions that ruled out single-term fixes). Oracle: p11_damp_oracle.npz
+(= benchmark_bhh.npz d_amp). A matrix: p11_Amat.npy (symmetric, eigs==Om).

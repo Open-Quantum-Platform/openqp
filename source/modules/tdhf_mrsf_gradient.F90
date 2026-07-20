@@ -1107,6 +1107,245 @@ contains
   end subroutine grd2_mrsf_nac_compute_data_t_get_density
 
 !###############################################################################
+!  Phase 11: NAC amplitude-term driver (BP#1, explicit-ERI part)
+!###############################################################################
+
+!> @brief Build the seven per-state MRSF transition/amplitude channel densities
+!>        spc(1:7,:,:) for state `ist` from the response amplitude bvec_mo(:,ist),
+!>        EXACTLY mirroring the production build of OQP::td_mrsf_density
+!>        (tdhf_mrsf_z_vector.F90:1675-1684):
+!>          channels 1-6:  iatogen(bvec_mo(:,ist)) -> mrsfcbc(mo_a,mo_a,...)
+!>          channel  7  :  ball := sfdmat( mrsfxvec(bvec_mo(:,ist)) )  [td_abxc]
+!>        The triplet flip / spc rescale are NOT applied here (production applies
+!>        them to the int2 OUTPUT Fock fmrst2, not to these INPUT densities); the
+!>        grd2 get_density consumes the raw channels and applies sgnk/spcscale.
+  subroutine mrsf_nac_amp_channels(infos, mo_a, bvec_mo, ist, spc)
+    use precision, only: dp
+    use types, only: information
+    use tdhf_mrsf_lib, only: mrsfcbc, mrsfxvec
+    use tdhf_sf_lib, only: sfdmat
+    use tdhf_lib, only: iatogen
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(information), intent(in) :: infos
+    real(kind=dp), intent(in), dimension(:,:) :: mo_a
+    real(kind=dp), intent(in), dimension(:,:) :: bvec_mo
+    integer, intent(in) :: ist
+    real(kind=dp), intent(out), dimension(:,:,:) :: spc   ! (7,nbf,nbf)
+
+    integer :: nbf, nocca, noccb, nbf_tri, ok
+    real(kind=dp), allocatable :: wrk1(:,:), bvec_d(:), td_abxc(:,:), &
+                                  ta(:), tb(:)
+
+    nbf   = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    nbf_tri = nbf*(nbf+1)/2
+
+    allocate(wrk1(nbf,nbf), td_abxc(nbf,nbf), &
+             bvec_d(nocca*(nbf-noccb)), ta(nbf_tri), tb(nbf_tri), &
+             source=0.0_dp, stat=ok)
+    if (ok/=0) call show_message('Cannot allocate memory', with_abort)
+
+    spc = 0.0_dp
+
+    ! channels 1-6 (+ a mrsfcbc ball that channel 7 overwrites)
+    call iatogen(bvec_mo(:,ist), wrk1, nocca, noccb)
+    call mrsfcbc(infos, mo_a, mo_a, wrk1, spc(1:7,:,:))
+
+    ! channel 7 (ball) = td_abxc from the mrsfxvec-folded amplitude (sfdmat)
+    call mrsfxvec(infos, bvec_mo(:,ist), bvec_d)
+    call sfdmat(bvec_d, td_abxc, mo_a, ta, tb, nocca, noccb)
+    spc(7,:,:) = td_abxc
+
+    deallocate(wrk1, td_abxc, bvec_d, ta, tb)
+  end subroutine mrsf_nac_amp_channels
+
+!###############################################################################
+
+  subroutine mrsf_nac_amp_C(c_handle) bind(C, name="mrsf_nac_amp")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_amp(inf)
+  end subroutine mrsf_nac_amp_C
+
+!> @brief Phase 11 BP#1: the explicit-ERI part of the analytic amplitude term
+!>        G_IJ = X_I^T (d_x A_2e) X_J for all MRSF state pairs (I/=J), stored as
+!>        OQP::nac_amp (3, natom, nstate, nstate). The Python driver divides by
+!>        the gap and assembles d_ij = d_ov - damp, damp = G_IJ/(Om_J-Om_I).
+!>
+!>        Mechanism: the validated bilinear engine grd2_mrsf_nac_compute_data_t
+!>        is run twice per pair --
+!>          (a) FULL  : shared reference d2 + interstate relaxed p2 + per-state
+!>                      channels spcI/spcJ  -> G_full
+!>          (b) BASELINE (FIX-1, SCF subtraction): p2=0, spcI=spcJ=0 -> G_SCF
+!>                      (the X-independent d2*d2 ground-SCF 2e gradient, ~56% of
+!>                      the integrand; the I=J self-test is blind to it because
+!>                      it cancels in deN-deP)
+!>        and G_IJ = G_full - G_SCF (grd2 is a product form, so subtracting the
+!>        d2*d2 baseline removes exactly the ground-SCF gradient and leaves the
+!>        X-dependent relaxed+transition^2 2e gradient).
+!>
+!>        FIX-2 (relaxed interstate p2): if OQP::td_p is present and nonzero on
+!>        entry it is used as p2 (the per-pair interstate Z-vector-relaxed
+!>        difference density, populated by the Python interstate z-vector seam);
+!>        the env OQP_NAC_AMP_NOP2 forces p2=0 for the transition^2-only
+!>        measurement.
+  subroutine mrsf_nac_amp(infos)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use mathlib, only: unpack_matrix
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_amp"
+    character(len=*), parameter :: OQP_nac_amp = "OQP::nac_amp"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), td_p(:,:)
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), bvec_mo(:,:)
+    real(kind=dp), pointer :: nac_amp(:,:,:)
+    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, OQP_td_bvec_mo /)
+
+    real(kind=dp), allocatable, target :: d0(:,:,:), pIJ(:,:,:), &
+         spcI(:,:,:), spcJ(:,:,:), zerospc(:,:,:), zerop(:,:,:), &
+         dcopy(:,:,:)
+    real(kind=dp), allocatable :: deFull(:,:), deSCF(:,:)
+    class(grd2_compute_data_t), allocatable :: gFull, gSCF
+    real(kind=dp) :: scale_exch, scale_exch2
+    logical :: dft, do_cam, use_p2
+    integer :: nbf, mrst, natom, nstate, ist, jst, c, a, ok
+    character(len=16) :: env_nop2
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf    = basis%nbf
+    natom  = ubound(infos%atoms%grad, 2)
+    nstate = infos%tddft%nstate
+    mrst   = infos%tddft%mult
+
+    if (mrst/=1 .and. mrst/=3) &
+      call show_message('mrsf_nac_amp supports mult=1,3 only', with_abort)
+
+    dft = infos%control%hamilton == 20
+    scale_exch  = 1.0_dp
+    scale_exch2 = 1.0_dp
+    if (dft) then
+      scale_exch  = infos%dft%HFscale
+      scale_exch2 = infos%tddft%HFscale
+    end if
+    do_cam = dft .and. infos%dft%cam_flag
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+
+    ! FIX-2 source: use the interstate relaxed density in OQP::td_p (populated
+    ! by the Python interstate z-vector seam) unless explicitly suppressed.
+    call get_environment_variable("OQP_NAC_AMP_NOP2", env_nop2)
+    use_p2 = (len_trim(env_nop2) == 0)
+    nullify(td_p)
+    if (use_p2) then
+      block
+        character(len=80) :: tags_p(1)
+        integer(c_int32_t) :: pstat, ptag_id
+        tags_p(1) = OQP_td_p
+        pstat = infos%dat%has_records(tags_p, ptag_id)
+        if (pstat == ta_ok) call tagarray_get_data(infos%dat, OQP_td_p, td_p)
+      end block
+    end if
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_amp /))
+    call infos%dat%reserve_data(OQP_nac_amp, ta_type_real64, &
+          3*natom*nstate*nstate, (/ 3*natom, nstate, nstate /))
+    call tagarray_get_data(infos%dat, OQP_nac_amp, nac_amp)
+    nac_amp = 0.0_dp
+
+    allocate(d0(nbf,nbf,2), dcopy(nbf,nbf,2), pIJ(nbf,nbf,2), &
+             zerop(nbf,nbf,2), spcI(7,nbf,nbf), spcJ(7,nbf,nbf), &
+             zerospc(7,nbf,nbf), deFull(3,natom), deSCF(3,natom), &
+             source=0.0_dp, stat=ok)
+    if (ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
+
+    call unpack_matrix(dmat_a, d0(:,:,1))
+    call unpack_matrix(dmat_b, d0(:,:,2))
+
+    ! interstate relaxed difference density p2^{IJ} (shared by all pairs only if
+    ! it is a single-state object; here we read whatever the seam left in td_p).
+    if (associated(td_p)) then
+      call unpack_matrix(td_p(:,1), pIJ(:,:,1))
+      call unpack_matrix(td_p(:,2), pIJ(:,:,2))
+    end if
+
+    do ist = 1, nstate
+      do jst = 1, nstate
+        if (ist == jst) cycle
+
+        ! per-state channel densities (mirror production td_mrsf_density build)
+        call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, ist, spcI)
+        call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, jst, spcJ)
+
+        ! (a) FULL: reference + relaxed p2 + per-state channels (init mutates
+        !     d2/p2 in place -> fresh copies each time).
+        dcopy = d0
+        deFull = 0.0_dp
+        gFull = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = pIJ, &
+                     spcI = spcI, spcJ = spcJ, nbf = nbf, &
+                     hfscale = scale_exch, hfscale2 = scale_exch2, &
+                     spcscale = [infos%tddft%spc_coco, &
+                                 infos%tddft%spc_ovov, &
+                                 infos%tddft%spc_coov], mrst = mrst )
+        call gFull%init()
+        call grd2_driver(infos, basis, deFull, gFull, &
+                         cam = do_cam, alpha = infos%tddft%cam_alpha, &
+                         beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
+        call gFull%clean()
+
+        ! (b) BASELINE (FIX-1): p2=0, spcI=spcJ=0 -> the d2*d2 ground-SCF 2e grad
+        dcopy = d0
+        deSCF = 0.0_dp
+        gSCF = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = zerop, &
+                     spcI = zerospc, spcJ = zerospc, nbf = nbf, &
+                     hfscale = scale_exch, hfscale2 = scale_exch2, &
+                     spcscale = [infos%tddft%spc_coco, &
+                                 infos%tddft%spc_ovov, &
+                                 infos%tddft%spc_coov], mrst = mrst )
+        call gSCF%init()
+        call grd2_driver(infos, basis, deSCF, gSCF, &
+                         cam = do_cam, alpha = infos%tddft%cam_alpha, &
+                         beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
+        call gSCF%clean()
+
+        ! G_IJ = G_full - G_SCF  (the X-dependent 2e amplitude gradient)
+        do a = 1, natom
+          do c = 1, 3
+            nac_amp((a-1)*3+c, ist, jst) = deFull(c,a) - deSCF(c,a)
+          end do
+        end do
+      end do
+    end do
+
+    write(iw,'(/5X,"=== Phase 11 NAC amplitude (explicit-ERI) computed ===")')
+    write(iw,'(5X,"OQP::nac_amp shape (3,natom,nstate,nstate)")')
+
+    deallocate(d0, dcopy, pIJ, zerop, spcI, spcJ, zerospc, deFull, deSCF)
+  end subroutine mrsf_nac_amp
+
+!###############################################################################
 
 !> @brief Phase 11 self-test: at I=J the bilinear NAC compute-data type must
 !>        reproduce the production grd2_mrsf_compute_data_t two-electron
