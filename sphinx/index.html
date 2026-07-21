@@ -43,7 +43,7 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Complete package reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="api/oqp/index.html">oqp</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/oqp/index.html#submodules">Submodules</a><ul>
@@ -147,29 +147,210 @@
              
   <section id="openqp-python-api">
 <h1>OpenQP Python API<a class="headerlink" href="#openqp-python-api" title="Link to this heading"></a></h1>
-<p>Open Quantum Platform (OpenQP) is a quantum-chemistry platform centered on
-mixed-reference spin-flip TDDFT and interoperable ground- and excited-state
-workflows.</p>
-<p>This reference is generated statically from the Python source on the current
-<code class="docutils literal notranslate"><span class="pre">main</span></code> branch (OpenQP 1.2.1). It includes the high-level <code class="xref py py-class docutils literal notranslate"><span class="pre">OpenQP</span></code>
-interface, semantic input handling, analysis and export helpers, quantum
-integral tools, molecular data models, and workflow implementations.</p>
-<section id="start-here">
-<h2>Start here<a class="headerlink" href="#start-here" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><a class="reference external" href="https://open-quantum-platform.github.io/openqp-docs/">OpenQP manual</a> —
-installation, methods, workflows, and keywords</p></li>
-<li><p><a class="reference external" href="https://open-quantum-platform.github.io/openqp-tutorials/">OpenQP tutorials</a> —
-runnable end-to-end examples</p></li>
-<li><p><a class="reference external" href="https://github.com/Open-Quantum-Platform/openqp">OpenQP repository</a> —
-source, releases, issues, and contribution information</p></li>
-<li><p><a class="reference internal" href="api/oqp/index.html"><span class="doc">oqp</span></a> — complete Python package reference</p></li>
-</ul>
+<p><strong>Version 1.2.1 · generated from</strong> <code class="docutils literal notranslate"><span class="pre">main&#64;740611d</span></code></p>
+<p>The OpenQP Python layer is both a fluent calculation builder and the runtime
+orchestrator for the native OpenQP library. It covers molecular input,
+electronic-structure model selection, excited-state and dynamics workflows,
+analysis, interchange formats, and direct access to lower-level execution
+objects.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This site is the <strong>source-level API reference</strong>. For installation,
+scientific background, supported methods, and every input keyword, use the
+<a class="reference external" href="https://open-quantum-platform.github.io/openqp-docs/">OpenQP manual</a>.</p>
+</div>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<p>The high-level <a class="reference internal" href="api/oqp/openqp/index.html"><span class="doc">oqp.openqp</span></a> builder converts readable chained
+calls into a validated OpenQP input and runs it through the native engine.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oqp.openqp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenQP</span>
+
+<span class="n">job</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">OpenQP</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;water_pbe&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">molecule</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;water&quot;</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="s2">&quot;6-31g*&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">dft</span><span class="p">(</span><span class="s2">&quot;pbe&quot;</span><span class="p">,</span> <span class="n">reference</span><span class="o">=</span><span class="s2">&quot;rhf&quot;</span><span class="p">,</span> <span class="n">runtype</span><span class="o">=</span><span class="s2">&quot;grad&quot;</span><span class="p">,</span> <span class="n">conv</span><span class="o">=</span><span class="mf">1.0e-7</span><span class="p">)</span>
+<span class="p">)</span>
+
+<span class="n">input_sections</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">to_input_dict</span><span class="p">()</span>  <span class="c1"># inspect before execution</span>
+<span class="n">molecule</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>                  <span class="c1"># native OpenQP Molecule result</span>
+</pre></div>
+</div>
+<p>OpenQP also exposes theory and workflow namespaces for more involved jobs:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oqp.openqp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenQP</span>
+
+<span class="n">job</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">OpenQP</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;mrsf_crossing&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">molecule</span><span class="p">(</span><span class="n">geometry</span><span class="o">=</span><span class="s2">&quot;water&quot;</span><span class="p">,</span> <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">theory</span><span class="p">(</span>
+        <span class="s2">&quot;mrsf-tddft&quot;</span><span class="p">,</span>
+        <span class="n">functional</span><span class="o">=</span><span class="s2">&quot;bhhlyp&quot;</span><span class="p">,</span>
+        <span class="n">basis</span><span class="o">=</span><span class="s2">&quot;6-31g*&quot;</span><span class="p">,</span>
+        <span class="n">nstate</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="p">)</span>
+<span class="p">)</span>
+<span class="n">job</span><span class="o">.</span><span class="n">workflow</span><span class="o">.</span><span class="n">meci</span><span class="p">(</span><span class="n">lib</span><span class="o">=</span><span class="s2">&quot;oqp&quot;</span><span class="p">,</span> <span class="n">istate</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">jstate</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
 </section>
-<section id="python-package-reference">
-<h2>Python package reference<a class="headerlink" href="#python-package-reference" title="Link to this heading"></a></h2>
+<section id="api-map">
+<h2>API map<a class="headerlink" href="#api-map" title="Link to this heading"></a></h2>
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">Choose the right entry point</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 31.0%" />
+<col style="width: 47.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Area</p></th>
+<th class="head"><p>Start here</p></th>
+<th class="head"><p>What it provides</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>High-level calculations</p></td>
+<td><p><a class="reference internal" href="api/oqp/openqp/index.html"><span class="doc">oqp.openqp</span></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">OpenQP</span></code> builder, molecule setup, HF/DFT/MP2/MRSF/DFTB theories,
+workflow namespaces, section proxies, validation, and execution.</p></td>
+</tr>
+<tr class="row-odd"><td><p>CLI and runner</p></td>
+<td><p><a class="reference internal" href="api/oqp/pyoqp/index.html"><span class="doc">oqp.pyoqp</span></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Runner</span></code>, command-line dispatch, example validation, feature-coverage
+checks, reference generation, and regression execution.</p></td>
+</tr>
+<tr class="row-even"><td><p>Semantic input</p></td>
+<td><p><a class="reference internal" href="api/oqp/utils/oqp_input/index.html"><span class="doc">oqp.utils.oqp_input</span></a></p></td>
+<td><p>Parsing and lowering of concise <code class="docutils literal notranslate"><span class="pre">.oqp</span></code> requests, state references,
+natural-language-style routes, canonical rendering, and diagnostics.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Molecule and results</p></td>
+<td><p><a class="reference internal" href="api/oqp/molecule/index.html"><span class="doc">oqp.molecule</span></a></p></td>
+<td><p>Molecular geometry, configuration, energies, orbitals, gradients,
+Hessians, state data, JSON loading, and native data access.</p></td>
+</tr>
+<tr class="row-even"><td><p>Electronic workflows</p></td>
+<td><p><a class="reference internal" href="api/oqp/library/index.html"><span class="doc">oqp.library</span></a></p></td>
+<td><p>Single points, gradients, optimization/IRC/NEB, frequencies, guesses,
+basis projection, symmetry, solvent, and engine adapters.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Dynamics and QM/MM</p></td>
+<td><p><a class="reference internal" href="api/oqp/library/namd/index.html"><span class="doc">oqp.library.namd</span></a></p></td>
+<td><p>FSSH NAMD, SOC dynamics, MCH propagation, QM/MM dynamics, hopping,
+decoherence, restart, and trajectory state management.</p></td>
+</tr>
+<tr class="row-even"><td><p>Analysis</p></td>
+<td><p><a class="reference internal" href="api/oqp/analysis/index.html"><span class="doc">oqp.analysis</span></a></p></td>
+<td><p>NTOs, attachment/detachment densities, transition densities, AO grids,
+charge-transfer descriptors, and excited-state analysis.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Quantum data</p></td>
+<td><p><a class="reference internal" href="api/oqp/quantum/index.html"><span class="doc">oqp.quantum</span></a></p></td>
+<td><p>One- and two-body integrals, AO-to-MO transformations, molecular
+Hamiltonians, and FCIDUMP reading/writing.</p></td>
+</tr>
+<tr class="row-even"><td><p>Export and interchange</p></td>
+<td><p><a class="reference internal" href="api/oqp/export/index.html"><span class="doc">oqp.export</span></a></p></td>
+<td><p>Cube generation, QCSchema conversion/validation, FCIDUMP export, and
+comparison/parsing helpers in <a class="reference internal" href="api/oqp/interop/index.html"><span class="doc">oqp.interop</span></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Utilities</p></td>
+<td><p><a class="reference internal" href="api/oqp/utils/index.html"><span class="doc">oqp.utils</span></a></p></td>
+<td><p>MPI helpers, matrices, geometry, file handling, performance presets,
+structured DFTB traces, input checks, and regression tooling.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="high-level-calculation-models">
+<h2>High-level calculation models<a class="headerlink" href="#high-level-calculation-models" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">OpenQP</span></code> builder keeps theory selection separate from the requested
+workflow. This makes it possible to reuse the same molecular definition and
+switch between energy, gradient, optimization, crossing, SOC, or dynamics
+workflows while keeping the generated input inspectable.</p>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">Public model helpers</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 34.0%" />
+<col style="width: 46.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Model family</p></th>
+<th class="head"><p>Representative calls</p></th>
+<th class="head"><p>Supported role in the builder</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>HF and DFT</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.hf()</span></code>, <code class="docutils literal notranslate"><span class="pre">.dft(...)</span></code>, <code class="docutils literal notranslate"><span class="pre">.theory.dft(...)</span></code></p></td>
+<td><p>Restricted/open-shell references, functionals, SCF convergence,
+energies, gradients, properties, and downstream workflows.</p></td>
+</tr>
+<tr class="row-odd"><td><p>MP2</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mp2(...)</span></code>, <code class="docutils literal notranslate"><span class="pre">.theory.mp2(...)</span></code></p></td>
+<td><p>MP2, SCS-MP2, SOS-MP2, and custom same-/opposite-spin scaling for
+energy calculations.</p></td>
+</tr>
+<tr class="row-even"><td><p>Excited states</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.theory(&quot;tdhf&quot;)</span></code>, <code class="docutils literal notranslate"><span class="pre">.theory.tddft(...)</span></code>, <code class="docutils literal notranslate"><span class="pre">.mrsf(...)</span></code></p></td>
+<td><p>TDHF/TDDFT, SF-TDDFT, and MRSF-TDDFT state spaces and response options.</p></td>
+</tr>
+<tr class="row-odd"><td><p>DFTB</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.dftb()</span></code>, <code class="docutils literal notranslate"><span class="pre">.mrsf_tddftb(...)</span></code></p></td>
+<td><p>Ground-state, TD-DFTB, SF/MRSF response, SOC, and dynamics configuration.</p></td>
+</tr>
+<tr class="row-even"><td><p>Embedded systems</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.qmmm(...)</span></code></p></td>
+<td><p>PDB/QM-region setup, electrostatic embedding, force fields, PME/cutoff
+settings, frontier-charge redistribution, and OpenMM coupling.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="workflow-oriented-example">
+<h2>Workflow-oriented example<a class="headerlink" href="#workflow-oriented-example" title="Link to this heading"></a></h2>
+<p>The same public API can express SOC-enabled QM/MM nonadiabatic dynamics:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oqp.openqp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenQP</span>
+
+<span class="n">job</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">OpenQP</span><span class="p">(</span><span class="n">project</span><span class="o">=</span><span class="s2">&quot;soc_namd_qmmm&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">molecule</span><span class="p">(</span><span class="s2">&quot;chromophore.pdb 0-4&quot;</span><span class="p">,</span> <span class="n">basis</span><span class="o">=</span><span class="s2">&quot;6-31g*&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">theory</span><span class="p">(</span><span class="s2">&quot;mrsf-tddft&quot;</span><span class="p">,</span> <span class="n">functional</span><span class="o">=</span><span class="s2">&quot;bhhlyp&quot;</span><span class="p">,</span> <span class="n">nstate</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">qmmm</span><span class="p">(</span><span class="n">cutoff</span><span class="o">=</span><span class="s2">&quot;PME&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">job</span><span class="o">.</span><span class="n">workflow</span><span class="o">.</span><span class="n">namd</span><span class="p">(</span>
+    <span class="n">soc</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">soc_basis</span><span class="o">=</span><span class="s2">&quot;mch&quot;</span><span class="p">,</span>
+    <span class="n">nstep</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">dt</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">init_state</span><span class="o">=</span><span class="s2">&quot;S1&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">trajectory</span> <span class="o">=</span> <span class="n">job</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="how-the-python-layer-is-organized">
+<h2>How the Python layer is organized<a class="headerlink" href="#how-the-python-layer-is-organized" title="Link to this heading"></a></h2>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">oqp.openqp</span></code></dt><dd><p>User-facing fluent builder and schema-backed section proxies.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">oqp.pyoqp</span></code> and <code class="docutils literal notranslate"><span class="pre">oqp.runtime</span></code></dt><dd><p>Native-library discovery, runner lifecycle, CLI behavior, and calculation
+dispatch.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">oqp.library</span></code></dt><dd><p>Scientific workflow implementations and adapters around the native core.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">oqp.molecule</span></code></dt><dd><p>Main state/result container and typed input data structures.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">oqp.analysis</span></code>, <code class="docutils literal notranslate"><span class="pre">oqp.quantum</span></code>, <code class="docutils literal notranslate"><span class="pre">oqp.export</span></code>, <code class="docutils literal notranslate"><span class="pre">oqp.interop</span></code></dt><dd><p>Post-processing and portable data interfaces that can be used independently
+of the fluent builder where appropriate.</p>
+</dd>
+</dl>
+</section>
+<section id="reference-navigation">
+<h2>Reference navigation<a class="headerlink" href="#reference-navigation" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">API</span></p>
+<p class="caption" role="heading"><span class="caption-text">Complete package reference</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="api/oqp/index.html">oqp</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="api/oqp/index.html#submodules">Submodules</a><ul>
@@ -199,6 +380,16 @@ source, releases, issues, and contribution information</p></li>
 </li>
 </ul>
 </div>
+</section>
+<section id="related-documentation">
+<h2>Related documentation<a class="headerlink" href="#related-documentation" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://open-quantum-platform.github.io/openqp-docs/">OpenQP manual</a></p></li>
+<li><p><a class="reference external" href="https://open-quantum-platform.github.io/openqp-tutorials/">Hands-on tutorials</a></p></li>
+<li><p><a class="reference external" href="https://open-quantum-platform.github.io/openqp-docs/api/">API guide</a></p></li>
+<li><p><a class="reference external" href="https://github.com/Open-Quantum-Platform/openqp">OpenQP source</a></p></li>
+<li><p><a class="reference external" href="https://github.com/Open-Quantum-Platform/openqp/tree/main/examples">Example inputs</a></p></li>
+</ul>
 </section>
 </section>
 

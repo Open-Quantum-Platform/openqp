@@ -1,31 +1,201 @@
 OpenQP Python API
 =================
 
-Open Quantum Platform (OpenQP) is a quantum-chemistry platform centered on
-mixed-reference spin-flip TDDFT and interoperable ground- and excited-state
-workflows.
+**Version 1.2.1 · generated from** ``main@740611d``
 
-This reference is generated statically from the Python source on the current
-``main`` branch (OpenQP 1.2.1). It includes the high-level :class:`OpenQP`
-interface, semantic input handling, analysis and export helpers, quantum
-integral tools, molecular data models, and workflow implementations.
+The OpenQP Python layer is both a fluent calculation builder and the runtime
+orchestrator for the native OpenQP library. It covers molecular input,
+electronic-structure model selection, excited-state and dynamics workflows,
+analysis, interchange formats, and direct access to lower-level execution
+objects.
 
-Start here
-----------
+.. note::
 
-* `OpenQP manual <https://open-quantum-platform.github.io/openqp-docs/>`_ —
-  installation, methods, workflows, and keywords
-* `OpenQP tutorials <https://open-quantum-platform.github.io/openqp-tutorials/>`_ —
-  runnable end-to-end examples
-* `OpenQP repository <https://github.com/Open-Quantum-Platform/openqp>`_ —
-  source, releases, issues, and contribution information
-* :doc:`api/oqp/index` — complete Python package reference
+   This site is the **source-level API reference**. For installation,
+   scientific background, supported methods, and every input keyword, use the
+   `OpenQP manual <https://open-quantum-platform.github.io/openqp-docs/>`_.
 
-Python package reference
-------------------------
+Quick start
+-----------
+
+The high-level :doc:`api/oqp/openqp/index` builder converts readable chained
+calls into a validated OpenQP input and runs it through the native engine.
+
+.. code-block:: python
+
+   from oqp.openqp import OpenQP
+
+   job = (
+       OpenQP(project="water_pbe")
+       .molecule(geometry="water", basis="6-31g*", charge=0)
+       .dft("pbe", reference="rhf", runtype="grad", conv=1.0e-7)
+   )
+
+   input_sections = job.to_input_dict()  # inspect before execution
+   molecule = job.run()                  # native OpenQP Molecule result
+
+OpenQP also exposes theory and workflow namespaces for more involved jobs:
+
+.. code-block:: python
+
+   from oqp.openqp import OpenQP
+
+   job = (
+       OpenQP(project="mrsf_crossing")
+       .molecule(geometry="water", charge=0)
+       .theory(
+           "mrsf-tddft",
+           functional="bhhlyp",
+           basis="6-31g*",
+           nstate=5,
+       )
+   )
+   job.workflow.meci(lib="oqp", istate=1, jstate=2)
+   result = job.run()
+
+API map
+-------
+
+.. list-table:: Choose the right entry point
+   :header-rows: 1
+   :widths: 22 31 47
+
+   * - Area
+     - Start here
+     - What it provides
+   * - High-level calculations
+     - :doc:`api/oqp/openqp/index`
+     - ``OpenQP`` builder, molecule setup, HF/DFT/MP2/MRSF/DFTB theories,
+       workflow namespaces, section proxies, validation, and execution.
+   * - CLI and runner
+     - :doc:`api/oqp/pyoqp/index`
+     - ``Runner``, command-line dispatch, example validation, feature-coverage
+       checks, reference generation, and regression execution.
+   * - Semantic input
+     - :doc:`api/oqp/utils/oqp_input/index`
+     - Parsing and lowering of concise ``.oqp`` requests, state references,
+       natural-language-style routes, canonical rendering, and diagnostics.
+   * - Molecule and results
+     - :doc:`api/oqp/molecule/index`
+     - Molecular geometry, configuration, energies, orbitals, gradients,
+       Hessians, state data, JSON loading, and native data access.
+   * - Electronic workflows
+     - :doc:`api/oqp/library/index`
+     - Single points, gradients, optimization/IRC/NEB, frequencies, guesses,
+       basis projection, symmetry, solvent, and engine adapters.
+   * - Dynamics and QM/MM
+     - :doc:`api/oqp/library/namd/index`
+     - FSSH NAMD, SOC dynamics, MCH propagation, QM/MM dynamics, hopping,
+       decoherence, restart, and trajectory state management.
+   * - Analysis
+     - :doc:`api/oqp/analysis/index`
+     - NTOs, attachment/detachment densities, transition densities, AO grids,
+       charge-transfer descriptors, and excited-state analysis.
+   * - Quantum data
+     - :doc:`api/oqp/quantum/index`
+     - One- and two-body integrals, AO-to-MO transformations, molecular
+       Hamiltonians, and FCIDUMP reading/writing.
+   * - Export and interchange
+     - :doc:`api/oqp/export/index`
+     - Cube generation, QCSchema conversion/validation, FCIDUMP export, and
+       comparison/parsing helpers in :doc:`api/oqp/interop/index`.
+   * - Utilities
+     - :doc:`api/oqp/utils/index`
+     - MPI helpers, matrices, geometry, file handling, performance presets,
+       structured DFTB traces, input checks, and regression tooling.
+
+High-level calculation models
+-----------------------------
+
+The ``OpenQP`` builder keeps theory selection separate from the requested
+workflow. This makes it possible to reuse the same molecular definition and
+switch between energy, gradient, optimization, crossing, SOC, or dynamics
+workflows while keeping the generated input inspectable.
+
+.. list-table:: Public model helpers
+   :header-rows: 1
+   :widths: 20 34 46
+
+   * - Model family
+     - Representative calls
+     - Supported role in the builder
+   * - HF and DFT
+     - ``.hf()``, ``.dft(...)``, ``.theory.dft(...)``
+     - Restricted/open-shell references, functionals, SCF convergence,
+       energies, gradients, properties, and downstream workflows.
+   * - MP2
+     - ``.mp2(...)``, ``.theory.mp2(...)``
+     - MP2, SCS-MP2, SOS-MP2, and custom same-/opposite-spin scaling for
+       energy calculations.
+   * - Excited states
+     - ``.theory("tdhf")``, ``.theory.tddft(...)``, ``.mrsf(...)``
+     - TDHF/TDDFT, SF-TDDFT, and MRSF-TDDFT state spaces and response options.
+   * - DFTB
+     - ``.dftb()``, ``.mrsf_tddftb(...)``
+     - Ground-state, TD-DFTB, SF/MRSF response, SOC, and dynamics configuration.
+   * - Embedded systems
+     - ``.qmmm(...)``
+     - PDB/QM-region setup, electrostatic embedding, force fields, PME/cutoff
+       settings, frontier-charge redistribution, and OpenMM coupling.
+
+Workflow-oriented example
+-------------------------
+
+The same public API can express SOC-enabled QM/MM nonadiabatic dynamics:
+
+.. code-block:: python
+
+   from oqp.openqp import OpenQP
+
+   job = (
+       OpenQP(project="soc_namd_qmmm")
+       .molecule("chromophore.pdb 0-4", basis="6-31g*")
+       .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+       .qmmm(cutoff="PME")
+   )
+   job.workflow.namd(
+       soc=True,
+       soc_basis="mch",
+       nstep=200,
+       dt=0.5,
+       init_state="S1",
+   )
+   trajectory = job.run()
+
+How the Python layer is organized
+---------------------------------
+
+``oqp.openqp``
+   User-facing fluent builder and schema-backed section proxies.
+
+``oqp.pyoqp`` and ``oqp.runtime``
+   Native-library discovery, runner lifecycle, CLI behavior, and calculation
+   dispatch.
+
+``oqp.library``
+   Scientific workflow implementations and adapters around the native core.
+
+``oqp.molecule``
+   Main state/result container and typed input data structures.
+
+``oqp.analysis``, ``oqp.quantum``, ``oqp.export``, ``oqp.interop``
+   Post-processing and portable data interfaces that can be used independently
+   of the fluent builder where appropriate.
+
+Reference navigation
+--------------------
 
 .. toctree::
    :maxdepth: 3
-   :caption: API
+   :caption: Complete package reference
 
    api/oqp/index
+
+Related documentation
+---------------------
+
+* `OpenQP manual <https://open-quantum-platform.github.io/openqp-docs/>`_
+* `Hands-on tutorials <https://open-quantum-platform.github.io/openqp-tutorials/>`_
+* `API guide <https://open-quantum-platform.github.io/openqp-docs/api/>`_
+* `OpenQP source <https://github.com/Open-Quantum-Platform/openqp>`_
+* `Example inputs <https://github.com/Open-Quantum-Platform/openqp/tree/main/examples>`_

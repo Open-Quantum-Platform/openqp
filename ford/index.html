@@ -1,151 +1,235 @@
-
-
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
-    <meta name="author" content="OpenQP Team" >
-    <link rel="icon" href="./favicon.png">
-
-    <title> OpenQP Fortran API </title>
-
-    <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
-    <!-- Font Awesome -->
-    <link href="./css/fontawesome.min.css" rel="stylesheet">
-    <link href="./css/brands.min.css" rel="stylesheet">
-    <link href="./css/regular.min.css" rel="stylesheet">
-    <link href="./css/solid.min.css" rel="stylesheet">
-    <link href="./css/v4-font-face.min.css" rel="stylesheet">
-    <link href="./css/v4-shims.min.css" rel="stylesheet">
-    <!-- MathJax -->
-    <script type="text/x-mathjax-config">
-      MathJax.Hub.Config({
-        TeX: { equationNumbers: { autoNumber: "AMS" } }
-      });
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
-            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
-    <!-- Other scripts and stylesheets -->
-    <link href="./css/local.css" rel="stylesheet">
-    <link href="./css/pygments.css" rel="stylesheet">
-    <script src="./js/svg-pan-zoom.min.js"></script>
-  </head>
-
-  <body>
-
-    <!-- Fixed navbar -->
-    <div class="container-fluid mb-sm-4 mb-xl-2">
-      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-        <div class="container">
-          <a class="navbar-brand" href="./index.html">OpenQP Fortran API <small>1.2.1</small></a>
-          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
-                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
-                  <span class="navbar-toggler-icon">
-          </button>
-
-          <div id="navbar" class="navbar-collapse collapse">
-            <ul class="navbar-nav">
-                  <li class="nav-item">
-                    <a class="nav-link" href="./lists/files.html">Source Files</a>
-                  </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="./lists/modules.html">Modules</a>
-                </li>
-            </ul>
-              <div class="d-flex align-items-end flex-grow-1">
-                <form action="./search.html" role="search" class="ms-auto">
-                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
-                </form>
-              </div>
-          </div><!--/.nav-collapse -->
-        </div>
-      </nav>
-    </div>
-
-    <div class="container">
-  <!-- Main component for a primary marketing message or call to action -->
-    <div class="p-5 mb-4 bg-light border rounded-3" id="jumbotron">
-      <p>Fortran source reference for Open Quantum Platform 1.2.1</p>
-        <p> Find us on&hellip;</p>
-      <p>
-        <a class="btn btn-lg btn-primary" href="https://github.com/Open-Quantum-Platform/openqp" role="button">GitHub</a>
-        
-        
-        
-        <a class="btn btn-lg btn-primary" href="https://open-quantum-platform.github.io/openqp/" role="button">The Web</a>
-      </p>
-    </div>
-
-      <div class="row" id='text'>
-        <div class=col-md-8>
-          <h1>OpenQP Fortran API</h1>
-          <h1>OpenQP Fortran API</h1>
-<p>This reference is generated from the current OpenQP <code>main</code> branch. It covers
-the native Fortran implementation, including the electronic-structure,
-response, dynamics, optimization, integral, and interoperability modules.</p>
-<p>For installation instructions, workflows, and input keywords, see the
-<a href="https://open-quantum-platform.github.io/openqp-docs/">OpenQP manual</a>.</p>
-        </div>
-          <div class="col-md-4">
-            <div class="card card-body bg-light">
-              <h2 class="card-title">Developer Info</h2>
-              <h4 class="card-text">OpenQP Team</h4>
-              <p class="card-text"></p>
-            </div>
-          </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Architecture and source-level Fortran API reference for OpenQP 1.2.1.">
+  <title>OpenQP Fortran Core</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #061317;
+      --panel: rgba(12, 38, 43, .92);
+      --panel-2: rgba(18, 49, 55, .72);
+      --ink: #edf9f8;
+      --muted: #a8c4c6;
+      --aqua: #72e3d7;
+      --blue: #86adff;
+      --line: rgba(133, 224, 216, .2);
+      --code: #b7d6d8;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 16px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 10% 5%, rgba(50, 190, 177, .2), transparent 28rem),
+        radial-gradient(circle at 93% 22%, rgba(72, 105, 207, .2), transparent 32rem),
+        var(--bg);
+    }
+    a { color: inherit; }
+    code { color: var(--code); font: .9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .wrap { width: min(1160px, calc(100% - 2rem)); margin: 0 auto; }
+    header { border-bottom: 1px solid var(--line); background: rgba(6, 19, 23, .78); backdrop-filter: blur(14px); }
+    nav { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; }
+    .brand { font-weight: 850; letter-spacing: .08em; text-decoration: none; }
+    .nav-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .25rem 1.1rem; }
+    .nav-links a { color: var(--muted); font-size: .92rem; text-decoration: none; }
+    .nav-links a:hover { color: var(--aqua); }
+    .hero { padding: clamp(4rem, 9vw, 7rem) 0 3.5rem; max-width: 900px; }
+    .eyebrow { color: var(--aqua); font-size: .76rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { margin: .55rem 0 1.2rem; font-size: clamp(3rem, 8vw, 6.2rem); line-height: .97; letter-spacing: -.055em; }
+    .lead { margin: 0; max-width: 790px; color: var(--muted); font-size: clamp(1.08rem, 2vw, 1.3rem); }
+    .actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
+    .button { padding: .72rem 1rem; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--panel); font-weight: 750; text-decoration: none; }
+    .button.primary { color: #04201e; background: var(--aqua); border-color: var(--aqua); }
+    .button:hover { border-color: var(--aqua); transform: translateY(-1px); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; overflow: hidden; margin-bottom: 5rem; border: 1px solid var(--line); border-radius: 16px; background: var(--line); }
+    .stat { padding: 1.3rem 1.4rem; background: rgba(7, 26, 31, .97); }
+    .stat strong { display: block; color: var(--aqua); font-size: 1.65rem; line-height: 1.2; }
+    .stat span { color: var(--muted); font-size: .88rem; }
+    section { margin-bottom: 5rem; }
+    .section-head { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 2rem; margin-bottom: 1.5rem; }
+    h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.1; letter-spacing: -.035em; }
+    .section-head p { margin: .15rem 0 0; color: var(--muted); }
+    .architecture { display: grid; grid-template-columns: repeat(5, 1fr); gap: .7rem; align-items: stretch; }
+    .flow { position: relative; padding: 1.2rem; min-height: 145px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .flow:not(:last-child)::after { content: "→"; position: absolute; z-index: 2; top: 50%; right: -.72rem; color: var(--aqua); font-weight: 900; transform: translateY(-50%); }
+    .flow span { display: block; color: var(--blue); font: 750 .72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .flow strong { display: block; margin-top: .75rem; font-size: .96rem; line-height: 1.35; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .card { padding: 1.45rem; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+    .card h3 { margin: 0 0 .45rem; font-size: 1.15rem; }
+    .card p { margin: 0 0 1rem; color: var(--muted); font-size: .93rem; }
+    .links { display: flex; flex-wrap: wrap; gap: .45rem; }
+    .links a { padding: .34rem .58rem; border: 1px solid rgba(134, 173, 255, .22); border-radius: 7px; color: #c4d5ff; background: rgba(63, 91, 158, .13); font: 700 .78rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; text-decoration: none; }
+    .links a:hover { color: var(--ink); border-color: var(--blue); }
+    .guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .guide a { min-height: 155px; padding: 1.35rem; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); text-decoration: none; }
+    .guide a:hover { border-color: var(--aqua); }
+    .guide strong { display: block; margin-bottom: .55rem; font-size: 1.06rem; }
+    .guide span { color: var(--muted); font-size: .92rem; }
+    .note { padding: 1.3rem 1.45rem; border-left: 3px solid var(--aqua); border-radius: 0 12px 12px 0; color: var(--muted); background: rgba(18, 57, 61, .58); }
+    footer { padding: 1.7rem 0 2.5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; }
+    @media (max-width: 900px) {
+      .architecture { grid-template-columns: 1fr; }
+      .flow { min-height: auto; }
+      .flow:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -.82rem; transform: translateX(50%); }
+    }
+    @media (max-width: 720px) {
+      nav { align-items: flex-start; padding: 1rem 0; }
+      .nav-links { max-width: 70%; }
+      .stats, .grid, .guide, .section-head { grid-template-columns: 1fr; }
+      .stats { gap: 1px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="wrap" aria-label="Primary navigation">
+      <a class="brand" href="../index.html">OPENQP</a>
+      <div class="nav-links">
+        <a href="./lists/modules.html">Modules</a>
+        <a href="./lists/files.html">Source files</a>
+        <a href="./search.html">Search</a>
+        <a href="../sphinx/index.html">Python API</a>
       </div>
-        <div class="row">
-          <hr>
-          <div class="col-xs-6 col-sm-6">
-            <div>
-              <h3>Source Files</h3>
-              <ul><li><a href='sourcefile/apply_basis.f90.html'>apply_basis.F90</a></li><li><a href='sourcefile/atomic_structure.f90.html'>atomic_structure.F90</a></li><li><a href='sourcefile/base64.f90.html'>base64.F90</a></li><li><a href='sourcefile/basis_library.f90.html'>basis_library.F90</a></li><li><a href='sourcefile/basis_projection.f90.html'>basis_projection.F90</a></li><li><a href='sourcefile/basis_tools.f90.html'>basis_tools.F90</a></li><li><a href='sourcefile/blas_thread.f90.html'>blas_thread.F90</a></li><li><a href='sourcefile/blas_wrap.f90.html'>blas_wrap.F90</a></li><li><a href='sourcefile/boys.f90.html'>boys.F90</a></li><li><a href='sourcefile/boys_lut.f90.html'>boys_lut.F90</a></li></ul>
-            </div>
-            <div>
-              <ul>
-                <li><a href="./lists/files.html"><em>All source files&hellip;</em></a></li>
-              </ul>
-            </div>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Native implementation · OpenQP 1.2.1</div>
+      <h1>Fortran<br>Core Reference.</h1>
+      <p class="lead">A source-level map of OpenQP's electronic-structure engine: basis and integral infrastructure, SCF and correlation, mixed-reference spin-flip methods, analytic derivatives, properties, dynamics, and interoperability.</p>
+      <div class="actions">
+        <a class="button primary" href="./lists/modules.html">Browse all modules</a>
+        <a class="button" href="./search.html">Search the reference</a>
+        <a class="button" href="https://github.com/Open-Quantum-Platform/openqp/tree/main/source">View source on GitHub</a>
+      </div>
+    </section>
+
+    <div class="stats" aria-label="Reference coverage">
+      <div class="stat"><strong>135</strong><span>Fortran source files indexed</span></div>
+      <div class="stat"><strong>136</strong><span>Modules documented</span></div>
+      <div class="stat"><strong>main@740611d</strong><span>Source revision represented</span></div>
+    </div>
+
+    <section>
+      <div class="section-head">
+        <h2>How the core fits together</h2>
+        <p>The native layer moves from language bindings and molecular data through numerical kernels and electronic-structure models to derivatives, properties, and molecular dynamics.</p>
+      </div>
+      <div class="architecture" aria-label="OpenQP Fortran architecture flow">
+        <div class="flow"><span>Interfaces</span><strong>C/Python interop and calculation entry points</strong></div>
+        <div class="flow"><span>Foundation</span><strong>Structures, basis sets, grids, integrals, and linear algebra</strong></div>
+        <div class="flow"><span>Electronic states</span><strong>HF, DFT, MP2, TDHF, SF, and MRSF models</strong></div>
+        <div class="flow"><span>Response</span><strong>Gradients, Hessians, Z-vectors, and state overlaps</strong></div>
+        <div class="flow"><span>Workflows</span><strong>Properties, SOC, QM/MM, and nonadiabatic dynamics</strong></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Explore by capability</h2>
+        <p>Start with the conceptual area you need, then follow each module's calls, types, variables, and linked source listing.</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>SCF, DFT, and correlation</h3>
+          <p>Self-consistent-field orchestration, energy evaluation, exchange-correlation infrastructure, MP2, and implicit solvent.</p>
+          <div class="links">
+            <a href="./module/scf.html">scf</a>
+            <a href="./module/hf_energy_mod.html">hf_energy_mod</a>
+            <a href="./module/dft.html">dft</a>
+            <a href="./module/mp2_lib.html">mp2_lib</a>
+            <a href="./module/solvent_pcm.html">solvent_pcm</a>
           </div>
-          <div class="col-xs-6 col-sm-6">
-            <div>
-              <h3>Modules</h3>
-              <ul><li><a href='module/apply_basis_mod.html'>apply_basis_mod</a></li><li><a href='module/atomic_structure_m.html'>atomic_structure_m</a></li><li><a href='module/base64.html'>base64</a></li><li><a href='module/basis_library.html'>basis_library</a></li><li><a href='module/basis_projection_mod.html'>basis_projection_mod</a></li><li><a href='module/basis_tools.html'>basis_tools</a></li><li><a href='module/blas_thread.html'>blas_thread</a></li><li><a href='module/blas_wrap.html'>blas_wrap</a></li><li><a href='module/boys.html'>boys</a></li><li><a href='module/boys_lut.html'>boys_lut</a></li></ul>
-            </div>
-            <div>
-              <ul>
-                <li><a href="./lists/modules.html"><em>All modules&hellip;</em></a></li>
-              </ul>
-            </div>
+        </article>
+        <article class="card">
+          <h3>Excited and spin-flip states</h3>
+          <p>TDHF/TDA building blocks and the spin-flip and mixed-reference spin-flip energy workflows central to OpenQP.</p>
+          <div class="links">
+            <a href="./module/tdhf_lib.html">tdhf_lib</a>
+            <a href="./module/tdhf_sf_lib.html">tdhf_sf_lib</a>
+            <a href="./module/tdhf_mrsf_lib.html">tdhf_mrsf_lib</a>
+            <a href="./module/tdhf_sf_energy_mod.html">tdhf_sf_energy_mod</a>
+            <a href="./module/tdhf_mrsf_energy_mod.html">tdhf_mrsf_energy_mod</a>
           </div>
-        </div>
-      <hr>
-    </div> <!-- /container -->
-    <footer>
-      <div class="container">
-        <div class="row justify-content-between">
-          <div class="col">
-            <p>
-              OpenQP Fortran API
- was developed by OpenQP Team<br>              &copy; 2026 
-<br /><small>main@740611d</small></p>
+        </article>
+        <article class="card">
+          <h3>Derivatives and response</h3>
+          <p>Analytic gradients and Hessians, response equations, Z-vectors, vibrational intensities, and overlap machinery.</p>
+          <div class="links">
+            <a href="./module/hf_gradient_mod.html">hf_gradient_mod</a>
+            <a href="./module/hf_hessian_mod.html">hf_hessian_mod</a>
+            <a href="./module/tdhf_mrsf_gradient_mod.html">tdhf_mrsf_gradient_mod</a>
+            <a href="./module/tdhf_mrsf_z_vector_mod.html">tdhf_mrsf_z_vector_mod</a>
+            <a href="./module/tdhf_sf_gradient_mod.html">tdhf_sf_gradient_mod</a>
+            <a href="./module/vibrational_intensities_mod.html">vibrational_intensities_mod</a>
           </div>
-          <div class="col">
-            <p class="text-end">
-              Documentation generated by
-              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
-            </p>
+        </article>
+        <article class="card">
+          <h3>Dynamics and molecular properties</h3>
+          <p>Nonadiabatic dynamics, spin-orbit coupling, QM/MM embedding, NMR shielding, and population analysis.</p>
+          <div class="links">
+            <a href="./module/namd_mod.html">namd_mod</a>
+            <a href="./module/soc_mrsf_mod.html">soc_mrsf_mod</a>
+            <a href="./module/qmmm_mod.html">qmmm_mod</a>
+            <a href="./module/nmr_shielding_mod.html">nmr_shielding_mod</a>
+            <a href="./module/nmr_giao_shielding_mod.html">nmr_giao_shielding_mod</a>
+            <a href="./module/population_analysis.html">population_analysis</a>
           </div>
-        </div>
-        <br>
-      </div> <!-- /container -->
-    </footer>
-  </body>
+        </article>
+        <article class="card">
+          <h3>Basis sets and integral engines</h3>
+          <p>Basis-set APIs, one- and two-electron integrals, Rys quadrature, ECP support, and external integral backends.</p>
+          <div class="links">
+            <a href="./module/basis_api.html">basis_api</a>
+            <a href="./module/basis_tools.html">basis_tools</a>
+            <a href="./module/int1.html">int1</a>
+            <a href="./module/int2_compute.html">int2_compute</a>
+            <a href="./module/rys.html">rys</a>
+            <a href="./module/mod_1e_primitives.html">mod_1e_primitives</a>
+          </div>
+        </article>
+        <article class="card">
+          <h3>Runtime and interoperability</h3>
+          <p>Language bindings, core types, logging, parallel execution, numerical solvers, and linear-algebra wrappers.</p>
+          <div class="links">
+            <a href="./module/c_interop.html">c_interop</a>
+            <a href="./module/types.html">types</a>
+            <a href="./module/parallel.html">parallel</a>
+            <a href="./module/oqp_linalg.html">oqp_linalg</a>
+            <a href="./module/nlopt.html">nlopt</a>
+            <a href="./module/logger.html">logger</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Choose the right view</h2>
+        <p>This is an implementation reference. For calculation setup and scientific workflows, use the manual and tutorials alongside it.</p>
+      </div>
+      <div class="guide">
+        <a href="./lists/modules.html"><strong>Module index →</strong><span>Best for API discovery. Browse documented modules, their public entities, dependencies, and source links.</span></a>
+        <a href="./lists/files.html"><strong>Source-file index →</strong><span>Best for implementation work. Open every indexed <code>.F90</code> unit with cross-linked declarations.</span></a>
+        <a href="./search.html"><strong>Full-text search →</strong><span>Find a module, procedure, type, or symbol across the complete generated reference.</span></a>
+        <a href="https://open-quantum-platform.github.io/openqp-docs/"><strong>User manual →</strong><span>Installation, supported methods, input sections, keywords, examples, and operational guidance.</span></a>
+        <a href="https://open-quantum-platform.github.io/openqp-tutorials/"><strong>Tutorials →</strong><span>Follow runnable, task-oriented examples for common ground- and excited-state calculations.</span></a>
+        <a href="../sphinx/index.html"><strong>Python API →</strong><span>Build and run calculations programmatically, inspect results, and compose higher-level workflows.</span></a>
+      </div>
+    </section>
+
+    <section class="note">
+      Generated from the complete Fortran tree on OpenQP <code>main@740611d</code>. The project source remains authoritative; this reference is intended to make its architecture and symbols easier to navigate.
+    </section>
+  </main>
+
+  <footer><div class="wrap">OpenQP Fortran Core · API reference generated 21 July 2026</div></footer>
+</body>
 </html>
