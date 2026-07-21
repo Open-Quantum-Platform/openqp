@@ -181,12 +181,13 @@ jobs:
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            run: |
-            # xdist: the suite runs real calculations and took 11.4 min serially,
-            # which nearly doubled this job. The example suite above already
-            # saturates the runner cores, so do the same here. --dist loadfile
-            # keeps every test in a file on one worker: several tests build
-            # projects from a shared cwd and would collide if spread apart.
-            pip install pytest pytest-xdist
+            # --forked is not optional here: 39 test files mutate sys.modules,
+            # and tests/test_analytic_hessian.py replaces the whole `oqp`
+            # package with a stub. Sharing one interpreter lets that leak into
+            # unrelated tests, so the set of failures depends on execution
+            # order. One process per test makes the result deterministic.
+            # xdist on top of it recovers the wall-clock the isolation costs.
+            pip install pytest pytest-xdist pytest-forked
             # Tests that need a build gate on OPENQP_ROOT. The installed package
             # self-locates via resolve_oqp_root(), so point the variable at the
             # package directory to opt those integration tests in rather than
@@ -199,7 +200,7 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            python -m pytest tests -q -n auto --dist loadfile --tb=no -rf
+            python -m pytest tests -q -n auto --forked --tb=no -rf
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
