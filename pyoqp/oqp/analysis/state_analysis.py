@@ -69,10 +69,21 @@ def _p_shell_groups(ao):
     """Group Cartesian p AOs by shell, with the axis of each component.
 
     A p shell has to be projected on the plane normal *coherently*, so the
-    grouping is what makes the pi fraction independent of how the molecule
-    happens to be oriented in the input frame.  Shells with l >= 2 carry no
-    pi weight here and are counted as in-plane; polarization d functions hold
-    little population, so this only blurs the n/sigma split slightly.
+    grouping is what makes the pi fraction essentially independent of how the
+    molecule happens to be oriented in the input frame.  Shells with l >= 2
+    carry no pi weight here and are counted as in-plane; polarization d
+    functions hold little population, so this only blurs the n/sigma split
+    slightly.
+
+    "Essentially" because a residue remains: q = S^(1/2)c is covariant under
+    rotations only when the AO basis is, and normalized *Cartesian* d shells
+    are not (the six components carry an extra s-like combination and mix
+    non-orthogonally under rotation).  Since ``AOBasis`` accepts only Cartesian
+    bases, rigidly rotating a molecule still moves the reported fractions a
+    little through S^(1/2): measured at 5.4e-3 for formaldehyde MRSF/6-31G*,
+    and below 1.5e-13 for the same molecule in unpolarized 6-31G.  That is far
+    below the ``label_threshold`` margin, but do not read the third decimal of
+    a fraction as physical when polarization functions are present.
     """
     shells = {}
     for mu, (shell, powers, _scale) in enumerate(ao.ao_index):

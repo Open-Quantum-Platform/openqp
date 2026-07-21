@@ -93,6 +93,8 @@ def test_pi_character_is_independent_of_molecular_orientation():
     # A p orbital along the plane normal is 100% pi whatever frame the molecule
     # was given in.  Projecting each Cartesian component separately would report
     # 1/2 for a normal in the xz plane and 1/3 for the body diagonal.
+    # (Exact here because a lone p shell is a rotationally covariant basis; with
+    # Cartesian d shells present a small residue survives -- see _p_shell_groups.)
     ao = _FullPShellAO()
     p_groups = state_analysis._p_shell_groups(ao)
     shalf = np.eye(3)

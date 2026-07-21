@@ -256,12 +256,17 @@ def test_integration_state_analysis_on_real_mrsf_roots(tmp_path):
     st = MRSFExcitedStates(r.mol)
     ao = AOBasis(r.mol)
     whole = [list(range(len(np.asarray(r.mol.get_atoms()).ravel())))]
+    # C, O | H, H -- two fragments, so Omega is 2x2 and its off-diagonal
+    # elements are what the hole/particle index convention actually controls.
+    # A single fragment would make every transpose assertion below vacuous.
+    split = [[0, 1], [2, 3]]
 
     # The fixture geometry is planar in yz, so the pi axis is x.  This is pure
     # geometry and holds regardless of the electronic structure.
     normal = infer_molecular_plane(ao, np.asarray(r.mol.get_atoms(), dtype=int))
     assert abs(abs(float(normal[0])) - 1.0) < 1e-6
 
+    off_diagonal_seen = False
     for n in range(1, st.nstates):
         rep = analyze_mrsf_transition(st, ao, n, whole)
         ct = rep["fragment_ct"]
@@ -277,11 +282,23 @@ def test_integration_state_analysis_on_real_mrsf_roots(tmp_path):
 
         # gamma^{n->0} is the transpose of gamma^{0->n}, so hole and particle
         # swap and Omega must transpose with them.  A stray transpose in the
-        # MO->AO path or in the fragment loop breaks this.
-        back = analyze_mrsf_transition(st, ao, 0, whole, ref=n)
-        np.testing.assert_allclose(back["fragment_ct"]["Omega"],
-                                   ct["Omega"].T, rtol=1e-8, atol=1e-10)
-        assert abs(back["energy_gap"] + rep["energy_gap"]) < 1e-10
+        # MO->AO path or in the fragment loop breaks this -- but only shows up
+        # once Omega has off-diagonal weight, hence the two-fragment split.
+        pair = analyze_mrsf_transition(st, ao, n, split)["fragment_ct"]
+        back = analyze_mrsf_transition(st, ao, 0, split, ref=n)["fragment_ct"]
+        np.testing.assert_allclose(back["Omega"], pair["Omega"].T,
+                                   rtol=1e-8, atol=1e-12)
+        assert abs(back["le_fraction"] - pair["le_fraction"]) < 1e-8
+        off_diagonal_seen |= bool(
+            np.max(np.abs(pair["Omega"] - np.diag(np.diag(pair["Omega"]))))
+            > 1e-6 * pair["total"])
+        assert abs(rep["energy_gap"]
+                   + analyze_mrsf_transition(st, ao, 0, whole,
+                                             ref=n)["energy_gap"]) < 1e-10
+
+    # Guard the guard: if every Omega were diagonal the transpose check above
+    # would have proved nothing.
+    assert off_diagonal_seen
 
     # Formaldehyde's low MRSF roots are the classic n->pi* / pi->pi* pair: the
     # acceptor is pi* in both, which the plane projection must reproduce.
