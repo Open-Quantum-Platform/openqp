@@ -62,7 +62,12 @@ def _fragment_map(ao_atom, fragments):
     """Validate a disjoint, complete atom partition and return AO fragments."""
     atom_frag = {}
     for frag, atoms in enumerate(fragments):
-        if not atoms:
+        # len(), not truthiness: fragments are naturally built with numpy
+        # helpers (np.flatnonzero, np.array_split), and `not ndarray` raises
+        # "truth value of an array ... is ambiguous" for any fragment holding
+        # more than one atom.
+        atoms = np.atleast_1d(np.asarray(atoms, dtype=int)).ravel()
+        if len(atoms) == 0:
             raise ValueError(f"fragment {frag} is empty")
         for atom in atoms:
             atom = int(atom)

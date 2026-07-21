@@ -305,3 +305,17 @@ def test_integration_state_analysis_on_real_mrsf_roots(tmp_path):
     s1 = analyze_mrsf_transition(st, ao, 1, whole)["orbital_character"]
     to_pi_star = sum(v for k, v in s1["fractions"].items() if k.endswith("->pi*"))
     assert to_pi_star > 0.5
+
+
+def test_fragment_ct_accepts_numpy_fragment_definitions():
+    # Fragments are naturally built with numpy helpers, and `not ndarray`
+    # raises "truth value of an array ... is ambiguous" for any fragment with
+    # more than one atom (Codex review of #290).
+    states, ao = _PhysicalPairStates(), _TwoAO()
+    result = descriptors.fragment_ct_matrix(
+        states, ao, 1, [np.array([0]), np.array([1])], ref=0)
+    np.testing.assert_allclose(result["Omega"], [[0.0, 1.0], [0.0, 0.0]])
+    # ... including a multi-atom fragment, which is the case that raised.
+    with pytest.raises(ValueError, match="more than one"):
+        descriptors.fragment_ct_matrix(
+            states, ao, 1, [np.array([0, 1]), np.array([1])], ref=0)
