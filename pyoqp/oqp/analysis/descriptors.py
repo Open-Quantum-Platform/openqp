@@ -75,7 +75,7 @@ def _fragment_map(ao_atom, fragments):
     return np.array([atom_frag[int(atom)] for atom in ao_atom], dtype=int)
 
 
-def fragment_ct_matrix(states, ao, n, fragments, ref=0):
+def fragment_ct_matrix(states, ao, n, fragments, ref=0, norm_tolerance=1.0e-10):
     """Fragment charge-transfer matrix for the physical ``ref -> n`` transition.
 
     ``fragments`` is a disjoint partition of 0-based atom indices.  The genuine
@@ -89,6 +89,18 @@ def fragment_ct_matrix(states, ao, n, fragments, ref=0):
     that matrix describes a response root relative to the auxiliary high-spin
     determinant, whereas ``tdm_ao(ref, n)`` describes the requested pair of
     physical MRSF roots.
+
+    ``total`` is the squared 1-TDM norm that normalizes LE/CT.  A symmetry-
+    forbidden pair has no appreciable 1-TDM, so below ``norm_tolerance`` the
+    fractions would be numerical noise dressed up as three decimal places:
+    ``le_fraction``/``ct_fraction`` are then NaN and ``well_defined`` is False.
+
+    .. note::
+       This is a deliberate behaviour change from the pre-0.9 version, which
+       analyzed ``amplitude_matrix(n)`` -- a response root relative to the
+       auxiliary high-spin determinant, not a physical root pair.  The
+       ``amplitude_norm`` result key belonged to that object and is gone; use
+       :func:`~oqp.analysis.nto_excitation` for amplitude-based character.
     """
     ref = int(ref)
     n = int(n)
@@ -113,15 +125,17 @@ def fragment_ct_matrix(states, ao, n, fragments, ref=0):
         for B in range(nfrag):
             particle_rows = ao_frag == B
             Omega[A, B] = P[np.ix_(particle_rows, hole_columns)].sum()
-    total = P.sum()
-    local = float(np.trace(Omega) / total) if total > 0 else 0.0
+    total = float(P.sum())
+    well_defined = total > float(norm_tolerance)
+    local = float(np.trace(Omega) / total) if well_defined else float("nan")
     return {
         "pair": (ref, n),
         "Omega": Omega,
-        "total": float(total),
+        "total": total,
         "hole_pop": Omega.sum(axis=1),       # per-fragment hole population
         "particle_pop": Omega.sum(axis=0),   # per-fragment particle population
         "le_fraction": local,
-        "ct_fraction": 1.0 - local if total > 0 else 0.0,
+        "ct_fraction": 1.0 - local,
+        "well_defined": well_defined,
         "transition_density_orthogonalized": Ttil,
     }

@@ -232,3 +232,59 @@ def test_integration_keystone_qcschema_fcidump(tmp_path):
     dump_fcidump(path, r2.mol)
     ver = verify_fcidump_fci(path, r2.mol)
     assert ver["diff"] < 1e-8
+
+
+@pytest.mark.skipif(not os.environ.get("OPENQP_ROOT"),
+                    reason="needs a built OpenQP (OPENQP_ROOT)")
+def test_integration_state_analysis_on_real_mrsf_roots(tmp_path):
+    """Run the state analysis on genuine MRSF densities, not a hand-made 2x2.
+
+    The unit tests inject a 2x2 matrix with ``tdm_ao == tdm_mo``, so they cannot
+    see the tagarray reshape, the root ordering, the MO->AO transform or the
+    nonorthogonal overlap.  Formaldehyde exercises all of them.
+    """
+    pytest.importorskip("oqp")
+    if not _have_input("ch2o_mrsf.inp"):
+        pytest.skip("excited-toolkit fixture inputs not present")
+    from oqp.pyoqp import Runner
+    from oqp.interop import (AOBasis, MRSFExcitedStates, analyze_mrsf_transition,
+                             infer_molecular_plane)
+
+    r = Runner(project="ch2o_sa", input_file=_input_path("ch2o_mrsf.inp"),
+               log=str(tmp_path / "ch2o_sa.log"), silent=1, usempi=False)
+    r.run()
+    st = MRSFExcitedStates(r.mol)
+    ao = AOBasis(r.mol)
+    whole = [list(range(len(np.asarray(r.mol.get_atoms()).ravel())))]
+
+    # The fixture geometry is planar in yz, so the pi axis is x.  This is pure
+    # geometry and holds regardless of the electronic structure.
+    normal = infer_molecular_plane(ao, np.asarray(r.mol.get_atoms(), dtype=int))
+    assert abs(abs(float(normal[0])) - 1.0) < 1e-6
+
+    for n in range(1, st.nstates):
+        rep = analyze_mrsf_transition(st, ao, n, whole)
+        ct = rep["fragment_ct"]
+        assert ct["well_defined"]
+        # Omega is a partition of the squared 1-TDM norm.
+        assert abs(ct["Omega"].sum() - ct["total"]) < 1e-8 * max(ct["total"], 1.0)
+        # A single fragment cannot support charge transfer.
+        assert abs(rep["le_fraction"] - 1.0) < 1e-8
+        fractions = rep["orbital_character"]["fractions"]
+        assert rep["orbital_character"]["classified"]
+        assert abs(sum(fractions.values()) - 1.0) < 1e-8
+        assert all(np.isfinite(v) for v in fractions.values())
+
+        # gamma^{n->0} is the transpose of gamma^{0->n}, so hole and particle
+        # swap and Omega must transpose with them.  A stray transpose in the
+        # MO->AO path or in the fragment loop breaks this.
+        back = analyze_mrsf_transition(st, ao, 0, whole, ref=n)
+        np.testing.assert_allclose(back["fragment_ct"]["Omega"],
+                                   ct["Omega"].T, rtol=1e-8, atol=1e-10)
+        assert abs(back["energy_gap"] + rep["energy_gap"]) < 1e-10
+
+    # Formaldehyde's low MRSF roots are the classic n->pi* / pi->pi* pair: the
+    # acceptor is pi* in both, which the plane projection must reproduce.
+    s1 = analyze_mrsf_transition(st, ao, 1, whole)["orbital_character"]
+    to_pi_star = sum(v for k, v in s1["fractions"].items() if k.endswith("->pi*"))
+    assert to_pi_star > 0.5

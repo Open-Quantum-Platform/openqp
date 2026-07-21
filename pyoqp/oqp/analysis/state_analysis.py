@@ -65,38 +65,64 @@ def infer_molecular_plane(ao, atoms=None, relative_tolerance=0.12):
     return _unit_vector(vectors[:, 0], "inferred plane normal")
 
 
-def _ao_pi_projection(ao, normal):
-    projection = np.zeros(ao.nbf)
-    for mu, (_shell, powers, _scale) in enumerate(ao.ao_index):
+def _p_shell_groups(ao):
+    """Group Cartesian p AOs by shell, with the axis of each component.
+
+    A p shell has to be projected on the plane normal *coherently*, so the
+    grouping is what makes the pi fraction independent of how the molecule
+    happens to be oriented in the input frame.  Shells with l >= 2 carry no
+    pi weight here and are counted as in-plane; polarization d functions hold
+    little population, so this only blurs the n/sigma split slightly.
+    """
+    shells = {}
+    for mu, (shell, powers, _scale) in enumerate(ao.ao_index):
         if sum(powers) == 1:
-            axis = int(np.argmax(powers))
-            projection[mu] = normal[axis] ** 2
-    return projection
+            shells.setdefault(shell, []).append((int(np.argmax(powers)), mu))
+    return [(np.array([mu for _axis, mu in members], dtype=int),
+             np.array([axis for axis, _mu in members], dtype=int))
+            for members in shells.values()]
 
 
-def _nto_orbital_character(coefficients, shalf, ao, normal, hetero_atoms):
+def _nto_orbital_character(coefficients, shalf, ao, normal, hetero_atoms,
+                           p_groups):
     # q = S^(1/2)c are coefficients in the symmetric orthonormal AO basis.
     q = shalf @ np.asarray(coefficients, dtype=float)
     population = q * q
     norm = population.sum()
     if norm <= 1.0e-20:
         return {"n": 0.0, "pi": 0.0, "sigma": 0.0}
-    population /= norm
-    pi_projection = _ao_pi_projection(ao, normal)
-    pi = float(np.dot(population, pi_projection))
     hetero_mask = np.isin(ao.ao_atom, np.asarray(hetero_atoms, dtype=int))
-    in_plane = 1.0 - pi_projection
-    lone_pair = float(np.dot(population * hetero_mask, in_plane))
-    n = min(max(lone_pair, 0.0), max(1.0 - pi, 0.0))
+    pi_population = 0.0
+    lone_pair = 0.0
+    in_p_shell = np.zeros(ao.nbf, dtype=bool)
+    for indices, axes in p_groups:
+        shell_population = float(population[indices].sum())
+        # (n.q)^2, not sum_a n_a^2 q_a^2: dropping the p_x/p_y/p_z cross terms
+        # would make the pi fraction correct only when the plane normal is a
+        # Cartesian axis, and underestimate it by up to 3x otherwise.
+        pi_shell = min(float(normal[axes] @ q[indices]) ** 2, shell_population)
+        pi_population += pi_shell
+        if hetero_mask[indices[0]]:      # one shell sits on one atom
+            lone_pair += shell_population - pi_shell
+        in_p_shell[indices] = True
+    lone_pair += float(population[hetero_mask & ~in_p_shell].sum())
+    pi = pi_population / norm
+    n = min(max(lone_pair / norm, 0.0), max(1.0 - pi, 0.0))
     sigma = max(1.0 - pi - n, 0.0)
     total = n + pi + sigma
     return {"n": n / total, "pi": pi / total, "sigma": sigma / total}
 
 
-def _orbital_channel_analysis(nto, states, ao, normal, hetero_atoms, weight_threshold):
+def _orbital_channel_analysis(nto, states, ao, normal, hetero_atoms,
+                              weight_threshold, norm_tolerance):
     weights = np.asarray(nto["weights"], dtype=float)
-    if weights.size == 0 or weights.sum() <= 0.0:
-        return {"fractions": {key: 0.0 for key in _CHANNELS}, "pairs": []}
+    if weights.size == 0 or weights.sum() <= norm_tolerance:
+        # sum(sigma^2) is the squared 1-TDM norm.  Normalizing it away would
+        # turn the numerical noise of a forbidden transition into fractions
+        # that look precise; report "no character" instead.
+        return {"fractions": {key: float("nan") for key in _CHANNELS},
+                "pairs": [], "classified": False,
+                "reason": "the ref->n transition density has no appreciable norm"}
     keep = weights > weight_threshold * weights.max()
     if not np.any(keep):
         keep[np.argmax(weights)] = True
@@ -104,13 +130,14 @@ def _orbital_channel_analysis(nto, states, ao, normal, hetero_atoms, weight_thre
     selected_weights = weights[selected]
     selected_weights /= selected_weights.sum()
     shalf = _lowdin_sqrt(states.S)
+    p_groups = _p_shell_groups(ao)
     fractions = np.zeros((3, 2))  # hole n/pi/sigma x particle pi*/sigma*
     pairs = []
     for rank, pair_weight in zip(selected, selected_weights):
         hole = _nto_orbital_character(
-            nto["holes_ao"][:, rank], shalf, ao, normal, hetero_atoms)
+            nto["holes_ao"][:, rank], shalf, ao, normal, hetero_atoms, p_groups)
         particle_hps = _nto_orbital_character(
-            nto["particles_ao"][:, rank], shalf, ao, normal, ())
+            nto["particles_ao"][:, rank], shalf, ao, normal, (), p_groups)
         particle = {"pi*": particle_hps["pi"],
                     "sigma*": particle_hps["n"] + particle_hps["sigma"]}
         h = np.array([hole["n"], hole["pi"], hole["sigma"]])
@@ -119,12 +146,13 @@ def _orbital_channel_analysis(nto, states, ao, normal, hetero_atoms, weight_thre
         pairs.append({"rank": int(rank + 1), "weight": float(pair_weight),
                       "hole": hole, "particle": particle})
     flat = fractions.ravel(order="F")
-    return {"fractions": dict(zip(_CHANNELS, map(float, flat))), "pairs": pairs}
+    return {"fractions": dict(zip(_CHANNELS, map(float, flat))), "pairs": pairs,
+            "classified": True, "reason": None}
 
 
 def analyze_mrsf_transition(states, ao, n, fragments, ref=0, plane_normal=None,
                             hetero_atoms=None, weight_threshold=1.0e-4,
-                            label_threshold=0.55):
+                            label_threshold=0.55, norm_tolerance=1.0e-10):
     """Analyze a physical MRSF root pair as LE/CT and orbital-character fractions.
 
     State indices and atom indices are 0-based.  ``fragments`` defines the
@@ -132,11 +160,21 @@ def analyze_mrsf_transition(states, ao, n, fragments, ref=0, plane_normal=None,
     For a planar chromophore the plane is inferred.  Supply ``plane_normal``
     for a local chromophore in a non-planar molecule.  If no unique plane can
     be found, LE/CT and NTO results are still returned while orbital character
-    is marked ``unclassified``.
+    is marked ``unclassified`` and its fractions are NaN.  The same happens
+    when the ``ref -> n`` transition density has no appreciable norm, since
+    every fraction here is normalized by it.
 
     The returned label is ``mixed`` unless the largest of the six orbital
     channels is at least ``label_threshold``.  The fractions remain the primary
     result and should be reported alongside any compact label.
+
+    .. warning::
+       ``n`` is *heteroatom in-plane population*, not a localized lone pair:
+       a heteroatom s orbital and a polarized C-O sigma bond both land in it.
+       The n/sigma split is therefore indicative only; ``pi`` (and hence the
+       pi*/sigma* axis) is the well-defined quantity, being a projection on the
+       molecular-plane normal.  Treat ``n->pi*`` vs ``sigma->pi*`` as a hint and
+       confirm with the NTO pairs in ``orbital_character["pairs"]``.
     """
     ref = int(ref)
     n = int(n)
@@ -154,22 +192,24 @@ def analyze_mrsf_transition(states, ao, n, fragments, ref=0, plane_normal=None,
         hetero_atoms = np.flatnonzero((atoms != 1) & (atoms != 6))
     hetero_atoms = np.asarray(hetero_atoms, dtype=int)
 
-    ct = fragment_ct_matrix(states, ao, n, fragments, ref=ref)
+    ct = fragment_ct_matrix(states, ao, n, fragments, ref=ref,
+                            norm_tolerance=norm_tolerance)
     nto = nto_transition(states, ref, n)
     if normal is None:
-        orbital = {"fractions": {key: 0.0 for key in _CHANNELS}, "pairs": []}
-        orbital["label_ascii"] = "unclassified"
-        orbital["label"] = "unclassified"
-        orbital["classified"] = False
-        orbital["reason"] = plane_reason
+        orbital = {"fractions": {key: float("nan") for key in _CHANNELS},
+                   "pairs": [], "classified": False, "reason": plane_reason}
     else:
         orbital = _orbital_channel_analysis(
-            nto, states, ao, normal, hetero_atoms, float(weight_threshold))
+            nto, states, ao, normal, hetero_atoms, float(weight_threshold),
+            float(norm_tolerance))
+    if orbital["classified"]:
         best = max(orbital["fractions"], key=orbital["fractions"].get)
         best_fraction = orbital["fractions"][best]
         orbital["label_ascii"] = best if best_fraction >= label_threshold else "mixed"
         orbital["label"] = _PRETTY[best] if best_fraction >= label_threshold else "mixed"
-        orbital["classified"] = True
+    else:
+        orbital["label_ascii"] = "unclassified"
+        orbital["label"] = "unclassified"
     orbital["plane_normal"] = normal
     orbital["hetero_atoms"] = hetero_atoms
     orbital["method"] = "Loewdin NTO p-perpendicular/heteroatom in-plane population"

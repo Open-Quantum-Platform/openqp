@@ -80,6 +80,38 @@ def test_mixed_label_retains_channel_fractions():
     assert abs(sum(result["orbital_character"]["fractions"].values()) - 1.0) < 1.0e-12
 
 
+class _FullPShellAO:
+    """One atom carrying a complete Cartesian p shell (p_x, p_y, p_z)."""
+
+    nbf = 3
+    ao_atom = np.array([0, 0, 0])
+    ao_index = [(0, (1, 0, 0), 1.0), (0, (0, 1, 0), 1.0), (0, (0, 0, 1), 1.0)]
+    coords = np.array([[0.0, 0.0, 0.0]])
+
+
+def test_pi_character_is_independent_of_molecular_orientation():
+    # A p orbital along the plane normal is 100% pi whatever frame the molecule
+    # was given in.  Projecting each Cartesian component separately would report
+    # 1/2 for a normal in the xz plane and 1/3 for the body diagonal.
+    ao = _FullPShellAO()
+    p_groups = state_analysis._p_shell_groups(ao)
+    shalf = np.eye(3)
+    for normal in ([0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0],
+                   [0.3, -0.7, 0.2]):
+        normal = np.asarray(normal) / np.linalg.norm(normal)
+        along = state_analysis._nto_orbital_character(
+            normal, shalf, ao, normal, (), p_groups)
+        assert abs(along["pi"] - 1.0) < 1.0e-12
+        # ... and a p orbital lying in the plane carries no pi character.
+        in_plane = np.cross(normal, [1.0, 0.0, 0.0])
+        if np.linalg.norm(in_plane) < 1.0e-8:
+            in_plane = np.cross(normal, [0.0, 1.0, 0.0])
+        in_plane /= np.linalg.norm(in_plane)
+        across = state_analysis._nto_orbital_character(
+            in_plane, shalf, ao, normal, (), p_groups)
+        assert across["pi"] < 1.0e-12
+
+
 def test_le_ct_survives_when_no_unique_plane_exists():
     result = state_analysis.analyze_mrsf_transition(
         _States(), _AO(), 1, [[0], [1]])
