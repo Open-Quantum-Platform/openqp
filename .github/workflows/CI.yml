@@ -189,7 +189,12 @@ jobs:
             OPENQP_ROOT="$(python -c 'import oqp, os; print(os.path.dirname(oqp.__file__))')"
             export OPENQP_ROOT
             echo "OPENQP_ROOT=$OPENQP_ROOT"
-            pytest tests -q --durations=10
+            # `python -m pytest`, not bare `pytest`: the -m form puts the repo
+            # root on sys.path, and tests/test_periodic_table.py imports
+            # `pyoqp.oqp.periodic_table` through the source tree rather than the
+            # installed `oqp` package. Bare pytest only adds tests/ and the
+            # module fails to import.
+            python -m pytest tests -q --durations=10
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
