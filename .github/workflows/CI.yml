@@ -200,7 +200,7 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            python -m pytest tests -q -n auto --forked --tb=no -rf
+            python -m pytest tests -q -n auto --forked --tb=short -rf
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
