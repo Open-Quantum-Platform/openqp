@@ -128,7 +128,7 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("EKT runtype only supports MRSF-TDDFT", messages)
         self.assertIn("EKT runtype must request IP, EA, or both", messages)
 
-    def test_fortran_module_ports_gamess_ekt_equations(self):
+    def test_fortran_module_implements_ekt_equations(self):
         source = read("source/modules/tdhf_mrsf_ekt.F90")
 
         self.assertIn('bind(C, name="tdhf_mrsf_ekt_ip")', source)

@@ -51,8 +51,7 @@ contains
     integer :: nbf, nbf2, nroot, ok, i, nfocks, nschwz
     integer :: nactive
     integer, allocatable :: dom_mo_idx(:), dom_no_idx(:)
-    ! EKT natural-orbital deflation threshold, matching GAMESS EKT-MRSF
-    ! (thresh = 1.0d-2, sfgrad.src:3298).
+    ! EKT natural-orbital deflation threshold.
     real(kind=dp), parameter :: ekt_occ_tol = 1.0e-2_dp
     real(kind=dp), parameter :: hartree_to_ev = 27.211386245988_dp
     real(kind=dp), allocatable :: fock_pack(:)
@@ -95,8 +94,8 @@ contains
     basis => infos%basis
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
-    ! Print/store all retained EKT Dyson roots available after the natural-
-    ! orbital deflation, matching the GAMESS behavior.  The TDDFT NSTATE input
+    ! Print/store all retained EKT Dyson roots available after natural-orbital
+    ! deflation.  The TDDFT NSTATE input
     ! still controls the parent MRSF calculation; it is not an EKT print cap.
     nroot = nbf
     select case (infos%control%scftype)
@@ -156,21 +155,18 @@ contains
     call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
 
     ! ---------------------------------------------------------------------
-    ! EKT-MRSF state-specific Lagrangian W~, reproduced exactly from the
-    ! GAMESS-US reference implementation (sfgrad.src, the IF(MREKT) block;
-    ! Pomogaev et al., JPCL 2021, eq 5):
+    ! EKT-MRSF state-specific Lagrangian W~ following
+    ! Pomogaev et al., JPCL 2021, eq 5:
     !
     !   W~_MO = -1/2 ( WMO + Lambda_MO )
     !
     ! where, in the MO basis and using the density metric C^T S M S C
     ! (a Lagrangian density is contravariant, like D):
-    !   * Lambda = energy-weighted density Sum_k eps_k C_k C_k^T  (= eijden /
-    !     GAMESS DAF record 36).  OpenQP's eijden halves the packed diagonal
-    !     (a gradient-consumer convention, grd1.src:624); the GAMESS EKT path
-    !     reads the raw record, so the half-diagonal is undone here.
+    !   * Lambda = energy-weighted density Sum_k eps_k C_k C_k^T.  OpenQP's
+    !     eijden halves the packed diagonal for gradient consumers, so the
+    !     half-diagonal is undone here.
     !   * WMO = the MRSF response Lagrangian.  OpenQP stores
-    !     wao = 1/4 C WMO C^T (z-vector applies two halves), while GAMESS uses
-    !     the bare WMO (records 419/429 = 1/2 C WMO C^T).  Hence
+    !     wao = 1/4 C WMO C^T (z-vector applies two halves).  Hence
     !     WMO = 2 C^T S wao S C.
     ! ---------------------------------------------------------------------
     block
@@ -188,7 +184,7 @@ contains
       end do
       call density_ao_to_mo(nbf, nbf2, lam_ao, smat, mo_a, lam_mo)  ! C^T S Lambda S C
       call density_ao_to_mo(nbf, nbf2, wao,    smat, mo_a, wmo_mo)  ! C^T S wao S C
-      wmo_mo = 2.0_dp*wmo_mo                  ! bare GAMESS WMO
+      wmo_mo = 2.0_dp*wmo_mo                  ! unscaled WMO
       lagrangian_mo = -0.5_dp*(wmo_mo + lam_mo)
       lagrangian_mo = 0.5_dp*(lagrangian_mo + transpose(lagrangian_mo))
       deallocate(lam_ao, lam_mo, wmo_mo)
@@ -196,10 +192,9 @@ contains
 
     if (electron_affinity) then
       ! EKT-EA: (F - W) * x = (I - P) * x * lambda.
-      ! GAMESS rebuilds the Fock matrix for EA from the relaxed MRSF density
-      ! (sfgrad.src:3269-3280, BUILDFOCK(..., MRDEA)) before forming F-W.
-      ! Reproduce that path here instead of using the reference SCF Fock.
-      ! GAMESS MRDEA uses the spin-averaged relaxed MRSF density
+      ! Rebuild the Fock matrix for EA from the relaxed MRSF density before
+      ! forming F-W, rather than using the reference SCF Fock.  The EA path uses
+      ! the spin-averaged relaxed MRSF density
       ! P = 1/2*(Da+Db) for the EA complement metric, not beta alone.
       density_mo = 0.5_dp*(density_ip_mo + density_ea_mo)
       ekt_metric = -density_mo
@@ -207,9 +202,8 @@ contains
         ekt_metric(i,i) = ekt_metric(i,i) + 1.0_dp
       end do
 
-      ! GAMESS MRDEA builds a closed-shell Fock from the spin-summed
-      ! relaxed density: LDVAL = AO(Pavg), DSCAL(2), BUILDFOCK; internally
-      ! its DFT path halves that total density for alpha=beta.
+      ! Build a closed-shell Fock from the spin-summed relaxed density; the DFT
+      ! path internally halves that total density for alpha=beta.
       ea_density_ao(:,1) = 0.5_dp*(density_alpha_ao + density_beta_ao)
       if (nfocks > 1) ea_density_ao(:,2) = ea_density_ao(:,1)
       saved_fock_ao(:,1) = fock_a
@@ -233,11 +227,11 @@ contains
 
       call orthogonal_transform_sym(nbf, nbf, ea_fock_ao(:,1), mo_a, nbf, fock_pack)
       call unpack_matrix(fock_pack, fock_mo, nbf, 'U')
-      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator (GAMESS MRDEA path)")')
+      write(iw,'(/,2x,"EKT-EA: rebuilt relaxed-density Fock for EA operator")')
       ekt_operator = fock_mo - lagrangian_mo
     else
       ! EKT: W * x = P * x * lambda.  Metric is the spin-summed relaxed
-      ! density P = 1/2 (Da_MO + Db_MO) (GAMESS sfgrad.src:3115); for H2O S0
+      ! density P = 1/2 (Da_MO + Db_MO); for H2O S0
       ! this gives 5 occupied natural orbitals at occupation ~1.
       density_mo = 0.5_dp*(density_ip_mo + density_ea_mo)
       ekt_metric = density_mo
@@ -256,8 +250,7 @@ contains
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
     allocate(dom_mo_idx(nroot), dom_no_idx(nroot), source=0, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
-    ! Deflation threshold matches GAMESS EKT (thresh = 1.0d-2, sfgrad.src:3298):
-    ! keep only natural orbitals with occupation > 1e-2, removing low-occupation
+    ! Keep only natural orbitals with occupation > 1e-2, removing low-occupation
     ! null/relaxation channels.
     call solve_ekt_no_deflation(nbf, nroot, ekt_operator, ekt_metric, &
          ekt_occ_tol, eig, orbitals, strengths, metric_norms, dom_mo_idx, &
@@ -309,9 +302,9 @@ contains
     write(iw,'(2x,"--------------------------------------")')
 
     if (electron_affinity) then
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = EA roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients; columns = EA roots)")')
     else
-      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients, GAMESS-style layout; columns = IP roots)")')
+      write(iw,'(/,2x,"MRSF-EKT Dyson orbitals (AO-basis coefficients; columns = IP roots)")')
     end if
     call print_dyson_orbitals(basis, mo_a, orbitals, eig, strengths, nbf, min(nroot, nactive))
     call flush(iw)
@@ -321,10 +314,10 @@ contains
 
   end subroutine tdhf_mrsf_ekt
 
-  !> @brief Print Dyson orbitals in a GAMESS-like block.
+  !> @brief Print Dyson orbitals in a compact block layout.
   !> @detail The EKT solver returns Dyson-orbital coefficients in the OpenQP
-  !>         MO basis.  For direct log-level comparison with GAMESS, transform
-  !>         them back to the AO basis and print five roots per block with
+  !>         MO basis.  Transform them back to the AO basis and print five roots
+  !>         per block with
   !>         ENERGY and STRENGTH header rows followed by AO basis-function
   !>         labels and coefficients.  This routine is output-only: it does not
   !>         change eigenvalues, strengths, root selection, or stored MO-basis
@@ -355,7 +348,7 @@ contains
 
     write(iw,'(/,10x,46("-"))')
     write(iw,'(12x,"EKT DYSON ORBITALS, ENERGIES AND NORMS")')
-    write(iw,'(12x,"OpenQP AO-basis coefficients; GAMESS-style layout")')
+    write(iw,'(12x,"OpenQP AO-basis coefficients")')
     write(iw,'(10x,46("-"))')
 
     do i0 = 1, nroot, mxlen
@@ -508,10 +501,9 @@ contains
     real(kind=dp), allocatable :: xvec(:,:), eps(:), cdys(:,:), d_times_x(:)
     real(kind=dp) :: tr_disc, occ_min, occ_max, xnorm, str, coeff_abs, best_abs
     integer :: i, j, m, ierr, ok, nout, best_idx, out_idx, n_skipped
-    ! EKT eigenvalue print/retention threshold.  GAMESS skips near-zero EKT
-    ! eigenvalues (|eps| <= thresh) when transferring solved EKT roots to its
-    ! output (sfgrad.src:3411, thresh = 1.0d-2 Ha); mirror that here so the
-    ! printed/stored Dyson ladder aligns with GAMESS without a one-root shift.
+    ! EKT eigenvalue print/retention threshold.  Skip near-zero EKT eigenvalues
+    ! (|eps| <= thresh) when transferring solved roots so the printed/stored
+    ! Dyson ladder contains only physically retained roots.
     ! Kept separate from the NO occupation tolerance (ekt_occ_tol) which only
     ! governs natural-orbital deflation.
     real(kind=dp), parameter :: ekt_eig_tol = 1.0e-2_dp
@@ -563,7 +555,7 @@ contains
     write(iw,'(2x,"occ_tol = ",es10.2,"   retained NOs = ",i0," / ",i0)') occ_tol, m, nbf
     write(iw,'(2x,"discarded trace = ",f12.6,"   retained occ range = [",f10.6,",",f10.6,"]")') &
           tr_disc, occ_min, occ_max
-    write(iw,'(2x,"eig_tol = ",es10.2," Ha   (skip EKT roots with |eps| <= eig_tol; GAMESS sfgrad.src)")') &
+    write(iw,'(2x,"eig_tol = ",es10.2," Ha   (skip EKT roots with |eps| <= eig_tol)")') &
           ekt_eig_tol
     write(iw,'(2x,"-------------------------------------",/)')
 
@@ -595,8 +587,8 @@ contains
 
     ! (8) back-transform Dyson orbitals to the MO basis  C = U_keep X.
     !     Metric norms are X^T D_NO X after normalization (=1 for retained
-    !     physical roots).  EKT pole strengths follow the GAMESS/Pomogaev
-    !     definition X^T D_NO^2 X; weak Dyson roots therefore retain small
+    !     physical roots).  EKT pole strengths follow the Pomogaev definition
+    !     X^T D_NO^2 X; weak Dyson roots therefore retain small
     !     strengths instead of being forced to 1 by metric normalization.
     allocate(cdys(nbf,m), d_times_x(m), source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
@@ -612,9 +604,9 @@ contains
     dom_no_coeff = 0.0_dp
     dom_no_occ = 0.0_dp
     ! Transfer solved EKT roots to the output arrays, skipping near-zero EKT
-    ! eigenvalues the GAMESS way (|eps| <= ekt_eig_tol).  The source eigenpair
+    ! eigenvalues (|eps| <= ekt_eig_tol).  The source eigenpair
     ! index is j (xvec/cdys/eps); out_idx is a separate compressed counter into
-    ! the output arrays so the printed/stored ladder matches GAMESS.
+    ! the output arrays so the printed/stored ladder is compact.
     out_idx = 0
     n_skipped = 0
     do j = 1, m

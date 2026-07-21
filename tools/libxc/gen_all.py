@@ -75,7 +75,7 @@ for xc_func in xc_func_list:
     print("{} was removed: it has Yukawa potential".format(xc_func))
     continue
   if "VDW" in func.get_name().upper():
-    print("{} was removed: GAMESS does not support vdW functionals".format(xc_func))
+    print("{} was removed: OpenQP does not support vdW functionals".format(xc_func))
     continue
   xc_out = xc_func.upper().replace("HYB_", "H")
   if xc_out == "LDA_X":

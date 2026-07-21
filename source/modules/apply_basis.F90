@@ -1,9 +1,9 @@
 !> @brief   Apply selected basis set library to the molecule
 !> @details This module extracts the information about basis set from the library file.
-!>               The library should be in GAMESS(US) basis set format. Then, it applies the selected
+!>               The library should be in the OpenQP basis-set format. Then, it applies the selected
 !>               basis to all atoms in the molecule.
 !> @param infos(in,out)     Molecule information
-!> @param abas(in)      [R] Basis set library file, GAMESS(US) format
+!> @param abas(in)      [R] OpenQP basis-set library file
 module apply_basis_mod
 
   character(len=*), parameter :: module_name = "apply_basis_mod"

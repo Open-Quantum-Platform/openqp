@@ -359,7 +359,7 @@ contains
       call show_message("For running B3LYP, choose one of them:")
       call show_message(" - B3LYPV1R with  VWN RPA LDA correlation part (default for Gaussian)")
       call show_message(" - B3LYPV3  with  VWN_3   LDA correlation part")
-      call show_message(" - B3LYPV5  with  VWN_5   LDA correlation part (default for GAMESS-US)")
+      call show_message(" - B3LYPV5  with  VWN_5   LDA correlation part (legacy convention)")
       call show_message(ABORTING, WITH_ABORT)
     case ("B3LYPV1R")
       call functional%add_functional(XC_HYB_GGA_XC_B3LYP, 1.00_fp, hfex=HFEX)

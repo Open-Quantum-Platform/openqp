@@ -53,7 +53,7 @@ def ispher_mode(strng):
     'auto'  - per-shell AO convention from the basis-set metadata
               (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
     'true'  - force pure spherical for every l>=2 shell regardless of how
-              the basis was published (GAMESS ISPHER=1 semantics);
+              the basis was published (pure-shell semantics);
     'false' - force Cartesian for every shell.
     Booleans (from saved/dict configs) map to 'true'/'false'."""
     if isinstance(strng, bool):

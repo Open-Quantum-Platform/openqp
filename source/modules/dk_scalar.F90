@@ -779,7 +779,7 @@ contains
   !> @brief Add the DK2 second-order correction to H^DK in p-space
   !>
   !> @details Computes and accumulates the DK2 correction following the
-  !>          direct W_1^2 approach (equivalent to GAMESS DK2X):
+  !>          direct W_1^2 approach:
   !>
   !>            H^DK2 += -1/2 (E * W_1^2 + W_1^2 * E)  -  W_1 * E * W_1
   !>
