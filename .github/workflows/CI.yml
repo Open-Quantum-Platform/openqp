@@ -181,7 +181,12 @@ jobs:
          - name: Run Python test suite
            if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
            run: |
-            pip install pytest
+            # xdist: the suite runs real calculations and took 11.4 min serially,
+            # which nearly doubled this job. The example suite above already
+            # saturates the runner cores, so do the same here. --dist loadfile
+            # keeps every test in a file on one worker: several tests build
+            # projects from a shared cwd and would collide if spread apart.
+            pip install pytest pytest-xdist
             # Tests that need a build gate on OPENQP_ROOT. The installed package
             # self-locates via resolve_oqp_root(), so point the variable at the
             # package directory to opt those integration tests in rather than
@@ -194,7 +199,7 @@ jobs:
             # `pyoqp.oqp.periodic_table` through the source tree rather than the
             # installed `oqp` package. Bare pytest only adds tests/ and the
             # module fails to import.
-            python -m pytest tests -q --durations=10
+            python -m pytest tests -q -n auto --dist loadfile --durations=15
 
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
