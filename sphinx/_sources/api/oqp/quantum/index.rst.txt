@@ -1,0 +1,39 @@
+oqp.quantum
+===========
+
+.. py:module:: oqp.quantum
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Quantum-computing bridge for OpenQP.
+
+      Export an OpenQP mean-field calculation as a second-quantized molecular
+      Hamiltonian / FCIDUMP, ready for quantum-computing electronic-structure
+      toolkits (Qiskit Nature, OpenFermion, Block2, ...).
+
+      Typical use::
+
+          from oqp.quantum import from_openqp
+
+          ham = from_openqp(mol, eri_ao=eri)   # eri = AO two-electron integrals
+          ham.to_fcidump("molecule.FCIDUMP")
+
+      The integral-transform and FCIDUMP I/O helpers
+      (:mod:`oqp.quantum.integrals`, :mod:`oqp.quantum.fcidump`) have no dependency
+      on the compiled ``oqp`` extension and can be used stand-alone.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/quantum/fcidump/index
+   /api/oqp/quantum/hamiltonian/index
+   /api/oqp/quantum/integrals/index
+
+

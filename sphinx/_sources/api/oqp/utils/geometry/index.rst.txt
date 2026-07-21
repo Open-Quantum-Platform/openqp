@@ -1,0 +1,89 @@
+oqp.utils.geometry
+==================
+
+.. py:module:: oqp.utils.geometry
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Geometry helpers for OpenQP Python inputs.
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   oqp.utils.geometry.GeometryLookupError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.geometry.builtin_geometry
+   oqp.utils.geometry.pubchem_geometry
+   oqp.utils.geometry.get_geometry
+   oqp.utils.geometry.geometry_from_sdf
+   oqp.utils.geometry.normalize_system
+
+
+Module Contents
+---------------
+
+.. py:exception:: GeometryLookupError
+
+   Bases: :py:obj:`ValueError`
+
+
+   .. code-block:: text
+
+      Raised when a named geometry cannot be resolved.
+
+
+.. py:function:: builtin_geometry(query)
+
+   .. code-block:: text
+
+      Return a built-in approximate Angstrom geometry for common small molecules.
+
+
+.. py:function:: pubchem_geometry(query, timeout=10)
+
+   .. code-block:: text
+
+      Fetch a 3D conformer from PubChem PUG-REST and return OpenQP geometry text.
+
+
+.. py:function:: get_geometry(query, source='auto', timeout=10)
+
+   .. code-block:: text
+
+      Resolve a named molecular geometry to OpenQP inline geometry text.
+
+      source="auto" tries OpenQP's small built-in table first, then PubChem.
+      source="builtin" only uses the local table.
+      source="pubchem" only uses PubChem PUG-REST.
+
+
+.. py:function:: geometry_from_sdf(sdf, query)
+
+   .. code-block:: text
+
+      Convert a PubChem-style V2000 SDF string to OpenQP inline geometry text.
+
+
+.. py:function:: normalize_system(system, unit='Angstrom')
+
+   .. code-block:: text
+
+      Normalize inline molecular geometries for OpenQP input.system.
+
+      Coordinates are written in Angstrom because the OpenQP input reader converts
+      the text geometry into its internal Bohr representation. Bohr inputs can be
+      passed with unit="Bohr".
+
+

@@ -1,0 +1,24 @@
+oqp.export
+==========
+
+.. py:module:: oqp.export
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Export utilities: Gaussian cubes, QCSchema AtomicResult, FCIDUMP.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/export/cubegen/index
+   /api/oqp/export/fcidump/index
+   /api/oqp/export/qcschema/index
+
+

@@ -1,0 +1,59 @@
+oqp.analysis.nto
+================
+
+.. py:module:: oqp.analysis.nto
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Natural transition orbitals (NTOs) for MRSF excited states.
+
+      Two complementary, well-defined objects (the MRSF S0-as-root subtlety means they
+      do *not* coincide as they would in closed-shell TDDFT):
+
+      * :func:`nto_excitation` -- SVD of the spin-adapted spin-flip amplitude matrix
+        ``X^{(n)}`` of root *n* (alpha-occupied -> beta-virtual).  These are the
+        hole/particle NTOs describing the *character* of state *n* relative to the
+        high-spin reference; ``sum(sigma^2) == ||X^{(n)}||^2`` (~1 for a normalized
+        single root).  Holes are alpha, particles are beta (spin-resolved).
+      * :func:`nto_transition` -- SVD of the state-interaction 1-TDM
+        ``gamma^{i->j}`` (validated at GATE 2).  Truncated reconstruction reproduces
+        the transition dipole; these are the natural orbitals of the genuine S_i->S_j
+        transition density (which has occ-occ/vir-vir structure for MRSF).
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.analysis.nto.nto_excitation
+   oqp.analysis.nto.nto_transition
+
+
+Module Contents
+---------------
+
+.. py:function:: nto_excitation(states, n, thresh=1e-06)
+
+   .. code-block:: text
+
+      Hole/particle NTOs of root ``n`` from its spin-flip amplitude matrix.
+
+      Returns a dict with spin-resolved AO-basis NTO coefficients, singular
+      values and weights (sigma^2), plus the amplitude norm sum(sigma^2).
+
+
+.. py:function:: nto_transition(states, i, j, thresh=1e-06)
+
+   .. code-block:: text
+
+      NTOs of the state-interaction 1-TDM gamma^{i->j} (alpha-MO basis SVD).
+
+      The left/right singular vectors are the particle/hole natural orbitals of
+      the S_i->S_j transition density.  ``reconstruct_tdm`` rebuilds gamma from the
+      leading pairs so the transition dipole can be re-derived (GATE 3 check).
+
+

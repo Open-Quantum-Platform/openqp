@@ -1,0 +1,92 @@
+oqp.library.oqp_irc
+===================
+
+.. py:module:: oqp.library.oqp_irc
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP intrinsic reaction coordinate (IRC) for OpenQP.
+
+      Backend-agnostic (NumPy only) Gonzalez--Schlegel mass-weighted steepest-descent
+      reaction path (Gonzalez & Schlegel, J. Phys. Chem. 94, 5523 (1990)).
+
+      The IRC is the steepest-descent path in mass-weighted Cartesian coordinates
+      q = M^{1/2} x.  Each step of mass-weighted arc length ``s`` is taken with the
+      Gonzalez--Schlegel constrained scheme:
+
+        1. pivot point  q* = q_k - (s/2) g_hat   (g_hat = mass-weighted gradient dir);
+        2. find q_{k+1} on the hypersphere |q - q*| = s/2 that minimizes E, i.e. the
+           point whose gradient is radial (no tangential component).
+
+      The first point is displaced from the transition state along the
+      imaginary-frequency mode (mass-weighted), in the requested forward/backward
+      direction.  The caller supplies ``energy_gradient(x_flat) -> (E, g_flat)`` in
+      atomic units, so this module is testable on analytic surfaces without the OQP
+      core.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.oqp_irc.IRC
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.oqp_irc.imaginary_mode
+
+
+Module Contents
+---------------
+
+.. py:class:: IRC(mass, x_ts, init_direction_mw, step=0.1, sign=1, logger=None)
+
+   .. py:attribute:: sqm
+
+
+   .. py:attribute:: x_ts
+
+
+   .. py:attribute:: dir
+
+
+   .. py:attribute:: step
+
+
+   .. py:attribute:: sign
+      :value: 1
+
+
+
+   .. py:attribute:: logger
+      :value: None
+
+
+
+   .. py:method:: run(energy_gradient, max_points=50, gtol=0.0001, micro_max=6, micro_tol=0.0001, on_point=None)
+
+
+.. py:function:: imaginary_mode(mass, hessian, coordinates=None, negative_tol=1e-08)
+
+   .. code-block:: text
+
+      Return the unique imaginary mode of a first-order saddle Hessian.
+
+      ``mass`` in amu (natom,), ``hessian`` in Hartree/Bohr**2 (3N,3N), and
+      optional ``coordinates`` in Bohr.  With coordinates, translations and
+      rotations are projected before diagonalization so their near-zero
+      numerical curvature cannot be mistaken for imaginary vibrations. Returns
+      the normalized mass-weighted eigenvector and curvature. Numerical negative
+      noise above ``-negative_tol`` is ignored. A valid IRC start must contain
+      exactly one significant vibrational negative mode; minima and higher-order
+      saddles are rejected.
+
+

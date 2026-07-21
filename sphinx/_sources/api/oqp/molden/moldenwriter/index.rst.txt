@@ -1,0 +1,108 @@
+oqp.molden.moldenwriter
+=======================
+
+.. py:module:: oqp.molden.moldenwriter
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Molden compatibility module
+      writer class
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.molden.moldenwriter.MoldenWriter
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.molden.moldenwriter.write_frequency
+
+
+Module Contents
+---------------
+
+.. py:class:: MoldenWriter(file)
+
+   .. code-block:: text
+
+      Class to write molecule information in Molden format
+
+      Molecular orbitals sequence for various angular momentum:
+      5D: D 0, D+1, D-1, D+2, D-2
+      6D: xx, yy, zz, xy, xz, yz
+
+      7F: F 0, F+1, F-1, F+2, F-2, F+3, F-3
+      10F: xxx, yyy, zzz, xyy, xxy, xxz, xzz, yzz, yyz, xyz
+
+      9G: G 0, G+1, G-1, G+2, G-2, G+3, G-3, G+4, G-4
+      15G: xxxx yyyy zzzz xxxy xxxz yyyx yyyz zzzx zzzy,
+           xxyy xxzz yyzz xxyz yyxz zzxy
+
+
+   .. py:attribute:: ORDERS
+
+
+   .. py:attribute:: SPH_ORDERS
+
+
+   .. py:attribute:: SHELL_TYPES
+      :value: 'spdfg'
+
+
+
+   .. py:attribute:: NORMS
+
+
+   .. py:attribute:: NBFS
+
+
+   .. py:attribute:: SPH_NBFS
+
+
+   .. py:method:: write_spherical_markers(basis)
+
+      .. code-block:: text
+
+         Emit Molden [5D]/[7F]/[9G] markers when the basis is spherical.
+
+
+
+   .. py:attribute:: file
+
+
+   .. py:method:: write_atoms(num_atoms, q_n, xyz, header=True, angstrom=False)
+
+      .. code-block:: text
+
+         Write atomic coordinates section
+
+
+
+   .. py:method:: write_basis(num_atoms, basis, header=True)
+
+      .. code-block:: text
+
+         Write GTO basis set section
+
+
+
+   .. py:method:: write_mo(basis, orbitals, energies, occupancies, spin, header=True)
+
+      .. code-block:: text
+
+         Write molecular orbitals section
+
+
+
+.. py:function:: write_frequency(mol, freqs, modes)
+

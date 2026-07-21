@@ -2,7 +2,8 @@ module tdhf_gradient_mod
 
   use precision, only: dp
   use grd2, only: grd2_driver, grd2_compute_data_t
-  use basis_tools, only: basis_set
+  use basis_tools, only: basis_set, bas_norm_matrix, build_cart_density
+  use constants, only: HARMONIC_ACTIVE, NUM_CART_BF
   use types, only: information
   use io_constants, only: iw
 
@@ -25,11 +26,15 @@ module tdhf_gradient_mod
     real(kind=dp), pointer :: p2(:,:,:) => null()
     real(kind=dp), pointer :: xpy2(:,:,:) => null()
     real(kind=dp), pointer :: xmy2(:,:,:) => null()
+    ! Cartesian-effective (bfnrm-folded) copies + offsets for HARMONIC_ACTIVE.
+    real(kind=dp), allocatable :: d_cart(:,:), p_cart(:,:), xpy_cart(:,:), xmy_cart(:,:)
+    integer, allocatable :: cart_off(:)
     integer :: nbf = 0
   contains
     procedure :: init => grd2_tdhf_compute_data_t_init
     procedure :: clean => grd2_tdhf_compute_data_t_clean
     procedure :: get_density => grd2_tdhf_compute_data_t_get_density
+    procedure :: build_cart => grd2_tdhf_build_cart
   end type
 
 contains
@@ -92,7 +97,7 @@ contains
 
     ! tagarray
     real(kind=dp), contiguous, pointer :: &
-      dmat_a(:), mo_a(:,:), td_p(:,:), xpy(:), xmy(:)
+      dmat_a(:), mo_a(:,:), td_p(:,:), xpy(:,:), xmy(:,:)
     character(len=*), parameter :: tags_general(*) = [ character(len=80) :: &
       OQP_TD_XPY, OQP_TD_XMY, OQP_DM_A, OQP_VEC_MO_A, OQP_TD_P ]
 
@@ -146,12 +151,12 @@ contains
              wrk2(nbf,nbf), &
              source=0.0d0)
 
-    call iatogen(xpy, wrk1, nocc, nocc)
+    call iatogen(xpy(:,infos%tddft%target_state), wrk1, nocc, nocc)
     call symmetrize_matrix(wrk1, nbf)
     wrk1 = wrk1*0.5
     call orthogonal_transform('t', nbf, mo_a, wrk1, xpy2(:,:,1), wrk2)
 
-    call iatogen(xmy, wrk1, nocc, nocc)
+    call iatogen(xmy(:,infos%tddft%target_state), wrk1, nocc, nocc)
     call orthogonal_transform('t', nbf, mo_a, wrk1, xmy2(:,:,1), wrk2)
 
 
@@ -321,6 +326,11 @@ contains
 
     call gcomp%init()
 
+    select type (gcomp)
+    class is (grd2_tdhf_compute_data_t)
+      call gcomp%build_cart(basis)
+    end select
+
     call grd2_driver(infos, basis, de, gcomp)
     infos%atoms%grad = infos%atoms%grad + de
 
@@ -339,6 +349,37 @@ contains
 
 
   end subroutine
+
+!###############################################################################
+
+!> @brief Build Cartesian-effective (bfnrm-folded) copies of the four TDDFT
+!>   gradient densities (ground d, relaxed p, transition X+Y and X-Y) +
+!>   Cartesian offsets, for contraction with Cartesian derivative ERIs under
+!>   HARMONIC_ACTIVE. Transition densities may be non-symmetric; the per-block
+!>   expansion handles that.
+  subroutine grd2_tdhf_build_cart(this, basis)
+    class(grd2_tdhf_compute_data_t), intent(inout) :: this
+    type(basis_set), intent(in) :: basis
+    integer, allocatable :: od(:)
+    integer :: nc
+    if (.not. HARMONIC_ACTIVE) return
+    call tdhf_cart_one(basis, this%d2(:,:,1),   this%d_cart,   this%cart_off, nc)
+    call tdhf_cart_one(basis, this%p2(:,:,1),   this%p_cart,   od, nc)
+    call tdhf_cart_one(basis, this%xpy2(:,:,1), this%xpy_cart, od, nc)
+    call tdhf_cart_one(basis, this%xmy2(:,:,1), this%xmy_cart, od, nc)
+  end subroutine grd2_tdhf_build_cart
+
+  subroutine tdhf_cart_one(basis, m, m_cart, off, nc)
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: m(:,:)
+    real(kind=dp), allocatable, intent(out) :: m_cart(:,:)
+    integer, allocatable, intent(out) :: off(:)
+    integer, intent(out) :: nc
+    real(kind=dp), allocatable :: tmp(:,:)
+    tmp = m
+    call bas_norm_matrix(tmp, basis%bfnrm, basis%nbf)
+    call build_cart_density(basis, tmp, m_cart, off, nc)
+  end subroutine tdhf_cart_one
 
 !###############################################################################
 
@@ -362,28 +403,33 @@ contains
     real(kind=dp), intent(out) :: dabmax
 
     real(kind=dp) :: coul, coul2, coul3, exch, exch2, exch3, exch4
-    real(kind=dp) :: df1
+    real(kind=dp) :: df1, bfn
     real(kind=dp) :: coulfact, xcfact
     integer :: i_, j_, k_, l_
     integer :: i, j, k, l
     integer :: loc(4)
     integer :: nbf(4)
     real(kind=dp), pointer :: ab(:,:,:,:)
+    real(kind=dp), pointer :: p(:,:), d(:,:), xpy(:,:), xmy(:,:)
+    logical :: usecart
 
     coulfact = 4*this%coulscale
     xcfact = this%hfscale
     dabmax = 0
-    loc = basis%ao_offset(id)-1
 
-    nbf = basis%naos(id)
+    usecart = HARMONIC_ACTIVE
+    if (usecart) then
+      p => this%p_cart;  d => this%d_cart;  xpy => this%xpy_cart;  xmy => this%xmy_cart
+      loc = this%cart_off(id) - 1
+      nbf = NUM_CART_BF(basis%am(id))
+    else
+      p => this%p2(:,:,1);  d => this%d2(:,:,1)
+      xpy => this%xpy2(:,:,1);  xmy => this%xmy2(:,:,1)
+      loc = basis%ao_offset(id) - 1
+      nbf = basis%naos(id)
+    end if
 
     ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
-
-    associate( p => this%p2(:,:,1) &
-             , d => this%d2(:,:,1) &
-             , xpy => this%xpy2(:,:,1) &
-             , xmy => this%xmy2(:,:,1) &
-             )
 
     do i_ = 1, nbf(1)
       i = loc(1) + i_
@@ -433,13 +479,13 @@ contains
               df1 = df1 - xcfact*exch
             end if
             dabmax = max(dabmax, abs(df1))
-            ab(l_,k_,j_,i_) = df1*product(basis%bfnrm([i,j,k,l]))
+            bfn = 1.0_dp
+            if (.not. usecart) bfn = product(basis%bfnrm([i,j,k,l]))
+            ab(l_,k_,j_,i_) = df1*bfn
           end do
         end do
       end do
     end do
-
-    end associate
 
   end subroutine grd2_tdhf_compute_data_t_get_density
 

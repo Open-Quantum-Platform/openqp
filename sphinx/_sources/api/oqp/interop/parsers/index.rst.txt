@@ -1,0 +1,59 @@
+oqp.interop.parsers
+===================
+
+.. py:module:: oqp.interop.parsers
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Parsers that normalize external-code excited-state results for comparison.
+
+      * :func:`parse_output` wraps cclib to read Gaussian/ORCA/Q-Chem/... output files.
+      * :func:`parse_pyscf_tddft` reads a PySCF TDDFT object's native attributes.
+      * :func:`parse_oqp` reads an OQP run (in-process molecule or results dict).
+
+      All return a normalized dict::
+
+          {'scf_energy_ha', 'excitation_energies_ev', 'oscillator_strengths',
+           'mo_energies_ev'}
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.interop.parsers.parse_output
+   oqp.interop.parsers.parse_pyscf_tddft
+   oqp.interop.parsers.parse_oqp
+
+
+Module Contents
+---------------
+
+.. py:function:: parse_output(path, program=None)
+
+   .. code-block:: text
+
+      Parse a quantum-chemistry output file with cclib (Gaussian/ORCA/Q-Chem...).
+
+      ``program`` (e.g. "gaussian") forces a specific cclib parser, bypassing
+      cclib's file-type auto-detection (useful for partial/synthetic logs).
+
+
+.. py:function:: parse_pyscf_tddft(td, mf=None)
+
+   .. code-block:: text
+
+      Read excitation energies / oscillator strengths from a PySCF TDDFT object.
+
+
+.. py:function:: parse_oqp(mol, states=None)
+
+   .. code-block:: text
+
+      Normalize an in-process OQP molecule (and optional MRSFExcitedStates).
+
+

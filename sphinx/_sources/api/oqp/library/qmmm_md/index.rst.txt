@@ -1,0 +1,227 @@
+oqp.library.qmmm_md
+===================
+
+.. py:module:: oqp.library.qmmm_md
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_md.md
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_md.QMMM_MD
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_md.parse_ini_to_config
+
+
+Module Contents
+---------------
+
+.. py:function:: parse_ini_to_config(filepath)
+
+   .. code-block:: text
+
+      Parse an INI-style configuration file into a flat dictionary
+      with ``section.key`` keys.
+
+      Numeric values are auto-converted to int or float.
+      Entries with empty values are skipped.
+
+
+.. py:class:: QMMM_MD(oqp_cfg=None, mol=None)
+
+   .. code-block:: text
+
+      QM/MM Molecular Dynamics with NVE / NVT / NPT support.
+
+      All parameters are read from the configuration. Provide **exactly one** of:
+
+      *   ``oqp_cfg``  - a ``dict`` with flat ``"section.key"`` entries
+          **or** a path to an INI file. QM/MM settings live under the
+          ``[qmmm]`` section / ``"qmmm.*"`` keys.
+
+      *   ``mol`` - a pre-built OpenQP mol object whose
+          ``mol.config["qmmm"]`` contains the same keys.
+
+      Recognised ``[qmmm]`` keys
+      --------------------------
+      pdb_file           : str            (required)
+      forcefield_files   : str            comma-separated list
+      qm_atoms           : str or list    ``"0,1,2"`` or ``"0-2"``
+      cutoff             : str            PME | NoCutoff | Ewald | ...
+      embedding          : str            mechanical | electrostatic
+      n_steps            : int            default 1000
+      timestep           : float (fs)     default 1.0
+      temperature        : float (K)      default 300.0
+      ensemble           : str            nve | nvt | npt   (default nve)
+      friction           : float (ps^-1)  default 1.0      (NVT/NPT only)
+      pressure           : float (bar)    default 1.0      (NPT only)
+      barostat_interval  : int            default 25       (NPT only)
+      trajectory_format  : str            pdb | dcd        (default pdb)
+      trajectory_file    : str            default qmmm_trajectory.<format>
+      log_file           : str            default qmmm_trajectory.dat
+      report_interval    : int            default 1
+      energy_file        : str            default total_energy.npz
+      qm_atoms_xyz       : str            optional XYZ file
+      qm_list            : str or list    optional index mapping
+
+      Saved observables (in ``energy_file`` as ``.npz``)
+      --------------------------------------------------
+      step          : MD step index
+      time_ps       : simulation time (ps)
+      E_pot         : potential energy (kJ/mol)
+      E_kin         : kinetic energy (kJ/mol)
+      E_tot         : total energy (kJ/mol)
+      temperature   : instantaneous T from kinetic energy (K)
+      volume_nm3    : box volume (nm^3), only populated for NPT
+
+
+   .. py:attribute:: pdb
+
+
+   .. py:attribute:: forcefield
+
+
+   .. py:attribute:: qm_atoms
+
+
+   .. py:attribute:: cutoff
+
+
+   .. py:attribute:: embedding
+      :value: ''
+
+
+
+   .. py:attribute:: frontier_scheme
+      :value: ''
+
+
+
+   .. py:attribute:: n_steps
+
+
+   .. py:attribute:: timestep
+
+
+   .. py:attribute:: temperature
+
+
+   .. py:attribute:: ensemble
+      :value: ''
+
+
+
+   .. py:attribute:: friction
+
+
+   .. py:attribute:: pressure
+
+
+   .. py:attribute:: barostat_interval
+
+
+   .. py:attribute:: trajectory_format
+      :value: ''
+
+
+
+   .. py:attribute:: trajectory_file
+      :value: ''
+
+
+
+   .. py:attribute:: log_file
+      :value: ''
+
+
+
+   .. py:attribute:: report_interval
+
+
+   .. py:attribute:: energy_file
+      :value: ''
+
+
+
+   .. py:attribute:: oqp_cfg
+      :value: None
+
+
+
+   .. py:attribute:: mol
+      :value: None
+
+
+
+   .. py:attribute:: oqp_driver
+      :value: None
+
+
+
+   .. py:attribute:: mm_systems
+      :value: None
+
+
+
+   .. py:attribute:: simulation_md
+      :value: None
+
+
+
+   .. py:attribute:: system_md
+      :value: None
+
+
+
+   .. py:attribute:: qmmm_ext
+      :value: None
+
+
+
+   .. py:method:: setup()
+
+      .. code-block:: text
+
+         Full setup: build driver, MD system, and simulation context.
+
+
+
+   .. py:method:: step()
+
+      .. code-block:: text
+
+         Perform one QM/MM MD step.
+
+         :returns: **E_tot**
+         :rtype: float   Total energy (kJ/mol).
+
+
+
+   .. py:method:: run()
+
+      .. code-block:: text
+
+         Run the full simulation in the configured ensemble.
+
+         :returns: Keys: step, time_ps, E_pot, E_kin, E_tot, temperature, volume_nm3.
+         :rtype: dict of np.ndarray
+
+
+
+.. py:data:: md
+

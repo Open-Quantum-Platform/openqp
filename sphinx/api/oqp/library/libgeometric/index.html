@@ -1,0 +1,422 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.libgeometric &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/libgeometric/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.libopenmm" href="../libopenmm/index.html" />
+    <link rel="prev" title="oqp.library.ints_2e" href="../ints_2e/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.libgeometric</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/libgeometric/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.libgeometric">
+<span id="oqp-library-libgeometric"></span><h1>oqp.library.libgeometric<a class="headerlink" href="#module-oqp.library.libgeometric" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>geomeTRIC optimizer interface for OpenQP.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libgeometric.BOHR_TO_ANGSTROM" title="oqp.library.libgeometric.BOHR_TO_ANGSTROM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BOHR_TO_ANGSTROM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libgeometric.ANGSTROM_TO_BOHR" title="oqp.library.libgeometric.ANGSTROM_TO_BOHR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ANGSTROM_TO_BOHR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricEngine" title="oqp.library.libgeometric.GeometricEngine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricEngine</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricOpt" title="oqp.library.libgeometric.GeometricOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricMECIOpt" title="oqp.library.libgeometric.GeometricMECIOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricMECIOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricMECPOpt" title="oqp.library.libgeometric.GeometricMECPOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricMECPOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricTSOpt" title="oqp.library.libgeometric.GeometricTSOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricTSOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricIRCOpt" title="oqp.library.libgeometric.GeometricIRCOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricIRCOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libgeometric.GeometricNEBOpt" title="oqp.library.libgeometric.GeometricNEBOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GeometricNEBOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.BOHR_TO_ANGSTROM">
+<span class="sig-name descname"><span class="pre">BOHR_TO_ANGSTROM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.52917721092</span></em><a class="headerlink" href="#oqp.library.libgeometric.BOHR_TO_ANGSTROM" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.ANGSTROM_TO_BOHR">
+<span class="sig-name descname"><span class="pre">ANGSTROM_TO_BOHR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.8897261245650618</span></em><a class="headerlink" href="#oqp.library.libgeometric.ANGSTROM_TO_BOHR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricEngine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">optimizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">molecule</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>geomeTRIC custom engine that delegates energy/gradient calls to OpenQP.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.optimizer">
+<span class="sig-name descname"><span class="pre">optimizer</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.optimizer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.M">
+<span class="sig-name descname"><span class="pre">M</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.M" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.stored_calcs">
+<span class="sig-name descname"><span class="pre">stored_calcs</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.stored_calcs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.calc">
+<span class="sig-name descname"><span class="pre">calc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dirname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">read_data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copydir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.calc" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.clearCalcs">
+<span class="sig-name descname"><span class="pre">clearCalcs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.clearCalcs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.detect_dft">
+<span class="sig-name descname"><span class="pre">detect_dft</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.detect_dft" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.save_guess_files">
+<span class="sig-name descname"><span class="pre">save_guess_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.save_guess_files" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>No-op hook used by geomeTRIC engines that persist SCF guesses.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.load_guess_files">
+<span class="sig-name descname"><span class="pre">load_guess_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.load_guess_files" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>No-op hook used by geomeTRIC engines that restore SCF guesses.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.number_output">
+<span class="sig-name descname"><span class="pre">number_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calc_number</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.number_output" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>No-op hook used by geomeTRIC NEB engines that version per-image outputs.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricEngine.calc_new">
+<span class="sig-name descname"><span class="pre">calc_new</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dirname</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricEngine.calc_new" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">_GeometricRunner</span></code>, <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.StateSpecificOpt" title="oqp.library.libscipy.StateSpecificOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.StateSpecificOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>State-specific geometry optimization driven by geomeTRIC.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricMECIOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricMECIOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricMECIOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">_GeometricRunner</span></code>, <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.MECIOpt" title="oqp.library.libscipy.MECIOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.MECIOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>MECI penalty/UBP objective minimized by geomeTRIC.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricMECPOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricMECPOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricMECPOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">_GeometricRunner</span></code>, <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.MECPOpt" title="oqp.library.libscipy.MECPOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.MECPOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>MECP objective minimized by geomeTRIC.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricTSOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricTSOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricTSOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">_GeometricRunner</span></code>, <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.StateSpecificOpt" title="oqp.library.libscipy.StateSpecificOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.StateSpecificOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Transition-state optimization driven by geomeTRIC.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricIRCOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricIRCOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricIRCOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">_GeometricRunner</span></code>, <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.StateSpecificOpt" title="oqp.library.libscipy.StateSpecificOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.StateSpecificOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Intrinsic reaction coordinate calculation driven by geomeTRIC.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricIRCOpt.irc_direction">
+<span class="sig-name descname"><span class="pre">irc_direction</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricIRCOpt.irc_direction" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">GeometricNEBOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="../libscipy/index.html#oqp.library.libscipy.StateSpecificOpt" title="oqp.library.libscipy.StateSpecificOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">oqp.library.libscipy.StateSpecificOpt</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>State-specific geomeTRIC NEB path calculation.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.neb_config">
+<span class="sig-name descname"><span class="pre">neb_config</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.neb_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.geometric_config">
+<span class="sig-name descname"><span class="pre">geometric_config</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.geometric_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.nimage">
+<span class="sig-name descname"><span class="pre">nimage</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.nimage" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.coordsys">
+<span class="sig-name descname"><span class="pre">coordsys</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.coordsys" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.trust">
+<span class="sig-name descname"><span class="pre">trust</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.trust" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.tmax">
+<span class="sig-name descname"><span class="pre">tmax</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.tmax" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.prefix">
+<span class="sig-name descname"><span class="pre">prefix</span></span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.prefix" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.plan_image_directories">
+<span class="sig-name descname"><span class="pre">plan_image_directories</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.plan_image_directories" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return isolated per-image working directories for a NEB path.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libgeometric.GeometricNEBOpt.optimize">
+<span class="sig-name descname"><span class="pre">optimize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libgeometric.GeometricNEBOpt.optimize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../ints_2e/index.html" class="btn btn-neutral float-left" title="oqp.library.ints_2e" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../libopenmm/index.html" class="btn btn-neutral float-right" title="oqp.library.libopenmm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,196 @@
+oqp.utils.oqp_tester
+====================
+
+.. py:module:: oqp.utils.oqp_tester
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OpenQP Test Runner
+
+      This module provides a class for running OpenQP tests
+      in parallel and generating reports.
+      It is compatible with CI pipelines.
+
+      Author: Konstantin Komarov
+      Email: constlike@gmail.com
+      Created: Aug 2024
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.oqp_tester.OQPTester
+
+
+Module Contents
+---------------
+
+.. py:class:: OQPTester(base_test_dir: str = None, output_dir: str = None, total_cpus: int = None, omp_threads: int = None, mpi_manager=None)
+
+   .. code-block:: text
+
+      A class for running OQP tests and generating reports.
+
+      This class can run tests from specified directories:
+        - 'openqp --run-tests path_to_folder': Run tests from a specific folder
+        - 'openqp --run-tests other': Run tests from the 'other' folder in examples
+        - 'openqp --run-tests all': Run the standard suite across examples,
+          with documented slow/non-self-contained exclusions
+        - '--input-format auto|inp|oqp|both': Select the input syntax to test
+      Can be used to run all tests in a specific folder.
+
+      .. attribute:: base_test_dir
+
+         Base directory for test files.
+
+         :type: str
+
+      .. attribute:: output_dir
+
+         Directory for storing test output files.
+
+         :type: str
+
+      .. attribute:: max_workers
+
+         Maximum number of parallel workers.
+
+         :type: int
+
+      .. attribute:: results
+
+         List to store test results.
+
+         :type: List[Dict[str, Any]]
+
+
+   .. py:attribute:: base_test_dir
+      :value: None
+
+
+
+   .. py:attribute:: mpi_manager
+      :value: None
+
+
+
+   .. py:attribute:: output_dir
+      :value: b'.'
+
+
+
+   .. py:attribute:: total_cpus
+
+
+   .. py:attribute:: omp_threads
+
+
+   .. py:attribute:: max_workers
+      :value: 1
+
+
+
+   .. py:attribute:: results
+      :type:  List[Dict[str, Any]]
+      :value: []
+
+
+
+   .. py:attribute:: report_file
+
+
+   .. py:attribute:: start_time
+      :value: None
+
+
+
+   .. py:attribute:: end_time
+      :value: None
+
+
+
+   .. py:attribute:: status
+      :value: 0
+
+
+
+   .. py:attribute:: input_format
+      :value: 'auto'
+
+
+
+   .. py:method:: calculate_max_workers()
+
+
+   .. py:method:: log(message: str)
+
+      .. code-block:: text
+
+         Simple logging function to stdout.
+
+
+
+   .. py:method:: get_git_commit_info()
+
+
+   .. py:method:: get_git_branch_info()
+
+
+   .. py:method:: run_single_test(input_file: str) -> Dict[str, Any]
+
+      .. code-block:: text
+
+         Run a single OpenQP test.
+
+         :param input_file: Path to the input file.
+         :type input_file: str
+
+         :returns: Dictionary containing test results.
+         :rtype: Dict[str, Any]
+
+
+
+   .. py:method:: run_tests(test_path: str = 'all', *, input_format: str = 'auto')
+
+      .. code-block:: text
+
+         Run OpenQP tests based on the specified test path.
+
+         :param test_path: Path to test directory or specific input file.
+                           Use 'all' to run all tests in the base directory.
+         :type test_path: str
+         :param input_format: ``auto`` (default), ``inp``, ``oqp``, or
+                              ``both``.
+         :type input_format: str
+
+
+
+   .. py:method:: format_time(seconds: float) -> str
+
+
+   .. py:method:: generate_report() -> str
+
+
+   .. py:method:: run(test_path: str = 'all', *, input_format: str = 'auto') -> str
+
+      .. code-block:: text
+
+         Run tests and generate a report.
+
+         :param test_path: Path to test directory or specific input file.
+                           Use 'all' to run all tests in the base directory.
+         :type test_path: str
+         :param input_format: ``auto`` (default), ``inp``, ``oqp``, or
+                              ``both``.
+         :type input_format: str
+
+         :returns: A formatted string containing the test report.
+         :rtype: str
+
+
+

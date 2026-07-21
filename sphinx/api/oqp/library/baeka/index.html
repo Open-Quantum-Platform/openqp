@@ -1,0 +1,578 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.baeka &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/baeka/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.frequency" href="../frequency/index.html" />
+    <link rel="prev" title="oqp.library" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.baeka</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/baeka/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.baeka">
+<span id="oqp-library-baeka"></span><h1>oqp.library.baeka<a class="headerlink" href="#module-oqp.library.baeka" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Generalized Baek adaptive-penalty kernel for conical intersections.
+
+The published three-state objective removes the redundant outer-state gap and
+penalizes only the two consecutive gaps.  This module extends that construction
+to ``N &gt;= 2`` states by using the ``N - 1`` adjacent gaps, together with an SVD
+projector for their independent gradient subspace.  It contains no OpenQP
+backend calls and is therefore directly unit-testable.
+
+The multiplier updates are additive, as in Baek&#39;s equations 3.12--3.13::
+
+    sigma &lt;- sigma + delta_beta        (ordinary macro iteration)
+    sigma &lt;- sigma + beta              (locally stationary, gap still open)
+
+``alpha`` and all gaps are energies (Hartree); ``sigma``, ``delta_beta`` and
+``beta`` are dimensionless.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.ArrayLike" title="oqp.library.baeka.ArrayLike"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ArrayLike</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.BaekAJumpScheduleExhausted" title="oqp.library.baeka.BaekAJumpScheduleExhausted"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaekAJumpScheduleExhausted</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.BaekAObjective" title="oqp.library.baeka.BaekAObjective"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaekAObjective</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.baeka.BaekAEvaluation" title="oqp.library.baeka.BaekAEvaluation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaekAEvaluation</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.BaekAState" title="oqp.library.baeka.BaekAState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaekAState</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.parse_jump_schedule" title="oqp.library.baeka.parse_jump_schedule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_jump_schedule</span></code></a>(→ Tuple[float, Ellipsis])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.baeka.penalty_subspace" title="oqp.library.baeka.penalty_subspace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">penalty_subspace</span></code></a>(→ Tuple[numpy.ndarray, numpy.ndarray])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.baeka.penalty_projector" title="oqp.library.baeka.penalty_projector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">penalty_projector</span></code></a>(→ Tuple[numpy.ndarray, int, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.baeka.baeka_objective" title="oqp.library.baeka.baeka_objective"><code class="xref py py-obj docutils literal notranslate"><span class="pre">baeka_objective</span></code></a>(→ BaekAObjective)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.baeka.ArrayLike">
+<span class="sig-name descname"><span class="pre">ArrayLike</span></span><a class="headerlink" href="#oqp.library.baeka.ArrayLike" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.baeka.parse_jump_schedule">
+<span class="sig-name descname"><span class="pre">parse_jump_schedule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Ellipsis</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.baeka.parse_jump_schedule" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return a validated additive ``beta`` schedule.
+
+The sectioned input reader may deliver the schedule as a comma-separated
+string, while the concise parser and Python API can provide a sequence.
+A scalar is accepted as a one-jump schedule; exhaustion is deliberately an
+error rather than silently inventing a continuation rule.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.baeka.penalty_subspace">
+<span class="sig-name descname"><span class="pre">penalty_subspace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gap_gradients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">rtol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.baeka.penalty_subspace" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return an orthonormal basis and singular values for the gap subspace.
+
+``gap_gradients`` has shape ``(N - 1, 3 * natom)``.  Raw adjacent
+gap-gradient vectors are used instead of multiplying by the penalty slope:
+the column space is identical away from exact degeneracy, while the raw
+vectors remain well-defined as the gap and the penalty slope approach zero.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.baeka.penalty_projector">
+<span class="sig-name descname"><span class="pre">penalty_projector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gap_gradients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">rtol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.baeka.penalty_projector" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return ``P = U U.T``, its numerical rank, and singular values.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">BaekAObjective</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAObjective" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>One generalized Baek objective/gradient evaluation.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.energies">
+<span class="sig-name descname"><span class="pre">energies</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.energies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.gradients">
+<span class="sig-name descname"><span class="pre">gradients</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.gradients" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.gaps">
+<span class="sig-name descname"><span class="pre">gaps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.gaps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.gap_gradients">
+<span class="sig-name descname"><span class="pre">gap_gradients</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.gap_gradients" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.average_energy">
+<span class="sig-name descname"><span class="pre">average_energy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.average_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.average_gradient">
+<span class="sig-name descname"><span class="pre">average_gradient</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.average_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.penalty">
+<span class="sig-name descname"><span class="pre">penalty</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.penalty" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.penalty_gradient">
+<span class="sig-name descname"><span class="pre">penalty_gradient</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.penalty_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.objective">
+<span class="sig-name descname"><span class="pre">objective</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.objective" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.gradient">
+<span class="sig-name descname"><span class="pre">gradient</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.span">
+<span class="sig-name descname"><span class="pre">span</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.span" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.sigma">
+<span class="sig-name descname"><span class="pre">sigma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.effective_sigma">
+<span class="sig-name descname"><span class="pre">effective_sigma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.effective_sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.alpha" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.projector_basis">
+<span class="sig-name descname"><span class="pre">projector_basis</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.projector_basis" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.projector_singular_values">
+<span class="sig-name descname"><span class="pre">projector_singular_values</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.projector_singular_values" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.projector_rank">
+<span class="sig-name descname"><span class="pre">projector_rank</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.projector_rank" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.parallel_gradient">
+<span class="sig-name descname"><span class="pre">parallel_gradient</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.parallel_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.perpendicular_gradient">
+<span class="sig-name descname"><span class="pre">perpendicular_gradient</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.perpendicular_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.parallel_norm">
+<span class="sig-name descname"><span class="pre">parallel_norm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.parallel_norm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.parallel_scaled_norm">
+<span class="sig-name descname"><span class="pre">parallel_scaled_norm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.parallel_scaled_norm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAObjective.perpendicular_norm">
+<span class="sig-name descname"><span class="pre">perpendicular_norm</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAObjective.perpendicular_norm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.baeka.baeka_objective">
+<span class="sig-name descname"><span class="pre">baeka_objective</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">energies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gradients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gap_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projector_rtol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projector_atol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#oqp.library.baeka.BaekAObjective" title="oqp.library.baeka.BaekAObjective"><span class="pre">BaekAObjective</span></a></span></span><a class="headerlink" href="#oqp.library.baeka.baeka_objective" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Evaluate the generalized adjacent-gap Baek objective.
+
+.. math::
+
+   F_N = N^{-1}\sum_i E_i + w\sigma\sum_i
+         \frac{(E_{i+1}-E_i)^2}{E_{i+1}-E_i+\alpha}.
+
+States must be supplied in ascending adiabatic/root order.  Only adjacent
+gaps are included; adding all pairs would reintroduce the redundancy that
+the three-state Baek objective was designed to remove.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">BaekAEvaluation</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Objective data plus one transition of the additive-sigma state machine.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.tested_data">
+<span class="sig-name descname"><span class="pre">tested_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#oqp.library.baeka.BaekAObjective" title="oqp.library.baeka.BaekAObjective"><span class="pre">BaekAObjective</span></a></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.tested_data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.data">
+<span class="sig-name descname"><span class="pre">data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#oqp.library.baeka.BaekAObjective" title="oqp.library.baeka.BaekAObjective"><span class="pre">BaekAObjective</span></a></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.tested_sigma">
+<span class="sig-name descname"><span class="pre">tested_sigma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.tested_sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.next_sigma">
+<span class="sig-name descname"><span class="pre">next_sigma</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.next_sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.delta_f">
+<span class="sig-name descname"><span class="pre">delta_f</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.delta_f" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.local_stationary">
+<span class="sig-name descname"><span class="pre">local_stationary</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.local_stationary" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.gap_converged">
+<span class="sig-name descname"><span class="pre">gap_converged</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.gap_converged" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.converged">
+<span class="sig-name descname"><span class="pre">converged</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.converged" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.action">
+<span class="sig-name descname"><span class="pre">action</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.action" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.jump">
+<span class="sig-name descname"><span class="pre">jump</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.jump" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAEvaluation.jump_index">
+<span class="sig-name descname"><span class="pre">jump_index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAEvaluation.jump_index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAJumpScheduleExhausted">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">BaekAJumpScheduleExhausted</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAJumpScheduleExhausted" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">RuntimeError</span></code></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Raised when another large additive jump is required but unavailable.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">BaekAState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delta_beta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta_schedule</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gap_tol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol_f</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol_g</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gap_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projector_rtol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projector_atol</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.baeka.BaekAState" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>State machine for the generalized Baek adaptive multiplier.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.sigma">
+<span class="sig-name descname"><span class="pre">sigma</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.alpha" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.delta_beta">
+<span class="sig-name descname"><span class="pre">delta_beta</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.delta_beta" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.beta_schedule">
+<span class="sig-name descname"><span class="pre">beta_schedule</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.beta_schedule" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.gap_tol">
+<span class="sig-name descname"><span class="pre">gap_tol</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.gap_tol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.tol_f">
+<span class="sig-name descname"><span class="pre">tol_f</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.tol_f" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.tol_g">
+<span class="sig-name descname"><span class="pre">tol_g</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.tol_g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.gap_weight">
+<span class="sig-name descname"><span class="pre">gap_weight</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.gap_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.projector_rtol">
+<span class="sig-name descname"><span class="pre">projector_rtol</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.projector_rtol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.projector_atol">
+<span class="sig-name descname"><span class="pre">projector_atol</span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.projector_atol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.jump_index">
+<span class="sig-name descname"><span class="pre">jump_index</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.baeka.BaekAState.jump_index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.baeka.BaekAState.evaluate">
+<span class="sig-name descname"><span class="pre">evaluate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">energies</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gradients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#oqp.library.baeka.BaekAEvaluation" title="oqp.library.baeka.BaekAEvaluation"><span class="pre">BaekAEvaluation</span></a></span></span><a class="headerlink" href="#oqp.library.baeka.BaekAState.evaluate" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Evaluate the objective and advance the sigma state machine once.
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="oqp.library" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../frequency/index.html" class="btn btn-neutral float-right" title="oqp.library.frequency" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

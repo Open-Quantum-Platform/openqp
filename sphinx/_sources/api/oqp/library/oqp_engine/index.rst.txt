@@ -1,0 +1,169 @@
+oqp.library.oqp_engine
+======================
+
+.. py:module:: oqp.library.oqp_engine
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Step-determination engine for the oqp OpenQP optimizer.
+
+      Backend-agnostic (NumPy only).  The :class:`OQPEngine` owns the optimization
+      loop and drives an energy/gradient callback supplied by the caller, so it can be
+      exercised on analytic test potentials without the compiled OQP core.
+
+      Algorithm (v1):
+
+      * working coordinates from :mod:`oqp.library.oqp_coords` (redundant internals
+        with Cartesian fall-back);
+      * restricted-step Rational Function Optimization (RFO) for minima and
+        partitioned-RFO (P-RFO, eigenvector following) for transition states;
+      * Schlegel-type diagonal model Hessian, or an optional supplied Cartesian
+        Hessian transformed into working coordinates, updated with BFGS (minima) or
+        the Bofill SR1/PSB mixture (TS);
+      * a predictive trust region in Cartesian RMSD, grown/shrunk on the ratio of
+        actual to predicted energy change.
+
+      References: Banerjee, Adams, Simons, Shepard, J. Phys. Chem. 89, 52 (1985);
+      Bofill, J. Comput. Chem. 15, 1 (1994); Peng, Ayala, Schlegel, Frisch,
+      J. Comput. Chem. 17, 49 (1996).
+
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   oqp.library.oqp_engine.ConvergenceSignal
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.oqp_engine.OQPEngine
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.oqp_engine.parse_frozen_distance_spec
+
+
+Module Contents
+---------------
+
+.. py:exception:: ConvergenceSignal
+
+   Bases: :py:obj:`Exception`
+
+
+   .. code-block:: text
+
+      Raised by the convergence callback to stop the loop cleanly.
+
+
+.. py:function:: parse_frozen_distance_spec(value)
+
+   .. code-block:: text
+
+      Return one-based atom pairs from ``distance(i,j);...`` syntax.
+
+
+.. py:class:: OQPEngine(atoms, x0, mode='min', trust=0.2, trust_min=0.005, trust_max=0.5, maxiter=100, follow_mode=0, coordsys='auto', logger=None, initial_hessian=None, initial_gradient=None, masses=None, project_global_rigid_modes=False, frozen_distances=None)
+
+   .. py:attribute:: atoms
+
+
+   .. py:attribute:: x
+
+
+   .. py:attribute:: sqrt_cartesian_mass
+
+
+   .. py:attribute:: project_global_rigid_modes
+      :value: False
+
+
+
+   .. py:attribute:: frozen_distances
+      :value: []
+
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+   .. py:attribute:: trust
+
+
+   .. py:attribute:: trust_min
+
+
+   .. py:attribute:: trust_max
+
+
+   .. py:attribute:: maxiter
+      :value: 100
+
+
+
+   .. py:attribute:: follow_mode
+      :value: 0
+
+
+
+   .. py:attribute:: logger
+      :value: None
+
+
+
+   .. py:attribute:: coords
+
+
+   .. py:attribute:: coordsys
+
+
+   .. py:attribute:: nonfinite_step_rejections
+      :value: 0
+
+
+
+   .. py:method:: run(energy_gradient, on_converged=None)
+
+      .. code-block:: text
+
+         Optimize until ``on_converged`` raises or ``maxiter`` is reached.
+
+         ``energy_gradient(x_flat) -> (E, g_flat)`` returns energy (Hartree) and
+         Cartesian gradient (Hartree/Bohr).  ``on_converged()`` is called after
+         every evaluation and may raise to stop (mirrors OQP's ``StopIteration``
+         convergence protocol).
+
+
+
+   .. py:method:: rebase_previous_objective(energy, gradient)
+
+      .. code-block:: text
+
+         Re-evaluate the stored previous point for a changed objective.
+
+         Adaptive objectives may change a scalar parameter between two geometry
+         evaluations.  Their caller can recombine the previous geometry's
+         parameter-independent energy and Cartesian gradient at the new
+         parameter, then use this helper to keep the BFGS secant and trust-ratio
+         comparison on one objective.  The previous geometry is retained with
+         the accepted step so the rebased gradient is transformed in the same
+         coordinate frame in which it was evaluated.
+
+         Returns ``False`` before the first step, when no previous point exists.
+
+
+

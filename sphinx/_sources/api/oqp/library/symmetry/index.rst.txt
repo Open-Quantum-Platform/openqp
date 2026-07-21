@@ -1,0 +1,201 @@
+oqp.library.symmetry
+====================
+
+.. py:module:: oqp.library.symmetry
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Backend-free symmetry utilities for one-electron diagnostics.
+
+      This module currently provides metadata-only diagnostics used by the symmetry
+      planning gates. It does not change SCF/integral/response execution behavior.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.symmetry.OneElectronBlockLeakSummary
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.symmetry.one_electron_block_diagnostics
+   oqp.library.symmetry.update_one_electron_block_diagnostics
+   oqp.library.symmetry.build_symmetry_adapted_transform
+   oqp.library.symmetry.assign_mo_irreps
+   oqp.library.symmetry.build_reduction_maps
+   oqp.library.symmetry.build_full_group_blocks
+   oqp.library.symmetry.product_irrep
+   oqp.library.symmetry.assign_state_irreps
+   oqp.library.symmetry.assign_mode_irreps
+
+
+Module Contents
+---------------
+
+.. py:class:: OneElectronBlockLeakSummary
+
+   .. code-block:: text
+
+      Normalized summary payload for one-electron block leakage checks.
+
+
+   .. py:attribute:: max_off_block_abs
+      :type:  float
+
+
+   .. py:attribute:: max_off_block_indices
+      :type:  list[tuple[int, int]]
+
+
+   .. py:attribute:: off_block_element_count
+      :type:  int
+
+
+   .. py:attribute:: within_tolerance
+      :type:  bool
+
+
+   .. py:attribute:: orthogonality_ok
+      :type:  bool
+
+
+   .. py:attribute:: orthogonality_max_deviation
+      :type:  float
+
+
+   .. py:attribute:: status
+      :type:  str
+
+
+   .. py:method:: as_dict() -> dict[str, Any]
+
+
+.. py:function:: one_electron_block_diagnostics(matrix: Any, symmetry_adapted_transform: Any, basis_labels: Iterable[str], tolerance: float = 1e-06) -> dict[str, Any]
+
+   .. code-block:: text
+
+      Compute off-block leakage diagnostics in a symmetry-adapted basis.
+
+      :param matrix: One-electron matrix (overlap or core-Hamiltonian like).
+      :param symmetry_adapted_transform: AO-space transformation matrix to symmetry-adapted AO basis.
+      :param basis_labels: Per-AO symmetry labels in the transformed basis.
+      :param tolerance: Off-block absolute-coupling tolerance.
+
+
+.. py:function:: update_one_electron_block_diagnostics(symmetry_metadata: Mapping[str, Any] | None, matrices: Mapping[str, Any], symmetry_adapted_transform: Any, basis_labels: Iterable[str], tolerance: float = 1e-06) -> dict[str, Any]
+
+   .. code-block:: text
+
+      Attach named one-electron diagnostics under
+      ``symmetry_metadata['one_electron_block_diagnostics']``.
+
+      This is metadata-only and intentionally does not enable any symmetry
+      acceleration behavior.
+
+
+.. py:function:: build_symmetry_adapted_transform(shells: Iterable[Any], operations: Iterable[Mapping[str, Any]], character_table: Mapping[str, Iterable[int]]) -> tuple[numpy.ndarray, list[str]]
+
+   .. code-block:: text
+
+      Build an orthogonal symmetry-adapted AO transform with irrep labels.
+
+      :param shells: Shell specs as (atom_index, l) pairs or {'atom','l'} mappings,
+                     Cartesian s/p/d only, in AO order.
+      :param operations: Abelian-group operations from ``symmetry_detect.detect_point_group``
+                         (``operations`` payload), in character-table column order.
+      :param character_table: Irrep -> characters mapping matching the operation order.
+
+      :returns: Orthogonal (n_ao, n_ao) transform whose columns are SALCs, and the
+                per-column irrep labels.
+      :rtype: (U, labels)
+
+
+.. py:function:: assign_mo_irreps(mo_coefficients: Any, overlap: Any, shells: Iterable[Any], operations: Iterable[Mapping[str, Any]], character_table: Mapping[str, Iterable[int]], tolerance: float = 0.0001, matrix_key: str = 'matrix') -> dict[str, Any]
+
+   .. code-block:: text
+
+      Assign abelian irrep labels to molecular orbitals (metadata only).
+
+      For each MO ``m`` the character under operation ``O`` is
+      ``chi(O) = <m|S O|m> / <m|S|m>``; the MO gets the irrep whose character
+      row matches within ``tolerance``, otherwise the label 'mixed'.
+
+      ``matrix_key`` selects which operation matrix to use; pass
+      ``'matrix_input_frame'`` when the MO coefficients live in the original
+      input coordinates rather than the standard orientation.
+
+
+.. py:function:: build_reduction_maps(shells: Iterable[Any], operations: Iterable[Mapping[str, Any]]) -> dict[str, Any]
+
+   .. code-block:: text
+
+      Shell/AO symmetry maps for integral reductions (Gate A, metadata only).
+
+      Valid in the standard orientation, where every abelian operation is a
+      signed shell permutation: requires sign-diagonal operation matrices
+      (the ``matrix`` payload of ``symmetry_detect``).
+
+      Returns per-operation shell permutations and per-AO sign vectors, plus
+      shell orbit representatives and orbit sizes for petite-list iteration.
+
+
+.. py:function:: build_full_group_blocks(shells: Iterable[Any], operations: Iterable[Mapping[str, Any]]) -> dict[str, Any]
+
+   .. code-block:: text
+
+      Shell map and dense per-shell operation blocks for the full group.
+
+      Generalizes the petite-list staging beyond sign-diagonal (abelian)
+      operations: every operation contributes its shell permutation plus a
+      dense (size x size) component-mixing block per shell, flattened
+      column-major (Fortran order), concatenated shell-by-shell then
+      op-by-op.
+
+
+.. py:function:: product_irrep(labels: Iterable[str], character_table: Mapping[str, Iterable[int]]) -> str
+
+   .. code-block:: text
+
+      Direct product of abelian irreps, e.g. b1 x b2 -> a2 in C2v.
+
+      Returns 'mixed' if any input label is not in the table (e.g. a
+      symmetry-broken 'mixed' orbital).
+
+
+.. py:function:: assign_state_irreps(amplitudes: Any, occ_coefficients: Any, vir_coefficients: Any, overlap: Any, shells: Iterable[Any], operations: Iterable[Mapping[str, Any]], character_table: Mapping[str, Iterable[int]], reference_labels: Iterable[str] = (), tolerance: float = 0.001, matrix_key: str = 'matrix') -> dict[str, Any]
+
+   .. code-block:: text
+
+      Assign abelian irrep labels to excitation amplitudes (metadata only).
+
+      ``amplitudes`` holds X_ia per state, shape (n_states, n_occ, n_vir),
+      where i indexes the occupied set described by ``occ_coefficients``
+      (n_ao, n_occ) and a the virtual set of ``vir_coefficients`` (n_ao,
+      n_vir). The transition character per operation is
+      ``<X, U X V^T> / <X, X>`` with ``U/V`` the MO representations of the
+      operation in the two sets. The total state irrep is the direct product
+      of the transition irrep with ``reference_labels`` (e.g. the SOMOs of a
+      spin-flip reference); for a closed-shell reference leave it empty.
+
+
+.. py:function:: assign_mode_irreps(modes: Any, operations: Iterable[Mapping[str, Any]], character_table: Mapping[str, Iterable[int]], tolerance: float = 0.001, matrix_key: str = 'matrix') -> dict[str, Any]
+
+   .. code-block:: text
+
+      Assign abelian irrep labels to Cartesian normal modes (metadata only).
+
+      ``modes`` holds one mode per row with 3*natom displacement components.
+      Each operation acts by permuting atoms and rotating the per-atom
+      displacement vectors; the character is ``<v|T v> / <v|v>``. Use
+      ``matrix_key='matrix_input_frame'`` for modes in input coordinates.
+
+

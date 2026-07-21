@@ -1,0 +1,419 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.utils.qmmm &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/utils/qmmm/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.utils.regression" href="../regression/index.html" />
+    <link rel="prev" title="oqp.utils.perf_levels" href="../perf_levels/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.utils</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.utils</a></li>
+      <li class="breadcrumb-item active">oqp.utils.qmmm</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/utils/qmmm/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.utils.qmmm">
+<span id="oqp-utils-qmmm"></span><h1>oqp.utils.qmmm<a class="headerlink" href="#module-oqp.utils.qmmm" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.force_field" title="oqp.utils.qmmm.force_field"><code class="xref py py-obj docutils literal notranslate"><span class="pre">force_field</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.nonbondedMethod" title="oqp.utils.qmmm.nonbondedMethod"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonbondedMethod</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.constraints" title="oqp.utils.qmmm.constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constraints</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.rigidWater" title="oqp.utils.qmmm.rigidWater"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rigidWater</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.nSteps" title="oqp.utils.qmmm.nSteps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nSteps</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.timeStep" title="oqp.utils.qmmm.timeStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">timeStep</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.istate" title="oqp.utils.qmmm.istate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">istate</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.qm_atoms" title="oqp.utils.qmmm.qm_atoms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">qm_atoms</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.pdb_file" title="oqp.utils.qmmm.pdb_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pdb_file</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.pdb0" title="oqp.utils.qmmm.pdb0"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pdb0</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.forcefield0" title="oqp.utils.qmmm.forcefield0"><code class="xref py py-obj docutils literal notranslate"><span class="pre">forcefield0</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.system0" title="oqp.utils.qmmm.system0"><code class="xref py py-obj docutils literal notranslate"><span class="pre">system0</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.gradient_qmmm" title="oqp.utils.qmmm.gradient_qmmm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_qmmm</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.bonded_info" title="oqp.utils.qmmm.bonded_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bonded_info</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.covalent_radii" title="oqp.utils.qmmm.covalent_radii"><code class="xref py py-obj docutils literal notranslate"><span class="pre">covalent_radii</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.kj_per_mol_to_hartree" title="oqp.utils.qmmm.kj_per_mol_to_hartree"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kj_per_mol_to_hartree</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.bohr_to_nm" title="oqp.utils.qmmm.bohr_to_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bohr_to_nm</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.unit_charge" title="oqp.utils.qmmm.unit_charge"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unit_charge</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_info" title="oqp.utils.qmmm.openmm_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_info</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_dump" title="oqp.utils.qmmm.openmm_dump"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_dump</span></code></a>([pdbfile])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_update_system" title="oqp.utils.qmmm.openmm_update_system"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_update_system</span></code></a>(coordinates)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_init" title="oqp.utils.qmmm.openmm_init"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_init</span></code></a>(atom_list)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_system" title="oqp.utils.qmmm.openmm_system"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_system</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_potential" title="oqp.utils.qmmm.openmm_potential"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_potential</span></code></a>(xyz)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_energy" title="oqp.utils.qmmm.openmm_energy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_energy</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.qmmm.openmm_gradient" title="oqp.utils.qmmm.openmm_gradient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">openmm_gradient</span></code></a>(xyz, oqp_charges)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.qmmm.form_gradient_qmmm" title="oqp.utils.qmmm.form_gradient_qmmm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">form_gradient_qmmm</span></code></a>(gradient_qm, gradient_mm)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.force_field">
+<span class="sig-name descname"><span class="pre">force_field</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.force_field" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.nonbondedMethod">
+<span class="sig-name descname"><span class="pre">nonbondedMethod</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.nonbondedMethod" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.constraints">
+<span class="sig-name descname"><span class="pre">constraints</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.constraints" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.rigidWater">
+<span class="sig-name descname"><span class="pre">rigidWater</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#oqp.utils.qmmm.rigidWater" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.nSteps">
+<span class="sig-name descname"><span class="pre">nSteps</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#oqp.utils.qmmm.nSteps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.timeStep">
+<span class="sig-name descname"><span class="pre">timeStep</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></em><a class="headerlink" href="#oqp.utils.qmmm.timeStep" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.istate">
+<span class="sig-name descname"><span class="pre">istate</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.utils.qmmm.istate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.qm_atoms">
+<span class="sig-name descname"><span class="pre">qm_atoms</span></span><a class="headerlink" href="#oqp.utils.qmmm.qm_atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.pdb_file">
+<span class="sig-name descname"><span class="pre">pdb_file</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.pdb_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.pdb0">
+<span class="sig-name descname"><span class="pre">pdb0</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.pdb0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.forcefield0">
+<span class="sig-name descname"><span class="pre">forcefield0</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.forcefield0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.system0">
+<span class="sig-name descname"><span class="pre">system0</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.qmmm.system0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.gradient_qmmm">
+<span class="sig-name descname"><span class="pre">gradient_qmmm</span></span><a class="headerlink" href="#oqp.utils.qmmm.gradient_qmmm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.bonded_info">
+<span class="sig-name descname"><span class="pre">bonded_info</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#oqp.utils.qmmm.bonded_info" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.covalent_radii">
+<span class="sig-name descname"><span class="pre">covalent_radii</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[0.0,</span> <span class="pre">0.354,</span> <span class="pre">0.849,</span> <span class="pre">1.336,</span> <span class="pre">1.01,</span> <span class="pre">0.838,</span> <span class="pre">0.757,</span> <span class="pre">0.7,</span> <span class="pre">0.658,</span> <span class="pre">0.668,</span> <span class="pre">0.92,</span> <span class="pre">1.539,</span> <span class="pre">1.421,</span> <span class="pre">1.244,...</span></em><a class="headerlink" href="#oqp.utils.qmmm.covalent_radii" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.kj_per_mol_to_hartree">
+<span class="sig-name descname"><span class="pre">kj_per_mol_to_hartree</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.000380879</span></em><a class="headerlink" href="#oqp.utils.qmmm.kj_per_mol_to_hartree" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.bohr_to_nm">
+<span class="sig-name descname"><span class="pre">bohr_to_nm</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.052917721092</span></em><a class="headerlink" href="#oqp.utils.qmmm.bohr_to_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.unit_charge">
+<span class="sig-name descname"><span class="pre">unit_charge</span></span><a class="headerlink" href="#oqp.utils.qmmm.unit_charge" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_info">
+<span class="sig-name descname"><span class="pre">openmm_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_info" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_dump">
+<span class="sig-name descname"><span class="pre">openmm_dump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pdbfile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_dump" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_update_system">
+<span class="sig-name descname"><span class="pre">openmm_update_system</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_update_system" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_init">
+<span class="sig-name descname"><span class="pre">openmm_init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atom_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_init" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_system">
+<span class="sig-name descname"><span class="pre">openmm_system</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_system" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_potential">
+<span class="sig-name descname"><span class="pre">openmm_potential</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xyz</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_potential" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_energy">
+<span class="sig-name descname"><span class="pre">openmm_energy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.openmm_gradient">
+<span class="sig-name descname"><span class="pre">openmm_gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xyz</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">oqp_charges</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.openmm_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.qmmm.form_gradient_qmmm">
+<span class="sig-name descname"><span class="pre">form_gradient_qmmm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gradient_qm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gradient_mm</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.qmmm.form_gradient_qmmm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../perf_levels/index.html" class="btn btn-neutral float-left" title="oqp.utils.perf_levels" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../regression/index.html" class="btn btn-neutral float-right" title="oqp.utils.regression" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

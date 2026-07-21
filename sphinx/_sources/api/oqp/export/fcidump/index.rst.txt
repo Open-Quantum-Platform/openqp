@@ -1,0 +1,63 @@
+oqp.export.fcidump
+==================
+
+.. py:module:: oqp.export.fcidump
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      FCIDUMP export for OQP reference orbitals.
+
+      This delegates to the in-tree :mod:`oqp.quantum` package, which builds the
+      second-quantized Hamiltonian from OpenQP's *own* AO integrals (``OQP::Hcore``
+      and the native two-electron integrals ``OQP::ERI_AO``) in OpenQP's MO basis --
+      so the AO ordering/normalization is guaranteed consistent and the file is the
+      genuine OpenQP Hamiltonian (no foreign integral engine, nothing silently
+      mixed). It does not reimplement the writer.
+
+      :func:`verify_fcidump_fci` is an optional cross-check: read the FCIDUMP, run a
+      PySCF FCI, and compare to PySCF's native FCI for the same system (FCI is
+      invariant to the orbital choice, so this is a clean ground truth). It honours
+      the spin sector (``MS2``) recorded in the file, so open-shell dumps verify
+      correctly.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.export.fcidump.dump_fcidump
+   oqp.export.fcidump.build_pyscf_mol
+   oqp.export.fcidump.verify_fcidump_fci
+
+
+Module Contents
+---------------
+
+.. py:function:: dump_fcidump(path, mol, tol=1e-12)
+
+   .. code-block:: text
+
+      Write a FCIDUMP for the OQP reference MOs via :mod:`oqp.quantum`.
+
+      Returns a small metadata dict (norb / nelec / ms2 / core energy).
+
+
+.. py:function:: build_pyscf_mol(mol)
+
+   .. code-block:: text
+
+      Construct a PySCF Mole matching the OQP molecule/basis (for the FCI
+      cross-check only).
+
+
+.. py:function:: verify_fcidump_fci(path, mol)
+
+   .. code-block:: text
+
+      Read FCIDUMP -> PySCF FCI, honouring MS2; compare to native PySCF FCI.
+
+

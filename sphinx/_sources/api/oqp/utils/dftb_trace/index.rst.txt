@@ -1,0 +1,254 @@
+oqp.utils.dftb_trace
+====================
+
+.. py:module:: oqp.utils.dftb_trace
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Parse and pretty-print openqp-dftb structured native diagnostics.
+
+      The openqp-dftb shared library cannot write into the OpenQP log directly (the
+      log unit belongs to liboqp's Fortran runtime), so the adapter captures the
+      library's flushed stdout.  At trace level 2 that capture carries one
+      machine-readable record per SCC/Davidson/Z-vector event
+      (``openqp_dftb_scc_iter ...``).  This module turns those records into the same
+      kind of human-readable iteration tables OpenQP prints for its native SCF,
+      Davidson, and Z-vector solvers, so a DFTB log reads like any other OpenQP log.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.dftb_trace.HARTREE_TO_EV
+   oqp.utils.dftb_trace.AU_TO_DEBYE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.dftb_trace.parse_native_trace
+   oqp.utils.dftb_trace.format_scc_pass
+   oqp.utils.dftb_trace.format_scc_post_update
+   oqp.utils.dftb_trace.format_scc_recoveries
+   oqp.utils.dftb_trace.format_scc_block
+   oqp.utils.dftb_trace.format_scc_summary_lines
+   oqp.utils.dftb_trace.format_davidson_block
+   oqp.utils.dftb_trace.format_davidson_summary_line
+   oqp.utils.dftb_trace.collapse_repeats
+   oqp.utils.dftb_trace.format_zvector_block
+   oqp.utils.dftb_trace.format_zvector_dense_block
+   oqp.utils.dftb_trace.format_resolved_options
+   oqp.utils.dftb_trace.format_step_timing
+   oqp.utils.dftb_trace.format_energy_components
+   oqp.utils.dftb_trace.point_charge_dipole
+   oqp.utils.dftb_trace.format_charge_block
+   oqp.utils.dftb_trace.format_other_lines
+   oqp.utils.dftb_trace.map_spectrum_label
+   oqp.utils.dftb_trace.spectrum_from_ground
+   oqp.utils.dftb_trace.final_energy_header
+   oqp.utils.dftb_trace.final_energy_annotation
+   oqp.utils.dftb_trace.final_energy_label
+   oqp.utils.dftb_trace.format_mo_table
+   oqp.utils.dftb_trace.spin_flip_pair
+   oqp.utils.dftb_trace.format_state_configurations
+   oqp.utils.dftb_trace.format_excited_state_summary
+
+
+Module Contents
+---------------
+
+.. py:data:: HARTREE_TO_EV
+   :value: 27.211386245988
+
+
+.. py:function:: parse_native_trace(text)
+
+   .. code-block:: text
+
+      Split a captured native stdout into structured events.
+
+      Returns a dict with ``scc_passes``, ``post_updates``, ``recoveries``,
+      ``davidson``, ``zvector``, ``zvector_dense``, ``spectrum``, ``warnings``,
+      and ``other`` (verbatim unrecognized lines, e.g. ``[zvec-stage]`` timing
+      breakdowns).  The parser is tolerant: an unknown or malformed record line
+      degrades to ``other`` instead of failing the calculation log.
+
+
+.. py:function:: format_scc_pass(entry)
+
+   .. code-block:: text
+
+      One OpenQP-style iteration table for a single SCC pass.
+
+
+.. py:function:: format_scc_post_update(entry)
+
+.. py:function:: format_scc_recoveries(recoveries, verbose=False)
+
+.. py:function:: format_scc_block(trace, verbose=False)
+
+   .. code-block:: text
+
+      All SCC passes + final residual check + recoveries as one text block.
+
+
+.. py:function:: format_scc_summary_lines(trace)
+
+   .. code-block:: text
+
+      One line per SCC pass -- used when the reference is merely re-solved.
+
+
+.. py:function:: format_davidson_block(solve, method_display='DFTB')
+
+.. py:function:: format_davidson_summary_line(solve)
+
+.. py:function:: collapse_repeats(lines)
+
+   .. code-block:: text
+
+      Merge consecutive identical lines into one line with a repeat count.
+
+
+.. py:function:: format_zvector_block(solve)
+
+.. py:function:: format_zvector_dense_block(solve)
+
+.. py:data:: AU_TO_DEBYE
+   :value: 2.541746451895
+
+
+.. py:function:: format_resolved_options(options)
+
+   .. code-block:: text
+
+      Grouped table of the EFFECTIVE openqp-dftb options after resolution.
+
+      The values come from the native openqp_dftb_resolved_options record, so a
+      named preset (e.g. dtcam-tb) is expanded to its actual published parameter
+      vector without duplicating those numbers in Python.
+
+
+.. py:function:: format_step_timing(step_cpu, step_wall, total_cpu, total_wall)
+
+   .. code-block:: text
+
+      The native-OpenQP style per-step + cumulative timing footer.
+
+
+.. py:function:: format_energy_components(components, reference_label='SCC reference')
+
+   .. code-block:: text
+
+      OpenQP-style 'Energy components' block for the converged reference.
+
+      Semantics (from the native emitter): electronic = h0 + scc + spin +
+      exchange; total = electronic + repulsive; band = sum of occupied
+      eigenvalues (informational).
+
+
+.. py:function:: point_charge_dipole(charges, coords_bohr)
+
+   .. code-block:: text
+
+      Dipole vector (a.u.) of net atomic point charges at coords (Bohr).
+
+
+.. py:function:: format_charge_block(symbols, charges, dipole_au, title)
+
+   .. code-block:: text
+
+      Mulliken charge table + point-charge dipole, OpenQP style.
+
+
+.. py:function:: format_other_lines(trace)
+
+.. py:function:: map_spectrum_label(label, state_prefix='S')
+
+   .. code-block:: text
+
+      Map a printed spectrum label to the public state label.
+
+      Closed-shell TDDFTB rows already carry ``S<n>`` labels.  Spin-flip and
+      MRSF rows are labeled ``root <n>``; within each spin manifold the public
+      label is zero-based from root 1 (root 1 = S0/T0).
+
+
+.. py:function:: spectrum_from_ground(spectrum, state_prefix='S')
+
+   .. code-block:: text
+
+      Rows out of the lowest state, keyed by public final-state label.
+
+
+.. py:function:: final_energy_header(summary)
+
+   .. code-block:: text
+
+      One header line naming the extra Final-Energy columns.
+
+
+.. py:function:: final_energy_annotation(summary, index)
+
+   .. code-block:: text
+
+      Extra Final-Energy columns (VEE in eV, |mu|, f) for state row ``index``.
+
+      Numbers only -- the column names come from :func:`final_energy_header`.
+      ``index`` is the row number in ``mol.energies``: for spin-flip/MRSF runs
+      row 0 is the internal reference and roots start at row 1; for closed-shell
+      TDDFTB row 0 is S0 itself.
+
+
+.. py:function:: final_energy_label(summary, index, default)
+
+   .. code-block:: text
+
+      Public state label for Final-Energy row ``index`` (TDDFTB: S0..Sn).
+
+
+.. py:function:: format_mo_table(mo)
+
+   .. code-block:: text
+
+      Molecular-orbital table: index, occupation, energies, irrep, markers.
+
+
+.. py:function:: spin_flip_pair(index, noca, nocb)
+
+   .. code-block:: text
+
+      Map a 1-based spin-flip amplitude index to (occ, vir) MO numbers.
+
+      The exported SF/MRSF response vectors are ``amplitudes(noca, n_virt_beta)``
+      flattened column-major: index = (vir - nocb - 1) * noca + occ, with occ an
+      alpha-occupied MO (1..noca) and vir a beta-virtual MO (nocb+1..nbf).
+
+
+.. py:function:: format_state_configurations(summary)
+
+   .. code-block:: text
+
+      AE-style per-state dominant configurations (coeff, OCC -> VIR).
+
+
+.. py:function:: format_excited_state_summary(summary)
+
+   .. code-block:: text
+
+      The OpenQP-style excited-state summary + state-to-state tables.
+
+      ``summary`` is the dict the adapter stores on the molecule:
+      ``reference_energy``, ``reference_label``, ``state_labels`` (public),
+      ``state_energies`` (total Hartree per root), ``spin_squares``,
+      ``oscillator`` ({public label: spectrum row}), ``transitions``
+      (spectrum rows with public labels), ``approximation``.
+
+

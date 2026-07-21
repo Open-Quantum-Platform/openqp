@@ -1,0 +1,825 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.libscipy &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/libscipy/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.namd" href="../namd/index.html" />
+    <link rel="prev" title="oqp.library.liboqp" href="../liboqp/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.libscipy</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/libscipy/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.libscipy">
+<span id="oqp-library-libscipy"></span><h1>oqp.library.libscipy<a class="headerlink" href="#module-oqp.library.libscipy" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP single point class
+</pre></div>
+</div>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libscipy.TemplateOpt" title="oqp.library.libscipy.TemplateOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemplateOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libscipy.ConstrainOpt" title="oqp.library.libscipy.ConstrainOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConstrainOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libscipy.MECIOpt" title="oqp.library.libscipy.MECIOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MECIOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libscipy.MECPOpt" title="oqp.library.libscipy.MECPOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MECPOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libscipy.StateSpecificOpt" title="oqp.library.libscipy.StateSpecificOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StateSpecificOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libscipy.MEP" title="oqp.library.libscipy.MEP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MEP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.libscipy.QMMMOpt" title="oqp.library.libscipy.QMMMOpt"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QMMMOpt</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.libscipy.ReLU" title="oqp.library.libscipy.ReLU"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReLU</span></code></a>(x, y)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Optimizer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.Optimizer" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP optimization class
+
+user should use the subclass to define the one_step optimization function
+see TemplateOpt class for example
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.optimizer">
+<span class="sig-name descname"><span class="pre">optimizer</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.optimizer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.step_size">
+<span class="sig-name descname"><span class="pre">step_size</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.step_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.step_tol">
+<span class="sig-name descname"><span class="pre">step_tol</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.step_tol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.maxit">
+<span class="sig-name descname"><span class="pre">maxit</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.maxit" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.mep_maxit">
+<span class="sig-name descname"><span class="pre">mep_maxit</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.mep_maxit" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.rmsd_grad">
+<span class="sig-name descname"><span class="pre">rmsd_grad</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.rmsd_grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.rmsd_step">
+<span class="sig-name descname"><span class="pre">rmsd_step</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.rmsd_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.max_grad">
+<span class="sig-name descname"><span class="pre">max_grad</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.max_grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.max_step">
+<span class="sig-name descname"><span class="pre">max_step</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.max_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.istate">
+<span class="sig-name descname"><span class="pre">istate</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.istate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.jstate">
+<span class="sig-name descname"><span class="pre">jstate</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.jstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.kstate">
+<span class="sig-name descname"><span class="pre">kstate</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.kstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.imult">
+<span class="sig-name descname"><span class="pre">imult</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.imult" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.jmult">
+<span class="sig-name descname"><span class="pre">jmult</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.jmult" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.energy_shift">
+<span class="sig-name descname"><span class="pre">energy_shift</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.energy_shift" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.energy_gap">
+<span class="sig-name descname"><span class="pre">energy_gap</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.energy_gap" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.init_scf">
+<span class="sig-name descname"><span class="pre">init_scf</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.init_scf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.atoms">
+<span class="sig-name descname"><span class="pre">atoms</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.sp">
+<span class="sig-name descname"><span class="pre">sp</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.sp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.grad">
+<span class="sig-name descname"><span class="pre">grad</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.ls">
+<span class="sig-name descname"><span class="pre">ls</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.ls" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.itr">
+<span class="sig-name descname"><span class="pre">itr</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.Optimizer.itr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.pre_energy">
+<span class="sig-name descname"><span class="pre">pre_energy</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.Optimizer.pre_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.pre_coord">
+<span class="sig-name descname"><span class="pre">pre_coord</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.pre_coord" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.metrics">
+<span class="sig-name descname"><span class="pre">metrics</span></span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.metrics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.optimize">
+<span class="sig-name descname"><span class="pre">optimize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.optimize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.opt_func">
+<span class="sig-name descname"><span class="pre">opt_func</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.opt_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.Optimizer.check_convergence">
+<span class="sig-name descname"><span class="pre">check_convergence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.Optimizer.check_convergence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.TemplateOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">TemplateOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.TemplateOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP abstract class for optimization
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.TemplateOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.TemplateOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ConstrainOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP Constrained optimization class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.ref_coord">
+<span class="sig-name descname"><span class="pre">ref_coord</span></span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.ref_coord" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.mass">
+<span class="sig-name descname"><span class="pre">mass</span></span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.mass" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.tmass">
+<span class="sig-name descname"><span class="pre">tmass</span></span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.tmass" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.init_energy">
+<span class="sig-name descname"><span class="pre">init_energy</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.init_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.last_energy">
+<span class="sig-name descname"><span class="pre">last_energy</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.last_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.init_xyz">
+<span class="sig-name descname"><span class="pre">init_xyz</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.init_xyz" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.last_xyz">
+<span class="sig-name descname"><span class="pre">last_xyz</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.last_xyz" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.last_radius">
+<span class="sig-name descname"><span class="pre">last_radius</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.last_radius" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.opt_status">
+<span class="sig-name descname"><span class="pre">opt_status</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.opt_status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.message">
+<span class="sig-name descname"><span class="pre">message</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'not</span> <span class="pre">converged'</span></em><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.message" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ConstrainOpt.check_convergence">
+<span class="sig-name descname"><span class="pre">check_convergence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.ConstrainOpt.check_convergence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MECIOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP MECI optimization class
+
+upb or penalty method
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.meci_search">
+<span class="sig-name descname"><span class="pre">meci_search</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.meci_search" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.sigma">
+<span class="sig-name descname"><span class="pre">sigma</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.sigma" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.alpha" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.incre">
+<span class="sig-name descname"><span class="pre">incre</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.incre" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.weights" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.x">
+<span class="sig-name descname"><span class="pre">x</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.x" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.y">
+<span class="sig-name descname"><span class="pre">y</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.y" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.method">
+<span class="sig-name descname"><span class="pre">method</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.method" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.work_func">
+<span class="sig-name descname"><span class="pre">work_func</span></span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.work_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.hybrid">
+<span class="sig-name descname"><span class="pre">hybrid</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.hybrid" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>first use penalty method
+switch to ubp when gap is &lt; self.energy_gap
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.ubp">
+<span class="sig-name descname"><span class="pre">ubp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.ubp" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>update branching plane method
+for state i and j,
+j = i + 1
+
+in the first step
+x_0 = [G(j) - G(i)] / np.sum([G(j) - G(i)] ** 2) ** 2
+y_0 = G(i) - np.sum(G(i) * x_0) * x_0
+y_0 = y_0 / np.sum(y_0 ** 2), so x_0 and y_0 are orthonormal
+
+in the k-th step
+y_k = [(x_k-1 * x_k) * y_k-1 - (y_k-1 * x_k) * x_k-1] / [(y_k-1 * x_k) ** 2 + (x_k-1 * x_k) ** 2] ** 0.5
+note the sign of x_k-1 and y_k-1 are opposite to the paper
+
+F = [E(j) + E(i)] * 0.5 + [E(j) - E(i)] ** 2 / sigma
+dF = PE * 0.5 + 2 * [E(j) - E(i)] / sigma * [G(j) - G(i)]
+PE = G(j) + G(i) - np.sum([G(j) + G(i)] * x_k) * x_k - np.sum([G(j) + G(i)] * y_k) * y_k
+
+in the original paper
+sigma = np.sum([G(j) - G(i)] ** 2) ** 0.5
+
+in this implementation
+we set sigma = np.sum([G(j) - G(i)] ** 2)
+
+reference: J. Chem. Theory Comput.2010,6,1538–1545
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.penalty">
+<span class="sig-name descname"><span class="pre">penalty</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.penalty" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>penalty method
+for state i and j,
+j = i + 1
+F = [E(j) + E(i)] * 0.5 + sigma * P
+P = [E(j) - E(i)] ** 2 / [E(j) - E(i) + alpha]
+dF = [G(j) + G(i)] * 0.5 + sigma * dP
+dP = {[E(j) - E(i)] ** 2 + 2 * alpha * [E(j) - E(i)]} / [E(j) - E(i) + alpha] ** 2 * [G(j) - G(i)]
+
+in the original paper
+sigma is a growing factor, 3.5
+alpha is a constant factor, 0.02
+
+in this implementation
+we set a constant sigma to 1
+we replace alpha with np.mean([G(j) - G(i)] ** 2) ** 0.5
+
+reference: J. Phys. Chem. B 2008,112,405-413
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECIOpt.check_convergence">
+<span class="sig-name descname"><span class="pre">check_convergence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECIOpt.check_convergence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MECPOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP MECP optimization class
+
+quadratic method
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.mecp_search">
+<span class="sig-name descname"><span class="pre">mecp_search</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'quad'</span></em><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.mecp_search" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.weights" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.method">
+<span class="sig-name descname"><span class="pre">method</span></span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.method" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.work_func">
+<span class="sig-name descname"><span class="pre">work_func</span></span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.work_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.quad">
+<span class="sig-name descname"><span class="pre">quad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">energies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.quad" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>quadratic penalty optimization
+
+F = 0.5 * (E1 + E2) + w * (E2 - E1) ** 2
+dF = 0.5 * (G1 + G2) + 2 * w * (E2 - E1) * (G2 - G1)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MECPOpt.check_convergence">
+<span class="sig-name descname"><span class="pre">check_convergence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MECPOpt.check_convergence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.StateSpecificOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">StateSpecificOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.StateSpecificOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP state specific optimization class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.StateSpecificOpt.method">
+<span class="sig-name descname"><span class="pre">method</span></span><a class="headerlink" href="#oqp.library.libscipy.StateSpecificOpt.method" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.StateSpecificOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.StateSpecificOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MEP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MEP" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP minimum energy path calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.libscipy.MEP.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.istate">
+<span class="sig-name descname"><span class="pre">istate</span></span><a class="headerlink" href="#oqp.library.libscipy.MEP.istate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.mep_maxit">
+<span class="sig-name descname"><span class="pre">mep_maxit</span></span><a class="headerlink" href="#oqp.library.libscipy.MEP.mep_maxit" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.atoms">
+<span class="sig-name descname"><span class="pre">atoms</span></span><a class="headerlink" href="#oqp.library.libscipy.MEP.atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.mo">
+<span class="sig-name descname"><span class="pre">mo</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.libscipy.MEP.mo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.mep_itr">
+<span class="sig-name descname"><span class="pre">mep_itr</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.MEP.mep_itr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.mep_energies">
+<span class="sig-name descname"><span class="pre">mep_energies</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#oqp.library.libscipy.MEP.mep_energies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.optimizer">
+<span class="sig-name descname"><span class="pre">optimizer</span></span><a class="headerlink" href="#oqp.library.libscipy.MEP.optimizer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.optimize">
+<span class="sig-name descname"><span class="pre">optimize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MEP.optimize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.MEP.check_mep">
+<span class="sig-name descname"><span class="pre">check_mep</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.MEP.check_mep" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.libscipy.ReLU">
+<span class="sig-name descname"><span class="pre">ReLU</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.ReLU" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">QMMMOpt</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.libscipy.Optimizer" title="oqp.library.libscipy.Optimizer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Optimizer</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP QM/MM optimization class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.pre_coord">
+<span class="sig-name descname"><span class="pre">pre_coord</span></span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.pre_coord" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.tmass">
+<span class="sig-name descname"><span class="pre">tmass</span></span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.tmass" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.init_energy">
+<span class="sig-name descname"><span class="pre">init_energy</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.init_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.last_energy">
+<span class="sig-name descname"><span class="pre">last_energy</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.last_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.init_xyz">
+<span class="sig-name descname"><span class="pre">init_xyz</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.init_xyz" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.last_xyz">
+<span class="sig-name descname"><span class="pre">last_xyz</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.last_xyz" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.last_radius">
+<span class="sig-name descname"><span class="pre">last_radius</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.last_radius" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.opt_status">
+<span class="sig-name descname"><span class="pre">opt_status</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.opt_status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.message">
+<span class="sig-name descname"><span class="pre">message</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'not</span> <span class="pre">converged'</span></em><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.message" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.one_step">
+<span class="sig-name descname"><span class="pre">one_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.one_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.libscipy.QMMMOpt.check_convergence">
+<span class="sig-name descname"><span class="pre">check_convergence</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.libscipy.QMMMOpt.check_convergence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../liboqp/index.html" class="btn btn-neutral float-left" title="oqp.library.liboqp" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../namd/index.html" class="btn btn-neutral float-right" title="oqp.library.namd" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

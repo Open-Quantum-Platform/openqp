@@ -1,0 +1,65 @@
+oqp.library.runfunc
+===================
+
+.. py:module:: oqp.library.runfunc
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP run type functions
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.runfunc.compute_namd
+   oqp.library.runfunc.compute_energy
+   oqp.library.runfunc.compute_scf_prop
+   oqp.library.runfunc.compute_grad
+   oqp.library.runfunc.compute_md
+   oqp.library.runfunc.compute_nacme
+   oqp.library.runfunc.compute_nac
+   oqp.library.runfunc.compute_soc
+   oqp.library.runfunc.compute_hess
+   oqp.library.runfunc.compute_thermo
+   oqp.library.runfunc.compute_geom
+   oqp.library.runfunc.compute_properties
+   oqp.library.runfunc.compute_data
+   oqp.library.runfunc.get_optimizer
+
+
+Module Contents
+---------------
+
+.. py:function:: compute_namd(mol)
+
+.. py:function:: compute_energy(mol)
+
+.. py:function:: compute_scf_prop(mol)
+
+.. py:function:: compute_grad(mol)
+
+.. py:function:: compute_md(mol)
+
+.. py:function:: compute_nacme(mol)
+
+.. py:function:: compute_nac(mol)
+
+.. py:function:: compute_soc(mol)
+
+.. py:function:: compute_hess(mol)
+
+.. py:function:: compute_thermo(mol)
+
+.. py:function:: compute_geom(mol)
+
+.. py:function:: compute_properties(mol)
+
+.. py:function:: compute_data(mol)
+
+.. py:function:: get_optimizer(mol)
+

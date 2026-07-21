@@ -1,0 +1,416 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.symmetry &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/symmetry/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.symmetry_detect" href="../symmetry_detect/index.html" />
+    <link rel="prev" title="oqp.library.solvent" href="../solvent/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.symmetry</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/symmetry/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.symmetry">
+<span id="oqp-library-symmetry"></span><h1>oqp.library.symmetry<a class="headerlink" href="#module-oqp.library.symmetry" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Backend-free symmetry utilities for one-electron diagnostics.
+
+This module currently provides metadata-only diagnostics used by the symmetry
+planning gates. It does not change SCF/integral/response execution behavior.
+</pre></div>
+</div>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.OneElectronBlockLeakSummary" title="oqp.library.symmetry.OneElectronBlockLeakSummary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OneElectronBlockLeakSummary</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.one_electron_block_diagnostics" title="oqp.library.symmetry.one_electron_block_diagnostics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">one_electron_block_diagnostics</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.symmetry.update_one_electron_block_diagnostics" title="oqp.library.symmetry.update_one_electron_block_diagnostics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_one_electron_block_diagnostics</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.build_symmetry_adapted_transform" title="oqp.library.symmetry.build_symmetry_adapted_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_symmetry_adapted_transform</span></code></a>(...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.symmetry.assign_mo_irreps" title="oqp.library.symmetry.assign_mo_irreps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_mo_irreps</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.build_reduction_maps" title="oqp.library.symmetry.build_reduction_maps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_reduction_maps</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.symmetry.build_full_group_blocks" title="oqp.library.symmetry.build_full_group_blocks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_full_group_blocks</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.product_irrep" title="oqp.library.symmetry.product_irrep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">product_irrep</span></code></a>(→ str)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.symmetry.assign_state_irreps" title="oqp.library.symmetry.assign_state_irreps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_state_irreps</span></code></a>(, tolerance, matrix_key, Any])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.symmetry.assign_mode_irreps" title="oqp.library.symmetry.assign_mode_irreps"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assign_mode_irreps</span></code></a>(→ dict[str, Any])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">OneElectronBlockLeakSummary</span></span><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Normalized summary payload for one-electron block leakage checks.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.max_off_block_abs">
+<span class="sig-name descname"><span class="pre">max_off_block_abs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.max_off_block_abs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.max_off_block_indices">
+<span class="sig-name descname"><span class="pre">max_off_block_indices</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.max_off_block_indices" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.off_block_element_count">
+<span class="sig-name descname"><span class="pre">off_block_element_count</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.off_block_element_count" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.within_tolerance">
+<span class="sig-name descname"><span class="pre">within_tolerance</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.within_tolerance" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.orthogonality_ok">
+<span class="sig-name descname"><span class="pre">orthogonality_ok</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.orthogonality_ok" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.orthogonality_max_deviation">
+<span class="sig-name descname"><span class="pre">orthogonality_max_deviation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.orthogonality_max_deviation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.status">
+<span class="sig-name descname"><span class="pre">status</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.symmetry.OneElectronBlockLeakSummary.as_dict">
+<span class="sig-name descname"><span class="pre">as_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.OneElectronBlockLeakSummary.as_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.one_electron_block_diagnostics">
+<span class="sig-name descname"><span class="pre">one_electron_block_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symmetry_adapted_transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.one_electron_block_diagnostics" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Compute off-block leakage diagnostics in a symmetry-adapted basis.
+
+:param matrix: One-electron matrix (overlap or core-Hamiltonian like).
+:param symmetry_adapted_transform: AO-space transformation matrix to symmetry-adapted AO basis.
+:param basis_labels: Per-AO symmetry labels in the transformed basis.
+:param tolerance: Off-block absolute-coupling tolerance.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.update_one_electron_block_diagnostics">
+<span class="sig-name descname"><span class="pre">update_one_electron_block_diagnostics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">symmetry_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">symmetry_adapted_transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">basis_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.update_one_electron_block_diagnostics" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Attach named one-electron diagnostics under
+``symmetry_metadata[&#39;one_electron_block_diagnostics&#39;]``.
+
+This is metadata-only and intentionally does not enable any symmetry
+acceleration behavior.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.build_symmetry_adapted_transform">
+<span class="sig-name descname"><span class="pre">build_symmetry_adapted_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">character_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.build_symmetry_adapted_transform" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Build an orthogonal symmetry-adapted AO transform with irrep labels.
+
+:param shells: Shell specs as (atom_index, l) pairs or {&#39;atom&#39;,&#39;l&#39;} mappings,
+               Cartesian s/p/d only, in AO order.
+:param operations: Abelian-group operations from ``symmetry_detect.detect_point_group``
+                   (``operations`` payload), in character-table column order.
+:param character_table: Irrep -&gt; characters mapping matching the operation order.
+
+:returns: Orthogonal (n_ao, n_ao) transform whose columns are SALCs, and the
+          per-column irrep labels.
+:rtype: (U, labels)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.assign_mo_irreps">
+<span class="sig-name descname"><span class="pre">assign_mo_irreps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mo_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">character_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrix_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'matrix'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.assign_mo_irreps" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Assign abelian irrep labels to molecular orbitals (metadata only).
+
+For each MO ``m`` the character under operation ``O`` is
+``chi(O) = &lt;m|S O|m&gt; / &lt;m|S|m&gt;``; the MO gets the irrep whose character
+row matches within ``tolerance``, otherwise the label &#39;mixed&#39;.
+
+``matrix_key`` selects which operation matrix to use; pass
+``&#39;matrix_input_frame&#39;`` when the MO coefficients live in the original
+input coordinates rather than the standard orientation.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.build_reduction_maps">
+<span class="sig-name descname"><span class="pre">build_reduction_maps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.build_reduction_maps" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Shell/AO symmetry maps for integral reductions (Gate A, metadata only).
+
+Valid in the standard orientation, where every abelian operation is a
+signed shell permutation: requires sign-diagonal operation matrices
+(the ``matrix`` payload of ``symmetry_detect``).
+
+Returns per-operation shell permutations and per-AO sign vectors, plus
+shell orbit representatives and orbit sizes for petite-list iteration.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.build_full_group_blocks">
+<span class="sig-name descname"><span class="pre">build_full_group_blocks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.build_full_group_blocks" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Shell map and dense per-shell operation blocks for the full group.
+
+Generalizes the petite-list staging beyond sign-diagonal (abelian)
+operations: every operation contributes its shell permutation plus a
+dense (size x size) component-mixing block per shell, flattened
+column-major (Fortran order), concatenated shell-by-shell then
+op-by-op.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.product_irrep">
+<span class="sig-name descname"><span class="pre">product_irrep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">character_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#oqp.library.symmetry.product_irrep" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Direct product of abelian irreps, e.g. b1 x b2 -&gt; a2 in C2v.
+
+Returns &#39;mixed&#39; if any input label is not in the table (e.g. a
+symmetry-broken &#39;mixed&#39; orbital).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.assign_state_irreps">
+<span class="sig-name descname"><span class="pre">assign_state_irreps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">amplitudes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">occ_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vir_coefficients</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shells</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">character_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrix_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'matrix'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.assign_state_irreps" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Assign abelian irrep labels to excitation amplitudes (metadata only).
+
+``amplitudes`` holds X_ia per state, shape (n_states, n_occ, n_vir),
+where i indexes the occupied set described by ``occ_coefficients``
+(n_ao, n_occ) and a the virtual set of ``vir_coefficients`` (n_ao,
+n_vir). The transition character per operation is
+``&lt;X, U X V^T&gt; / &lt;X, X&gt;`` with ``U/V`` the MO representations of the
+operation in the two sets. The total state irrep is the direct product
+of the transition irrep with ``reference_labels`` (e.g. the SOMOs of a
+spin-flip reference); for a closed-shell reference leave it empty.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.symmetry.assign_mode_irreps">
+<span class="sig-name descname"><span class="pre">assign_mode_irreps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">modes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">operations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">character_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">matrix_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'matrix'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.library.symmetry.assign_mode_irreps" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Assign abelian irrep labels to Cartesian normal modes (metadata only).
+
+``modes`` holds one mode per row with 3*natom displacement components.
+Each operation acts by permuting atoms and rotating the per-atom
+displacement vectors; the character is ``&lt;v|T v&gt; / &lt;v|v&gt;``. Use
+``matrix_key=&#39;matrix_input_frame&#39;`` for modes in input coordinates.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../solvent/index.html" class="btn btn-neutral float-left" title="oqp.library.solvent" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../symmetry_detect/index.html" class="btn btn-neutral float-right" title="oqp.library.symmetry_detect" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

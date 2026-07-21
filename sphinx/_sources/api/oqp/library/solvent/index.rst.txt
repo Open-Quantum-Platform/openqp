@@ -1,0 +1,116 @@
+oqp.library.solvent
+===================
+
+.. py:module:: oqp.library.solvent
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Validation/reference helpers for PCM solvent support.
+
+      These are dependency-light, runtime-inert helpers retained as cross-checks and
+      input validators for the canonical runtime PCM path (which lives entirely in
+      Fortran: ``infos%control%pcm_enabled`` -> ``add_pcm_reaction_field`` -> the ddX
+      C adapter -> ``E%e_pcm``).  Nothing in this module is imported by the runtime
+      SCF; it is **not** runtime plumbing.  What it preserves from the retired
+      reference-supplied-potential prototype:
+
+      * ``reference_scf_total_density`` -- RHF/ROHF density-summation rule.
+      * ``reference_scf_pcm_energy_terms`` -- the ``0.5 * Tr[D . V]`` polarization
+        energy convention, kept as an independent validation cross-check against the
+        backend ``esolv``.
+      * ``provisional_ddx_external_charges`` -- the provisional ``-0.5 * q_cav``
+        sign/scale candidate, still pending independent-reference/ddX cross-check.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.solvent.reference_scf_total_density
+   oqp.library.solvent.reference_scf_reaction_field_contract
+   oqp.library.solvent.reference_scf_phi_cav_inputs
+   oqp.library.solvent.reference_scf_pcm_energy_terms
+   oqp.library.solvent.provisional_ddx_external_charges
+   oqp.library.solvent.provisional_ddx_reaction_field_inputs
+
+
+Module Contents
+---------------
+
+.. py:function:: reference_scf_total_density(density_blocks)
+
+   .. code-block:: text
+
+      Return the packed total AO density for reference-SCF PCM prototypes.
+
+      OpenQP's first PCM target uses the RHF/ROHF reference density to build the
+      ddX cavity potential.  RHF-style inputs have one packed density block, while
+      ROHF/UHF-style storage has separate alpha/beta blocks that must be summed
+      before evaluating the scalar electrostatic solvent response.
+
+
+.. py:function:: reference_scf_reaction_field_contract(density_blocks, reaction_potential)
+
+   .. code-block:: text
+
+      Validate the packed AO reaction-field matrix contract.
+
+      Dependency-light validation helper: the reaction-field AO matrix must be a
+      packed triangular matrix matching the RHF/ROHF reference density length.
+      This helper does not enable runtime PCM or define energy bookkeeping.
+
+
+.. py:function:: reference_scf_phi_cav_inputs(density_blocks, cavity_xyz)
+
+   .. code-block:: text
+
+      Validate inputs for reference-density electrostatic potential on a ddX cavity.
+
+      This validates the contract for an ``electrostatic_potential_unweighted``
+      call that supplies ddX ``phi_cav`` from the RHF/ROHF reference density.  It
+      returns the summed reference density as ``density_packed`` so callers cannot
+      accidentally pass raw spin-density blocks into the scalar MEP path.  It does
+      not enable runtime PCM or define solvent energy bookkeeping.
+
+
+.. py:function:: reference_scf_pcm_energy_terms(density_blocks, reaction_potential)
+
+   .. code-block:: text
+
+      Return the ``0.5 * Tr[D . V]`` PCM polarization-energy cross-check.
+
+      This dependency-light helper keeps the host-side polarization-energy
+      convention tied to the same packed RHF/ROHF reference density and reaction
+      potential.  It exists as an independent validation cross-check against the
+      backend (ddX) ``esolv``; the backend energy convention still needs
+      validation before the canonical runtime PCM energy is treated as correct.
+
+
+.. py:function:: provisional_ddx_external_charges(q_cav, *, allow_provisional: bool = False)
+
+   .. code-block:: text
+
+      Return candidate OpenQP external-charge weights from ddX ``q_cav``.
+
+      The ddPCM finite-difference smoke suggests ``chg = -0.5*q_cav`` for the
+      ``external_charge_potential`` AO-matrix seam.  The sign/scale is still
+      provisional, so callers must opt in explicitly until it is cross-checked
+      against independent-reference/ddX data.
+
+
+.. py:function:: provisional_ddx_reaction_field_inputs(q_cav, cavity_xyz, *, allow_provisional: bool = False)
+
+   .. code-block:: text
+
+      Validate candidate ddX cavity data for the AO reaction-field cross-check.
+
+      ``cavity_xyz`` is the flat ``(3, ncav)`` coordinate buffer copied from ddX,
+      and ``q_cav`` is the projected cavity quantity whose sign/scale remains
+      provisional.  This helper prepares only guarded validation inputs; it does
+      not enable runtime PCM coupling.
+
+

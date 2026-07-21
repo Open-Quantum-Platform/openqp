@@ -2,6 +2,7 @@ module pcg_mod
 
   use precision, only: dp
   use iso_c_binding, only: c_ptr, c_loc, c_null_ptr, c_f_pointer
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
   implicit none
 
@@ -12,6 +13,7 @@ module pcg_mod
   public PCG_OK
   public PCG_NOT_INITIALIZED
   public PCG_BAD_ARGUMENT
+  public PCG_BREAKDOWN
   public pcg_matvec
   public pcg_t
   public pcg_optimize
@@ -22,6 +24,8 @@ module pcg_mod
   integer, parameter :: PCG_OK              = 0
   integer, parameter :: PCG_NOT_INITIALIZED = 1
   integer, parameter :: PCG_BAD_ARGUMENT    = 2
+  integer, parameter :: PCG_BREAKDOWN       = 3
+  real(kind=dp), parameter :: PCG_DENOMINATOR_FLOOR = 1.0d-24
 
   integer, parameter :: msglen = 32
 
@@ -32,6 +36,7 @@ module pcg_mod
       , "PCG_OK" &
       , "PCG_NOT_INITIALIZED" &
       , "PCG_BAD_ARGUMENT" &
+      , "PCG_BREAKDOWN" &
     ]
 
   interface
@@ -54,6 +59,7 @@ module pcg_mod
     real(kind=dp), allocatable :: r(:)
     real(kind=dp), allocatable :: y(:)
     real(kind=dp) :: error = huge(1.0_dp)
+    real(kind=dp) :: rz = 0.0_dp     !< carried r.M^-1.r = dot_product(r, y)
     real(kind=dp) :: tol = 0.0_dp
     procedure(pcg_matvec), nopass, pointer :: precond => null()
     procedure(pcg_matvec), nopass, pointer :: update => null()
@@ -85,9 +91,25 @@ contains
 
     integer :: veclen
 
+    if (size(b) <= 0) then
+      this%errcode = PCG_BAD_ARGUMENT
+      return
+    end if
+
     if (present(x0)) then
       if (size(x0) /= size(b)) then
         this%errcode = PCG_BAD_ARGUMENT
+        return
+      end if
+    end if
+
+    if (.not. all(ieee_is_finite(b))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
+    if (present(x0)) then
+      if (.not. all(ieee_is_finite(x0))) then
+        this%errcode = PCG_BREAKDOWN
         return
       end if
     end if
@@ -112,13 +134,42 @@ contains
 
     this%dat = c_loc(dat)
 
+    call this%update(this%Ap, this%x, this%dat)
+    if (any(.not. ieee_is_finite(this%Ap))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     this%r(:) = this%b - this%Ap
+    if (any(.not. ieee_is_finite(this%r))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     call this%precond(this%y, this%r, this%dat)
+    if (any(.not. ieee_is_finite(this%y))) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
     this%p(:) = this%y
 
+    ! Seed the carried numerator rz = r.M^-1.r so pcg_step never has to
+    ! recompute dot_product(r, y) for the current residual.
+    this%rz = dot_product(this%r, this%y)
+    if (.not. ieee_is_finite(this%rz)) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
+
     this%error = norm2(this%r)
+    if (.not. ieee_is_finite(this%error)) then
+      this%errcode = PCG_BREAKDOWN
+      return
+    end if
 
     this%initialized = .true.
+    if (this%error <= this%tol) then
+      this%errcode = PCG_CONVERGED
+      return
+    end if
 
   end subroutine
 
@@ -140,6 +191,7 @@ contains
     this%dat = c_null_ptr
 
     this%error = huge(1.0_dp)
+    this%rz = 0.0_dp
     this%tol = 0.0_dp
 
     this%errcode = 0
@@ -153,10 +205,10 @@ contains
     implicit none
     class(pcg_t), intent(inout) :: this
 
-    real(kind=dp) :: rz, alpha, beta
+    real(kind=dp) :: rz, rz_new, pap, alpha, beta
 
     if (.not.this%initialized) then
-      this%error = PCG_NOT_INITIALIZED
+      this%errcode = PCG_NOT_INITIALIZED
       return
     end if
 
@@ -164,28 +216,107 @@ contains
               p  => this%p, r  => this%r, y  => this%y, &
               error => this%error)
 
-      call this%update(Ap, p, this%dat)
+      ! Invariant on entry: r, y and the carried rz = dot_product(r, y) were
+      ! already validated finite by pcg_init (or the previous step's
+      ! preconditioner update), and p = y + beta*p was built from finite
+      ! operands.  Rather than rescanning every state vector each iteration
+      ! (which costs several O(n) passes on top of the matvec), we let the
+      ! scalar reductions pap, error and rz_new act as the fail-closed
+      ! detectors: a NaN/Inf anywhere in p, Ap, r or y propagates into one of
+      ! them, so a single finiteness test on each scalar is sufficient.
+      rz = this%rz
 
-      rz = dot_product(r, y)
-      alpha = rz / dot_product(p, Ap)
+      ! Guard p before the (expensive) operator apply so a corrupted search
+      ! direction never triggers a wasted matvec.
+      if (any(.not. ieee_is_finite(p))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
+      call this%update(Ap, p, this%dat)
+      if (any(.not. ieee_is_finite(Ap))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
+      pap = dot_product(p, Ap)
+      if (.not. ieee_is_finite(pap) .or. .not. ieee_is_finite(rz)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+      if (.not. pcg_safe_positive_denominator(pap) .or. &
+          .not. pcg_safe_positive_denominator(rz)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
+      alpha = rz / pap
+      if (.not. ieee_is_finite(alpha)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       x(:) = x(:) + alpha*p(:)
       r(:) = r(:) - alpha*Ap(:)
 
       error = norm2(r)
+      if (.not. ieee_is_finite(error)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
 
       if (error<this%tol) then
+        ! Only scan the full solution vector once, at the point we are about
+        ! to hand it back as converged, so a finite residual can never mask a
+        ! non-finite entry that escaped via a zero in Ap.
+        if (.not. all(ieee_is_finite(x))) then
+          this%errcode = PCG_BREAKDOWN
+          return
+        end if
         this%errcode = PCG_CONVERGED
         return
       end if
 
+      if (.not. pcg_safe_positive_denominator(error)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+
       call this%precond(y, r, this%dat)
-      beta = dot_product(r, y) / rz
+      if (any(.not. ieee_is_finite(y))) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+      rz_new = dot_product(r, y)
+      if (.not. pcg_safe_positive_denominator(rz_new)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
+      beta = rz_new / rz
+      if (.not. ieee_is_finite(beta)) then
+        this%errcode = PCG_BREAKDOWN
+        return
+      end if
       p(:) = y(:) + beta*p(:)
+
+      ! Carry rz forward so the next iteration reuses r.M^-1.r instead of
+      ! recomputing dot_product(r, y).
+      this%rz = rz_new
 
     end associate
 
   end subroutine
+
+!#################################################################
+
+  logical function pcg_safe_positive_denominator(value)
+    implicit none
+    real(kind=dp), intent(in) :: value
+
+    pcg_safe_positive_denominator = ieee_is_finite(value) .and. &
+      abs(value) >= PCG_DENOMINATOR_FLOOR
+
+  end function pcg_safe_positive_denominator
 
 !#################################################################
 
@@ -206,11 +337,22 @@ contains
 
     type(pcg_t) :: pcg
     integer :: iter
+    integer :: final_errcode
 
     if (present(cgiters)) cgiters = 0
 
     call pcg%init(b=b, update=update, precond=precond, dat=dat, x0=x0, tol=tol)
-    if (pcg%errcode /= PCG_OK) goto 9999
+    select case (pcg%errcode)
+      case (PCG_OK)
+        continue
+      case (PCG_CONVERGED)
+        b = pcg%x
+        if (present(err)) err = pcg%error
+        call pcg%clean()
+        return
+      case default
+        goto 9999
+    end select
 
     do iter = 1, mxit
       if (present(cgiters)) cgiters = iter
@@ -227,14 +369,17 @@ contains
 
     if (pcg%errcode == PCG_CONVERGED .or. pcg%errcode == PCG_OK) then
       b = pcg%x
-      err = pcg%error
+      if (present(err)) err = pcg%error
     end if
 
+    call pcg%clean()
     return
     9999 continue
 
+    final_errcode = pcg%errcode
+    call pcg%clean()
     call show_message('PCG: an error has occured, ' // &
-                      trim(errmsg(pcg%errcode)), WITH_ABORT)
+                      trim(errmsg(final_errcode)), WITH_ABORT)
 
   end subroutine
 

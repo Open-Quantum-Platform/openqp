@@ -6,19 +6,35 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
     <meta name="author" content="OpenQP Team" >
     <link rel="icon" href="../favicon.png">
 
-    <title>get_structures_ao_overlap_mod &ndash; OPENQP</title>
+    <title>get_structures_ao_overlap_mod &ndash; OpenQP Fortran API</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
-    <link href="../css/pygments.css" rel="stylesheet">
-    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
     <link href="../css/local.css" rel="stylesheet">
-
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link href="../css/pygments.css" rel="stylesheet">
     <script src="../js/svg-pan-zoom.min.js"></script>
   </head>
 
@@ -28,7 +44,7 @@
     <div class="container-fluid mb-sm-4 mb-xl-2">
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container">
-          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
           <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
                   aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
                   <span class="navbar-toggler-icon">
@@ -36,23 +52,18 @@
 
           <div id="navbar" class="navbar-collapse collapse">
             <ul class="navbar-nav">
-                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
                   <li class="nav-item">
                     <a class="nav-link" href="../lists/files.html">Source Files</a>
                   </li>
                 <li class="nav-item">
                   <a class="nav-link" href="../lists/modules.html">Modules</a>
                 </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
-                </li>
             </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
           </div><!--/.nav-collapse -->
         </div>
       </nav>
@@ -68,10 +79,11 @@
     <div class="row align-items-center justify-content-between" id="info-bar">
       <div class="col">
         <ul class="list-inline" style="margin-bottom:0px;display:inline">
+            <li class="list-inline-item" id="meta-author"><i class="fa fa-pencil"></i> Konstantin Komarov</li>
 
             <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
               <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
-                 title=" 0.3% of total for modules and submodules.">133 statements</a>
+                 title=" 0.2% of total for modules and submodules.">129 statements</a>
             </li>
 
             <li class="list-inline-item" id="source-file">
@@ -91,9 +103,11 @@
     </div>
   </div>
   <script>
-    $(function () {
-    $('[data-bs-toggle="tooltip"]').tooltip()
-    })
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
   </script>
 
   </div>
@@ -103,18 +117,6 @@
         <div id="sidebar">
       <h3>Contents</h3>
   
-      <div class="card mb-4">
-      <a data-bs-toggle="collapse" href="#vars-0"
-         aria-expanded="false" aria-controls="vars-0">
-         <h4 class="card-header bg-primary text-white">Variables</h4>
-      </a>
-      <div id="vars-0" class="collapse">
-        <div class="list-group list-group-flush">
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#variable-module_name~13">module_name</a>
-        </div>
-      </div>
-    </div>
-
   
   
   
@@ -125,22 +127,8 @@
   
   
   
-      <div class="card mb-4">
-      <a data-bs-toggle="collapse" href="#subs-0"
-         aria-expanded="false" aria-controls="subs-0">
-         <h4 class="card-header bg-primary text-white">Subroutines</h4>
-      </a>
-      <div id="subs-0" class="collapse">
-        <div class="list-group list-group-flush">
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#proc-get_structures_ao_overlap_c">get_structures_ao_overlap_C</a>
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#proc-get_structures_ao_overlap">get_structures_ao_overlap</a>
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#proc-mo_overlap">mo_overlap</a>
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#proc-print_results">print_results</a>
-            <a class="list-group-item" href="../module/get_structures_ao_overlap_mod.html#proc-print_geo">print_geo</a>
-        </div>
-      </div>
-    </div>
-
+  
+  
   
   
   
@@ -149,15 +137,14 @@
   
   
 
+    <em>None</em>
 
   </div>
 
     </div>
 
     <div class="col-md-9" id='text'>
-      <p>@brief Module for calculating Atomic Orbital (AO) overlap between different geometries</p>
-<p>@details This module provides functionality to compute overlap between
-   basis sets (Atomic Orbitals) of two different geometries. It includes
+      <p>basis sets (Atomic Orbitals) of two different geometries. It includes
    calculations for AO overlap and then Molecular Orbital (MO) overlap.</p>
 <div class="alert alert-info">
 <p class="alert-title h4">Note</p>
@@ -173,408 +160,17 @@
       Output MO overlap will be written to
                    mol.data["OQP::overlap_mo_non_orthogonal"]</p>
 </div>
-<p>@data Aug 2024</p>
-<p>@author Konstantin Komarov</p>
       
       
       <br>
 
 
-        <section>
-          <h2>Variables</h2>
-            <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Visibility</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-<th></th><th scope="col">Initial</th>        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-module_name~13"></span>
-              character(len=*),
-            </td>
-              <td>public,</td>
-            <td>
-parameter               
-            </td>
-            <td>::</td>
-            <td><strong>module_name</strong></td>
-<td> =</td>
-                <td>&#34;get_structures_ao_overlap_mod&#34;</td>
-            <td>
-                
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-        </section>
-        <br>
 
 
 
 
 
 
-        <section>
-          <h2>Subroutines</h2>
-              <div class="card">
-    <div class="card-header codesum"><span class="anchor" id="proc-get_structures_ao_overlap_c"></span> <h3>public  subroutine <a href='../proc/get_structures_ao_overlap_c.html'>get_structures_ao_overlap_C</a>(c_handle) bind(C, name="get_structures_ao_overlap")  
-</h3></div>
-    <div class="card-body">
-          
-  <p>@brief C-interoperable wrapper for get_states_overlap</p><a href="../proc/get_structures_ao_overlap_c.html" class="pull-right"><emph>Read more&hellip;</emph></a>
-
-  <h4>Arguments</h4>
-      <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-c_handle~21"></span>
-              type(<a href='../type/oqp_handle_t.html'>oqp_handle_t</a>)
-            </td>
-<td></td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>c_handle</strong></td>
-            <td>
-
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-
-    </div>
-  </div>
-
-              <div class="card">
-    <div class="card-header codesum"><span class="anchor" id="proc-get_structures_ao_overlap"></span> <h3>public  subroutine <a href='../proc/get_structures_ao_overlap.html'>get_structures_ao_overlap</a>(infos)  
-</h3></div>
-    <div class="card-body">
-          
-  <p>@brief Calculate AO overlap between two different geometries
-@param[in,out] infos Information structure containing all necessary data</p><a href="../proc/get_structures_ao_overlap.html" class="pull-right"><emph>Read more&hellip;</emph></a>
-
-  <h4>Arguments</h4>
-      <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-infos~38"></span>
-              type(<a href='../type/information.html'>information</a>),
-            </td>
-<td>intent(inout),</td>
-              <td></td>            <td>
-              target
-            </td>
-            <td>::</td>
-            <td><strong>infos</strong></td>
-            <td>
-<p>Information structure containing all necessary data</p>
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-
-    </div>
-  </div>
-
-              <div class="card">
-    <div class="card-header codesum"><span class="anchor" id="proc-mo_overlap"></span> <h3>public  subroutine <a href='../proc/mo_overlap.html'>mo_overlap</a>(overlap_mo, mo_a, mo_a_old, overlap_ao, nbf)  
-</h3></div>
-    <div class="card-body">
-          
-  <p>@brief Calculate Molecular Orbital (MO) overlap between two geometries</p><a href="../proc/mo_overlap.html" class="pull-right"><emph>Read more&hellip;</emph></a>
-
-  <h4>Arguments</h4>
-      <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-overlap_mo"></span>
-              real(kind=dp),
-            </td>
-<td>intent(out),</td>
-              <td></td>            <td>
-              dimension(:,:)
-            </td>
-            <td>::</td>
-            <td><strong>overlap_mo</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-mo_a~5"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in),</td>
-              <td></td>            <td>
-              dimension(:,:)
-            </td>
-            <td>::</td>
-            <td><strong>mo_a</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-mo_a_old~2"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in),</td>
-              <td></td>            <td>
-              dimension(:,:)
-            </td>
-            <td>::</td>
-            <td><strong>mo_a_old</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-overlap_ao"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in),</td>
-              <td></td>            <td>
-              dimension(:,:)
-            </td>
-            <td>::</td>
-            <td><strong>overlap_ao</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-nbf~55"></span>
-              integer
-            </td>
-<td></td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>nbf</strong></td>
-            <td>
-
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-
-    </div>
-  </div>
-
-              <div class="card">
-    <div class="card-header codesum"><span class="anchor" id="proc-print_results"></span> <h3>public  subroutine <a href='../proc/print_results.html'>print_results</a>(overlap_mo, e, e_old, nbf, na, iw)  
-</h3></div>
-    <div class="card-body">
-          
-  <p>@brief Print results of MO overlap between two geometries</p><a href="../proc/print_results.html" class="pull-right"><emph>Read more&hellip;</emph></a>
-
-  <h4>Arguments</h4>
-      <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-overlap_mo~2"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>overlap_mo</strong>(:,:)</td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-e~3"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>e</strong>(:)</td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-e_old~2"></span>
-              real(kind=dp),
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>e_old</strong>(:)</td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-nbf~56"></span>
-              integer,
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>nbf</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-na~11"></span>
-              integer,
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>na</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-iw~2"></span>
-              integer,
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>iw</strong></td>
-            <td>
-
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-
-    </div>
-  </div>
-
-              <div class="card">
-    <div class="card-header codesum"><span class="anchor" id="proc-print_geo"></span> <h3>public  subroutine <a href='../proc/print_geo.html'>print_geo</a>(basis, text)  
-</h3></div>
-    <div class="card-body">
-          
-  <p>@brief Print geometry information</p><a href="../proc/print_geo.html" class="pull-right"><emph>Read more&hellip;</emph></a>
-
-  <h4>Arguments</h4>
-      <table class="table table-striped varlist">
-    <thead>
-      <tr>
-        <th scope="col">Type</th>
-<th scope="col">Intent</th><th scope="col">Optional</th>        <th scope="col">Attributes</th>
-        <th scope="col"></th>
-        <th scope="col">Name</th>
-        <th scope="col"></th>
-    </thead>
-    <tbody>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-basis~73"></span>
-              type(<a href='../type/basis_set.html'>basis_set</a>),
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>basis</strong></td>
-            <td>
-
-            </td>
-        </tr>
-        <tr>
-            <td>
-              <span class="anchor" id="variable-text"></span>
-              character(len=*),
-            </td>
-<td>intent(in)</td>
-              <td></td>            <td>
-              
-            </td>
-            <td>::</td>
-            <td><strong>text</strong></td>
-            <td>
-
-            </td>
-        </tr>
-    </tbody>
-  </table>
-
-
-    </div>
-  </div>
-
-        </section>
-        <br>
 
 
 
@@ -588,9 +184,9 @@ parameter
         <div class="row justify-content-between">
           <div class="col">
             <p>
-              OPENQP
- was developed by OpenQP Team<br>              &copy; 2025 
-</p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
           </div>
           <div class="col">
             <p class="text-end">
@@ -602,24 +198,5 @@ parameter
         <br>
       </div> <!-- /container -->
     </footer>
-
-    <!-- Bootstrap core JavaScript -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
-
-    <!-- MathJax JavaScript
-             ================================================== -->
-             <!-- Placed at the end of the document so the pages load faster -->
-        <script type="text/x-mathjax-config">
-          MathJax.Hub.Config({
-          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
-          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
-          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
-          });
-        </script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
-
   </body>
 </html>

@@ -6,19 +6,35 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
     <meta name="author" content="OpenQP Team" >
     <link rel="icon" href="../favicon.png">
 
-    <title>rys_lut.F90 &ndash; OPENQP</title>
+    <title>rys_lut.F90 &ndash; OpenQP Fortran API</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
-    <link href="../css/pygments.css" rel="stylesheet">
-    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
     <link href="../css/local.css" rel="stylesheet">
-
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link href="../css/pygments.css" rel="stylesheet">
     <script src="../js/svg-pan-zoom.min.js"></script>
   </head>
 
@@ -28,7 +44,7 @@
     <div class="container-fluid mb-sm-4 mb-xl-2">
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container">
-          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
           <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
                   aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
                   <span class="navbar-toggler-icon">
@@ -36,23 +52,18 @@
 
           <div id="navbar" class="navbar-collapse collapse">
             <ul class="navbar-nav">
-                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
                   <li class="nav-item">
                     <a class="nav-link" href="../lists/files.html">Source Files</a>
                   </li>
                 <li class="nav-item">
                   <a class="nav-link" href="../lists/modules.html">Modules</a>
                 </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
-                </li>
             </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
           </div><!--/.nav-collapse -->
         </div>
       </nav>
@@ -90,9 +101,11 @@
     </div>
   </div>
   <script>
-    $(function () {
-    $('[data-bs-toggle="tooltip"]').tooltip()
-    })
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
   </script>
 
   </div>
@@ -145,557 +158,7 @@
     <div class="col-md-9" id='text'>
       
       <br>
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Files dependent on this one</h3>
-          </div>
-          <div class="card-body">
-            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: sourcefile~~rys_lut.f90~~AfferentGraph Pages: 1 -->
-<svg id="sourcefilerys_lutf90AfferentGraph" width="641pt" height="428pt"
- viewBox="0.00 0.00 641.00 428.28" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph" class="graph" transform="scale(.7091 .7091) rotate(0) translate(4 600)">
-<title>sourcefile~~rys_lut.f90~~AfferentGraph</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-600 900,-600 900,4 -4,4"/>
-<!-- sourcefile~rys_lut.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node1" class="node">
-<title>sourcefile~rys_lut.f90</title>
-<polygon fill="none" stroke="#000000" points="70,-472 0,-472 0,-448 70,-448 70,-472"/>
-<text text-anchor="middle" x="35" y="-457.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">rys_lut.F90</text>
-</g>
-<!-- sourcefile~rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node2" class="node">
-<title>sourcefile~rys.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/rys.f90.html" xlink:title="rys.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="160,-472 106,-472 106,-448 160,-448 160,-472"/>
-<text text-anchor="middle" x="133" y="-457.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">rys.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge1" class="edge">
-<title>sourcefile~rys.f90&#45;&gt;sourcefile~rys_lut.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M105.9616,-460C97.9804,-460 89.0189,-460 80.2209,-460"/>
-<polygon fill="#000000" stroke="#000000" points="80.0365,-456.5001 70.0365,-460 80.0364,-463.5001 80.0365,-456.5001"/>
-</g>
-<!-- sourcefile~grd2_rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node3" class="node">
-<title>sourcefile~grd2_rys.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/grd2_rys.f90.html" xlink:title="grd2_rys.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="277,-472 196,-472 196,-448 277,-448 277,-472"/>
-<text text-anchor="middle" x="236.5" y="-457.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2_rys.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~grd2_rys.f90&#45;&gt;sourcefile~rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge2" class="edge">
-<title>sourcefile~grd2_rys.f90&#45;&gt;sourcefile~rys.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M195.8911,-460C187.4493,-460 178.5922,-460 170.2771,-460"/>
-<polygon fill="#000000" stroke="#000000" points="170.1068,-456.5001 160.1068,-460 170.1067,-463.5001 170.1068,-456.5001"/>
-</g>
-<!-- sourcefile~int_rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node4" class="node">
-<title>sourcefile~int_rys.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/int_rys.f90.html" xlink:title="int_rys.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="271.5,-514 201.5,-514 201.5,-490 271.5,-490 271.5,-514"/>
-<text text-anchor="middle" x="236.5" y="-499.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int_rys.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~int_rys.f90&#45;&gt;sourcefile~rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge3" class="edge">
-<title>sourcefile~int_rys.f90&#45;&gt;sourcefile~rys.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M206.8411,-489.9645C195.246,-485.2593 181.8295,-479.8149 169.6392,-474.8681"/>
-<polygon fill="#000000" stroke="#000000" points="170.7661,-471.5482 160.1839,-471.0311 168.134,-478.0345 170.7661,-471.5482"/>
-</g>
-<!-- sourcefile~mod_1e_primitives.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node5" class="node">
-<title>sourcefile~mod_1e_primitives.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/mod_1e_primitives.f90.html" xlink:title="mod_1e_primitives.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="449,-432 313,-432 313,-408 449,-408 449,-432"/>
-<text text-anchor="middle" x="381" y="-417.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">mod_1e_primitives.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge4" class="edge">
-<title>sourcefile~mod_1e_primitives.f90&#45;&gt;sourcefile~rys.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M312.7825,-423.419C277.6106,-426.0835 234.1922,-430.7778 196,-439 187.413,-440.8486 178.3572,-443.4569 169.8721,-446.209"/>
-<polygon fill="#000000" stroke="#000000" points="168.587,-442.9488 160.2359,-449.4687 170.8302,-449.5796 168.587,-442.9488"/>
-</g>
-<!-- sourcefile~grd1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node6" class="node">
-<title>sourcefile~grd1.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/grd1.f90.html" xlink:title="grd1.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="552,-432 492,-432 492,-408 552,-408 552,-432"/>
-<text text-anchor="middle" x="522" y="-417.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd1.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~grd1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge7" class="edge">
-<title>sourcefile~grd1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.752,-420C482.0512,-420 470.8213,-420 459.3102,-420"/>
-<polygon fill="#000000" stroke="#000000" points="459.1534,-416.5001 449.1534,-420 459.1533,-423.5001 459.1534,-416.5001"/>
-</g>
-<!-- sourcefile~grd2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node7" class="node">
-<title>sourcefile~grd2.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/grd2.f90.html" xlink:title="grd2.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="552,-474 492,-474 492,-450 552,-450 552,-474"/>
-<text text-anchor="middle" x="522" y="-459.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">grd2.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~grd2_rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge5" class="edge">
-<title>sourcefile~grd2.f90&#45;&gt;sourcefile~grd2_rys.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.9861,-461.7897C443.3656,-461.4491 346.8397,-460.773 287.3511,-460.3562"/>
-<polygon fill="#000000" stroke="#000000" points="287.079,-456.8543 277.0547,-460.2841 287.0299,-463.8542 287.079,-456.8543"/>
-</g>
-<!-- sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node9" class="node">
-<title>sourcefile~int2.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node9"><a xlink:href="../sourcefile/int2.f90.html" xlink:title="int2.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="408.5,-514 353.5,-514 353.5,-490 408.5,-490 408.5,-514"/>
-<text text-anchor="middle" x="381" y="-499.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int2.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~grd2.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge20" class="edge">
-<title>sourcefile~grd2.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M491.752,-470.581C470.3236,-476.66 441.4342,-484.8555 418.5339,-491.3521"/>
-<polygon fill="#000000" stroke="#000000" points="417.4696,-488.0158 408.8045,-494.1122 419.3801,-494.7501 417.4696,-488.0158"/>
-</g>
-<!-- sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node8" class="node">
-<title>sourcefile~int1.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/int1.f90.html" xlink:title="int1.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="549.5,-171 494.5,-171 494.5,-147 549.5,-147 549.5,-171"/>
-<text text-anchor="middle" x="522" y="-156.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge8" class="edge">
-<title>sourcefile~int1.f90&#45;&gt;sourcefile~mod_1e_primitives.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M511.1803,-171.2254C503.3564,-180.4092 492.8286,-193.5032 485,-206 443.1284,-272.8398 405.8623,-359.0212 389.6245,-398.5098"/>
-<polygon fill="#000000" stroke="#000000" points="386.3182,-397.3489 385.7869,-407.9304 392.8009,-399.9898 386.3182,-397.3489"/>
-</g>
-<!-- sourcefile~int2.f90&#45;&gt;sourcefile~int_rys.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge6" class="edge">
-<title>sourcefile~int2.f90&#45;&gt;sourcefile~int_rys.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M353.4805,-502C333.2228,-502 305.2304,-502 281.7074,-502"/>
-<polygon fill="#000000" stroke="#000000" points="281.5976,-498.5001 271.5976,-502 281.5975,-505.5001 281.5976,-498.5001"/>
-</g>
-<!-- sourcefile~electric_moments.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node10" class="node">
-<title>sourcefile~electric_moments.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node10"><a xlink:href="../sourcefile/electric_moments.f90.html" xlink:title="electric_moments.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="725,-24 595,-24 595,0 725,0 725,-24"/>
-<text text-anchor="middle" x="660" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">electric_moments.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge13" class="edge">
-<title>sourcefile~electric_moments.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M609.4408,-24.1364C604.2727,-26.576 599.3372,-29.4992 595,-33 560.6356,-60.7375 539.1791,-109.2883 529.0154,-137.3333"/>
-<polygon fill="#000000" stroke="#000000" points="525.6358,-136.3969 525.6697,-146.9916 532.2502,-138.6882 525.6358,-136.3969"/>
-</g>
-<!-- sourcefile~get_basis_overlap.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node11" class="node">
-<title>sourcefile~get_basis_overlap.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node11"><a xlink:href="../sourcefile/get_basis_overlap.f90.html" xlink:title="get_basis_overlap.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="725,-192 595,-192 595,-168 725,-168 725,-192"/>
-<text text-anchor="middle" x="660" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_basis_overlap.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge14" class="edge">
-<title>sourcefile~get_basis_overlap.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M594.6372,-170.0535C582.6003,-168.2218 570.4154,-166.3676 559.5531,-164.7146"/>
-<polygon fill="#000000" stroke="#000000" points="560.0049,-161.2431 549.5921,-163.1988 558.9517,-168.1635 560.0049,-161.2431"/>
-</g>
-<!-- sourcefile~hf_gradient.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node12" class="node">
-<title>sourcefile~hf_gradient.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node12"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="708,-474 612,-474 612,-450 708,-450 708,-474"/>
-<text text-anchor="middle" x="660" y="-459.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge9" class="edge">
-<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.4547,-449.9645C602.176,-444.4014 580.5022,-437.805 562.1496,-432.2194"/>
-<polygon fill="#000000" stroke="#000000" points="562.9239,-428.7966 552.338,-429.2333 560.8857,-435.4934 562.9239,-428.7966"/>
-</g>
-<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge11" class="edge">
-<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M611.7343,-462C595.6938,-462 578.0052,-462 562.6033,-462"/>
-<polygon fill="#000000" stroke="#000000" points="562.3541,-458.5001 552.3541,-462 562.354,-465.5001 562.3541,-458.5001"/>
-</g>
-<!-- sourcefile~huckel.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node13" class="node">
-<title>sourcefile~huckel.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node13"><a xlink:href="../sourcefile/huckel.f90.html" xlink:title="huckel.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="695,-108 625,-108 625,-84 695,-84 695,-108"/>
-<text text-anchor="middle" x="660" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">huckel.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge15" class="edge">
-<title>sourcefile~huckel.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M624.7504,-105.9054C614.9603,-109.0538 604.432,-112.8185 595,-117 579.3608,-123.9333 562.7687,-133.302 549.3615,-141.4318"/>
-<polygon fill="#000000" stroke="#000000" points="547.3094,-138.5853 540.6392,-146.817 550.9868,-144.5416 547.3094,-138.5853"/>
-</g>
-<!-- sourcefile~int1e.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node14" class="node">
-<title>sourcefile~int1e.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node14"><a xlink:href="../sourcefile/int1e.f90.html" xlink:title="int1e.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="691,-66 629,-66 629,-42 691,-42 691,-66"/>
-<text text-anchor="middle" x="660" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">int1e.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~int1e.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge16" class="edge">
-<title>sourcefile~int1e.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M628.69,-60.4155C617.4608,-63.643 605.092,-68.3314 595,-75 569.7881,-91.6597 548.1342,-119.3175 535.1016,-138.316"/>
-<polygon fill="#000000" stroke="#000000" points="532.0422,-136.596 529.4186,-146.8608 537.8708,-140.4725 532.0422,-136.596"/>
-</g>
-<!-- sourcefile~resp.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node15" class="node">
-<title>sourcefile~resp.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node15"><a xlink:href="../sourcefile/resp.f90.html" xlink:title="resp.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="689,-150 631,-150 631,-126 689,-126 689,-150"/>
-<text text-anchor="middle" x="660" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">resp.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~resp.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge17" class="edge">
-<title>sourcefile~resp.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M630.7337,-142.4536C610.1067,-145.5925 582.2932,-149.825 559.9602,-153.2234"/>
-<polygon fill="#000000" stroke="#000000" points="559.1718,-149.803 549.8122,-154.7677 560.225,-156.7234 559.1718,-149.803"/>
-</g>
-<!-- sourcefile~scf.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node16" class="node">
-<title>sourcefile~scf.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node16"><a xlink:href="../sourcefile/scf.f90.html" xlink:title="scf.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="549,-554 495,-554 495,-530 549,-530 549,-554"/>
-<text text-anchor="middle" x="522" y="-539.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~scf.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge21" class="edge">
-<title>sourcefile~scf.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M494.8138,-534.2876C473.1069,-528.1296 442.4556,-519.4342 418.4297,-512.6183"/>
-<polygon fill="#000000" stroke="#000000" points="419.1595,-509.1873 408.5839,-509.8252 417.249,-515.9216 419.1595,-509.1873"/>
-</g>
-<!-- sourcefile~tdhf_energy.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node17" class="node">
-<title>sourcefile~tdhf_energy.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node17"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="708.5,-272 611.5,-272 611.5,-248 708.5,-248 708.5,-272"/>
-<text text-anchor="middle" x="660" y="-257.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge18" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M643.354,-247.817C619.3164,-230.2243 574.7144,-197.5809 546.7934,-177.1459"/>
-<polygon fill="#000000" stroke="#000000" points="548.8418,-174.3079 538.7051,-171.2262 544.7076,-179.9566 548.8418,-174.3079"/>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge22" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M627.2557,-247.9468C589.508,-234.4533 531.4231,-215.0749 522,-220"/>
-</g>
-<!-- sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node19" class="node">
-<title>sourcefile~tdhf_lib.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node19"><a xlink:href="../sourcefile/tdhf_lib.f90.html" xlink:title="tdhf_lib.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="559,-371 485,-371 485,-347 559,-347 559,-371"/>
-<text text-anchor="middle" x="522" y="-356.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_lib.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge30" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M622.266,-272.1024C612.9794,-275.8744 603.3203,-280.5136 595,-286 572.7016,-300.7035 551.6267,-323.0258 537.9071,-339.1142"/>
-<polygon fill="#000000" stroke="#000000" points="535.145,-336.9616 531.4355,-346.8858 540.5242,-341.4409 535.145,-336.9616"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node18" class="node">
-<title>sourcefile~tdhf_gradient.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node18"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="713,-432 607,-432 607,-408 713,-408 713,-432"/>
-<text text-anchor="middle" x="660" y="-417.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge10" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M606.6456,-420C591.8983,-420 576.1444,-420 562.2754,-420"/>
-<polygon fill="#000000" stroke="#000000" points="562.0849,-416.5001 552.0849,-420 562.0848,-423.5001 562.0849,-416.5001"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge12" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~grd2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M620.4547,-432.0355C602.176,-437.5986 580.5022,-444.195 562.1496,-449.7806"/>
-<polygon fill="#000000" stroke="#000000" points="560.8857,-446.5066 552.338,-452.7667 562.9239,-453.2034 560.8857,-446.5066"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge31" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M628.746,-407.9863C617.9872,-403.7218 605.9057,-398.7892 595,-394 581.8738,-388.2357 567.6186,-381.5085 555.2179,-375.5008"/>
-<polygon fill="#000000" stroke="#000000" points="556.6681,-372.314 546.146,-371.0748 553.5987,-378.6052 556.6681,-372.314"/>
-</g>
-<!-- sourcefile~tdhf_lib.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge23" class="edge">
-<title>sourcefile~tdhf_lib.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M510.5435,-371.1448C503.1724,-379.0176 493.4301,-389.5333 485,-399 468.6498,-417.3607 466.1873,-423.4205 449,-441 434.4931,-455.8379 417.0517,-471.4434 403.465,-483.1557"/>
-<polygon fill="#000000" stroke="#000000" points="400.8954,-480.7476 395.5643,-489.9035 405.4415,-486.0705 400.8954,-480.7476"/>
-</g>
-<!-- sourcefile~tdhf_mrsf_energy.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node20" class="node">
-<title>sourcefile~tdhf_mrsf_energy.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node20"><a xlink:href="../sourcefile/tdhf_mrsf_energy.f90.html" xlink:title="tdhf_mrsf_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="892,-514 765,-514 765,-490 892,-490 892,-514"/>
-<text text-anchor="middle" x="828.5" y="-499.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge24" class="edge">
-<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M764.8383,-496.8317C733.1083,-495.5616 694.288,-495.9846 660,-502"/>
-</g>
-<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge32" class="edge">
-<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M819.6778,-489.8774C803.394,-468.3707 766.4678,-423.5021 725,-399 699.0876,-383.6891 689.1682,-387.4223 660,-380"/>
-</g>
-<!-- sourcefile~tdhf_mrsf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node21" class="node">
-<title>sourcefile~tdhf_mrsf_lib.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node21"><a xlink:href="../sourcefile/tdhf_mrsf_lib.f90.html" xlink:title="tdhf_mrsf_lib.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="711.5,-596 608.5,-596 608.5,-572 711.5,-572 711.5,-596"/>
-<text text-anchor="middle" x="660" y="-581.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_mrsf_lib.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_mrsf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge37" class="edge">
-<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_mrsf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M810.8268,-514.0526C790.7222,-527.3683 756.5783,-548.8021 725,-563 720.6972,-564.9346 716.1621,-566.775 711.5708,-568.5038"/>
-<polygon fill="#000000" stroke="#000000" points="710.3563,-565.221 702.1239,-571.8901 712.7184,-571.8105 710.3563,-565.221"/>
-</g>
-<!-- sourcefile~tdhf_sf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node23" class="node">
-<title>sourcefile~tdhf_sf_lib.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node23"><a xlink:href="../sourcefile/tdhf_sf_lib.f90.html" xlink:title="tdhf_sf_lib.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="704,-352 616,-352 616,-328 704,-328 704,-352"/>
-<text text-anchor="middle" x="660" y="-337.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_lib.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge38" class="edge">
-<title>sourcefile~tdhf_mrsf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M820.405,-489.7139C800.5084,-459.8058 749.0858,-384.3249 725,-366 720.2286,-362.3698 714.8826,-359.1733 709.3607,-356.3781"/>
-<polygon fill="#000000" stroke="#000000" points="710.5183,-353.0577 699.9718,-352.0471 707.5862,-359.414 710.5183,-353.0577"/>
-</g>
-<!-- sourcefile~tdhf_mrsf_lib.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge25" class="edge">
-<title>sourcefile~tdhf_mrsf_lib.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M608.2401,-583.321C572.7446,-581.5307 525.018,-576.4816 485,-563 455.6245,-553.1038 425.434,-534.2451 405.2009,-520.1042"/>
-<polygon fill="#000000" stroke="#000000" points="407.0794,-517.1448 396.9076,-514.1807 403.0108,-522.8411 407.0794,-517.1448"/>
-</g>
-<!-- sourcefile~tdhf_sf_energy.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node22" class="node">
-<title>sourcefile~tdhf_sf_energy.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node22"><a xlink:href="../sourcefile/tdhf_sf_energy.f90.html" xlink:title="tdhf_sf_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="884.5,-312 772.5,-312 772.5,-288 884.5,-288 884.5,-312"/>
-<text text-anchor="middle" x="828.5" y="-297.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_sf_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge26" class="edge">
-<title>sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M812.282,-287.9975C765.0303,-254.6082 624.3516,-166.5048 522,-220"/>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M522,-220C430.3246,-267.9152 505.6299,-354.4362 449,-441 438.071,-457.7059 421.4494,-472.7311 407.3755,-483.6894"/>
-<polygon fill="#000000" stroke="#000000" points="404.9112,-481.1628 399.0154,-489.9657 409.1139,-486.7609 404.9112,-481.1628"/>
-</g>
-<!-- sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge33" class="edge">
-<title>sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M772.0909,-298.0661C724.0285,-297.9472 653.6341,-301.4244 595,-319 578.3538,-323.9897 561.239,-333.1175 547.7687,-341.395"/>
-<polygon fill="#000000" stroke="#000000" points="545.6323,-338.6059 539.0759,-346.9283 549.3913,-344.511 545.6323,-338.6059"/>
-</g>
-<!-- sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge39" class="edge">
-<title>sourcefile~tdhf_sf_energy.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M777.9444,-312.0013C757.7842,-316.7871 734.5421,-322.3046 714.048,-327.1696"/>
-<polygon fill="#000000" stroke="#000000" points="713.1547,-323.7843 704.2335,-329.4995 714.7716,-330.595 713.1547,-323.7843"/>
-</g>
-<!-- sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~int1.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge19" class="edge">
-<title>sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~int1.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M643.3889,-327.8949C629.1648,-316.8895 608.8459,-299.5719 595,-281 572.9002,-251.3569 578.553,-237.3814 559,-206 553.2122,-196.711 545.9191,-187.1045 539.3409,-179.0164"/>
-<polygon fill="#000000" stroke="#000000" points="541.9289,-176.6548 532.8377,-171.2142 536.5518,-181.1367 541.9289,-176.6548"/>
-</g>
-<!-- sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge34" class="edge">
-<title>sourcefile~tdhf_sf_lib.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M615.9565,-346.064C601.0876,-348.1111 584.4318,-350.4043 569.3202,-352.4849"/>
-<polygon fill="#000000" stroke="#000000" points="568.5751,-349.0544 559.146,-353.8857 569.5299,-355.989 568.5751,-349.0544"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node24" class="node">
-<title>sourcefile~tdhf_z_vector.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node24"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="881,-392 776,-392 776,-368 881,-368 881,-392"/>
-<text text-anchor="middle" x="828.5" y="-377.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~int2.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge27" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~int2.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M819.6778,-392.1226C803.394,-413.6293 766.4678,-458.4979 725,-483 699.0876,-498.3109 689.645,-496.7991 660,-502"/>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M660,-502C574.795,-516.9482 472.6869,-511.0397 418.7284,-506.1"/>
-<polygon fill="#000000" stroke="#000000" points="418.8857,-502.5991 408.5979,-505.1314 418.2194,-509.5674 418.8857,-502.5991"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge35" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.6753,-386.6157C742.0439,-389.217 697.8472,-389.6309 660,-380"/>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M660,-380C630.1158,-372.3955 595.8456,-367.1624 568.9326,-363.8221"/>
-<polygon fill="#000000" stroke="#000000" points="569.3477,-360.3468 559.0026,-362.6335 568.5157,-367.2972 569.3477,-360.3468"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge40" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~tdhf_sf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M777.9444,-367.9987C757.7842,-363.2129 734.5421,-357.6954 714.048,-352.8304"/>
-<polygon fill="#000000" stroke="#000000" points="714.7716,-349.405 704.2335,-350.5005 713.1547,-356.2157 714.7716,-349.405"/>
-</g>
-<!-- sourcefile~get_states_overlap.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node25" class="node">
-<title>sourcefile~get_states_overlap.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node25"><a xlink:href="../sourcefile/get_states_overlap.f90.html" xlink:title="get_states_overlap.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="896,-596 761,-596 761,-572 896,-572 896,-596"/>
-<text text-anchor="middle" x="828.5" y="-581.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">get_states_overlap.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~get_states_overlap.f90&#45;&gt;sourcefile~tdhf_mrsf_lib.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge36" class="edge">
-<title>sourcefile~get_states_overlap.f90&#45;&gt;sourcefile~tdhf_mrsf_lib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M760.9355,-584C748.0036,-584 734.5253,-584 721.7862,-584"/>
-<polygon fill="#000000" stroke="#000000" points="721.7527,-580.5001 711.7527,-584 721.7527,-587.5001 721.7527,-580.5001"/>
-</g>
-<!-- sourcefile~guess_huckel.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node26" class="node">
-<title>sourcefile~guess_huckel.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node26"><a xlink:href="../sourcefile/guess_huckel.f90.html" xlink:title="guess_huckel.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="881.5,-108 775.5,-108 775.5,-84 881.5,-84 881.5,-108"/>
-<text text-anchor="middle" x="828.5" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">guess_huckel.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge28" class="edge">
-<title>sourcefile~guess_huckel.f90&#45;&gt;sourcefile~huckel.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M775.1855,-96C752.7311,-96 726.872,-96 705.3514,-96"/>
-<polygon fill="#000000" stroke="#000000" points="705.1693,-92.5001 695.1693,-96 705.1692,-99.5001 705.1693,-92.5001"/>
-</g>
-<!-- sourcefile~hf_energy.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_node27" class="node">
-<title>sourcefile~hf_energy.f90</title>
-<g id="a_sourcefile~~rys_lut.f90~~AfferentGraph_node27"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="702.5,-554 617.5,-554 617.5,-530 702.5,-530 702.5,-554"/>
-<text text-anchor="middle" x="660" y="-539.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90 -->
-<g id="sourcefile~~rys_lut.f90~~AfferentGraph_edge29" class="edge">
-<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M617.4694,-542C598.9329,-542 577.3924,-542 559.4684,-542"/>
-<polygon fill="#000000" stroke="#000000" points="559.3829,-538.5001 549.3829,-542 559.3829,-545.5001 559.3829,-538.5001"/>
-</g>
-</g>
-</svg>
-</div>                <script>
-                  var pansourcefilerys_lutf90AfferentGraph = svgPanZoom('#sourcefilerys_lutf90AfferentGraph',
-                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
-                  );
-                </script>          <div>
-            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
-          </div>
-          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-<p>Nodes of different colours represent the following: </p>
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: Graph Key Pages: 1 -->
-<svg width="202pt" height="32pt"
- viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>Graph Key</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
-<!-- Source File -->
-<g id="node1" class="node">
-<title>Source File</title>
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
-<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
-</g>
-<!-- This Page&#39;s Entity -->
-<g id="node2" class="node">
-<title>This Page&#39;s Entity</title>
-<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
-<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
-</g>
-</g>
-</svg>
 
-<p>Solid arrows point from a file to a file which it depends on. A file
-is dependent upon another if the latter must be compiled before the former
-can be.
-</p>
- </div>
-            </div>
-          </div>
-        </div>
-          </div>
-        </div>
-<br>
       <section>
         <h2><span class="anchor" id="src"></span>Source Code</h2>
         <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">rys_lut</span>
@@ -1199,9 +662,9 @@ can be.
         <div class="row justify-content-between">
           <div class="col">
             <p>
-              OPENQP
- was developed by OpenQP Team<br>              &copy; 2025 
-</p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
           </div>
           <div class="col">
             <p class="text-end">
@@ -1213,24 +676,5 @@ can be.
         <br>
       </div> <!-- /container -->
     </footer>
-
-    <!-- Bootstrap core JavaScript -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
-
-    <!-- MathJax JavaScript
-             ================================================== -->
-             <!-- Placed at the end of the document so the pages load faster -->
-        <script type="text/x-mathjax-config">
-          MathJax.Hub.Config({
-          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
-          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
-          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
-          });
-        </script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
-
   </body>
 </html>

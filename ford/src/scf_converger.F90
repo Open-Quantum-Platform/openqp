@@ -1,216 +1,689 @@
+!===============================================================================
+! MODULE: scf_converger
+!===============================================================================
+!
+! DESCRIPTION:
+!   The scf_converger module implements a framework for managing convergence
+!   in Self-Consistent Field (SCF) calculations. It provides a main driver
+!   type `scf_conv` to coordinate multiple convergence methods, including
+!   variants of Direct Inversion in the Iterative Subspace (DIIS) and
+!   Second-Order SCF (SOSCF), storing iteration data in a ring buffer structure.
+!
+! MEMBERS:
+!   - conv_none  [INTEGER]: Constant (1) for no convergence method.
+!   - conv_cdiis [INTEGER]: Constant (2) for Commutator DIIS.
+!   - conv_ediis [INTEGER]: Constant (3) for Energy DIIS.
+!   - conv_adiis [INTEGER]: Constant (4) for Approximate DIIS.
+!   - conv_soscf [INTEGER]: Constant (5) for Second-Order SCF.
+!   - conv_state_not_initialized [INTEGER]: Constant (0) for uninitialized state.
+!   - conv_state_initialized     [INTEGER]: Constant (1) for initialized state.
+!   - conv_name_maxlen           [INTEGER]: Constant (32) for maximum length of converger names.
+!
+! DEPENDENCIES:
+!   - precision: Provides `dp` for double precision real numbers.
+!   - io_constants: Provides `iw` for output unit.
+!   - messages: Provides `show_message` and `with_abort` for error handling.
+!   - mathlib: Provides functions for matrix operations:
+!     `traceprod_sym_packed`: Calculates trace of product of two packed symmetric matrices.
+!     `orb_to_dens`: Converts orbitals to density matrix.
+!     `antisymmetrize_matrix`: Makes matrix antisymmetric (A = A - A^T).
+!     `unpack_matrix`: Converts packed triangular to full square matrix.
+!     `pack_matrix`: Converts full square to packed triangular matrix.
+!   - `scf_addons`: Provides Pseudo-Fractional Occupation Number (pFON) functionality.
+!
+! DATA MANAGEMENT:
+!   The module uses a ring buffer system implemented in the `converger_data` type
+!   for efficiently storing SCF iteration history. This designimproves memory efficiency
+!   and data locality compared to traditional vector growth approaches.
+!   The buffer system supports both forward and backward indices for intuitive access
+!   (1 = oldest, -1 = latest).
+!
+! NOTES:
+!   - The module defines public types: `scf_conv`, `scf_conv_result`, and `soscf_converger`.
+!   - All other entities are private unless explicitly made public.
+!   - The code supports handling of Fock matrices for RHF/ROHF (1 matrix) and UHF (2 matrices).
+!   - ROHF Fock matrix has already gone through the Guest-Saunders transformation.
+!   - The module supports integration with the pFON (pseudo-Fractional Occupation Number)
+!     methodology.
+!
+! HISTORY:
+!   - [pre-2022] Initial Development - Vladimir Mironov
+!     Established the core framework for SCF convergence management,
+!     including the main driver `scf_conv` and initial DIIS methods.
+!   - [2025] Ring Buffer - Konstantin Komarov
+!     Implemented the ring buffer structure via the `converger_data` type,
+!     improving memory efficiency for storing SCF iteration history.
+!   - [2025] SOSCF Converger - Konstantin Komarov
+!     Added the Second-Order SCF (SOSCF) method through the `soscf_converger` type,
+!     enabling convergence using orbital optimization techniques.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv - MAIN DRIVER TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv` type is the main driver for SCF convergence. It manages a
+!   ring buffer of iteration data via `converger_data`, maintains an array of
+!   subconvergers, and selects a convergence method based on the current error
+!   and predefined thresholds.
+!
+! MEMBERS:
+!   step          [INTEGER]: Current SCF iteration step.
+!   overlap       [REAL(dp), POINTER]: Pointer to the full-format overlap matrix (S).
+!   overlap_sqrt  [REAL(dp), POINTER]: Pointer to the full-format S^(1/2) matrix.
+!   dat           [TYPE(converger_data)]: Stores SCF iteration history in a ring buffer.
+!   sconv         [TYPE(subconverger_), ALLOCATABLE]: Array of subconverger instances.
+!   thresholds    [REAL(dp), ALLOCATABLE]: Error thresholds for selecting subconvergers.
+!   iter_space_size [INTEGER]: Size of the subconverger problem space, default is 10.
+!   verbose       [INTEGER]: Verbosity level, default is 0.
+!   state         [INTEGER]: Current state (0 = not initialized, 1 = initialized), default is 0.
+!   current_error [REAL(dp)]: Maximum absolute value of the current DIIS error, default is 1.0e99_dp.
+!
+! METHODS:
+!   init          - Initializes the driver with iteration parameters and subconvergers.
+!   clean         - Deallocates resources and resets the driver.
+!   add_data      - Adds data from a new SCF iteration to the ring buffer.
+!   select_method - Selects the active subconverger based on the current error (private).
+!   run           - Executes the selected subconverger and returns a result.
+!   compute_error - Computes the current DIIS error (private).
+!
+! USAGE EXAMPLE IS BELOW.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: converger_data - DATA MANAGEMENT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `converger_data` type implements a ring buffer for efficient storage
+!   of SCF iteration history. It manages data locality and memory usage by
+!   maintaining a fixed-size circular buffer rather than continuously growing
+!   arrays, improving performance for calculations with many iterations.
+!
+! MEMBERS:
+!   slot          [INTEGER]: Current slot in the ring buffer (1-based index).
+!   num_saved     [INTEGER]: Number of occupied slots in the buffer.
+!   num_slots     [INTEGER]: Total capacity of the buffer.
+!   num_focks     [INTEGER]: Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF).
+!   ldim          [INTEGER]: Size of square matrices (nbf).
+!   nelec_a       [INTEGER]: Number of alpha electrons.
+!   nelec_b       [INTEGER]: Number of beta electrons.
+!   buffer        [TYPE(scf_data_t), ALLOCATABLE]: Array of SCF data containers.
+!
+! METHODS:
+!   init         - Initializes the ring buffer with specified dimensions.
+!   clean        - Deallocates buffer resources.
+!   next_slot    - Advances to the next slot in the buffer (private).
+!   discard_last - Removes the most recent iteration data (private).
+!   put          - Stores new SCF data in the current slot (private).
+!   get_fock     - Retrieves Fock matrix for specific iteration (private).
+!   get_mo_a     - Retrieves alpha MO coefficients (private).
+!   get_mo_b     - Retrieves beta MO coefficients (private).
+!   get_mo_e_a   - Retrieves alpha MO energies (private).
+!   get_mo_e_b   - Retrieves beta MO energies (private).
+!   get_pfon     - Retrieves pFON object pointer (private).
+!   get_density  - Retrieves density matrix (private).
+!   get_err      - Retrieves error matrix (private).
+!   get_energy   - Retrieves SCF energy (private).
+!   get_slot     - Computes slot index from iteration number (private).
+!
+! USAGE NOTES:
+!   - Data access supports both positive indices (1 = oldest) and
+!     negative indices (-1 = latest) for intuitive programming.
+!   - Each slot contains complete SCF iteration data including Fock matrices,
+!     density matrices, MO coefficients, energies, and error matrices.
+!   - Integration with pFON allows storage of fractional occupation data
+!     when dealing with challenging electronic structures.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: subconverger - ABSTRACT BASE TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `subconverger` type is an abstract base type defining the interface
+!   for all convergence methods used by `scf_conv`. Each subtype must implement
+!   the deferred procedures `run` and `setup`.
+!
+! MEMBERS:
+!   last_setup [INTEGER]: Number of SCF iterations since last setup, default is 1024.
+!   iter       [INTEGER]: Number of iterations passed, default is 0.
+!   conv_name  [CHARACTER(len=32)]: Name of the converger, default is an empty string.
+!   dat        [TYPE(converger_data), POINTER]: Pointer to SCF data.
+!
+! METHODS:
+!   init  - Initializes the subconverger (implemented as `subconverger_init`).
+!   clean - Deallocates resources (implemented as `subconverger_clean`).
+!   run   - Executes the convergence method, returns a `scf_conv_result` (deferred).
+!   setup - Prepares the subconverger with new data (deferred).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: noconv_converger - DUMMY CONVERGER
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `noconv_converger` type extends `subconverger` and implements a dummy
+!   convergence method that returns the latest iteration data without modification.
+!
+! METHODS:
+!   init  - Initializes with the parent `scf_conv` instance.
+!   run   - Returns the latest Fock matrix data in a `scf_conv_result`.
+!   setup - Does nothing (empty implementation).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: cdiis_converger - COMMUTATOR DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `cdiis_converger` type extends `subconverger` and implements the
+!   Commutator DIIS (C-DIIS) method, solving a constrained minimization problem
+!   min { Ax, \sum_i x_i = 1 } where A_{ij} = Tr([F_i D_i S_i], [F_j D_j S_j]).
+!
+! MEMBERS:
+!   maxdiis [INTEGER]: Maximum number of DIIS vectors.
+!   a       [REAL(dp), ALLOCATABLE]: C-DIIS A-matrix for error overlaps.
+!   verbose [INTEGER]: Verbosity level, default is 0.
+!   old_dim [INTEGER]: Dimension of A-matrix from the previous step, default is 0.
+!
+! METHODS:
+!   init  - Initializes the C-DIIS instance.
+!   clean - Deallocates the A-matrix.
+!   run   - Solves the DIIS equations and returns a `scf_conv_interp_result`.
+!   setup - Updates the A-matrix with new error data.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: ediis_converger - ENERGY DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `ediis_converger` type extends `cdiis_converger` and implements the
+!   Energy DIIS (E-DIIS) method, optimizing the function
+!   E_E-DIIS = \sum_i c_i E_i - 0.5 \sum_{i,j} c_i c_j Tr((D_i-D_j)(F_i-F_j))
+!   with constraints \sum_i c_i = 1, c_i \geq 0.
+!
+! MEMBERS:
+!   b    [REAL(dp), ALLOCATABLE]: Energy history from previous iterations.
+!   xlog [REAL(dp), ALLOCATABLE]: History of interpolation coefficients.
+!   t    [TYPE(ediis_opt_data)]: Optimization data structure for NLOpt.
+!   fun  [PROCEDURE(eadiis_f), POINTER]: Pointer to the objective function.
+!
+! METHODS:
+!   init  - Initializes the E-DIIS instance.
+!   clean - Deallocates additional arrays (b, xlog).
+!   setup - Prepares the optimization problem with energy and matrix data.
+!   run   - Solves the optimization problem and returns a `scf_conv_interp_result`.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: adiis_converger - APPROXIMATE DIIS
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `adiis_converger` type extends `ediis_converger` and implements the
+!   Approximate DIIS (A-DIIS) method, optimizing the function
+!   E_A-DIIS = \sum_i c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr((D_i-D_n)(F_j-F_n))
+!   with constraints \sum_i c_i = 1, c_i \geq 0.
+!
+! METHODS:
+!   init  - Initializes the A-DIIS instance (inherits from `ediis_converger`).
+!   setup - Prepares the modified optimization problem specific to A-DIIS.
+!
+! NOTES:
+!   - Inherits all members and most methods from `ediis_converger`.
+!   - Only `setup` is overridden to adjust the objective function.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: soscf_converger - SECOND-ORDER SCF
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `soscf_converger` type extends `subconverger` and implements the
+!   Second-Order SCF (SOSCF) method, using orbital gradients and an L-BFGS
+!   approximation of the Hessian for convergence.
+!
+! MEMBERS:
+!   verbose         [INTEGER]: Verbosity level, default is 0.
+!   nfocks          [INTEGER]: Number of Fock matrices (1 for RHF, 2 for UHF), default is 0.
+!   nbf             [INTEGER]: Number of basis functions, default is 0.
+!   nbf_tri         [INTEGER]: Triangular size of basis functions (nbf*(nbf+1)/2), default is 0.
+!   scf_type        [INTEGER]: SCF type (1=RHF, 2=UHF, 3=ROHF), default is 0.
+!   nocc_a          [INTEGER]: Number of occupied alpha orbitals, default is 0.
+!   nocc_b          [INTEGER]: Number of occupied beta orbitals, default is 0.
+!   nvec            [INTEGER]: Size of the gradient vector, default is 0.
+!   overlap         [REAL(dp), POINTER]: Pointer to overlap matrix, null by default.
+!   overlap_invsqrt [REAL(dp), POINTER]: Pointer to inverse square root of overlap, null by default.
+!   max_iter        [INTEGER]: Maximum micro-iterations, default is 10.
+!   min_iter        [INTEGER]: Minimum micro-iterations, default is 1.
+!   hess_thresh     [REAL(dp)]: Orbital Hessian threshold, default is 1.0e-10_dp.
+!   grad_thresh     [REAL(dp)]: Gradient threshold, default is 1.0e-5_dp.
+!   level_shift     [REAL(dp)]: Level shifting parameter, default is 0.2_dp.
+!   s_history       [REAL(dp), ALLOCATABLE]: L-BFGS step history (nvec, m_max).
+!   rho_history     [REAL(dp), ALLOCATABLE]: L-BFGS curvature reciprocals (m_max).
+!   y_history       [REAL(dp), ALLOCATABLE]: L-BFGS gradient difference history (nvec, m_max).
+!   grad            [REAL(dp), ALLOCATABLE]: Current gradient (nvec).
+!   x               [REAL(dp), ALLOCATABLE]: Current x (nvec).
+!   grad_prev       [REAL(dp), ALLOCATABLE]: Previous gradient (nvec).
+!   x_prev          [REAL(dp), ALLOCATABLE]: Previous rotation parameters (nvec).
+!   h_inv           [REAL(dp), ALLOCATABLE]: Initial inverse Hessian diagonal (nvec).
+!   work_1          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   work_2          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   work_3          [REAL(dp), ALLOCATABLE]: Working matrix (nbf, nbf).
+!   mo_a            [REAL(dp), ALLOCATABLE]: Alpha MO coefficients (nbf, nbf).
+!   mo_b            [REAL(dp), ALLOCATABLE]: Beta MO coefficients (nbf, nbf).
+!   dens_a          [REAL(dp), ALLOCATABLE]: Alpha density matrix (nbf_tri).
+!   dens_b          [REAL(dp), ALLOCATABLE]: Beta density matrix (nbf_tri).
+!   m_max           [INTEGER]: Maximum number of stored history steps, default is 0.
+!   m_history       [INTEGER]: Current number of stored history steps, default is 0.
+!   first_macro     [LOGICAL]: Flag for first macro-iteration, default is .true.
+!
+! METHODS:
+!   init           - Initializes the SOSCF instance.
+!   clean          - Deallocates arrays and resets pointers.
+!   setup          - Prepares data for SOSCF iterations.
+!   run            - Executes SOSCF micro-iterations and returns a `scf_conv_soscf_result`.
+!   init_hess_inv  - Computes the initial inverse Hessian diagonal.
+!   calc_orb_grad  - Calculates the orbital gradient.
+!   bfgs           - Computes the orbital rotation x using L-BFGS.
+!   rotate_orbs    - Applies the orbital rotation.
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_result - BASE RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_result` type is a base type for returning results from
+!   convergence methods executed by `scf_conv`. It provides default
+!   implementations that do nothing, overridden by subtypes.
+!
+! MEMBERS:
+!   ierr           [INTEGER]: Error status (0 = success, nonzero = failure), default is 5.
+!   error          [REAL(dp)]: Current DIIS error magnitude, default is 1.0e99_dp.
+!   dat            [TYPE(converger_data), POINTER]: Pointer to SCF data, null by default.
+!   active_converger_name [CHARACTER(len=32)]: Name of the active converger, default is empty.
+!
+! METHODS:
+!   get_error    - Returns the current error value.
+!   get_fock     - Placeholder returning no data (overridden by subtypes).
+!   get_density  - Placeholder returning no data (overridden by subtypes).
+!   get_mo_a     - Placeholder returning no data (overridden by subtypes).
+!   get_mo_b     - Placeholder returning no data (overridden by subtypes).
+!   get_mo_e_a   - Placeholder returning no data (overridden by subtypes).
+!   get_mo_e_b   - Placeholder returning no data (overridden by subtypes).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_interp_result - INTERPOLATION RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_interp_result` type extends `scf_conv_result` and provides
+!   results for interpolation-based methods (e.g., DIIS), computing updated
+!   Fock or density matrices as F_n = \sum_i F_i * c_i or D_n = \sum_i D_i * c_i.
+!
+! MEMBERS:
+!   coeffs [REAL(dp), ALLOCATABLE]: Interpolation coefficients c_i.
+!   pstart [INTEGER]: Start index of the interpolation range.
+!   pend   [INTEGER]: End index of the interpolation range.
+!
+! METHODS:
+!   get_fock    - Returns the interpolated Fock matrix.
+!   get_density - Returns the interpolated density matrix.
+!   interpolate - Computes the interpolated matrix (Fock or density, private).
+!
+!===============================================================================
+
+!===============================================================================
+! TYPE: scf_conv_soscf_result - SOSCF RESULT TYPE
+!===============================================================================
+!
+! DESCRIPTION:
+!   The `scf_conv_soscf_result` type extends `scf_conv_result` and provides
+!   results specific to the SOSCF method, returning the latest MO coefficients,
+!   and MO energies.
+!
+! METHODS:
+!   get_mo_a    - Returns the updated alpha MO coefficients.
+!   get_mo_b    - Returns the updated beta MO coefficients.
+!   get_mo_e_a  - Returns the updated alpha MO energies.
+!   get_mo_e_b  - Returns the updated beta MO energies.
+!
+!===============================================================================
+
+!===============================================================================
+! EXAMPLE USAGE
+!===============================================================================
+!
+!   use scf_converger
+!   type(scf_conv) :: conv
+!   class(scf_conv_result), allocatable :: res
+!   ! Initialize converger
+!   call conv%init(ldim=nbf,
+!                  maxvec=15, &
+!                  subconvergers=[conv_cdiis, conv_ediis], &
+!                  thresholds=[2.0_dp, 1.0_dp], &
+!                  overlap=s_mat,
+!                  overlap_sqrt=s_sqrt, &
+!                  num_focks=1,
+!                  verbose=1)
+!   ! In SCF loop:
+!   do iter = 1, max_iter
+!     ! Build Fock matrix...
+!
+!     ! Add data to converger
+!     call conv%add_data(f=fock, dens=density, e=energy)
+!
+!     ! Run convergence step and get new Fock matrix
+!     call conv%run(conv_res)
+!     call conv_res%get_fock(matrix=fock, istat=stat)
+!
+!     ! Check convergence
+!     diis_error = conv_res%get_error()
+!     if (diis_error < thresh) exit
+!   end do
+!   ! Clean converger
+!   call conv%clean()
+!===============================================================================
+! EXAMPLE USAGE
+!===============================================================================
 module scf_converger
 
   use precision, only: dp
+  use io_constants, only: iw
+  use mathlib, only: traceprod_sym_packed, orb_to_dens
+  use messages, only: show_message, with_abort
+  use mathlib, only: antisymmetrize_matrix, unpack_matrix, pack_matrix
+  use scf_addons, only: pfon_t
+  use, intrinsic :: iso_fortran_env, only: int32
+  use, intrinsic :: iso_c_binding, only: c_bool
+  use types, only: information
+  use mod_dft_molgrid, only: dft_grid_t
+
   implicit none
 
   private
-  public scf_conv
-  public scf_conv_result
+  ! -- SOSCF variant selector (always SOSCF_VARIANT_ORIGINAL) --
+  integer, parameter, public :: SOSCF_VARIANT_ORIGINAL    = 0
+  integer, parameter, public :: SOSCF_VARIANT_STABLE_ONLY = 1
+  integer, parameter, public :: SOSCF_VARIANT_QUAD_LS     = 2
+  !
+  public :: scf_conv
+  public :: scf_conv_result
+  public :: scf_conv_trah_result
+  public :: soscf_converger ! Used to provide parametres for soscf
+  public :: soscf_set_variant ! SOSCF mode setter
+  public :: trah_converger  ! Used to provide parametres dor trah
 
-  integer, parameter, public :: conv_none = 1
+  !> Constants for converger types
+  integer, parameter, public :: conv_none  = 1
   integer, parameter, public :: conv_cdiis = 2
   integer, parameter, public :: conv_ediis = 3
   integer, parameter, public :: conv_adiis = 4
+  integer, parameter, public :: conv_soscf = 5
+  integer, parameter, public :: conv_trah  = 6
 
-  integer, parameter, public :: conv_dtype_fock    = 1
-  integer, parameter, public :: conv_dtype_err     = 2
-  integer, parameter, public :: conv_dtype_density = 3
-  integer, parameter, public :: conv_dtype_energy  = 4
-
+  !> Converger state constants
   integer, parameter, public :: conv_state_not_initialized = 0
-  integer, parameter, public :: conv_state_initialized = 1
+  integer, parameter, public :: conv_state_initialized     = 1
 
+  !> Maximum length for converger names
   integer, parameter, public :: conv_name_maxlen = 32
+  integer, parameter, public :: SCF_RHF=1, SCF_UHF=2, SCF_ROHF=3
+  !> @brief Type to encapsulate SCF iteration data
+  !> @detail Stores Fock, density, DIIS error matrices, and SCF energy for a single SCF iteration.
+  !>         Designed for efficient memory use and data locality in a ring buffer.
+  type :: scf_data_t
+    real(kind=dp), allocatable :: focks(:,:)      !< Fock matrices (nbf_tri, num_focks)
+    real(kind=dp), allocatable :: densities(:,:)  !< Density matrices (nbf_tri, num_focks)
+    real(kind=dp), allocatable :: errs(:,:)       !< DIIS error matrices (nbf_tri, num_focks)
+    real(kind=dp), allocatable :: mo_a(:,:)       !< MO coefficients alpha (nbf, nbf)
+    real(kind=dp), allocatable :: mo_b(:,:)       !< MO coefficients beta (nbf, nbf)
+    real(kind=dp), allocatable :: mo_e_a(:)       !< MO energies alpha (nbf)
+    real(kind=dp), allocatable :: mo_e_b(:)       !< MO energies beta (nbf)
+    real(kind=dp)              :: energy = 0.0_dp !< SCF energy
+    type(pfon_t), pointer      :: pfon_obj => null() !< Pseudo-Fractional Occupation Number (pFON) type
+    real(kind=dp), pointer     :: occ_a(:) => null() !< Alpha orbital occupations (nbf)
+    real(kind=dp), pointer     :: occ_b(:) => null() !< Beta orbital occupations (nbf)
+  contains
+    procedure, private, pass :: init  => scf_data_init
+    procedure, private, pass :: clean => scf_data_clean
+  end type scf_data_t
 
-
-!> @brief Storage of Fock matrix convergence history for SCF convergers
-!> @detail Is stores up to a `num_slots` of Fock, density, DIIS error matrices and SCF energies
-!>  in cyclic buffers.
-!>  Data can be accessed via `put` and `get` subroutines using the datatype id: conv_dtype_*
-!>  Before putting new data, procedure `next_slot` should be called
+  !> @brief Storage of SCF iteration history using a ring buffer of scf_data_t
+  !> @detail Manages a cyclic buffer of SCF data up to num_slots. Data is stored in a single
+  !>         array of scf_data_t for better encapsulation and cache efficiency.
   type :: converger_data
-    integer :: slot = 0  !< current slot
-    integer :: num_saved  !< amount of occupied slots
-    integer :: num_slots !< total number of slots
-    integer :: num_focks !< dimension of Fock and density matrices, = 1 for RHF, 2 for UHF
-    integer :: ldim !< total size of the Fock matrix
-    real(kind=dp), allocatable :: focks(:,:,:) !< array of Fock matrices
-    real(kind=dp), allocatable :: errs(:,:,:) !< array of DIIS error matrices
-    real(kind=dp), allocatable :: densities(:,:,:) !< array of density matrices
-    real(kind=dp), allocatable :: energies(:) !< array of SCF energies
+    integer                   :: slot = 0         !< Current slot (1-based index)
+    integer                   :: num_saved = 0    !< Number of occupied slots
+    integer                   :: num_slots = 0    !< Total number of slots in buffer
+    integer                   :: num_focks = 0    !< Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
+    integer                   :: ldim = 0         !< Size of square matrices (nbf)
+    integer                   :: nelec_a = 0      !< Number of occupied alpha orbitals
+    integer                   :: nelec_b = 0      !< Number of occupied beta orbitals
+    type(scf_data_t), allocatable :: buffer(:)    !< Ring buffer of SCF data
   contains
-    procedure, private, pass :: init => converger_data_init
-    procedure, private, pass :: clean => converger_data_clean
-    procedure, private, pass :: next_slot => conv_data_next_slot
+    procedure, private, pass :: init         => conv_data_init
+    procedure, private, pass :: clean        => conv_data_clean
+    procedure, private, pass :: next_slot    => conv_data_next_slot
     procedure, private, pass :: discard_last => conv_data_discard
-    procedure, private, pass :: conv_data_save_vec
-    procedure, private, pass :: conv_data_save_scalar
-    procedure, private, pass :: get => conv_data_get_val
-    procedure, private, pass :: get_e => conv_data_get_energy
+    procedure, private, pass :: put          => conv_data_put
+    procedure, private, pass :: get_fock     => conv_data_get_fock
+    procedure, private, pass :: get_mo_a     => conv_data_get_mo_a
+    procedure, private, pass :: get_mo_b     => conv_data_get_mo_b
+    procedure, private, pass :: get_mo_e_a   => conv_data_get_mo_e_a
+    procedure, private, pass :: get_mo_e_b   => conv_data_get_mo_e_b
+    procedure, private, pass :: get_pfon     => conv_data_get_pfon
+    procedure, private, pass :: get_density  => conv_data_get_density
+    procedure, private, pass :: get_err      => conv_data_get_err
+    procedure, private, pass :: get_energy   => conv_data_get_energy
+    procedure, private, pass :: get_slot     => conv_data_get_slot
+  end type converger_data
 
-    generic, private :: put => conv_data_save_vec, conv_data_save_scalar
-  end type
-
-!> @brief Base type for SCF converger results
-!> @detail It is used by main SCF convergence driver `scf_conv`
-!>  The extending type should provide the following interfaces:
-!>    init  : preliminary initialization of internal subconverger data
-!>    clean : destructor
-!>    setup : setting-up of the sub-converger equations, taking into the account the new data
-!>            added in main SCF driver
-!>    run   : solving the equations, returns `scf_conv_result` datatype. Multiple subsequent calls to
-!>            this procedure without re-running `setup` should not change internal state and have to give same results
+  !> @brief Base type for SCF converger results
+  !> @detail Used by the main SCF convergence driver `scf_conv` to return results.
+  !>  The extending type should provide the following interfaces:
+  !>    init  : preliminary initialization of internal subconverger data
+  !>    clean : destructor
+  !>    setup : setting-up of the sub-converger equations, taking into the account the new data
+  !>            added in main SCF driver
+  !>    run   : solving the equations, returns `scf_conv_result` datatype. Multiple subsequent calls to
+  !>            this procedure without re-running `setup` should not change internal state and have to give same results
   type :: scf_conv_result
-    integer :: ierr = 5
-    real(kind=dp) :: error = 1.0e99_dp
-    type(converger_data), pointer :: dat => null()
-    character(len=conv_name_maxlen) :: active_converger_name = ''
+    integer :: ierr = 5                            !< Error status (0 = success, nonzero = failure)
+    real(kind=dp) :: error = 1.0e99_dp             !< Current DIIS error magnitude
+    type(converger_data), pointer :: dat => null() !< Pointer to SCF data storage
+    character(len=conv_name_maxlen) :: active_converger_name = '' !< Name of active converger
   contains
-    procedure, pass :: get_fock => conv_result_dummy_get_fock
+    procedure, pass :: get_error   => conv_result_get_error
+    procedure, pass :: get_fock    => conv_result_dummy_get_fock
     procedure, pass :: get_density => conv_result_dummy_get_density
-  end type
+    procedure, pass :: get_mo_a    => conv_result_dummy_get_mo_a
+    procedure, pass :: get_mo_b    => conv_result_dummy_get_mo_b
+    procedure, pass :: get_mo_e_a  => conv_result_dummy_get_mo_e_a
+    procedure, pass :: get_mo_e_b  => conv_result_dummy_get_mo_e_b
+    procedure, pass :: get_rms_grad => conv_result_dummy_get_rms_g
+    procedure, pass :: get_iter     => conv_result_dummy_get_iter
+    procedure, pass :: get_rms_dp  => conv_result_dummy_get_rms_dp
+    procedure, pass :: get_etot  => conv_result_dummy_get_etot
+  end type scf_conv_result
 
-!> @brief SCF converger results for interpolation methods like DIIS
-!> @details The updated Fock/density will be computed as
-!>   \f$ F_{n+1} = \sum_{i=1}^{n}{F_i c_i} } \f$
+  !> @brief SCF converger results for interpolation methods like DIIS
+  !> @details The updated Fock/density is computed as F_n = \sum_{i} F_i * c_i
   type, extends(scf_conv_result) :: scf_conv_interp_result
-    real(kind=dp), allocatable :: coeffs(:) !< interpolation coefficients \f$ c_i \f$
-    integer :: pstart
-    integer :: pend
+    real(kind=dp), allocatable :: coeffs(:) !< Interpolation coefficients c_i
+    integer :: pstart                       !< Start index of interpolation range
+    integer :: pend                         !< End index of interpolation range
   contains
     procedure, pass :: get_fock    => conv_result_interp_get_fock
     procedure, pass :: get_density => conv_result_interp_get_density
     procedure, private, pass :: interpolate => conv_result_interpolate
-  end type
+  end type scf_conv_interp_result
 
-!> @brief Base type for real SCF convergers (subconvergers)
-!> @detail It is used by main SCF convergence driver `scf_conv`
-!>  The extending type should provide the following interfaces:
-!>    init  : preliminary initialization of internal subconverger data
-!>    clean : destructor
-!>    setup : setting-up of the sub-converger equations, taking into the account the new data
-!>            added in main SCF driver
-!>    run   : solving the equations, returns `scf_conv_result` datatype. Multiple subsequent calls to
-!>            this procedure without re-running `setup` should not change internal state and have to give same results
+  !> @brief SCF converger results for SOSCF method
+  type, extends(scf_conv_result) :: scf_conv_soscf_result
+    real(kind=dp) :: rms_grad = 1
+    real(kind=dp) :: rms_dp = 1
+  contains
+    procedure, pass :: get_mo_a    => conv_result_soscf_get_mo_a
+    procedure, pass :: get_mo_b    => conv_result_soscf_get_mo_b
+    procedure, pass :: get_mo_e_a  => conv_result_soscf_get_mo_e_a
+    procedure, pass :: get_mo_e_b  => conv_result_soscf_get_mo_e_b
+    procedure, pass :: get_rms_grad => conv_result_soscf_get_rms_g
+    procedure, pass :: get_rms_dp  => conv_result_soscf_get_rms_dp
+  end type scf_conv_soscf_result
+
+  type, extends(scf_conv_result) :: scf_conv_trah_result
+    integer :: iter = 0
+    real(kind=dp) :: rms_grad = 1
+  contains
+    procedure, pass :: get_mo_a     => conv_result_trah_get_mo_a
+    procedure, pass :: get_mo_b     => conv_result_trah_get_mo_b
+    procedure, pass :: get_mo_e_a   => conv_result_trah_get_mo_e_a
+    procedure, pass :: get_mo_e_b   => conv_result_trah_get_mo_e_b
+    procedure, pass :: get_fock     => conv_result_trah_get_fock
+    procedure, pass :: get_rms_grad => conv_result_trah_get_rms_g
+    procedure, pass :: get_iter     => conv_result_trah_get_iter
+  end type scf_conv_trah_result
+  !> @brief Base type for real SCF convergers (subconvergers)
+  !> @detail Used by main SCF convergence driver `scf_conv`.
+  !>  The extending type should provide the following interfaces:
+  !>    init  : preliminary initialization of internal subconverger data
+  !>    clean : destructor
+  !>    setup : setting-up of the sub-converger equations, taking into the account the new data
+  !>            added in main SCF driver
+  !>    run   : solving the equations, returns `scf_conv_result` datatype. Multiple subsequent calls to
+  !>            this procedure without re-running `setup` should not change internal state and have to give same results
   type, abstract :: subconverger
-    integer :: last_setup = 1024  !< Number of SCF iterations `setup` has been called
-    integer :: iter  = 0 !< Number of iterations passed
+    integer :: last_setup = 1024                      !< Number of SCF iterations since last setup
+    integer :: iter = 0                               !< Number of iterations passed
     character(len=conv_name_maxlen) :: conv_name = '' !< Converger name
-    type(converger_data), pointer :: dat !< Pointer to Fock, density, and DIIS error matrices data
+    type(converger_data), pointer :: dat => null()    !< Pointer to SCF data
   contains
     private
     procedure, pass :: subconverger_init
     procedure, pass :: subconverger_clean
-    procedure, public, pass :: init => subconverger_init
+    procedure, public, pass :: init  => subconverger_init
     procedure, public, pass :: clean => subconverger_clean
     procedure(subconverger_run), pass, deferred :: run
     procedure(subconverger_setup), pass, deferred :: setup
-  end type
+  end type subconverger
 
-!> @brief Container type for subconvergers
-!>   Used to create allocatable array of allocatable types
+  !> @brief Container type for subconvergers
+  !> @detail Used to create allocatable array of allocatable types
   type :: subconverger_
     class(subconverger), allocatable :: s
-  end type
+  end type subconverger_
 
-!> @brief Main driver for converging SCF problems
-!> @detail Manages and runs different real convergers depending on the current
-!>  state of SCF optimization
+  !> @brief Main driver for converging SCF problems
+  !> @detail Manages and runs different real convergers depending on the current
+  !>         state of SCF optimization.
   type :: scf_conv
-    integer :: step  !< Current step
-    real(kind=dp), pointer :: overlap(:,:) => null()  !< Pointer to the full-format overlap matrix (S)
-    real(kind=dp), pointer :: overlap_sqrt(:,:) => null()  !< Pointer to the full-format S^(1/2) matrix
-    type(converger_data) :: dat !< Storage of Fock, density, and DIIS error matrices for previous steps
-    type(subconverger_), allocatable :: sconv(:) !< Array of converger methods
-    real(kind=dp), allocatable :: thresholds(:) !< Thresholds to initiate convergers from `sconv`
-                                                !< if `current_error < thresholds(i)`, then `sconv(i)` is used
-    integer :: iter_space_size = 10  !< Default size of subconverger problem size
-    integer :: verbose = 0  !< Verbosity
-    integer :: state = 0 !< Current state of converger:
-                         !< 0 - not initialized
-                         !< 1 - initialized, normal
-    real(kind=dp) :: current_error = 1.0e99_dp !< Maximum absolute value of current DIIS error matrix
+    integer :: step = 0                           !< Current SCF iteration step
+    real(kind=dp), pointer :: overlap(:,:) => null()      !< Pointer to full-format overlap matrix (S)
+    real(kind=dp), pointer :: overlap_sqrt(:,:) => null() !< Pointer to full-format S^(1/2) matrix
+    type(converger_data) :: dat                   !< Storage of SCF iteration history
+    type(subconverger_), allocatable :: sconv(:)  !< Array of subconverger methods
+    real(kind=dp), allocatable :: thresholds(:)   !< Thresholds to initiate subconvergers
+    integer :: iter_space_size = 10               !< Default size of subconverger problem space
+    integer :: verbose = 0                        !< Verbosity level
+    integer :: state = 0                          !< Current state (0 = not initialized, 1 = initialized)
+    real(kind=dp) :: current_error = 1.0e99_dp    !< Maximum absolute value of current DIIS error
+    integer :: scf_type = 0
   contains
-    procedure, pass :: init => scf_conv_init
-    procedure, pass :: clean => scf_conv_clean
+    procedure, pass :: init     => scf_conv_init
+    procedure, pass :: clean    => scf_conv_clean
     procedure, pass :: add_data => scf_conv_add_data
     procedure, private, pass :: select_method => scf_conv_select
-    procedure, pass :: run => scf_conv_run
+    procedure, pass :: run      => scf_conv_run
     procedure, private, pass :: compute_error => scf_conv_compute_error
-  end type
+  end type scf_conv
 
-!> @brief Dummy (steepest descent) converger
-!> @detail Used for convenience and does nothing
+  !> @brief Dummy (steepest descent) converger
+  !> @detail Used for convenience, does nothing but return the latest data.
   type, extends(subconverger) :: noconv_converger
   contains
-    procedure, pass :: init => noconv_init
-    procedure, pass :: run => noconv_run
+    procedure, pass :: init  => noconv_init
+    procedure, pass :: run   => noconv_run
     procedure, pass :: setup => noconv_setup
-  end type
+  end type noconv_converger
 
-!> @brief Commutator DIIS (C-DIIS) converger
-!> @detail Solves constraint minimization problem:
-!>   \f$ min \{ Ax, \sum_i{x_i} = 1 \} \f$
-!>   where \f$ A_{ij} = Tr([F_i D_i S_i],\ [F_j D_j S_j]) \f$
+  !> @brief Commutator DIIS (C-DIIS) converger
+  !> @detail Solves constraint minimization problem: min { Ax, \sum_i x_i = 1 }
+  !>         where A_{ij} = Tr([F_i D_i S_i], [F_j D_j S_j])
   type, extends(subconverger) :: cdiis_converger
-    integer :: maxdiis
-    real(kind=dp), allocatable :: a(:,:) !< C-DIIS A-matrix
-    integer :: verbose = 0  !< Verbosity parameter
-    integer :: old_dim = 0  !< Actual dimension of A matrix from previous step
+    integer :: maxdiis                            !< Maximum number of DIIS vectors
+    real(kind=dp), allocatable :: a(:,:)          !< C-DIIS A-matrix
+    integer :: verbose = 0                        !< Verbosity parameter
+    integer :: old_dim = 0                        !< Dimension of A matrix from previous step
   contains
-    procedure, pass :: init => cdiis_init
+    procedure, pass :: init  => cdiis_init
     procedure, pass :: clean => cdiis_clean
-    procedure, pass :: run => cdiis_run
+    procedure, pass :: run   => cdiis_run
     procedure, pass :: setup => cdiis_setup
-  end type
+  end type cdiis_converger
 
-!> @brief Datatype to pass optimization parameters to NLOpt
-!>   for solving E/A-DIIS-like constraint minimization problems:
-!>   \f$ min \{ x^T A x + bx,\ x_i \geq 0,\ \sum_i{x_i} = 1 \} \f$
+  !> @brief Datatype to pass optimization parameters to NLOpt for E/A-DIIS
+  !> @detail Used for solving constraint minimization problems in E/A-DIIS:
+  !>         \f$ min \{ x^T A x + bx,\ x_i \geq 0,\ \sum_i{x_i} = 1 \} \f$
   type :: ediis_opt_data
-    real(kind=8), pointer :: b(:) => null()
-    real(kind=8), pointer :: A(:,:) => null()
-    procedure(eadiis_f), pointer, nopass :: fun => null()
-  end type
+    real(kind=8), pointer :: b(:) => null()       !< Energy or linear term coefficients
+    real(kind=8), pointer :: A(:,:) => null()     !< Quadratic term matrix
+    procedure(eadiis_f), pointer, nopass :: fun => null() !< Objective function pointer
+  end type ediis_opt_data
 
-!> @brief Energy DIIS (E-DIIS) converger
-!> @detail Optimizes the following function:
-!>  \f$ E_\mathrm{E-DIIS} = \sum_{i} c_i E_i - 0.5 \sum_{i,j} c_i c_j Tr( (D_i-D_j) (F_i-F_j) ) \f$
-!> under the constraints:
-!>  \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
+  !> @brief Energy DIIS (E-DIIS) converger
+  !> @detail Optimizes the following function:
+  !>         \f$ E_\mathrm{E-DIIS} = \sum_{i} c_i E_i - 0.5 \sum_{i,j} c_i c_j Tr( (D_i-D_j) (F_i-F_j) ) \f$
+  !>         under the constraints:
+  !>         \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
   type, extends(cdiis_converger) :: ediis_converger
-    real(kind=dp), allocatable :: b(:) !< energy history
-    real(kind=dp), allocatable :: xlog(:,:) !< interpolation coefficients history
-    type(ediis_opt_data) :: t
-    procedure(eadiis_f), pointer, nopass :: fun => null()
+    real(kind=dp), allocatable :: b(:)            !< Energy history
+    real(kind=dp), allocatable :: xlog(:,:)       !< Interpolation coefficients history
+    type(ediis_opt_data) :: t                     !< Optimization data for NLOpt
+    procedure(eadiis_f), pointer, nopass :: fun => null() !< Pointer to objective function
   contains
-    procedure, pass :: init => ediis_init
+    procedure, pass :: init  => ediis_init
     procedure, pass :: clean => ediis_clean
     procedure, pass :: setup => ediis_setup
-    procedure, pass :: run => ediis_run
-  end type
+    procedure, pass :: run   => ediis_run
+  end type ediis_converger
 
-!> @brief A-DIIS subconverger type
-!> @detail Optimizes the following function:
-!>  \f$ E_\mathrm{A-DIIS} = \sum_{i} c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr( (D_i-D_n) (F_j-F_n) ) \f$
-!> under the constraints:
-!>  \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
+  !> @brief A-DIIS subconverger type
+  !> @detail Optimizes the following function:
+  !>         \f$ E_\mathrm{A-DIIS} = \sum_{i} c_i Tr((D_i-D_n)F_n) + 2 \sum_{i,j} c_i c_j Tr( (D_i-D_n) (F_j-F_n) ) \f$
+  !>         under the constraints:
+  !>         \f$ \sum_i {c_i} = 1, c_i \geq 0 \f$
   type, extends(ediis_converger) :: adiis_converger
   contains
-    procedure, pass :: init => adiis_init
+    procedure, pass :: init  => adiis_init
     procedure, pass :: setup => adiis_setup
-  end type
+  end type adiis_converger
 
   abstract interface
     subroutine subconverger_run(self, res)
       import
-      class(subconverger), target :: self
+      class(subconverger), target, intent(inout) :: self
       class(scf_conv_result), allocatable, intent(out) :: res
     end subroutine
 
     subroutine subconverger_setup(self)
       import
-      class(subconverger) :: self
+      class(subconverger), intent(inout) :: self
     end subroutine
 
     subroutine eadiis_f(val, n, t, grad, need_gradient, d)
@@ -218,303 +691,955 @@ module scf_converger
       implicit none
       real(kind=8) :: val, t(*), grad(*)
       integer(kind=4), intent(in) :: n, need_gradient
-      type(ediis_opt_data) :: d
+      type(ediis_opt_data), intent(in) :: d
     end subroutine
   end interface
 
-!==============================================================================
+  !> @brief SOSCF subconverger type
+  !> @detail Implementation is based on
+  !          T. H. Fischer, J. Almlof, Journal of Physical Chemistry, 96(24), 9768-9774 (1992)
+  !          F. Neese, Chemical Physics Letters, 325(1-3), 93-98 (2000)
+  type, extends(subconverger) :: soscf_converger
+
+    integer :: verbose = 0            !< Verbosity parameter
+    integer :: nfocks = 0             !< Number of Focks (RHF = 1, UHF = 2)
+    integer :: nbf = 0                !< Number of basis functions
+    integer :: nbf_tri = 0            !< Number of basis functions in triangular format
+    integer :: scf_type = 0           !< SCF type: 1:RHF, 2:UHF, 3:ROHF
+    integer :: nocc_a = 0             !< Number of occupied alpha orbitals
+    integer :: nocc_b = 0             !< Number of occupied beta orbitals
+    integer :: nvec = 0               !< Size of the gradient vector
+
+    ! === cheap step-control state (SOSCF only) ===
+    real(dp) :: alpha_cap   = 1.0_dp
+    real(dp) :: kappa_lim   = 0.8_dp
+    real(dp) :: alpha_last  = 0.0_dp
+    real(dp) :: gg_last     = 0.0_dp
+    real(dp) :: hh_last     = 1.0_dp
+    real(dp) :: g_rms_last  = 0.0_dp
+    integer  :: polish_cnt  = 0
+
+    real(kind=dp), pointer :: overlap(:, :) => null()
+    real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
+    class(information), pointer :: infos
+
+!    ! SOSCF parameters from scf_driver:
+    real(kind=dp) :: hess_thresh = 1.0e-10_dp !< Orbital Hessian threshold
+    real(kind=dp) :: grad_thresh = 1.0e-3_dp  !< Gradient threshold
+    real(kind=dp) :: level_shift = 0.0_dp     !< Level shifting parameter
+    real(kind=dp) :: rms_grad_prev = 0.0_dp   !< previous Gradient norm
+    integer :: soscf_reset_mod = 1            !< Set the SOSCF Hessian reset mode.
+    logical :: use_lineq = .false.            !< Use linear equations (vs BFGS)
+
+    ! L-BFGS history
+    real(kind=dp), allocatable :: s_history(:,:)  !< Step history (nvec, m_max)
+    real(kind=dp), allocatable :: rho_history(:)  !< Curvature reciprocals (m_max)
+    real(kind=dp), allocatable :: y_history(:,:)  !< Gradient difference history (nvec, m_max)
+    real(kind=dp), allocatable :: upd_history(:,:)! h_inv*dgrad history (nvec, m_max)
+    real(kind=dp), allocatable :: grad(:)         !< Gradient (nvec)
+    real(kind=dp), allocatable :: x(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: x_prev(:)         !< Step (nvec)
+    real(kind=dp), allocatable :: grad_prev(:)    !< Previous gradient (nvec)
+    real(kind=dp), allocatable :: h_inv(:)        !< Initial inverse Hessian diagonal (nvec)
+    real(kind=dp), allocatable :: work_1(:,:)     !< Work matrix (nbf, nbf)
+    real(kind=dp), allocatable :: work_2(:,:)     !< Work matrix (nbf, nbf)
+    real(kind=dp), allocatable :: work_3(:,:)     !< Work matrix (nbf, nbf)
+    real(kind=dp), allocatable :: mo_a(:,:)       !< MOs matrix (nbf, nbf)
+    real(kind=dp), allocatable :: mo_b(:,:)       !< MOs matrix (nbf, nbf)
+    real(kind=dp), allocatable :: dens_a(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_b(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_a_old(:)       !< MOs matrix (nbf_tri)
+    real(kind=dp), allocatable :: dens_b_old(:)       !< MOs matrix (nbf_tri)
+    integer :: m_max = 0                          !< Maximum number of stored history steps
+    integer :: m_history = 0                      !< Number of stored history steps
+    logical :: first_macro = .true.               !< Flag for first macro-iteration
+    ! 0: original; 1: stability-only; 2: stability + quadratic LS + 1-D TR
+    integer :: variant = SOSCF_VARIANT_ORIGINAL
+  contains
+    procedure, pass :: init  => soscf_init
+    procedure, pass :: clean => soscf_clean
+    procedure, pass :: setup => soscf_setup
+    procedure, pass :: run   => soscf_run
+    procedure, private, pass :: init_hess_inv => init_hess_inv
+    procedure, private, pass :: calc_orb_grad => calc_orb_grad
+    procedure, private, pass :: bfgs => bfgs
+    procedure, private, pass :: rotate_orbs => rotate_orbs
+    procedure, private, pass :: rms_density => rms_density
+  end type soscf_converger
+!=================================================================
+!impementation of trust region agumented hessian
+!=================================================================
+
+  type, extends(subconverger) :: trah_converger
+    integer :: scf_type   = SCF_RHF
+    integer :: nbf        = 0
+    integer :: nbf_tri    = 0
+    integer :: nocc_a     = 0
+    integer :: nocc_b     = 0
+    integer :: nvir_a     = 0
+    integer :: nvir_b     = 0
+    integer :: nfocks     = 1
+    integer :: verbose = 0
+    real(dp) :: etot = 0
+    integer(int32) :: n_param     = 0
+    logical :: is_dft     = .false.
+    real(dp) :: hf_scale  = 1.0_dp
+
+    real(dp), allocatable :: fock_ao(:,:)   ! fock matrix fock_ao (nbf_tri, nfock)
+    real(dp), allocatable :: dens(:,:)      ! density matrix (nbf_tri, nfocks)
+    real(dp), allocatable :: f_old(:,:)
+    real(dp), allocatable :: d_old(:,:)
+    real(kind=dp), pointer :: overlap(:, :) => null()
+    real(kind=dp), pointer :: overlap_invsqrt(:, :) => null()
+
+    class(information), pointer :: infos
+    type(dft_grid_t), pointer :: molgrid
+
+    real(dp), allocatable :: mo_a(:,:), mo_b(:,:)
+
+    real(dp), allocatable :: foo_a(:,:), fvv_a(:,:), xmat_a(:,:), x2mat_a(:,:)
+    real(dp), allocatable :: foo_b(:,:), fvv_b(:,:), xmat_b(:,:), x2mat_b(:,:)
+
+    real(dp), allocatable :: v(:,:)         ! response v(nbf, nbf)
+    real(dp), allocatable :: dm(:,:)        ! response density dm(nbf,nbf)
+    real(dp), allocatable :: pfock(:,:)     ! Fock matrix (nbf_tri, nfocks) from respose density
+    real(dp), allocatable :: dm_tri(:,:)    ! packed DM (nbf_tri, nfocks)
+
+    real(dp), allocatable :: work1(:,:)     ! (nbf, nbf)
+    real(dp), allocatable :: work2(:,:)     ! (nbf, nbf)
+    real(dp), allocatable :: work3(:,:)     ! (nbf, nbf)
+
+  contains
+    procedure, pass :: init  => trah_init
+    procedure, pass :: clean => trah_clean
+    procedure, pass :: setup => trah_setup
+    procedure, pass :: run   => trah_run
+    procedure, pass :: rotate_orbs => rotate_orbs_trah
+    procedure, pass :: calc_h_op => calc_h_op
+    procedure, pass :: calc_g_h => calc_g_h
+  end type trah_converger
 
 contains
+    subroutine soscf_set_variant(obj, variant)
+    class(subconverger), intent(inout) :: obj
+    integer,            intent(in)     :: variant
+    select type(me => obj)
+    type is (soscf_converger)
+      me%variant = variant
+    class default
+      ! ignore for non-SOSCF convergers
+  end select
+  end subroutine soscf_set_variant
 
 !==============================================================================
+! scf_data_t Methods
+!==============================================================================
 
-!> @brief Form the new Fock matrix
+  !> @brief Initialize an scf_data_t instance
+  !> @param[inout] self The scf_data_t object to initialize.
+  !> @param[in] ldim Size of triangular matrices (nbf*(nbf+1)/2)
+  !> @param[in] nfocks Number of Fock matrices (1 for RHF/ROHF, 2 for UHF)
+  !> @param[out] istat Status code (0 for success, nonzero for allocation failure)
+  subroutine scf_data_init(self, ldim, nfocks, istat)
+    class(scf_data_t), intent(inout) :: self
+    integer, intent(in) :: ldim, nfocks
+    integer, intent(out) :: istat
+    integer :: nbf_tri
+
+    istat = 0
+    nbf_tri = ldim * (ldim + 1) / 2
+    if (allocated(self%focks)) call self%clean()
+    allocate(self%focks(nbf_tri, nfocks), &
+             self%densities(nbf_tri, nfocks), &
+             self%errs(nbf_tri, nfocks), &
+             stat=istat)
+    ! Note: MO coefficients mo_a, mo_b and energies mo_e_a, mo_e_b
+    ! Note: are allocated on demand in conv_data_put
+
+    self%densities = 0.0_dp
+    self%focks     = 0.0_dp
+    self%errs      = 0.0_dp
+    self%energy    = 0.0_dp
+  end subroutine scf_data_init
+
+  !> @brief Clean up an scf_data_t instance
+  subroutine scf_data_clean(self)
+    class(scf_data_t), intent(inout) :: self
+
+    if (allocated(self%focks))     deallocate(self%focks)
+    if (allocated(self%densities)) deallocate(self%densities)
+    if (allocated(self%errs))      deallocate(self%errs)
+    self%occ_a => null()
+    self%occ_b => null()
+    self%energy = 0.0_dp
+  end subroutine scf_data_clean
+
+!==============================================================================
+! converger_data Methods
+!==============================================================================
+
+  !> @brief Set up a ring buffer to store SCF iteration history.
+  !> @param[inout] self The converger_data object to initialize.
+  !> @param[in] ldim Number of basis functions (nbf)
+  !> @param[in] nfocks Number of Fock matrices per iteration (1 for RHF/ROHF, 2 for UHF)
+  !> @param[in] nslots Maximum number of SCF iterations to store
+  !> @param[out] istat Success status (0 for success, nonzero for error)
+  subroutine conv_data_init(self, ldim, nfocks, nslots, istat, nelec_a, nelec_b)
+    class(converger_data), intent(inout) :: self
+    integer, intent(in) :: ldim, nfocks, nslots
+    integer, intent(out) :: istat
+    integer, intent(in), optional :: nelec_a, nelec_b
+    integer :: i
+
+    istat = 0
+    if (allocated(self%buffer)) call self%clean()
+    self%ldim      = ldim
+    self%num_focks = nfocks
+    self%num_slots = nslots
+    self%num_saved = 0
+    self%slot      = 0
+    if (present(nelec_a)) self%nelec_a = nelec_a
+    if (present(nelec_b)) self%nelec_b = nelec_b
+    allocate(self%buffer(nslots), stat=istat)
+    do i = 1, nslots
+      call self%buffer(i)%init(ldim, nfocks, istat)
+    end do
+  end subroutine conv_data_init
+
+  !> @brief Finalize converger_data and deallocate memory
+  subroutine conv_data_clean(self)
+    class(converger_data), intent(inout) :: self
+    integer :: i
+
+    if (allocated(self%buffer)) then
+      do i = 1, self%num_slots
+        call self%buffer(i)%clean()
+      end do
+      deallocate(self%buffer)
+    end if
+    self%ldim      = 0
+    self%num_focks = 0
+    self%num_slots = 0
+    self%num_saved = 0
+    self%slot      = 0
+  end subroutine conv_data_clean
+
+  !> @brief Advance to the next slot in the ring buffer
+  subroutine conv_data_next_slot(self)
+    class(converger_data), intent(inout) :: self
+
+    self%slot = mod(self%slot, self%num_slots) + 1
+    self%num_saved = min(self%num_saved + 1, self%num_slots)
+  end subroutine conv_data_next_slot
+
+  !> @brief Discard the most recent data entry
+  subroutine conv_data_discard(self)
+    class(converger_data), intent(inout) :: self
+
+    self%slot = mod(self%slot - 2, self%num_slots) + 1
+    self%num_saved = min(self%num_saved - 1, 1)
+  end subroutine conv_data_discard
+
+  !> @brief Store SCF data for the current iteration
+  !> @param[in] fock Fock matrices (optional)
+  !> @param[in] dens Density matrices (optional)
+  !> @param[in] energy SCF energy (optional)
+  !> @param[in] mo_a Alpha MO coefficients (optional)
+  !> @param[in] mo_b Beta MO coefficients (optional)
+  !> @param[in] mo_e_a Alpha MO energies (optional)
+  !> @param[in] mo_e_b Beta MO energies (optional)
+  subroutine conv_data_put(self, fock, dens, energy, mo_a, mo_b, &
+                           mo_e_a, mo_e_b, pfon_obj)
+    class(converger_data), intent(inout) :: self
+    real(kind=dp), intent(in), optional :: fock(:,:)
+    real(kind=dp), intent(in), optional :: dens(:,:)
+    real(kind=dp), intent(in), optional :: energy
+    real(kind=dp), intent(in), optional :: mo_a(:,:), mo_b(:,:)
+    real(kind=dp), intent(in), optional :: mo_e_a(:), mo_e_b(:)
+    type(pfon_t), optional, target, intent(in) :: pfon_obj
+
+    integer :: slot, nbf
+
+    nbf = self%ldim
+    slot = self%slot
+    if (present(fock)) self%buffer(slot)%focks = fock
+    if (present(dens)) self%buffer(slot)%densities = dens
+    if (present(energy)) self%buffer(slot)%energy = energy
+    if (present(mo_a)) then
+      if (.not. allocated(self%buffer(slot)%mo_a)) then
+        allocate(self%buffer(slot)%mo_a(nbf, nbf))
+      end if
+      self%buffer(slot)%mo_a = mo_a
+    end if
+    if (present(mo_b)) then
+      if (.not. allocated(self%buffer(slot)%mo_b)) then
+        allocate(self%buffer(slot)%mo_b(nbf, nbf))
+      end if
+      self%buffer(slot)%mo_b = mo_b
+    end if
+    if (present(mo_e_a)) then
+      if (.not. allocated(self%buffer(slot)%mo_e_a)) then
+        allocate(self%buffer(slot)%mo_e_a(nbf))
+      end if
+      self%buffer(slot)%mo_e_a = mo_e_a
+    end if
+    if (present(mo_e_b)) then
+      if (.not. allocated(self%buffer(slot)%mo_e_b)) then
+        allocate(self%buffer(slot)%mo_e_b(nbf))
+      end if
+      self%buffer(slot)%mo_e_b = mo_e_b
+    end if
+    if (present(pfon_obj)) then
+      self%buffer(slot)%pfon_obj => pfon_obj
+    end if
+  end subroutine conv_data_put
+
+  !> @brief Get Fock matrix for a specific iteration and matrix ID
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @param[in] matrix_id Fock matrix index (1 = alpha, 2 = beta)
+  !> @return Pointer to the Fock matrix
+  function conv_data_get_fock(self, n, matrix_id) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n, matrix_id
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%focks(:, matrix_id)
+  end function conv_data_get_fock
+
+  !> @brief Get MO coefficients for alpha orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the alpha MO coefficients
+  function conv_data_get_mo_a(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:,:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_a
+  end function conv_data_get_mo_a
+
+  !> @brief Get MO coefficients for beta orbitals for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the beta MO coefficients
+  function conv_data_get_mo_b(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:,:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_b
+  end function conv_data_get_mo_b
+
+  !> @brief Get alpha MO energies for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the alpha MO energies
+  function conv_data_get_mo_e_a(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_e_a
+  end function conv_data_get_mo_e_a
+
+  !> @brief Get beta MO energies for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the beta MO energies
+  function conv_data_get_mo_e_b(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%mo_e_b
+  end function conv_data_get_mo_e_b
+
+  !> @brief Get pfon object for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return Pointer to the pfon object
+  function conv_data_get_pfon(self, n) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n
+    type(pfon_t), pointer :: res
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%pfon_obj
+  end function conv_data_get_pfon
+
+  !> @brief Get density matrix for a specific iteration and matrix ID
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @param[in] matrix_id Density matrix index (1 = alpha, 2 = beta)
+  !> @return Pointer to the density matrix
+  function conv_data_get_density(self, n, matrix_id) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n, matrix_id
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%densities(:, matrix_id)
+  end function conv_data_get_density
+
+  !> @brief Get DIIS error matrix for a specific iteration and matrix ID
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @param[in] matrix_id Error matrix index (1 = alpha, 2 = beta)
+  !> @return Pointer to the error matrix
+  function conv_data_get_err(self, n, matrix_id) result(res)
+    class(converger_data), intent(in), target :: self
+    integer, intent(in) :: n, matrix_id
+    real(kind=dp), pointer :: res(:)
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res => self%buffer(slot)%errs(:, matrix_id)
+  end function conv_data_get_err
+
+  !> @brief Get SCF energy for a specific iteration
+  !> @param[in] n Slot ID (1 = oldest, -1 = latest)
+  !> @return SCF energy value
+  function conv_data_get_energy(self, n) result(res)
+    class(converger_data), intent(in) :: self
+    integer, intent(in) :: n
+    real(kind=dp) :: res
+    integer :: slot
+
+    slot = self%get_slot(n)
+    res = self%buffer(slot)%energy
+  end function conv_data_get_energy
+
+  !> @brief Compute slot index from iteration number
+  !> @param[in] n Iteration number (1 = oldest, -1 = latest)
+  !> @return Slot index in the ring buffer
+  function conv_data_get_slot(self, n) result(slot)
+    class(converger_data), intent(in) :: self
+    integer, intent(in) :: n
+    integer :: slot, num_saved
+    num_saved = self%num_saved
+    if (n == -1) then
+      slot = self%slot
+    else
+      slot = modulo(self%slot - num_saved + n - 1, self%num_slots) + 1
+    end if
+  end function
+
+!==============================================================================
+! scf_conv_result Methods
+!==============================================================================
+
+  !> @brief Form the new Fock matrix
+  !> @detail Placeholder for derived types to override. Does nothing by default.
   subroutine conv_result_dummy_get_fock(self, matrix, istat)
-    use precision, only: dp
-    implicit none
     class(scf_conv_result), intent(in) :: self
     integer, intent(out) :: istat
     real(kind=dp), intent(inout) :: matrix(:,:)
-    istat = 0
 
+    istat = 0
   end subroutine conv_result_dummy_get_fock
 
-!==============================================================================
-
-!> @brief Form the new density matrix
+  !> @brief Form the new density matrix
+  !> @detail Placeholder for derived types to override. Does nothing by default.
   subroutine conv_result_dummy_get_density(self, matrix, istat)
-    use precision, only: dp
-    implicit none
     class(scf_conv_result), intent(in) :: self
     integer, intent(out) :: istat
     real(kind=dp), intent(inout) :: matrix(:,:)
-    istat = 0
 
+    istat = 0
   end subroutine conv_result_dummy_get_density
 
-!==============================================================================
+  subroutine conv_result_dummy_get_mo_a(self, matrix, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
 
-!> @brief Form the interpolated Fock matrix
-!> @detail F_n = \sum_{n-maxdiis+1}^{n} F_i * C_i
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_a
+
+  subroutine conv_result_dummy_get_mo_b(self, matrix, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_b
+
+  subroutine conv_result_dummy_get_mo_e_a(self, vector, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_e_a
+
+  subroutine conv_result_dummy_get_mo_e_b(self, vector, istat)
+    class(scf_conv_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    istat = 0
+  end subroutine conv_result_dummy_get_mo_e_b
+
+  function conv_result_dummy_get_rms_g(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_rms_g
+
+  function conv_result_dummy_get_iter(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+    istat = 0
+  end function conv_result_dummy_get_iter
+
+  function conv_result_dummy_get_rms_dp(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_rms_dp
+
+  function conv_result_dummy_get_etot(self) result(istat)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: istat
+
+    istat = 0
+  end function conv_result_dummy_get_etot
+
+  !> @brief Form the interpolated Fock matrix
+  !> @detail F_n = \sum_{i=start}^{end} F_i * c_i
   subroutine conv_result_interp_get_fock(self, matrix, istat)
-    use precision, only: dp
-    implicit none
     class(scf_conv_interp_result), intent(in) :: self
     integer, intent(out) :: istat
     real(kind=dp), intent(inout) :: matrix(:,:)
 
     if (self%ierr == 0) then
-      call self%interpolate(matrix, conv_dtype_fock, istat)
+      call self%interpolate(matrix, 'fock', istat)
+    else
+      istat = self%ierr
     end if
-
   end subroutine conv_result_interp_get_fock
 
+  !> @brief Get error value from result
+  !> @return Current error value
+  !> @brief Get the current convergence error
+  !> @return Current error value for the active converger
+  function conv_result_get_error(self) result(err)
+    class(scf_conv_result), intent(in) :: self
+    real(kind=dp) :: err
+
+    err = self%error
+  end function conv_result_get_error
+
+!==============================================================================
+! DIIS Result Methods
 !==============================================================================
 
-!> @brief Form the interpolated density matrix
-!> @detail D_n = \sum_{n-maxdiis+1}^{n} D_i * C_i
+  !> @brief Form the interpolated density matrix
+  !> @detail D_n = \sum_{i=start}^{end} D_i * c_i
   subroutine conv_result_interp_get_density(self, matrix, istat)
-    use precision, only: dp
-    implicit none
     class(scf_conv_interp_result), intent(in) :: self
     integer, intent(out) :: istat
     real(kind=dp), intent(inout) :: matrix(:,:)
 
     if (self%ierr == 0) then
-      call self%interpolate(matrix, conv_dtype_density, istat)
+      call self%interpolate(matrix, 'density', istat)
+    else
+      istat = self%ierr
     end if
-
   end subroutine conv_result_interp_get_density
 
-!==============================================================================
-
-!> @brief Form the interpolated matrix
-!> @detail F_n = \sum_{n-maxdiis+1}^{n} F_i * C_i
+  !> @brief Form the interpolated matrix (Fock or density)
+  !> @param[inout] matrix Output matrix (Fock or density)
+  !> @param[in] datatype 'fock' or 'density' to specify which matrix to interpolate
+  !> @param[out] istat Status code (0 = success)
   subroutine conv_result_interpolate(self, matrix, datatype, istat)
-    use precision, only: dp
-
-    implicit none
-
     class(scf_conv_interp_result), intent(in) :: self
-    integer, intent(in) :: datatype
     integer, intent(out) :: istat
     real(kind=dp), intent(inout) :: matrix(:,:)
+    character(len=*), intent(in) :: datatype
     integer :: i, ifock
 
-    if (self%ierr/=0) then
-        istat = self%ierr
-        return
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
     end if
 
-    matrix = 0
+    matrix = 0.0_dp
     do ifock = 1, self%dat%num_focks
       do i = self%pstart, self%pend
-        matrix(:,ifock) = matrix(:,ifock) &
-                          + self%coeffs(i)*self%dat%get(i,datatype,ifock)
+        select case (datatype)
+        case ('fock')
+          matrix(:, ifock) = matrix(:, ifock) + self%coeffs(i) * self%dat%get_fock(i, ifock)
+        case ('density')
+          matrix(:, ifock) = matrix(:, ifock) + self%coeffs(i) * self%dat%get_density(i, ifock)
+        end select
       end do
     end do
+
     istat = 0
   end subroutine conv_result_interpolate
 
 !==============================================================================
+! SOSCF Result Methods
 !==============================================================================
 
-!> @brief Finalize scf_conv datatype
+  !> @brief Get alpha MO coefficients from SOSCF result
+  subroutine conv_result_soscf_get_mo_a(self, matrix, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_a
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_a
+
+  !> @brief Get beta MO coefficients from SOSCF result
+  subroutine conv_result_soscf_get_mo_b(self, matrix, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_b
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_b
+
+  !> @brief Get alpha orbital energies from SOSCF result
+  subroutine conv_result_soscf_get_mo_e_a(self, vector, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_a
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_e_a
+
+  !> @brief Get beta orbital energies from SOSCF result
+  subroutine conv_result_soscf_get_mo_e_b(self, vector, istat)
+    class(scf_conv_soscf_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_b
+    istat = 0
+  end subroutine conv_result_soscf_get_mo_e_b
+
+  function conv_result_soscf_get_rms_g(self) result(rms)
+    class(scf_conv_soscf_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%rms_grad
+  end function conv_result_soscf_get_rms_g
+
+  function conv_result_soscf_get_rms_dp(self) result(rms)
+    class(scf_conv_soscf_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%rms_dp
+  end function conv_result_soscf_get_rms_dp
+
+!==============================================================================
+! TRAH Result Methods
+!==============================================================================
+
+  !> @brief Get alpha MO coefficients from TRAH result
+  subroutine conv_result_trah_get_mo_a(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_a
+    istat = 0
+  end subroutine conv_result_trah_get_mo_a
+
+  !> @brief Get beta MO coefficients from TRAH result
+  subroutine conv_result_trah_get_mo_b(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%mo_b
+    istat = 0
+  end subroutine conv_result_trah_get_mo_b
+
+  subroutine conv_result_trah_get_mo_e_a(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_a
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_a
+
+  subroutine conv_result_trah_get_mo_e_b(self, vector, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: vector(:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    vector = self%dat%buffer(self%dat%slot)%mo_e_b
+    istat = 0
+  end subroutine conv_result_trah_get_mo_e_b
+
+  subroutine conv_result_trah_get_fock(self, matrix, istat)
+    class(scf_conv_trah_result), intent(in) :: self
+    integer, intent(out) :: istat
+    real(kind=dp), intent(inout) :: matrix(:,:)
+
+    if (self%ierr /= 0) then
+      istat = self%ierr
+      return
+    end if
+
+    matrix = self%dat%buffer(self%dat%slot)%focks
+    istat = 0
+  end subroutine conv_result_trah_get_fock
+
+  function conv_result_trah_get_rms_g(self) result(rms)
+    class(scf_conv_trah_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%rms_grad
+  end function conv_result_trah_get_rms_g
+
+  function conv_result_trah_get_iter(self) result(rms)
+    class(scf_conv_trah_result), intent(in) :: self
+    real(kind=dp) :: rms
+
+    rms = self%iter
+  end function conv_result_trah_get_iter
+!==============================================================================
+! scf_conv Methods
+!==============================================================================
+
+  !> @brief Finalize scf_conv datatype
   subroutine scf_conv_clean(self)
-    class(scf_conv) :: self
+    class(scf_conv), intent(inout) :: self
+
     self%verbose = 0
     self%step = 0
     self%state = conv_state_not_initialized
-
     call self%dat%clean()
-
     if (allocated(self%thresholds)) deallocate(self%thresholds)
     if (allocated(self%sconv)) deallocate(self%sconv)
     nullify(self%overlap)
     nullify(self%overlap_sqrt)
-  end subroutine
+  end subroutine scf_conv_clean
 
-!==============================================================================
-
-!> @brief Initializes the SCF converger driver
-!> @param[in] ldim  Number of orbitals
-!> @param[in] maxvec  Size of SCF converger linear space, e.g. number of DIIS vectors
-!> @param[in] subconvergers  Array of SCF subconverger codes
-!> @param[in] thresholds  Thresholds to initate subconverger
-!>                         subconvergers[i] runs when current error is less than thresholds[i]
-!> @param[in] overlap  overlap matrix (S) in full format
-!> @param[in] overlap_sqrt  S^(1/2) matrix in full format
-!> @param[in] num_focks  1 if R/ROHF, 2 if UHF
-!> @param[in] verbose  sets verbosity
-  subroutine scf_conv_init(self, ldim, maxvec, subconvergers, thresholds, &
-                  overlap, overlap_sqrt, num_focks, verbose)
-    class(scf_conv) :: self
+  !> @brief Initializes the SCF converger driver
+  !> @param[in] ldim Number of orbitals
+  !> @param[in] maxvec Size of SCF converger linear space (e.g., number of DIIS vectors)
+  !> @param[in] subconvergers Array of SCF subconverger codes
+  !> @param[in] thresholds Thresholds to initiate subconvergers, where
+  !>                       subconvergers[i] runs when current error is less than thresholds[i]
+  !> @param[in] overlap Overlap matrix (S) in full format
+  !> @param[in] overlap_sqrt S^(1/2) matrix in full format
+  !> @param[in] num_focks 1 if R/ROHF, 2 if UHF
+  !> @param[in] verbose Verbosity level
+  subroutine scf_conv_init(self, ldim, nelec_a, nelec_b, maxvec, subconvergers, thresholds, &
+                          overlap, overlap_sqrt, num_focks, scf_type ,verbose, sd_scf)
+    class(scf_conv), intent(inout) :: self
     integer, intent(in) :: ldim
+    integer, optional, intent(in) :: nelec_a
+    integer, optional, intent(in) :: nelec_b
     integer, optional, intent(in) :: maxvec
     integer, optional, intent(in) :: subconvergers(:)
     real(kind=dp), optional, intent(in) :: thresholds(:)
     real(kind=dp), optional, target, intent(in) :: overlap(:,:), overlap_sqrt(:,:)
     integer, optional, intent(in) :: num_focks
     integer, optional, intent(in) :: verbose
-    integer :: nfocks
-    integer :: istat
-    integer :: i
+    integer :: nfocks, istat, i
+    integer, optional, intent(in) :: scf_type
+    logical(c_bool), optional, intent(in) :: sd_scf
 
-    if (self%state/=conv_state_not_initialized) call self%clean()
+    if (self%state /= conv_state_not_initialized) call self%clean()
 
     if (present(thresholds)) then
       allocate(self%thresholds(0:ubound(thresholds,1)))
-      self%thresholds(0:) = [thresholds, 0.0d0]
+      self%thresholds(0:) = [thresholds, 0.0_dp]
     else
       allocate(self%thresholds(0:1))
-      self%thresholds(0:) = [1.0d0, 0.0d0]
+      self%thresholds(0:) = [1.0_dp, 0.0_dp]
     end if
 
     self%overlap => null()
-    if (present(overlap)) then
-        self%overlap => overlap
-    end if
+    if (present(overlap)) self%overlap => overlap
 
     self%overlap_sqrt => null()
-    if (present(overlap_sqrt)) then
-        self%overlap_sqrt => overlap_sqrt
-    end if
+    if (present(overlap_sqrt)) self%overlap_sqrt => overlap_sqrt
 
     nfocks = 1
     if (present(num_focks)) nfocks = num_focks
 
+    if (present(scf_type)) self%scf_type = scf_type
+
     self%verbose = 0
-    if (present(verbose)) then
-        self%verbose = verbose
-    end if
+    if (present(verbose)) self%verbose = verbose
 
     self%iter_space_size = 15
-    if (present(maxvec)) then
-      self%iter_space_size = maxvec
-    end if
+    if (present(maxvec)) self%iter_space_size = maxvec
 
     self%step = 0
 
-    if (present(subconvergers)) then
-        allocate(self%sconv(0:ubound(subconvergers,1)))
-        allocate(noconv_converger :: self%sconv(0)%s)
-        call self%sconv(0)%s%init(self)
-        do i = 1, ubound(subconvergers,1)
-          select case (subconvergers(i))
-          case (conv_none)
-            allocate(noconv_converger :: self%sconv(i)%s)
-          case (conv_cdiis)
-            allocate(cdiis_converger :: self%sconv(i)%s)
-          case (conv_ediis)
-            allocate(ediis_converger :: self%sconv(i)%s)
-          case (conv_adiis)
-            allocate(adiis_converger :: self%sconv(i)%s)
-          end select
-          call self%sconv(i)%s%init(self)
-        end do
+    if (present(nelec_a) .and. present(nelec_b)) then
+      call self%dat%init(ldim, nfocks, self%iter_space_size, istat, nelec_a, nelec_b)
+    else
+      call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
+    end if
+    if (istat /= 0) then
+      self%state = conv_state_not_initialized
+      return
+    end if
+    if (present(sd_scf)) then
+        if(.not. sd_scf) self%step = self%step + 1
     end if
 
-    call self%dat%init(ldim, nfocks, self%iter_space_size, istat)
+    if (present(subconvergers)) then
+      allocate(self%sconv(0:ubound(subconvergers,1)))
+      allocate(noconv_converger :: self%sconv(0)%s)
+      call self%sconv(0)%s%init(self)
+      do i = 1, ubound(subconvergers,1)
+        select case (subconvergers(i))
+        case (conv_none)
+          allocate(noconv_converger :: self%sconv(i)%s)
+        case (conv_cdiis)
+          allocate(cdiis_converger :: self%sconv(i)%s)
+        case (conv_ediis)
+          allocate(ediis_converger :: self%sconv(i)%s)
+        case (conv_adiis)
+          allocate(adiis_converger :: self%sconv(i)%s)
+        case (conv_soscf)
+          allocate(soscf_converger :: self%sconv(i)%s)
+        case (conv_trah)
+          allocate(trah_converger :: self%sconv(i)%s)
+        end select
+        call self%sconv(i)%s%init(self)
+      end do
+    end if
 
-    if (istat == 0) self%state = conv_state_initialized
-  end subroutine
+    self%state = conv_state_initialized
 
-!==============================================================================
+  end subroutine scf_conv_init
 
-!> @brief Store the data from the new SCF iteration
-!> @param[in] f  Fock matrix/matrices
-!> @param[in] dens  Density matrix/matrices
-!> @param[in] e  SCF energy
-  subroutine  scf_conv_add_data(self, f, dens, e)
-    use precision, only: dp
-
-    implicit none
-
+  !> @brief Store data from the new SCF iteration
+  !> @param[in] f Fock matrix/matrices
+  !> @param[in] dens Density matrix/matrices
+  !> @param[in] e SCF energy (optional)
+  subroutine scf_conv_add_data(self, f, dens, e, mo_a, mo_b, mo_e_a, mo_e_b, &
+                               pfon)
     class(scf_conv), intent(inout) :: self
-!    real(kind=dp), intent(in) :: err(:,:)
-    real(kind=dp), intent(in) :: f(:,:)
-    real(kind=dp), intent(in) :: dens(:,:)
-    real(kind=dp), optional, intent(in) :: e
+    real(kind=dp), intent(in), optional :: f(:,:)    ! Fock matrices
+    real(kind=dp), intent(in), optional :: dens(:,:) ! Density matrices
+    real(kind=dp), intent(in), optional :: e         ! SCF energy
+    real(kind=dp), intent(in), optional :: mo_a(:,:) ! Alpha MO coefficients
+    real(kind=dp), intent(in), optional :: mo_b(:,:) ! Beta MO coefficients
+    real(kind=dp), intent(in), optional :: mo_e_a(:) ! Alpha MO energies
+    real(kind=dp), intent(in), optional :: mo_e_b(:) ! Beta MO energies
+    type(pfon_t), pointer, intent(in), optional :: pfon ! Pseudo-Fractional Occupation Number (pFON) object
     integer :: i
 
     call self%dat%next_slot()
 
-!   Save the current Fock and density matrices
-    call self%dat%put(f,    conv_dtype_fock)
-    call self%dat%put(dens, conv_dtype_density)
-    if (present(e)) call self%dat%put(e, conv_dtype_energy)
+    ! Save the current Fock and density matrices
+    if (present(f)) call self%dat%put(fock=f)
+    if (present(dens)) call self%dat%put(dens=dens)
+    if (present(e)) call self%dat%put(energy=e)
+    if (present(mo_a)) call self%dat%put(mo_a=mo_a)
+    if (present(mo_b)) call self%dat%put(mo_b=mo_b)
+    if (present(mo_e_a)) call self%dat%put(mo_e_a=mo_e_a)
+    if (present(mo_e_b)) call self%dat%put(mo_e_b=mo_e_b)
+    if (present(pfon)) call self%dat%put(pfon_obj=pfon)
 
+    ! Compute the current error
     self%current_error = self%compute_error()
 
+    ! Update subconverger states
     do i = lbound(self%sconv, 1), ubound(self%sconv, 1)
       self%sconv(i)%s%last_setup = self%sconv(i)%s%last_setup + 1
     end do
-
   end subroutine scf_conv_add_data
 
-!==============================================================================
-
-!> @brief Computes the new guess to the SCF wavefunction
-!> @param[out] conv_result  results of the calculation
+  !> @brief Computes the new guess to the SCF wavefunction
+  !> @param[out] conv_result Results of the calculation
   subroutine scf_conv_run(self, conv_result)
-
-    implicit none
-
-    class(scf_conv), target :: self
+    class(scf_conv), target, intent(inout) :: self
+    class(scf_conv_result), allocatable, intent(out) :: conv_result
     class(subconverger), pointer :: conv
-    class(scf_conv_result), allocatable :: conv_result
-
     class(scf_conv_result), allocatable :: tmp_result
-
-!    integer :: ierr
 
     conv => self%select_method(self%current_error)
 
     if (self%state == conv_state_not_initialized) then
-        conv_result = scf_conv_result( &
-                error = self%current_error &
-            )
-        return
+      conv_result = scf_conv_result(error=self%current_error)
+      return
     end if
-
-!    if (conv%iter == 0) then
-!      write (iw, "(10x, '* * *   Initiating ',A,' Converger   * * *')") &
-!            trim(conv%conv_name)
-!    end if
 
     conv%iter = conv%iter + 1
     self%step = self%step + 1
 
-!!    call self%adiis_print()
-!!   Update DIIS equation matrix
     call conv%setup()
-!
-!   Nothing left to do on the first iteration, exit
+    ! Nothing left to do on the first iteration, exit
     if (self%step == 1) then
-        conv_result = scf_conv_result( &
-                ierr = 0, &
-                active_converger_name = 'SD', &
-                error = self%current_error &
-            )
-        return
+      conv_result = scf_conv_result( &
+                      ierr=0, &
+                      active_converger_name='SD', &
+                      error=self%current_error)
+      return
     end if
-!
-!   Solve the set of DIIS linear equations
+
+    ! Solve the set of DIIS linear equations
     call conv%run(tmp_result)
-
-    tmp_result%error = self%current_error
-!
-!    if (self%verbose > 1) call self%print_solution
-
     call move_alloc(from=tmp_result, to=conv_result)
+  end subroutine scf_conv_run
 
-  end subroutine
-
-!==============================================================================
-
-!> @brief Select subconverger basing on the current DIIS error value
-!> @param[in] error DIIS error value
-!> @return  pointer to selected converger
+  !> @brief Select subconverger basing on the current DIIS error value
+  !> @param[in] error DIIS error value
+  !> @return  pointer to selected converger
   function scf_conv_select(self, error) result(conv)
     implicit none
     class(scf_conv), target :: self
@@ -528,7 +1653,6 @@ contains
     end do
 
     conv => self%sconv(min(i,nconv))%s
-
     ! Continue using the 'SD' converger if
     ! already initiated
     if (i == 0 .and. self%step > 0) then
@@ -542,465 +1666,291 @@ contains
 
   end function
 
-!==============================================================================
-
-!> @brief Calculate the DIIS error matrix: \f$ \mathrm{Err} = FDS - SDF \f$
-!> @details This routine is general for RHF, ROHF, and UHF.
-!>    Since each of `F`, `D`, `S` are symmetric, this means calculate \f$ FDS \f$,
-!>    and then subtract the transpose from that result.
-!>    Before entry, `F`, `D` and `S` must be expanded to square storage.
-!> @return  DIIS error value
+  !> @brief Calculate the DIIS error matrix: \f$ \mathrm{Err} = FDS - SDF \f$
+  !> @details This routine is general for RHF, ROHF, and UHF.
+  !>          Since each of `F`, `D`, `S` are symmetric, this means calculate \f$ FDS \f$,
+  !>          and then subtract the transpose from that result.
+  !>          Before entry, `F`, `D` and `S` must be expanded to square storage.
+  !> @return DIIS error value (infinity norm across all matrices)
   function scf_conv_compute_error(self) result(diis_error)
-    use mathlib, only: antisymmetrize_matrix
-    use mathlib, only: unpack_matrix, pack_matrix
-    use precision, only: dp
+    use mathlib, only: antisymmetrize_matrix, unpack_matrix, pack_matrix
     use oqp_linalg
-
-    implicit none
-
-    class(scf_conv) :: self
+    class(scf_conv), target, intent(inout) :: self
     real(kind=dp) :: diis_error
-
+    real(kind=dp), pointer :: f(:), d(:), err(:)
 !   all are (nbf, nbf) square matrices
-    real(kind=dp), pointer, dimension(:) :: f, d, err
     real(kind=dp), allocatable :: fock_full(:,:), dens_full(:,:), err_full(:,:), wrk(:,:)
-    integer :: nbf, ifock, nfocks
+    integer :: nbf, ifock, nfocks, slot
 
     nfocks = self%dat%num_focks
-
     nbf = self%dat%ldim
+    slot = self%dat%slot
 
-    allocate(fock_full(nbf,nbf))
-    allocate(dens_full(nbf,nbf))
-    allocate(err_full(nbf,nbf))
-    allocate(wrk(nbf,nbf))
+    allocate(fock_full(nbf, nbf), &
+             dens_full(nbf, nbf), &
+             err_full(nbf, nbf), &
+             wrk(nbf, nbf))
 
-    diis_error = 0
-
+    diis_error = 0.0_dp
     do ifock = 1, nfocks
-        f => self%dat%get(-1,conv_dtype_fock,ifock)
-        d => self%dat%get(-1,conv_dtype_density,ifock)
-        call unpack_matrix(f,fock_full,nbf,'u')
-        call unpack_matrix(d,dens_full,nbf,'u')
-        ! F*D
-        call dsymm('l','u',nbf,nbf,1.0d0, &
-                fock_full,nbf,dens_full,nbf,0.0d0,wrk,nbf)
-        ! (F*D)*S
-        call dgemm('n','n',nbf,nbf,nbf,1.0d0, &
-                wrk,nbf,self%overlap,nbf,0.0d0,err_full,nbf)
-        ! F*D*S - S*D*F
-        call antisymmetrize_matrix(err_full, nbf)
+      f => self%dat%get_fock(-1, ifock)
+      d => self%dat%get_density(-1, ifock)
+      call unpack_matrix(f, fock_full, nbf, 'u')
+      call unpack_matrix(d, dens_full, nbf, 'u')
+      ! F*D
+      call dsymm('l', 'u', nbf, nbf, 1.0_dp, fock_full, nbf, dens_full, nbf, 0.0_dp, wrk, nbf)
+      ! (F*D)*S
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, wrk, nbf, self%overlap, nbf, 0.0_dp, err_full, nbf)
+      ! F*D*S - S*D*F
+      call antisymmetrize_matrix(err_full, nbf)
 
-!       MV: This step is not really necessary
-!       Put error matrix into consistent orthonormal basis
-!       Pulay uses S**-1/2, but here we use Q, Q obeys Q-dagger*S*Q=I
-!       E-orth = Q-dagger * E * Q, FCKA is used as a scratch `nbf` vector.
-        call dgemm('t','n',nbf,nbf,nbf,1.0d0, &
-                self%overlap_sqrt,nbf,err_full,nbf,0.0d0,wrk,nbf)
-        call dgemm('n','n',nbf,nbf,nbf,1.0d0, &
-                wrk,nbf,self%overlap_sqrt,nbf,0.0d0,err_full,nbf)
-
-        err => self%dat%get(-1,conv_dtype_err,ifock)
-        call pack_matrix(err_full, nbf, err, 'u')
-
-!       Compute DIIS error (infinity norm of error matrix)
-        diis_error = diis_error + maxval(abs(err))
+      ! MV: This step is not really necessary
+      ! Put error matrix into consistent orthonormal basis
+      ! Pulay uses S**-1/2, but here we use Q, Q obeys Q-dagger*S*Q=I
+      ! E-orth = Q-dagger * E * Q, FCKA is used as a scratch `nbf` vector.
+      call dgemm('t', 'n', nbf, nbf, nbf, 1.0_dp, self%overlap_sqrt, nbf, err_full, nbf, 0.0_dp, wrk, nbf)
+      call dgemm('n', 'n', nbf, nbf, nbf, 1.0_dp, wrk, nbf, self%overlap_sqrt, nbf, 0.0_dp, err_full, nbf)
+      err => self%dat%buffer(slot)%errs(:, ifock)
+      call pack_matrix(err_full, nbf, err, 'u')
+      ! Compute DIIS error (infinity norm of error matrix)
+      diis_error = diis_error + maxval(abs(err))
     end do
 
-    deallocate(fock_full)
-    deallocate(dens_full)
-    deallocate(err_full)
-    deallocate(wrk)
+    deallocate(fock_full, dens_full, err_full, wrk)
   end function scf_conv_compute_error
 
 !==============================================================================
+! Subconverger Methods
 !==============================================================================
 
-!> @brief Allocate memory and initialize converger_data type
-!> @param[in] ldim  number of orbitals
-!> @param[in] nfocks  1 if R/ROHF, 2 if UHF
-!> @param[in] nslots  max. number of stored datasets from previous SCF iterations
-!> @param[out] istat  success status, nonzero if error occured
-  subroutine converger_data_init(self, ldim, nfocks, nslots, istat)
-    class(converger_data) :: self
-    integer, intent(in) :: ldim, nfocks, nslots
-    integer, intent(out) :: istat
-    integer :: nbf_tri
-    if (allocated(self%focks)) call self%clean()
-    nbf_tri = (ldim+1)*ldim/2
-    self%ldim = ldim
-    self%num_focks = nfocks
-    self%num_slots = nslots
-    self%num_saved = 0
-    self%slot = 0
-    allocate( &
-        self%focks(nbf_tri,nfocks,nslots), &
-        self%densities(nbf_tri,nfocks,nslots), &
-        self%energies(nslots), &
-        self%errs(nbf_tri,nfocks,nslots), &
-        stat=istat)
-  end subroutine
-
-!==============================================================================
-
-!> @brief converger_data type finalization
-  subroutine converger_data_clean(self)
-    class(converger_data) :: self
-    self%ldim = 0
-    self%num_focks = 0
-    self%num_slots = 0
-    self%num_saved = 0
-    if (allocated(self%focks)    ) deallocate(self%focks)
-    if (allocated(self%densities)) deallocate(self%densities)
-    if (allocated(self%energies) ) deallocate(self%energies)
-    if (allocated(self%errs)     ) deallocate(self%errs)
-  end subroutine
-
-!==============================================================================
-
-!> @brief Switch to the next slot in cyclic buffer
-  subroutine conv_data_next_slot(self)
-    class(converger_data) :: self
-    self%slot = mod(self%slot, self%num_slots)+1
-    self%num_saved = min(self%num_saved+1, self%num_slots)
-  end subroutine
-
-!==============================================================================
-
-!> @brief Discard latest data
-  subroutine conv_data_discard(self)
-    class(converger_data) :: self
-    self%slot = mod(self%slot-2, self%num_slots)+1
-    self%num_saved = min(self%num_saved-1, 1)
-  end subroutine
-
-!==============================================================================
-
-!> @brief Save a vector/matrix to the converger_data
-!> @param[in] val data to be saved
-!> @param[in] dtype the type of the data (fock/density/error)
-  subroutine conv_data_save_vec(self, val, dtype)
-    class(converger_data) :: self
-    real(kind=dp) :: val(:,:)
-    integer, intent(in) :: dtype
-    integer :: im, nmatrices
-    nmatrices = ubound(val,2)
-    do im = 1, nmatrices
-      select case(dtype)
-      case (conv_dtype_fock)
-          self%focks(:,im,self%slot) = val(:,im)
-      case (conv_dtype_err)
-          self%errs(:,im,self%slot) = val(:,im)
-      case (conv_dtype_density)
-          self%densities(:,im,self%slot) = val(:,im)
-      case default
-      end select
-    end do
-  end subroutine
-
-!==============================================================================
-
-!> @brief Save a double precision scalar to the converger_data
-!> @param[in] val data to be saved
-!> @param[in] dtype the type of the data
-  subroutine conv_data_save_scalar(self, val, dtype)
-    class(converger_data) :: self
-    real(kind=dp) :: val
-    integer, intent(in) :: dtype
-    select case(dtype)
-    case (conv_dtype_energy)
-        self%energies(self%slot) = val
-    case default
-    end select
-  end subroutine
-
-!==============================================================================
-
-!> @brief Get a vector/matrix from the converger_data
-!> @param[in] n Data slot ID. The allowed values are:
-!>              1 (oldest) to num_saved (latest)
-!>              -1 is a shortcut to latest
-!> @param[in] dtype the type of the data (fock/density/error)
-!> @param[in] matrix_id 1 - alpha, 2 - beta Fock/density/error matrix
-!> @result pointer to the data
-  function conv_data_get_val(self, n, dtype, matrix_id) result(res)
-    class(converger_data), target :: self
-    real(kind=dp), pointer :: res(:)
-    integer, intent(in) :: n, dtype, matrix_id
-    integer :: slot, num_saved
-
-    if (n == -1) then
-!     Pick last one
-      slot = self%slot
-    else
-!     Pick n-th starting from the oldest
-      num_saved = self%num_saved
-      slot = modulo(self%slot-num_saved+n-1, self%num_slots)+1
-    end if
-    select case(dtype)
-    case (conv_dtype_fock)
-      res => self%focks(:,matrix_id,slot)
-    case (conv_dtype_err)
-      res => self%errs(:,matrix_id,slot)
-    case (conv_dtype_density)
-      res => self%densities(:,matrix_id,slot)
-    case default
-    end select
-  end function
-
-!==============================================================================
-
-!> @brief Get a double precision scalar from the converger_data
-!> @param[in] n Data slot ID. The allowed values are:
-!>              1 (oldest) to num_saved (latest)
-!>              -1 is a shortcut to latest
-!> @param[in] dtype the type of the data (fock/density/error)
-!> @result stored value
-  function conv_data_get_energy(self, n, dtype) result(res)
-    class(converger_data), target :: self
-    real(kind=dp) :: res
-    integer, intent(in) :: n, dtype
-    integer :: slot, num_saved
-
-    if (n == -1) then
-!     Pick last one
-      slot = self%slot
-    else
-!     Pick n-th starting from the oldest
-      num_saved = self%num_saved
-      slot = modulo(self%slot-num_saved+n-1, self%num_slots)+1
-    end if
-    select case(dtype)
-    case (conv_dtype_energy)
-      res = self%energies(slot)
-    case default
-    end select
-  end function
-
-!==============================================================================
-
-!> @brief Initialize subconverger
-!> @detail This subroutine takes SCF converger driver as argument.
-!>   It should be initialized and include all the required parameters.
-!> @param[in] params  current SCF converger driver
+  !> @brief Initialize subconverger
+  !> @detail This subroutine takes SCF converger driver as argument.
+  !>         It should be initialized and include all the required parameters.
+  !> @param[in] params Current SCF converger driver
   subroutine subconverger_init(self, params)
-    implicit none
-    class(subconverger) :: self
-    type(scf_conv), target :: params
+    class(subconverger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
+
     self%iter = 0
     self%last_setup = 1024
     self%dat => params%dat
-  end subroutine
-
-!==============================================================================
+  end subroutine subconverger_init
 
 !> @brief Finalize subconverger
   subroutine subconverger_clean(self)
-    class(subconverger) :: self
+    class(subconverger), intent(inout) :: self
+
     self%iter = 0
     self%last_setup = 1024
     self%dat => null()
-  end subroutine
+  end subroutine subconverger_clean
 
+!==============================================================================
+! noconv_converger Methods
 !==============================================================================
 
 !> @brief Initialize SD subconverger
 !> @param[in] params current SCF converger driver
   subroutine noconv_init(self, params)
-    implicit none
-    class(noconv_converger) :: self
-    type(scf_conv), target :: params
+    class(noconv_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
 
-    if (self%iter>0) call self%clean()
-
+    if (self%iter > 0) call self%clean()
     call self%subconverger_init(params)
     self%conv_name = 'SD'
-
-  end subroutine
+  end subroutine noconv_init
 
 !> @brief Computes the new guess to the SCF wavefunction
-!> @param[out] res  results of the calculation
+!> @param[out] res results of the calculation
   subroutine noconv_run(self, res)
-    class(noconv_converger), target :: self
+    class(noconv_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-    res = scf_conv_result(ierr = 0, active_converger_name = 'SD')
-  end subroutine
+    real(kind=dp) :: diis_error
+    integer :: ifock
 
-!==============================================================================
+    allocate(scf_conv_result :: res)
+    res = scf_conv_result(ierr=0, active_converger_name='SD', dat=self%dat)
+
+    ! Compute error
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      diis_error = max(diis_error, maxval(abs(self%dat%get_err(-1, ifock))))
+    end do
+    res%error = diis_error
+  end subroutine noconv_run
 
 !> @brief Prepare subconverger to run
   subroutine noconv_setup(self)
-    class(noconv_converger) :: self
-  end subroutine
+    class(noconv_converger), intent(inout) :: self
 
+    self%last_setup = 0
+  end subroutine noconv_setup
+
+!==============================================================================
+! cdiis_converger Methods
 !==============================================================================
 
 !> @brief Initialize C-DIIS subconverger
 !> @detail This subroutine takes SCF converger driver as argument.
-!>   It should be initialized and include all the required parameters.
-!> @param[in] params current SCF converger driver
+!>         It should be initialized and include all the required parameters.
+!> @param[in] params Current SCF converger driver
   subroutine cdiis_init(self, params)
-    implicit none
-    class(cdiis_converger) :: self
-    type(scf_conv), target :: params
+    class(cdiis_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
 
-    if (self%iter>0) call self%clean()
-
+    if (self%iter > 0) call self%clean()
     call self%subconverger_init(params)
-
     self%conv_name = 'C-DIIS'
     self%verbose = params%verbose
     self%maxdiis = params%iter_space_size
-    self%dat => params%dat
-
-    allocate(self%a(self%maxdiis,self%maxdiis), source=0.0d0)
-  end subroutine
-
-!==============================================================================
+    allocate(self%a(self%maxdiis, self%maxdiis), source=0.0_dp)
+  end subroutine cdiis_init
 
 !> @brief Finalize C-DIIS subconverger
   subroutine cdiis_clean(self)
-    class(cdiis_converger) :: self
-    call self%subconverger_clean()
+    class(cdiis_converger), intent(inout) :: self
 
+    call self%subconverger_clean()
     self%verbose = 0
     if (allocated(self%a)) deallocate(self%a)
-  end subroutine
+  end subroutine cdiis_clean
 
-!==============================================================================
-
-!> @brief Computes the new guess to the SCF wavefunction using C-DIIS
-!> @param[out] res  results of the calculation
+  !> @brief Computes the new guess to the SCF wavefunction using C-DIIS
+  !> @param[out] res Results of the calculation
   subroutine cdiis_run(self, res)
     use mathlib, only: solve_linear_equations
     use io_constants, only: iw
-
-    implicit none
-
-    class(cdiis_converger), target :: self
+    class(cdiis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-
-    integer :: i, na, cur, info
-    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1)
+!      integer :: i, na, cur, info, ifock
+!    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1)
+    integer :: i, na, cur, info, ifock, trial, k
+    real(kind=dp) :: a_loc(self%maxdiis+1, self%maxdiis+1), a_sys(self%maxdiis+1, self%maxdiis+1)
+    real(kind=dp) :: delta
     real(kind=dp) :: x_loc(self%maxdiis+1)
     real(kind=dp), allocatable :: x(:)
+    real(kind=dp), pointer :: err(:)
+    real(kind=dp) :: diis_error
 
     allocate(scf_conv_interp_result :: res)
     res%dat => self%dat
     res%active_converger_name = self%conv_name
     select type (res)
     class is (scf_conv_interp_result)
-        res%pstart = 1
-        res%pend = self%dat%num_saved
+      res%pstart = 1
+      res%pend = self%dat%num_saved
     end select
 
-    res%ierr = 3  ! need to set up DIIS equations first
-    if (.not.self%last_setup == 0) return
+    res%ierr = 3 ! Need to set up DIIS equations first
+    if (self%last_setup /= 0) return
 
-    !na = min(self%iter, self%maxdiis)
     na = self%dat%num_saved
-
-!   Solve the set of DIIS linear equations
-    a_loc(:self%maxdiis,:self%maxdiis) = self%a
-    a_loc(:,na+1) = -1
+    ! Solve the set of DIIS linear equations
+    ! Add mild Tikhonov regularization before shrinking the subspace
+    a_loc(:self%maxdiis, :self%maxdiis) = self%a
+    a_loc(1:na,   na+1) = -1.0_dp
+    a_loc(na+1, 1:na  ) = -1.0_dp
+    a_loc(na+1,  na+1) =  0.0_dp
     do i = na, 1, -1
-!     Helper index, needed for dimension reduction in case of instability
-      cur = na-i+1
-
-      x_loc = 0.0d0
-      x_loc(na+1) = -1.0d0
-      info= 0
-      call solve_linear_equations(a_loc(cur, cur), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+      ! Helper index, needed for dimension reduction in case of instability
+      cur = na - i + 1
+      x_loc = 0.0_dp
+      x_loc(na+1) = -1.0_dp
+ 
+      info = 0
+      a_sys = a_loc
+      call solve_linear_equations(a_sys(cur:, cur:), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+ 
+      if (info > 0) then
+        do trial = 1, 3
+          delta = 1.0e-12_dp * (10.0_dp ** (trial-1))
+          a_sys = a_loc
+          do k = 0, i-1
+            a_sys(cur+k, cur+k) = a_sys(cur+k, cur+k) + delta
+          end do
+          call solve_linear_equations(a_sys(cur:, cur:), x_loc(cur:), i+1, 1, self%maxdiis+1, info)
+          if (info == 0) exit
+        end do
+      end if
+ 
       if (info <= 0) exit
-      write (iw, *) 'Reducing DIIS Equation size by 1 for numerical stability'
+      write(iw, *) 'Reducing DIIS Equation size by 1 for numerical stability'
     end do
-
-    if (info<0) then ! illegal value of DSYSV argument
-        res%ierr = 2
+    !
+    if (info < 0) then
+      res%ierr = 2 ! Illegal value in DSYSV
     else if (info > 0) then
-        res%ierr = 1 ! singular DIIS matrix
+      res%ierr = 1 ! Singular DIIS matrix
     else
-        res%ierr = 0 ! normal exit
-        x = x_loc(1:self%maxdiis)
-        select type (res)
-        class is (scf_conv_interp_result)
-            call move_alloc(from=x, to=res%coeffs)
-        end select
+      res%ierr = 0 ! normal exit
+      x = x_loc(1:self%maxdiis)
+      select type (res)
+      class is (scf_conv_interp_result)
+        call move_alloc(from=x, to=res%coeffs)
+      end select
     end if
 
-  end subroutine
-
-!==============================================================================
+    ! Compute DIIS error from the latest iteration
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      err => self%dat%get_err(-1, ifock)
+      diis_error = max(diis_error, maxval(abs(err)))
+    end do
+    res%error = diis_error
+  end subroutine cdiis_run
 
 !> @brief Prepare C-DIIS subconverger to run
   subroutine cdiis_setup(self)
-    use precision, only: dp
-
-    implicit none
-
-    class(cdiis_converger) :: self
+    class(cdiis_converger), intent(inout) :: self
     integer :: i, j, na, maxdiis, ifock, nfocks
     real(kind=dp) :: factor
 
     maxdiis = self%maxdiis
-    !na = min(self%iter, maxdiis)
     na = self%dat%num_saved
     nfocks = self%dat%num_focks
+    ! Factor to account RHF/UHF cases
+    factor = 1.0_dp / nfocks
 
-!   Factor to account RHF/UHF cases
-    factor = 1.0d0/nfocks
-
-    if (self%last_setup>1) then
-!     DIIS matrix is rather old, generate it from scratch
+    if (self%last_setup > 1) then
+      ! DIIS matrix is rather old, generate it from scratch
       self%old_dim = na
-      self%a = 0
+      self%a = 0.0_dp
       do ifock = 1, nfocks
         do i = 1, na
-        do j = 1, i
-          self%a(j,i) = self%a(j,i) + factor*dot_product(&
-                            self%dat%get(j,conv_dtype_err,ifock), &
-                            self%dat%get(i,conv_dtype_err,ifock))
-        end do
+          do j = 1, i
+            self%a(j,i) = self%a(j,i) + factor * dot_product( &
+                            self%dat%get_err(j, ifock), &
+                            self%dat%get_err(i, ifock))
+          end do
         end do
       end do
-
     else if (self%last_setup == 1) then
-!     DIIS matrix is old by 1 iteration, just update it
+      ! DIIS matrix is old by 1 iteration, just update it
 
-!     If the current number of iterations exceeds the dimension of A matrix:
-!     discard the data of oldest iteration by shifting the bottom-rigth square
-!     to the top-left corner
+      ! If the current number of iterations exceeds the dimension of A matrix:
+      ! discard the data of oldest iteration by shifting the bottom-rigth square
+      ! to the top-left corner
       if (self%old_dim >= maxdiis) then
-        self%a(1:maxdiis-1,1:maxdiis-1) = self%a(2:maxdiis,2:maxdiis)
+        self%a(1:maxdiis-1, 1:maxdiis-1) = self%a(2:maxdiis, 2:maxdiis)
       end if
-
       self%old_dim = na
 !     Compute new elements (`na`-th column)
-      self%a(:,na) = 0
+      self%a(:, na) = 0.0_dp
       do ifock = 1, nfocks
         do i = 1, na
-          self%a(i,na) = self%a(i,na) + factor*dot_product(&
-                            self%dat%get(na,conv_dtype_err,ifock), &
-                            self%dat%get(i,conv_dtype_err,ifock))
+          self%a(i, na) = self%a(i, na) + factor * dot_product( &
+                            self%dat%get_err(na, ifock), &
+                            self%dat%get_err(i, ifock))
         end do
       end do
-    else if (self%last_setup == 0) then
-!       DIIS matrix is already prepared nothing to do here
-        continue
-    else
-!       Should not get here
-        continue
     end if
 
-!   Set last column to 1 for the Lagrange multiplier part
-!    self%a(:na+1,na+1) = -1
-
-!   DIIS matrix is already prepared nothing to do here
+    ! DIIS matrix is already prepared nothing to do here
     self%last_setup = 0
-
-  end subroutine
+  end subroutine cdiis_setup
 
 !==============================================================================
+! ediis_converger Methods
 !==============================================================================
 
 !> @brief Initialize E-DIIS subconverger
@@ -1008,123 +1958,104 @@ contains
 !>   It should be initialized and include all the required parameters.
 !> @param[in] params current SCF converger driver
   subroutine ediis_init(self, params)
-    class(ediis_converger) :: self
-    type(scf_conv), target :: params
+    class(ediis_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
 
     call self%cdiis_converger%init(params)
     self%conv_name = 'E-DIIS'
     self%fun => ediis_fun
     allocate(self%b(self%maxdiis))
-    allocate(self%xlog(self%maxdiis,self%maxdiis), source=0.0d0)
-  end subroutine
+    allocate(self%xlog(self%maxdiis, self%maxdiis), source=0.0_dp)
+  end subroutine ediis_init
 
 !> @brief Finalize E-DIIS subconverger
   subroutine ediis_clean(self)
-    class(ediis_converger) :: self
-    call self%cdiis_converger%clean()
+    class(ediis_converger), intent(inout) :: self
 
+    call self%cdiis_converger%clean()
     if (allocated(self%b)) deallocate(self%b)
     if (allocated(self%xlog)) deallocate(self%xlog)
-  end subroutine
+  end subroutine ediis_clean
 
 !> @brief Prepare E-DIIS subconverger to run
   subroutine ediis_setup(self)
-    use precision, only: dp
-
-    implicit none
-
-    class(ediis_converger) :: self
+    class(ediis_converger), intent(inout) :: self
     integer :: i, j, na, maxdiis, ifock, nfocks
     real(kind=dp) :: factor
 
     maxdiis = self%maxdiis
-    !na = min(self%iter, maxdiis)
     na = self%dat%num_saved
     nfocks = self%dat%num_focks
+    ! Factor to account RHF/UHF cases
+    factor = 1.0_dp / nfocks
 
-!   Factor to account RHF/UHF cases
-    factor = 1.0d0/nfocks
-
-    if (self%last_setup>1) then
-!     DIIS matrix is rather old, generate it from scratch
+    if (self%last_setup > 1) then
+      ! DIIS matrix is rather old, generate it from scratch
       self%old_dim = na
-      self%a = 0
+      self%a = 0.0_dp
       do ifock = 1, nfocks
         do i = 1, na
-        do j = 1, i-1
-          self%a(j,i) = self%a(j,i) + factor*dot_product(&
-                    self%dat%get(j,conv_dtype_density,ifock) &
-                  - self%dat%get(i,conv_dtype_density,ifock), &
-                    self%dat%get(j,conv_dtype_fock,   ifock) &
-                  - self%dat%get(i,conv_dtype_fock,   ifock))
-          self%a(i,j) = self%a(j,i)
-        end do
+          do j = 1, i-1
+            self%a(j,i) = self%a(j,i) + factor * dot_product( &
+                            self%dat%get_density(j, ifock) - self%dat%get_density(i, ifock), &
+                            self%dat%get_fock(j, ifock) - self%dat%get_fock(i, ifock))
+            self%a(i,j) = self%a(j,i)
+          end do
         end do
       end do
-
     else if (self%last_setup == 1) then
-!     DIIS matrix is old by 1 iteration, just update it
+      ! DIIS matrix is old by 1 iteration, just update it
 
-!     If the current number of iterations exceeds the dimension of A matrix:
-!     discard the data of oldest iteration by shifting the bottom-rigth square
-!     to the top-left corner
+      ! If the current number of iterations exceeds the dimension of A matrix:
+      ! discard the data of oldest iteration by shifting the bottom-rigth square
+      ! to the top-left corner
       if (self%old_dim >= maxdiis) then
-        self%a(1:maxdiis-1,1:maxdiis-1) = self%a(2:maxdiis,2:maxdiis)
+        self%a(1:maxdiis-1, 1:maxdiis-1) = self%a(2:maxdiis, 2:maxdiis)
       end if
-
       self%old_dim = na
 !     Compute new elements (`na`-th column)
-      self%a(:,na) = 0
+      self%a(:, na) = 0.0_dp
       do ifock = 1, nfocks
         do j = 1, na
-          self%a(j,na) = self%a(j,na) + factor*dot_product(&
-                    self%dat%get(j, conv_dtype_density,ifock) &
-                  - self%dat%get(na,conv_dtype_density,ifock), &
-                    self%dat%get(j, conv_dtype_fock,   ifock) &
-                  - self%dat%get(na,conv_dtype_fock,   ifock))
+          self%a(j, na) = self%a(j, na) + factor * dot_product( &
+                            self%dat%get_density(j, ifock) - self%dat%get_density(na, ifock), &
+                            self%dat%get_fock(j, ifock) - self%dat%get_fock(na, ifock))
         end do
       end do
-      self%a(na,1:na-1) = self%a(1:na-1,na)
-
-    else if (self%last_setup == 0) then
-!       DIIS matrix is already prepared nothing to do here
-        continue
-    else
-!       Should not get here
-        continue
+      self%a(na, 1:na-1) = self%a(1:na-1, na)
     end if
 
     do i = 1, na
-      self%b(i) = self%dat%get_e(i,conv_dtype_energy)
+      self%b(i) = self%dat%get_energy(i)
     end do
 
-!   DIIS matrix is already prepared nothing to do here
+    ! DIIS matrix is already prepared nothing to do here
     self%last_setup = 0
+  end subroutine ediis_setup
 
-  end subroutine
-
-!==============================================================================
-
-!> @brief Computes the new guess to the SCF wavefunction using E-DIIS
-!> @param[out] res  results of the calculation
+  !> @brief Computes the new guess to the SCF wavefunction using E-DIIS
+  !> @param[out] res  results of the calculation
   subroutine ediis_run(self, res)
     use io_constants, only: iw
     use nlopt
-
-    implicit none
-
-    class(ediis_converger), target :: self
+    class(ediis_converger), target, intent(inout) :: self
     class(scf_conv_result), allocatable, intent(out) :: res
-
-    real(kind=dp), parameter :: tol = 1.0d-5
-    real(kind=dp), parameter :: constrtol = 1.0d-8
+    real(kind=dp), parameter :: tol = 1.0e-5_dp
+    real(kind=dp), parameter :: constrtol = 1.0e-8_dp
     real(kind=dp) :: minf, minf_min
     real(kind=dp), allocatable :: x(:), xmin(:)
+    real(kind=dp), pointer :: err(:)
+    real(kind=dp) :: diis_error
     integer(kind=4) :: ires
-    integer :: na
-    integer :: i, j
+    integer :: na, i, j, ifock
     logical :: is_a_repeat
-    integer :: opt_global, opt_lbfgs
+    ! NLOpt's f77-style API stores a C POINTER in the opt handle argument
+    ! (NLOpt documents it as integer*8), so the handles must be 8 bytes
+    ! REGARDLESS of the build's default integer width. With a default-width
+    ! declaration, LP64 builds (4-byte default integer, e.g. native macOS
+    ! Accelerate) let nlo_create() write an 8-byte pointer into 4-byte storage
+    ! => stack corruption => SIGSEGV (exit -11) in every EDIIS/ADIIS SCF.
+    integer(kind=8) :: opt_global, opt_lbfgs
     type(ediis_opt_data) :: t
 
     allocate(scf_conv_interp_result :: res)
@@ -1132,138 +2063,120 @@ contains
     res%active_converger_name = self%conv_name
     select type (res)
     class is (scf_conv_interp_result)
-        res%pstart = 1
-        res%pend = self%dat%num_saved
+      res%pstart = 1
+      res%pend = self%dat%num_saved
     end select
 
-    res%ierr = 3  ! need to set up DIIS equations first
-    if (.not.self%last_setup == 0) return
+    res%ierr = 3 ! Need to set up DIIS equations first
+    if (self%last_setup /= 0) return
 
-    !na = min(self%iter, self%maxdiis)
     na = self%dat%num_saved
-
     if (self%iter > self%maxdiis) then
       do i = 1, self%maxdiis-1
-        self%xlog(:,i) = cshift(self%xlog(:,i+1), 1)
-        self%xlog(i+1:,i) = 0
+        self%xlog(:, i) = cshift(self%xlog(:, i+1), 1)
+        self%xlog(i+1:, i) = 0.0_dp
       end do
     end if
 
     allocate(x(na), xmin(na))
-
     opt_global = 0
-    minf_min = huge(1.0d0)
+    minf_min = huge(1.0_dp)
 
-!   Initialize E-DIIS equation parameters for NLOpt
-    t = ediis_opt_data(A=self%a(1:na,1:na), b=self%b(1:na), fun=self%fun)
-!    call nlo_optimize(ires, opt_lbfgs, x(:na), minf)
-!    call nlo_destroy(opt_lbfgs)
-
-!   Set up the Improved Stochastic Ranking Evolution Strategy
-!   It will run coarse global optimization, which will be further refined via L-BFGS
+    ! Initialize E-DIIS equation parameters for NLOpt
+    t = ediis_opt_data(A=self%a(1:na, 1:na), b=self%b(1:na), fun=self%fun)
+    ! Set up the Improved Stochastic Ranking Evolution Strategy
+    ! It will run coarse global optimization, which will be further refined via L-BFGS
     call nlo_create(opt_global, NLOPT_GN_ISRES, na)
-!   Max. number of calls to the objective function
-    call nlo_set_maxeval(ires, opt_global, 100*(na+1));
-!   Relative convergence tolerance for arguments
-    call nlo_set_xtol_rel(ires, opt_global, 1.0d-2)
-!   Absolute convergence tolerance for function value
-    call nlo_set_ftol_abs(ires, opt_global, 1.0d-4)
-!   Relative convergence tolerance for function value
-    call nlo_set_ftol_rel(ires, opt_global, 1.0d-4)
-
-!   Sum of coeffs equal to 1
+    ! Max. number of calls to the objective function
+    call nlo_set_maxeval(ires, opt_global, 100*(na+1))
+    ! Relative convergence tolerance for arguments
+    call nlo_set_xtol_rel(ires, opt_global, 1.0e-2_dp)
+    ! Absolute convergence tolerance for function value
+    call nlo_set_ftol_abs(ires, opt_global, 1.0e-4_dp)
+    ! Relative convergence tolerance for function value
+    call nlo_set_ftol_rel(ires, opt_global, 1.0e-4_dp)
+    ! Sum of coeffs equal to 1
     call nlo_add_equality_constraint(ires, opt_global, eadiis_constraints, 0, constrtol)
-!   0 <= c_i <= 1
-    call nlo_set_lower_bounds1(ires, opt_global, 0.0d0)
-    call nlo_set_upper_bounds1(ires, opt_global, 1.0d0)
-!   Objective function
+    ! 0 <= c_i <= 1
+    call nlo_set_lower_bounds1(ires, opt_global, 0.0_dp)
+    call nlo_set_upper_bounds1(ires, opt_global, 1.0_dp)
+    ! Objective function
     call nlo_set_min_objective(ires, opt_global, eadiis_fun, t)
 
-    x = 0.0d0
-    x(:na) = 1.0d0/na
+    x = 1.0_dp / na
     call nlo_optimize(ires, opt_global, x(:na), minf)
     call nlo_destroy(opt_global)
 
-!   Refine the results of global optimization via L-BFGS
+    ! Refine the results of global optimization via L-BFGS
     opt_lbfgs = 0
     call nlo_create(opt_lbfgs, NLOPT_LD_LBFGS, na)
     call nlo_set_xtol_rel(ires, opt_lbfgs, tol)
     call nlo_set_ftol_abs(ires, opt_lbfgs, tol*tol)
     call nlo_set_ftol_rel(ires, opt_lbfgs, tol*tol)
-
-!   Here, the modified E-DIIS equations are used, because L-BFGS does not support
-!   equality constraints
-!   They utilize the following variable substitution:
-!   c_i = t_i^2/\sum_i{t_i^2}
+    ! Here, the modified E-DIIS equations are used, because L-BFGS does not support
+    ! equality constraints
+    ! They utilize the following variable substitution:
+    ! c_i = t_i^2/\sum_i{t_i^2}
     call nlo_set_min_objective(ires, opt_lbfgs, eadiis_objective, t)
-
     call nlo_optimize(ires, opt_lbfgs, x(:na), minf)
-
-!   Because we used modified E-DIIS equations, we need to compute
-!   coefficients `c` from `t`:
-    x = x**2/sum(x**2)
-
-!   Get prediction of the new SCF energy
+    ! Because we used modified E-DIIS equations, we need to compute
+    ! coefficients `c` from `t`:
+    x = x**2 / sum(x**2)
+    ! Get prediction of the new SCF energy
     call eadiis_fun(minf, int(na, 4), x, x, int(0,4), t)
 
     if (ires < 0) then
-      if (self%verbose > 2) then
-        write(iw, '(10X,"*** nlopt0 failed:",I4," ***")') ires
-      end if
+      if (self%verbose > 2) write(iw, '(10X,"*** nlopt0 failed:",I4," ***")') ires
     elseif (minf < minf_min) then
-        is_a_repeat = &
-          any( [( norm2(self%xlog(:na,j)-x(:na))<1.0d-4, &
-                    j = 1, min(self%iter, self%maxdiis) )] )&
-          .or.any(1.0d0-x(1:na-1) < 1.0d-4)
-        if (.not.is_a_repeat) then
-            minf_min = minf
-            xmin = 0
-            xmin = x
-            if (self%verbose > 2) then
-              write(iw,'(A,*(F15.6))') 'nlopt0: improving x at ', xmin(:)
-              write(iw,'(A,*(F15.6))') 'nlopt0: improved val = ', minf
-            end if
-        elseif (self%verbose > 2) then
-            write(iw,'(A,*(F15.6))') 'nlopt0: found rep at ', x(:)
-            write(iw,'(A,*(F15.6))') 'nlopt0: rep val = ', minf
-        end if
-    else
+      is_a_repeat = any([(norm2(self%xlog(:na, j) - x(:na)) < 1.0e-4_dp, &
+                          j = 1, min(self%iter, self%maxdiis))]) .or. &
+                    any(1.0_dp - x(1:na-1) < 1.0e-4_dp)
+      if (.not. is_a_repeat) then
+        minf_min = minf
+        xmin = x
         if (self%verbose > 2) then
-          write(iw,'(A,*(F15.6))') 'nlopt0: found min at ', x(:)
-          write(iw,'(A,*(F15.6))') 'nlopt0: min val = ', minf
+          write(iw, '(A,*(F15.6))') 'nlopt0: improving x at ', xmin(:)
+          write(iw, '(A,*(F15.6))') 'nlopt0: improved val = ', minf
         end if
+      elseif (self%verbose > 2) then
+        write(iw, '(A,*(F15.6))') 'nlopt0: found rep at ', x(:)
+        write(iw, '(A,*(F15.6))') 'nlopt0: rep val = ', minf
+      end if
+    else
+      if (self%verbose > 2) then
+        write(iw, '(A,*(F15.6))') 'nlopt0: found min at ', x(:)
+        write(iw, '(A,*(F15.6))') 'nlopt0: min val = ', minf
+      end if
     end if
 
-!   If no solution found, try the alternative:
-!   Start from the trivial guess [x(1:n-1)=0, x(n) = 1]
-!   then run two L-BFGS iterations and average with
-!   [x(1:i-i), x(i+1:n) = 0, x(i) = 1] vector and run few L-BFGS steps again
-!   for all [ i = n-1, 1 ] and then [i = 1, n]
-    if ( minf_min > 1d99) then
-      call nlo_set_maxeval(ires, opt_lbfgs, 2);
-      call nlo_set_xtol_rel(ires, opt_lbfgs, 0.1d0)
-
-      xmin = 0
-      xmin(na) = 1.0d0
+    ! If no solution found, try the alternative:
+    ! Start from the trivial guess [x(1:n-1)=0, x(n) = 1]
+    ! then run two L-BFGS iterations and average with
+    ! [x(1:i-i), x(i+1:n) = 0, x(i) = 1] vector and run few L-BFGS steps again
+    ! for all [ i = n-1, 1 ] and then [i = 1, n]
+    if (minf_min > 1.0e99_dp) then
+      call nlo_set_maxeval(ires, opt_lbfgs, 2)
+      call nlo_set_xtol_rel(ires, opt_lbfgs, 0.1_dp)
+      xmin = 0.0_dp
+      xmin(na) = 1.0_dp
       do i = na-1, 1, -1
-        x = 0
-        x(i) = 1
-        xmin = (xmin + x) / (1+sum(x))
+        x = 0.0_dp
+        x(i) = 1.0_dp
+        xmin = (xmin + x) / (1 + sum(x))
         call nlo_optimize(ires, opt_lbfgs, xmin, minf)
-        if (ires < 0) exit
-        xmin = xmin**2/sum(xmin**2)
         if (ires < 0) then
           if (self%verbose > 2) then
             write(iw, '(10X,"*** nlopt2 failed:",I4," ***")') ires
           end if
           exit
         end if
+        xmin = xmin**2 / sum(xmin**2)
       end do
       if (ires >= 0) then
         do i = 1, na
-          x = 0
-          x(i) = 1
-          xmin = (xmin + x) / (1+sum(x))
+          x = 0.0_dp
+          x(i) = 1.0_dp
+          xmin = (xmin + x) / (1 + sum(x))
           call nlo_optimize(ires, opt_lbfgs, xmin, minf)
           if (ires < 0) then
             if (self%verbose > 2) then
@@ -1271,249 +2184,2213 @@ contains
             end if
             exit
           end if
-          xmin = xmin**2/sum(xmin**2)
+          xmin = xmin**2 / sum(xmin**2)
         end do
       end if
-!     If still no success, the default is minimum energy + small contribution from others:
+      ! If still no success, the default is minimum energy + small contribution from others:
       if (ires < 0) then
-        xmin = 1
-        xmin(minloc(self%b(1:na-1))) = 10
-        xmin = xmin/sum(xmin)
-        if (self%verbose > 2) then
-          write(iw, *) 'nlopt2: unoptimal default'
-        end if
+        xmin = 1.0_dp
+        xmin(minloc(self%b(1:na-1))) = 10.0_dp
+        xmin = xmin / sum(xmin)
+        if (self%verbose > 2) write(iw, *) 'nlopt2: unoptimal default'
       end if
       call eadiis_fun(minf_min, int(na, 4), xmin, xmin, int(0,4), t)
-
     end if
 
     minf = minf_min
-
-    self%xlog(:na,min(self%iter, self%maxdiis)) = xmin(1:na)
-
+    self%xlog(:na, min(self%iter, self%maxdiis)) = xmin(1:na)
     call nlo_destroy(opt_lbfgs)
 
     res%ierr = 0
     select type (res)
     class is (scf_conv_interp_result)
-        call move_alloc(from=xmin, to=res%coeffs)
+      call move_alloc(from=xmin, to=res%coeffs)
     end select
 
-  end subroutine
+    ! compute diis error from the latest iteration
+    diis_error = 0.0_dp
+    do ifock = 1, self%dat%num_focks
+      err => self%dat%get_err(-1, ifock)
+      diis_error = max(diis_error, maxval(abs(err)))
+    end do
+    res%error = diis_error
+  end subroutine ediis_run
 
 !==============================================================================
-
-!> @brief Modified E/A-DIIS objective function wrapper, which allows to use unconstrained optimization
-!> @details The following variable substitution is used:
-!>  \f$ c_i = t_i^2 / \sum_i{t_i^2} \f$
-!> @note This is standard interface to work with NLOpt library
-!> @param[out] val function value
-!> @param[in] n dimension of the problem
-!> @param[in] t vector of arguments
-!> @param[out] grad vector of function gradient
-!> @param[in] need_gradient flag to turn on computing gradient, 0 - gradient not computed
-!> @param[in] d datatype storing function parameters
-  subroutine eadiis_objective(val, n, t, grad, need_gradient, d)
-    implicit none
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, t(n), grad(n)
-    type(ediis_opt_data) :: d
-    real(kind=8) :: x(n), tnorm, jac(n,n)
-    integer :: i, j
-    tnorm = 1/sum(t(1:n)**2)
-    x = (t(1:n)**2)*tnorm
-
-    call d%fun(val, n, x, grad, need_gradient, d)
-
-    jac = 0
-    if (need_gradient/=0) then
-      do i = 1, n
-        jac(i,i) = 1
-        do j = 1, n
-          jac(j,i) = 2*tnorm*t(j)*(jac(j,i)-x(i))
-        end do
-      end do
-      grad(1:n) = matmul(jac, grad(1:n))
-    end if
-  end subroutine
-
+! adiis_converger Methods
 !==============================================================================
 
-!> @brief Non-modified E/A-DIIS objective function wrapper
-!> @note This is standard interface to work with NLOpt library
-!> @param[out] val function value
-!> @param[in] n dimension of the problem
-!> @param[in] t vector of arguments
-!> @param[out] grad vector of function gradient
-!> @param[in] need_gradient flag to turn on computing gradient, 0 - gradient not computed
-!> @param[in] d datatype storing function parameters
-  subroutine eadiis_fun(val, n, x, grad, need_gradient, d)
-    implicit none
-    integer(kind=4), intent(in) :: n, need_gradient
-    real(kind=8) :: val, x(n), grad(n)
-    type(ediis_opt_data) :: d
-
-    call d%fun(val, n, x, grad, need_gradient, d)
-  end subroutine
-
-!==============================================================================
-
-!> @brief E-DIIS objective function calculation
-!> @note This is standard interface to work with NLOpt library
-!> @param[out] val function value
-!> @param[in] n dimension of the problem
-!> @param[in] t vector of arguments
-!> @param[out] grad vector of function gradient
-!> @param[in] need_gradient flag to turn on computing gradient, 0 - gradient not computed
-!> @param[in] d datatype storing function parameters
-  subroutine ediis_fun(val, n, x, grad, need_gradient, d)
-    implicit none
-    real(kind=8) :: val, x(*), grad(*)
-    integer(kind=4), intent(in) :: n, need_gradient
-    type(ediis_opt_data) :: d
-
-    if (need_gradient/=0) then
-       grad(1:n) = d%b(1:n) - matmul(d%a(1:n,1:n),x(1:n))
-    end if
-    val = dot_product(x(1:n),d%b(1:n)) &
-            - 0.5*dot_product(x(1:n), matmul(d%a(1:n,1:n),x(1:n)))
-  end subroutine
-
-!==============================================================================
-
-!> @brief E/A-DIIS constraints
-!> @note This is standard interface to work with NLOpt library
-!> @param[out] val function value
-!> @param[in] n dimension of the problem
-!> @param[in] t vector of arguments
-!> @param[out] grad vector of function gradient
-!> @param[in] need_gradient flag to turn on computing gradient, 0 - gradient not computed
-!> @param[in] d datatype storing function parameters
-  subroutine eadiis_constraints(val, n, x, grad, need_gradient, d)
-    implicit none
-    integer(kind=4) :: need_gradient
-    integer(kind=4) :: n
-    real(kind=8) :: val, x(n), grad(n)
-    class(ediis_converger) :: d
-    if (need_gradient.ne.0) then
-      grad = 1
-    end if
-    val = sum(x) - 1
-  end subroutine
-
-!==============================================================================
-!==============================================================================
-
-!> @brief Initialize A-DIIS subconverger
-!> @detail This subroutine takes SCF converger driver as argument.
-!>   It should be initialized and include all the required parameters.
-!> @param[in] params current SCF converger driver
+  !> @brief Initialize A-DIIS subconverger
+  !> @detail This subroutine takes SCF converger driver as argument.
+  !>   It should be initialized and include all the required parameters.
+  !> @param[in] params current SCF converger driver
   subroutine adiis_init(self, params)
-    class(adiis_converger) :: self
-    type(scf_conv), target :: params
+    class(adiis_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
 
     call self%cdiis_converger%init(params)
     self%conv_name = 'A-DIIS'
     self%fun => adiis_fun
     allocate(self%b(self%maxdiis))
-    allocate(self%xlog(self%maxdiis,self%maxdiis), source=0.0d0)
-  end subroutine
+    allocate(self%xlog(self%maxdiis, self%maxdiis), source=0.0_dp)
+  end subroutine adiis_init
 
-!> @brief Prepare A-DIIS subconverger to run
+  !> @brief Prepare A-DIIS subconverger to run
   subroutine adiis_setup(self)
-    use precision, only: dp
-!    use io_constants, only: iw
-
-    implicit none
-
-    class(adiis_converger) :: self
+    class(adiis_converger), intent(inout) :: self
     integer :: i, j, na, maxdiis, ifock, nfocks
     real(kind=dp) :: factor
 
     maxdiis = self%maxdiis
-    !na = min(self%iter, maxdiis)
     na = self%dat%num_saved
     nfocks = self%dat%num_focks
-
-!   Factor to account RHF/UHF cases
-    factor = 1.0d0/nfocks
+    ! Factor to account RHF/UHF cases
+    factor = 1.0_dp / nfocks
 
     self%old_dim = na
-    self%a = 0
-    self%b = 0
+    self%a = 0.0_dp
+    self%b = 0.0_dp
     do ifock = 1, nfocks
       do i = 1, na
-      do j = 1, na
-        self%a(j,i) = self%a(j,i) + 0.5d0*factor*dot_product(&
-            self%dat%get(j,conv_dtype_density,ifock) - self%dat%get(-1,conv_dtype_density,ifock), &
-            self%dat%get(i,conv_dtype_fock,   ifock) - self%dat%get(-1,conv_dtype_fock,   ifock))
-      end do
-      end do
-      do i = 1, na
-        self%b(i) = self%b(i) + factor*dot_product(&
-            self%dat%get(i,conv_dtype_density,ifock) &
-          - self%dat%get(-1,conv_dtype_density,ifock), &
-            self%dat%get(-1,conv_dtype_fock,ifock))
+        do j = 1, na
+          self%a(j,i) = self%a(j,i) + 0.5_dp * factor * dot_product( &
+                          self%dat%get_density(j, ifock) - self%dat%get_density(-1, ifock), &
+                          self%dat%get_fock(j, ifock) - self%dat%get_fock(-1, ifock))
+        end do
+        self%b(i) = self%b(i) + factor * dot_product( &
+                        self%dat%get_density(i, ifock) - self%dat%get_density(-1, ifock), &
+                        self%dat%get_fock(-1, ifock))
       end do
     end do
 
-
-!   DIIS matrix is already prepared nothing to do here
+    ! DIIS matrix is already prepared nothing to do here
     self%last_setup = 0
-
-!    call diis_print_equation(self)
-
-  end subroutine
+  end subroutine adiis_setup
 
 !==============================================================================
+! Optimization Helper Routines
+!==============================================================================
 
-!> @brief A-DIIS objective function calculation
-!> @note This is standard interface to work with NLOpt library
-!> @param[out] val function value
-!> @param[in] n dimension of the problem
-!> @param[in] t vector of arguments
-!> @param[out] grad vector of function gradient
-!> @param[in] need_gradient flag to turn on computing gradient, 0 - gradient not computed
-!> @param[in] d datatype storing function parameters
-  subroutine adiis_fun(val, n, x, grad, need_gradient, d)
-    implicit none
-    type(ediis_opt_data) :: d
-    real(kind=8) :: val, x(*), grad(*)
+  !> @brief Modified E/A-DIIS objective function wrapper, which allows to use unconstrained optimization
+  !> @details The following variable substitution is used:
+  !>          \f$ c_i = t_i^2 / \sum_i{t_i^2} \f$
+  !> @note This is standard interface to work with NLOpt library
+  !> @param[out] val Function value
+  !> @param[in] n Dimension of the problem
+  !> @param[in] t Vector of arguments
+  !> @param[out] grad Vector of function gradient
+  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
+  !> @param[in] d Datatype storing function parameters
+  subroutine eadiis_objective(val, n, t, grad, need_gradient, d)
     integer(kind=4), intent(in) :: n, need_gradient
+    real(kind=8) :: val, t(n), grad(n)
+    type(ediis_opt_data), intent(in) :: d
+    real(kind=8) :: x(n), tnorm, jac(n,n)
+    integer :: i, j
 
-    if (need_gradient/=0) then
-       grad(1:n) = 2.0*d%b(1:n) + matmul(d%a(1:n,1:n),x(1:n)) &
-                                + matmul(x(1:n),d%a(1:n,1:n))
+    tnorm = 1.0_dp / sum(t(1:n)**2)
+    x = (t(1:n)**2) * tnorm
+    call d%fun(val, n, x, grad, need_gradient, d)
+
+    if (need_gradient /= 0) then
+      jac = 0.0_dp
+      do i = 1, n
+        jac(i,i) = 1.0_dp
+        do j = 1, n
+          jac(j,i) = 2.0_dp * tnorm * t(j) * (jac(j,i) - x(i))
+        end do
+      end do
+      grad(1:n) = matmul(jac, grad(1:n))
     end if
-    val = d%b(n) &!d%get_e(-1,conv_dtype_energy) &
-          + 2.0*dot_product(x(1:n),d%b(1:n)) &
-          + dot_product(x(1:n), matmul(d%a(1:n,1:n),x(1:n)))
-  end subroutine
+  end subroutine eadiis_objective
+
+  !> @brief Non-modified E/A-DIIS objective function wrapper
+  !> @note This is standard interface to work with NLOpt library
+  !> @param[out] val Function value
+  !> @param[in] n Dimension of the problem
+  !> @param[in] t Vector of arguments
+  !> @param[out] grad Vector of function gradient
+  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
+  !> @param[in] d Datatype storing function parameters
+  subroutine eadiis_fun(val, n, x, grad, need_gradient, d)
+    integer(kind=4), intent(in) :: n, need_gradient
+    real(kind=8) :: val, x(n), grad(n)
+    type(ediis_opt_data), intent(in) :: d
+
+    call d%fun(val, n, x, grad, need_gradient, d)
+  end subroutine eadiis_fun
+
+  !> @brief E-DIIS objective function calculation
+  !> @note This is standard interface to work with NLOpt library
+  !> @param[out] val Function value
+  !> @param[in] n Dimension of the problem
+  !> @param[in] t Vector of arguments
+  !> @param[out] grad Vector of function gradient
+  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
+  !> @param[in] d Datatype storing function parameters
+  subroutine ediis_fun(val, n, x, grad, need_gradient, d)
+    integer(kind=4), intent(in) :: n, need_gradient
+    real(kind=8) :: val, x(*), grad(*)
+    type(ediis_opt_data), intent(in) :: d
+
+    if (need_gradient /= 0) then
+      grad(1:n) = d%b(1:n) - matmul(d%A(1:n, 1:n), x(1:n))
+    end if
+    val = dot_product(x(1:n), d%b(1:n)) - &
+          0.5_dp * dot_product(x(1:n), matmul(d%A(1:n, 1:n), x(1:n)))
+  end subroutine ediis_fun
+
+  !> @brief E/A-DIIS constraints
+  !> @note This is standard interface to work with NLOpt library
+  !> @param[out] val Function value
+  !> @param[in] n Dimension of the problem
+  !> @param[in] t Vector of arguments
+  !> @param[out] grad Vector of function gradient
+  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
+  !> @param[in] d Datatype storing function parameters
+  subroutine eadiis_constraints(val, n, x, grad, need_gradient, d)
+    integer(kind=4), intent(in) :: n, need_gradient
+    real(kind=8) :: val, x(n), grad(n)
+    class(ediis_converger), intent(in) :: d
+
+    if (need_gradient /= 0) grad = 1.0_dp
+    val = sum(x) - 1.0_dp
+  end subroutine eadiis_constraints
+
+  !> @brief A-DIIS objective function calculation
+  !> @note This is standard interface to work with NLOpt library
+  !> @param[out] val Function value
+  !> @param[in] n Dimension of the problem
+  !> @param[in] t Vector of arguments
+  !> @param[out] grad Vector of function gradient
+  !> @param[in] need_gradient Flag to turn on computing gradient, 0 - gradient not computed
+  !> @param[in] d Datatype storing function parameters
+  subroutine adiis_fun(val, n, x, grad, need_gradient, d)
+    integer(kind=4), intent(in) :: n, need_gradient
+    real(kind=8) :: val, x(*), grad(*)
+    type(ediis_opt_data), intent(in) :: d
+
+    if (need_gradient /= 0) then
+      grad(1:n) = 2.0_dp * d%b(1:n) + matmul(d%A(1:n, 1:n), x(1:n)) + &
+                  matmul(x(1:n), d%A(1:n, 1:n))
+    end if
+    val = d%b(n) + 2.0_dp * dot_product(x(1:n), d%b(1:n)) + &
+          dot_product(x(1:n), matmul(d%A(1:n, 1:n), x(1:n)))
+  end subroutine adiis_fun
 
 !==============================================================================
+! Debug Printing (optional)
 !==============================================================================
 
 !> @brief Debug printing of the DIIS equation data
   subroutine diis_print_equation(self)
     use printing, only: print_square
     use io_constants, only: iw
-    implicit none
-    class(cdiis_converger) :: self
+    class(cdiis_converger), intent(in) :: self
     integer :: num_saved
-    !num_saved = min(self%iter, self%maxdiis)
+
     num_saved = self%dat%num_saved
-    write(iw,'("(dbg) --------------------------------------------------")')
-    write(iw,'("(dbg) DIIS iteration / max.dim. : ",G0," / ",G0)') self%iter, self%maxdiis
-    write(iw,'("(dbg)",I4," Fock sets stored")') num_saved
-    write(iw,'("(dbg) --------------------------------------------------")')
-    write(iw,'("(dbg) Current DIIS equation matrix:")')
+    write(iw, '("(dbg) --------------------------------------------------")')
+    write(iw, '("(dbg) DIIS iteration / max.dim. : ",G0," / ",G0)') self%iter, self%maxdiis
+    write(iw, '("(dbg)",I4," Fock sets stored")') num_saved
+    write(iw, '("(dbg) --------------------------------------------------")')
+    write(iw, '("(dbg) Current DIIS equation matrix:")')
     call print_square(self%a, num_saved, num_saved, ubound(self%a,1), tag='(dbg)')
-    write(iw,'("(dbg) --------------------------------------------------")')
+    write(iw, '("(dbg) --------------------------------------------------")')
     select type(self)
     class is (ediis_converger)
-    write(iw,'("(dbg) Current DIIS equation vector:")')
-    write(iw,'(*(ES15.7,","))') self%b(1:num_saved)
+      write(iw, '("(dbg) Current DIIS equation vector:")')
+      write(iw, '(*(ES15.7,","))') self%b(1:num_saved)
     end select
   end subroutine diis_print_equation
+
+!==============================================================================
+! soscf_converger Methods
+!==============================================================================
+
+  !> @brief Initialize the SOSCF converger
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[in] params SCF convergence parameters from the driver
+  subroutine soscf_init(self, params)
+    class(soscf_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
+
+    integer :: nvec, m_max, istat, nvir_a, nvir_b
+
+    ! Initialize base class
+    call self%subconverger_init(params)
+    self%conv_name = 'SOSCF'
+    self%nfocks    = params%dat%num_focks
+    self%verbose   = params%verbose
+    self%nbf       = params%dat%ldim
+    self%nocc_a    = params%dat%nelec_a
+    self%nocc_b    = params%dat%nelec_b
+    self%nbf_tri   = self%nbf * (self%nbf + 1) / 2
+    self%m_max     = params%dat%num_slots
+    self%m_history = 0
+    self%dat       => params%dat
+    self%overlap   => params%overlap
+    self%overlap_invsqrt => params%overlap_sqrt
+    self%first_macro = .true.
+    self%scf_type = params%scf_type
+
+    nvir_a = self%nbf - self%nocc_a
+    nvir_b = self%nbf - self%nocc_b
+
+    ! Calculate gradient vector size (nvec)
+    select case (self%scf_type)
+    case (1)  ! RHF
+      self%nvec = self%nocc_a * nvir_a
+    case (2)  ! UHF
+      self%nvec = self%nocc_a * nvir_a + self%nocc_b * nvir_b
+    case (3)  ! ROHF
+      self%nvec = self%nocc_b * nvir_b + (self%nocc_a - self%nocc_b) * nvir_a
+    end select
+
+    ! Allocate working matrices
+    istat = 0
+    if (.not. allocated(self%rho_history)) &
+      allocate(self%rho_history(self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%work_1)) &
+      allocate(self%work_1(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%work_2)) &
+      allocate(self%work_2(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%work_3)) &
+      allocate(self%work_3(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+    ! Allocate L-BFGS history arrays
+    if (.not. allocated(self%s_history)) &
+      allocate(self%s_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%grad)) &
+      allocate(self%grad(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x)) &
+      allocate(self%x(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%x_prev)) &
+      allocate(self%x_prev(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%grad_prev)) &
+      allocate(self%grad_prev(self%nvec), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%y_history)) &
+      allocate(self%y_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%upd_history)) &
+      allocate(self%upd_history(self%nvec, self%m_max), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%h_inv)) &
+      allocate(self%h_inv(self%nvec), stat=istat, source=0.0_dp)
+
+    ! Allocate SOSCF arrays
+    if (.not. allocated(self%mo_a)) &
+      allocate(self%mo_a(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%dens_a)) &
+      allocate(self%dens_a(self%nbf_tri), stat=istat, source=0.0_dp)
+    if (.not. allocated(self%dens_a_old)) &
+      allocate(self%dens_a_old(self%nbf_tri), stat=istat, source=0.0_dp)
+    if (self%scf_type > 1) then
+      if (.not. allocated(self%mo_b)) &
+        allocate(self%mo_b(self%nbf, self%nbf), stat=istat, source=0.0_dp)
+      if (.not. allocated(self%dens_b)) &
+        allocate(self%dens_b(self%nbf_tri), stat=istat, source=0.0_dp)
+      if (.not. allocated(self%dens_b_old)) &
+        allocate(self%dens_b_old(self%nbf_tri), stat=istat, source=0.0_dp)
+    end if
+
+    if (istat /= 0) then
+      write(iw, '(A)') 'ERROR: Failed to allocate arrays in soscf_init'
+      stop
+    end if
+
+  end subroutine soscf_init
+
+  !> @brief Clean up SOSCF converger
+  !> @param[inout] self The SOSCF converger instance
+  subroutine soscf_clean(self)
+    class(soscf_converger), intent(inout) :: self
+    if (allocated(self%rho_history)) deallocate(self%rho_history)
+    if (allocated(self%work_1)) deallocate(self%work_1)
+    if (allocated(self%work_2)) deallocate(self%work_2)
+    if (allocated(self%work_3)) deallocate(self%work_3)
+    if (allocated(self%s_history)) deallocate(self%s_history)
+    if (allocated(self%y_history)) deallocate(self%y_history)
+    if (allocated(self%upd_history)) deallocate(self%upd_history)
+    if (allocated(self%grad)) deallocate(self%grad)
+    if (allocated(self%grad_prev)) deallocate(self%grad_prev)
+    if (allocated(self%x_prev)) deallocate(self%x_prev)
+    if (allocated(self%x)) deallocate(self%x)
+    if (allocated(self%h_inv)) deallocate(self%h_inv)
+    if (allocated(self%mo_a)) deallocate(self%mo_a)
+    if (allocated(self%dens_a)) deallocate(self%dens_a)
+    if (allocated(self%mo_b)) deallocate(self%mo_b)
+    if (allocated(self%dens_b)) deallocate(self%dens_b)
+    if (allocated(self%dens_a_old)) deallocate(self%dens_a_old)
+    if (allocated(self%dens_b_old)) deallocate(self%dens_b_old)
+    call self%subconverger_clean()
+  end subroutine soscf_clean
+
+  !> @brief Setup SOSCF for the current iteration
+  !> @param[inout] self The SOSCF converger instance
+  subroutine soscf_setup(self)
+
+    class(soscf_converger), intent(inout) :: self
+
+    ! Data verification on each setup call
+    self%last_setup = 0
+  end subroutine soscf_setup
+
+  !> @brief Run the SOSCF convergence step
+  !> @param[inout] self The SOSCF converger instance
+  !> @param[out] res Convergence result
+  subroutine soscf_run(self, res)
+    use mathlib, only: unpack_matrix
+    use oqp_linalg
+
+    class(soscf_converger), target, intent(inout) :: self
+    class(scf_conv_result), allocatable, intent(out) :: res
+
+    ! Local variables
+    type(pfon_t), pointer :: pfon => null()
+    real(kind=dp), pointer :: occ_a(:) => null()
+    real(kind=dp), pointer :: occ_b(:) => null()
+    real(kind=dp), pointer :: fock_ao_a(:), fock_ao_b(:)
+    real(kind=dp), pointer :: mo_e_a(:), mo_e_b(:)
+    real(kind=dp) :: grad_norm, alpha, sy, rms_dp
+    real(kind=dp) :: grad_norm_ratio
+    integer :: iter, istat
+    integer :: i, nocc
+
+
+    ! Allocate result object
+    allocate(scf_conv_soscf_result :: res)
+    res%dat => self%dat
+    res%active_converger_name = self%conv_name
+
+    if (self%last_setup /= 0) then
+      if (self%verbose > 0) write(iw, '(A)') 'SOSCF: Setup not called, returning'
+      return
+    end if
+
+    res%ierr = 0
+    istat = 0
+
+
+    ! --- Step 1: Extract current data from converger_data ---
+    mo_e_a => self%dat%get_mo_e_a(-1)
+    fock_ao_a => self%dat%get_fock(-1, 1)
+    self%mo_a = self%dat%get_mo_a(-1)
+    self%dens_a = self%dat%get_density(-1, 1)
+    if (self%scf_type > 1) then
+      mo_e_b => self%dat%get_mo_e_b(-1)
+      fock_ao_b => self%dat%get_fock(-1, 2)
+      self%mo_b = self%dat%get_mo_b(-1)
+      self%dens_b = self%dat%get_density(-1, 2)
+    end if
+    if (self%scf_type == 1) then
+      call self%rms_density( d_new_a = self%dens_a,       &
+                             d_old_a = self%dens_a_old,   &
+                             rms_dp  = rms_dp )
+      self%dens_a_old = self%dens_a
+    else
+      call self%rms_density(self%dens_a, self%dens_b,            &
+                              self%dens_a_old, self%dens_b_old, rms_dp)
+      self%dens_a_old = self%dens_a
+      self%dens_b_old = self%dens_b
+    end if
+
+    pfon => self%dat%get_pfon(-1)
+    if (associated(pfon)) then
+      ! Get occupation arrays directly from pfon
+      occ_a => pfon%occ_a
+      if (self%scf_type > 1) then
+        occ_b => pfon%occ_b
+      end if
+    else
+      ! Allocate local occupation arrays
+      nocc = min(self%nocc_a,self%nocc_b)
+      allocate(occ_a(nocc), source=0.0_dp)
+      occ_a = 2
+      if (self%scf_type/=1) occ_a = 1
+    end if
+
+    ! --- Step 2: Initialize LBFGS history ---
+    if (self%first_macro) then
+      self%s_history = 0.0_dp
+      self%y_history = 0.0_dp
+      self%upd_history = 0.0_dp
+      self%grad_prev = 0.0_dp
+      self%grad = 0.0_dp
+      self%x = 0.0_dp
+      self%x_prev = 0.0_dp
+      self%m_history = 0
+      if (self%m_history == 0) &
+        call self%init_hess_inv(mo_e_a, mo_e_b)
+      self%first_macro = .false.
+      if (self%verbose>1) then
+        write(iw, '(A,E20.10)') 'DEBUG: soscf_run: Input: grad_thresh=', self%grad_thresh
+        write(iw, '(A,E20.10)') 'DEBUG: soscf_run: Input: level_shift=', self%level_shift
+      end if
+    end if
+
+    call self%calc_orb_grad(self%grad, fock_ao_a, fock_ao_b, self%mo_a, self%mo_b)
+    grad_norm = sqrt(dot_product(self%grad, self%grad)/self%nvec)
+    if (self%m_history == 0 )  self%rms_grad_prev = grad_norm
+    if (self%verbose>1) &
+      write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run:1:calc_orb_grad: iter=', 0, ' grad_norm=', grad_norm
+
+    if (self%verbose>1) &
+      write(iw, '(A,E20.10)') 'DEBUG soscf_run: init: grad_thresh=', self%grad_thresh
+    ! Check convergence
+    if ( grad_norm < self%grad_thresh) then
+      if (self%verbose>1) &
+        write(iw, '(A,I3,A,E20.10)') 'DEBUG soscf_run: loop exit: iter=',iter, ' grad_norm=', grad_norm
+    end if
+
+    ! Compute trail vector x using J. Phys. Chem. 1992, 96, 9768-9774
+    call self%bfgs(self%x)
+    if (self%scf_type == 1) then
+       call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
+    elseif(self%scf_type == 2) then
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_a, self%mo_a)
+      call self%rotate_orbs(self%x(self%nocc_a * (self%nbf - self%nocc_a) +1 : self%nvec)&
+              , self%nocc_b, self%nocc_b, self%mo_b)
+    elseif(self%scf_type == 3) then
+      call self%rotate_orbs(self%x, self%nocc_a, self%nocc_b, self%mo_a)
+      self%mo_b(1:self%nbf, 1:self%nbf) = self%mo_a(1:self%nbf, 1:self%nbf)
+    end if
+    self%m_history = self%m_history + 1
+    self%grad_prev = self%grad
+
+    ! --- Step 4: Update result and converger_data ---
+    res%ierr = 0
+    res%error = grad_norm
+    select type (res)
+    class is (scf_conv_soscf_result)
+      res%rms_grad = res%error
+      res%rms_dp = rms_dp
+    end select
+
+    ! Update MO coefficients and compute MO energies
+    self%dat%buffer(self%dat%slot)%mo_a = self%mo_a
+    if (self%scf_type == 2) self%dat%buffer(self%dat%slot)%mo_b = self%mo_b
+    call compute_mo_energies(self, fock_ao_a, self%mo_a, &
+                             self%dat%buffer(self%dat%slot)%mo_e_a, self%work_1, self%work_2)
+    if (self%scf_type == 2) then
+      call compute_mo_energies(self, fock_ao_b, self%mo_b, &
+                               self%dat%buffer(self%dat%slot)%mo_e_b, self%work_1, self%work_2)
+    end if
+
+    if (self%soscf_reset_mod == 0) return
+    if (mod(self%m_history, self%soscf_reset_mod) == 0) then
+      if (self%rms_grad_prev > 1.0d-12) then
+        grad_norm_ratio = grad_norm / self%rms_grad_prev
+        self%rms_grad_prev = grad_norm
+        if (grad_norm_ratio > 0.95_dp) then
+          write(iw, '(8X, "Resetting Hessian, gradient norm ratio = ", F8.5)') grad_norm_ratio
+          self%m_history = 0
+          self%first_macro = .true.
+        end if
+      end if
+    end if
+
+
+  end subroutine soscf_run
+
+  subroutine rms_density(self, d_new_a, d_new_b,            &
+                                d_old_a, d_old_b, rms_dp, max_dp)
+     use, intrinsic :: iso_fortran_env, only : dp => real64
+     implicit none
+     class(soscf_converger), intent(in)       :: self
+     real(dp), intent(in)                     :: d_new_a(:), d_old_a(:)
+     real(dp), intent(in),  optional          :: d_new_b(:), d_old_b(:)
+     real(dp), intent(out)                    :: rms_dp
+     real(dp), intent(out), optional          :: max_dp
+
+     integer  :: ntri, k
+     real(dp) :: sum_sq, sum_sq_b
+     real(dp) :: max_loc, max_loc_b
+     real(dp) :: diff
+
+     ntri = self%nbf_tri
+
+     sum_sq  = 0.0_dp
+     max_loc = 0.0_dp
+  !$omp   parallel do default(shared) private(k,diff)             &
+  !$omp&  reduction(+:sum_sq) reduction(max:max_loc)
+     do k = 1, ntri
+        diff    = d_new_a(k) - d_old_a(k)
+        sum_sq  = sum_sq + diff*diff
+        max_loc = max(max_loc, abs(diff))
+     end do
+  !$omp   end parallel do
+
+     rms_dp = sqrt( sum_sq / real(ntri, dp) )
+     if (present(max_dp)) max_dp = max_loc
+
+     if (present(d_new_b) .and. present(d_old_b)) then
+        sum_sq_b  = 0.0_dp
+        max_loc_b = 0.0_dp
+  !$omp   parallel do default(shared) private(k,diff)             &
+  !$omp&  reduction(+:sum_sq_b) reduction(max:max_loc_b)
+        do k = 1, ntri
+           diff       = d_new_b(k) - d_old_b(k)
+           sum_sq_b   = sum_sq_b + diff*diff
+           max_loc_b  = max(max_loc_b, abs(diff))
+        end do
+  !$omp   end parallel do
+
+        rms_dp = 0.5_dp * ( rms_dp + sqrt( sum_sq_b / real(ntri, dp) ) )
+        if (present(max_dp)) max_dp = max(max_dp, max_loc_b)
+     end if
+  end subroutine rms_density
+
+  !> @brief Computes the initial diagonal inverse Hessian for SOSCF
+  !> @details Approximates the inverse Hessian diagonal using orbital energy differences,
+  !>          adjusted for SCF type:
+  !>          - RHF: h_inv = 0.25 / (ε_a - ε_i) for closed-shell.
+  !>          - UHF: h_inv combines alpha and beta energy differences.
+  !>          - ROHF: h_inv varies by orbital region (closed-virtual, open-virtual).
+  !>          Includes level-shifting for stability.
+  !> @param[out] self%h_inv Diagonal inverse Hessian (size depends on scf_type)
+  !> @param[in] mo_e_a Alpha orbital energies (size: nbf)
+  !> @param[in] mo_e_b Beta orbital energies (size: nbf, ignored for RHF/ROHF)
+  subroutine init_hess_inv(self, mo_e_a, mo_e_b)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), pointer, intent(in) :: mo_e_a(:)
+    real(kind=dp), pointer, intent(in) :: mo_e_b(:)
+
+    real(kind=dp) :: diff, scale
+    integer :: i, a, k, istart
+
+    associate (nbf       => self%nbf, &
+               nocc_a    => self%nocc_a, &
+               nocc_b    => self%nocc_b, &
+               scf_type  => self%scf_type, &
+               lvl_shift => self%level_shift, &
+               thresh    => self%hess_thresh)
+      select case (scf_type)
+      case (1) ! RHF: Closed-shell system
+        ! Single set of orbitals, nocc_a = nocc_b, 4 * (ε_a - ε_i) scaling
+        k = 0
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nocc_b+1
+            scale = 0.25_dp  ! Closed-virtual: like RHF
+          else
+            istart = nocc_a +1
+            scale = 0.25_dp   ! Open-virtual: like UHF (singly occupied)
+          end if
+          do a= istart, nbf
+            k = k +1
+            diff = mo_e_a(a) - mo_e_a(i)
+            if (abs(diff) < thresh) then
+               diff = sign(thresh + lvl_shift, diff)
+            end if
+            self%h_inv(k) = scale /diff
+          end do
+        end do
+
+      case (2) ! UHF: Unrestricted, separate alpha and beta orbitals
+        ! Alpha occupied -> alpha virtual, beta occupied -> beta virtual
+        k = 0
+        ! Alpha rotations
+        do i = 1, nocc_a
+          do a= nocc_a+1, nbf
+            k = k +1
+            diff = mo_e_a(a) - mo_e_a(i)
+            if (abs(diff) < thresh) then
+               diff = sign(thresh + lvl_shift, diff)
+            end if
+            self%h_inv(k) = 0.5_dp /diff
+          end do
+        end do
+        ! Beta rotations
+        do i = 1, nocc_b
+          do a= nocc_b+1, nbf
+            k = k +1
+            diff = mo_e_b(a) - mo_e_b(i)
+            if (abs(diff) < thresh) then
+               diff = sign(thresh + lvl_shift, diff)
+            end if
+            self%h_inv(k) = 0.5_dp /diff
+          end do
+        end do
+
+
+      case (3) ! ROHF: Restricted open-shell
+        ! Regions: closed (j <= nocc_b)
+        !          open (nocc_b < j <= nocc_a)
+        !          virtual (j > nocc_a)
+        k = 0
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nocc_b+1
+            scale = 0.25_dp  ! Closed-virtual: like RHF
+          else
+            istart = nocc_a +1
+            scale = 0.50_dp   ! Open-virtual: like UHF (singly occupied)
+          end if
+          do a= istart, nbf
+            k = k +1
+              diff = mo_e_a(a) - mo_e_a(i)
+              if (abs(diff) < thresh) then
+                 diff = sign(thresh + lvl_shift, diff)
+              end if
+            self%h_inv(k) = scale /diff
+          end do
+        end do
+      end select
+    end associate
+  end subroutine init_hess_inv
+
+  !> @brief Computes orbital gradient.
+  !> @details Calculates the gradient for occupied-virtual orbital rotations:
+  !>          - RHF: g(i,a) = 4 * F(i,a), single gradient.
+  !>          - UHF: g_a(i,a) = 2 * F_a(i,a), g_b(i,a) = 2 * F_b(i,a), separate gradients.
+  !>          - ROHF: g(c,v) = 2 * F_b(c,v) for doubly occ -> singly occ,
+  !>                  g(o,v) = 2 * (F_a(o,v) + F_b(o,v)) doubly occ ->virt,
+  !>                  g(o,v) = 2 * F_a(o,v) for singly occ -> virt
+  !> @param[out] grad_a Alpha gradient for RHF, ROHF, and UHF
+  !> @param[out] grad_b Beta gradient for UHF (optional, size: nocc_b * (nbf - nocc_b))
+  !> @param[in] fock_a Packed alpha/single Fock matrix (size: nbf*(nbf+1)/2)
+  !> @param[in] fock_b Packed beta Fock matrix for UHF (optional, size: nbf*(nbf+1)/2)
+  subroutine calc_orb_grad(self, grad, fock_a, fock_b, mo_a, mo_b)
+    implicit none
+    class(soscf_converger)             :: self
+    real(kind=dp), intent(out)         :: grad(:)
+    real(kind=dp), pointer, intent(in) :: fock_a(:)
+    real(kind=dp), pointer, intent(in) :: fock_b(:)
+    real(kind=dp), intent(in)          :: mo_a(:,:)
+    real(kind=dp), intent(in)          :: mo_b(:,:)
+
+    integer :: i, a, k, nvir_a, nvir_b, istart
+
+    if (.not. ASSOCIATED(fock_a)) &
+      call show_message('Failed to use Fock array in calc_orb_grad', &
+                        with_abort)
+
+    associate (nbf    => self%nbf, &
+               nocc_a => self%nocc_a, &
+               nocc_b => self%nocc_b)
+
+      nvir_a = nbf - nocc_a
+      nvir_b = nbf - nocc_b
+      grad = 0.0_dp
+
+      select case (self%scf_type)
+      case (1)  ! RHF
+        ! Unpack AO-basis Fock matrix
+        self%work_1 = 0.0_dp
+        call unpack_matrix(fock_a, self%work_1)
+        ! Convert AO Fock to MO Fock.
+        ! self%work_2 = F_ao * C_virt
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        ! self%work_1 = C_occ^T * self%work_2
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        k = 0
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nbf - nocc_b
+          else
+            istart = nbf - nocc_a
+          end if
+          do a= 1, istart
+            k = k +1
+            grad(k) = 4.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+      case (2)  ! UHF
+        if (.not. associated(fock_b)) &
+          call show_message('Failed to use Fock arrays in calc_orb_grad', &
+                            with_abort)
+        ! Alpha
+        call unpack_matrix(fock_a, self%work_1)
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        k = 0
+        do i = 1, nocc_a
+          do a= 1, nvir_a
+            k = k +1
+            grad(k) = 2.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+        ! Beta
+        self%work_1 = 0.0_dp
+        call unpack_matrix(fock_b, self%work_1)
+        call dgemm('N', 'N', nbf, nvir_b, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_b(:, nocc_b+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_b, nvir_b, nbf, &
+                   1.0_dp, mo_b(:, 1:nocc_b), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_b, 1:nvir_b), nocc_b)
+        do i = 1, nocc_b
+          do a= 1, nvir_b
+            k = k +1
+            grad(k) = 2.0_dp * self%work_1(i, a)
+          end do
+        end do
+
+      case (3)  ! ROHF
+        self%work_1 = 0.0_dp
+        self%work_3 = 0.0_dp
+        call unpack_matrix(fock_a, self%work_1)
+        call unpack_matrix(fock_b, self%work_3)
+        call dgemm('N', 'N', nbf, nvir_a, nbf, &
+                   1.0_dp, self%work_1, nbf, &
+                           mo_a(:, nocc_a+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_a, nvir_a, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_a), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_1(1:nocc_a, 1:nvir_a), nocc_a)
+        self%work_2 = 0.0_dp
+        call dgemm('N', 'N', nbf, nvir_b, nbf, &
+                   1.0_dp, self%work_3, nbf, &
+                           mo_a(:, nocc_b+1:), nbf, &
+                   0.0_dp, self%work_2, nbf)
+        call dgemm('T', 'N', nocc_b, nvir_b, nbf, &
+                   1.0_dp, mo_a(:, 1:nocc_b), nbf, &
+                           self%work_2, nbf, &
+                   0.0_dp, self%work_3(1:nocc_b, 1:nvir_b), nocc_b)
+        k = 0
+        do i = 1, nocc_a
+          if (i <= nocc_b ) then
+            istart = nbf - nocc_b
+          else
+            istart = nbf - nocc_a
+          end if
+          do a= 1, istart
+            k = k +1
+            if (i <= nocc_b) then
+              if (a <= (nocc_a - nocc_b)) then
+                grad(k) = 2.0_dp * self%work_3(i,a)
+              else
+                grad(k) = 2.0_dp * (self%work_3(i,a) + self%work_1(i, a - nocc_a + nocc_b))
+              end if
+            else
+              grad(k) = 2.0_dp * self%work_1(i, a)
+            end if
+          end do
+        end do
+      end select
+    end associate
+  end subroutine calc_orb_grad
+
+  subroutine bfgs_original_legacy(self, x)
+    implicit none
+    class(soscf_converger) :: self
+    real(kind=dp), intent(out) :: x(:)
+
+    real(kind=dp) :: displn(self%nvec)
+    real(kind=dp) :: dgrad(self%nvec)
+    real(kind=dp) :: updti(self%nvec)
+    real(kind=dp) :: alpha, beta, t, t1, t2, t3, t4, scale, norm_disp
+    real(kind=dp) :: s1, s2, s3, s4, s5, s6
+    integer :: i, j
+
+    ! Initialize displacement and preconditioned gradient difference
+    if (self%m_history < 1) then
+      scale = 1.0_dp
+      x = -scale * self%h_inv * self%grad
+      where (isnan(x)) x = 0.0_dp
+    else
+      displn = self%h_inv * self%grad
+      dgrad = self%grad-self%grad_prev
+      updti = self%h_inv * dgrad
+      if (self%m_history > 1) then
+        do i = 1, self%m_history-1
+          s1 = dot_product(self%s_history(:,i), self%y_history(:,i))
+          s2 = dot_product(self%y_history(:,i), self%upd_history(:,i))
+          s3 = dot_product(self%s_history(:,i), self%grad)
+          s4 = dot_product(self%upd_history(:,i), self%grad)
+          s5 = dot_product(self%s_history(:,i), dgrad)
+          s6 = dot_product(self%upd_history(:,i), dgrad)
+
+          s1 = 1.0d0 / s1
+          s2 = 1.0d0 / s2
+          t = 1.0d0 + s1 / s2
+          t2 = s1 * s3
+          t4 = s1 * s5
+          t1 = t * t2 - s1 * s4
+          t3 = t * t4 - s1 * s6
+          displn = displn + t1 * self%s_history(:,i) - t2 * self%upd_history(:,i)
+          updti  = updti  + t3 * self%s_history(:,i) - t4 * self%upd_history(:,i)
+        end do
+      end if
+
+      ! Final correction using current dgrad and updti
+      s1 = dot_product(self%x_prev, dgrad)
+      s2 = dot_product(dgrad, updti)
+      s3 = dot_product(self%x_prev, self%grad)
+      s4 = dot_product(updti, self%grad)
+
+      s1 = 1.0_dp / s1
+      s2 = 1.0_dp /s2
+      t = 1.0_dp + s1 / s2
+      t2 = s1 * s3
+      t1 = t * t2 - s1 * s4
+      displn = displn + t1 * self%x_prev - t2 * updti
+      self%s_history(:, self%m_history) = self%x_prev
+      self%y_history(:, self%m_history) = dgrad
+      self%upd_history(:, self%m_history) = updti
+      x = -displn
+    end if
+    norm_disp = sqrt(dot_product(x, x)/self%nvec)
+    if (norm_disp > 0.1)  then
+       x = x*0.1/norm_disp
+    end if
+    self%x_prev = x
+    self%grad_prev = self%grad
+  end subroutine bfgs_original_legacy
+
+  subroutine bfgs_stable_only_impl(self, x)
+     implicit none
+     class(soscf_converger) :: self
+     real(kind=dp), intent(out) :: x(:)
+
+     ! --- locals ---
+     real(kind=dp) :: displn(self%nvec)      ! preconditioned (approx) H^{-1} g
+     real(kind=dp) :: dgrad(self%nvec)       ! y_k = g_k - g_{k-1}
+     real(kind=dp) :: updti(self%nvec)       ! H0^{-1} y_k  (H0 diagonal from gaps)
+     real(kind=dp) :: s1, s2, s3, s4, s5, s6 ! scalars used in the L-BFGS application
+     real(kind=dp) :: t, t1, t2, t3, t4
+     integer :: i
+
+     ! cheap step control scalars
+     real(kind=dp) :: gg, hh, alpha, cg, kappa_max, norm_rms
+     real(kind=dp), parameter :: eps       = 1.0e-16_dp
+     real(kind=dp), parameter :: alpha_min = 0.05_dp
+     !real(kind=dp), parameter :: alpha_max = 1.00_dp
+     !real(kind=dp), parameter :: kappa_lim = 0.30_dp   ! cap on max |rotation element|
+     real(dp) :: alpha_max, kappa_l
+
+     alpha_max = self%alpha_cap
+     kappa_l   = self%kappa_lim
+
+     ! -------- form search direction p (in x) via diagonal-precond L-BFGS --------
+     if (self%m_history < 1) then
+       ! first step: preconditioned steepest descent
+       x = - self%h_inv * self%grad
+       where (isnan(x)) x = 0.0_dp
+     else
+       displn = self%h_inv * self%grad
+       dgrad  = self%grad - self%grad_prev
+       updti  = self%h_inv * dgrad
+
+       ! apply stored pairs (i = 1 .. m_history-1) with curvature checks
+       if (self%m_history > 1) then
+         do i = 1, self%m_history-1
+           s1 = dot_product(self%s_history(:,i), self%y_history(:,i))          ! s·y
+           s2 = dot_product(self%y_history(:,i), self%upd_history(:,i))        ! y·(H0^{-1}y)
+
+           ! skip ill-conditioned pairs
+           if ( s1 <= 1.0e-12_dp * &
+                sqrt(max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps)) * &
+                sqrt(max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps)) ) cycle
+           if (abs(s2) <= eps) cycle
+
+           s3 = dot_product(self%s_history(:,i), self%grad)                    ! s·g
+           s4 = dot_product(self%upd_history(:,i), self%grad)                  ! (H0^{-1}y)·g
+           s5 = dot_product(self%s_history(:,i), dgrad)                        ! s·y_k
+           s6 = dot_product(self%upd_history(:,i), dgrad)                      ! (H0^{-1}y)·y_k
+
+           s1 = 1.0_dp / s1
+           s2 = 1.0_dp / s2
+           t  = 1.0_dp + s1 / s2
+
+           t2 = s1 * s3
+           t4 = s1 * s5
+           t1 = t * t2 - s1 * s4
+           t3 = t * t4 - s1 * s6
+
+           displn = displn + t1 * self%s_history(:,i) - t2 * self%upd_history(:,i)
+           updti  = updti  + t3 * self%s_history(:,i) - t4 * self%upd_history(:,i)
+         end do
+       end if
+
+       ! final correction using the current pair (x_prev, dgrad)
+       s1 = dot_product(self%x_prev, dgrad)                 ! s·y with current pair
+       s2 = dot_product(dgrad, updti)                       ! y·(H0^{-1}y)
+
+       if ( s1 > 1.0e-12_dp * sqrt(max(dot_product(self%x_prev, self%x_prev), eps)) * &
+                         sqrt(max(dot_product(dgrad, dgrad), eps)) .and. abs(s2) > eps ) then
+         s3 = dot_product(self%x_prev, self%grad)           ! s·g
+         s4 = dot_product(updti,       self%grad)           ! (H0^{-1}y)·g
+
+         s1 = 1.0_dp / s1
+         s2 = 1.0_dp / s2
+         t  = 1.0_dp + s1 / s2
+
+         t2 = s1 * s3
+         t1 = t * t2 - s1 * s4
+
+         displn = displn + t1 * self%x_prev - t2 * updti
+
+         ! store the current pair for the next iteration (safe to reuse)
+         self%s_history(:, self%m_history)   = self%x_prev
+         self%y_history(:, self%m_history)   = dgrad
+         self%upd_history(:, self%m_history) = updti
+       else
+         ! neutral store (keeps indexing consistent; pair will be skipped next time)
+         self%s_history(:, self%m_history)   = 0.0_dp
+         self%y_history(:, self%m_history)   = 0.0_dp
+         self%upd_history(:, self%m_history) = 0.0_dp
+       end if
+
+       x = -displn
+     end if
+
+     ! -------------------- CHEAP step length and safeguards ---------------------
+     ! Quadratic one-shot step along p = x using diagonal Hessian H0
+     gg = dot_product(self%grad, x)                            ! g·p
+     hh = sum( x * x / max(self%h_inv, eps) )                  ! p·H0·p  (H0 = diag(1/h_inv))
+
+     if (hh > eps) then
+       alpha = -gg / hh
+     else
+       alpha = 0.1_dp
+     end if
+     alpha = min(max(alpha, alpha_min), alpha_max)
+
+     ! angle safeguard: if p is poorly aligned with -g, be conservative
+     cg = -gg / ( sqrt(max(dot_product(self%grad, self%grad), eps)) * &
+                  sqrt(max(dot_product(x, x),               eps)) )
+     if (cg < 0.2_dp) alpha = 0.5_dp * alpha
+
+     ! elementwise amplitude cap (keeps exponential/orbital update in safe regime)
+     kappa_max = maxval(abs(x))
+     if (kappa_max > 0.0_dp) then
+       if (alpha * kappa_max > kappa_l) alpha = (kappa_l / kappa_max)
+     end if
+
+     ! scale the step
+     x = alpha * x
+
+     ! existing RMS clamp (RMS amplitude <= 0.1)
+     norm_rms = sqrt(dot_product(x, x) / self%nvec)
+     if (norm_rms > 0.1_dp) x = x * (0.1_dp / norm_rms)
+
+     where (isnan(x)) x = 0.0_dp
+
+     ! keep these for the next macro-iteration
+     self%x_prev   = x
+     self%grad_prev = self%grad
+     self%alpha_last = alpha
+     self%gg_last    = gg
+     self%hh_last    = hh
+     self%g_rms_last = sqrt( sum(self%grad*self%grad) / real(self%nvec,dp) )
+
+  end subroutine bfgs_stable_only_impl
+
+  subroutine bfgs_quad_ls_impl(self, x)
+    !! Mode 2: Curvature-safe L-BFGS + robust quadratic line search + 1-D trust region
+    !! - No extra J/K builds.
+    !! - Conservative early caps; bolder near the end.
+    !! - Guarantees descent direction; falls back to precond. SD if needed.
+    implicit none
+    class(soscf_converger)     :: self
+    real(kind=dp), intent(out) :: x(:)
+  
+    integer        :: n, i, m
+    real(kind=dp)  :: eps, sTy, rho_i, qdot, sN, yN, tol_curv
+    real(kind=dp)  :: gnorm, pnorm, g_rms, p_rms, p_inf, cg
+    real(kind=dp)  :: gg, hh, alpha, alpha_min, alpha_max
+    real(kind=dp)  :: delta_rms, kappa_lim, dEmodel
+  
+    ! Two-loop temporaries (automatic arrays)
+    real(kind=dp)  :: q(size(x)), r(size(x))
+    real(kind=dp), allocatable :: alpha_buf(:)
+  
+    n   = size(x)
+    eps = 1.0e-16_dp
+  
+    ! -------------------------------
+    ! 1) Curvature-safe L-BFGS two-loop
+    ! -------------------------------
+    m = self%m_history
+    q = self%grad
+  
+    if (m > 0) then
+      allocate(alpha_buf(m))
+      ! backward loop
+      do i = m, 1, -1
+        sTy = dot_product(self%s_history(:,i), self%y_history(:,i))
+        ! Nocedal curvature tolerance: skip weak/indef pairs
+        sN  = sqrt( max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps) )
+        yN  = sqrt( max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps) )
+        tol_curv = 1.0e-12_dp * sN * yN
+        if (sTy > tol_curv) then
+          rho_i = 1.0_dp / sTy
+          alpha_buf(i) = rho_i * dot_product(self%s_history(:,i), q)
+          q = q - alpha_buf(i) * self%y_history(:,i)
+        else
+          alpha_buf(i) = 0.0_dp
+        end if
+      end do
+    end if
+  
+    ! Initial inverse-Hessian action via diagonal preconditioner H0^{-1}
+    r = self%h_inv * q
+  
+    if (m > 0) then
+      ! forward loop
+      do i = 1, m
+        sTy = dot_product(self%s_history(:,i), self%y_history(:,i))
+        sN  = sqrt( max(dot_product(self%s_history(:,i), self%s_history(:,i)), eps) )
+        yN  = sqrt( max(dot_product(self%y_history(:,i), self%y_history(:,i)), eps) )
+        tol_curv = 1.0e-12_dp * sN * yN
+        if (sTy <= tol_curv) cycle
+        rho_i = 1.0_dp / sTy
+        qdot  = rho_i * dot_product(self%y_history(:,i), r)
+        r     = r + self%s_history(:,i) * (alpha_buf(i) - qdot)
+      end do
+      deallocate(alpha_buf)
+    end if
+  
+    ! Unscaled search direction
+    x = -r
+  
+    ! -------------------------------
+    ! 2) Robust step control (no extra J/K)
+    !    - quadratic step on diagonal model
+    !    - descent/angle checks
+    !    - 1-D trust region (RMS + ∞-norm)
+    ! -------------------------------
+    g_rms = sqrt( sum(self%grad*self%grad) / real(self%nvec, dp) )
+    gnorm = sqrt( max(dot_product(self%grad, self%grad), eps) )
+    pnorm = sqrt( max(dot_product(x, x), eps) )
+    p_rms = sqrt( dot_product(x, x) / real(self%nvec, dp) )
+    p_inf = maxval(abs(x))
+  
+    ! If L-BFGS gave a non-descent direction, fall back to preconditioned SD
+    gg = dot_product(self%grad, x)               ! g·p  (p == x at this point)
+    if (gg >= 0.0_dp) then
+      x  = - self%h_inv * self%grad              ! safe fallback
+      pnorm = sqrt( max(dot_product(x, x), eps) )
+      p_rms = sqrt( dot_product(x, x) / real(self%nvec, dp) )
+      p_inf = maxval(abs(x))
+      gg = dot_product(self%grad, x)
+    end if
+  
+    ! Diagonal quadratic curvature along p: H0 = diag(1/h_inv)
+    hh = sum( x * x / max(self%h_inv, eps) )     ! p·H0·p
+  
+    ! Stationary step on the quadratic model
+    if (hh > eps) then
+      alpha = -gg / hh
+    else
+      alpha = 0.10_dp
+    end if
+  
+    ! Conservative bounds far from minimum; relax as ||g||_rms shrinks
+    if (g_rms > 5.0e-3_dp) then
+      alpha_min = 0.02_dp;  alpha_max = 0.50_dp
+      delta_rms = 0.08_dp;  kappa_lim = 0.25_dp
+    elseif (g_rms > 1.0e-3_dp) then
+      alpha_min = 0.05_dp;  alpha_max = 0.75_dp
+      delta_rms = 0.12_dp;  kappa_lim = 0.40_dp
+    elseif (g_rms > 2.0e-4_dp) then
+      alpha_min = 0.10_dp;  alpha_max = 0.90_dp
+      delta_rms = 0.16_dp;  kappa_lim = 0.50_dp
+    else
+      alpha_min = 0.20_dp;  alpha_max = 1.00_dp
+      delta_rms = 0.20_dp;  kappa_lim = 0.60_dp
+    end if
+    if (alpha < alpha_min) alpha = alpha_min
+    if (alpha > alpha_max) alpha = alpha_max
+  
+    ! Descent-angle safeguard (only damp far from minimum)
+    if (pnorm > 0.0_dp) then
+      cg = -gg / ( gnorm * pnorm )               ! cos(angle(-g, p))
+    else
+      cg = 1.0_dp
+    end if
+    if (g_rms > 3.0e-3_dp) then
+      if (cg < 0.10_dp) alpha = 0.50_dp * alpha
+      if (cg < 0.00_dp) alpha = 0.25_dp * alpha
+    end if
+  
+    ! 1-D trust region caps
+    if (p_rms > 0.0_dp) alpha = min(alpha, delta_rms / p_rms)
+    if (p_inf > 0.0_dp) alpha = min(alpha, kappa_lim / p_inf)
+  
+    ! Model-based sufficient decrease (on the quadratic, not extra Fock):
+    ! Ensure m(alpha) = alpha*gg + 0.5*alpha^2*hh is negative and not tiny positive.
+    dEmodel = alpha*gg + 0.5_dp*alpha*alpha*hh
+    if (dEmodel >= 0.0_dp .and. hh > eps) then
+      ! move to half of stationary step on the model
+      alpha = min(alpha, -0.5_dp*gg/hh)
+      dEmodel = alpha*gg + 0.5_dp*alpha*alpha*hh
+      if (dEmodel >= 0.0_dp) alpha = 0.5_dp*alpha
+    end if
+  
+    ! Final scaled step
+    x = alpha * x
+  
+    ! Keep these for the next iteration (unchanged behavior)
+    self%x_prev    = x
+    self%grad_prev = self%grad
+  end subroutine bfgs_quad_ls_impl
+
+  subroutine bfgs(self, x)
+    !! Dispatcher so that soscf_mode = 0 is *bit-identical* to original.
+    implicit none
+    class(soscf_converger)     :: self
+    real(kind=dp), intent(out) :: x(:)
+  
+    select case (self%variant)
+    case (SOSCF_VARIANT_ORIGINAL)
+      call bfgs_original_legacy(self, x)     ! exact copy from original file
+    case (SOSCF_VARIANT_STABLE_ONLY)
+      call bfgs_stable_only_impl(self, x)    ! curvature-safe L-BFGS + legacy RMS clamp
+    case (SOSCF_VARIANT_QUAD_LS)
+      call bfgs_quad_ls_impl(self, x)        ! stable + quadratic line search (no extra J/K)
+    case default
+      call bfgs_original_legacy(self, x)
+    end select
+  end subroutine bfgs
+
+
+  subroutine rotate_orbs(self, x, nocc_a, nocc_b, mo)
+    implicit none
+
+    class(soscf_converger) :: self
+    real(kind=dp), intent(in)        :: x(:)
+    integer, intent(in)              :: nocc_a, nocc_b
+    real(kind=dp), intent(inout)     :: mo(:,:)
+
+    integer            :: nbf, i, idx
+    logical :: second_term
+
+    nbf = self%nbf
+    self%work_1 = 0
+    self%work_2 = 0
+    idx = 0
+    second_term = .true.
+    if (self%scf_type == 3) then! ROHF
+      second_term = .false.
+    end if
+    call exp_scaling(self%work_1, x, idx, nocc_a, nocc_b, nbf, second_term)
+    call orthonormalize(self%work_1, nbf)
+
+    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work_1, nbf, 0.0_dp, self%work_2, nbf)
+    mo = self%work_2
+
+  contains
+
+    subroutine exp_scaling(G, x, idx, nocc_a, nocc_b, nbf, second_term)
+      real(kind=dp), intent(out)     :: G(:,:)
+      real(kind=dp), intent(in)      :: x(:)
+      integer, intent(inout)         :: idx
+      integer, intent(in)            :: nocc_a, nocc_b, nbf
+
+      real(kind=dp), allocatable     :: K(:,:), K2(:,:)
+      integer                        :: occ, virt, istart, i
+      logical, intent(inout)         :: second_term
+
+      allocate(K(nbf,nbf), source=0.0_dp)
+      allocate(K2(nbf,nbf), source=0.0_dp)
+
+      do occ = 1, nocc_a
+        istart = merge(nocc_b+1, nocc_a+1, occ <= nocc_b)
+        do virt = istart, nbf
+          idx = idx + 1
+          K(virt, occ) =  x(idx)
+          K(occ, virt) = -x(idx)
+        end do
+      end do
+
+      G = 0.0_dp
+      do i = 1, nbf
+        G(i,i) = 1.0_dp
+      end do
+      G = G + K
+      if (second_term) then
+        call dgemm('N','T', nbf, nbf, nbf, 1.0_dp, K, nbf, K, nbf, 0.0_dp, K2, nbf)
+        G = G + 0.5_dp * K2
+      end if
+
+      deallocate(K, K2)
+    end subroutine exp_scaling
+
+    subroutine orthonormalize(G, nbf)
+      real(kind=dp), intent(inout) :: G(:,:)
+      integer, intent(in)          :: nbf
+      integer                      :: i, j
+      real(kind=dp)                :: norm, dot
+
+      do i = 1, nbf
+        norm = sqrt(dot_product(G(:,i), G(:,i)))
+        call dscal(nbf, 1.0_dp / norm, G(1,i), 1)
+        if (i == nbf) cycle
+        do j = i+1, nbf
+          dot = dot_product(G(:,i), G(:,j))
+          call daxpy(nbf, -dot, G(1,i), 1, G(1,j), 1)
+        end do
+      end do
+    end subroutine orthonormalize
+
+  end subroutine rotate_orbs
+
+  !> @brief Computes MO energies from the Fock matrix and updated MO coefficients.
+  !> @details Projects the Fock matrix onto the MO basis: F_mo = C^T * F * C,
+  !>          taking diagonal elements as approximate MO energies for monitoring.
+  !> @param[in] self The SOSCF converger object (for nbf).
+  !> @param[in] fock Packed Fock matrix (nbf_tri).
+  !> @param[in] mo_coeffs MO coefficients (nbf, nbf).
+  !> @param[out] mo_energies MO energies (nbf).
+  subroutine compute_mo_energies(self, fock, mo_coeffs, mo_energies, work_1, work_2)
+    use mathlib, only: unpack_matrix
+    implicit none
+    class(soscf_converger), intent(in) :: self
+    real(kind=dp), intent(in) :: fock(:)
+    real(kind=dp), intent(in) :: mo_coeffs(:, :)
+    real(kind=dp), intent(out) :: mo_energies(:)
+    real(kind=dp), intent(inout) :: work_1(:, :)
+    real(kind=dp), intent(inout) :: work_2(:, :)
+
+    real(kind=dp), allocatable :: f_full(:, :), temp(:, :), f_mo(:, :)
+    integer :: nbf, i
+
+    nbf = self%nbf
+
+    call unpack_matrix(fock, work_1)
+    call dgemm('T', 'N', nbf, nbf, nbf, &
+               1.0_dp, mo_coeffs, nbf, &
+                       work_1, nbf, &
+               0.0_dp, work_2, nbf)
+    call dgemm('N', 'N', nbf, nbf, nbf, &
+               1.0_dp, work_2, nbf, &
+                       mo_coeffs, nbf, &
+               0.0_dp, work_1, nbf)
+
+    do i = 1, nbf
+      mo_energies(i) = work_1(i, i)
+    end do
+
+  end subroutine compute_mo_energies
+!====================================================================
+! Trust region agumnted hessian subroutines
+!====================================================================
+  !> @brief Initialize the TRAH (Trust-Region Augmented Hessian) converger.
+  !> @detail Copies basic problem dimensions and pointers from `params`, sets
+  !>         up spin/occ/vir sizes, counts the optimization variables, and
+  !>         allocates working arrays via `alloc_workspace`.
+  !> @param[inout] self    TRAH converger object.
+  !> @param[in]    params  SCF convergence context (dimensions, data handles).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine trah_init(self, params)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    type(scf_conv), target, intent(in) :: params
+    call self%subconverger_init(params)
+
+    self%conv_name = 'TRAH'
+    self%nfocks    = params%dat%num_focks
+    self%verbose   = params%verbose
+    self%nbf       = params%dat%ldim
+    self%nocc_a    = params%dat%nelec_a
+    self%nocc_b    = params%dat%nelec_b
+    self%nbf_tri   = self%nbf * (self%nbf + 1) / 2
+    self%dat       => params%dat
+    self%overlap   => params%overlap
+    self%overlap_invsqrt => params%overlap_sqrt
+    self%scf_type = params%scf_type
+
+    self%nvir_a = self%nbf - self%nocc_a
+    self%nvir_b = self%nbf - self%nocc_b
+!    self%is_dft  = (infos%control%hamilton >= 20)
+!    self%hf_scale = merge(infos%dft%HFscale, 1.0_dp, self%is_dft)
+
+    select case (self%scf_type)
+    case (SCF_RHF)
+      self%n_param = int((self%nocc_a * self%nvir_a), kind=int32)
+    case (2)
+      self%n_param = int((self%nocc_a * self%nvir_a) + (self%nocc_b * self%nvir_b), kind=int32)
+    case (SCF_ROHF)
+      self%n_param = int(self%nvir_a * (self%nocc_a - self%nocc_b) + (self%nocc_b * self%nvir_b), kind=int32)
+    end select
+
+    call alloc_workspace(self)
+
+
+  end subroutine trah_init
+
+  !> @brief Initialize the TRAH (Trust-Region Augmented Hessian) converger.
+  !> @detail Copies basic problem dimensions and pointers from `params`, sets
+  !>         up spin/occ/vir sizes, counts the optimization variables, and
+  !>         allocates working arrays via `alloc_workspace`.
+  !> @param[inout] self    TRAH converger object.
+  !> @param[in]    params  SCF convergence context (dimensions, data handles).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine alloc_workspace(self)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    integer :: nbf, nbf_tri
+
+    nbf      = self%nbf
+    nbf_tri  = nbf*(nbf+1)/2
+
+    if (.not.allocated(self%work1))   allocate(self%work1(nbf,nbf))
+    if (.not.allocated(self%work2))   allocate(self%work2(nbf,nbf))
+    if (.not.allocated(self%work3))   allocate(self%work3(nbf,nbf))
+
+    if (.not.allocated(self%v))       allocate(self%v(nbf,nbf))
+    if (.not.allocated(self%dm))      allocate(self%dm(nbf,nbf))
+    if (.not.allocated(self%pfock))   allocate(self%pfock(nbf_tri, self%nfocks))
+    if (.not.allocated(self%dens))   allocate(self%dens(nbf_tri, self%nfocks))
+    if (.not.allocated(self%fock_ao))   allocate(self%fock_ao(nbf_tri, self%nfocks))
+    if (.not.allocated(self%d_old))   allocate(self%d_old(nbf_tri, self%nfocks))
+    if (.not.allocated(self%f_old))   allocate(self%f_old(nbf_tri, self%nfocks))
+
+    if (.not.allocated(self%dm_tri))  allocate(self%dm_tri(nbf_tri, self%nfocks))
+
+    if (self%scf_type == SCF_RHF .or. self%scf_type == SCF_ROHF .or. self%scf_type == SCF_UHF) then
+      if (.not.allocated(self%mo_a))   allocate(self%mo_a(nbf,nbf))
+      if (.not.allocated(self%foo_a))   allocate(self%foo_a(self%nocc_a, self%nocc_a))
+      if (.not.allocated(self%fvv_a))   allocate(self%fvv_a(self%nvir_a, self%nvir_a))
+      if (.not.allocated(self%xmat_a))  allocate(self%xmat_a(self%nvir_a, self%nocc_a))
+      if (.not.allocated(self%x2mat_a)) allocate(self%x2mat_a(self%nvir_a, self%nocc_a))
+    end if
+    if (self%scf_type == SCF_UHF .or. self%scf_type == SCF_ROHF) then
+      if (.not.allocated(self%mo_b))   allocate(self%mo_b(nbf,nbf))
+      if (.not.allocated(self%foo_b))   allocate(self%foo_b(self%nocc_b, self%nocc_b))
+      if (.not.allocated(self%fvv_b))   allocate(self%fvv_b(self%nvir_b, self%nvir_b))
+      if (.not.allocated(self%xmat_b))  allocate(self%xmat_b(self%nvir_b, self%nocc_b))
+      if (.not.allocated(self%x2mat_b)) allocate(self%x2mat_b(self%nvir_b, self%nocc_b))
+    end if
+  end subroutine alloc_workspace
+
+  !> @brief Free all allocated TRAH work arrays.
+  !> @detail Deallocates AO work buffers, spin-resolved slices, packed
+  !>         densities/Focks, and incremental-update buffers (d_old, f_old).
+  !> @param[inout] self  TRAH converger object to clean up.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine trah_clean(self)
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    if (allocated(self%work1))   deallocate(self%work1)
+    if (allocated(self%work2))   deallocate(self%work2)
+    if (allocated(self%work3))   deallocate(self%work3)
+    if (allocated(self%v))       deallocate(self%v)
+    if (allocated(self%dm))      deallocate(self%dm)
+    if (allocated(self%pfock))   deallocate(self%pfock)
+    if (allocated(self%dm_tri))  deallocate(self%dm_tri)
+    if (allocated(self%foo_a))   deallocate(self%foo_a)
+    if (allocated(self%fvv_a))   deallocate(self%fvv_a)
+    if (allocated(self%xmat_a))  deallocate(self%xmat_a)
+    if (allocated(self%x2mat_a)) deallocate(self%x2mat_a)
+    if (allocated(self%foo_b))   deallocate(self%foo_b)
+    if (allocated(self%fvv_b))   deallocate(self%fvv_b)
+    if (allocated(self%xmat_b))  deallocate(self%xmat_b)
+    if (allocated(self%x2mat_b)) deallocate(self%x2mat_b)
+
+    if (allocated(self%d_old))   deallocate(self%d_old)
+    if (allocated(self%f_old))  deallocate(self%f_old)
+
+  end subroutine trah_clean
+
+  !> @brief Lightweight (re)setup before a TRAH iteration.
+  !> @detail Resets internal flags that track whether data-dependent setup
+  !>         has been performed for the current iteration/step.
+  !> @param[inout] self  TRAH converger object.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine trah_setup(self)
+
+    class(trah_converger), intent(inout) :: self
+    ! Data verification on each setup call
+    self%last_setup = 0
+
+  end subroutine trah_setup
+
+  !> @brief Entry point to run a TRAH step (skeleton).
+  !> @detail Pulls the latest Fock, density, and MO blocks from `self%dat`
+  !>         and creates a `scf_conv_trah_result`. Actual step logic is
+  !>         intended to be added where noted.
+  !> @param[inout] self  TRAH converger object.
+  !> @param[out]   res   Result object produced by TRAH iteration.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine trah_run(self, res)
+!    use otr_interface, only: init_trah_solver, run_trah_solver
+    class(trah_converger), target, intent(inout) :: self
+    class(scf_conv_result), allocatable, intent(out) :: res
+    ! --- Step 1: Extract current data from converger_data ---
+    self%fock_ao(:,1) = self%dat%get_fock(-1, 1)
+    self%mo_a = self%dat%get_mo_a(-1)
+    self%dens(:,1) = self%dat%get_density(-1, 1)
+    if (self%scf_type > 1) then
+      self%fock_ao(:,2) = self%dat%get_fock(-1, 2)
+      self%mo_b = self%dat%get_mo_b(-1)
+      self%dens(:,2) = self%dat%get_density(-1, 2)
+    end if
+    allocate(scf_conv_trah_result :: res)
+    res%dat => self%dat
+    res%active_converger_name = self%conv_name
+    res%ierr=0
+
+  end subroutine trah_run
+
+  !> @brief Build orbital-rotation gradient and diagonal of the Hessian proxy.
+  !> @detail Transforms packed AO Fock to MO space (FOO/FVV blocks) and
+  !>         constructs the orbital-gradient (off-diagonal Fock) and a
+  !>         diagonal approximation to the Hessian using eigenvalue gaps.
+  !>         Covers RHF, UHF (α/β), and ROHF cases.
+  !> @param[inout] self    TRAH converger.
+  !> @param[out]   grad    Orbital-rotation gradient (vectorized).
+  !> @param[out]   h_diag  Diagonal of the Hessian approximation.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine calc_g_h(self, grad, h_diag)
+    use precision,  only: dp
+    use mathlib,    only: unpack_matrix
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    real(dp),             intent(out)    :: grad(:)
+    real(dp),             intent(out)    :: h_diag(:)
+    real(dp), allocatable :: ugd(:), uh(:)
+
+    integer :: i, a, k, k_rohf
+
+    associate( nbf => self%nbf, &
+               nocc_a => self%nocc_a, &
+               nocc_b => self%nocc_b, &
+               nvir_a => self%nvir_a, &
+               nvir_b => self%nvir_b, &
+               w1 => self%work1, &
+               w2 => self%work2, &
+               w3 => self%work3, &
+               fock_ao  => self%fock_ao,&
+               mo_a => self%mo_a, &
+               mo_b => self%mo_b, &
+               foo => self%foo_a,  fvv => self%fvv_a,&
+               foo_b => self%foo_b,  fvv_b => self%fvv_b)
+
+    select case (self%scf_type)
+    case (SCF_RHF)
+
+      call unpack_matrix(fock_ao(:,1), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      foo = w3(1:nocc_a,1:nocc_a)
+      fvv = w3(nocc_a+1:nbf,nocc_a+1:nbf)
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          grad(k)  = 2.0_dp * w3(i,a)
+          h_diag(k) = 2.0_dp * ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+
+    case (SCF_UHF)
+      ! ---- UHF α block ----
+      call unpack_matrix(fock_ao(:,1), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+      foo = w3(1:nocc_a,1:nocc_a)
+      fvv = w3(nocc_a+1:nbf,nocc_a+1:nbf)
+
+      k = 0
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_a
+          k = k + 1
+          grad(k)  = w3(i,a)
+          h_diag(k) = ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+      ! ---- UHF beta block ----
+      call unpack_matrix(fock_ao(:,2), w1)
+      w2 = 0.0_dp
+      w3 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      foo_b = w3(1:nocc_b,1:nocc_b)
+      fvv_b = w3(nocc_b+1:nbf,nocc_b+1:nbf)
+
+      k = self%nvir_a * nocc_a
+      do i = nocc_b+1, nbf
+        do a = 1, nocc_b
+          k = k + 1
+          grad(k)  = w3(i,a)
+          h_diag(k) = ( w3(i,i) - w3(a,a) )
+        end do
+      end do
+
+    case (SCF_ROHF)
+      ! ---- ROHF α block ----
+
+      call unpack_matrix(fock_ao(:,1), w1)
+      w2 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w1,  nbf, mo_a, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_a, nbf, w2,  nbf, 0.0_dp, w1, nbf)
+
+      foo = w1(1:nocc_a,1:nocc_a)
+      fvv = w1(nocc_a+1:nbf,nocc_a+1:nbf)
+
+      call unpack_matrix(fock_ao(:,2), w3)
+      w2 = 0.0_dp
+      call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, w3,   nbf, mo_b, nbf, 0.0_dp, w2, nbf)
+      call dgemm('T','N', nbf, nbf, nbf, 1.0_dp, mo_b, nbf, w2,  nbf, 0.0_dp, w3, nbf)
+
+      foo_b = w3(1:nocc_b,1:nocc_b)
+      fvv_b = w3(nocc_b+1:nbf,nocc_b+1:nbf)
+
+      k = 0
+      do i = nocc_b+1, nocc_a
+        do a = 1, nocc_b
+          k = k + 1
+          grad(k)   = w3(i, a)
+          h_diag(k) = w3(i,i) - w3(a,a)
+        end do
+      end do
+
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_b
+          k = k + 1
+          grad(k)   = w3(i, a) + w1(i, a)
+          h_diag(k) = (w3(i,i) - w3(a,a)) + (w1(i,i) - w1(a,a))
+        end do
+      end do
+
+      do i = nocc_a+1, nbf
+        do a = nocc_b+1, nocc_a
+          k = k + 1
+          grad(k)   = w1(i, a)
+          h_diag(k) = w1(i,i) - w1(a,a)
+        end do
+      end do
+
+
+    case default
+      error stop 'calc_g_h: unsupported scftype'
+    end select
+
+    end associate
+  end subroutine calc_g_h
+
+  !> @brief Apply the Hessian/operator to a trial vector (H·x) for TRAH.
+  !> @detail Maps trial rotations `x` (RHF/UHF/ROHF) to AO-space density
+  !>         perturbations, calls `get_response_packed` to obtain the
+  !>         packed Coulomb/exchange(+XC) response, transforms back to MO,
+  !>         and assembles the resulting vector `x2` in rotation space.
+  !> @param[inout] self   TRAH converger (uses work arrays, MO blocks).
+  !> @param[inout] infos  System/control information (basis, DFT flags, grid).
+  !> @param[in]    x      Trial vector (packed rotations; α then β for UHF).
+  !> @param[out]   x2     Result of operator application (same layout as x).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine calc_h_op(self, infos, x, x2)
+    use precision,  only: dp
+    use types, only: information
+    use mathlib,    only: pack_matrix, unpack_matrix
+    use scf_addons, only: get_response_packed
+    implicit none
+    class(trah_converger), intent(inout) :: self
+    class(information), intent(inout), target :: infos
+    real(dp),                intent(in)  :: x(:)     ! length nocc*nvir (α then β for UHF)
+    real(dp),                intent(out) :: x2(:)    ! same length
+
+    integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b
+    integer :: i, a, k
+    associate( nbf => self%nbf, &
+               nocc_a => self%nocc_a, nocc_b => self%nocc_b, &
+               nvir_a => self%nvir_a, nvir_b => self%nvir_b, &
+               work1 => self%work1, &
+               work2 => self%work2, &
+               work3 => self%work3, &
+               fock_ao  => self%fock_ao,&
+               mo => self%mo_a, &
+               mo_b => self%mo_b, &
+               dm  => self%dm, pfock => self%pfock,  dm_tri => self%dm_tri, v => self%v, &
+               foo => self%foo_a,  fvv => self%fvv_a, xmat => self%xmat_a, x2mat => self%x2mat_a, &
+               foo_b => self%foo_b,  fvv_b => self%fvv_b, xmat_b => self%xmat_b, x2mat_b => self%x2mat_b )
+
+    select case (self%scf_type)
+
+    !============================== RHF ==============================
+    case(SCF_RHF)
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          xmat(i,a) = x(k)
+        end do
+      end do
+
+      call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
+                 1.0_dp, fvv,  nvir_a, &
+                         xmat, nvir_a, &
+                 0.0_dp, x2mat, nvir_a)
+      call dgemm('N','N', nvir_a, nocc_a, nocc_a, &
+                -1.0_dp, xmat, nvir_a, &
+                          foo, nocc_a, &
+                 1.0_dp, x2mat, nvir_a)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_a, nvir_a, &
+                 2.0_dp, mo(:, nocc_a+1:nbf), nbf, &
+                         xmat,             nvir_a, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_a, &
+                 1.0_dp, work2,          nbf, &
+                         mo(:, 1:nocc_a),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+      call pack_matrix(dm,dm_tri(:,1))
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock)
+      call unpack_matrix(pfock(:,1), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
+
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          x2(k) = 2*x2mat(i,a)
+        end do
+      end do
+
+    !============================== UHF ==============================
+    case (scf_uhf)
+      ! ---- α channel ----
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          xmat(i,a) = x(k)
+        end do
+      end do
+
+      call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
+                 1.0_dp, fvv,  nvir_a, &
+                         xmat, nvir_a, &
+                 0.0_dp, x2mat, nvir_a)
+      call dgemm('N','N', nvir_a, nocc_a, nocc_a, &
+                -1.0_dp, xmat, nvir_a, &
+                          foo, nocc_a, &
+                 1.0_dp, x2mat, nvir_a)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_a, nvir_a, &
+                 1.0_dp, mo(:, nocc_a+1:nbf), nbf, &
+                         xmat,             nvir_a, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_a, &
+                 1.0_dp, work2,          nbf, &
+                         mo(:, 1:nocc_a),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+      call pack_matrix(dm,dm_tri(:,1))
+
+
+      k = nvir_a*nocc_a
+      do i = 1, nvir_b
+        do a = 1, nocc_b
+          k= k+1
+          xmat_b(i,a) = x(k)
+        end do
+      end do
+
+      call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
+                 1.0_dp, fvv_b,  nvir_b, &
+                         xmat_b, nvir_b, &
+                 0.0_dp, x2mat_b, nvir_b)
+      call dgemm('N','N', nvir_b, nocc_b, nocc_b, &
+                -1.0_dp, xmat_b, nvir_b, &
+                          foo_b, nocc_b, &
+                 1.0_dp, x2mat_b, nvir_b)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_b, nvir_b, &
+                 1.0_dp, mo_b(:, nocc_b+1:nbf), nbf, &
+                         xmat_b,             nvir_b, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_b, &
+                 1.0_dp, work2,          nbf, &
+                         mo_b(:, 1:nocc_b),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+
+      call pack_matrix(dm,dm_tri(:,2))
+      ! end of dm calculation
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      ! alpha x2mat
+      call unpack_matrix(pfock(:,1), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
+
+      ! beta x2mat
+      call unpack_matrix(pfock(:,2), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo_b, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo_b, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+
+      k = 0
+      do i = 1, nvir_a
+        do a = 1, nocc_a
+          k= k+1
+          x2(k) = x2mat(i,a)
+        end do
+      end do
+
+      do i = 1, nvir_b
+        do a = 1, nocc_b
+          k= k+1
+          x2(k) = x2mat_b(i,a)
+        end do
+      end do
+
+!============================== ROHF ==============================
+    case (scf_ROHF)
+     ! alpha
+      call unpack_rohf_trial(x, xmat, xmat_b, nbf, nocc_a, nocc_b)
+
+      call dgemm('N','N', nvir_a, nocc_a, nvir_a, &
+                 1.0_dp, fvv,  nvir_a, &
+                         xmat, nvir_a, &
+                 0.0_dp, x2mat, nvir_a)
+      call dgemm('N','N', nvir_a, nocc_a, nocc_a, &
+                -1.0_dp, xmat, nvir_a, &
+                          foo, nocc_a, &
+                 1.0_dp, x2mat, nvir_a)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_a, nvir_a, &
+                 1.0_dp, mo(:, nocc_a+1:nbf), nbf, &
+                         xmat,             nvir_a, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_a, &
+                 1.0_dp, work2,          nbf, &
+                         mo(:, 1:nocc_a),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+      call pack_matrix(dm,dm_tri(:,1))
+
+      ! beta
+      call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
+                 1.0_dp, fvv_b,  nvir_b, &
+                         xmat_b, nvir_b, &
+                 0.0_dp, x2mat_b, nvir_b)
+      call dgemm('N','N', nvir_b, nocc_b, nocc_b, &
+                -1.0_dp, xmat_b, nvir_b, &
+                          foo_b, nocc_b, &
+                 1.0_dp, x2mat_b, nvir_b)
+
+      dm = 0.0_dp
+      work2 = 0
+      call dgemm('N','N', nbf, nocc_b, nvir_b, &
+                 1.0_dp, mo_b(:, nocc_b+1:nbf), nbf, &
+                         xmat_b,             nvir_b, &
+                0.0_dp, work2,          nbf)
+      call dgemm('N','T', nbf, nbf, nocc_b, &
+                 1.0_dp, work2,          nbf, &
+                         mo_b(:, 1:nocc_b),   nbf, &
+                 0.0_dp, work3,          nbf)
+      do i = 1, nbf
+        do a = 1, nbf
+          dm(i,a) = work3(i,a) + work3(a,i)
+        end do
+      end do
+
+      call pack_matrix(dm,dm_tri(:,2))
+      ! end of dm calculation
+      call get_response_packed(infos%basis, infos, self%molGrid, mo, dm_tri, pfock, mo_b)
+      ! alpha x2mat
+      call unpack_matrix(pfock(:,1), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
+
+      ! beta x2mat
+      call unpack_matrix(pfock(:,2), v)
+      work2 = 0
+      call dgemm('T','N', nbf, nbf, nbf, &
+                 1.0_dp, mo_b, nbf, &
+                         v ,             nbf, &
+                 0.0_dp, work2,          nbf)
+      work3 = 0
+      call dgemm('N','N', nbf, nbf, nbf, &
+                 1.0_dp, work2, nbf, &
+                         mo_b, nbf, &
+                 0.0_dp, work3,  nbf)
+      x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
+    end select
+    end associate
+  end subroutine calc_h_op
+
+  !> @brief Pack ROHF α/β trial matrices into a single rotation vector.
+  !> @detail Packs S↔D, V↔D, and V↔S blocks according to the ROHF layout
+  !>         (assuming nocc_a ≥ nocc_b), producing the linearized step.
+  !> @param[inout] x       Output vector of packed rotations.
+  !> @param[in]    xa      α-block trial matrix (V×Occ_α).
+  !> @param[in]    xb      β-block trial matrix (V×Occ_β with offset).
+  !> @param[in]    nbf     Number of basis functions.
+  !> @param[in]    nocc_a  Number of α occupied orbitals.
+  !> @param[in]    nocc_b  Number of β occupied orbitals.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine pack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
+    use iso_fortran_env, only: dp => real64
+    implicit none
+    real(dp), intent(inout)   :: x(:)
+    real(dp), intent(in)    :: xa(:,:), xb(:,:)
+    integer,  intent(in)    :: nbf, nocc_a, nocc_b
+    integer :: nvir_a, nvir_b, offset, npar, k, iv, a
+
+    nvir_a = nbf - nocc_a
+    nvir_b = nbf - nocc_b
+    offset = nocc_a - nocc_b
+    npar = nocc_b*nvir_b + offset*nvir_a
+    x = 0.0_dp
+    k = 0
+
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, nocc_b
+          k    = k + 1
+          x(k) = xb(iv, a)
+        end do
+      end do
+    end if
+    do iv = 1, nvir_a
+      do a = 1, nocc_b
+        k    = k + 1
+        x(k) = xa(iv, a) + xb(offset + iv, a)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvir_a
+        do a = 1, offset
+          k    = k + 1
+          x(k) = xa(iv, nocc_b + a)
+        end do
+      end do
+    end if
+  end subroutine
+
+  !> @brief Unpack ROHF packed rotation vector into α/β trial matrices.
+  !> @detail Inverse of `pack_rohf_trial`. Reconstructs α and β trial blocks
+  !>         from the linearized ROHF step layout (nocc_a ≥ nocc_b).
+  !> @param[in]    x       Input packed rotation vector.
+  !> @param[out]   xa      α-block trial matrix (V×Occ_α).
+  !> @param[out]   xb      β-block trial matrix (V×Occ_β with offset).
+  !> @param[in]    nbf     Number of basis functions.
+  !> @param[in]    nocc_a  Number of α occupied orbitals.
+  !> @param[in]    nocc_b  Number of β occupied orbitals.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine unpack_rohf_trial(x, xa, xb, nbf, nocc_a, nocc_b)
+    use precision, only: dp
+    implicit none
+    real(dp), intent(in)              :: x(:)
+    real(dp), intent(out)   :: xa(:,:), xb(:,:)
+    integer, intent(in)               :: nbf, nocc_a, nocc_b
+    integer :: nvir_a, nvir_b, ndocc, offset
+    integer :: k, iv, a
+
+    nvir_a = nbf - nocc_a
+    nvir_b = nbf - nocc_b
+    ndocc  = nocc_b
+    offset = nocc_a - nocc_b
+    xa = 0.0_dp
+    xb = 0.0_dp
+    k = 0
+    if (offset > 0) then
+      do iv = 1, offset
+        do a = 1, nocc_b
+          k = k + 1
+          xb(iv, a) = x(k)
+        end do
+      end do
+    end if
+    do iv = 1, nvir_a
+      do a = 1, nocc_b
+        k = k + 1
+        xa(iv, a)             = x(k)
+        xb(offset + iv, a)    = x(k)
+      end do
+    end do
+    if (offset > 0) then
+      do iv = 1, nvir_a
+        do a = 1, offset
+          k = k + 1
+          xa(iv, nocc_b + a) = x(k)
+        end do
+      end do
+    end if
+  end subroutine
+
+  !> @brief Build a skew-symmetric orbital-rotation generator K from a step.
+  !> @detail Fills K with V↔Occ (and ROHF S↔D, V↔D, V↔S) elements from the
+  !>         linearized step vector. Handles RHF/UHF with explicit `nocc`,
+  !>         and ROHF using `self`’s spin occupations. Aborts on size mismatch.
+  !> @param[inout] self   TRAH converger (uses scf_type and occ/vir sizes).
+  !> @param[in]    step   Linearized rotation vector.
+  !> @param[inout] K      Output skew-symmetric generator (nbf×nbf).
+  !> @param[in,opt] nocc  Occupied count for non-ROHF (RHF/UHF) paths.
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine skew_sym_k(self, step, K, nocc)
+    use precision, only : dp
+    implicit none
+
+    class(trah_converger), intent(inout) :: self
+    real(dp),      intent(in)            :: step(:)
+    real(dp),      intent(inout)         :: K(:,:)
+    integer,       intent(in),  optional :: nocc   ! used for non-ROHF paths
+
+    integer :: nbf, nocc_a, nocc_b, nvir_a, nvir_b, scftype
+    integer :: i, a, idx, expected, offset
+
+    nbf     = self%nbf
+    nocc_a  = self%nocc_a
+    nocc_b  = self%nocc_b
+    nvir_a  = self%nvir_a
+    nvir_b  = self%nvir_b
+    scftype = self%scf_type
+
+    if (size(K,1) /= nbf .or. size(K,2) /= nbf) error stop "skew_sym_k: bad K dims"
+    if (nocc_a + nvir_a /= nbf) error stop "skew_sym_k: nocc_a+nvir_a != nbf"
+    if (nocc_b + nvir_b /= nbf) error stop "skew_sym_k: nocc_b+nvir_b != nbf"
+
+    K   = 0.0_dp
+    idx = 0
+
+    if (scftype == 3) then
+      ! ---------------- ROHF (single spatial K), assume nocc_a >= nocc_b ----------------
+      ! Subspaces: D=1..nocc_b, S=nocc_b+1..nocc_a, V=nocc_a+1..nbf
+      !
+      ! step packing (length npar):
+      !  1) S<->D (β-only extras):      size = nocc_b*(nocc_a - nocc_b)
+      !  2) V<->D (common spin-sum):    size = nocc_b*nvir_a
+      !  3) V<->S (α-only extras):      size = (nocc_a - nocc_b)*nvir_a
+      !
+      offset   = nocc_a - nocc_b
+      expected = nocc_b*offset + nocc_b*nvir_a + offset*nvir_a
+      if (size(step) /= expected) error stop "skew_sym_k(ROHF): step length mismatch"
+      if (offset > 0) then
+        do i = nocc_b+1, nocc_a
+          do a = 1, nocc_b
+            idx = idx + 1
+            K(i, a) =  step(idx)
+            K(a, i) = -step(idx)
+          end do
+        end do
+      end if
+      do i = nocc_a+1, nbf
+        do a = 1, nocc_b
+          idx = idx + 1
+          K(i, a) =  step(idx)
+          K(a, i) = -step(idx)
+        end do
+      end do
+      if (offset > 0) then
+        do i = nocc_a+1, nbf
+          do a = nocc_b+1, nocc_a
+            idx = idx + 1
+            K(i, a) =  step(idx)
+            K(a, i) = -step(idx)
+          end do
+        end do
+      end if
+
+    else
+      ! ---------------- RHF / UHF path (single block V<->Occ) ----------------
+      if (.not. present(nocc)) error stop "skew_sym_k: nocc required for non-ROHF"
+      if (nocc < 0 .or. nocc > nbf) error stop "skew_sym_k: nocc out of range"
+      expected = (nbf - nocc) * nocc
+      if (size(step) /= expected) error stop "skew_sym_k: step length mismatch"
+
+      do i = nocc+1, nbf
+        do a = 1, nocc
+          idx = idx + 1
+          K(i, a) =  step(idx)
+          K(a, i) = -step(idx)
+        end do
+      end do
+    end if
+
+    if (idx /= size(step)) error stop "skew_sym_k: not all elements consumed"
+  end subroutine
+
+  !> @brief Rotate MOs by an exponential map of the generator (TRAH step).
+  !> @detail Builds the skew-symmetric generator K from `step`, evaluates a
+  !>         truncated matrix exponential (optionally higher-order), re-orthonormalizes
+  !>         the transform, and updates MO := MO · exp(K).
+  !> @param[inout] self  TRAH converger.
+  !> @param[in]    step  Linearized rotation vector (packed).
+  !> @param[in]    nbf   Basis dimension.
+  !> @param[in]    nocc  Occupied count (used for non-ROHF paths).
+  !> @param[inout] mo    MO coefficient matrix to be rotated (nbf×nbf).
+  !> @author Mohsen Mazaherifar
+  !> @date August 2025
+  subroutine rotate_orbs_trah(self, step, nbf, nocc, mo)
+    implicit none
+
+    class(trah_converger), intent(inout) :: self
+    real(kind=dp), intent(in)        :: step(:)
+    integer, intent(in)              :: nbf,nocc
+    real(kind=dp), intent(inout)     :: mo(:,:)
+    real(kind=dp), allocatable :: K(:,:)
+    integer            :: i, idx, occ, virt, istart
+    logical :: second_term
+
+    if (all(step == 0.0d0)) return
+
+    allocate(K(nbf,nbf),    source=0.0_dp)
+    self%work1 = 0
+    self%work2 = 0
+    idx = 0
+    second_term = .true.
+    ! ---- Build skew-symmetric K from "step" (same as before) ----
+    call skew_sym_k(self, step, K, nocc)
+
+    if (self%scf_type == 3) then! ROHF
+      second_term = .true.
+    end if
+    call exp_scaling(self%work1, K, second_term)
+
+    call orthonormalize(self%work1, nbf)
+    call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, mo, nbf, self%work1, nbf, 0.0_dp, self%work2, nbf)
+    mo = self%work2
+    if(allocated(K)) deallocate(K)
+
+  contains
+
+    subroutine exp_scaling(G, K, higher_order)
+      implicit none
+      real(kind=dp),    intent(out)   :: G(:,:)
+      real(kind=dp),    intent(in)    :: K(:,:)
+      logical,          intent(in)    :: higher_order
+
+      real(kind=dp), allocatable :: Kpow(:,:), Tmp(:,:)
+      integer :: i, m
+      integer, parameter :: max_order = 6      ! increase to 8/10 if desired
+      real(kind=dp) :: coef
+
+      allocate(Kpow(nbf,nbf), source=0.0_dp)
+      allocate(Tmp(nbf,nbf),  source=0.0_dp)
+
+      ! ---- Initialize G = I ----
+      G = 0.0_dp
+      do i = 1, nbf
+        G(i,i) = 1.0_dp
+      end do
+
+      ! ---- First-order: G <- I + K (always) ----
+      G = G + K
+
+      if (higher_order) then
+        ! Accumulate higher Taylor terms up to max_order using BLAS
+        ! Start from K^1 already in hand; build K^m iteratively.
+        Kpow = K
+        coef = 1.0_dp
+        do m = 2, max_order
+          ! Kpow <- Kpow * K == K^m
+          call dgemm('N','N', nbf, nbf, nbf, 1.0_dp, Kpow, nbf, K, nbf, 0.0_dp, Tmp, nbf)
+          Kpow = Tmp
+          coef = coef / real(m, dp)           ! 1/m! (incrementally)
+          G = G + coef * Kpow
+        end do
+      end if
+
+      deallocate(Tmp, Kpow)
+    end subroutine exp_scaling
+
+    subroutine orthonormalize(G, nbf)
+      real(kind=dp), intent(inout) :: G(:,:)
+      integer, intent(in)          :: nbf
+      integer                      :: i, j
+      real(kind=dp)                :: norm, dot
+
+      do i = 1, nbf
+        norm = sqrt(dot_product(G(:,i), G(:,i)))
+        call dscal(nbf, 1.0_dp / norm, G(1,i), 1)
+        if (i == nbf) cycle
+        do j = i+1, nbf
+          dot = dot_product(G(:,i), G(:,j))
+          call daxpy(nbf, -dot, G(1,i), 1, G(1,j), 1)
+        end do
+      end do
+    end subroutine orthonormalize
+  end subroutine rotate_orbs_trah
 
 end module scf_converger

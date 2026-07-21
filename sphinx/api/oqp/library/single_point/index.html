@@ -1,0 +1,955 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.single_point &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/single_point/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.solvent" href="../solvent/index.html" />
+    <link rel="prev" title="oqp.library.set_basis" href="../set_basis/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.single_point</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/single_point/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.single_point">
+<span id="oqp-library-single-point"></span><h1>oqp.library.single_point<a class="headerlink" href="#module-oqp.library.single_point" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP single point class
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.dftd_installed" title="oqp.library.single_point.dftd_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dftd_installed</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.MP2_VARIANT_SCALES" title="oqp.library.single_point.MP2_VARIANT_SCALES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MP2_VARIANT_SCALES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.SCFnotConverged" title="oqp.library.single_point.SCFnotConverged"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCFnotConverged</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.TDnotConverged" title="oqp.library.single_point.TDnotConverged"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TDnotConverged</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.ZVnotConverged" title="oqp.library.single_point.ZVnotConverged"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZVnotConverged</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.LastStep" title="oqp.library.single_point.LastStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LastStep</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.SinglePoint" title="oqp.library.single_point.SinglePoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SinglePoint</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.Gradient" title="oqp.library.single_point.Gradient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Gradient</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.Hessian" title="oqp.library.single_point.Hessian"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Hessian</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.BasisOverlap" title="oqp.library.single_point.BasisOverlap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BasisOverlap</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.NACME" title="oqp.library.single_point.NACME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NACME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.NAC" title="oqp.library.single_point.NAC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAC</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.dftd4_native_disp" title="oqp.library.single_point.dftd4_native_disp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dftd4_native_disp</span></code></a>(atoms, coordinates, functional, do_grad)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.single_point.grad_wrapper" title="oqp.library.single_point.grad_wrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">grad_wrapper</span></code></a>(key_dict)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.single_point.nacme_wrapper" title="oqp.library.single_point.nacme_wrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nacme_wrapper</span></code></a>(key_dict)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.single_point.dftd_installed">
+<span class="sig-name descname"><span class="pre">dftd_installed</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dftd4</span> <span class="pre">(native)'</span></em><a class="headerlink" href="#oqp.library.single_point.dftd_installed" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.single_point.dftd4_native_disp">
+<span class="sig-name descname"><span class="pre">dftd4_native_disp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">functional</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_grad</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.dftd4_native_disp" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>DFT-D4 energy (Eh) and gradient (Eh/Bohr) via liboqp&#39;s native dftd4.
+
+atoms: atomic numbers; coordinates: (natom, 3) in Bohr; functional: e.g. &#39;pbe0&#39;.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.single_point.MP2_VARIANT_SCALES">
+<span class="sig-name descname"><span class="pre">MP2_VARIANT_SCALES</span></span><a class="headerlink" href="#oqp.library.single_point.MP2_VARIANT_SCALES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Calculator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Calculator" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP calculator base class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.save_mol">
+<span class="sig-name descname"><span class="pre">save_mol</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.save_mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.export">
+<span class="sig-name descname"><span class="pre">export</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.export" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.export_title">
+<span class="sig-name descname"><span class="pre">export_title</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.export_title" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.exception">
+<span class="sig-name descname"><span class="pre">exception</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.exception" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Calculator.mpi_manager">
+<span class="sig-name descname"><span class="pre">mpi_manager</span></span><a class="headerlink" href="#oqp.library.single_point.Calculator.mpi_manager" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LastStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">param</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP last step single point calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.functional">
+<span class="sig-name descname"><span class="pre">functional</span></span><a class="headerlink" href="#oqp.library.single_point.LastStep.functional" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.do_d4">
+<span class="sig-name descname"><span class="pre">do_d4</span></span><a class="headerlink" href="#oqp.library.single_point.LastStep.do_d4" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.res">
+<span class="sig-name descname"><span class="pre">res</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.single_point.LastStep.res" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.single_point.LastStep.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.get_dispersion">
+<span class="sig-name descname"><span class="pre">get_dispersion</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep.get_dispersion" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.set_param">
+<span class="sig-name descname"><span class="pre">set_param</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">param</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep.set_param" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.compute">
+<span class="sig-name descname"><span class="pre">compute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep.compute" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.final_energy">
+<span class="sig-name descname"><span class="pre">final_energy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d4_energy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep.final_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.LastStep.final_grad">
+<span class="sig-name descname"><span class="pre">final_grad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">d4_grad</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grad_list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.LastStep.final_grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SinglePoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP single point calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.method">
+<span class="sig-name descname"><span class="pre">method</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.method" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.runtype">
+<span class="sig-name descname"><span class="pre">runtype</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.runtype" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.functional">
+<span class="sig-name descname"><span class="pre">functional</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.functional" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.basis">
+<span class="sig-name descname"><span class="pre">basis</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.basis" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.library">
+<span class="sig-name descname"><span class="pre">library</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.library" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.scf_type">
+<span class="sig-name descname"><span class="pre">scf_type</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.scf_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.scf_maxit">
+<span class="sig-name descname"><span class="pre">scf_maxit</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.scf_maxit" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.forced_attempt">
+<span class="sig-name descname"><span class="pre">forced_attempt</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.forced_attempt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.alternative_scf">
+<span class="sig-name descname"><span class="pre">alternative_scf</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.alternative_scf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.converger_type">
+<span class="sig-name descname"><span class="pre">converger_type</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.converger_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.stability">
+<span class="sig-name descname"><span class="pre">stability</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.stability" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.scf_mult">
+<span class="sig-name descname"><span class="pre">scf_mult</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.scf_mult" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.init_scf">
+<span class="sig-name descname"><span class="pre">init_scf</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.init_scf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.init_it">
+<span class="sig-name descname"><span class="pre">init_it</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.init_it" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.init_basis">
+<span class="sig-name descname"><span class="pre">init_basis</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.init_basis" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.init_library">
+<span class="sig-name descname"><span class="pre">init_library</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.init_library" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.init_conv">
+<span class="sig-name descname"><span class="pre">init_conv</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.init_conv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.conv">
+<span class="sig-name descname"><span class="pre">conv</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.conv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.save_molden">
+<span class="sig-name descname"><span class="pre">save_molden</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.save_molden" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.td">
+<span class="sig-name descname"><span class="pre">td</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.td" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.energy_func">
+<span class="sig-name descname"><span class="pre">energy_func</span></span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.energy_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.pack_molden_name">
+<span class="sig-name descname"><span class="pre">pack_molden_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cal_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scf_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">functional</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.pack_molden_name" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Add information to molden file name
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.molden_unique_name">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">molden_unique_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_filename</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.molden_unique_name" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Check if the base file exists
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.ixcore_shift">
+<span class="sig-name descname"><span class="pre">ixcore_shift</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.ixcore_shift" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.energy">
+<span class="sig-name descname"><span class="pre">energy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">do_init_scf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">restore_scf_converger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.correlation">
+<span class="sig-name descname"><span class="pre">correlation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ref_energy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.correlation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.swapmo">
+<span class="sig-name descname"><span class="pre">swapmo</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.swapmo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.reference">
+<span class="sig-name descname"><span class="pre">reference</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">do_init_scf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.reference" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.excitation">
+<span class="sig-name descname"><span class="pre">excitation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ref_energy</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.excitation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.scf">
+<span class="sig-name descname"><span class="pre">scf</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.scf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.SinglePoint.tddft">
+<span class="sig-name descname"><span class="pre">tddft</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.SinglePoint.tddft" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Gradient" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP gradient calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.method">
+<span class="sig-name descname"><span class="pre">method</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.method" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.td">
+<span class="sig-name descname"><span class="pre">td</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.td" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.grads">
+<span class="sig-name descname"><span class="pre">grads</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.grads" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.td_prop">
+<span class="sig-name descname"><span class="pre">td_prop</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.td_prop" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.zvec_func">
+<span class="sig-name descname"><span class="pre">zvec_func</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.zvec_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.grad_func">
+<span class="sig-name descname"><span class="pre">grad_func</span></span><a class="headerlink" href="#oqp.library.single_point.Gradient.grad_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.gradient">
+<span class="sig-name descname"><span class="pre">gradient</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Gradient.gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.scf_grad">
+<span class="sig-name descname"><span class="pre">scf_grad</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Gradient.scf_grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Gradient.tddft_grad">
+<span class="sig-name descname"><span class="pre">tddft_grad</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Gradient.tddft_grad" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Hessian</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP frequence calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.hess_type">
+<span class="sig-name descname"><span class="pre">hess_type</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.hess_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.state">
+<span class="sig-name descname"><span class="pre">state</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.read">
+<span class="sig-name descname"><span class="pre">read</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.read" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.restart">
+<span class="sig-name descname"><span class="pre">restart</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.restart" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.temperature">
+<span class="sig-name descname"><span class="pre">temperature</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.temperature" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.clean">
+<span class="sig-name descname"><span class="pre">clean</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.clean" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.native_hess_func">
+<span class="sig-name descname"><span class="pre">native_hess_func</span></span><a class="headerlink" href="#oqp.library.single_point.Hessian.native_hess_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.hessian">
+<span class="sig-name descname"><span class="pre">hessian</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">analysis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.hessian" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Compute/read the Hessian, optionally skipping vibrational analysis.
+
+Native TS and IRC drivers need only the Cartesian matrix.  Passing
+``analysis=False`` avoids normal modes, IR/Raman property displacements,
+thermochemistry, and cache output while leaving the standalone Hessian
+workflow unchanged.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.analytical_hess">
+<span class="sig-name descname"><span class="pre">analytical_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.analytical_hess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.analytical_ground_state_hess">
+<span class="sig-name descname"><span class="pre">analytical_ground_state_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.analytical_ground_state_hess" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run the native OpenQP HF/DFT analytic Hessian kernel and return its stored matrix.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.analytical_tddft_hess">
+<span class="sig-name descname"><span class="pre">analytical_tddft_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.analytical_tddft_hess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.analytical_sf_hess">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">analytical_sf_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.analytical_sf_hess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.analytical_mrsf_hess">
+<span class="sig-name descname"><span class="pre">analytical_mrsf_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.analytical_mrsf_hess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.Hessian.numerical_hess">
+<span class="sig-name descname"><span class="pre">numerical_hess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.Hessian.numerical_hess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.single_point.grad_wrapper">
+<span class="sig-name descname"><span class="pre">grad_wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.grad_wrapper" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">BasisOverlap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OQP basis overlap calculation class
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.back_door">
+<span class="sig-name descname"><span class="pre">back_door</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.back_door" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.align_type">
+<span class="sig-name descname"><span class="pre">align_type</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.align_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.overlap_func">
+<span class="sig-name descname"><span class="pre">overlap_func</span></span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.overlap_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.overlap">
+<span class="sig-name descname"><span class="pre">overlap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.overlap" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.dftb_overlap">
+<span class="sig-name descname"><span class="pre">dftb_overlap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.dftb_overlap" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Cross-geometry MO overlap + MO alignment for method=dftb.
+
+Mirrors overlap_func + align_mo: computes the column-normalized MO
+overlap tag from the SK cross overlap, sign-fixes (and optionally
+reorders) the current MOs blockwise against the previous step, and
+recomputes the overlap with the aligned MOs.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.load_previous_data">
+<span class="sig-name descname"><span class="pre">load_previous_data</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.load_previous_data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.align_mo">
+<span class="sig-name descname"><span class="pre">align_mo</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.align_mo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.BasisOverlap.find_vec_order">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">find_vec_order</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlap_matrix</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.BasisOverlap.find_vec_order" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NACME</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NACME" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.BasisOverlap" title="oqp.library.single_point.BasisOverlap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BasisOverlap</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Class to calculate Non-Adiabatic Coupling (NAC) matrix elements
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.NACME.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.dt">
+<span class="sig-name descname"><span class="pre">dt</span></span><a class="headerlink" href="#oqp.library.single_point.NACME.dt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.nac_dim">
+<span class="sig-name descname"><span class="pre">nac_dim</span></span><a class="headerlink" href="#oqp.library.single_point.NACME.nac_dim" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.align_x">
+<span class="sig-name descname"><span class="pre">align_x</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NACME.align_x" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.dftb_states_overlap">
+<span class="sig-name descname"><span class="pre">dftb_states_overlap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NACME.dftb_states_overlap" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>DFTB state overlap from the ALIGNED MO/X tags (native tag layout).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NACME.nacme">
+<span class="sig-name descname"><span class="pre">nacme</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NACME.nacme" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Calculates the non-adiabatic coupling (NAC) matrix elements
+between the two geometries.
+
+Currently, adapted only for MRSF-TDDFT approach
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAC</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NAC" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.single_point.Calculator" title="oqp.library.single_point.Calculator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Calculator</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Class to calculate Non-Adiabatic Coupling (NAC) vector
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.nac_type">
+<span class="sig-name descname"><span class="pre">nac_type</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.nac_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.restart">
+<span class="sig-name descname"><span class="pre">restart</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.restart" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.clean">
+<span class="sig-name descname"><span class="pre">clean</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.clean" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.nac_states">
+<span class="sig-name descname"><span class="pre">nac_states</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.nac_states" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.bp">
+<span class="sig-name descname"><span class="pre">bp</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.bp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.nac_func">
+<span class="sig-name descname"><span class="pre">nac_func</span></span><a class="headerlink" href="#oqp.library.single_point.NAC.nac_func" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.nac">
+<span class="sig-name descname"><span class="pre">nac</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NAC.nac" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.compute_bp">
+<em class="property"><span class="k"><span class="pre">static</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">compute_bp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">h</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">g1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">g2</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NAC.compute_bp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.analytical_nac">
+<span class="sig-name descname"><span class="pre">analytical_nac</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NAC.analytical_nac" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.single_point.NAC.numerical_nac">
+<span class="sig-name descname"><span class="pre">numerical_nac</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.NAC.numerical_nac" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.single_point.nacme_wrapper">
+<span class="sig-name descname"><span class="pre">nacme_wrapper</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key_dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.single_point.nacme_wrapper" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="oqp.library.single_point.SCFnotConverged">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SCFnotConverged</span></span><a class="headerlink" href="#oqp.library.single_point.SCFnotConverged" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Common base class for all non-exit exceptions.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="oqp.library.single_point.TDnotConverged">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">TDnotConverged</span></span><a class="headerlink" href="#oqp.library.single_point.TDnotConverged" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Common base class for all non-exit exceptions.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="oqp.library.single_point.ZVnotConverged">
+<em class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ZVnotConverged</span></span><a class="headerlink" href="#oqp.library.single_point.ZVnotConverged" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">Exception</span></code></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Common base class for all non-exit exceptions.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../set_basis/index.html" class="btn btn-neutral float-left" title="oqp.library.set_basis" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../solvent/index.html" class="btn btn-neutral float-right" title="oqp.library.solvent" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

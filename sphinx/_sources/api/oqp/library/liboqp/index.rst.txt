@@ -1,0 +1,351 @@
+oqp.library.liboqp
+==================
+
+.. py:module:: oqp.library.liboqp
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP geometry optimizer backend for OpenQP.
+
+      A NumPy/SciPy-only alternative to the external ``geomeTRIC`` driver.  The
+      electronic-structure work, convergence test and logging are reused verbatim from
+      :class:`oqp.library.libscipy.StateSpecificOpt`; this module only supplies the
+      step-determination loop through :class:`oqp.library.oqp_engine.OQPEngine`
+      (redundant internal coordinates + restricted-step RFO / P-RFO with model-Hessian
+      BFGS/Bofill updates).
+
+      Selected with ``[optimize] lib=oqp``.  Supported runtypes:
+
+      * ``optimize`` -> :class:`OQPOpt`   (state-specific minimum)
+      * ``ts``       -> :class:`OQPTSOpt` (transition state, eigenvector following)
+
+      Options are read from the ``[oqp]`` input section (see
+      ``oqp.molecule.oqpdata``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.liboqp.ANGSTROM_TO_BOHR
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.liboqp.OQPOpt
+   oqp.library.liboqp.OQPTSOpt
+   oqp.library.liboqp.OQPMECIOpt
+   oqp.library.liboqp.OQPAutoMECIOpt
+   oqp.library.liboqp.OQPMECPOpt
+   oqp.library.liboqp.OQPBaekAOpt
+   oqp.library.liboqp.OQPTCIOpt
+   oqp.library.liboqp.OQPNEBOpt
+   oqp.library.liboqp.OQPIRCOpt
+   oqp.library.liboqp.OQPMEPOpt
+
+
+Module Contents
+---------------
+
+.. py:data:: ANGSTROM_TO_BOHR
+   :value: 1.8897261245650618
+
+
+.. py:class:: OQPOpt(mol)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      State-specific minimum via redundant internals + restricted-step RFO.
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+.. py:class:: OQPTSOpt(mol)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Transition-state search via partitioned RFO (eigenvector following).
+
+
+   .. py:attribute:: mode
+      :value: 'ts'
+
+
+
+.. py:class:: OQPMECIOpt(mol)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.MECIOpt`
+
+
+   .. code-block:: text
+
+      MECI search: minimize the penalty/UBP objective with the oqp engine.
+
+      Reuses ``MECIOpt.one_step`` (which returns the penalty objective and its
+      gradient) and ``MECIOpt.check_convergence`` (which adds the energy-gap
+      criterion) verbatim -- only the step determination is oqp.
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+.. py:class:: OQPAutoMECIOpt(mol)
+
+   .. code-block:: text
+
+      Native MECI strategy that escalates a two-state search to BaekA.
+
+      A short conventional penalty phase is inexpensive and usually reaches the
+      crossing seam quickly.  If it does not satisfy both geometry and gap
+      criteria, the lowest-objective geometry retained by :class:`OQPMECIOpt` is
+      handed to the Baek adaptive penalty algorithm.  For three or more states,
+      BaekA is the only well-defined implementation and is selected directly.
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: metrics
+
+
+   .. py:attribute:: penalty_optimizer
+      :value: None
+
+
+
+   .. py:attribute:: baeka_optimizer
+      :value: None
+
+
+
+   .. py:method:: optimize()
+
+
+.. py:class:: OQPMECPOpt(mol)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.MECPOpt`
+
+
+   .. code-block:: text
+
+      MECP search: minimize the gap-penalty objective with the oqp engine.
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+.. py:class:: OQPBaekAOpt(mol, states=None)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.Optimizer`
+
+
+   .. code-block:: text
+
+      Generalized Baek adaptive-penalty CI search for ``N >= 2`` states.
+
+      The selected roots are ordered and only adjacent energy gaps are penalized,
+      removing the redundant outer gap of an all-pairs formulation.  ``sigma`` is
+      increased additively by ``pen_delta`` on ordinary iterations and by the next
+      entry of ``pen_jump`` when the projected objective is locally stationary but
+      the outer-state span still exceeds ``energy_gap``.
+
+      Reference: Y. S. Baek, S. Lee, M. Filatov, and C. H. Choi,
+      J. Phys. Chem. A 125, 1994--2006 (2021),
+      https://doi.org/10.1021/acs.jpca.0c11294.
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+   .. py:attribute:: states
+
+
+   .. py:attribute:: alpha
+
+
+   .. py:attribute:: delta_beta
+
+
+   .. py:attribute:: jump_schedule
+
+
+   .. py:attribute:: weights
+
+
+   .. py:attribute:: baeka
+
+
+   .. py:method:: optimize()
+
+      .. code-block:: text
+
+         Run BaekA with same-sigma-rebased native RFO/BFGS steps.
+
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: check_convergence()
+
+
+.. py:class:: OQPTCIOpt(mol)
+
+   Bases: :py:obj:`_OQPRunner`, :py:obj:`oqp.library.libscipy.MECIOpt`
+
+
+   .. code-block:: text
+
+      Legacy three-state CI search retained for input compatibility.
+
+      This is the historical OpenQP TCI prototype: it penalizes the two
+      consecutive gaps and multiplies ``sigma`` by ``pen_incre`` every step.
+      The published additive Baek adaptive algorithm is independently selected
+      with ``runtype=meci`` and ``meci_search=baeka``.
+
+
+   .. py:attribute:: mode
+      :value: 'min'
+
+
+
+   .. py:method:: one_step(coordinates)
+
+
+.. py:class:: OQPNEBOpt(mol)
+
+   Bases: :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Nudged elastic band reaction path via the oqp FIRE band optimizer.
+
+      Reactant is the ``[input] system`` geometry; product is read from the
+      ``[neb] product`` XYZ endpoint.  Images are linearly interpolated and the
+      interior images optimized with improved-tangent NEB + optional climbing
+      image (see :mod:`oqp.library.oqp_neb`).  Energies/gradients per image use
+      the state-specific (``istate``) surface via the reused OQP machinery.
+
+
+   .. py:attribute:: nimage
+
+
+   .. py:attribute:: product
+
+
+   .. py:attribute:: k_spring
+
+
+   .. py:attribute:: climbing
+
+
+   .. py:attribute:: neb_fmax
+
+
+   .. py:attribute:: neb_frms
+
+
+   .. py:attribute:: climb_fmax
+
+
+   .. py:attribute:: neb_dt
+
+
+   .. py:attribute:: maxmove
+
+
+   .. py:attribute:: align
+
+
+   .. py:attribute:: opt_ends
+
+
+   .. py:attribute:: end_fmax
+
+
+   .. py:attribute:: neb_output
+      :value: ''
+
+
+
+   .. py:method:: optimize()
+
+
+.. py:class:: OQPIRCOpt(mol)
+
+   Bases: :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Intrinsic reaction coordinate by the oqp Gonzalez-Schlegel IRC.
+
+      Computes the Hessian at the starting transition state, takes the
+      imaginary-frequency mode as the initial (mass-weighted) direction, and
+      traces the mass-weighted steepest-descent path forward or backward (see
+      :mod:`oqp.library.oqp_irc`).
+
+
+   .. py:attribute:: irc_step
+
+
+   .. py:attribute:: irc_sign
+      :value: -1
+
+
+
+   .. py:attribute:: path_gtol
+
+
+   .. py:method:: optimize()
+
+
+.. py:class:: OQPMEPOpt(mol)
+
+   Bases: :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Minimum energy path: mass-weighted steepest descent from the start point.
+
+      Reuses the Gonzalez-Schlegel constrained-hypersphere integrator
+      (:mod:`oqp.library.oqp_irc`) but, unlike IRC, begins at an arbitrary
+      (non-stationary) geometry along the steepest-descent direction
+      ``-g`` instead of a transition-state imaginary mode, tracing the path down
+      to the nearest minimum.  Matches the semantics of the mass-weighted
+      constrained-sphere ``MEP``/``ConstrainOpt`` driver.
+
+
+   .. py:attribute:: mep_step
+
+
+   .. py:attribute:: path_gtol
+
+
+   .. py:method:: optimize()
+
+

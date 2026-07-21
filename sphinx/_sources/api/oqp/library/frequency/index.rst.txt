@@ -1,0 +1,68 @@
+oqp.library.frequency
+=====================
+
+.. py:module:: oqp.library.frequency
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP frequency analysis
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.frequency.IR_INTENSITY_CONVERSION_KM_MOL
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.frequency.infrared_intensities
+   oqp.library.frequency.raman_activities
+   oqp.library.frequency.normal_mode
+   oqp.library.frequency.thermal_analysis
+
+
+Module Contents
+---------------
+
+.. py:data:: IR_INTENSITY_CONVERSION_KM_MOL
+   :value: 42.255
+
+
+.. py:function:: infrared_intensities(dipole_derivatives, modes)
+
+   .. code-block:: text
+
+      Project Cartesian dipole derivatives onto normal modes.
+
+      :param dipole_derivatives: Array with shape ``(3, 3N)`` containing d(mu_x,mu_y,mu_z)/dR in
+                                 atomic units.
+      :param modes: Normal modes with shape ``(nmode, 3N)`` as returned by ``normal_mode``.
+
+      :returns: IR intensities in km/mol and the mode-projected dipole derivatives.
+      :rtype: intensities, mode_dipoles
+
+
+.. py:function:: raman_activities(polarizability_derivatives, modes)
+
+   .. code-block:: text
+
+      Project Cartesian polarizability derivatives and compute Raman activities.
+
+      ``polarizability_derivatives`` has shape ``(3, 3, 3N)`` in atomic units.
+      The returned activities follow the standard non-resonant expression
+      ``45 * alpha_bar'^2 + 7 * gamma'^2`` for each normal mode.
+
+
+.. py:function:: normal_mode(coord, mass, hessian)
+
+.. py:function:: thermal_analysis(energy, atoms, mass, freqs, inertia, temperature=298.15, linear=False, mult=0, freq_scale_factor=1, freq_cutoff=100)
+

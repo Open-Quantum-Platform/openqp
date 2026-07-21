@@ -120,7 +120,7 @@ end subroutine get_ab_initio_density
  subroutine corresponding_orbital_projection(vb, sba, va, &
                    ndoc, nact, nproj, nbf, l1co, l0)
 
-  use eigen, only: schmd, diag_symm_full
+  use messages, only: show_message, WITH_ABORT
 
   implicit none
 
@@ -147,17 +147,21 @@ end subroutine get_ab_initio_density
            source=.false., &
            stat=ok)
 
-! Vb^T * Sba
+! Precompute Vb^T * Sba once for all nproj reference orbitals;
+! each project() call below uses its own row block of it
   call dgemm('t', 'n', nproj, nbf, l1co, &
              1.0_dp, vb, l1co, &
                      sba, l1co, &
              0.0_dp, rhs, nbf)
 
-! 1. Project core space
+! The three orbital subspaces are projected independently and in
+! order, so that each later step works in the orthogonal complement
+! of the previous ones:
+! 1. doubly occupied (core) space
   call project(va, rhs, 1, ndoc, l0, nbf)
-! 2. Project active space
+! 2. singly occupied (active) space, ROHF/UHF only
   call project(va, rhs, ndoc+1, ndoc+nact, l0, nbf)
-! 3. Project virtual space
+! 3. low virtual space
   call project(va, rhs, ndoc+nact+1, nproj, l0, nbf)
 
  contains
@@ -169,51 +173,78 @@ end subroutine get_ab_initio_density
     real(kind=dp) :: va(nbf,*), rhs(nbf,*)
     integer :: minmo, maxmo, l0, nbf
 
-    integer :: i, j, ok
-    integer :: nrest, nmo
+    integer :: i, j
+    integer :: nrest, nmo, nsv, lwork, info
+
+    real(kind=dp), allocatable :: sv(:), vt(:,:), wrk(:)
+    real(kind=dp) :: wrksize(1), udummy(1)
 
     nrest = l0-minmo+1
     nmo  = maxmo-minmo+1
     if (nrest <= 0) return
     if (nmo == 0) return
 
-!   D = Vb^T * Sab * Va
+!   Overlap between the nmo reference orbitals (b set) and the
+!   nrest orbitals of the active window of the a set:
+!   D = Vb^T * Sab * Va, dimension (nmo x nrest).
+!   rhs already holds Vb^T * Sab for all nproj reference orbitals.
     call dgemm('n','n', nmo, nrest, nbf, &
                1.0_dp, rhs(minmo,1), nbf, &
                        va(1,minmo),nbf, &
                0.0_dp, d, nbf)
 
-!   Diagonalize D^T * D
-!   Eigenvalues run 0 to 1, we want the highest ones first,
-!   that is why we use factor -1
-!   We don't need eigenvalues
-    call dsyrk('u', 't', nrest, nmo, &
-               -1.0_dp, d, nbf, &
-                0.0_dp, vaco, nbf)
-    call diag_symm_full(1, nrest, vaco, nbf, scr, ok)
+!   We need the `nmo` eigenvectors of D^T * D with the largest
+!   eigenvalues (largest overlap with the `b` set); they are the
+!   leading right singular vectors of D. The thin SVD of the
+!   (nmo x nrest) matrix D delivers them in descending-overlap order
+!   at O(nmo^2*nrest) cost, instead of the O(nrest^3) diagonalization
+!   of D^T * D. We don't need the singular values.
+    nsv = min(nmo, nrest)
+    allocate(sv(nsv), vt(nsv,nrest))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrksize, -1, info)
+    lwork = int(wrksize(1))
+    allocate(wrk(lwork))
+    call dgesvd('N', 'S', nmo, nrest, d, nbf, sv, udummy, 1, vt, nsv, &
+                wrk, lwork, info)
+    if (info /= 0) &
+      call show_message('Corresponding orbital projection: SVD failed', WITH_ABORT)
+    vaco(1:nrest,1:nsv) = transpose(vt(1:nsv,1:nrest))
+    deallocate(sv, vt, wrk)
 
-!   The near zero overlap part of the space gets scrambled
-!   in the above diagonalization, we can get a symmetry
-!   adapted space by Gram-Schmidt instead.
-    call schmd(vaco,nmo,nrest,nbf,scr)
+!   Cannot project more orbitals than the remaining space can hold
+    if (nmo > nrest) &
+      call show_message('Corresponding orbital projection: nmo > nrest', WITH_ABORT)
 
-!   Rotate va to corresponding orbital set, a'=a*v,
-    call dgemm('n', 'n', nbf, nrest, nrest, &
-               1.0_dp, va(1,minmo), nbf, &
-                       vaco, nbf, &
-               0.0_dp, tmp, nbf)
-
-!   Copy projected orbitals back to end of va
-    va(:,minmo:l0) = tmp(:,1:nrest)
+!   Rotate va to the corresponding orbital set, a' = a*Q, where the
+!   orthogonal Q completes the nmo leading corresponding vectors to a
+!   full basis of the nrest space (the near zero overlap part of the
+!   space is not determined by the SVD; the QR completion provides a
+!   symmetry adapted complement). Q is applied directly from its
+!   Householder reflectors (dgeqrf+dormqr) at O(nbf*nrest*nmo) cost,
+!   instead of forming Q explicitly and multiplying at O(nbf*nrest^2).
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrksize, -1, info)
+    lwork = int(wrksize(1))
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrksize, -1, info)
+    lwork = max(lwork, int(wrksize(1)))
+    allocate(wrk(lwork))
+    call dgeqrf(nrest, nmo, vaco, nbf, scr, wrk, lwork, info)
+    call dormqr('r', 'n', nbf, nrest, nmo, vaco, nbf, scr, &
+                va(1,minmo), nbf, wrk, lwork, info)
+    deallocate(wrk)
 
 !   Get overlap between `b` and the `a'` corresponding set,
 !   D = Vb^T * Sab * VaCO
-    call dgemm('t', 't', nrest, nmo, nbf, &
+!   Only the leading (nmo x nmo) block is used by the pairing below.
+    call dgemm('t', 't', nmo, nmo, nbf, &
                1.0_dp, va(1,minmo), nbf, &
                        rhs(minmo,1), nbf, &
                0.0_dp, tmp, nbf)
 
-!   Permute `a'` set to maximum overlap with `b` set
+!   Pair each projected orbital with the reference orbital it
+!   overlaps most (greedy assignment), so that guess orbital i
+!   corresponds to Huckel/old MO i in order
     unused(:nmo) = .true.
     do i = 1, nmo
       j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused)

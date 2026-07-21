@@ -1,0 +1,34 @@
+oqp.interop
+===========
+
+.. py:module:: oqp.interop
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Single public surface for MRSF excited-state analysis & interoperability.
+
+      One place to import from; the implementation lives in :mod:`oqp.analysis`,
+      :mod:`oqp.export`, and the in-tree :mod:`oqp.quantum` (FCIDUMP / second-quantized
+      Hamiltonian)::
+
+          from oqp.interop import (
+              MRSFExcitedStates, nto_excitation, attachment_detachment,   # analysis
+              CubeExporter, to_qcschema,                                  # export
+              dump_fcidump, from_openqp,                                  # FCIDUMP (oqp.quantum)
+              parse_output, parse_pyscf_tddft, compare_results,           # external diff
+          )
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/interop/compare/index
+   /api/oqp/interop/parsers/index
+
+

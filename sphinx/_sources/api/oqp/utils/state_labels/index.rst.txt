@@ -1,0 +1,187 @@
+oqp.utils.state_labels
+======================
+
+.. py:module:: oqp.utils.state_labels
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      User-facing electronic-state labels for OpenQP logs.
+
+      The native MRSF drivers deliberately use a high-spin reference and one-based
+      response roots.  Those are useful implementation details, but they are not the
+      states a user asked OpenQP to calculate.  This module keeps that distinction in
+      one place so input summaries and progress logs can consistently say ``S0`` or
+      ``S1`` while still identifying the internal ROHF/UHF reference when relevant.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.state_labels.DFTB_CAP_STRUCTURED_TRACE
+   oqp.utils.state_labels.DFTB_CAP_STATE_SPECTRUM
+   oqp.utils.state_labels.DFTB_CAP_SCC_FINAL_TRUST
+   oqp.utils.state_labels.DFTB_KNOWN_PRESETS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.state_labels.response_type
+   oqp.utils.state_labels.canonical_dftb_type
+   oqp.utils.state_labels.resolved_dftb_type
+   oqp.utils.state_labels.dftb_method_name
+   oqp.utils.state_labels.dftb_reference_description
+   oqp.utils.state_labels.dftb_target_description
+   oqp.utils.state_labels.format_dftb_settings
+   oqp.utils.state_labels.is_mrsf
+   oqp.utils.state_labels.spin_name
+   oqp.utils.state_labels.public_method_name
+   oqp.utils.state_labels.public_state_label
+   oqp.utils.state_labels.reference_description
+   oqp.utils.state_labels.requested_states
+   oqp.utils.state_labels.calculation_request_lines
+   oqp.utils.state_labels.format_calculation_request
+
+
+Module Contents
+---------------
+
+.. py:data:: DFTB_CAP_STRUCTURED_TRACE
+   :value: 1
+
+
+.. py:data:: DFTB_CAP_STATE_SPECTRUM
+   :value: 2
+
+
+.. py:data:: DFTB_CAP_SCC_FINAL_TRUST
+   :value: 4
+
+
+.. py:data:: DFTB_KNOWN_PRESETS
+   :value: ('dtcam-tb', 'dftb+')
+
+
+.. py:function:: response_type(config)
+
+   .. code-block:: text
+
+      Return the normalized response method used by the calculation.
+
+
+.. py:function:: canonical_dftb_type(value)
+
+   .. code-block:: text
+
+      Return the backend spelling shared by API, logs, and runtime dispatch.
+
+
+.. py:function:: resolved_dftb_type(config)
+
+   .. code-block:: text
+
+      Resolve ``[dftb] type=auto`` using the same rules as the adapter.
+
+
+.. py:function:: dftb_method_name(config)
+
+   .. code-block:: text
+
+      Return the scientifically accurate display name for a DFTB route.
+
+
+.. py:function:: dftb_reference_description(config)
+
+   .. code-block:: text
+
+      Describe the reference actually requested from openqp-dftb.
+
+
+.. py:function:: dftb_target_description(config)
+
+   .. code-block:: text
+
+      Describe the physical state manifold produced by the DFTB route.
+
+
+.. py:function:: format_dftb_settings(config, *, backend=None, parameter_path=None, library_path=None, executable=None, abi_version=None, capabilities=None)
+
+   .. code-block:: text
+
+      Format one concise, grouped summary of effective DFTB request settings.
+
+      A named model preset is resolved inside openqp-dftb.  In that case this
+      formatter deliberately does not present schema defaults as effective
+      operator/SCC values.
+
+
+.. py:function:: is_mrsf(config)
+
+   .. code-block:: text
+
+      True for MRSF/UMRSF response calculations, including TD-DFTB.
+
+
+.. py:function:: spin_name(multiplicity)
+
+   .. code-block:: text
+
+      Return a readable spin name, retaining unusual multiplicities.
+
+
+.. py:function:: public_method_name(config)
+
+   .. code-block:: text
+
+      Return the method name a user recognizes, not its legacy dispatch key.
+
+
+.. py:function:: public_state_label(config, root, multiplicity=None, *, show_reference=True)
+
+   .. code-block:: text
+
+      Translate an engine state/root number to a physical state label.
+
+      MRSF labels are zero-based inside each spin manifold: response root 1 is
+      ``S0``, ``T0``, or ``Q0`` according to the requested target multiplicity.
+      Root zero in an MRSF energy array is the high-spin SCF working reference,
+      not a physical target state.
+      Other methods retain the legacy numeric state label to avoid asserting a
+      spin assignment that the input may not contain.
+
+
+.. py:function:: reference_description(config)
+
+   .. code-block:: text
+
+      Describe the working SCF reference, explicitly marking it internal.
+
+
+.. py:function:: requested_states(config)
+
+   .. code-block:: text
+
+      Return physical target state(s) for the active workflow.
+
+
+.. py:function:: calculation_request_lines(config, source=None, resolved=None)
+
+   .. code-block:: text
+
+      Build the concise, user-facing calculation summary shown at log start.
+
+
+.. py:function:: format_calculation_request(config, source=None, resolved=None)
+
+   .. code-block:: text
+
+      Format :func:`calculation_request_lines` as a log-ready text block.
+
+

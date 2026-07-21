@@ -1,0 +1,98 @@
+oqp.analysis.gto_grid
+=====================
+
+.. py:module:: oqp.analysis.gto_grid
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Self-contained Cartesian-GTO evaluator for OQP basis sets.
+
+      Builds AO values on arbitrary points from the basis exposed by
+      ``mol.data.get_basis()``, using OQP's normalization/ordering convention
+      (verified by reproducing OQP's overlap matrix ``OQP::SM`` to ~1e-6 with an
+      analytic McMurchie-Davidson overlap, and on a grid to <=1e-3).
+
+      Convention (from the OQP molden writer):
+        * shells store OQP-internal contraction coefficients; the molden/standard
+          normalized-primitive coefficient is ``d = coef * NORMS[L] * (2a)^-(L/2+3/4)``.
+        * Cartesian component order: L=0 [s]; L=1 [x,y,z]; L=2 [xx,yy,zz,xy,xz,yz];
+          L=3 [xxx,yyy,zzz,xyy,xxy,xxz,xzz,yzz,yyz,xyz].
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.analysis.gto_grid.AOBasis
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.analysis.gto_grid.make_box_grid
+
+
+Module Contents
+---------------
+
+.. py:class:: AOBasis(mol)
+
+   .. py:attribute:: coords
+
+
+   .. py:attribute:: nbf
+
+
+   .. py:attribute:: shells
+      :value: []
+
+
+
+   .. py:attribute:: ao_index
+      :value: []
+
+
+
+   .. py:attribute:: ao_atom
+      :value: []
+
+
+
+   .. py:method:: eval_orbitals(mo_coeff_ao, points)
+
+      .. code-block:: text
+
+         Evaluate orbitals (columns of ``mo_coeff_ao``, AO basis) on points.
+
+
+
+   .. py:method:: eval_ao(points)
+
+      .. code-block:: text
+
+         Evaluate all AOs on ``points`` (npts, 3) in Bohr -> (npts, nbf).
+
+
+
+   .. py:method:: overlap_analytic()
+
+      .. code-block:: text
+
+         Analytic AO overlap matrix in OQP ordering/normalization.
+
+
+
+.. py:function:: make_box_grid(coords, padding=5.0, spacing=0.15)
+
+   .. code-block:: text
+
+      Regular Cartesian grid around ``coords`` (Bohr). Returns
+      (origin, (nx,ny,nz), (dx,dy,dz), points[N,3]) in Bohr.
+
+

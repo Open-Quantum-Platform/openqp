@@ -13,6 +13,7 @@ module population_analysis
   public run_population_analysis
   public POP_MULLIKEN
   public POP_LOWDIN
+  public mulliken_excited
 
 !--------------------------------------------------------------------------------
 
@@ -32,6 +33,18 @@ contains
 
 !--------------------------------------------------------------------------------
 
+  subroutine mulliken_excited_C(c_handle) bind(C, name="mulliken_excited")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info, oqp_handle_refresh_ptr
+    use strings, only: Cstring
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mulliken_excited(inf)
+  end subroutine mulliken_excited_C
+
+!--------------------------------------------------------------------------------
+
   subroutine lowdin_C(c_handle) bind(C, name="lowdin")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info, oqp_handle_refresh_ptr
     use strings, only: Cstring
@@ -43,6 +56,147 @@ contains
   end subroutine lowdin_C
 
 !--------------------------------------------------------------------------------
+!--------------------------------------------------------------------------------
+!> @brief Mulliken population analysis for MRSF-TDDFT excited states
+!>
+!> Computes Mulliken charges for a target excited state using:
+!>   P_excited = P_ground + Delta_P
+!> where Delta_P is the excited-state difference density (relaxed or unrelaxed).
+!>
+!> @param[in]  infos   OQP handle
+!>
+!> @author   Mohsen
+!>
+!> REVISION HISTORY:
+!> @date _Apr, 2026_ Initial release
+!--------------------------------------------------------------------------------
+
+  subroutine mulliken_excited(infos)
+    use precision, only: dp
+    use io_constants, only: iw
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use types, only: information
+    use oqp_tagarray_driver
+    use mathlib, only: unpack_matrix
+    implicit none
+
+    character(len=*), parameter :: module_name = "mulliken_excited"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), allocatable :: orbital_pop(:)
+    real(kind=dp), allocatable :: chg(:)
+    real(kind=dp), allocatable :: dens(:,:), tmp(:)
+
+    integer :: nat, nbf, nbf2, ok, istate
+    logical :: urohf, use_relaxed
+
+    ! tagarray pointers
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), smat(:)
+    real(kind=dp), contiguous, pointer :: td_p(:,:), td_abxc(:)
+!    character(len=*), parameter :: tags_required(8) = (/ character(len=80) :: &
+!      OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
+!      OQP_td_energies /)
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+      OQP_DM_A, OQP_DM_B, OQP_TD_P, OQP_TD_ABXC, OQP_SM /)
+
+    character(len=*), parameter :: subroutine_name = "mulliken_excited"
+
+    open (unit=IW, file=infos%log_filename, position="append")
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nat = ubound(infos%atoms%zn, 1)
+    nbf = basis%nbf
+    nbf2 = nbf * (nbf + 1) / 2
+
+    urohf = infos%control%scftype == 2 .or. infos%control%scftype == 3
+
+    istate = infos%tddft%target_state
+
+    use_relaxed = .true.
+
+    allocate(orbital_pop(nbf), &
+             chg(nat),         &
+             tmp(nbf2),        &
+             dens(nbf, nbf),   &
+             source=0.0d0, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', WITH_ABORT)
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    tmp = dmat_a
+    if (urohf) then
+      call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+      tmp = tmp + dmat_b
+    end if
+
+
+    if (use_relaxed) then
+      ! Try to get the relaxed density first
+      call tagarray_get_data(infos%dat, OQP_TD_P, td_p)
+      tmp = tmp + td_p(:,1) + td_p(:,2)
+      write(iw,'(4x,a)') 'Using RELAXED difference density (Z-vector)'
+    else
+      ! Fall back to unrelaxed density
+      call tagarray_get_data(infos%dat, OQP_TD_ABXC, td_abxc)
+      tmp = tmp + td_abxc
+      write(iw,'(4x,a)') 'Using UNRELAXED difference density'
+    end if
+
+    call tagarray_get_data(infos%dat, OQP_SM, smat)
+
+    call unpack_matrix(tmp, dens)
+
+
+    call get_orb_pop_mulliken(smat, dens, orbital_pop)
+
+    call get_atomic_pop(basis, orbital_pop, chg)
+
+    chg = infos%atoms%zn - infos%basis%ecp_zn_num - chg
+
+!   -----------------------------------------------------------------------
+!   Print results
+!   -----------------------------------------------------------------------
+    write(iw,'(2/)')
+    write(iw,'(4x,a)')    '============================================='
+    write(iw,'(4x,a,i4)') 'Mulliken population analysis for state ', istate
+    write(iw,'(4x,a)')    '============================================='
+    call flush(iw)
+
+    write(iw,'(/,2X,A,I4)') 'Gross AO population (Mulliken) - State ', istate
+    call print_ao_pop(infos, orbital_pop)
+
+    write(iw,'(/,2X,A,I4)') 'Atomic partial charges (Mulliken) - State ', istate
+    call print_charges(infos, chg)
+
+    close(iw)
+
+    deallocate(orbital_pop, chg, tmp, dens)
+
+  end subroutine mulliken_excited
+
+  !> @brief Store a per-atom charge vector to a tagarray so it can be written
+  !>   to the reference/restart JSON and regression-tested from Python.
+  subroutine store_atom_charges(infos, tag, comment, chg)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+
+    type(information), target, intent(inout) :: infos
+    character(len=*), intent(in) :: tag, comment
+    real(kind=dp), intent(in) :: chg(:)
+
+    real(kind=dp), contiguous, pointer :: chgout(:)
+    integer :: nat
+
+    nat = size(chg)
+    call infos%dat%alloc_or_die(tag, (/ nat /), chgout, description=comment)
+    chgout(1:nat) = chg(1:nat)
+  end subroutine store_atom_charges
 
   subroutine mulliken(infos)
     use precision, only: dp
@@ -51,6 +205,7 @@ contains
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
+    use oqp_tagarray_driver, only: OQP_mulliken_charges, OQP_mulliken_charges_comment
 
     implicit none
 
@@ -87,6 +242,9 @@ contains
     write(iw,'(/,2X,A)') 'Atomic partial charges (Mulliken)'
     call print_charges(infos, chg)
 
+    call store_atom_charges(infos, OQP_mulliken_charges, &
+                            OQP_mulliken_charges_comment, chg)
+
     close(iw)
 
   end subroutine mulliken
@@ -100,6 +258,7 @@ contains
     use messages, only: show_message, with_abort
     use types, only: information
     use strings, only: Cstring, fstring
+    use oqp_tagarray_driver, only: OQP_lowdin_charges, OQP_lowdin_charges_comment
 
     implicit none
 
@@ -135,6 +294,9 @@ contains
 
     write(iw,'(/,2X,A)') 'Atomic partial charges (Lowdin)'
     call print_charges(infos, chg)
+
+    call store_atom_charges(infos, OQP_lowdin_charges, &
+                            OQP_lowdin_charges_comment, chg)
 
     close(iw)
 
@@ -251,7 +413,7 @@ contains
     do i = 1, basis%nshell
       iatom = basis%origin(i)
       i0 = basis%ao_offset(i)
-      i1 = basis%ao_offset(i)+NUM_CART_BF(basis%am(i))-1
+      i1 = basis%ao_offset(i)+basis%naos(i)-1   ! AO count per shell (spherical-aware)
       at_pop(iatom) = at_pop(iatom) + sum(ao_pop(i0:i1))
     end do
   end subroutine

@@ -1,0 +1,310 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.solvent &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/solvent/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.symmetry" href="../symmetry/index.html" />
+    <link rel="prev" title="oqp.library.single_point" href="../single_point/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.solvent</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/solvent/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.solvent">
+<span id="oqp-library-solvent"></span><h1>oqp.library.solvent<a class="headerlink" href="#module-oqp.library.solvent" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validation/reference helpers for PCM solvent support.
+
+These are dependency-light, runtime-inert helpers retained as cross-checks and
+input validators for the canonical runtime PCM path (which lives entirely in
+Fortran: ``infos%control%pcm_enabled`` -&gt; ``add_pcm_reaction_field`` -&gt; the ddX
+C adapter -&gt; ``E%e_pcm``).  Nothing in this module is imported by the runtime
+SCF; it is **not** runtime plumbing.  What it preserves from the retired
+reference-supplied-potential prototype:
+
+* ``reference_scf_total_density`` -- RHF/ROHF density-summation rule.
+* ``reference_scf_pcm_energy_terms`` -- the ``0.5 * Tr[D . V]`` polarization
+  energy convention, kept as an independent validation cross-check against the
+  backend ``esolv``.
+* ``provisional_ddx_external_charges`` -- the provisional ``-0.5 * q_cav``
+  sign/scale candidate, still pending independent-reference/ddX cross-check.
+</pre></div>
+</div>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.solvent.reference_scf_total_density" title="oqp.library.solvent.reference_scf_total_density"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reference_scf_total_density</span></code></a>(density_blocks)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.solvent.reference_scf_reaction_field_contract" title="oqp.library.solvent.reference_scf_reaction_field_contract"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reference_scf_reaction_field_contract</span></code></a>(density_blocks, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.solvent.reference_scf_phi_cav_inputs" title="oqp.library.solvent.reference_scf_phi_cav_inputs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reference_scf_phi_cav_inputs</span></code></a>(density_blocks, cavity_xyz)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.solvent.reference_scf_pcm_energy_terms" title="oqp.library.solvent.reference_scf_pcm_energy_terms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reference_scf_pcm_energy_terms</span></code></a>(density_blocks, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.solvent.provisional_ddx_external_charges" title="oqp.library.solvent.provisional_ddx_external_charges"><code class="xref py py-obj docutils literal notranslate"><span class="pre">provisional_ddx_external_charges</span></code></a>(q_cav, *[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.solvent.provisional_ddx_reaction_field_inputs" title="oqp.library.solvent.provisional_ddx_reaction_field_inputs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">provisional_ddx_reaction_field_inputs</span></code></a>(q_cav, cavity_xyz, *)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.reference_scf_total_density">
+<span class="sig-name descname"><span class="pre">reference_scf_total_density</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">density_blocks</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.reference_scf_total_density" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return the packed total AO density for reference-SCF PCM prototypes.
+
+OpenQP&#39;s first PCM target uses the RHF/ROHF reference density to build the
+ddX cavity potential.  RHF-style inputs have one packed density block, while
+ROHF/UHF-style storage has separate alpha/beta blocks that must be summed
+before evaluating the scalar electrostatic solvent response.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.reference_scf_reaction_field_contract">
+<span class="sig-name descname"><span class="pre">reference_scf_reaction_field_contract</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">density_blocks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reaction_potential</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.reference_scf_reaction_field_contract" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validate the packed AO reaction-field matrix contract.
+
+Dependency-light validation helper: the reaction-field AO matrix must be a
+packed triangular matrix matching the RHF/ROHF reference density length.
+This helper does not enable runtime PCM or define energy bookkeeping.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.reference_scf_phi_cav_inputs">
+<span class="sig-name descname"><span class="pre">reference_scf_phi_cav_inputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">density_blocks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cavity_xyz</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.reference_scf_phi_cav_inputs" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validate inputs for reference-density electrostatic potential on a ddX cavity.
+
+This validates the contract for an ``electrostatic_potential_unweighted``
+call that supplies ddX ``phi_cav`` from the RHF/ROHF reference density.  It
+returns the summed reference density as ``density_packed`` so callers cannot
+accidentally pass raw spin-density blocks into the scalar MEP path.  It does
+not enable runtime PCM or define solvent energy bookkeeping.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.reference_scf_pcm_energy_terms">
+<span class="sig-name descname"><span class="pre">reference_scf_pcm_energy_terms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">density_blocks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reaction_potential</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.reference_scf_pcm_energy_terms" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return the ``0.5 * Tr[D . V]`` PCM polarization-energy cross-check.
+
+This dependency-light helper keeps the host-side polarization-energy
+convention tied to the same packed RHF/ROHF reference density and reaction
+potential.  It exists as an independent validation cross-check against the
+backend (ddX) ``esolv``; the backend energy convention still needs
+validation before the canonical runtime PCM energy is treated as correct.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.provisional_ddx_external_charges">
+<span class="sig-name descname"><span class="pre">provisional_ddx_external_charges</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q_cav</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_provisional</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.provisional_ddx_external_charges" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return candidate OpenQP external-charge weights from ddX ``q_cav``.
+
+The ddPCM finite-difference smoke suggests ``chg = -0.5*q_cav`` for the
+``external_charge_potential`` AO-matrix seam.  The sign/scale is still
+provisional, so callers must opt in explicitly until it is cross-checked
+against independent-reference/ddX data.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.solvent.provisional_ddx_reaction_field_inputs">
+<span class="sig-name descname"><span class="pre">provisional_ddx_reaction_field_inputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q_cav</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cavity_xyz</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_provisional</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.solvent.provisional_ddx_reaction_field_inputs" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validate candidate ddX cavity data for the AO reaction-field cross-check.
+
+``cavity_xyz`` is the flat ``(3, ncav)`` coordinate buffer copied from ddX,
+and ``q_cav`` is the projected cavity quantity whose sign/scale remains
+provisional.  This helper prepares only guarded validation inputs; it does
+not enable runtime PCM coupling.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../single_point/index.html" class="btn btn-neutral float-left" title="oqp.library.single_point" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../symmetry/index.html" class="btn btn-neutral float-right" title="oqp.library.symmetry" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,10 +1,12 @@
-! buffer_types defines a list of data types used in parallel communication.
-! Each entry specifies:
-! (1) A human-readable name for the data type,
-! (2) The corresponding MPI data type for communication,
-! (3) The Fortran data type (with the appropriate kind),
-! (4) The array rank or shape (e.g., scalar, 1D, 2D, etc.).
-! These types are used for creating allreduce/bcast buffers in MPI operations.
+!> buffer_types defines a list of data types used in parallel communication.
+!> Each entry specifies:
+!> (1) A human-readable name for the data type,
+!> (2) The corresponding MPI data type for communication,
+!> (3) The Fortran data type (with the appropriate kind),
+!> (4) The array rank or shape (e.g., scalar, 1D, 2D, etc.).
+!> These types are used for creating allreduce/bcast buffers in MPI operations.
+!> @author Mohsen Mazaherifar
+!> @date Sep 2024
 
 
 

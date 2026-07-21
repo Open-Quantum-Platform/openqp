@@ -6,19 +6,35 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
     <meta name="author" content="OpenQP Team" >
     <link rel="icon" href="../favicon.png">
 
-    <title>dft_xclib.F90 &ndash; OPENQP</title>
+    <title>dft_xclib.F90 &ndash; OpenQP Fortran API</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
-    <link href="../css/pygments.css" rel="stylesheet">
-    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
     <link href="../css/local.css" rel="stylesheet">
-
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link href="../css/pygments.css" rel="stylesheet">
     <script src="../js/svg-pan-zoom.min.js"></script>
   </head>
 
@@ -28,7 +44,7 @@
     <div class="container-fluid mb-sm-4 mb-xl-2">
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container">
-          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
           <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
                   aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
                   <span class="navbar-toggler-icon">
@@ -36,23 +52,18 @@
 
           <div id="navbar" class="navbar-collapse collapse">
             <ul class="navbar-nav">
-                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
                   <li class="nav-item">
                     <a class="nav-link" href="../lists/files.html">Source Files</a>
                   </li>
                 <li class="nav-item">
                   <a class="nav-link" href="../lists/modules.html">Modules</a>
                 </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
-                </li>
             </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
           </div><!--/.nav-collapse -->
         </div>
       </nav>
@@ -71,7 +82,7 @@
 
             <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
               <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
-                 title=" 0.4% of total for source files.">172 statements</a>
+                 title=" 0.3% of total for source files.">172 statements</a>
             </li>
 
             <li class="list-inline-item" id="source-file">
@@ -90,9 +101,11 @@
     </div>
   </div>
   <script>
-    $(function () {
-    $('[data-bs-toggle="tooltip"]').tooltip()
-    })
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
   </script>
 
   </div>
@@ -145,479 +158,7 @@
     <div class="col-md-9" id='text'>
       
       <br>
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">This file depends on</h3>
-          </div>
-          <div class="card-body">
-            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: sourcefile~~dft_xclib.f90~~EfferentGraph Pages: 1 -->
-<svg id="sourcefiledft_xclibf90EfferentGraph" width="478pt" height="74pt"
- viewBox="0.00 0.00 478.00 74.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 70)">
-<title>sourcefile~~dft_xclib.f90~~EfferentGraph</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-70 474,-70 474,4 -4,4"/>
-<!-- sourcefile~dft_xclib.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_node1" class="node">
-<title>sourcefile~dft_xclib.f90</title>
-<polygon fill="none" stroke="#000000" points="470,-44 391,-44 391,-20 470,-20 470,-44"/>
-<text text-anchor="middle" x="430.5" y="-29.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">dft_xclib.F90</text>
-</g>
-<!-- sourcefile~functionals.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_node2" class="node">
-<title>sourcefile~functionals.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/functionals.f90.html" xlink:title="functionals.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="355,-64 261,-64 261,-40 355,-40 355,-64"/>
-<text text-anchor="middle" x="308" y="-49.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">functionals.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_xclib.f90&#45;&gt;sourcefile~functionals.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge1" class="edge">
-<title>sourcefile~dft_xclib.f90&#45;&gt;sourcefile~functionals.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M390.7278,-38.4934C382.5932,-39.8215 373.88,-41.2441 365.272,-42.6495"/>
-<polygon fill="#000000" stroke="#000000" points="364.5616,-39.219 355.2563,-44.2847 365.6896,-46.1276 364.5616,-39.219"/>
-</g>
-<!-- sourcefile~precision.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_node3" class="node">
-<title>sourcefile~precision.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~EfferentGraph_node3"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="92.5,-24 8.5,-24 8.5,0 92.5,0 92.5,-24"/>
-<text text-anchor="middle" x="50.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_xclib.f90&#45;&gt;sourcefile~precision.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge2" class="edge">
-<title>sourcefile~dft_xclib.f90&#45;&gt;sourcefile~precision.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M390.7488,-28.7669C341.5172,-24.7735 255.0814,-17.7975 181,-12"/>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M181,-12C155.3664,-9.501 126.7657,-9.2214 102.8876,-9.6828"/>
-<polygon fill="#000000" stroke="#000000" points="102.5344,-6.1903 92.6221,-9.9316 102.704,-13.1882 102.5344,-6.1903"/>
-</g>
-<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge4" class="edge">
-<title>sourcefile~functionals.f90&#45;&gt;sourcefile~precision.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M281.9441,-39.951C256.751,-29.2346 217.1821,-14.8315 181,-12"/>
-</g>
-<!-- sourcefile~messages.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_node4" class="node">
-<title>sourcefile~messages.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~EfferentGraph_node4"><a xlink:href="../sourcefile/messages.f90.html" xlink:title="messages.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="225,-64 137,-64 137,-40 225,-40 225,-64"/>
-<text text-anchor="middle" x="181" y="-49.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">messages.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge3" class="edge">
-<title>sourcefile~functionals.f90&#45;&gt;sourcefile~messages.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M260.7099,-52C252.4873,-52 243.8761,-52 235.4797,-52"/>
-<polygon fill="#000000" stroke="#000000" points="235.385,-48.5001 225.385,-52 235.385,-55.5001 235.385,-48.5001"/>
-</g>
-<!-- sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge6" class="edge">
-<title>sourcefile~messages.f90&#45;&gt;sourcefile~precision.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M141.8457,-39.9987C128.6755,-35.9618 113.8071,-31.4045 99.9502,-27.1571"/>
-<polygon fill="#000000" stroke="#000000" points="100.6644,-23.7154 90.0777,-24.1311 98.6129,-30.4081 100.6644,-23.7154"/>
-</g>
-<!-- sourcefile~constants_io.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_node5" class="node">
-<title>sourcefile~constants_io.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~EfferentGraph_node5"><a xlink:href="../sourcefile/constants_io.f90.html" xlink:title="constants_io.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="101,-66 0,-66 0,-42 101,-42 101,-66"/>
-<text text-anchor="middle" x="50.5" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">constants_io.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~EfferentGraph_edge5" class="edge">
-<title>sourcefile~messages.f90&#45;&gt;sourcefile~constants_io.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M136.8187,-52.6771C128.723,-52.8012 120.1426,-52.9327 111.655,-53.0628"/>
-<polygon fill="#000000" stroke="#000000" points="111.332,-49.5672 101.3868,-53.2201 111.4393,-56.5664 111.332,-49.5672"/>
-</g>
-</g>
-</svg>
-</div>          <div>
-            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
-          </div>
-          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-<p>Nodes of different colours represent the following: </p>
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: Graph Key Pages: 1 -->
-<svg width="202pt" height="32pt"
- viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>Graph Key</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
-<!-- Source File -->
-<g id="node1" class="node">
-<title>Source File</title>
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
-<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
-</g>
-<!-- This Page&#39;s Entity -->
-<g id="node2" class="node">
-<title>This Page&#39;s Entity</title>
-<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
-<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
-</g>
-</g>
-</svg>
 
-<p>Solid arrows point from a file to a file which it depends on. A file
-is dependent upon another if the latter must be compiled before the former
-can be.
-</p>
- </div>
-            </div>
-          </div>
-        </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Files dependent on this one</h3>
-          </div>
-          <div class="card-body">
-            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: sourcefile~~dft_xclib.f90~~AfferentGraph Pages: 1 -->
-<svg id="sourcefiledft_xclibf90AfferentGraph" width="641pt" height="159pt"
- viewBox="0.00 0.00 641.00 159.41" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph" class="graph" transform="scale(.6698 .6698) rotate(0) translate(4 234)">
-<title>sourcefile~~dft_xclib.f90~~AfferentGraph</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-234 953,-234 953,4 -4,4"/>
-<!-- sourcefile~dft_xclib.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node1" class="node">
-<title>sourcefile~dft_xclib.f90</title>
-<polygon fill="none" stroke="#000000" points="79,-148 0,-148 0,-124 79,-124 79,-148"/>
-<text text-anchor="middle" x="39.5" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">dft_xclib.F90</text>
-</g>
-<!-- sourcefile~dft_xc_libxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node2" class="node">
-<title>sourcefile~dft_xc_libxc.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/dft_xc_libxc.f90.html" xlink:title="dft_xc_libxc.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="212,-148 115,-148 115,-124 212,-124 212,-148"/>
-<text text-anchor="middle" x="163.5" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_xc_libxc.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~dft_xclib.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge1" class="edge">
-<title>sourcefile~dft_xc_libxc.f90&#45;&gt;sourcefile~dft_xclib.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M114.8478,-136C106.4545,-136 97.7186,-136 89.2956,-136"/>
-<polygon fill="#000000" stroke="#000000" points="89.2207,-132.5001 79.2207,-136 89.2206,-139.5001 89.2207,-132.5001"/>
-</g>
-<!-- sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node3" class="node">
-<title>sourcefile~dft_gridint.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/dft_gridint.f90.html" xlink:title="dft_gridint.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="337,-148 248,-148 248,-124 337,-124 337,-148"/>
-<text text-anchor="middle" x="292.5" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_xc_libxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge2" class="edge">
-<title>sourcefile~dft_gridint.f90&#45;&gt;sourcefile~dft_xc_libxc.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M247.7441,-136C239.57,-136 230.9276,-136 222.416,-136"/>
-<polygon fill="#000000" stroke="#000000" points="222.1387,-132.5001 212.1387,-136 222.1386,-139.5001 222.1387,-132.5001"/>
-</g>
-<!-- sourcefile~dft_gridint_energy.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node4" class="node">
-<title>sourcefile~dft_gridint_energy.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/dft_gridint_energy.f90.html" xlink:title="dft_gridint_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="503,-106 373,-106 373,-82 503,-82 503,-106"/>
-<text text-anchor="middle" x="438" y="-91.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge3" class="edge">
-<title>sourcefile~dft_gridint_energy.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.3055,-106.0355C380.0197,-110.7366 361.1778,-116.1755 344.0528,-121.1188"/>
-<polygon fill="#000000" stroke="#000000" points="342.8376,-117.8266 334.2005,-123.9627 344.779,-124.552 342.8376,-117.8266"/>
-</g>
-<!-- sourcefile~dft_gridint_fxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node5" class="node">
-<title>sourcefile~dft_gridint_fxc.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/dft_gridint_fxc.f90.html" xlink:title="dft_gridint_fxc.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="493,-190 383,-190 383,-166 493,-166 493,-190"/>
-<text text-anchor="middle" x="438" y="-175.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_fxc.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge4" class="edge">
-<title>sourcefile~dft_gridint_fxc.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M396.3055,-165.9645C380.0197,-161.2634 361.1778,-155.8245 344.0528,-150.8812"/>
-<polygon fill="#000000" stroke="#000000" points="344.779,-147.448 334.2005,-148.0373 342.8376,-154.1734 344.779,-147.448"/>
-</g>
-<!-- sourcefile~dft_gridint_grad.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node6" class="node">
-<title>sourcefile~dft_gridint_grad.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/dft_gridint_grad.f90.html" xlink:title="dft_gridint_grad.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="497.5,-148 378.5,-148 378.5,-124 497.5,-124 497.5,-148"/>
-<text text-anchor="middle" x="438" y="-133.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_grad.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge5" class="edge">
-<title>sourcefile~dft_gridint_grad.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M378.3998,-136C368.0404,-136 357.313,-136 347.096,-136"/>
-<polygon fill="#000000" stroke="#000000" points="347.0817,-132.5001 337.0816,-136 347.0816,-139.5001 347.0817,-132.5001"/>
-</g>
-<!-- sourcefile~dft_gridint_gxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node7" class="node">
-<title>sourcefile~dft_gridint_gxc.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/dft_gridint_gxc.f90.html" xlink:title="dft_gridint_gxc.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="669,-230 556,-230 556,-206 669,-206 669,-230"/>
-<text text-anchor="middle" x="612.5" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_gxc.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge6" class="edge">
-<title>sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M555.7741,-222.5203C505.9124,-224.4185 432.2669,-222.097 373,-199 348.6399,-189.5066 325.6579,-170.0761 310.5352,-155.2894"/>
-<polygon fill="#000000" stroke="#000000" points="312.8998,-152.703 303.3778,-148.0574 307.9245,-157.627 312.8998,-152.703"/>
-</g>
-<!-- sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge9" class="edge">
-<title>sourcefile~dft_gridint_gxc.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M560.1442,-205.9987C541.4222,-201.7071 520.1336,-196.8272 500.6322,-192.3569"/>
-<polygon fill="#000000" stroke="#000000" points="501.1494,-188.8848 490.6201,-190.0619 499.5853,-195.7078 501.1494,-188.8848"/>
-</g>
-<!-- sourcefile~dft_gridint_tdxc_grad.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node8" class="node">
-<title>sourcefile~dft_gridint_tdxc_grad.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/dft_gridint_tdxc_grad.f90.html" xlink:title="dft_gridint_tdxc_grad.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="686,-35 539,-35 539,-11 686,-11 686,-35"/>
-<text text-anchor="middle" x="612.5" y="-20.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft_gridint_tdxc_grad.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_gridint.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge7" class="edge">
-<title>sourcefile~dft_gridint_tdxc_grad.f90&#45;&gt;sourcefile~dft_gridint.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M538.765,-29.5792C489.945,-36.0235 425.4859,-48.615 373,-73 349.7006,-83.8249 327.0101,-102.5532 311.6906,-116.7847"/>
-<polygon fill="#000000" stroke="#000000" points="309.2073,-114.3164 304.3871,-123.7512 314.0389,-119.3816 309.2073,-114.3164"/>
-</g>
-<!-- sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node9" class="node">
-<title>sourcefile~dft.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node9"><a xlink:href="../sourcefile/dft.f90.html" xlink:title="dft.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="639.5,-128 585.5,-128 585.5,-104 639.5,-104 639.5,-128"/>
-<text text-anchor="middle" x="612.5" y="-113.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_energy.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge8" class="edge">
-<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_energy.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M585.2344,-112.5625C565.8558,-110.1194 538.8255,-106.7115 513.2075,-103.4817"/>
-<polygon fill="#000000" stroke="#000000" points="513.4607,-99.986 503.1014,-102.2076 512.585,-106.9311 513.4607,-99.986"/>
-</g>
-<!-- sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge12" class="edge">
-<title>sourcefile~dft.f90&#45;&gt;sourcefile~dft_gridint_grad.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M585.2344,-119.125C564.4951,-121.502 534.9919,-124.8835 507.835,-127.996"/>
-<polygon fill="#000000" stroke="#000000" points="507.1013,-124.5571 497.5649,-129.1731 507.8985,-131.5115 507.1013,-124.5571"/>
-</g>
-<!-- sourcefile~tdhf_energy.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node10" class="node">
-<title>sourcefile~tdhf_energy.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node10"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="823.5,-188 726.5,-188 726.5,-164 823.5,-164 823.5,-188"/>
-<text text-anchor="middle" x="775" y="-173.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge10" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M726.2507,-178.3902C693.9541,-179.533 650.6652,-180.2236 612.5,-178"/>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M612.5,-178C576.4767,-175.9012 536.1994,-175.7554 503.4248,-176.1996"/>
-<polygon fill="#000000" stroke="#000000" points="503.0058,-172.7057 493.0622,-176.3628 503.1161,-179.7048 503.0058,-172.7057"/>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge18" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M742.1157,-163.8581C715.154,-153.903 677.0207,-139.823 649.0955,-129.5122"/>
-<polygon fill="#000000" stroke="#000000" points="650.2721,-126.2157 639.6788,-126.0353 647.8475,-132.7824 650.2721,-126.2157"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node11" class="node">
-<title>sourcefile~tdhf_gradient.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node11"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="828,-24 722,-24 722,0 828,0 828,-24"/>
-<text text-anchor="middle" x="775" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_gridint_tdxc_grad.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge14" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft_gridint_tdxc_grad.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M721.7914,-15.6018C713.6083,-16.1557 704.9927,-16.739 696.3379,-17.3248"/>
-<polygon fill="#000000" stroke="#000000" points="695.9242,-13.8447 686.1835,-18.0122 696.3971,-20.8287 695.9242,-13.8447"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge19" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M740.4386,-24.1166C734.1617,-26.7567 727.7779,-29.7459 722,-33 688.9717,-51.6016 654.7559,-79.0902 633.5528,-97.2659"/>
-<polygon fill="#000000" stroke="#000000" points="631.0878,-94.7708 625.8301,-103.969 635.6763,-100.0572 631.0878,-94.7708"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node12" class="node">
-<title>sourcefile~tdhf_z_vector.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node12"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="827.5,-230 722.5,-230 722.5,-206 827.5,-206 827.5,-230"/>
-<text text-anchor="middle" x="775" y="-215.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge11" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_fxc.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M741.6302,-205.9738C709.1625,-195.1887 658.1825,-180.6616 612.5,-178"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_gxc.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge13" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft_gridint_gxc.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M722.2409,-218C708.594,-218 693.7192,-218 679.4518,-218"/>
-<polygon fill="#000000" stroke="#000000" points="679.1965,-214.5001 669.1965,-218 679.1964,-221.5001 679.1965,-214.5001"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge20" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M739.34,-205.9555C733.3647,-203.3563 727.3681,-200.3625 722,-197 703.6056,-185.4779 703.1437,-177.3118 686,-164 671.978,-153.1122 655.499,-142.1947 641.7021,-133.5288"/>
-<polygon fill="#000000" stroke="#000000" points="643.4193,-130.4754 633.0757,-128.1821 639.7316,-136.4252 643.4193,-130.4754"/>
-</g>
-<!-- sourcefile~hf_energy.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node13" class="node">
-<title>sourcefile~hf_energy.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node13"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="949,-128 864,-128 864,-104 949,-104 949,-128"/>
-<text text-anchor="middle" x="906.5" y="-113.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge15" class="edge">
-<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M863.7226,-116.6437C852.1309,-116.7912 839.5849,-116.9262 828,-117 780.8898,-117.3001 769.1106,-117.2151 722,-117 698.0929,-116.8908 671.2507,-116.6476 650.1258,-116.4284"/>
-<polygon fill="#000000" stroke="#000000" points="649.9868,-112.9268 639.95,-116.3201 649.9122,-119.9264 649.9868,-112.9268"/>
-</g>
-<!-- sourcefile~scf.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node15" class="node">
-<title>sourcefile~scf.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node15"><a xlink:href="../sourcefile/scf.f90.html" xlink:title="scf.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="802,-108 748,-108 748,-84 802,-84 802,-108"/>
-<text text-anchor="middle" x="775" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge21" class="edge">
-<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M863.8057,-109.5066C847.1956,-106.9803 828.3378,-104.1122 812.2852,-101.6708"/>
-<polygon fill="#000000" stroke="#000000" points="812.6059,-98.1794 802.1933,-100.1359 811.5533,-105.0998 812.6059,-98.1794"/>
-</g>
-<!-- sourcefile~hf_gradient.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_node14" class="node">
-<title>sourcefile~hf_gradient.f90</title>
-<g id="a_sourcefile~~dft_xclib.f90~~AfferentGraph_node14"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="823,-66 727,-66 727,-42 823,-42 823,-66"/>
-<text text-anchor="middle" x="775" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge16" class="edge">
-<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M743.2826,-66.1014C716.265,-76.4097 677.4313,-91.2262 649.1013,-102.0352"/>
-<polygon fill="#000000" stroke="#000000" points="647.6506,-98.8425 639.5552,-105.6774 650.146,-105.3827 647.6506,-98.8425"/>
-</g>
-<!-- sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~dft_xclib.f90~~AfferentGraph_edge17" class="edge">
-<title>sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M747.8012,-99.3476C720.8875,-102.66 679.4928,-107.7547 649.577,-111.4367"/>
-<polygon fill="#000000" stroke="#000000" points="649.0142,-107.9794 639.5167,-112.6749 649.8694,-114.927 649.0142,-107.9794"/>
-</g>
-</g>
-</svg>
-</div>                <script>
-                  var pansourcefiledft_xclibf90AfferentGraph = svgPanZoom('#sourcefiledft_xclibf90AfferentGraph',
-                    {zoomEnabled: true, controlIconsEnabled: true, fit: true, center: true,}
-                  );
-                </script>          <div>
-            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
-          </div>
-          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-<p>Nodes of different colours represent the following: </p>
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: Graph Key Pages: 1 -->
-<svg width="202pt" height="32pt"
- viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>Graph Key</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
-<!-- Source File -->
-<g id="node1" class="node">
-<title>Source File</title>
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
-<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
-</g>
-<!-- This Page&#39;s Entity -->
-<g id="node2" class="node">
-<title>This Page&#39;s Entity</title>
-<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
-<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
-</g>
-</g>
-</svg>
-
-<p>Solid arrows point from a file to a file which it depends on. A file
-is dependent upon another if the latter must be compiled before the former
-can be.
-</p>
- </div>
-            </div>
-          </div>
-        </div>
-          </div>
-        </div>
-<br>
       <section>
         <h2><span class="anchor" id="src"></span>Source Code</h2>
         <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="w"> </span><span class="k">module </span><span class="n">mod_dft_xclib</span>
@@ -962,9 +503,9 @@ can be.
         <div class="row justify-content-between">
           <div class="col">
             <p>
-              OPENQP
- was developed by OpenQP Team<br>              &copy; 2025 
-</p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
           </div>
           <div class="col">
             <p class="text-end">
@@ -976,24 +517,5 @@ can be.
         <br>
       </div> <!-- /container -->
     </footer>
-
-    <!-- Bootstrap core JavaScript -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
-
-    <!-- MathJax JavaScript
-             ================================================== -->
-             <!-- Placed at the end of the document so the pages load faster -->
-        <script type="text/x-mathjax-config">
-          MathJax.Hub.Config({
-          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
-          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
-          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
-          });
-        </script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
-
   </body>
 </html>

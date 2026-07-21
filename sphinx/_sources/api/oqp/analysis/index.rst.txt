@@ -1,0 +1,29 @@
+oqp.analysis
+============
+
+.. py:module:: oqp.analysis
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      MRSF excited-state analysis (NTOs, attachment/detachment, descriptors).
+
+      Built on the MRSF 1-TDM/1-RDM exposed by the ``misc-excited-analysis`` patch
+      and validated at GATE 2 (transition-dipole reconstruction to ~1e-15).
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/analysis/density_diff/index
+   /api/oqp/analysis/descriptors/index
+   /api/oqp/analysis/gto_grid/index
+   /api/oqp/analysis/nto/index
+   /api/oqp/analysis/transition_density/index
+
+

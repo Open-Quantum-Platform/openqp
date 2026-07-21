@@ -1,0 +1,97 @@
+oqp.utils.mpi_utils
+===================
+
+.. py:module:: oqp.utils.mpi_utils
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.mpi_utils.mpi4py_available
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.mpi_utils.MPIManager
+   oqp.utils.mpi_utils.MPIPool
+   oqp.utils.mpi_utils.MPIMap
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.mpi_utils.mpi_get_attr
+   oqp.utils.mpi_utils.mpi_update_attr
+   oqp.utils.mpi_utils.mpi_dump
+
+
+Module Contents
+---------------
+
+.. py:data:: mpi4py_available
+   :value: True
+
+
+.. py:class:: MPIManager
+
+   .. py:method:: mpi4py_available()
+
+
+   .. py:method:: barrier()
+
+
+   .. py:method:: finalize_mpi()
+
+
+   .. py:method:: set_mpi_comm(data)
+
+
+   .. py:method:: bcast(data, root=0, barrier=True)
+
+
+.. py:class:: MPIPool(processes)
+
+   .. py:attribute:: processes
+
+
+   .. py:method:: imap_unordered(func, inp)
+
+
+   .. py:method:: close()
+
+
+.. py:class:: MPIMap(func, var, processes)
+
+   Bases: :py:obj:`collections.abc.Iterator`
+
+
+   .. py:attribute:: a
+      :value: -1
+
+
+
+   .. py:attribute:: func
+
+
+   .. py:attribute:: var
+
+
+   .. py:attribute:: processes
+
+
+   .. py:attribute:: mpi_manager
+
+
+.. py:function:: mpi_get_attr(func)
+
+.. py:function:: mpi_update_attr(func)
+
+.. py:function:: mpi_dump(func)
+

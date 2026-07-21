@@ -1,0 +1,141 @@
+oqp.library.set_basis
+=====================
+
+.. py:module:: oqp.library.set_basis
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Set up basis set for the molecule
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.set_basis.BasisData
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.set_basis.set_basis
+
+
+Module Contents
+---------------
+
+.. py:class:: BasisData(mol)
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: shell_num
+      :value: 0
+
+
+
+   .. py:attribute:: mpi_manager
+
+
+   .. py:attribute:: num_atoms
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:attribute:: atom_xyz
+
+
+   .. py:attribute:: basis_names
+      :value: []
+
+
+
+   .. py:attribute:: shells_data
+      :value: []
+
+
+
+   .. py:attribute:: ecp
+
+
+   .. py:attribute:: use_ecp
+      :value: False
+
+
+
+   .. py:method:: get_basis_data(elements, basis_name='STO-3G', el_index=0)
+
+      .. code-block:: text
+
+         Retrieves and organizes electron shell data (and ECP data if present) for a specified element.
+
+         :param elements: Atomic number (int) of the element.
+         :param basis_name: Name of the basis set (default: 'STO-3G').
+         :param el_index: Index of the element in the molecule.
+         :return: A list of dictionaries containing shell data.
+
+
+
+   .. py:method:: get_basislist()
+
+      .. code-block:: text
+
+         Retrieves a list of basis names for structure.
+
+         :return: A list of basis names (strings).
+
+
+
+   .. py:method:: create_shell_data()
+
+      .. code-block:: text
+
+         Creates the shells data for each atom in the molecule based on provided basis sets.
+
+         :return: A list of all shells data across all atoms.
+
+
+
+   .. py:method:: set_ecp_data()
+
+      .. code-block:: text
+
+         Sets the ECP-related data in the molecule's data structure and appends it via oqp.
+
+
+
+   .. py:method:: set_basis_data()
+
+      .. code-block:: text
+
+         Sets the basis data for the molecule's shells, then sets the ECP data.
+
+
+
+   .. py:method:: read_basis_fmt(url: str, elements: str) -> dict
+
+      .. code-block:: text
+
+         Reads and returns the 'elements' dictionary from a basis set specification.
+
+         :param url: A string indicating either a local file path ('file:/path/...').
+         :param basis_name: Optional name of the basis set, used by bse.get_basis if not a local file.
+         :param elements:
+         :return: Dictionary of basis data of element.
+
+
+
+.. py:function:: set_basis(mol)
+
+   .. code-block:: text
+
+      Set up basis set for the molecule
+
+

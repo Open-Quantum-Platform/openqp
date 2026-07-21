@@ -1,51 +1,97 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>OpenQP API Documentation</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OpenQP documentation portal and current Python and Fortran API references.">
+  <title>OpenQP Documentation</title>
   <style>
+    :root {
+      color-scheme: dark;
+      --ink: #ecf7f7;
+      --muted: #a9c5c7;
+      --panel: rgba(13, 39, 44, .86);
+      --line: rgba(132, 221, 214, .22);
+      --aqua: #71e1d6;
+      --blue: #79a9ff;
+    }
+    * { box-sizing: border-box; }
     body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 50px;
-      background: #f5f5f5;
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font: 16px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 12% 5%, rgba(56, 190, 176, .25), transparent 31rem),
+        radial-gradient(circle at 88% 28%, rgba(63, 104, 214, .22), transparent 32rem),
+        #061317;
     }
-    h1 {
-      margin-bottom: 30px;
-    }
-    .link-box {
-      display: inline-block;
-      margin: 20px;
-      padding: 20px;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      width: 250px;
+    a { color: inherit; }
+    .wrap { width: min(1120px, calc(100% - 2rem)); margin: 0 auto; }
+    header { padding: 1.2rem 0; border-bottom: 1px solid var(--line); }
+    nav { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .brand { font-weight: 800; letter-spacing: .08em; text-decoration: none; }
+    .version { color: var(--muted); font-size: .85rem; }
+    .hero { padding: clamp(4rem, 10vw, 8rem) 0 3.5rem; max-width: 800px; }
+    .eyebrow { color: var(--aqua); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; font-size: .78rem; }
+    h1 { margin: .5rem 0 1rem; font-size: clamp(3rem, 9vw, 6.7rem); line-height: .95; letter-spacing: -.055em; }
+    .lead { color: var(--muted); font-size: clamp(1.05rem, 2vw, 1.3rem); max-width: 720px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; padding-bottom: 5rem; }
+    .card {
+      min-height: 190px;
+      padding: 1.5rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
       text-decoration: none;
-      color: black;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      transition: all 0.3s ease;
+      backdrop-filter: blur(12px);
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
     }
-    .link-box:hover {
-      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    }
+    .card:hover { transform: translateY(-4px); border-color: var(--aqua); background: rgba(16, 52, 57, .96); }
+    .tag { color: var(--blue); font: 700 .73rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .1em; }
+    h2 { margin: 1.25rem 0 .5rem; font-size: 1.45rem; }
+    .card p { color: var(--muted); margin: 0; }
+    .wide { grid-column: 1 / -1; min-height: 150px; }
+    footer { padding: 1.5rem 0 2.5rem; color: var(--muted); border-top: 1px solid var(--line); font-size: .9rem; }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .wide { grid-column: auto; } }
   </style>
 </head>
 <body>
-
-  <h1>Welcome to Project Documentation</h1>
-
-  <a href="./sphinx/index.html" class="link-box">
-    <h2>Python API Docs</h2>
-    <p>Browse Python API documentation generated with Sphinx.</p>
-  </a>
-
-  <a href="./ford/index.html" class="link-box">
-    <h2>Fortran API Docs</h2>
-    <p>Explore Fortran API documentation generated with FORD.</p>
-  </a>
-
+  <header>
+    <nav class="wrap">
+      <a class="brand" href="./">OPENQP</a>
+      <span class="version">Documentation · v1.2.1</span>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Open Quantum Platform</div>
+      <h1>Explore<br>OpenQP.</h1>
+      <p class="lead">Manuals, tutorials, and source-level references for a modern quantum-chemistry platform built around mixed-reference spin-flip methods and interoperable ground- and excited-state workflows.</p>
+    </section>
+    <section class="grid" aria-label="Documentation links">
+      <a class="card" href="https://open-quantum-platform.github.io/openqp-docs/">
+        <span class="tag">Learn</span><h2>OpenQP Manual</h2>
+        <p>Installation, capabilities, workflows, input syntax, and keyword reference.</p>
+      </a>
+      <a class="card" href="https://open-quantum-platform.github.io/openqp-tutorials/">
+        <span class="tag">Practice</span><h2>Hands-on Tutorials</h2>
+        <p>Guided, runnable calculations covering core OpenQP workflows.</p>
+      </a>
+      <a class="card" href="./sphinx/index.html">
+        <span class="tag">Python · current main</span><h2>Python API</h2>
+        <p>High-level interfaces, workflows, analysis, export, quantum, and utility modules.</p>
+      </a>
+      <a class="card" href="./ford/index.html">
+        <span class="tag">Fortran · current main</span><h2>Fortran API</h2>
+        <p>Native modules, procedures, types, source files, and implementation relationships.</p>
+      </a>
+      <a class="card wide" href="https://github.com/Open-Quantum-Platform/openqp">
+        <span class="tag">Build with us</span><h2>Source, releases, and issues on GitHub →</h2>
+        <p>Browse OpenQP 1.2.1, inspect examples, report problems, or contribute.</p>
+      </a>
+    </section>
+  </main>
+  <footer><div class="wrap">API references generated from <code>main@740611d</code> on 21 July 2026.</div></footer>
 </body>
 </html>
-

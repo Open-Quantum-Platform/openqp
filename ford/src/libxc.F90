@@ -7,6 +7,7 @@
 !> @todo   add meta-GGA functionals with laplacian of electron density
 module libxc
   use xc_f03_lib_m
+  use xc_f03_funcs_m
   use functionals, only: functional_t
   use precision, only: fp
   implicit none
@@ -490,10 +491,10 @@ contains
     case ("DTCAM-TUNE", "CDTCAMTUNE")  ! Use to tune HF exchange in DFT and TDDFT
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ dft_params%cam_alpha+dft_params%cam_beta, &
+            external_parameters=(/ 0.81_fp, &
+                                   dft_params%cam_alpha+dft_params%cam_beta, &
                                   -dft_params%cam_beta, &
-                                   dft_params%cam_mu, &
-                                   0.81_fp  /), &
+                                   dft_params%cam_mu /), &
             alpha=dft_params%cam_alpha, &
             beta=dft_params%cam_beta, &
             omega=dft_params%cam_mu)
@@ -503,7 +504,7 @@ contains
     case ("DTCAM-VAEE", "DTCAMVAEE")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.30_fp,  0.20_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.30_fp,  0.20_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.50
             beta=dft_params%cam_beta, &   ! =-0.20
             omega=dft_params%cam_mu)      ! = 0.33
@@ -519,7 +520,7 @@ contains
     case ("DTCAM-XIV", "DTCAMXIV")  ! see doi.org/10.1021/acs.jctc.4c00640
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.30_fp,  0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.30_fp,  0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.59
             beta=dft_params%cam_beta, &   ! =-0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -536,7 +537,7 @@ contains
     case ("DTCAM-XI", "DTCAMXI")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 1.02_fp, -0.52_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 1.02_fp, -0.52_fp, 0.33_fp   /), &
             alpha=dft_params%cam_alpha, & ! = 0.50
             beta=dft_params%cam_beta, &   ! = 0.52
             omega=dft_params%cam_mu)      ! = 0.33
@@ -552,7 +553,7 @@ contains
     case ("DTCAM-AEE", "DTCAMAEE")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.48_fp, -0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.48_fp, -0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.19
             beta=dft_params%cam_beta, &   ! = 0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -568,7 +569,7 @@ contains
     case ("DTCAM-VEE", "DTCAMVEE")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.48_fp, -0.29_fp, 0.33_fp, 0.81_fp  /), &
+            external_parameters=(/ 0.81_fp, 0.48_fp, -0.29_fp, 0.33_fp  /), &
             alpha=dft_params%cam_alpha, & ! = 0.19
             beta=dft_params%cam_beta, &   ! = 0.29
             omega=dft_params%cam_mu)      ! = 0.33
@@ -584,19 +585,19 @@ contains
     case ("DTCAM-STG", "DTCAMSTG")  
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_TUNED_CAM_B3LYP, 1.00_fp, &
-            external_parameters=(/ 0.24_fp,  0.24_fp, 0.33_fp, 0.81_fp  /), &
-            alpha=dft_params%cam_alpha, & ! = 0.48
-            beta=dft_params%cam_beta, &   ! =-0.24
+            external_parameters=(/ 0.81_fp, 0.17_fp,  0.28_fp, 0.33_fp  /), &
+            alpha=dft_params%cam_alpha, & ! = 0.45
+            beta=dft_params%cam_beta, &   ! =-0.28
             omega=dft_params%cam_mu)      ! = 0.33
-      tddft_params%cam_alpha = 0.71_fp
-      tddft_params%cam_beta = -0.1_fp
-      tddft_params%cam_mu = dft_params%cam_mu
-      tddft_params%spc_coco = 0.5_fp
-      tddft_params%spc_ovov = 0.5_fp
-      tddft_params%spc_coov = 0.5_fp
-      write(*,fmt='(3a)') "[2] W. Park, A. Lashkaripour, K. Komarov, S. Lee, M. Huix-Rotllant, ", &
-            "and C. H. Choi, J. Chem. Theory Comput., 20(13), 5679-5694 (2024); ", &
-            "DOI: 10.1021/acs.jctc.4c00640"
+      tddft_params%cam_alpha = 0.64_fp
+      tddft_params%cam_beta = -0.11_fp
+      tddft_params%cam_mu =   0.30_fp
+      tddft_params%spc_coco = 0.43_fp
+      tddft_params%spc_ovov = 0.44_fp
+      tddft_params%spc_coov = 0.65_fp
+      write(*,fmt='(3a)') "[2] A. Lashkaripour, W. Park,  M. Mazaherifar ", &
+            "and C. H. Choi, J. Chem. Theory Comput. 2025, 21, 11, 5661–5668; ", &
+            "DOI: 10.1021/acs.jctc.5c00451"
     case ("RCAM-B3LYP", "RCAMB3LYP")
       dft_params%cam_flag = .true.
       call functional%add_functional(XC_HYB_GGA_XC_RCAM_B3LYP, 1.00_fp, &

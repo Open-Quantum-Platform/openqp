@@ -1,0 +1,504 @@
+oqp.library.libscipy
+====================
+
+.. py:module:: oqp.library.libscipy
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP single point class
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.libscipy.Optimizer
+   oqp.library.libscipy.TemplateOpt
+   oqp.library.libscipy.ConstrainOpt
+   oqp.library.libscipy.MECIOpt
+   oqp.library.libscipy.MECPOpt
+   oqp.library.libscipy.StateSpecificOpt
+   oqp.library.libscipy.MEP
+   oqp.library.libscipy.QMMMOpt
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.libscipy.ReLU
+
+
+Module Contents
+---------------
+
+.. py:class:: Optimizer(mol)
+
+   .. code-block:: text
+
+      OQP optimization class
+
+      user should use the subclass to define the one_step optimization function
+      see TemplateOpt class for example
+
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: optimizer
+
+
+   .. py:attribute:: step_size
+
+
+   .. py:attribute:: step_tol
+
+
+   .. py:attribute:: maxit
+
+
+   .. py:attribute:: mep_maxit
+
+
+   .. py:attribute:: rmsd_grad
+
+
+   .. py:attribute:: rmsd_step
+
+
+   .. py:attribute:: max_grad
+
+
+   .. py:attribute:: max_step
+
+
+   .. py:attribute:: istate
+
+
+   .. py:attribute:: jstate
+
+
+   .. py:attribute:: kstate
+
+
+   .. py:attribute:: imult
+
+
+   .. py:attribute:: jmult
+
+
+   .. py:attribute:: energy_shift
+
+
+   .. py:attribute:: energy_gap
+
+
+   .. py:attribute:: init_scf
+
+
+   .. py:attribute:: nstate
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:attribute:: sp
+
+
+   .. py:attribute:: grad
+
+
+   .. py:attribute:: ls
+
+
+   .. py:attribute:: itr
+      :value: 0
+
+
+
+   .. py:attribute:: pre_energy
+      :value: 0
+
+
+
+   .. py:attribute:: pre_coord
+
+
+   .. py:attribute:: metrics
+
+
+   .. py:method:: optimize()
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: opt_func(coordinates)
+
+
+   .. py:method:: check_convergence()
+
+
+.. py:class:: TemplateOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP abstract class for optimization
+
+
+
+   .. py:method:: one_step(coordinates)
+
+
+.. py:class:: ConstrainOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP Constrained optimization class
+
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: ref_coord
+
+
+   .. py:attribute:: mass
+
+
+   .. py:attribute:: tmass
+
+
+   .. py:attribute:: init_energy
+      :value: 0
+
+
+
+   .. py:attribute:: last_energy
+      :value: 0
+
+
+
+   .. py:attribute:: init_xyz
+      :value: None
+
+
+
+   .. py:attribute:: last_xyz
+      :value: None
+
+
+
+   .. py:attribute:: last_radius
+      :value: 0
+
+
+
+   .. py:attribute:: opt_status
+      :value: 0
+
+
+
+   .. py:attribute:: message
+      :value: 'not converged'
+
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: check_convergence()
+
+
+.. py:class:: MECIOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP MECI optimization class
+
+      upb or penalty method
+
+
+   .. py:attribute:: meci_search
+
+
+   .. py:attribute:: sigma
+
+
+   .. py:attribute:: alpha
+
+
+   .. py:attribute:: incre
+
+
+   .. py:attribute:: weights
+
+
+   .. py:attribute:: x
+
+
+   .. py:attribute:: y
+
+
+   .. py:attribute:: method
+
+
+   .. py:attribute:: work_func
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: hybrid(coordinates, energies, grads)
+
+      .. code-block:: text
+
+         first use penalty method
+         switch to ubp when gap is < self.energy_gap
+
+
+
+   .. py:method:: ubp(coordinates, energies, grads)
+
+      .. code-block:: text
+
+         update branching plane method
+         for state i and j,
+         j = i + 1
+
+         in the first step
+         x_0 = [G(j) - G(i)] / np.sum([G(j) - G(i)] ** 2) ** 2
+         y_0 = G(i) - np.sum(G(i) * x_0) * x_0
+         y_0 = y_0 / np.sum(y_0 ** 2), so x_0 and y_0 are orthonormal
+
+         in the k-th step
+         y_k = [(x_k-1 * x_k) * y_k-1 - (y_k-1 * x_k) * x_k-1] / [(y_k-1 * x_k) ** 2 + (x_k-1 * x_k) ** 2] ** 0.5
+         note the sign of x_k-1 and y_k-1 are opposite to the paper
+
+         F = [E(j) + E(i)] * 0.5 + [E(j) - E(i)] ** 2 / sigma
+         dF = PE * 0.5 + 2 * [E(j) - E(i)] / sigma * [G(j) - G(i)]
+         PE = G(j) + G(i) - np.sum([G(j) + G(i)] * x_k) * x_k - np.sum([G(j) + G(i)] * y_k) * y_k
+
+         in the original paper
+         sigma = np.sum([G(j) - G(i)] ** 2) ** 0.5
+
+         in this implementation
+         we set sigma = np.sum([G(j) - G(i)] ** 2)
+
+         reference: J. Chem. Theory Comput.2010,6,1538–1545
+
+
+
+   .. py:method:: penalty(coordinates, energies, grads)
+
+      .. code-block:: text
+
+         penalty method
+         for state i and j,
+         j = i + 1
+         F = [E(j) + E(i)] * 0.5 + sigma * P
+         P = [E(j) - E(i)] ** 2 / [E(j) - E(i) + alpha]
+         dF = [G(j) + G(i)] * 0.5 + sigma * dP
+         dP = {[E(j) - E(i)] ** 2 + 2 * alpha * [E(j) - E(i)]} / [E(j) - E(i) + alpha] ** 2 * [G(j) - G(i)]
+
+         in the original paper
+         sigma is a growing factor, 3.5
+         alpha is a constant factor, 0.02
+
+         in this implementation
+         we set a constant sigma to 1
+         we replace alpha with np.mean([G(j) - G(i)] ** 2) ** 0.5
+
+         reference: J. Phys. Chem. B 2008,112,405-413
+
+
+
+   .. py:method:: check_convergence()
+
+
+.. py:class:: MECPOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP MECP optimization class
+
+      quadratic method
+
+
+   .. py:attribute:: mecp_search
+      :value: 'quad'
+
+
+
+   .. py:attribute:: weights
+
+
+   .. py:attribute:: method
+
+
+   .. py:attribute:: work_func
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: quad(coordinates, energies, grads)
+
+      .. code-block:: text
+
+         quadratic penalty optimization
+
+         F = 0.5 * (E1 + E2) + w * (E2 - E1) ** 2
+         dF = 0.5 * (G1 + G2) + 2 * w * (E2 - E1) * (G2 - G1)
+
+
+
+   .. py:method:: check_convergence()
+
+
+.. py:class:: StateSpecificOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP state specific optimization class
+
+
+
+   .. py:attribute:: method
+
+
+   .. py:method:: one_step(coordinates)
+
+
+.. py:class:: MEP(mol)
+
+   .. code-block:: text
+
+      OQP minimum energy path calculation class
+
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: istate
+
+
+   .. py:attribute:: mep_maxit
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:attribute:: mo
+      :value: None
+
+
+
+   .. py:attribute:: mep_itr
+      :value: 0
+
+
+
+   .. py:attribute:: mep_energies
+      :value: []
+
+
+
+   .. py:attribute:: optimizer
+
+
+   .. py:method:: optimize()
+
+
+   .. py:method:: check_mep()
+
+
+.. py:function:: ReLU(x, y)
+
+.. py:class:: QMMMOpt(mol)
+
+   Bases: :py:obj:`Optimizer`
+
+
+   .. code-block:: text
+
+      OQP QM/MM optimization class
+
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: pre_coord
+
+
+   .. py:attribute:: tmass
+
+
+   .. py:attribute:: init_energy
+      :value: 0
+
+
+
+   .. py:attribute:: last_energy
+      :value: 0
+
+
+
+   .. py:attribute:: init_xyz
+      :value: None
+
+
+
+   .. py:attribute:: last_xyz
+      :value: None
+
+
+
+   .. py:attribute:: last_radius
+      :value: 0
+
+
+
+   .. py:attribute:: opt_status
+      :value: 0
+
+
+
+   .. py:attribute:: message
+      :value: 'not converged'
+
+
+
+   .. py:method:: one_step(coordinates)
+
+
+   .. py:method:: check_convergence()
+
+

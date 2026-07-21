@@ -99,17 +99,16 @@ module types
     integer(c_int64_t) :: scftype  = 1       !< Refence wavefuction, 1= RHF 2= UHF 3= ROHF
     character(c_char)  :: runtype(20)  = ''  !<  Run type: energy, grad, etc.
     integer(c_int64_t) :: guess    = 1       !< used guess
+    integer(c_int64_t) :: active_basis = 0    !< Choose data basis: 0 -> info%basis, 1 -> info%alt_basis
     integer(c_int64_t) :: maxit    = 3       !< The maximum number of iterations
     integer(c_int64_t) :: maxit_dav = 50     !< The maximum number of iterations in Davidson eigensolver
     integer(c_int64_t) :: maxit_zv = 50      !< The maximum number of CG iterations in Z-vector subroutines
     integer(c_int64_t) :: maxdiis  = 7               !< The maximum number of diis equations
     integer(c_int64_t) :: diis_reset_mod = 10        !< The maximum number of diis iteration before resetting
     real(c_double) :: diis_reset_conv = 0.005_dp     !< Convergency criteria of DIIS reset
-    real(c_double) :: diis_method_threshold = 2.0_dp !< DIIS threshold for switching DIIS method
     integer(c_int64_t) :: diis_type = 5              !< 1: none, 2: cdiis, 3: ediis, 4: adiis, 5: vdiis
-    real(c_double) :: vdiis_cdiis_switch = 0.3_dp    !< The threshold for selecting cdiis
-    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< The threshold for setting vshift = 0
-    real(c_double) :: vshift_cdiis_switch = 0.3_dp   !< The threshold for selecting cdiis for vshift
+    real(c_double) :: cdiis_switch = 0.3_dp          !< DIIS error below which the cascade switches to C-DIIS
+    real(c_double) :: vdiis_vshift_switch = 0.003_dp !< DIIS error below which the level shift is turned off
     real(c_double) :: vshift = 0.0_dp                !< Virtual orbital shift for ROHF
     logical(c_bool) :: mom = .false.                 !< Maximum Overlap Method for SCF Convergency
     logical(c_bool) :: pfon = .false.                !< Pseudo-Fractional Occupation Number Method (pFON) for scf
@@ -117,14 +116,76 @@ module types
     real(c_double) :: pfon_start_temp = 2000.0_dp    !< Starting tempreature for pFON
     real(c_double) :: pfon_cooling_rate = 50.0_dp    !< Tempreature cooling rate for pFON
     real(c_double) :: pfon_nsmear = 5.0_dp           !< Num. of smearing orbitals for pFON if = 0, all 
-    real(c_double) :: conv         = 1e-6_dp         !< Convergency criteria of SCF
+    real(c_double) :: conv = 1e-6_dp                 !< Convergency criteria of SCF
     integer(c_int64_t) :: scf_incremental = 1        !< Enable/disable incremental Fock build
     real(c_double) :: int2e_cutoff = 5e-11_dp        !< 2e-integrals cutoff
+    ! Progressive (iteration-dependent) integral screening. Default OFF.
+    ! When on, the 2e Schwarz/density cutoff is loosened in early SCF iterations
+    ! (coupled to the DIIS error) and tightened back to int2e_cutoff as the SCF
+    ! converges, so the converged energy is unchanged but early Fock builds are
+    ! cheaper. Composes with the incremental Fock build (full rebuild on the pin).
+    integer(c_int64_t) :: scf_pscreen = 0            !< 0=off (default), 1=on
+    real(c_double) :: pscreen_k = 1e-2_dp            !< tau_iter = pscreen_k * diis_error (safety fraction, <1)
+    real(c_double) :: pscreen_cap = 1e-8_dp          !< loosest allowed cutoff (upper clamp on tau_iter); 1e-8 is
+                                                     !< the validated safe ceiling -- looser derails DIIS on dense
+                                                     !< systems (the err_screen << |SCF update| invariant)
+    real(c_double) :: pscreen_tight = 1e-4_dp        !< pin tau_iter to int2e_cutoff once diis_error < this
+    ! Progressive XC: during the loose phase (diis_error >= pscreen_tight) override the
+    ! DFT grid density cutoff and AO-prune threshold with these looser values, so early
+    ! XC builds prune more AOs / skip more low-density points; restored to baseline (pinned)
+    ! once diis_error < pscreen_tight. 0 = that knob is not ramped. Same scf_pscreen gate.
+    real(c_double) :: pscreen_xc_dcut = 0.0_dp       !< loose grid density cutoff during descent (0=off)
+    real(c_double) :: pscreen_xc_aocut = 0.0_dp      !< loose grid AO-prune threshold during descent (0=off)
+    ! Progressive XC coarse->fine grid ramp: use a coarse (pscreen_grid_rad x
+    ! pscreen_grid_ang Lebedev) grid during the descent, the full grid once pinned.
+    ! 0 = off. The coarse grid is built in hf_energy (dft_initialize needs basis
+    ! intent(inout)) and selected per-iteration in scf_driver. Energy-neutral: the
+    ! tail uses the full grid, and the XC build is non-incremental.
+    integer(c_int64_t) :: pscreen_grid_rad = 0       !< coarse radial points during descent (0=off)
+    integer(c_int64_t) :: pscreen_grid_ang = 0       !< coarse angular (Lebedev) points during descent (0=off)
     integer(c_int64_t) :: esp = 0                    !< (R)ESP charges, 0 - skip, 1 - ESP, 2 - RESP
     integer(c_int64_t) :: resp_target = 0            !< RESP charges target: 0 - zero, 1 - Mulliken
     real(c_double) :: resp_constr = 0.01             !< RESP charges constraint
     logical(c_bool) :: basis_set_issue = .false.     !< Basis set issue flag
-    real(c_double) :: conf_print_threshold = 5.0d-02             !< The threshold for configuration printout
+    real(c_double) :: conf_print_threshold = 5.0d-02 !< The threshold for configuration printout
+    logical(c_bool) :: rstctmo = .false.               !< Restrict new MO similar to previous MO. This is similar to MOM method
+    ! Scalar relativistic correction Parameters
+    integer(c_int64_t) :: scal_rel = 0               !< Douglas–Kroll–Hess correction (DKH) to the hcore
+                                                     !< 0   - no DKH correction
+                                                     !< 1   - first-order  DKH
+                                                     !< 2   - second-order DKH
+    integer(c_int64_t) :: soc_2e   = 1               !< SOC 2e solution: 0=off (1e only), 1=on (1e+2e)
+    ! SCF converger selection
+    integer(c_int64_t) :: converger_type = 0       !< SCF converger: 0=DIIS, 1=SOSCF, 2=TRAH
+    real(c_double) :: soscf_lvl_shift = 0.0_dp !< Level shifting parameter for SOSCF
+    integer(c_int64_t) :: verbose = 1          !< Controls output verbosity: 0 for minimal, 1+ for detailed.
+    ! Opentrustregion Parameter
+    logical(c_bool)        :: trh_stab = .false.    !< Enable stability check before/at convergence
+    logical(c_bool)        :: trh_ls   = .false.    !< Enable logarithmic line search on accepted steps
+    integer(c_int64_t)     :: trh_sub_solver=0      !< subsystem solver. 0: "davidson", 1 :"jacobi-davidson",2: "tcg" 
+    integer(c_int64_t)     :: trh_nrtv = 1          !< # of random trial vectors for initial subspace
+    real(c_double)         :: trh_r0   = 0.4d0      !< Initial trust-region radius
+    integer(c_int64_t)     :: trh_jd_start = 30     !< Number of micro iterations -> switches to the Jacobi-Davidson method.
+    integer(c_int64_t)     :: trh_nmic = 50         !< Max micro-iterations per macro step
+    real(c_double)         :: trh_gred = 1.0d-3     !< Global trust-radius reduction factor (0<gred<1)
+    real(c_double)         :: trh_lred = 1.0d-4     !< Local trust-radius reduction factor (0<lred<1)
+    integer(c_int64_t)     :: trh_impl = 1          !< TRAH solver: 1=native Fortran (default), 0=OpenTrustRegion (external)
+    ! SD parameters
+    logical(c_bool) :: sd_scf = .true.           !< prevent running the first SD-SCF calculation
+    ! PCM implicit solvent (energy-only, ddX backend; off by default)
+    logical(c_bool) :: pcm_enabled = .false.     !< Enable PCM reaction-field contribution to SCF
+    real(c_double)  :: pcm_epsilon = 78.3553_dp  !< Solvent dielectric constant (water default)
+    ! Performance knobs -- set from input keys via the control struct (see
+    ! pyoqp utils/perf_levels.py and the `perf` preset). Defaults reproduce the
+    ! historic behaviour. Kept in sync with struct control_parameters in include/oqp.h.
+    integer(c_int64_t) :: xc_c2f            = 1         !< coarse-to-fine XC grid (1=on, default)
+    integer(c_int64_t) :: xc_phi_cache      = 0         !< cache collocation Phi across SCF iters
+    integer(c_int64_t) :: xc_incdft         = 0         !< incremental DFT (experimental)
+    real(c_double)     :: grad_cutoff       = 1.0d-10   !< 2e-derivative Schwarz cutoff (gradient)
+    real(c_double)     :: mrsf_resp_cutoff  = 1.0d-8    !< MRSF response 2e cutoff
+    integer(c_int64_t) :: mrsf_fp32         = 0         !< FP32 MRSF response digestion
+    integer(c_int64_t) :: mrsf_zv_warmstart = 1         !< MRSF z-vector warm-start (1=on, default)
+    logical(c_bool) :: qmmm_flag = .false.       !< QM/MM Flag
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters
@@ -147,6 +208,11 @@ module types
     real(c_double) :: spc_coco = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_ovov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
     real(c_double) :: spc_coov = 0.0_dp    !< Spin-pair coupling parameter MRSF (C=closed, O=open, V=virtual MOs)
+    type(c_ptr) :: ixcore                  !< orbital index responsible for excitation (ixcore=1 means that it computes 
+    integer(c_int64_t) :: ixcore_len = 0   !< length of ixcore
+    integer(c_int64_t) :: z_solver = 0     !< z-vector solver: 0 (CG), 1 (GMRES legacy), 2 (MINRES), 3 (AUTO)
+    integer(c_int64_t) :: gmres_dim = 50   !< The Restart dimension of GMRES 
+    logical(c_bool) :: umrsf = .false.     !< UMRSF branch calculations switch in td_mrsf_energy module
   end type tddft_parameters
 
   type, public, bind(c) :: mpi_communicator
@@ -160,6 +226,7 @@ module types
     integer(c_int) :: element_id = -1
 !    integer(c_int) :: num_expo = 0
     integer(c_int) :: ang_mom = 0
+    integer(c_int) :: harmonic = 0   !< 1 = pure spherical-harmonic shell, 0 = Cartesian
     integer(c_int) :: ecp_nam = 0
     type(c_ptr) :: num_expo
     type(c_ptr) :: expo
@@ -180,6 +247,7 @@ module types
     type(tddft_parameters) :: tddft
     type(container_t) :: dat
     type(basis_set) :: basis
+    type(basis_set) :: alt_basis
     character(len=:), allocatable :: log_filename
     type(mpi_communicator) :: mpiinfo
     type(electron_shell) :: elshell
@@ -221,7 +289,6 @@ contains
     ok = 1
     this%atoms = atoms
 
-  end function
+end function
 
 end module types
-

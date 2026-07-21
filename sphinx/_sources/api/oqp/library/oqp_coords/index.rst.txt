@@ -1,0 +1,372 @@
+oqp.library.oqp_coords
+======================
+
+.. py:module:: oqp.library.oqp_coords
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Coordinate systems for the oqp OpenQP geometry optimizer.
+
+      This module is intentionally backend-agnostic: it depends only on NumPy and can
+      be unit-tested without the compiled OQP electronic-structure core.  It provides
+
+      * :class:`RedundantInternalCoordinates` -- bonds, angles and dihedrals built
+        from covalent connectivity, with the Wilson B-matrix, gradient/Hessian
+        transforms and an iterative Cartesian back-transformation
+        (Pulay/Fogarasi natural internals; Peng, Ayala, Schlegel, Frisch,
+        J. Comput. Chem. 17, 49 (1996)); and
+      * :class:`CartesianCoordinates` -- a trivial fall-back used when the internal
+        set fails to span the 3N-6 non-redundant space (e.g. linear molecules) or the
+        back-transformation diverges.
+
+      Both classes share the same small interface consumed by
+      ``oqp_engine.OQPEngine``::
+
+          coords.q(x)                 -> internal/Cartesian coordinate vector
+          coords.b_matrix(x)          -> dq/dx        (n_q, 3N)
+          coords.grad_to_q(x, gx)     -> gradient in working coordinates
+          coords.guess_hessian(x)     -> diagonal model Hessian (n_q, n_q)
+          coords.q_displacement(q2,q1)-> q2 - q1 with dihedral wrapping
+          coords.back_transform(x, dq)-> new Cartesian geometry for a step dq
+          coords.cart_rmsd(x, x_new)  -> RMS Cartesian displacement (Bohr)
+
+      All quantities are in atomic units (Bohr, radian, Hartree/Bohr ...).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.oqp_coords.BOHR_TO_ANGSTROM
+   oqp.library.oqp_coords.ANGSTROM_TO_BOHR
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.oqp_coords.Bond
+   oqp.library.oqp_coords.Angle
+   oqp.library.oqp_coords.Dihedral
+   oqp.library.oqp_coords.TranslationComponent
+   oqp.library.oqp_coords.RotationComponent
+   oqp.library.oqp_coords.RedundantInternalCoordinates
+   oqp.library.oqp_coords.DelocalizedInternalCoordinates
+   oqp.library.oqp_coords.CartesianCoordinates
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.oqp_coords.covalent_radius_bohr
+   oqp.library.oqp_coords.build_coordinates
+
+
+Module Contents
+---------------
+
+.. py:data:: BOHR_TO_ANGSTROM
+   :value: 0.52917721092
+
+
+.. py:data:: ANGSTROM_TO_BOHR
+   :value: 1.8897261245650618
+
+
+.. py:function:: covalent_radius_bohr(z: int) -> float
+
+   .. code-block:: text
+
+      Covalent radius of element ``z`` in Bohr (1.5 A fallback for heavy Z).
+
+
+.. py:class:: Bond(i, j)
+
+   .. py:attribute:: kind
+      :value: 'bond'
+
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:method:: value(x)
+
+
+   .. py:method:: derivatives(x)
+
+
+.. py:class:: Angle(i, j, k)
+
+   .. py:attribute:: kind
+      :value: 'angle'
+
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:method:: value(x)
+
+
+   .. py:method:: derivatives(x)
+
+
+.. py:class:: Dihedral(i, j, k, l)
+
+   .. py:attribute:: kind
+      :value: 'dihedral'
+
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:method:: value(x)
+
+
+   .. py:method:: derivatives(x, h=1e-06)
+
+
+.. py:class:: TranslationComponent(atoms, axis)
+
+   .. code-block:: text
+
+      One Cartesian centroid component of a fragment (analytic, constant B).
+
+
+   .. py:attribute:: kind
+      :value: 'translation'
+
+
+
+   .. py:attribute:: frag
+
+
+   .. py:attribute:: axis
+
+
+   .. py:attribute:: n
+
+
+   .. py:method:: value(x)
+
+
+   .. py:method:: derivatives(x)
+
+
+.. py:class:: RotationComponent(atoms, axis, reference_xyz)
+
+   .. code-block:: text
+
+      One exp-map rotation component of a fragment relative to a reference.
+
+      The value is evaluated analytically (Kabsch); the B-matrix row is taken by a
+      central finite difference of that value -- exact to ~1e-9 and free of the
+      intricate quaternion-derivative algebra, at negligible cost for the small
+      systems these optimizations target.
+
+
+   .. py:attribute:: kind
+      :value: 'rotation'
+
+
+
+   .. py:attribute:: frag
+
+
+   .. py:attribute:: axis
+
+
+   .. py:attribute:: ref
+
+
+   .. py:method:: value(x)
+
+
+   .. py:method:: derivatives(x, h=1e-05)
+
+
+.. py:class:: RedundantInternalCoordinates(primitives, natom)
+
+   .. code-block:: text
+
+      Redundant internal coordinate system (bonds, angles, dihedrals).
+
+
+   .. py:attribute:: primitives
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: ndim
+
+
+   .. py:method:: from_geometry(atoms, x, bond_factor=1.3)
+      :classmethod:
+
+
+      .. code-block:: text
+
+         Build internals from atomic numbers ``atoms`` and geometry ``x``.
+
+         Returns ``None`` when fewer than two atoms are present (nothing to do)
+         or when the constructed set is rank-deficient (caller falls back to
+         Cartesians).
+
+
+
+   .. py:method:: q(x)
+
+
+   .. py:method:: b_matrix(x)
+
+
+   .. py:method:: spans_internal_space(x, eig_tol=1e-06)
+
+
+   .. py:method:: grad_to_q(x, gx)
+
+
+   .. py:method:: guess_hessian(x)
+
+
+   .. py:method:: q_displacement(q2, q1)
+
+
+   .. py:method:: back_transform(x, dq, tol=1e-06, maxiter=50)
+
+      .. code-block:: text
+
+         Iteratively realise an internal-coordinate step ``dq`` in Cartesians.
+
+         Returns ``(x_new, ok)``; ``ok`` is False if the iteration diverged, in
+         which case the caller should shrink the step or fall back.
+
+
+
+   .. py:method:: cart_rmsd(x, x_new)
+
+
+.. py:class:: DelocalizedInternalCoordinates(ric, u, q_ref)
+
+   .. code-block:: text
+
+      Delocalized internal coordinates (Baker, JCP 105, 192 (1996)).
+
+      Non-redundant linear combinations of a redundant primitive set: the active
+      subspace ``U`` is the eigenvectors of G = B B^T with non-zero eigenvalue,
+      fixed at construction.  Coordinates are measured as displacements from the
+      construction geometry, so G_dlc is well conditioned and the transforms use a
+      plain solve instead of a pseudo-inverse.
+
+
+   .. py:attribute:: ric
+
+
+   .. py:attribute:: U
+
+
+   .. py:attribute:: q_ref
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: ndim
+
+
+   .. py:attribute:: primitives
+
+
+   .. py:method:: from_ric(ric, x, eig_tol=1e-06)
+      :classmethod:
+
+
+
+   .. py:method:: q(x)
+
+
+   .. py:method:: b_matrix(x)
+
+
+   .. py:method:: grad_to_q(x, gx)
+
+
+   .. py:method:: guess_hessian(x)
+
+
+   .. py:method:: q_displacement(q2, q1)
+
+
+   .. py:method:: back_transform(x, dq, tol=1e-06, maxiter=50)
+
+
+   .. py:method:: cart_rmsd(x, x_new)
+
+
+.. py:class:: CartesianCoordinates(natom)
+
+   .. code-block:: text
+
+      Trivial Cartesian coordinate system (identity B-matrix).
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: ndim
+
+
+   .. py:attribute:: primitives
+      :value: []
+
+
+
+   .. py:method:: q(x)
+
+
+   .. py:method:: b_matrix(x)
+
+
+   .. py:method:: grad_to_q(x, gx)
+
+
+   .. py:method:: guess_hessian(x)
+
+
+   .. py:method:: q_displacement(q2, q1)
+
+
+   .. py:method:: back_transform(x, dq, **_)
+
+
+   .. py:method:: cart_rmsd(x, x_new)
+
+
+.. py:function:: build_coordinates(atoms, x, coordsys='tric')
+
+   .. code-block:: text
+
+      Return a coordinate system for ``atoms``/``x``.
+
+      ``coordsys`` selects the working coordinates:
+
+      * ``tric`` (default) / ``auto`` -- translation-rotation internal coordinates;
+      * ``dlc`` -- delocalized internal coordinates;
+      * ``ric`` / ``internal`` -- redundant internal coordinates;
+      * ``cart`` / ``cartesian`` -- Cartesians.
+
+      All internal systems fall back to redundant internals and then Cartesians
+      when their set is unavailable or rank-deficient (e.g. linear species), so the
+      optimizer always has a usable coordinate system.
+
+

@@ -1,0 +1,197 @@
+oqp.library.libgeometric
+========================
+
+.. py:module:: oqp.library.libgeometric
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      geomeTRIC optimizer interface for OpenQP.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.libgeometric.BOHR_TO_ANGSTROM
+   oqp.library.libgeometric.ANGSTROM_TO_BOHR
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.libgeometric.GeometricEngine
+   oqp.library.libgeometric.GeometricOpt
+   oqp.library.libgeometric.GeometricMECIOpt
+   oqp.library.libgeometric.GeometricMECPOpt
+   oqp.library.libgeometric.GeometricTSOpt
+   oqp.library.libgeometric.GeometricIRCOpt
+   oqp.library.libgeometric.GeometricNEBOpt
+
+
+Module Contents
+---------------
+
+.. py:data:: BOHR_TO_ANGSTROM
+   :value: 0.52917721092
+
+
+.. py:data:: ANGSTROM_TO_BOHR
+   :value: 1.8897261245650618
+
+
+.. py:class:: GeometricEngine(optimizer, molecule)
+
+   .. code-block:: text
+
+      geomeTRIC custom engine that delegates energy/gradient calls to OpenQP.
+
+
+   .. py:attribute:: optimizer
+
+
+   .. py:attribute:: M
+
+
+   .. py:attribute:: stored_calcs
+
+
+   .. py:method:: calc(coords, dirname, read_data=False, copydir=None)
+
+
+   .. py:method:: clearCalcs()
+
+
+   .. py:method:: detect_dft()
+
+
+   .. py:method:: save_guess_files(dirname)
+
+      .. code-block:: text
+
+         No-op hook used by geomeTRIC engines that persist SCF guesses.
+
+
+
+   .. py:method:: load_guess_files(dirname)
+
+      .. code-block:: text
+
+         No-op hook used by geomeTRIC engines that restore SCF guesses.
+
+
+
+   .. py:method:: number_output(dirname, calc_number)
+
+      .. code-block:: text
+
+         No-op hook used by geomeTRIC NEB engines that version per-image outputs.
+
+
+
+   .. py:method:: calc_new(coords, dirname)
+
+
+.. py:class:: GeometricOpt(mol)
+
+   Bases: :py:obj:`_GeometricRunner`, :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      State-specific geometry optimization driven by geomeTRIC.
+
+
+.. py:class:: GeometricMECIOpt(mol)
+
+   Bases: :py:obj:`_GeometricRunner`, :py:obj:`oqp.library.libscipy.MECIOpt`
+
+
+   .. code-block:: text
+
+      MECI penalty/UBP objective minimized by geomeTRIC.
+
+
+.. py:class:: GeometricMECPOpt(mol)
+
+   Bases: :py:obj:`_GeometricRunner`, :py:obj:`oqp.library.libscipy.MECPOpt`
+
+
+   .. code-block:: text
+
+      MECP objective minimized by geomeTRIC.
+
+
+.. py:class:: GeometricTSOpt(mol)
+
+   Bases: :py:obj:`_GeometricRunner`, :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Transition-state optimization driven by geomeTRIC.
+
+
+.. py:class:: GeometricIRCOpt(mol)
+
+   Bases: :py:obj:`_GeometricRunner`, :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      Intrinsic reaction coordinate calculation driven by geomeTRIC.
+
+
+   .. py:attribute:: irc_direction
+
+
+.. py:class:: GeometricNEBOpt(mol)
+
+   Bases: :py:obj:`oqp.library.libscipy.StateSpecificOpt`
+
+
+   .. code-block:: text
+
+      State-specific geomeTRIC NEB path calculation.
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: neb_config
+
+
+   .. py:attribute:: geometric_config
+
+
+   .. py:attribute:: nimage
+
+
+   .. py:attribute:: coordsys
+
+
+   .. py:attribute:: trust
+
+
+   .. py:attribute:: tmax
+
+
+   .. py:attribute:: prefix
+
+
+   .. py:method:: plan_image_directories()
+
+      .. code-block:: text
+
+         Return isolated per-image working directories for a NEB path.
+
+
+
+   .. py:method:: optimize()
+
+

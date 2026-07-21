@@ -1,6 +1,6 @@
 module mod_dft_gridint
 
-  use precision, only: fp
+  use precision, only: fp, i8b
 !  use params, only: dft_wt_der
   use basis_tools, only: basis_set
   use io_constants, only: iw
@@ -8,7 +8,9 @@ module mod_dft_gridint
   use mod_dft_molgrid, only: dft_grid_t
   use functionals, only: functional_t
   use oqp_linalg
+  use blas_wrap, only: oqp_ddot => oqp_ddot_i64
   use parallel, only: par_env_t
+  use mod_dft_gridint_phi_cache, only: g_phi_cache, phi_cache_geom_hash
   implicit none
 
 !###############################################################################
@@ -89,6 +91,10 @@ module mod_dft_gridint
     real(kind=fp) :: ao_threshold = 0.0d0
     real(kind=fp) :: ao_sparsity_ratio = 0.0d0
 
+    !< Opt-in to the cross-iteration collocation-Phi cache (Opt 1). Only the
+    !< repeated SCF energy/Fock build sets this; gated further by env at runtime.
+    logical :: use_phi_cache = .false.
+
     !< alpha spin wavefunction
     real(KIND=fp), contiguous, pointer :: wfAlpha(:, :) => null()
     !< beta spin wavefunction
@@ -97,6 +103,11 @@ module mod_dft_gridint
     !< Molecular grid data
     type(dft_grid_t), pointer :: molGrid => null()
     type(functional_t), pointer :: functional
+
+    !< Per-atom symmetry-reduction weights (orbit size for unique atoms,
+    !< zero for their images); null => no reduction. Set only by the SCF
+    !< XC path; response/gradient consumers never set it.
+    real(KIND=fp), contiguous, pointer :: symAtomWeight(:) => null()
 
   end type
 
@@ -114,6 +125,10 @@ module mod_dft_gridint
     real(KIND=fp), allocatable :: tmpWfAlpha(:) !< tmp alpha spin wavefunction
     real(KIND=fp), allocatable :: tmpWfBeta(:) !< tmp beta spin wavefunction
     integer, allocatable :: indices_p(:) !< AO significant indices
+    integer, allocatable :: shells_p(:) !< shells surviving the slice-level prescreen
+    integer, allocatable :: deadAOs_(:) !< AOs of prescreened-out shells
+    integer, allocatable :: liveAOs_(:) !< AOs of surviving shells
+    logical, allocatable :: aoLive_(:) !< .true. for AOs of surviving shells
 
     real(KIND=fp), contiguous, pointer :: &
         aoMem(:, :, :) => null() & !< AO memory
@@ -141,9 +156,17 @@ module mod_dft_gridint
                                    !< .FALSE. - wfA and wfB are densities
     integer :: numAOs = 0 !< number of AOs
     integer :: numAOs_p = 0 !< number of pruned AOs
+    integer :: numShells_p = 0 !< number of shells in shells_p
+    integer :: numDeadAOs = 0 !< number of AOs in deadAOs_
+    integer :: numLiveAOs = 0 !< number of AOs in liveAOs_
     logical :: skip_p = .true. !< skip if no pruned numAOs
     integer :: numPts = 0
     integer :: numAtoms = 0
+    !< Index of the atom whose atomic grid generated the current slice
+    !< (molGrid%idOrigin(iSlice)); set by the slice driver before each
+    !< consumer update so consumers can associate points with their owning
+    !< atom (e.g. PCM per-atom multipole projection). 0 when not in a slice.
+    integer :: currAtom = 0
     integer :: maxPts = 0
     integer :: maxAngMom = 0
     integer :: nAODer = 0
@@ -180,6 +203,7 @@ module mod_dft_gridint
     procedure :: resetOrbPointers
     procedure :: resetXCPointers
     procedure :: compAOs
+    procedure :: buildShellList
     procedure :: pruneAOs
     procedure :: resetPrunedPointers
     procedure :: compMOs
@@ -276,6 +300,7 @@ module mod_dft_gridint
   public xc_consumer_t
   public xc_options_t
   public run_xc
+  public run_grid_aos
   public mo_tran_symm_
   public mo_tran_gemm_
   public xc_der1
@@ -573,6 +598,70 @@ contains
 
 !###############################################################################
 
+!> @brief Build the list of shells that can be nonzero anywhere in the
+!>  current slice of grid points
+!> @details The slice is enclosed in a bounding sphere and a shell
+!>  survives if the closest approach of the sphere to the shell origin
+!>  is within the shell extent (shell_mx_dist2).  AO evaluation then
+!>  loops only over surviving shells, and the AOs of screened-out
+!>  shells are known-zero without being touched.
+!> @param[in] basis  atomic basis set
+!> @param[in] xyz    absolute coordinates of the slice points
+  subroutine buildShellList(self, basis, xyz)
+    class(xc_engine_t) :: self
+    type(basis_set), intent(in) :: basis
+    real(kind=fp), intent(in) :: xyz(:,:)
+
+    real(kind=fp) :: cmin(3), cmax(3), c(3), rad, dmr
+    integer :: i, ish, n, nd, nl, off, nao
+
+    if (.not. allocated(self%shells_p)) then
+      allocate(self%shells_p(basis%nshell))
+      allocate(self%deadAOs_(self%numAOs))
+      allocate(self%liveAOs_(self%numAOs))
+      allocate(self%aoLive_(self%numAOs))
+    end if
+
+    ! Bounding sphere of the slice
+    cmin = xyz(1,1:3)
+    cmax = cmin
+    do i = 2, ubound(xyz,1)
+      cmin = min(cmin, xyz(i,1:3))
+      cmax = max(cmax, xyz(i,1:3))
+    end do
+    c = 0.5_fp*(cmin+cmax)
+    rad = 0.5_fp*sqrt(sum((cmax-cmin)**2))
+
+    n = 0
+    nd = 0
+    nl = 0
+    do ish = 1, basis%nshell
+      off = basis%ao_offset(ish)
+      nao = basis%naos(ish)
+      dmr = max(0.0_fp, &
+              sqrt(sum((basis%atoms%xyz(:3,basis%origin(ish)) - c)**2)) - rad)
+      if (dmr*dmr <= basis%shell_mx_dist2(ish)) then
+        n = n + 1
+        self%shells_p(n) = ish
+        do i = off, off+nao-1
+          nl = nl + 1
+          self%liveAOs_(nl) = i
+        end do
+        self%aoLive_(off:off+nao-1) = .true.
+      else
+        do i = off, off+nao-1
+          nd = nd + 1
+          self%deadAOs_(nd) = i
+        end do
+        self%aoLive_(off:off+nao-1) = .false.
+      end if
+    end do
+    self%numShells_p = n
+    self%numDeadAOs = nd
+    self%numLiveAOs = nl
+
+  end subroutine
+
 !> @brief Compute atomic orbital values/gradient/hessian in a grid point
 !> @param[in]  iPtIn      index of the point in self%xyzw array
 !> @param[in]  iPtOut     index of the point in AO/MO arrays
@@ -587,13 +676,19 @@ contains
     integer :: nnz, ipt
     real(kind=fp) :: ptxyz(3)
 
+    ! Screen out shells which are out of range for the whole slice;
+    ! their AO entries are left untouched (known zero), see pruneAOs
+    call self%buildShellList(basis, xyz)
+
+    associate (shells => self%shells_p(1:self%numShells_p))
+
     select case (nDer)
     case (0)
       do iPt = 1, ubound(xyz,1)
         ptxyz = xyz(iPt,1:3)
 
         call basis%aoval(ptxyz, nnz, &
-                     self%aoV(:, iPt))
+                     self%aoV(:, iPt), shells=shells)
       end do
     case (1)
       do iPt = 1, ubound(xyz,1)
@@ -603,7 +698,7 @@ contains
                       self%aoV(:, iPt), &
                       self%aoG1(:, iPt, X__), &
                       self%aoG1(:, iPt, Y__), &
-                      self%aoG1(:, iPt, Z__))
+                      self%aoG1(:, iPt, Z__), shells=shells)
       end do
     case (2)
       do iPt = 1, ubound(xyz,1)
@@ -619,7 +714,7 @@ contains
                        self%aoG2(:, iPt, ZZ_), &
                        self%aoG2(:, iPt, XY_), &
                        self%aoG2(:, iPt, YZ_), &
-                       self%aoG2(:, iPt, XZ_))
+                       self%aoG2(:, iPt, XZ_), shells=shells)
 
       end do
     case default
@@ -627,20 +722,46 @@ contains
       stop
     end select
 
+    end associate
+
   end subroutine
 
   subroutine pruneAOs(self, skip)
     class(xc_engine_t), target :: self
 
     logical :: skip
-    integer :: i, numAOs_p
+    integer :: i, j, l, v, numAOs_p
+    real(kind=fp) :: aoVMax(self%numLiveAOs)
+    real(kind=fp) :: aoMaxAll, thr
+
+    ! Per-AO maximum over all points, for the AOs of shells surviving
+    ! the slice-level prescreen only (entries of screened-out shells
+    ! were never evaluated and hold stale values), accumulated by
+    ! column sweeps (aoV rows are strided by numAOs)
+    aoVMax = 0.0_fp
+    do j = 1, self%numPts
+      do l = 1, self%numLiveAOs
+        aoVMax(l) = max(aoVMax(l), abs(self%aoV(self%liveAOs_(l), j)))
+      end do
+    end do
+
+    ! All grid quantities are bilinear in the AOs, so an AO whose
+    ! strongest possible pair product |ao_i|*max|ao| stays below the
+    ! threshold cannot contribute above it: when the largest AO value
+    ! in the slice is < 1 this sharpens the per-AO threshold.
+    aoMaxAll = 0.0_fp
+    do l = 1, self%numLiveAOs
+      aoMaxAll = max(aoMaxAll, aoVMax(l))
+    end do
+    thr = self%ao_threshold
+    if (aoMaxAll > 0.0_fp .and. aoMaxAll < 1.0_fp) thr = thr/aoMaxAll
 
     numAOs_p = 0
     ! Save significant indices
-    do i = 1, self%numAOs
-      if (maxval(abs(self%aoV(i, :))) > self%ao_threshold) then
+    do l = 1, self%numLiveAOs
+      if (aoVMax(l) > thr) then
         numAOs_p = numAOs_p + 1
-        self%indices_p(numAOs_p) = i
+        self%indices_p(numAOs_p) = self%liveAOs_(l)
       end if
     end do
 
@@ -656,6 +777,17 @@ contains
     if (self%skip_p) then
       ! Set the full number of AOs since we skip pruning AOs
       self%numAOs_p = self%numAOs
+
+      ! The full (uncompressed) AO arrays are used downstream, so the
+      ! never-evaluated entries of prescreened-out shells must be
+      ! zeroed.  Few shells are dead here, since most AOs survived.
+      if (self%numDeadAOs > 0) then
+        do v = 1, ubound(self%aoMem, 3)
+          do j = 1, self%numPts
+            self%aoMem(self%deadAOs_(1:self%numDeadAOs), j, v) = 0.0_fp
+          end do
+        end do
+      end if
 
       self%wfAlpha_p => self%wfAlpha
       if (self%hasbeta) &
@@ -675,10 +807,18 @@ contains
 !> @brief Adjust XC memory storage for a given
 !>  number of pruned grid points
 !> @author Konstantin Komarov
-  subroutine resetPrunedPointers(self)
+  subroutine resetPrunedPointers(self, gather)
     class(xc_engine_t), target :: self
+    !> When .false. (Phi-cache replay), skip the geometry-only AO gather/compaction
+    !> -- the cached Phi block is already in pruned layout -- but still recompute
+    !> the density-dependent wavefunction compression and (re)set all pointers.
+    logical, intent(in), optional :: gather
 
     real(kind=fp), pointer, dimension(:,:,:) :: reorderable_data
+    logical :: do_gather
+
+    do_gather = .true.
+    if (present(gather)) do_gather = gather
 
     associate(  numAOs    => self%numAOs &
               , numAOs_p  => self%numAOs_p &
@@ -689,25 +829,31 @@ contains
               , numTmpVec => self%numTmpVec &
               , indices   => self%indices_p &
       )
-      ! Setup the pointer for reorderable data
-      reorderable_data => self%aoMem(:, :, :)
+      ! Setup the pointer for reorderable data (source of the AO gather)
+      if (do_gather) reorderable_data => self%aoMem(:, :, :)
 
       ! Update pointers with pruned AOs
       self%aoMem(1:numAOs_p, 1:numPts, 1:numAOVecs) => self%aoMem_(1:)
 
       if (isWFVecs) then
 
-        ! Set pointer for pruned
-        self%wfAlpha_p(1:numAOs_p, 1:numAOs) => self%tmpWfAlpha(1:numAOs_p*numAOs)
-        ! Compress array
-        self%wfAlpha_p(:numAOs_p,:) = self%wfAlpha(indices(:numAOs_p),:)
+        ! Only the occupied MO coefficient columns are referenced in
+        ! compMOs, so compress just those instead of all numAOs columns
+        associate (nOccA => self%numOccAlpha, nOccB => self%numOccBeta)
 
-        if (hasBeta) then
           ! Set pointer for pruned
-          self%wfBeta_p(1:numAOs_p, 1:numAOs) => self%tmpWfBeta(1:numAOs_p*numAOs)
+          self%wfAlpha_p(1:numAOs_p, 1:nOccA) => self%tmpWfAlpha(1:numAOs_p*nOccA)
           ! Compress array
-          self%wfBeta_p(:numAOs_p, :) = self%wfBeta(indices(:numAOs_p),:)
-        end if
+          self%wfAlpha_p(:numAOs_p,:) = self%wfAlpha(indices(:numAOs_p),:nOccA)
+
+          if (hasBeta) then
+            ! Set pointer for pruned
+            self%wfBeta_p(1:numAOs_p, 1:nOccB) => self%tmpWfBeta(1:numAOs_p*nOccB)
+            ! Compress array
+            self%wfBeta_p(:numAOs_p, :) = self%wfBeta(indices(:numAOs_p),:nOccB)
+          end if
+
+        end associate
 
       else
 
@@ -730,7 +876,8 @@ contains
       select case (self%nAODer)
       case (0)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:1) = reorderable_data(indices(1:numAOs_p), :, 1:1)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -740,7 +887,8 @@ contains
 
       case (1)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:4) = reorderable_data(indices(1:numAOs_p), :, 1:4)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -754,7 +902,8 @@ contains
 
       case (2)
         ! Compress array
-        self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
+        if (do_gather) &
+          self%aoMem(1:numAOs_p, :, 1:10) = reorderable_data(indices(1:numAOs_p), :, 1:10)
 
         ! Update pointers for pruned
         self%aoV => self%aoMem(:, :, 1)
@@ -904,17 +1053,18 @@ contains
  subroutine compRRho_ab(xce, mo, rho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rho(:,:,:)
-    real(kind=fp), intent(in) :: mo(:,:,:,:)
-    integer :: i, j, k, nMtx, nSpin
+    real(kind=fp), contiguous, intent(out) :: rho(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:,:)
+    integer :: i, j, k, m, nMtx, nSpin
 
     nMtx = ubound(mo,3)
     nSpin = ubound(mo,4)
+    m = xce%numAOs_p
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          rho(k,i,j) = dot_product(xce%aoV(:,i), mo(:,i,j,k))
+          rho(k,i,j) = oqp_ddot(m, xce%aoV(:,i), 1, mo(:,i,j,k), 1)
         end do
       end do
     end do
@@ -930,20 +1080,26 @@ contains
  subroutine compRDRho_ab(xce, mo, drrho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(in) :: mo(:,:,:,:)
-    real(kind=fp), intent(out) :: drrho(:,:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:,:)
+    real(kind=fp), contiguous, intent(out) :: drrho(:,:,:,:)
 
-    integer :: i, j, k, nMtx, nSpin
+    integer :: i, j, k, m, ldg, nMtx, nSpin
+    real(kind=fp) :: d3(3)
 
     nMtx = ubound(mo,3)
     nSpin = ubound(mo,4)
+    m = xce%numAOs_p
+    ! aoG1 X/Y/Z planes are equidistant in memory: treat them as the
+    ! columns of an m x 3 matrix and get all three derivatives from
+    ! a single dgemv
+    ldg = size(xce%aoG1,1)*size(xce%aoG1,2)
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          drrho(1,k,i,j) = 2*dot_product(xce%aoG1(:,i,1), mo(:,i,j,k))
-          drrho(2,k,i,j) = 2*dot_product(xce%aoG1(:,i,2), mo(:,i,j,k))
-          drrho(3,k,i,j) = 2*dot_product(xce%aoG1(:,i,3), mo(:,i,j,k))
+          call dgemv('T', m, 3, 2.0_fp, xce%aoG1(:,i,1), ldg, &
+                     mo(:,i,j,k), 1, 0.0_fp, d3, 1)
+          drrho(1:3,k,i,j) = d3
         end do
       end do
     end do
@@ -958,17 +1114,23 @@ contains
  subroutine compRTau_ab(xce, moG1, rtau)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rtau(:,:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:,:)
-    integer :: i, j, k, nSpin, nMtx
+    real(kind=fp), contiguous, intent(out) :: rtau(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:,:)
+    integer :: i, j, k, d, m, nSpin, nMtx
+    real(kind=fp) :: t
 
     nSpin = ubound(moG1,5)
     nMtx = ubound(moG1, 4)
+    m = xce%numAOs_p
 
     do k = 1, nSpin
       do j = 1, nMtx
         do i = 1, xce%numPts
-          rtau(k,i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j,k))
+          t = 0
+          do d = 1, 3
+            t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j,k), 1)
+          end do
+          rtau(k,i,j) = 0.5*t
         end do
       end do
     end do
@@ -984,15 +1146,16 @@ contains
  subroutine compRRho_a(xce, mo, rho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: rho(:,:)
-    real(kind=fp), intent(in) :: mo(:,:,:)
-    integer :: j, i, nMtx
+    real(kind=fp), contiguous, intent(out) :: rho(:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:)
+    integer :: j, i, m, nMtx
 
     nMtx = ubound(mo,3)
+    m = xce%numAOs_p
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        rho(i,j) = dot_product(xce%aoV(:,i), mo(:,i,j))
+        rho(i,j) = oqp_ddot(m, xce%aoV(:,i), 1, mo(:,i,j), 1)
       end do
     end do
 
@@ -1007,18 +1170,22 @@ contains
  subroutine compRDRho_a(xce, mo, drrho)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(in) :: mo(:,:,:)
-    real(kind=fp), intent(out) :: drrho(:,:,:)
+    real(kind=fp), contiguous, intent(in) :: mo(:,:,:)
+    real(kind=fp), contiguous, intent(out) :: drrho(:,:,:)
 
-    integer :: i, j, nMtx
+    integer :: i, j, m, ldg, nMtx
+    real(kind=fp) :: d3(3)
 
     nMtx = ubound(mo,3)
+    m = xce%numAOs_p
+    ! aoG1 X/Y/Z planes as columns of an m x 3 matrix, see compRDRho_ab
+    ldg = size(xce%aoG1,1)*size(xce%aoG1,2)
 
     do j = 1, nMtx
       do i = 1, xce%numPts
-        drrho(1,i,j) = 2*dot_product(xce%aoG1(:,i,1), mo(:,i,j))
-        drrho(2,i,j) = 2*dot_product(xce%aoG1(:,i,2), mo(:,i,j))
-        drrho(3,i,j) = 2*dot_product(xce%aoG1(:,i,3), mo(:,i,j))
+        call dgemv('T', m, 3, 2.0_fp, xce%aoG1(:,i,1), ldg, &
+                   mo(:,i,j), 1, 0.0_fp, d3, 1)
+        drrho(1:3,i,j) = d3
       end do
     end do
 
@@ -1032,13 +1199,20 @@ contains
  subroutine compRTau_a(xce, moG1, tau)
 
     class(xc_engine_t) :: xce
-    real(kind=fp), intent(out) :: tau(:,:)
-    real(kind=fp), intent(in) :: moG1(:,:,:,:)
-    integer :: i, j
+    real(kind=fp), contiguous, intent(out) :: tau(:,:)
+    real(kind=fp), contiguous, intent(in) :: moG1(:,:,:,:)
+    integer :: i, j, d, m
+    real(kind=fp) :: t
+
+    m = xce%numAOs_p
 
     do j = 1, ubound(moG1,4)
       do i = 1, xce%numPts
-        tau(i,j) = 0.5*sum(xce%aoG1(:,i,1:3)*moG1(:,i,1:3,j))
+        t = 0
+        do d = 1, 3
+          t = t + oqp_ddot(m, xce%aoG1(:,i,d), 1, moG1(:,i,d,j), 1)
+        end do
+        tau(i,j) = 0.5*t
       end do
     end do
 
@@ -1078,17 +1252,18 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: rho(:,:)
-    integer :: i
+    integer :: i, m
 
+    m = self%numAOs_p
 
     if (self%hasBeta) then
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%aoV(:,i), self%moVA(:,i))
-        rho(2,i) = dot_product(self%aoV(:,i), self%moVB(:,i))
+        rho(1,i) = oqp_ddot(m, self%aoV(:,i), 1, self%moVA(:,i), 1)
+        rho(2,i) = oqp_ddot(m, self%aoV(:,i), 1, self%moVB(:,i), 1)
       end do
     else
       do i = 1, self%numPts
-        rho(1,i) = 0.5_fp*dot_product(self%aoV(:,i), self%moVA(:,i))
+        rho(1,i) = 0.5_fp*oqp_ddot(m, self%aoV(:,i), 1, self%moVA(:,i), 1)
         rho(2,i) = rho(1,i)
       end do
     end if
@@ -1111,12 +1286,12 @@ contains
 
     if (self%hasBeta) then
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%moVA(:noa,i), self%moVA(:noa,i))
-        rho(2,i) = dot_product(self%moVB(:nob,i), self%moVB(:nob,i))
+        rho(1,i) = oqp_ddot(noa, self%moVA(:,i), 1, self%moVA(:,i), 1)
+        rho(2,i) = oqp_ddot(nob, self%moVB(:,i), 1, self%moVB(:,i), 1)
       end do
     else
       do i = 1, self%numPts
-        rho(1,i) = dot_product(self%moVA(:noa,i), self%moVA(:noa,i))
+        rho(1,i) = oqp_ddot(noa, self%moVA(:,i), 1, self%moVA(:,i), 1)
         rho(2,i) = rho(1,i)
       end do
     end if
@@ -1133,19 +1308,22 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j
+    integer :: i, m, ldg
     real(kind=fp) :: drhoa(3), drhob(3)
+
+    m = self%numAOs_p
+    ! aoG1 X/Y/Z planes as columns of an m x 3 matrix, see compRDRho_ab
+    ldg = size(self%aoG1,1)*size(self%aoG1,2)
 
     do i = 1, self%numPts
       if (self%hasBeta) then
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%aoG1(:,i,j), self%moVA(:,i))
-          drhob(j) = 2*dot_product(self%aoG1(:,i,j), self%moVB(:,i))
-        end do
+        call dgemv('T', m, 3, 2.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
+        call dgemv('T', m, 3, 2.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVB(:,i), 1, 0.0_fp, drhob, 1)
       else
-        do j = 1, 3
-          drhoa(j) = dot_product(self%aoG1(:,i,j), self%moVA(:,i))
-        end do
+        call dgemv('T', m, 3, 1.0_fp, self%aoG1(:,i,1), ldg, &
+                   self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
         drhob = drhoa
       end if
       drho(1:3,i) = drhoa
@@ -1167,22 +1345,27 @@ contains
 
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: drho(:,:), sigma(:,:)
-    integer :: i, j, noa, nob
+    integer :: i, lda, ldb, noa, nob
     real(kind=fp) :: drhoa(3), drhob(3)
 
     noa = self%numOccAlpha
     nob = self%numOccBeta
+    ! moG1 X/Y/Z planes as columns of an (nocc) x 3 matrix, see compRDRho_ab
+    lda = size(self%moG1A,1)*size(self%moG1A,2)
+    ldb = lda
+    if (self%hasBeta) ldb = size(self%moG1B,1)*size(self%moG1B,2)
+
+    ! dgemv quick-returns without touching y when m == 0
+    drhoa = 0
+    drhob = 0
 
     do i = 1, self%numPts
+      call dgemv('T', noa, 3, 2.0_fp, self%moG1A(:,i,1), lda, &
+                 self%moVA(:,i), 1, 0.0_fp, drhoa, 1)
       if (self%hasBeta) then
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%moG1A(:noa,i,j), self%moVA(:noa,i))
-          drhob(j) = 2*dot_product(self%moG1B(:nob,i,j), self%moVB(:nob,i))
-        end do
+        call dgemv('T', nob, 3, 2.0_fp, self%moG1B(:,i,1), ldb, &
+                   self%moVB(:,i), 1, 0.0_fp, drhob, 1)
       else
-        do j = 1, 3
-          drhoa(j) = 2*dot_product(self%moG1A(:noa,i,j), self%moVA(:noa,i))
-        end do
         drhob = drhoa
       end if
       drho(1:3,i) = drhoa
@@ -1205,17 +1388,19 @@ contains
     class(xc_engine_t) :: self
     real(kind=fp), intent(out) :: tau(:,:)
     real(kind=fp) :: taua(3), taub(3)
-    integer :: i, j
+    integer :: i, j, m
+
+    m = self%numAOs_p
 
     do i = 1, self%numPts
       if (self%hasBeta) then
         do j = 1, 3
-          taua(j) = dot_product(self%aoG1(:,i,j), self%moG1A(:,i,j))
-          taub(j) = dot_product(self%aoG1(:,i,j), self%moG1B(:,i,j))
+          taua(j) = oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1A(:,i,j), 1)
+          taub(j) = oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1B(:,i,j), 1)
         end do
       else
         do j = 1, 3
-          taua(j) = 0.5_fp*dot_product(self%aoG1(:,i,j), self%moG1A(:,i,j))
+          taua(j) = 0.5_fp*oqp_ddot(m, self%aoG1(:,i,j), 1, self%moG1A(:,i,j), 1)
         end do
         taub = taua
       end if
@@ -1246,12 +1431,12 @@ contains
     do i = 1, self%numPts
       if (self%hasBeta) then
         do j = 1, 3
-          taua(j) = dot_product(self%moG1A(:noa,i,j), self%moG1A(:noa,i,j))
-          taub(j) = dot_product(self%moG1B(:nob,i,j), self%moG1B(:nob,i,j))
+          taua(j) = oqp_ddot(noa, self%moG1A(:,i,j), 1, self%moG1A(:,i,j), 1)
+          taub(j) = oqp_ddot(nob, self%moG1B(:,i,j), 1, self%moG1B(:,i,j), 1)
         end do
       else
         do j = 1, 3
-          taua(j) = dot_product(self%moG1A(:noa,i,j), self%moG1A(:noa,i,j))
+          taua(j) = oqp_ddot(noa, self%moG1A(:,i,j), 1, self%moG1A(:,i,j), 1)
         end do
         taub = taua
       end if
@@ -1278,12 +1463,15 @@ contains
     integer, intent(in) :: nPts
 
     integer :: i, j
-    real(kind=fp) :: f
+    real(kind=fp), allocatable :: w(:)
+
+    allocate(w(size(bfGrad,1)))
 
     do i = 1, nPts
-        f = fGrad(i)*2.0_fp
+!       Scaled orbital values are shared by the three Cartesian directions
+        w = moV(:,i)*(fGrad(i)*2.0_fp)
         do j = 1, 3
-          bfGrad(:,j) = bfGrad(:,j) + aoG1(:,i,j)*moV(:,i)*f
+          bfGrad(:,j) = bfGrad(:,j) + aoG1(:,i,j)*w
         end do
     end do
 
@@ -1304,19 +1492,25 @@ contains
     real(kind=fp), contiguous, intent(in) :: aoG1(:,:,:), aoG2(:,:,:)
     integer, intent(in) :: npts
 
-    integer :: i, jt, j1, j2
+    integer :: i, j1
     real(kind=fp) :: f(3)
+    real(kind=fp), allocatable :: s(:), t(:)
+
+    allocate(s(size(bfGrad,1)), t(size(bfGrad,1)))
 
     do i = 1, nPts
       f = fGrad(i,:)*2.0_fp
+
+!     s = sum_j2 f(j2)*moG1(:,i,j2) is shared by the three output directions;
+!     contracting aoG2/moG1 with f first halves the number of full-vector
+!     passes compared to the straightforward 3x3 (j1,j2) loop.
+      s = f(1)*moG1(:,i,1) + f(2)*moG1(:,i,2) + f(3)*moG1(:,i,3)
+
       do j1 = 1, 3 ! X__ Y__ Z__
-          do j2 = 1, 3 ! X__ Y__ Z__
-              jt = SQ_TO_TR(j1,j2)
-              bfGrad(:,j1) = bfGrad(:,j1) + f(j2)* &
-                  (  aoG2(:,i,jt)  *  moV(:,i) &
-                   + aoG1(:,i,j1)  * moG1(:,i,j2) &
-                  )
-          end do
+          t = f(1)*aoG2(:,i,SQ_TO_TR(j1,1)) &
+            + f(2)*aoG2(:,i,SQ_TO_TR(j1,2)) &
+            + f(3)*aoG2(:,i,SQ_TO_TR(j1,3))
+          bfGrad(:,j1) = bfGrad(:,j1) + t*moV(:,i) + aoG1(:,i,j1)*s
       end do
     end do
 
@@ -1336,16 +1530,20 @@ contains
     real(kind=fp), contiguous, intent(in) :: aoG2(:,:,:)
     integer, intent(in) :: npts
 
-    integer :: i, j1, j2, jt
-    real(kind=fp) :: f
+    integer :: i, j1
+    real(kind=fp), allocatable :: w(:,:)
+
+    allocate(w(size(bfGrad,1),3))
 
     do i = 1, npts
-        f = fgrad(i)
+!       Pre-scale the orbital gradients once per point; the three scaled
+!       vectors are then reused by all three output directions.
+        w = moG1(:,i,:)*fgrad(i)
         do j1 = 1, 3 ! x__ y__ z__
-            do j2 = 1, 3 ! x__ y__ z__
-                jt = sq_to_tr(j1,j2)
-                bfgrad(:,j1) = bfgrad(:,j1) + f*aoG2(:,i,jt)*moG1(:,i,j2)
-            end do
+            bfgrad(:,j1) = bfgrad(:,j1) &
+                         + aoG2(:,i,sq_to_tr(j1,1))*w(:,1) &
+                         + aoG2(:,i,sq_to_tr(j1,2))*w(:,2) &
+                         + aoG2(:,i,sq_to_tr(j1,3))*w(:,3)
         end do
     end do
 
@@ -2119,7 +2317,10 @@ contains
 
   subroutine run_xc(xc_opts, xc_dat, basis)
     use basis_tools, only: basis_set
-!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
+    use blas_thread, only: blas_thread_count, blas_thread_set
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
+!$                     omp_get_max_threads, omp_get_num_procs, omp_get_wtime
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2137,6 +2338,7 @@ contains
     integer :: next
     integer :: iSlice
     integer :: iAtom
+    real(KIND=fp) :: symw
     integer :: npt
 
     integer :: i
@@ -2147,7 +2349,38 @@ contains
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
 
+    integer(c_int64_t) :: nBlasThreads
 
+    ! Opt 1: collocation-Phi cache (geometry-only reuse across SCF iterations)
+    integer, parameter :: nAOVecs_tbl(0:3) = [1, 4, 10, 20]
+    logical :: cache_on, cache_replay
+    integer :: nAODer_c, numAOVecs_c, naop_c
+    logical :: skip_p_c
+    integer(i8b) :: ghash
+    ! Env-gated phase timing (OQP_XC_TIMING): geometry/Phi vs density-driven XC
+    logical :: do_timing
+    character(len=8) :: tenv
+    integer :: tst, tln
+    real(KIND=fp) :: t_geom, t_xc, tic
+    t_geom = 0.0_fp
+    t_xc   = 0.0_fp
+    tic    = 0.0_fp
+
+
+!   The slice loop below issues many small BLAS calls from inside the
+!   OpenMP parallel region.  A BLAS-internal thread pool (e.g. pthread
+!   builds of OpenBLAS) is unaware of the surrounding parallelism, so
+!   when all cores are already busy with OpenMP threads it oversubscribes
+!   the machine and serializes on its pool lock.  Cap the BLAS threads
+!   such that OpenMP x BLAS does not exceed the core count.
+    nBlasThreads = -1
+!$  if (omp_get_max_threads() > 1) then
+!$    nBlasThreads = blas_thread_count()
+!$    if (nBlasThreads > 0) then
+!$      call blas_thread_set(int(max(1, &
+!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$    end if
+!$  end if
 
     next = -1
     myjob = -1
@@ -2167,14 +2400,36 @@ contains
     totgradxyz = 0
     totkin = 0
 
+    ! --- Opt 1: configure the collocation-Phi cache for this build ------------
+    ! Only the repeated SCF energy/Fock build opts in (use_phi_cache); gated
+    ! further by the env var. The same numAOVecs formula as xc_engine_t%init.
+    nAODer_c = xc_opts%nDer
+    if (xc_opts%isGGA .or. xc_opts%needTau) nAODer_c = nAODer_c + 1
+    numAOVecs_c = nAOVecs_tbl(nAODer_c)
+    cache_on = xc_opts%use_phi_cache
+    ghash = 0_i8b
+    if (cache_on) ghash = phi_cache_geom_hash(basis%atoms%xyz)
+    call g_phi_cache%begin_run(cache_on, xc_opts%molGrid%nSlices, &
+             xc_opts%molGrid%nMolPts, xc_opts%numAOs, &
+             numAOVecs_c, xc_opts%numAtoms, ghash, dftthr)
+    cache_replay = g_phi_cache%active .and. g_phi_cache%replay
+
+    ! --- Env-gated per-build phase timing ------------------------------------
+    call get_environment_variable('OQP_XC_TIMING', tenv, length=tln, status=tst)
+    do_timing = (tst == 0 .and. tln > 0 .and. &
+        (tenv(1:1) == '1' .or. tenv(1:1) == 't' .or. tenv(1:1) == 'T' .or. &
+         tenv(1:1) == 'y' .or. tenv(1:1) == 'Y' .or. &
+         tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
+
 !$omp parallel &
 !$omp   private(iChunk, chunkSize, numThreads, done) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
 !$omp   private(i), &
-!$omp   private(iAtom), &
+!$omp   private(iAtom, symw), &
 !$omp   private(skip), &
-!$omp   reduction(+:exc, totele, totgradxyz, totkin)
+!$omp   private(naop_c, skip_p_c, tic) &
+!$omp   reduction(+:exc, totele, totgradxyz, totkin, t_geom, t_xc)
 
     numThreads = 1
     myThread = 1
@@ -2200,23 +2455,76 @@ contains
 !$omp do schedule(dynamic)
       slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
 
-        call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
-        if (numNzPts==0) CYCLE
+!$      if (do_timing) tic = omp_get_wtime()
 
         iAtom = xc_opts%molGrid%idOrigin(iSlice)
 
-        call xce%resetPointers(numNzPts)
+        ! Symmetry reduction: integrate only unique atoms' slices, with
+        ! quadrature weights scaled by the atom-orbit size. Geometry-only, so
+        ! it is recomputed identically on a cache replay (the cached weights
+        ! already include the symw scaling baked in during the build pass).
+        symw = 1.0_fp
+        if (associated(xc_opts%symAtomWeight)) then
+          symw = xc_opts%symAtomWeight(iAtom)
+          if (symw == 0.0_fp) CYCLE
+        end if
 
-        do i = 1, numNzPts
-          xce%xyzw(i,:3) = &
-            xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
-        end do
+        if (cache_replay) then
+          ! ---- Opt 1 REPLAY: restore the cached geometry-only Phi block -----
+          call g_phi_cache%get_meta(iSlice, skip, numNzPts, naop_c, skip_p_c)
+          if (skip) CYCLE
+          call xce%resetPointers(numNzPts)
+          xce%numAOs_p = naop_c
+          xce%skip_p   = skip_p_c
+          call g_phi_cache%get_bulk(iSlice, xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+          if (skip_p_c) then
+            ! dense slice: full AO layout from resetPointers; wf is uncompressed
+            xce%wfAlpha_p => xce%wfAlpha
+            if (xce%hasBeta) xce%wfBeta_p => xce%wfBeta
+          else
+            ! sparse slice: cached Phi already pruned; recompute wf compression
+            ! and (re)set pruned pointers, but skip the geometry-only AO gather
+            call xce%resetPrunedPointers(gather=.false.)
+          end if
+        else
+          ! ---- BUILD: compute Phi as usual (and store it when caching) ------
+          call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
+          if (numNzPts==0) then
+            if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
+                              xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+            CYCLE
+          end if
 
-        call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+          if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
 
-        call xce%pruneAOs(skip)
+          call xce%resetPointers(numNzPts)
 
-        IF (skip) CYCLE
+          do i = 1, numNzPts
+            xce%xyzw(i,:3) = &
+              xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
+          end do
+
+          call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+
+          call xce%pruneAOs(skip)
+
+          IF (skip) then
+            if (cache_on) call g_phi_cache%store(iSlice, .true., 0, 0, .true., &
+                              xce%indices_p, xce%aoMem_, xce%xyzw(:,4))
+            CYCLE
+          end if
+
+          if (cache_on) call g_phi_cache%store(iSlice, .false., xce%numPts, &
+                            xce%numAOs_p, xce%skip_p, xce%indices_p, &
+                            xce%aoMem_, xce%xyzw(:,4))
+        end if
+
+!$      if (do_timing) then
+!$        t_geom = t_geom + omp_get_wtime() - tic
+!$        tic = omp_get_wtime()
+!$      end if
+
+        xce%currAtom = iAtom
 
         call xce%compXC(xc_opts%functional, skip)
 
@@ -2225,6 +2533,8 @@ contains
         call xc_dat%update(xce, myThread)
 
         call xc_dat%postUpdate(xce, myThread)
+
+!$      if (do_timing) t_xc = t_xc + omp_get_wtime() - tic
 
       end do slc
 !$omp end do nowait
@@ -2239,6 +2549,23 @@ contains
     deallocate (xce)
 !$omp end parallel
 
+    ! Finalize the Phi cache build pass (mark ready, tally footprint).
+    call g_phi_cache%finish_run()
+
+    if (do_timing) then
+      ! Phase times below are aggregate THREAD-seconds (summed over threads),
+      ! used to show the geomPhi(build)->geomPhi(replay) drop and the
+      ! geom-vs-density composition. The authoritative per-build WALL time is
+      ! the serial [SCFTIME] wall_XCbuild printed by calc_jk_xc.
+      write(iw,'(1x,a,a8,a,i7,a,f9.4,a,f9.4,a,f9.4,a,f8.1,a)') &
+        '[XCTIME] phi-cache=', merge('replay', merge('build ', 'off   ', cache_on), cache_replay), &
+        ' nz_pts=', npt, &
+        '  thrS_geomPhi=', t_geom, 's  thrS_xc=', t_xc, &
+        's  thrS_xcbuild=', t_geom+t_xc, 's  cacheMB=', real(g_phi_cache%nbytes,fp)/1.048576d6, ' '
+    end if
+
+    call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
+
     call xc_dat%parallel_stop()
     call xc_dat%pe%allreduce(exc, 1)
     call xc_dat%pe%allreduce(totele, 1)
@@ -2249,6 +2576,131 @@ contains
     xc_dat%N_elec = totele
     xc_dat%E_kin = totkin
     xc_dat%G_total = totgradxyz
+
+  end subroutine
+
+!> @brief Drive a grid loop that only evaluates AO values on the molecular grid.
+!>
+!> This is a stripped-down variant of run_xc used by guesses that need
+!> one-electron operators integrated numerically on the DFT grid (e.g. the
+!> superposition-of-atomic-potentials guess). It performs the same slice
+!> loop, coordinate shift, AO evaluation and AO pruning as run_xc, but skips
+!> the exchange-correlation evaluation (compXC) entirely, so no functional is
+!> required. The consumer's update/postUpdate hooks see xce%aoV, xce%wts and
+!> xce%xyzw (absolute point coordinates) for the pruned points.
+  subroutine run_grid_aos(xc_opts, xc_dat, basis)
+    use basis_tools, only: basis_set
+    use blas_thread, only: blas_thread_count, blas_thread_set
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
+!$                     omp_get_max_threads, omp_get_num_procs
+
+    implicit none
+    class(xc_consumer_t), intent(inout) :: xc_dat
+    type(xc_options_t), intent(in) :: xc_opts
+    type(basis_set), intent(in) :: basis
+
+    type(xc_engine_t), allocatable :: xce
+
+    logical :: skip
+    real(KIND=fp) :: dftthr, wcutoff
+    integer :: iSlice, iAtom, npt, i, numNzPts
+    real(KIND=fp) :: symw
+    integer :: iChunk, chunkSize
+    integer :: myThread, numThreads
+    integer(c_int64_t) :: nBlasThreads
+
+!   Cap BLAS threads inside the slice-parallel region, see run_xc
+    nBlasThreads = -1
+!$  if (omp_get_max_threads() > 1) then
+!$    nBlasThreads = blas_thread_count()
+!$    if (nBlasThreads > 0) then
+!$      call blas_thread_set(int(max(1, &
+!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$    end if
+!$  end if
+
+    npt = xc_opts%molGrid%nMolPts
+    dftthr = 1.0d-04/npt
+    if (xc_opts%dft_threshold > 0.0d0) dftthr = xc_opts%dft_threshold
+
+    wcutoff = 1.0d-15
+    if (dftthr > 1.1d-15) wcutoff = 1.0d-08/npt
+
+!$omp parallel &
+!$omp   private(iChunk, chunkSize, numThreads) &
+!$omp   private(iSlice, numNzPts, xce) &
+!$omp   private(myThread), &
+!$omp   private(i), &
+!$omp   private(iAtom, symw), &
+!$omp   private(skip)
+
+    numThreads = 1
+    myThread = 1
+!$  numThreads = omp_get_num_threads()
+!$  myThread = omp_get_thread_num()+1
+    chunkSize = max(1, xc_opts%molGrid%nSlices/(xc_dat%pe%size*4))
+    if (chunkSize/numThreads > 40) then
+      chunkSize = 40*numThreads
+    end if
+    allocate (xce)
+    call xce%init(xc_opts)
+
+!$omp master
+    call xc_dat%parallel_start(xce, numThreads)
+!$omp end master
+!$omp barrier
+
+    do iChunk = 1, xc_opts%molGrid%nSlices, chunkSize
+      if (mod(iChunk/chunkSize, xc_dat%pe%size) /= xc_dat%pe%rank) cycle
+
+!$omp do schedule(dynamic)
+      slc: do iSlice = iChunk, min(xc_opts%molGrid%nSlices, iChunk-1+chunkSize)
+
+        iAtom = xc_opts%molGrid%idOrigin(iSlice)
+
+        ! Symmetry reduction: integrate only unique atoms' slices, with
+        ! quadrature weights scaled by the atom-orbit size.
+        symw = 1.0_fp
+        if (associated(xc_opts%symAtomWeight)) then
+          symw = xc_opts%symAtomWeight(iAtom)
+          if (symw == 0.0_fp) CYCLE
+        end if
+
+        call xc_opts%molgrid%getSliceNonZero(wcutoff, iSlice, xce%xyzw, numNzPts)
+        if (numNzPts==0) CYCLE
+
+        if (symw /= 1.0_fp) xce%xyzw(1:numNzPts, 4) = symw*xce%xyzw(1:numNzPts, 4)
+
+        call xce%resetPointers(numNzPts)
+
+        do i = 1, numNzPts
+          xce%xyzw(i,:3) = &
+            xce%xyzw(i,:3) + basis%atoms%xyz(:3,iAtom)
+        end do
+
+        call xce%compAOs(basis, xce%nAODer, xce%xyzw(:numNzPts,:3))
+
+        call xce%pruneAOs(skip)
+
+        IF (skip) CYCLE
+
+        xce%currAtom = iAtom
+
+        call xc_dat%update(xce, myThread)
+
+        call xc_dat%postUpdate(xce, myThread)
+
+      end do slc
+!$omp end do nowait
+    end do
+
+    deallocate (xce)
+!$omp end parallel
+
+    call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
+
+    call xc_dat%parallel_stop()
 
   end subroutine
 

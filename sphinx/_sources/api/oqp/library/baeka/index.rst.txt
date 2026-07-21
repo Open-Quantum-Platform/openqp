@@ -1,0 +1,322 @@
+oqp.library.baeka
+=================
+
+.. py:module:: oqp.library.baeka
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Generalized Baek adaptive-penalty kernel for conical intersections.
+
+      The published three-state objective removes the redundant outer-state gap and
+      penalizes only the two consecutive gaps.  This module extends that construction
+      to ``N >= 2`` states by using the ``N - 1`` adjacent gaps, together with an SVD
+      projector for their independent gradient subspace.  It contains no OpenQP
+      backend calls and is therefore directly unit-testable.
+
+      The multiplier updates are additive, as in Baek's equations 3.12--3.13::
+
+          sigma <- sigma + delta_beta        (ordinary macro iteration)
+          sigma <- sigma + beta              (locally stationary, gap still open)
+
+      ``alpha`` and all gaps are energies (Hartree); ``sigma``, ``delta_beta`` and
+      ``beta`` are dimensionless.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.baeka.ArrayLike
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   oqp.library.baeka.BaekAJumpScheduleExhausted
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.baeka.BaekAObjective
+   oqp.library.baeka.BaekAEvaluation
+   oqp.library.baeka.BaekAState
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.baeka.parse_jump_schedule
+   oqp.library.baeka.penalty_subspace
+   oqp.library.baeka.penalty_projector
+   oqp.library.baeka.baeka_objective
+
+
+Module Contents
+---------------
+
+.. py:data:: ArrayLike
+
+.. py:function:: parse_jump_schedule(value) -> Tuple[float, Ellipsis]
+
+   .. code-block:: text
+
+      Return a validated additive ``beta`` schedule.
+
+      The sectioned input reader may deliver the schedule as a comma-separated
+      string, while the concise parser and Python API can provide a sequence.
+      A scalar is accepted as a one-jump schedule; exhaustion is deliberately an
+      error rather than silently inventing a continuation rule.
+
+
+.. py:function:: penalty_subspace(gap_gradients: ArrayLike, *, rtol: float = 1e-10, atol: float = 1e-12) -> Tuple[numpy.ndarray, numpy.ndarray]
+
+   .. code-block:: text
+
+      Return an orthonormal basis and singular values for the gap subspace.
+
+      ``gap_gradients`` has shape ``(N - 1, 3 * natom)``.  Raw adjacent
+      gap-gradient vectors are used instead of multiplying by the penalty slope:
+      the column space is identical away from exact degeneracy, while the raw
+      vectors remain well-defined as the gap and the penalty slope approach zero.
+
+
+.. py:function:: penalty_projector(gap_gradients: ArrayLike, *, rtol: float = 1e-10, atol: float = 1e-12) -> Tuple[numpy.ndarray, int, numpy.ndarray]
+
+   .. code-block:: text
+
+      Return ``P = U U.T``, its numerical rank, and singular values.
+
+
+.. py:class:: BaekAObjective
+
+   .. code-block:: text
+
+      One generalized Baek objective/gradient evaluation.
+
+
+   .. py:attribute:: energies
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: gradients
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: gaps
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: gap_gradients
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: average_energy
+      :type:  float
+
+
+   .. py:attribute:: average_gradient
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: penalty
+      :type:  float
+
+
+   .. py:attribute:: penalty_gradient
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: objective
+      :type:  float
+
+
+   .. py:attribute:: gradient
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: span
+      :type:  float
+
+
+   .. py:attribute:: sigma
+      :type:  float
+
+
+   .. py:attribute:: effective_sigma
+      :type:  float
+
+
+   .. py:attribute:: alpha
+      :type:  float
+
+
+   .. py:attribute:: projector_basis
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: projector_singular_values
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: projector_rank
+      :type:  int
+
+
+   .. py:attribute:: parallel_gradient
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: perpendicular_gradient
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: parallel_norm
+      :type:  float
+
+
+   .. py:attribute:: parallel_scaled_norm
+      :type:  float
+
+
+   .. py:attribute:: perpendicular_norm
+      :type:  float
+
+
+.. py:function:: baeka_objective(energies: ArrayLike, gradients: ArrayLike, *, sigma: float, alpha: float, gap_weight: float = 1.0, projector_rtol: float = 1e-10, projector_atol: float = 1e-12) -> BaekAObjective
+
+   .. code-block:: text
+
+      Evaluate the generalized adjacent-gap Baek objective.
+
+      .. math::
+
+         F_N = N^{-1}\sum_i E_i + w\sigma\sum_i
+               \frac{(E_{i+1}-E_i)^2}{E_{i+1}-E_i+\alpha}.
+
+      States must be supplied in ascending adiabatic/root order.  Only adjacent
+      gaps are included; adding all pairs would reintroduce the redundancy that
+      the three-state Baek objective was designed to remove.
+
+
+.. py:class:: BaekAEvaluation
+
+   .. code-block:: text
+
+      Objective data plus one transition of the additive-sigma state machine.
+
+
+   .. py:attribute:: tested_data
+      :type:  BaekAObjective
+
+
+   .. py:attribute:: data
+      :type:  BaekAObjective
+
+
+   .. py:attribute:: tested_sigma
+      :type:  float
+
+
+   .. py:attribute:: next_sigma
+      :type:  float
+
+
+   .. py:attribute:: delta_f
+      :type:  float
+
+
+   .. py:attribute:: local_stationary
+      :type:  bool
+
+
+   .. py:attribute:: gap_converged
+      :type:  bool
+
+
+   .. py:attribute:: converged
+      :type:  bool
+
+
+   .. py:attribute:: action
+      :type:  str
+
+
+   .. py:attribute:: jump
+      :type:  Optional[float]
+
+
+   .. py:attribute:: jump_index
+      :type:  int
+
+
+.. py:exception:: BaekAJumpScheduleExhausted
+
+   Bases: :py:obj:`RuntimeError`
+
+
+   .. code-block:: text
+
+      Raised when another large additive jump is required but unavailable.
+
+
+.. py:class:: BaekAState(*, sigma: float, alpha: float, delta_beta: float, beta_schedule, gap_tol: float, tol_f: float, tol_g: float, gap_weight: float = 1.0, projector_rtol: float = 1e-10, projector_atol: float = 1e-12)
+
+   .. code-block:: text
+
+      State machine for the generalized Baek adaptive multiplier.
+
+
+   .. py:attribute:: sigma
+
+
+   .. py:attribute:: alpha
+
+
+   .. py:attribute:: delta_beta
+
+
+   .. py:attribute:: beta_schedule
+
+
+   .. py:attribute:: gap_tol
+
+
+   .. py:attribute:: tol_f
+
+
+   .. py:attribute:: tol_g
+
+
+   .. py:attribute:: gap_weight
+
+
+   .. py:attribute:: projector_rtol
+
+
+   .. py:attribute:: projector_atol
+
+
+   .. py:attribute:: jump_index
+      :value: 0
+
+
+
+   .. py:method:: evaluate(energies: ArrayLike, gradients: ArrayLike) -> BaekAEvaluation
+
+      .. code-block:: text
+
+         Evaluate the objective and advance the sigma state machine once.
+
+
+

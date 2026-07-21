@@ -1,0 +1,665 @@
+oqp.molecule.molecule
+=====================
+
+.. py:module:: oqp.molecule.molecule
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP molecule class
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.molecule.molecule.LEAN_JSON_ENV
+   oqp.molecule.molecule.HESSIAN_CACHE_VERSION
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.molecule.molecule.Molecule
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.molecule.molecule.compare_data
+   oqp.molecule.molecule.get_coord
+   oqp.molecule.molecule.string_config
+   oqp.molecule.molecule.list2string
+
+
+Module Contents
+---------------
+
+.. py:data:: LEAN_JSON_ENV
+   :value: 'OQP_LEAN_JSON'
+
+
+.. py:data:: HESSIAN_CACHE_VERSION
+   :value: 2
+
+
+.. py:class:: Molecule(project_name, input_file, log, xyz=None, elem=None, mass=None, charge=0, mult=1, silent=0, idx=1)
+
+   .. code-block:: text
+
+      OQP molecule representation in python
+
+
+   .. py:attribute:: mpi_manager
+
+
+   .. py:attribute:: usempi
+      :value: True
+
+
+
+   .. py:attribute:: silent
+      :value: 0
+
+
+
+   .. py:attribute:: idx
+      :value: 1
+
+
+
+   .. py:attribute:: xyz
+      :value: None
+
+
+
+   .. py:attribute:: elem
+      :value: None
+
+
+
+   .. py:attribute:: mass
+      :value: None
+
+
+
+   .. py:attribute:: charge
+      :value: 0
+
+
+
+   .. py:attribute:: mult
+      :value: 1
+
+
+
+   .. py:attribute:: control
+      :value: None
+
+
+
+   .. py:attribute:: mol_energy
+      :value: None
+
+
+
+   .. py:attribute:: data
+      :value: None
+
+
+
+   .. py:attribute:: config
+
+
+   .. py:attribute:: project_name
+
+
+   .. py:attribute:: input_file
+
+
+   .. py:attribute:: log
+
+
+   .. py:attribute:: log_path
+
+
+   .. py:attribute:: energies
+      :value: None
+
+
+
+   .. py:attribute:: grads
+      :value: None
+
+
+
+   .. py:attribute:: dcm
+      :value: []
+
+
+
+   .. py:attribute:: nac
+      :value: []
+
+
+
+   .. py:attribute:: soc
+      :value: []
+
+
+
+   .. py:attribute:: freqs
+
+
+   .. py:attribute:: hessian
+
+
+   .. py:attribute:: hessian_metadata
+
+
+   .. py:attribute:: modes
+
+
+   .. py:attribute:: inertia
+
+
+   .. py:attribute:: infrared_intensities
+
+
+   .. py:attribute:: raman_activities
+
+
+   .. py:attribute:: vibrational_intensity_metadata
+
+
+   .. py:attribute:: infrared_mode_dipole_derivatives
+
+
+   .. py:attribute:: raman_mode_polarizability_derivatives
+
+
+   .. py:attribute:: symmetry_metadata
+
+
+   .. py:attribute:: mrsf_ekt_results_by_kind
+
+
+   .. py:attribute:: tag
+      :value: ['OQP::DM_A', 'OQP::DM_B', 'OQP::FOCK_A', 'OQP::FOCK_B', 'OQP::E_MO_A', 'OQP::E_MO_B',...
+
+
+
+   .. py:attribute:: skip_tag
+
+
+   .. py:attribute:: config_tag
+
+
+   .. py:attribute:: start_time
+      :value: None
+
+
+
+   .. py:attribute:: back_door
+      :value: None
+
+
+
+   .. py:method:: get_atoms()
+
+      .. code-block:: text
+
+         Get read-only atoms
+
+
+
+   .. py:method:: initialize_symmetry_metadata()
+
+
+   .. py:method:: label_molecular_orbitals()
+
+      .. code-block:: text
+
+         Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
+
+         Stores the result under ``symmetry_metadata['mo_labels']``; never
+         changes SCF/integral/response behavior.
+
+
+
+   .. py:method:: reorient_for_integral_symmetry()
+
+      .. code-block:: text
+
+         GAMESS-style reorientation to the standard frame (geometry only).
+
+         Call before the guess/basis stage; ``stage_integral_symmetry_maps``
+         completes the activation once the basis is available. No-op unless
+         ``[symmetry] use_integral_symmetry`` is enabled.
+
+
+
+   .. py:method:: stage_integral_symmetry_maps()
+
+      .. code-block:: text
+
+         Stage petite-list maps for the Fortran SCF (requires the basis).
+
+         Fail-safe: any inconsistency leaves the run on the C1 path with the
+         reason recorded in the metadata.
+
+
+
+   .. py:method:: stage_response_symmetry()
+
+      .. code-block:: text
+
+         Stage per-pair irrep indices for response-space blocking.
+
+         Builds OQP::sym_pair_irrep (1-based irrep index per excitation
+         pair, occupied index fastest) from the converged MO labels. Only
+         acts when ``use_response_symmetry`` is enabled; bails to the
+         unblocked solver on any 'mixed' orbital or inconsistency.
+
+
+
+   .. py:method:: label_excited_states()
+
+      .. code-block:: text
+
+         Assign abelian irrep labels to TD excited states (metadata only).
+
+         Supports tda/rpa (closed-shell, occ/vir from VEC_MO_A) and sf/mrsf
+         (occ from alpha, vir from beta MOs; total symmetry includes the
+         direct product of the reference SOMO irreps). Stores results under
+         ``symmetry_metadata['state_labels']``; never fatal.
+
+
+
+   .. py:method:: symmetrize_gradient(grads)
+
+      .. code-block:: text
+
+         Project gradients onto the totally symmetric component.
+
+         Valid in the standard orientation when the petite reduction is
+         active: g'_a = (1/|G|) sum_op M_op^T g_{perm_op(a)}. Exact for the
+         skeleton two-electron gradient and a noise-cleaner for the rest.
+
+
+
+   .. py:method:: label_normal_modes()
+
+      .. code-block:: text
+
+         Assign abelian irrep labels to normal modes (metadata only, non-fatal).
+
+         Stores the result under ``symmetry_metadata['mode_labels']``.
+
+
+
+   .. py:method:: get_mass()
+
+      .. code-block:: text
+
+         Get read-only molar mass
+
+
+
+   .. py:method:: get_system()
+
+      .. code-block:: text
+
+         Get read-only coordinates
+
+
+
+   .. py:method:: get_scf_energy(component=None)
+
+      .. code-block:: text
+
+         Retrieve SCF (Self-Consistent Field) energy components.
+
+         This method provides convenient access to individual or all energy
+         terms computed during an SCF procedure. If no component is specified,
+         the total SCF energy is returned.
+
+         :param component: The energy component to retrieve. Supported options are:
+
+                           - ``None`` (default): Returns only the total SCF energy.
+                           - ``"all"``: Returns a dictionary containing all available
+                             energy components.
+                           - One of the following component names:
+                               * "energy"  — total SCF energy
+                               * "psinrm"  — wavefunction norm
+                               * "ehf1"    — Hartree-Fock energy (one-electron)
+                               * "vee"     — electron-electron repulsion energy
+                               * "nenergy" — nuclear energy contribution
+                               * "vne"     — electron-nucleus attraction energy
+                               * "vnn"     — nucleus-nucleus repulsion energy
+                               * "vtot"    — total potential energy
+                               * "tkin"    — kinetic energy
+                               * "virial"  — virial ratio
+         :type component: str, optional
+
+         :returns:
+
+                   - If `component` is None, returns a single float (total SCF energy).
+                   - If `component` is "all", returns a dictionary with all energy components.
+                   - If `component` corresponds to a specific component, returns that component as a float.
+         :rtype: float or dict
+
+         :raises ValueError: If the provided `component` does not match any of the known energy components.
+
+         .. rubric:: Examples
+
+         >>> mol.get_scf_energy()
+         -75.98327432
+
+         >>> mol.get_scf_energy("tkin")
+         37.420192
+
+         >>> mol.get_scf_energy("all")
+         {
+             'energy': -75.98327432,
+             'psinrm': 0.999999,
+             'ehf1': -72.3123,
+             'vee': 18.2034,
+             'nenergy': -80.000,
+             'vne': -85.6214,
+             'vnn': 5.6214,
+             'vtot': -67.4180,
+             'tkin': 37.4202,
+             'virial': 2.1519
+         }
+
+
+
+   .. py:method:: get_atoms2(prop=None)
+
+      .. code-block:: text
+
+         Get atomic data.
+         :param prop: If None, return full atomic data dict.
+                      If a string, return that specific atomic property.
+                      Available keys: 'natom', 'coords', 'charge', 'mass'
+         :type prop: str or None
+
+         :rtype: dict or np.ndarray
+
+
+
+   .. py:method:: get_grad()
+
+      .. code-block:: text
+
+         Get gradient in Hartree/Bohr
+
+
+
+   .. py:method:: get_nac()
+
+      .. code-block:: text
+
+         Get the non-adiabatic (phase-corrected derivative) coupling matrix d_ij.
+
+         Populated by a NACME run (``self.dcm``); empty for every other runtype.
+         The elements are sign/phase ambiguous between builds, so the regression
+         comparison uses magnitudes (see the ``nac`` registry entry,
+         ``phase_invariant=True``).
+
+
+
+   .. py:method:: get_soc()
+
+      .. code-block:: text
+
+         Get spin-orbit coupling eigenvalues in cm-1
+
+
+
+   .. py:method:: get_hess()
+
+      .. code-block:: text
+
+         Get hessian results
+
+
+
+   .. py:method:: set_hessian_result(raw_hessian, asymmetry_tol=1e-08)
+
+      .. code-block:: text
+
+         Store a final Cartesian Hessian in OpenQP frequency conventions.
+
+         Native analytic Hessian kernels should hand one square ``(3N, 3N)``
+         matrix to this helper. The helper records the pre-symmetrization
+         asymmetry for diagnostics and stores the symmetrized matrix used by
+         normal-mode analysis; it does not compute a numerical fallback.
+
+
+
+   .. py:method:: snapshot_mrsf_ekt_results(kind)
+
+      .. code-block:: text
+
+         Snapshot MRSF-EKT root results ('ip' or 'ea') right after the call.
+
+         The Fortran EKT driver reuses the same OQP::mrsf_ekt_* records for IP
+         and EA, so when both are requested in one runtype=ekt job the second
+         call overwrites the first.  Snapshotting after each call keeps the
+         Dyson orbitals and pole strengths of both kinds for the final JSON.
+
+
+
+   .. py:method:: get_mrsf_ekt_results()
+
+      .. code-block:: text
+
+         Collect MRSF-EKT root results for the final JSON file.
+
+
+
+   .. py:method:: get_data()
+
+      .. code-block:: text
+
+         Extract data from mol to dict
+
+
+
+   .. py:method:: get_data_from_back_door()
+
+      .. code-block:: text
+
+         Extract mol data for nacme calculation
+
+
+
+   .. py:method:: explicit_scf_props()
+
+      .. code-block:: text
+
+         Lowercased scf_prop values requested for this calculation.
+
+         ``scf_prop`` defaults to empty, so its config value is exactly the set of
+         properties the user asked for -- works identically for file-based and
+         scripting-API (input_dict) runs. Regression coverage of a property is
+         opt-in: only requested properties are surfaced to the JSON, required by
+         the gate, and compared.
+
+
+
+   .. py:method:: get_results()
+
+      .. code-block:: text
+
+         Collect computed results to dict
+
+
+
+   .. py:method:: get_coord(coordinates)
+
+
+   .. py:method:: update_system(coordinates)
+
+      .. code-block:: text
+
+         Modify coordinates in memory
+
+
+
+   .. py:method:: update_mol(ref_mol)
+
+      .. code-block:: text
+
+         Pass data from ref_mol to current mol
+
+
+
+   .. py:method:: check(info)
+
+      .. code-block:: text
+
+         Check internal data
+
+
+
+   .. py:method:: data_allocate()
+
+      .. code-block:: text
+
+         Allocate new oqp data object
+
+
+
+   .. py:method:: data_deallocate()
+
+      .. code-block:: text
+
+         Deallocate oqp data object
+
+
+
+   .. py:method:: get_config(input_source)
+
+
+   .. py:method:: load_config(input_source)
+
+      .. code-block:: text
+
+         Load calculation parameters from a file or a dictionary based on the input type.
+
+         input_source: filename (str) or config dictionary (dict)
+
+
+
+   .. py:method:: write_molden(filename)
+
+      .. code-block:: text
+
+         Write calculation results in Molden format
+
+
+
+   .. py:method:: set_log()
+
+      .. code-block:: text
+
+         Set up log file
+
+
+
+   .. py:method:: set_config_json()
+
+
+   .. py:method:: save_data(lean=None)
+
+      .. code-block:: text
+
+         Save mol data and computed results to json
+
+         :param lean: When True, drop internal ``OQP::`` arrays (density, Fock,
+                      MO coefficients, overlap/kinetic, SOC/TD/MRSF scratch, etc.)
+                      before writing. These are never compared by ``check_ref`` and
+                      are not consumed by any example, so test references can omit
+                      them to stay ~99% smaller. When None (default) the behaviour
+                      follows the ``OQP_LEAN_JSON`` environment variable; otherwise
+                      the full bundle is written so the ``guess=json`` restart
+                      workflow (``load_data``/``put_data``) keeps its DM/Fock/MO data.
+
+
+
+   .. py:method:: save_freqs(state)
+
+
+   .. py:method:: load_data()
+
+
+   .. py:method:: update_config_json()
+
+
+   .. py:method:: put_data(data)
+
+
+   .. py:method:: read_freqs()
+
+
+   .. py:method:: regression_context()
+
+      .. code-block:: text
+
+         (runtype, excited, props) used to resolve which registry keys apply.
+
+         ``excited`` is True when an excited-state (TDDFT/MRSF/...) method is
+         active, which is the gate for comparing ``td_energies`` (a ground-state
+         run stores the placeholder [0]). ``props`` is the list of requested
+         ``scf_prop`` values (e.g. 'nmr'), the gate for property keys.
+
+
+
+   .. py:method:: check_ref()
+
+      .. code-block:: text
+
+         Compare runtime results against the reference, driven by the
+         regression registry (an allowlist: exactly the declared quantities for
+         this runtype/method/properties are compared).
+
+
+
+.. py:function:: compare_data(data_1, data_2, skip_sub=(), rtol=0.0)
+
+   .. code-block:: text
+
+      Compute the numerical differences between two arrays
+
+      ``skip_sub`` names dict sub-keys to ignore during comparison (e.g. the
+      phase/sign-ambiguous EKT orbital vectors); the registry supplies these per
+      quantity so they are declared in one place.
+
+      ``rtol`` (0 = exact absolute compare) sets a relative tolerance: a value is
+      counted as matching when ``|a-b| <= rtol*|b|``, and only the excess beyond
+      that tolerance contributes to the reported diff. Used for large-magnitude
+      quantities (e.g. SOC, ~1e5 cm^-1) where the absolute round(diff,4) gate
+      would otherwise demand far more significant figures than ULP-level noise.
+
+
+.. py:function:: get_coord(xyz, nat)
+
+   .. code-block:: text
+
+      Get coordinate
+
+
+.. py:function:: string_config(config)
+
+.. py:function:: list2string(in_list)
+

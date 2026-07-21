@@ -1,0 +1,179 @@
+oqp.quantum.hamiltonian
+=======================
+
+.. py:module:: oqp.quantum.hamiltonian
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Build the second-quantized molecular Hamiltonian from an OpenQP molecule.
+
+      This is the bridge that turns a converged OpenQP mean-field calculation into
+      the input expected by quantum-computing electronic-structure workflows
+      (Qiskit Nature, OpenFermion, PennyLane-via-OpenFermion, Block2, ...). The
+      output is either a :class:`MolecularHamiltonian` of NumPy tensors in the MO
+      basis, or a FCIDUMP file.
+
+      What OpenQP exposes today
+      -------------------------
+      The Python data container (``mol.data[...]``) provides everything needed for
+      the *one-electron* part of the Hamiltonian and all metadata:
+
+      * ``OQP::Hcore`` -- core Hamiltonian in the AO basis (packed triangular)
+      * ``OQP::SM``    -- overlap (packed triangular)
+      * ``OQP::VEC_MO_A`` / ``OQP::VEC_MO_B`` -- MO coefficients
+      * ``enuc`` -- nuclear repulsion energy
+      * ``nelec_A`` / ``nelec_B`` -- electron counts
+
+      Two-electron integrals
+      ----------------------
+      The two-electron repulsion integrals (ERIs) are produced by the Fortran getter
+      ``oqp.int2e(mol)``, which populates the ``OQP::ERI_AO`` tag with the full
+      ``nbf**4`` AO tensor (chemist notation). :func:`from_openqp` calls it
+      automatically, so a converged calculation yields a complete FCIDUMP with no
+      external integral source. The ERIs come from the same engine and AO basis as
+      ``OQP::Hcore`` and the MO coefficients, keeping the Hamiltonian consistent.
+
+      This is the conventional in-core path (memory ~ ``nbf**4``); it is meant for
+      small active systems / quantum-computing experiments, not production basis
+      sets. Callers may still override the source with ``eri_ao=`` or an
+      ``eri_provider`` callable, or skip the two-body part with ``compute_eri=False``.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.quantum.hamiltonian.MolecularHamiltonian
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.quantum.hamiltonian.from_openqp
+
+
+Module Contents
+---------------
+
+.. py:class:: MolecularHamiltonian
+
+   .. code-block:: text
+
+      Second-quantized electronic Hamiltonian in the MO basis.
+
+      .. attribute:: one_body
+
+         ``h_pq`` one-electron integrals.
+
+         :type: numpy.ndarray, shape (norb, norb)
+
+      .. attribute:: two_body
+
+         ``(pq|rs)`` two-electron integrals (chemist notation). ``None`` when
+         ERIs were unavailable (one-electron-only export).
+
+         :type: numpy.ndarray or None, shape (norb, norb, norb, norb)
+
+      .. attribute:: core_energy
+
+         Scalar energy (nuclear repulsion + any frozen-core contribution).
+
+         :type: float
+
+      .. attribute:: n_electrons
+
+         Number of correlated electrons.
+
+         :type: int
+
+      .. attribute:: ms2
+
+         ``2 * S_z`` = (n_alpha - n_beta).
+
+         :type: int
+
+      .. attribute:: orbsym
+
+         Per-orbital symmetry labels (defaults to all 1).
+
+         :type: list of int
+
+
+   .. py:attribute:: one_body
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: core_energy
+      :type:  float
+
+
+   .. py:attribute:: n_electrons
+      :type:  int
+
+
+   .. py:attribute:: two_body
+      :type:  numpy.ndarray
+      :value: None
+
+
+
+   .. py:attribute:: ms2
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: orbsym
+      :type:  list
+      :value: []
+
+
+
+   .. py:property:: n_orbitals
+
+
+   .. py:method:: to_fcidump(filename, tol=1e-12)
+
+      .. code-block:: text
+
+         Write this Hamiltonian to a FCIDUMP file.
+
+         Requires two-electron integrals to be present.
+
+
+
+.. py:function:: from_openqp(mol, eri_ao=None, eri_provider=None, mo_coeff=None, spin='alpha', compute_eri=True)
+
+   .. code-block:: text
+
+      Construct a :class:`MolecularHamiltonian` from an OpenQP ``Molecule``.
+
+      :param mol: A molecule whose SCF has completed (MO coefficients populated).
+      :type mol: oqp.molecule.molecule.Molecule
+      :param eri_ao: Two-electron AO integrals ``(mu nu|la si)`` in chemist notation,
+                     shape ``(nao, nao, nao, nao)``. If given, the two-body MO tensor is
+                     built and a full FCIDUMP can be written.
+      :type eri_ao: array_like, optional
+      :param eri_provider: ``eri_provider(mol) -> eri_ao``; used when ``eri_ao`` is not supplied.
+                           Lets callers plug in OpenQP's native ERIs (once exposed) or an
+                           external engine without changing this code.
+      :type eri_provider: callable, optional
+      :param mo_coeff: Override the MO coefficient matrix (AO rows, MO columns). Defaults to
+                       the converged restricted/alpha MOs (``OQP::VEC_MO_A``).
+      :type mo_coeff: array_like, optional
+      :param spin: Which set of converged MOs to use when ``mo_coeff`` is not given.
+      :type spin: {"alpha", "beta"}
+      :param compute_eri: When no ``eri_ao``/``eri_provider`` is given, compute OpenQP's native
+                          AO ERIs via ``oqp.int2e`` (default). Set ``False`` to build a
+                          one-electron-only Hamiltonian (no two-body tensor, no FCIDUMP).
+      :type compute_eri: bool
+
+      :rtype: MolecularHamiltonian
+
+

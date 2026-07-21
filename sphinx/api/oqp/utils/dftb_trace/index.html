@@ -1,0 +1,528 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.utils.dftb_trace &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/utils/dftb_trace/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.utils.file_utils" href="../file_utils/index.html" />
+    <link rel="prev" title="oqp.utils.constants" href="../constants/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.utils</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.utils</a></li>
+      <li class="breadcrumb-item active">oqp.utils.dftb_trace</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/utils/dftb_trace/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.utils.dftb_trace">
+<span id="oqp-utils-dftb-trace"></span><h1>oqp.utils.dftb_trace<a class="headerlink" href="#module-oqp.utils.dftb_trace" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Parse and pretty-print openqp-dftb structured native diagnostics.
+
+The openqp-dftb shared library cannot write into the OpenQP log directly (the
+log unit belongs to liboqp&#39;s Fortran runtime), so the adapter captures the
+library&#39;s flushed stdout.  At trace level 2 that capture carries one
+machine-readable record per SCC/Davidson/Z-vector event
+(``openqp_dftb_scc_iter ...``).  This module turns those records into the same
+kind of human-readable iteration tables OpenQP prints for its native SCF,
+Davidson, and Z-vector solvers, so a DFTB log reads like any other OpenQP log.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.HARTREE_TO_EV" title="oqp.utils.dftb_trace.HARTREE_TO_EV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HARTREE_TO_EV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.AU_TO_DEBYE" title="oqp.utils.dftb_trace.AU_TO_DEBYE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AU_TO_DEBYE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.parse_native_trace" title="oqp.utils.dftb_trace.parse_native_trace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_native_trace</span></code></a>(text)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_scc_pass" title="oqp.utils.dftb_trace.format_scc_pass"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_scc_pass</span></code></a>(entry)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_scc_post_update" title="oqp.utils.dftb_trace.format_scc_post_update"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_scc_post_update</span></code></a>(entry)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_scc_recoveries" title="oqp.utils.dftb_trace.format_scc_recoveries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_scc_recoveries</span></code></a>(recoveries[, verbose])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_scc_block" title="oqp.utils.dftb_trace.format_scc_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_scc_block</span></code></a>(trace[, verbose])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_scc_summary_lines" title="oqp.utils.dftb_trace.format_scc_summary_lines"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_scc_summary_lines</span></code></a>(trace)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_davidson_block" title="oqp.utils.dftb_trace.format_davidson_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_davidson_block</span></code></a>(solve[, method_display])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_davidson_summary_line" title="oqp.utils.dftb_trace.format_davidson_summary_line"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_davidson_summary_line</span></code></a>(solve)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.collapse_repeats" title="oqp.utils.dftb_trace.collapse_repeats"><code class="xref py py-obj docutils literal notranslate"><span class="pre">collapse_repeats</span></code></a>(lines)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_zvector_block" title="oqp.utils.dftb_trace.format_zvector_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_zvector_block</span></code></a>(solve)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_zvector_dense_block" title="oqp.utils.dftb_trace.format_zvector_dense_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_zvector_dense_block</span></code></a>(solve)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_resolved_options" title="oqp.utils.dftb_trace.format_resolved_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_resolved_options</span></code></a>(options)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_step_timing" title="oqp.utils.dftb_trace.format_step_timing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_step_timing</span></code></a>(step_cpu, step_wall, total_cpu, ...)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_energy_components" title="oqp.utils.dftb_trace.format_energy_components"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_energy_components</span></code></a>(components[, reference_label])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.point_charge_dipole" title="oqp.utils.dftb_trace.point_charge_dipole"><code class="xref py py-obj docutils literal notranslate"><span class="pre">point_charge_dipole</span></code></a>(charges, coords_bohr)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_charge_block" title="oqp.utils.dftb_trace.format_charge_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_charge_block</span></code></a>(symbols, charges, dipole_au, title)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_other_lines" title="oqp.utils.dftb_trace.format_other_lines"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_other_lines</span></code></a>(trace)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.map_spectrum_label" title="oqp.utils.dftb_trace.map_spectrum_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">map_spectrum_label</span></code></a>(label[, state_prefix])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.spectrum_from_ground" title="oqp.utils.dftb_trace.spectrum_from_ground"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spectrum_from_ground</span></code></a>(spectrum[, state_prefix])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.final_energy_header" title="oqp.utils.dftb_trace.final_energy_header"><code class="xref py py-obj docutils literal notranslate"><span class="pre">final_energy_header</span></code></a>(summary)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.final_energy_annotation" title="oqp.utils.dftb_trace.final_energy_annotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">final_energy_annotation</span></code></a>(summary, index)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.final_energy_label" title="oqp.utils.dftb_trace.final_energy_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">final_energy_label</span></code></a>(summary, index, default)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_mo_table" title="oqp.utils.dftb_trace.format_mo_table"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_mo_table</span></code></a>(mo)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.spin_flip_pair" title="oqp.utils.dftb_trace.spin_flip_pair"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spin_flip_pair</span></code></a>(index, noca, nocb)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_state_configurations" title="oqp.utils.dftb_trace.format_state_configurations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_state_configurations</span></code></a>(summary)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.dftb_trace.format_excited_state_summary" title="oqp.utils.dftb_trace.format_excited_state_summary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_excited_state_summary</span></code></a>(summary)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.HARTREE_TO_EV">
+<span class="sig-name descname"><span class="pre">HARTREE_TO_EV</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">27.211386245988</span></em><a class="headerlink" href="#oqp.utils.dftb_trace.HARTREE_TO_EV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.parse_native_trace">
+<span class="sig-name descname"><span class="pre">parse_native_trace</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.parse_native_trace" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Split a captured native stdout into structured events.
+
+Returns a dict with ``scc_passes``, ``post_updates``, ``recoveries``,
+``davidson``, ``zvector``, ``zvector_dense``, ``spectrum``, ``warnings``,
+and ``other`` (verbatim unrecognized lines, e.g. ``[zvec-stage]`` timing
+breakdowns).  The parser is tolerant: an unknown or malformed record line
+degrades to ``other`` instead of failing the calculation log.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_scc_pass">
+<span class="sig-name descname"><span class="pre">format_scc_pass</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_scc_pass" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>One OpenQP-style iteration table for a single SCC pass.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_scc_post_update">
+<span class="sig-name descname"><span class="pre">format_scc_post_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_scc_post_update" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_scc_recoveries">
+<span class="sig-name descname"><span class="pre">format_scc_recoveries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">recoveries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_scc_recoveries" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_scc_block">
+<span class="sig-name descname"><span class="pre">format_scc_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trace</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_scc_block" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>All SCC passes + final residual check + recoveries as one text block.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_scc_summary_lines">
+<span class="sig-name descname"><span class="pre">format_scc_summary_lines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trace</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_scc_summary_lines" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>One line per SCC pass -- used when the reference is merely re-solved.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_davidson_block">
+<span class="sig-name descname"><span class="pre">format_davidson_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">solve</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method_display</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'DFTB'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_davidson_block" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_davidson_summary_line">
+<span class="sig-name descname"><span class="pre">format_davidson_summary_line</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">solve</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_davidson_summary_line" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.collapse_repeats">
+<span class="sig-name descname"><span class="pre">collapse_repeats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lines</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.collapse_repeats" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Merge consecutive identical lines into one line with a repeat count.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_zvector_block">
+<span class="sig-name descname"><span class="pre">format_zvector_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">solve</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_zvector_block" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_zvector_dense_block">
+<span class="sig-name descname"><span class="pre">format_zvector_dense_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">solve</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_zvector_dense_block" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.AU_TO_DEBYE">
+<span class="sig-name descname"><span class="pre">AU_TO_DEBYE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2.541746451895</span></em><a class="headerlink" href="#oqp.utils.dftb_trace.AU_TO_DEBYE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_resolved_options">
+<span class="sig-name descname"><span class="pre">format_resolved_options</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_resolved_options" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Grouped table of the EFFECTIVE openqp-dftb options after resolution.
+
+The values come from the native openqp_dftb_resolved_options record, so a
+named preset (e.g. dtcam-tb) is expanded to its actual published parameter
+vector without duplicating those numbers in Python.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_step_timing">
+<span class="sig-name descname"><span class="pre">format_step_timing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step_cpu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step_wall</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_cpu</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_wall</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_step_timing" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>The native-OpenQP style per-step + cumulative timing footer.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_energy_components">
+<span class="sig-name descname"><span class="pre">format_energy_components</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SCC</span> <span class="pre">reference'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_energy_components" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OpenQP-style &#39;Energy components&#39; block for the converged reference.
+
+Semantics (from the native emitter): electronic = h0 + scc + spin +
+exchange; total = electronic + repulsive; band = sum of occupied
+eigenvalues (informational).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.point_charge_dipole">
+<span class="sig-name descname"><span class="pre">point_charge_dipole</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">charges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_bohr</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.point_charge_dipole" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Dipole vector (a.u.) of net atomic point charges at coords (Bohr).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_charge_block">
+<span class="sig-name descname"><span class="pre">format_charge_block</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">symbols</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dipole_au</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_charge_block" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Mulliken charge table + point-charge dipole, OpenQP style.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_other_lines">
+<span class="sig-name descname"><span class="pre">format_other_lines</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trace</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_other_lines" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.map_spectrum_label">
+<span class="sig-name descname"><span class="pre">map_spectrum_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'S'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.map_spectrum_label" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Map a printed spectrum label to the public state label.
+
+Closed-shell TDDFTB rows already carry ``S&lt;n&gt;`` labels.  Spin-flip and
+MRSF rows are labeled ``root &lt;n&gt;``; within each spin manifold the public
+label is zero-based from root 1 (root 1 = S0/T0).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.spectrum_from_ground">
+<span class="sig-name descname"><span class="pre">spectrum_from_ground</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spectrum</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'S'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.spectrum_from_ground" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Rows out of the lowest state, keyed by public final-state label.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.final_energy_header">
+<span class="sig-name descname"><span class="pre">final_energy_header</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.final_energy_header" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>One header line naming the extra Final-Energy columns.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.final_energy_annotation">
+<span class="sig-name descname"><span class="pre">final_energy_annotation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.final_energy_annotation" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Extra Final-Energy columns (VEE in eV, |mu|, f) for state row ``index``.
+
+Numbers only -- the column names come from :func:`final_energy_header`.
+``index`` is the row number in ``mol.energies``: for spin-flip/MRSF runs
+row 0 is the internal reference and roots start at row 1; for closed-shell
+TDDFTB row 0 is S0 itself.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.final_energy_label">
+<span class="sig-name descname"><span class="pre">final_energy_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.final_energy_label" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Public state label for Final-Energy row ``index`` (TDDFTB: S0..Sn).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_mo_table">
+<span class="sig-name descname"><span class="pre">format_mo_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mo</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_mo_table" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Molecular-orbital table: index, occupation, energies, irrep, markers.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.spin_flip_pair">
+<span class="sig-name descname"><span class="pre">spin_flip_pair</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noca</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nocb</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.spin_flip_pair" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Map a 1-based spin-flip amplitude index to (occ, vir) MO numbers.
+
+The exported SF/MRSF response vectors are ``amplitudes(noca, n_virt_beta)``
+flattened column-major: index = (vir - nocb - 1) * noca + occ, with occ an
+alpha-occupied MO (1..noca) and vir a beta-virtual MO (nocb+1..nbf).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_state_configurations">
+<span class="sig-name descname"><span class="pre">format_state_configurations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_state_configurations" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>AE-style per-state dominant configurations (coeff, OCC -&gt; VIR).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.dftb_trace.format_excited_state_summary">
+<span class="sig-name descname"><span class="pre">format_excited_state_summary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.dftb_trace.format_excited_state_summary" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>The OpenQP-style excited-state summary + state-to-state tables.
+
+``summary`` is the dict the adapter stores on the molecule:
+``reference_energy``, ``reference_label``, ``state_labels`` (public),
+``state_energies`` (total Hartree per root), ``spin_squares``,
+``oscillator`` ({public label: spectrum row}), ``transitions``
+(spectrum rows with public labels), ``approximation``.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../constants/index.html" class="btn btn-neutral float-left" title="oqp.utils.constants" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../file_utils/index.html" class="btn btn-neutral float-right" title="oqp.utils.file_utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

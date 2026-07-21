@@ -1,0 +1,1227 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.molecule.oqpdata &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/molecule/oqpdata/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.openqp" href="../../openqp/index.html" />
+    <link rel="prev" title="oqp.molecule.molecule" href="../molecule/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.molecule</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.molecule</a></li>
+      <li class="breadcrumb-item active">oqp.molecule.oqpdata</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/molecule/oqpdata/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.molecule.oqpdata">
+<span id="oqp-molecule-oqpdata"></span><h1>oqp.molecule.oqpdata<a class="headerlink" href="#module-oqp.molecule.oqpdata" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Wrapper for OQP data
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA" title="oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OQP_CONFIG_SCHEMA</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.TA_DIMENSIONS_LENGTH" title="oqp.molecule.oqpdata.TA_DIMENSIONS_LENGTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TA_DIMENSIONS_LENGTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.OQPData" title="oqp.molecule.oqpdata.OQPData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OQPData</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.sarray" title="oqp.molecule.oqpdata.sarray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sarray</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.farray" title="oqp.molecule.oqpdata.farray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">farray</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.iarray" title="oqp.molecule.oqpdata.iarray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">iarray</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.barray" title="oqp.molecule.oqpdata.barray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">barray</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.parray" title="oqp.molecule.oqpdata.parray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parray</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.string" title="oqp.molecule.oqpdata.string"><code class="xref py py-obj docutils literal notranslate"><span class="pre">string</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.optional_string" title="oqp.molecule.oqpdata.optional_string"><code class="xref py py-obj docutils literal notranslate"><span class="pre">optional_string</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.ispher_mode" title="oqp.molecule.oqpdata.ispher_mode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ispher_mode</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.path" title="oqp.molecule.oqpdata.path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">path</span></code></a>(strng)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.compute_alpha_beta_electrons" title="oqp.molecule.oqpdata.compute_alpha_beta_electrons"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compute_alpha_beta_electrons</span></code></a>(n_e, mult)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.molecule.oqpdata.read_system" title="oqp.molecule.oqpdata.read_system"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_system</span></code></a>(system)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.sarray">
+<span class="sig-name descname"><span class="pre">sarray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.sarray" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert array of parameters to list of strngs
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.farray">
+<span class="sig-name descname"><span class="pre">farray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.farray" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert array of parameters to list of floats
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.iarray">
+<span class="sig-name descname"><span class="pre">iarray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.iarray" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert array of parameters to list of integers
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.barray">
+<span class="sig-name descname"><span class="pre">barray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.barray" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert comma-separated boolean parameters to a list of booleans.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.parray">
+<span class="sig-name descname"><span class="pre">parray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.parray" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert array of parameters to list of integer pairs
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.string">
+<span class="sig-name descname"><span class="pre">string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.string" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle string parameters
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.optional_string">
+<span class="sig-name descname"><span class="pre">optional_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.optional_string" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Preserve a non-empty string, but represent an omitted option as None.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.ispher_mode">
+<span class="sig-name descname"><span class="pre">ispher_mode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.ispher_mode" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Normalize the ispher keyword to one of three modes:
+&#39;auto&#39;  - per-shell AO convention from the basis-set metadata
+          (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
+&#39;true&#39;  - force pure spherical for every l&gt;=2 shell regardless of how
+          the basis was published (GAMESS ISPHER=1 semantics);
+&#39;false&#39; - force Cartesian for every shell.
+Booleans (from saved/dict configs) map to &#39;true&#39;/&#39;false&#39;.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.path">
+<span class="sig-name descname"><span class="pre">path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">strng</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.path" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Convert string to Path
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA">
+<span class="sig-name descname"><span class="pre">OQP_CONFIG_SCHEMA</span></span><a class="headerlink" href="#oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.TA_DIMENSIONS_LENGTH">
+<span class="sig-name descname"><span class="pre">TA_DIMENSIONS_LENGTH</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">12</span></em><a class="headerlink" href="#oqp.molecule.oqpdata.TA_DIMENSIONS_LENGTH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">OQPData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">silent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Wrapper for OQP data class
+</pre></div>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.typemap">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">typemap</span></span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.typemap" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Access type map
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.silent">
+<span class="sig-name descname"><span class="pre">silent</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.silent" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.mol2">
+<span class="sig-name descname"><span class="pre">mol2</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.mol2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_mol_charge">
+<span class="sig-name descname"><span class="pre">set_mol_charge</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">charge</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_mol_charge" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set charge of a molecule
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_mol_multiplicity">
+<span class="sig-name descname"><span class="pre">set_mol_multiplicity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multiplicity</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_mol_multiplicity" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set multiplicity of the molecule
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_type">
+<span class="sig-name descname"><span class="pre">set_scf_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scftype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_type" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF type
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_maxit">
+<span class="sig-name descname"><span class="pre">set_scf_maxit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxit</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_maxit" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set maximum number of SCF iterations
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_maxdiis">
+<span class="sig-name descname"><span class="pre">set_scf_maxdiis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxdiis</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_maxdiis" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set maximum number of DIIS Equations
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_diis_reset_mod">
+<span class="sig-name descname"><span class="pre">set_scf_diis_reset_mod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">diis_reset_mod</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_diis_reset_mod" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set reset DIIS Equations for every diis_reset_mod
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_diis_reset_conv">
+<span class="sig-name descname"><span class="pre">set_scf_diis_reset_conv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">diis_reset_conv</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_diis_reset_conv" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set reset DIIS Equations for every diis_reset_mod
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_diis_type">
+<span class="sig-name descname"><span class="pre">set_scf_diis_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">diistype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_diis_type" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set DIIS method
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_cdiis_switch">
+<span class="sig-name descname"><span class="pre">set_scf_cdiis_switch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cdiis_switch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_cdiis_switch" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>DIIS error below which the DIIS cascade switches to C-DIIS
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_vdiis_vshift_switch">
+<span class="sig-name descname"><span class="pre">set_scf_vdiis_vshift_switch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vdiis_vshift_switch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_vdiis_vshift_switch" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>DIIS error below which the level shift is turned off (vDIIS)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_vshift">
+<span class="sig-name descname"><span class="pre">set_scf_vshift</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">vshift</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_vshift" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set Vshift size for better SCF convergency
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_mom">
+<span class="sig-name descname"><span class="pre">set_scf_mom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mom</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_mom" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set MOM for better SCF convergency
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_mom_switch">
+<span class="sig-name descname"><span class="pre">set_scf_mom_switch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mom_switch</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_mom_switch" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set MOM turn on criteria of DIIS error
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pfon">
+<span class="sig-name descname"><span class="pre">set_scf_pfon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pfon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pfon" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pfon
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pfon_start_temp">
+<span class="sig-name descname"><span class="pre">set_scf_pfon_start_temp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pfon_start_temp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pfon_start_temp" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pfon_start_temp
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pfon_cooling_rate">
+<span class="sig-name descname"><span class="pre">set_scf_pfon_cooling_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pfon_cooling_rate</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pfon_cooling_rate" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pfon_cooling_rate
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pfon_nsmear">
+<span class="sig-name descname"><span class="pre">set_scf_pfon_nsmear</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pfon_nsmear</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pfon_nsmear" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pfon_cooling_rate
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_rstctmo">
+<span class="sig-name descname"><span class="pre">set_scf_rstctmo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rstctmo</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_rstctmo" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>restrict MO
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_active_basis">
+<span class="sig-name descname"><span class="pre">set_scf_active_basis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">active_basis</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_active_basis" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Select basis set: 0 =&gt; info%basis
+1 =&gt; info%alt_basis
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_conv">
+<span class="sig-name descname"><span class="pre">set_scf_conv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conv</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_conv" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF convergence threshold
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_scal_rel">
+<span class="sig-name descname"><span class="pre">set_scf_scal_rel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scal_rel</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_scal_rel" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF convergence threshold
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_incremental">
+<span class="sig-name descname"><span class="pre">set_scf_incremental</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flag</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_incremental" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set incremental Fock matrix build
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flag</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Enable progressive (iteration-dependent) integral screening
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_k">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_k</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">k</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_k" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive screening coupling: tau_iter = k * diis_error
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_cap">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_cap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cap</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_cap" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive screening loosest cutoff (upper clamp on tau_iter)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_tight">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_tight</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tight</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_tight" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive screening: pin to int2e_cutoff once diis_error &lt; tight
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_xc_dcut">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_xc_dcut</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dcut</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_xc_dcut" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive XC: loose grid density cutoff during the SCF descent (0=off)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_xc_aocut">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_xc_aocut</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">aocut</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_xc_aocut" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_grid_rad">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_grid_rad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_grid_rad" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive XC: coarse radial grid points during the SCF descent (0=off)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_pscreen_grid_ang">
+<span class="sig-name descname"><span class="pre">set_scf_pscreen_grid_ang</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_pscreen_grid_ang" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_xc_c2f">
+<span class="sig-name descname"><span class="pre">set_scf_xc_c2f</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_xc_c2f" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Coarse-to-fine XC grid during SCF descent (on/off/auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_xc_phi_cache">
+<span class="sig-name descname"><span class="pre">set_scf_xc_phi_cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_xc_phi_cache" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Cache collocation Phi across SCF iterations (on/off/auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_xc_incdft">
+<span class="sig-name descname"><span class="pre">set_scf_xc_incdft</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_xc_incdft" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Incremental DFT (experimental; on/off/auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_grad_cutoff">
+<span class="sig-name descname"><span class="pre">set_scf_grad_cutoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_grad_cutoff" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Schwarz cutoff for the 2e-derivative gradient build (number or auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_resp_cutoff">
+<span class="sig-name descname"><span class="pre">set_tdhf_resp_cutoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_resp_cutoff" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>MRSF response 2e-integral cutoff (number or auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_fp32">
+<span class="sig-name descname"><span class="pre">set_tdhf_fp32</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_fp32" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>FP32 MRSF response digestion (on/off/auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_zv_warmstart">
+<span class="sig-name descname"><span class="pre">set_tdhf_zv_warmstart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">v</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_zv_warmstart" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>MRSF z-vector warm-start across geometry steps (on/off/auto).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_converger_type">
+<span class="sig-name descname"><span class="pre">set_scf_converger_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">converger_type</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_converger_type" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF solver for SCF convergence:
+converger_type (int): SOSCF algorithm type
+    0: DIIS
+    1: BFGS/SOSCF
+    2: TRAH
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_soscf_lvl_shift">
+<span class="sig-name descname"><span class="pre">set_soscf_lvl_shift</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">soscf_lvl_shift</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_soscf_lvl_shift" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SOSCF level-shift parameter.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_scf_verbose">
+<span class="sig-name descname"><span class="pre">set_scf_verbose</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">verbose</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_scf_verbose" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Controls output verbosity
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_stability">
+<span class="sig-name descname"><span class="pre">set_trah_stability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_stability" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Enable/disable Hessian/eigenspectrum stability analysis before TRAH.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_line_search">
+<span class="sig-name descname"><span class="pre">set_trah_line_search</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flag</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_line_search" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Enable line search within TRAH micro-iterations.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_subsystem_solver">
+<span class="sig-name descname"><span class="pre">set_subsystem_solver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trh_sub_solver</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_subsystem_solver" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Select the TRAH subsystem solver.
+Valid values:
+  0 : Davidson
+  1 : Jacobi–Davidson
+  2 : TCG
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_n_random_trial_vectors">
+<span class="sig-name descname"><span class="pre">set_trah_n_random_trial_vectors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_n_random_trial_vectors" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Number of random trial vectors for initial subspace.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_start_trust_radius">
+<span class="sig-name descname"><span class="pre">set_trah_start_trust_radius</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">r0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_start_trust_radius" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Initial trust-region radius.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_jacobi_davidson_start">
+<span class="sig-name descname"><span class="pre">set_trah_jacobi_davidson_start</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trh_jd_start</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_jacobi_davidson_start" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Jacobi-Davidson start mode / option.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_n_micro">
+<span class="sig-name descname"><span class="pre">set_trah_n_micro</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_n_micro" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Max micro-iterations per macro step.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_global_red_factor">
+<span class="sig-name descname"><span class="pre">set_trah_global_red_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_global_red_factor" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Global trust-radius reduction factor (0 &lt; f &lt; 1).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_local_red_factor">
+<span class="sig-name descname"><span class="pre">set_trah_local_red_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_local_red_factor" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Local trust-radius reduction factor (0 &lt; f &lt; 1).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_trah_impl">
+<span class="sig-name descname"><span class="pre">set_trah_impl</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">trh_impl</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_trah_impl" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Select the TRAH implementation.
+Valid values:
+  auto   : native Fortran trust-region augmented-Hessian solver
+  native : native Fortran trust-region augmented-Hessian solver
+  otr    : external OpenTrustRegion library
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_sd_scf">
+<span class="sig-name descname"><span class="pre">set_sd_scf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sd_scf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_sd_scf" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>prevent running the first SD-SCF calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_pcm_enabled">
+<span class="sig-name descname"><span class="pre">set_pcm_enabled</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">enabled</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_pcm_enabled" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Enable the PCM reaction-field contribution to the SCF (ddX backend)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_pcm_epsilon">
+<span class="sig-name descname"><span class="pre">set_pcm_epsilon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epsilon</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_pcm_epsilon" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set the PCM solvent dielectric constant
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_flag">
+<span class="sig-name descname"><span class="pre">set_qmmm_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qmmm_flag</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_flag" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation type
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_forcefield">
+<span class="sig-name descname"><span class="pre">set_qmmm_forcefield</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">forcefield</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_forcefield" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation forcefield
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_rigidwater">
+<span class="sig-name descname"><span class="pre">set_qmmm_rigidwater</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rigidwater</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_rigidwater" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation rigidWater
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_nonbondedmethod">
+<span class="sig-name descname"><span class="pre">set_qmmm_nonbondedmethod</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nonbondedmethod</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_nonbondedmethod" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation nonbondedMethod
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_constraints">
+<span class="sig-name descname"><span class="pre">set_qmmm_constraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_constraints" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation constraints
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_nsteps">
+<span class="sig-name descname"><span class="pre">set_qmmm_nsteps</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nsteps</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_nsteps" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation constraints
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_timestep">
+<span class="sig-name descname"><span class="pre">set_qmmm_timestep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timestep</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_timestep" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation constraints
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_qmmm_istate">
+<span class="sig-name descname"><span class="pre">set_qmmm_istate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">istate</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_qmmm_istate" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle QM/MM calculation istate
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_type">
+<span class="sig-name descname"><span class="pre">set_tdhf_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">td_type</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_type" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Handle td-dft calculation type
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_nstate">
+<span class="sig-name descname"><span class="pre">set_tdhf_nstate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nstate</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_nstate" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set number of states in tdhf calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_target">
+<span class="sig-name descname"><span class="pre">set_tdhf_target</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_target" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set target states in tdhf gradient calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_maxit">
+<span class="sig-name descname"><span class="pre">set_tdhf_maxit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxit</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_maxit" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set max number of iterations in Davidson&#39;s eigensolver
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_maxit_zv">
+<span class="sig-name descname"><span class="pre">set_tdhf_maxit_zv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">maxit_zv</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_maxit_zv" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set max number of iterations in Davidson&#39;s eigensolver
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_conv">
+<span class="sig-name descname"><span class="pre">set_tdhf_conv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conv</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_conv" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF convergence threshold
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_zvconv">
+<span class="sig-name descname"><span class="pre">set_tdhf_zvconv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conv</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_zvconv" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set SCF convergence threshold
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_multiplicity">
+<span class="sig-name descname"><span class="pre">set_tdhf_multiplicity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multiplicity</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_multiplicity" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set multiplicity in tdhf calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_nvdav">
+<span class="sig-name descname"><span class="pre">set_tdhf_nvdav</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nvdav</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_nvdav" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set max number of trial vectors in Davidson&#39;s eigensolver
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_tlf">
+<span class="sig-name descname"><span class="pre">set_tdhf_tlf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tlf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_tlf" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set TLF in tdhf NAC calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_hfscale">
+<span class="sig-name descname"><span class="pre">set_tdhf_hfscale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hfscale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_hfscale" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set HF exact exchange scalar in response calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_cam_alpha">
+<span class="sig-name descname"><span class="pre">set_tdhf_cam_alpha</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_alpha</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_cam_alpha" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set short range HF exact exchange scalar in response calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_cam_beta">
+<span class="sig-name descname"><span class="pre">set_tdhf_cam_beta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_beta</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_cam_beta" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set long range HF exact exchange scalar in response calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_cam_mu">
+<span class="sig-name descname"><span class="pre">set_tdhf_cam_mu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_mu</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_cam_mu" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set range separation parameter mu in response calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_spc_coco">
+<span class="sig-name descname"><span class="pre">set_tdhf_spc_coco</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spc_coco</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_spc_coco" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set CO-CO spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_spc_ovov">
+<span class="sig-name descname"><span class="pre">set_tdhf_spc_ovov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spc_ovov</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_spc_ovov" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set OV-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_spc_coov">
+<span class="sig-name descname"><span class="pre">set_tdhf_spc_coov</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spc_coov</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_spc_coov" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set CO-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_ixcore">
+<span class="sig-name descname"><span class="pre">set_tdhf_ixcore</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ixcore</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_ixcore" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_gmres_dim">
+<span class="sig-name descname"><span class="pre">set_tdhf_gmres_dim</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gmres_dim</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_gmres_dim" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set the restart dimension of GMRES during z-vector:
+50 (default)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_tdhf_z_solver">
+<span class="sig-name descname"><span class="pre">set_tdhf_z_solver</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z_solver</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_tdhf_z_solver" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set z-vector solver type:
+0: CG (Conjugate Gradient, default) - for symmetric positive-definite (A+B)
+1: GMRES (Generalized Minimal Residual) - legacy explicit fallback
+2: MINRES (Minimal Residual) - symmetric, robust when (A+B) is indefinite
+3: AUTO - try CG, fall back to MINRES then GMRES if a solver fails
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_conf_threshold">
+<span class="sig-name descname"><span class="pre">set_conf_threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">conf_threshold</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_conf_threshold" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set configuration printout option
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dft_functional">
+<span class="sig-name descname"><span class="pre">set_dft_functional</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">functional</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dft_functional" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set DFT functional
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_mp2_same_spin_scale">
+<span class="sig-name descname"><span class="pre">set_mp2_same_spin_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_mp2_same_spin_scale" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set standalone MP2 same-spin scale.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_mp2_opposite_spin_scale">
+<span class="sig-name descname"><span class="pre">set_mp2_opposite_spin_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_mp2_opposite_spin_scale" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set standalone MP2 opposite-spin scale.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_rad_type">
+<span class="sig-name descname"><span class="pre">set_dftgrid_rad_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">radtype</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_rad_type" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set radial grid type in DFT
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_rad_npts">
+<span class="sig-name descname"><span class="pre">set_dftgrid_rad_npts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">npts</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_rad_npts" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set number of radial grid points in DFT
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_ang_npts">
+<span class="sig-name descname"><span class="pre">set_dftgrid_ang_npts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">npts</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_ang_npts" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set number of angular grid points in DFT
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_ao_threshold">
+<span class="sig-name descname"><span class="pre">set_dftgrid_ao_threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">do</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_ao_threshold" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set grid_ao_threshold
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_ao_pruned">
+<span class="sig-name descname"><span class="pre">set_dftgrid_ao_pruned</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">do</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_ao_pruned" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set grid_ao_pruned
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_pruned_ao_sparsity_ratio">
+<span class="sig-name descname"><span class="pre">set_dftgrid_pruned_ao_sparsity_ratio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">do</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_pruned_ao_sparsity_ratio" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set grid_ao_sparsity_ratio
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_partfun">
+<span class="sig-name descname"><span class="pre">set_dftgrid_partfun</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">partfun</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_partfun" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set partition function in Becke&#39;s fuzzy cell method
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_pruned">
+<span class="sig-name descname"><span class="pre">set_dftgrid_pruned</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pruned</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_pruned" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set pruned grid
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_hfscale">
+<span class="sig-name descname"><span class="pre">set_dftgrid_hfscale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hfscale</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_hfscale" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set HF exact exchange scalar in DFT calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_flag">
+<span class="sig-name descname"><span class="pre">set_dftgrid_cam_flag</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_flag</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_flag" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set CAM flag in DFT calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_alpha">
+<span class="sig-name descname"><span class="pre">set_dftgrid_cam_alpha</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_alpha</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_alpha" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set short range HF exact exchange scalar in DFT calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_beta">
+<span class="sig-name descname"><span class="pre">set_dftgrid_cam_beta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_beta</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_beta" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set long range HF exact exchange scalar in DFT calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_mu">
+<span class="sig-name descname"><span class="pre">set_dftgrid_cam_mu</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_mu</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_dftgrid_cam_mu" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set range separation parameter mu in DFT calculation
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_system">
+<span class="sig-name descname"><span class="pre">set_system</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_system" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up atomic data
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_system2">
+<span class="sig-name descname"><span class="pre">set_system2</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_system2" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Set up the second set of atomic data
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.set_soc_2e">
+<span class="sig-name descname"><span class="pre">set_soc_2e</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">soc_2e</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.set_soc_2e" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.parse_section">
+<span class="sig-name descname"><span class="pre">parse_section</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">section</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.parse_section" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.apply_config">
+<span class="sig-name descname"><span class="pre">apply_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.apply_config" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Apply the data from the OQP config
+The latter has to be read from the input file
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.OQPData.get_basis">
+<span class="sig-name descname"><span class="pre">get_basis</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.OQPData.get_basis" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Get basis set from a molecule
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.compute_alpha_beta_electrons">
+<span class="sig-name descname"><span class="pre">compute_alpha_beta_electrons</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_e</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mult</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.compute_alpha_beta_electrons" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Compute number of alpha and beta electrons for a given total electron number and multiplicity
+ne - total number of electrons
+mult - multiplicity
+returns (n_alpha, n_beta)
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.molecule.oqpdata.read_system">
+<span class="sig-name descname"><span class="pre">read_system</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">system</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.molecule.oqpdata.read_system" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../molecule/index.html" class="btn btn-neutral float-left" title="oqp.molecule.molecule" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../openqp/index.html" class="btn btn-neutral float-right" title="oqp.openqp" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

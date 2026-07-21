@@ -1,0 +1,87 @@
+oqp.library.symmetry_detect
+===========================
+
+.. py:module:: oqp.library.symmetry_detect
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Backend-free molecular point-group detection for symmetry metadata.
+
+      This module detects the full Schoenflies point group of a molecular geometry
+      and resolves the largest usable abelian subgroup from the D2h family
+      (C1, Ci, Cs, C2, C2v, C2h, D2, D2h) together with a standard orientation and
+      per-operation atom permutations.
+
+      Detection is geometry-only metadata: it does not change SCF/integral/response
+      execution behavior, and all symmetry reductions stay off.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.symmetry_detect.SIGN_OPERATIONS
+   oqp.library.symmetry_detect.ABELIAN_GROUP_OPS
+   oqp.library.symmetry_detect.CHARACTER_TABLES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.symmetry_detect.detect_point_group
+   oqp.library.symmetry_detect.enumerate_full_group
+   oqp.library.symmetry_detect.attach_detection_metadata
+
+
+Module Contents
+---------------
+
+.. py:data:: SIGN_OPERATIONS
+   :type:  dict[str, tuple[int, int, int]]
+
+.. py:data:: ABELIAN_GROUP_OPS
+   :type:  dict[str, list[str]]
+
+.. py:data:: CHARACTER_TABLES
+   :type:  dict[str, dict[str, list[int]]]
+
+.. py:function:: detect_point_group(atomic_numbers: Any, coordinates: Any, tolerance: float = 1e-05) -> dict[str, Any]
+
+   .. code-block:: text
+
+      Detect full point group and abelian (D2h-family) subgroup metadata.
+
+      :param atomic_numbers: Per-atom nuclear charges (used as symmetry-equivalence weights).
+      :param coordinates: Cartesian coordinates, shape (natom, 3) (any consistent length unit).
+      :param tolerance: Absolute displacement tolerance for accepting a symmetry operation.
+
+
+.. py:function:: enumerate_full_group(atomic_numbers: Any, coordinates: Any, tolerance: float = 1e-05, max_order: int = 120) -> list[dict[str, Any]]
+
+   .. code-block:: text
+
+      All point-group operations of a geometry (non-abelian included).
+
+      Seeds the set with every verified rotation power, reflection, and the
+      inversion found by the element survey, then closes it under
+      multiplication (products of symmetry operations are symmetry
+      operations). Returns operation payloads with dense 3x3 matrices and
+      atom permutations, in the frame of the given coordinates.
+
+
+.. py:function:: attach_detection_metadata(symmetry_metadata: MutableMapping[str, Any], atomic_numbers: Any, coordinates: Any) -> MutableMapping[str, Any]
+
+   .. code-block:: text
+
+      Run detection and record results in `symmetry_metadata` in place.
+
+      Metadata-only: resolves 'auto' point-group/subgroup requests against the
+      detected values and never enables symmetry reductions.
+
+

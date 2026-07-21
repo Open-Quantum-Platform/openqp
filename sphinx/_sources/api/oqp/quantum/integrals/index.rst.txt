@@ -1,0 +1,94 @@
+oqp.quantum.integrals
+=====================
+
+.. py:module:: oqp.quantum.integrals
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Integral utilities for building the second-quantized molecular Hamiltonian.
+
+      These helpers are deliberately free of any dependency on the compiled ``oqp``
+      extension so that they can be unit-tested and reused independently of an
+      OpenQP build. They operate on plain NumPy arrays.
+
+      Conventions
+      -----------
+      * One-electron integrals ``h_pq`` are stored as a square ``(norb, norb)``
+        matrix in the (real) molecular-orbital basis.
+      * Two-electron integrals use **chemist notation** ``(pq|rs)`` -- the same
+        convention used by the FCIDUMP interchange format, PySCF and most quantum
+        chemistry codes. The stored tensor has shape ``(norb, norb, norb, norb)``
+        with index order ``[p, q, r, s]`` meaning
+        ``(pq|rs) = \int \phi_p(1)\phi_q(1) (1/r12) \phi_r(2)\phi_s(2) dr1 dr2``.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.quantum.integrals.unpack_triangular
+   oqp.quantum.integrals.ao_to_mo_1body
+   oqp.quantum.integrals.ao_to_mo_2body
+
+
+Module Contents
+---------------
+
+.. py:function:: unpack_triangular(packed, norb, lower=True)
+
+   .. code-block:: text
+
+      Expand a packed triangular matrix into a dense symmetric matrix.
+
+      OpenQP stores symmetric one-electron matrices (``OQP::Hcore``, ``OQP::SM``,
+      Fock, density, ...) as the lower triangle in column-major Fortran order,
+      which -- read back as a flat C array -- is exactly the row-major lower
+      triangle. This mirrors the unpacking already done in ``Molecule``.
+
+      :param packed: Flat array of length ``norb * (norb + 1) // 2``.
+      :type packed: array_like
+      :param norb: Dimension of the resulting square matrix.
+      :type norb: int
+      :param lower: Whether ``packed`` holds the lower (default) or upper triangle.
+      :type lower: bool
+
+      :returns: Dense ``(norb, norb)`` symmetric matrix.
+      :rtype: numpy.ndarray
+
+
+.. py:function:: ao_to_mo_1body(h_ao, mo_coeff)
+
+   .. code-block:: text
+
+      Transform a one-electron AO matrix into the MO basis.
+
+      ``h_pq = sum_{mu,nu} C_{mu p} h_{mu nu} C_{nu q}``.
+
+      :param h_ao: One-electron integrals in the AO basis (e.g. core Hamiltonian).
+      :type h_ao: array_like, shape (nao, nao)
+      :param mo_coeff: MO coefficient matrix (AO rows, MO columns).
+      :type mo_coeff: array_like, shape (nao, nmo)
+
+
+.. py:function:: ao_to_mo_2body(eri_ao, mo_coeff)
+
+   .. code-block:: text
+
+      Transform two-electron AO integrals ``(mu nu|la si)`` into the MO basis.
+
+      Performs the standard O(N^5) four-index transformation, contracting one
+      index at a time, and returns ``(pq|rs)`` in chemist notation.
+
+      :param eri_ao: Two-electron repulsion integrals in the AO basis, chemist notation.
+      :type eri_ao: array_like, shape (nao, nao, nao, nao)
+      :param mo_coeff: MO coefficient matrix (AO rows, MO columns).
+      :type mo_coeff: array_like, shape (nao, nmo)
+
+      :returns: ``(pq|rs)`` in the MO basis.
+      :rtype: numpy.ndarray, shape (nmo, nmo, nmo, nmo)
+
+

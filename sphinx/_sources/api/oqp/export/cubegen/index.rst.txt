@@ -1,0 +1,70 @@
+oqp.export.cubegen
+==================
+
+.. py:module:: oqp.export.cubegen
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Gaussian .cube export for MRSF orbitals and excited-state densities.
+
+      Uses the self-contained GTO evaluator (``oqp.analysis.gto_grid``).  Density
+      cubes store rho(r) = sum_uv D_uv chi_u(r) chi_v(r); orbital cubes store the
+      amplitude phi(r).  Grid integrals are validated against analytic traces:
+      state density -> N, transition density -> 0, attachment/detachment ->
+      n_promoted, |orbital|^2 -> 1.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.export.cubegen.CubeExporter
+
+
+Module Contents
+---------------
+
+.. py:class:: CubeExporter(states, ao=None, padding=5.0, spacing=0.15)
+
+   .. py:attribute:: st
+
+
+   .. py:attribute:: ao
+
+
+   .. py:attribute:: Z
+
+
+   .. py:attribute:: coords
+
+
+   .. py:attribute:: dV
+      :value: 0.003375
+
+
+
+   .. py:method:: integrate_density(D_ao, spacing=None, padding=5.0)
+
+
+   .. py:method:: integrate_orbital_sq(c_ao, spacing=None, padding=5.0)
+
+
+   .. py:method:: mo_cube(path, mo_index, spin='alpha')
+
+
+   .. py:method:: state_density_cube(path, n)
+
+
+   .. py:method:: transition_density_cube(path, i, j)
+
+
+   .. py:method:: attachment_detachment_cubes(path_attach, path_detach, ad)
+
+
+   .. py:method:: nto_cube(path, c_ao, label)
+
+

@@ -1,0 +1,55 @@
+oqp
+===
+
+.. py:module:: oqp
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP instance
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/SimulationManager/index
+   /api/oqp/analysis/index
+   /api/oqp/export/index
+   /api/oqp/interop/index
+   /api/oqp/library/index
+   /api/oqp/molden/index
+   /api/oqp/molecule/index
+   /api/oqp/openqp/index
+   /api/oqp/periodic_table/index
+   /api/oqp/pyoqp/index
+   /api/oqp/quantum/index
+   /api/oqp/runtime/index
+   /api/oqp/utils/index
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.RTLD
+   oqp.ffi
+   oqp.attr_value
+
+
+Package Contents
+----------------
+
+.. py:data:: RTLD
+   :value: False
+
+
+.. py:data:: ffi
+
+.. py:data:: attr_value
+

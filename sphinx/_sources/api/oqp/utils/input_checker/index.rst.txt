@@ -1,0 +1,247 @@
+oqp.utils.input_checker
+=======================
+
+.. py:module:: oqp.utils.input_checker
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OpenQP input checker with actionable diagnostics.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.input_checker.SUPPORTED_RUNTYPES
+   oqp.utils.input_checker.NOT_AVAILABLE_RUNTYPES
+   oqp.utils.input_checker.ALL_RUNTYPES
+   oqp.utils.input_checker.METHODS
+   oqp.utils.input_checker.SCF_TYPES
+   oqp.utils.input_checker.TDHF_TYPES
+   oqp.utils.input_checker.MP2_VARIANTS
+   oqp.utils.input_checker.DFTB_BACKENDS
+   oqp.utils.input_checker.DFTB_TYPES
+   oqp.utils.input_checker.DFTB_SCC_MIXERS
+   oqp.utils.input_checker.DFTB_MODELS
+   oqp.utils.input_checker.DFTB_MODEL_DEFAULT_MRSF
+   oqp.utils.input_checker.DFTB_MODEL_DEFAULT_OPEN_SHELL
+   oqp.utils.input_checker.DFTB_MODEL_LOCKED_KEYS
+   oqp.utils.input_checker.DFTB_NATIVE_ONLY_KEYS
+   oqp.utils.input_checker.GUESS_TYPES
+   oqp.utils.input_checker.SCF_CONVERGERS
+   oqp.utils.input_checker.OPTIONAL_SCF_CONVERGERS
+   oqp.utils.input_checker.DIIS_TYPES
+   oqp.utils.input_checker.PCM_BACKENDS
+   oqp.utils.input_checker.PCM_MODES
+   oqp.utils.input_checker.PCM_MODELS
+   oqp.utils.input_checker.PCM_BACKEND_MODELS
+   oqp.utils.input_checker.OPT_LIBS
+   oqp.utils.input_checker.SCIPY_OPTIMIZERS
+   oqp.utils.input_checker.MECI_SEARCH
+   oqp.utils.input_checker.SCF_PROPS
+   oqp.utils.input_checker.NMR_GAUGES
+   oqp.utils.input_checker.INIT_SCF_TYPES
+   oqp.utils.input_checker.WIKI_HELP
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.input_checker.Diagnostic
+   oqp.utils.input_checker.CheckReport
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.input_checker.apply_dftb_model_default
+   oqp.utils.input_checker.analytic_hessian_capability
+   oqp.utils.input_checker.check_input_values
+
+
+Module Contents
+---------------
+
+.. py:data:: SUPPORTED_RUNTYPES
+
+.. py:data:: NOT_AVAILABLE_RUNTYPES
+
+.. py:data:: ALL_RUNTYPES
+
+.. py:data:: METHODS
+
+.. py:data:: SCF_TYPES
+
+.. py:data:: TDHF_TYPES
+
+.. py:data:: MP2_VARIANTS
+
+.. py:data:: DFTB_BACKENDS
+
+.. py:data:: DFTB_TYPES
+
+.. py:data:: DFTB_SCC_MIXERS
+
+.. py:data:: DFTB_MODELS
+
+.. py:data:: DFTB_MODEL_DEFAULT_MRSF
+   :value: 'dtcam-tb'
+
+
+.. py:data:: DFTB_MODEL_DEFAULT_OPEN_SHELL
+   :value: 'dftb+'
+
+
+.. py:data:: DFTB_MODEL_LOCKED_KEYS
+   :value: ('omega', 'cam_alpha', 'cam_beta', 'lc_gamma', 'lc_ground_state', 'w_scale', 'response_w_scale',...
+
+
+.. py:data:: DFTB_NATIVE_ONLY_KEYS
+   :value: ('c_mrsf', 'c_mrsf_oo', 'response_global_hybrid', 'onsite_exchange_scale', 'w_scale',...
+
+
+.. py:data:: GUESS_TYPES
+
+.. py:data:: SCF_CONVERGERS
+
+.. py:data:: OPTIONAL_SCF_CONVERGERS
+
+.. py:data:: DIIS_TYPES
+
+.. py:data:: PCM_BACKENDS
+
+.. py:data:: PCM_MODES
+
+.. py:data:: PCM_MODELS
+
+.. py:data:: PCM_BACKEND_MODELS
+
+.. py:data:: OPT_LIBS
+
+.. py:data:: SCIPY_OPTIMIZERS
+
+.. py:data:: MECI_SEARCH
+
+.. py:data:: SCF_PROPS
+
+.. py:data:: NMR_GAUGES
+
+.. py:data:: INIT_SCF_TYPES
+
+.. py:data:: WIKI_HELP
+
+.. py:class:: Diagnostic
+
+   .. py:attribute:: severity
+      :type:  str
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: message
+      :type:  str
+
+
+   .. py:attribute:: value
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: expected
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: action
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: wiki
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:method:: to_text(index: int) -> str
+
+
+.. py:class:: CheckReport
+
+   .. py:attribute:: diagnostics
+      :type:  list[Diagnostic]
+      :value: []
+
+
+
+   .. py:property:: ok
+      :type: bool
+
+
+
+   .. py:property:: errors
+      :type: list[Diagnostic]
+
+
+
+   .. py:property:: warnings
+      :type: list[Diagnostic]
+
+
+
+   .. py:method:: add(severity: str, path: str, message: str, *, value: Any = None, expected: str | None = None, action: str | None = None, wiki: str | None = None) -> None
+
+
+   .. py:method:: to_text() -> str
+
+
+.. py:function:: apply_dftb_model_default(config: dict[str, Any]) -> str
+
+   .. code-block:: text
+
+      Materialize the production default [dftb] model preset.
+
+      MRSF-TDDFTB defaults to the published DTCAM-TB operator; the other
+      open-shell SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
+      compatibility protocol.  Closed-shell routes (singlet ground, TD-DFTB)
+      and DFTB0 stay preset-free because the restricted reference has no
+      long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
+      and any tuned preset-locked key implies manual operator control (legacy
+      inputs keep meaning what they said).  Returns the effective model string.
+
+
+.. py:function:: analytic_hessian_capability(config: dict[str, Any]) -> tuple[str, str]
+
+   .. code-block:: text
+
+      Return analytic-Hessian capability status and a precise reason.
+
+      This checker is intentionally conservative: enabling a dispatch scaffold must
+      not imply broad scientific support. Unsupported analytic Hessians fail at
+      input-check time instead of silently falling back to numerical Hessians.
+
+
+.. py:function:: check_input_values(config: dict[str, Any], *, raise_error: bool = True, emit: bool = True, input_dir: str | None = None) -> CheckReport
+
+   .. code-block:: text
+
+      Validate an already parsed OpenQP config and return a diagnostic report.
+
+      ``input_dir`` is the directory of the input file, used to resolve paths
+      (e.g. the NEB product endpoint) that are stored relative to the input file
+      rather than the current working directory.
+
+

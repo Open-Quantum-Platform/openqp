@@ -1,0 +1,43 @@
+oqp.library.ints_2e
+===================
+
+.. py:module:: oqp.library.ints_2e
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.ints_2e.ints_2e
+   oqp.library.ints_2e.eri_ao
+
+
+Module Contents
+---------------
+
+.. py:function:: ints_2e(mol)
+
+   .. code-block:: text
+
+      Compute the two-electron repulsion integrals (ERIs) in the AO basis.
+
+      Populates the ``OQP::ERI_AO`` tag with the full ``nbf**4`` tensor of
+      integrals ``(mu nu|la si)`` in chemist notation. This is the conventional
+      in-core path (memory grows as ``nbf**4``); it targets small active systems
+      for FCIDUMP / quantum-computing export rather than production SCF.
+
+
+.. py:function:: eri_ao(mol, recompute=True)
+
+   .. code-block:: text
+
+      Return dense AO two-electron integrals in chemist notation.
+
+      By default this recomputes ``OQP::ERI_AO`` on every call.  A same-size tag
+      may belong to an earlier geometry/calculation on the same ``Molecule`` and
+      would silently mix stale ERIs with current one-electron data.  Set
+      ``recompute=False`` only when the caller has explicitly managed cache
+      validity.
+
+

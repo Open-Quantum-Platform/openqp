@@ -1,0 +1,766 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.namd &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/namd/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.neb_utils" href="../neb_utils/index.html" />
+    <link rel="prev" title="oqp.library.libscipy" href="../libscipy/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.namd</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/namd/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.namd">
+<span id="oqp-library-namd"></span><h1>oqp.library.namd<a class="headerlink" href="#module-oqp.library.namd" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Nonadiabatic molecular dynamics (NAMD) — Tully fewest-switches surface hopping
+(FSSH) on MRSF-TDDFT adiabatic states.
+
+Design
+------
+The numerically critical surface-hopping physics lives in Fortran
+(``source/modules/namd.F90`` -&gt; C entry ``mrsf_namd_hop``); this Python driver
+only *sequences* the existing electronic-structure drivers and integrates the
+nuclei with velocity Verlet:
+
+  per step:  position update (Verlet)
+             -&gt; SinglePoint.reference()  (SCF)
+             -&gt; BasisOverlap.overlap()   (MO overlap vs previous step, phase aligned)
+             -&gt; SinglePoint.excitation() (MRSF energies + response vectors)
+             -&gt; Gradient (active state)
+             -&gt; velocity 2nd half-kick
+             -&gt; NACME.nacme()            (state overlap S = &lt;i(t-dt)|j(t)&gt;)
+             -&gt; oqp.mrsf_namd_hop()      (TDC, RK4 amplitude propagation, EDC,
+                                          trivial-crossing follow, FSSH hop +
+                                          isotropic velocity rescaling)
+             -&gt; on hop: recompute gradient on the new active surface
+             -&gt; output / restart
+
+Units: coordinates in bohr, masses in electron masses, energies in Hartree,
+velocities in bohr / atomic-time.  Time step is given in fs and converted.
+
+This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.FS_TO_AU" title="oqp.library.namd.FS_TO_AU"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FS_TO_AU</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.KB_HARTREE" title="oqp.library.namd.KB_HARTREE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KB_HARTREE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.AMU_TO_AU" title="oqp.library.namd.AMU_TO_AU"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AMU_TO_AU</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.BOHR_TO_NM" title="oqp.library.namd.BOHR_TO_NM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BOHR_TO_NM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.NM_TO_BOHR" title="oqp.library.namd.NM_TO_BOHR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NM_TO_BOHR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.HABOHR_TO_KJMOLNM" title="oqp.library.namd.HABOHR_TO_KJMOLNM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HABOHR_TO_KJMOLNM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.KJMOL_TO_HARTREE" title="oqp.library.namd.KJMOL_TO_HARTREE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KJMOL_TO_HARTREE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.HA_TO_WAVENUM" title="oqp.library.namd.HA_TO_WAVENUM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HA_TO_WAVENUM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD" title="oqp.library.namd.NAMD"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD_QMMM" title="oqp.library.namd.NAMD_QMMM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_QMMM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD_SOC" title="oqp.library.namd.NAMD_SOC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD_SOC_MCH" title="oqp.library.namd.NAMD_SOC_MCH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC_MCH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD_SOC_QMMM" title="oqp.library.namd.NAMD_SOC_QMMM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC_QMMM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.namd.NAMD_SOC_MCH_QMMM" title="oqp.library.namd.NAMD_SOC_MCH_QMMM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC_MCH_QMMM</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.FS_TO_AU">
+<span class="sig-name descname"><span class="pre">FS_TO_AU</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">41.341374575751</span></em><a class="headerlink" href="#oqp.library.namd.FS_TO_AU" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.KB_HARTREE">
+<span class="sig-name descname"><span class="pre">KB_HARTREE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3.166811563e-06</span></em><a class="headerlink" href="#oqp.library.namd.KB_HARTREE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.AMU_TO_AU">
+<span class="sig-name descname"><span class="pre">AMU_TO_AU</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1822.888486209</span></em><a class="headerlink" href="#oqp.library.namd.AMU_TO_AU" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.BOHR_TO_NM">
+<span class="sig-name descname"><span class="pre">BOHR_TO_NM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.05291772109</span></em><a class="headerlink" href="#oqp.library.namd.BOHR_TO_NM" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.NM_TO_BOHR">
+<span class="sig-name descname"><span class="pre">NM_TO_BOHR</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">18.89726124636483</span></em><a class="headerlink" href="#oqp.library.namd.NM_TO_BOHR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.HABOHR_TO_KJMOLNM">
+<span class="sig-name descname"><span class="pre">HABOHR_TO_KJMOLNM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">49614.75258041956</span></em><a class="headerlink" href="#oqp.library.namd.HABOHR_TO_KJMOLNM" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.KJMOL_TO_HARTREE">
+<span class="sig-name descname"><span class="pre">KJMOL_TO_HARTREE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0003808798847829512</span></em><a class="headerlink" href="#oqp.library.namd.KJMOL_TO_HARTREE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Driver for FSSH nonadiabatic molecular dynamics.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.nstep">
+<span class="sig-name descname"><span class="pre">nstep</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.nstep" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dt_fs">
+<span class="sig-name descname"><span class="pre">dt_fs</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dt_fs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dt">
+<span class="sig-name descname"><span class="pre">dt</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dt_max">
+<span class="sig-name descname"><span class="pre">dt_max</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dt_max" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dt_adaptive">
+<span class="sig-name descname"><span class="pre">dt_adaptive</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dt_adaptive" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dt_min">
+<span class="sig-name descname"><span class="pre">dt_min</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dt_min" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.dx_max">
+<span class="sig-name descname"><span class="pre">dx_max</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.dx_max" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.active">
+<span class="sig-name descname"><span class="pre">active</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.active" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.nstate">
+<span class="sig-name descname"><span class="pre">nstate</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.nstate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.substep">
+<span class="sig-name descname"><span class="pre">substep</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.substep" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.decoherence">
+<span class="sig-name descname"><span class="pre">decoherence</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.decoherence" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.edc_c">
+<span class="sig-name descname"><span class="pre">edc_c</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.edc_c" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.thrshe">
+<span class="sig-name descname"><span class="pre">thrshe</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.thrshe" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.tdc_scheme">
+<span class="sig-name descname"><span class="pre">tdc_scheme</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.tdc_scheme" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.trivial">
+<span class="sig-name descname"><span class="pre">trivial</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.trivial" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.trivial_thresh">
+<span class="sig-name descname"><span class="pre">trivial_thresh</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.trivial_thresh" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.init_temp">
+<span class="sig-name descname"><span class="pre">init_temp</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.init_temp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.seed">
+<span class="sig-name descname"><span class="pre">seed</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.seed" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.velocity_source">
+<span class="sig-name descname"><span class="pre">velocity_source</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.velocity_source" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.natom">
+<span class="sig-name descname"><span class="pre">natom</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.natom" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.mass">
+<span class="sig-name descname"><span class="pre">mass</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.mass" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.rng">
+<span class="sig-name descname"><span class="pre">rng</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.rng" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.coef">
+<span class="sig-name descname"><span class="pre">coef</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.coef" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.vel">
+<span class="sig-name descname"><span class="pre">vel</span></span><a class="headerlink" href="#oqp.library.namd.NAMD.vel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.prev_xyz">
+<span class="sig-name descname"><span class="pre">prev_xyz</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.prev_xyz" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.prev_data">
+<span class="sig-name descname"><span class="pre">prev_data</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.namd.NAMD.prev_data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD_QMMM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.namd.NAMD" title="oqp.library.namd.NAMD"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>FSSH NAMD with electrostatic ESPF QM/MM embedding (non-periodic).
+
+The QM region is the OpenQP Molecule; the MM region + QM/MM coupling are
+handled by OpenMM via the OpenQpQMMM driver.  Per step:
+  * sync positions (QM Molecule + OpenMM context),
+  * MM electrostatic potential at QM atoms (POTMM),
+  * embedded SCF + MRSF excitation (all states),
+  * active-state embedded gradient = Gradient + grad_esp_qmmm_excited,
+  * ESPF QM charges -&gt; MM forces (forces_mm),
+  * full-system velocity Verlet (QM+MM, atomic units),
+  * QM-only FSSH hop (rescale only QM velocities, as in GAMESS RESCALV).
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.qm_atoms">
+<span class="sig-name descname"><span class="pre">qm_atoms</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.qm_atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.cutoff">
+<span class="sig-name descname"><span class="pre">cutoff</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.cutoff" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.periodic">
+<span class="sig-name descname"><span class="pre">periodic</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.periodic" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.pdb">
+<span class="sig-name descname"><span class="pre">pdb</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.pdb" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.forcefield">
+<span class="sig-name descname"><span class="pre">forcefield</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.forcefield" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.driver">
+<span class="sig-name descname"><span class="pre">driver</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.driver" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.mm">
+<span class="sig-name descname"><span class="pre">mm</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.mm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.natom_all">
+<span class="sig-name descname"><span class="pre">natom_all</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.natom_all" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.r_all">
+<span class="sig-name descname"><span class="pre">r_all</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.r_all" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.m_all">
+<span class="sig-name descname"><span class="pre">m_all</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.m_all" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.v_all">
+<span class="sig-name descname"><span class="pre">v_all</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.v_all" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.qm_mass">
+<span class="sig-name descname"><span class="pre">qm_mass</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.qm_mass" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_QMMM.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_QMMM.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.namd.HA_TO_WAVENUM">
+<span class="sig-name descname"><span class="pre">HA_TO_WAVENUM</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">219474.6313708</span></em><a class="headerlink" href="#oqp.library.namd.HA_TO_WAVENUM" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD_SOC</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.namd.NAMD" title="oqp.library.namd.NAMD"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SOC-NAMD (intersystem crossing) on the SHARC spin-adiabatic representation.
+
+soc_mrsf builds and diagonalises H = diag(E_MCH) + H_SOC, giving the
+spin-adiabatic energies (OQP::soc_eval, cm^-1 relative to the lowest
+excitation) and eigenvectors U (OQP::soc_evec_*).  Surface hopping is done
+on these spin-adiabatic states.
+
+Nuclei propagate on the active spin-adiabatic surface using the SHARC
+weighted-MCH diagonal gradient (sum_i |U_i,a|^2 grad E_i^MCH, triplet Ms
+sublevels sharing one gradient), which is correct through an S/T crossing
+where SOC mixes states strongly.  The spin-adiabatic FSSH hopping layer uses
+the local-diabatization propagator with substep energy integration and
+U-phase tracking (block-Procrustes within degenerate Ms groups) on the
+block-diagonal MCH state overlap.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.nstate_mrsf">
+<span class="sig-name descname"><span class="pre">nstate_mrsf</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.nstate_mrsf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.ns">
+<span class="sig-name descname"><span class="pre">ns</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.ns" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.nt">
+<span class="sig-name descname"><span class="pre">nt</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.nt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.nstate_soc">
+<span class="sig-name descname"><span class="pre">nstate_soc</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.nstate_soc" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.active">
+<span class="sig-name descname"><span class="pre">active</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.active" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.coef">
+<span class="sig-name descname"><span class="pre">coef</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.coef" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.e_ref">
+<span class="sig-name descname"><span class="pre">e_ref</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.e_ref" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.e0">
+<span class="sig-name descname"><span class="pre">e0</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.e0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.init_state">
+<span class="sig-name descname"><span class="pre">init_state</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.init_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.econs">
+<span class="sig-name descname"><span class="pre">econs</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.econs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.soc_du_dt_corr">
+<span class="sig-name descname"><span class="pre">soc_du_dt_corr</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.soc_du_dt_corr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.soc_tdc_grad_corr">
+<span class="sig-name descname"><span class="pre">soc_tdc_grad_corr</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.soc_tdc_grad_corr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD_SOC_MCH</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.namd.NAMD_SOC" title="oqp.library.namd.NAMD_SOC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SOC-NAMD in the MCH (spin-pure) basis.
+
+The active state is a single MCH basis function (singlet root or one
+triplet Ms component), so the nuclear force is the exact MCH root gradient.
+Electronic amplitudes are propagated by the SOC Hamiltonian in that MCH
+basis instead of the spin-adiabatic local-diabatization propagator.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH.coef">
+<span class="sig-name descname"><span class="pre">coef</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH.coef" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD_SOC_QMMM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.namd.NAMD_QMMM" title="oqp.library.namd.NAMD_QMMM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_QMMM</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>SOC-NAMD (intersystem crossing) with electrostatic ESPF QM/MM embedding.
+
+Union of the SHARC spin-adiabatic SOC-NAMD machinery (NAMD_SOC) and the
+ESPF/OpenMM embedding (NAMD_QMMM).  Per step:
+  * sync positions (QM Molecule + OpenMM context),
+  * embedded SCF + singlet MRSF + triplet MRSF + soc_mrsf -&gt; (E_diag, U),
+  * spin-adiabatic MCH overlap -&gt; U-phase tracking -&gt; overlap T,
+  * active-surface force = weighted-MCH diagonal gradient, each MCH
+    component carrying its own ESPF embedding gradient,
+  * ESPF QM charges (of the dominant MCH component) -&gt; MM forces,
+  * full-system velocity Verlet (QM+MM, atomic units),
+  * local-diabatization propagation + spin-adiabatic fewest-switches hop,
+    rescaling QM velocities only (as in GAMESS RESCALV).
+
+The SOC electronic/hopping kernels are borrowed from NAMD_SOC via explicit
+NAMD_SOC.&lt;method&gt;(self, ...) calls so this class can inherit the QM/MM
+embedding plumbing from NAMD_QMMM.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.nstate_mrsf">
+<span class="sig-name descname"><span class="pre">nstate_mrsf</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.nstate_mrsf" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.ns">
+<span class="sig-name descname"><span class="pre">ns</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.ns" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.nt">
+<span class="sig-name descname"><span class="pre">nt</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.nt" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.nstate_soc">
+<span class="sig-name descname"><span class="pre">nstate_soc</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.nstate_soc" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.active">
+<span class="sig-name descname"><span class="pre">active</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.active" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.coef">
+<span class="sig-name descname"><span class="pre">coef</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.coef" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.e_ref">
+<span class="sig-name descname"><span class="pre">e_ref</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.e_ref" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.e0">
+<span class="sig-name descname"><span class="pre">e0</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.e0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.init_state">
+<span class="sig-name descname"><span class="pre">init_state</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.init_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.econs">
+<span class="sig-name descname"><span class="pre">econs</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.econs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.soc_du_dt_corr">
+<span class="sig-name descname"><span class="pre">soc_du_dt_corr</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.soc_du_dt_corr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.soc_tdc_grad_corr">
+<span class="sig-name descname"><span class="pre">soc_tdc_grad_corr</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.soc_tdc_grad_corr" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_QMMM.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_QMMM.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH_QMMM">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">NAMD_SOC_MCH_QMMM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH_QMMM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#oqp.library.namd.NAMD_SOC_QMMM" title="oqp.library.namd.NAMD_SOC_QMMM"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NAMD_SOC_QMMM</span></code></a></p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>QM/MM SOC-NAMD in the MCH basis with exact active-root QM gradient.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH_QMMM.coef">
+<span class="sig-name descname"><span class="pre">coef</span></span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH_QMMM.coef" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.namd.NAMD_SOC_MCH_QMMM.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.namd.NAMD_SOC_MCH_QMMM.run" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../libscipy/index.html" class="btn btn-neutral float-left" title="oqp.library.libscipy" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../neb_utils/index.html" class="btn btn-neutral float-right" title="oqp.library.neb_utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

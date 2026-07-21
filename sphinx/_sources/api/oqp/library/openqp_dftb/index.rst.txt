@@ -1,0 +1,140 @@
+oqp.library.openqp_dftb
+=======================
+
+.. py:module:: oqp.library.openqp_dftb
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OpenQP runtime adapter for the optional OpenQP-DFTB backend.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.openqp_dftb.HA_TO_WAVENUMBER
+   oqp.library.openqp_dftb.FINE_STRUCTURE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.openqp_dftb.OpenQPDFTBAdapter
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.openqp_dftb.dftb_soc
+
+
+Module Contents
+---------------
+
+.. py:class:: OpenQPDFTBAdapter(mol)
+
+   .. code-block:: text
+
+      Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider.
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: config
+
+
+   .. py:attribute:: dftb
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: nstate
+
+
+   .. py:method:: energy()
+
+      .. code-block:: text
+
+         Return an OpenQP-style state-energy array and update molecule data.
+
+
+
+   .. py:method:: reference()
+
+      .. code-block:: text
+
+         Return the DFTB reference energy in the same shape as SCF reference().
+
+
+
+   .. py:method:: excitation(_ref_energy=None)
+
+      .. code-block:: text
+
+         Return DFTB total state energies after a reference-style call.
+
+
+
+   .. py:method:: gradient(states)
+
+      .. code-block:: text
+
+         Return an OpenQP-style gradient array indexed by state number.
+
+
+
+   .. py:method:: states_overlap(xyz_old, xyz_new, mo_old, mo_new, x_old, x_new, *, noca, nocb, multiplicity, tlf_order=2)
+
+      .. code-block:: text
+
+         Cross-geometry MRSF/SF state overlap via libopenqp_dftb_c.
+
+         All matrix inputs are FORTRAN-FLAT 1-D arrays (i.e. tag.ravel() of the
+         native-convention tags). Returns (overlap_mo_tag, states_overlap_tag)
+         in the same native tag layout (transpose view of the Fortran matrices).
+
+
+
+   .. py:method:: soc_matrix(mo, x_singlet, x_triplet, *, noca, nocb)
+
+      .. code-block:: text
+
+         Raw one-center MRSF SOC matrix (no alpha^2/2) via libopenqp_dftb_c.
+
+         Inputs are Fortran-flat 1-D arrays; returns (hsoc_re, hsoc_im) as
+         (dim, dim) numpy arrays in the GAMESS state ordering, where the
+         row/column index layout matches the native soc_mrsf convention.
+
+
+
+.. py:data:: HA_TO_WAVENUMBER
+   :value: 219474.6313708
+
+
+.. py:data:: FINE_STRUCTURE
+   :value: 0.0072973525693
+
+
+.. py:function:: dftb_soc(mol)
+
+   .. code-block:: text
+
+      Standalone SOC driver for method=dftb (mirror of the native compute_soc).
+
+      Runs the MRSF response for both target multiplicities from the same ROKS
+      reference, builds the one-center SOC matrix, diagonalizes
+      diag((E - e0) * ha2wn) + hsoc * (alpha^2/2 * ha2wn) in numpy, and fills the
+      same OQP:: tags the native soc_mrsf produces (soc_eval in cm^-1 relative to
+      the lowest MCH excitation; soc_hsoc_* raw, without the alpha^2/2 prefactor).
+
+

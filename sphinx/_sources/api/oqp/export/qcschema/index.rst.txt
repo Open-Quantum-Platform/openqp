@@ -1,0 +1,47 @@
+oqp.export.qcschema
+===================
+
+.. py:module:: oqp.export.qcschema
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      QCSchema AtomicResult export for an OQP (MRSF) calculation.
+
+      Produces a payload that validates with ``qcelemental.models.AtomicResult`` and
+      round-trips OQP's own energies to machine precision.  Excited-state data
+      (excitation energies, oscillator strengths, transition dipoles) are carried in
+      ``extras`` since they are not first-class AtomicResultProperties fields.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.export.qcschema.to_qcschema
+   oqp.export.qcschema.validate_qcschema
+
+
+Module Contents
+---------------
+
+.. py:function:: to_qcschema(mol, states=None, driver='energy')
+
+   .. code-block:: text
+
+      Build a QCSchema AtomicResult payload (dict) from a finished run.
+
+      ``states`` is an optional :class:`MRSFExcitedStates` to attach excited-state
+      properties.
+
+
+.. py:function:: validate_qcschema(payload)
+
+   .. code-block:: text
+
+      Validate the payload with qcelemental; returns the AtomicResult model.
+
+

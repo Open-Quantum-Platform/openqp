@@ -1,0 +1,42 @@
+oqp.utils.kword_map
+===================
+
+.. py:module:: oqp.utils.kword_map
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.kword_map.KW_MAP_PURE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.kword_map.build_kw_map
+   oqp.utils.kword_map.resolve_param_key
+
+
+Module Contents
+---------------
+
+.. py:function:: build_kw_map(schema: dict) -> Dict[str, Tuple[str, str]]
+
+   .. code-block:: text
+
+      Build a flat mapping { 'section.option': (section, option) } from OQP_CONFIG_SCHEMA.
+
+
+.. py:data:: KW_MAP_PURE
+
+.. py:function:: resolve_param_key(user_key: str) -> Tuple[str, str]
+
+   .. code-block:: text
+
+
+
+

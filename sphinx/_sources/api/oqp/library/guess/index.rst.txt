@@ -1,0 +1,34 @@
+oqp.library.guess
+=================
+
+.. py:module:: oqp.library.guess
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Set up initial guess density
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.guess.update_guess
+   oqp.library.guess.guess
+
+
+Module Contents
+---------------
+
+.. py:function:: update_guess(mol)
+
+.. py:function:: guess(mol)
+
+   .. code-block:: text
+
+      Set up initial guess density
+
+

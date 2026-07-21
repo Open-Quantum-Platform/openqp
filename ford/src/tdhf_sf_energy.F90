@@ -12,8 +12,36 @@ contains
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call tdhf_sf_energy(inf)
+    call tdhf_sf_energy_with_restart(inf)
   end subroutine tdhf_sf_energy_C
+
+  ! Run the SF Davidson and auto-restart with a larger subspace (maxvec) and
+  ! more iterations (maxit_dav) if it fails to converge.  Re-invoking the driver
+  ! reallocates a fresh, larger subspace; user settings are restored afterwards.
+  subroutine tdhf_sf_energy_with_restart(infos)
+    use types, only: information
+    use io_constants, only: iw
+    type(information), intent(inout) :: infos
+    integer, parameter :: max_restarts = 2
+    integer :: attempt, maxvec0, maxit0
+    maxvec0 = infos%tddft%maxvec
+    maxit0  = infos%control%maxit_dav
+    do attempt = 0, max_restarts
+      call tdhf_sf_energy(infos)
+      if (infos%mol_energy%Davidson_converged) exit
+      if (attempt < max_restarts) then
+        infos%tddft%maxvec      = 2 * infos%tddft%maxvec
+        infos%control%maxit_dav = 2 * infos%control%maxit_dav
+        open(unit=iw, file=infos%log_filename, position="append")
+        write(iw,'(/,2X,"SF Davidson not converged; auto-restart #",I0, &
+                 &" with larger subspace (maxvec=",I0,", maxit_dav=",I0,")"/)') &
+          attempt + 1, infos%tddft%maxvec, infos%control%maxit_dav
+        close(iw)
+      end if
+    end do
+    infos%tddft%maxvec      = maxvec0
+    infos%control%maxit_dav = maxit0
+  end subroutine tdhf_sf_energy_with_restart
 
   subroutine tdhf_sf_energy(infos)
     use io_constants, only: iw
@@ -27,7 +55,8 @@ contains
 
     use precision, only: dp
     use int2_compute, only: int2_compute_t
-    use tdhf_lib, only: int2_td_data_t
+    use tdhf_lib, only: sym_response_project, &
+      int2_td_data_t
     use tdhf_lib, only: &
       inivec, iatogen, mntoia, rparedms, rpaeig, rpavnorm, &
       rpaechk, rpaprint, rpanewb
@@ -51,6 +80,7 @@ contains
 
     real(kind=dp), allocatable :: scr2(:)
     real(kind=dp), allocatable :: ab2_mo(:,:), scr3(:,:)
+    real(kind=dp), allocatable :: sym_ritz(:,:)
     real(kind=dp), allocatable :: eex(:), spin_square(:)
     real(kind=dp), allocatable :: amb(:,:), &
                                   apb(:,:)
@@ -98,8 +128,12 @@ contains
       OQP_FOCK_A, OQP_DM_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_DM_B, OQP_E_MO_B, OQP_VEC_MO_B, OQP_SM /)
 
     mol_mult = infos%mol_prop%mult
-    if (mol_mult/=3) call show_message('SF-TDDFT are available for ROHF/UHF ref. with ONLY triplet multiplicity(mult=3)',with_abort)
-
+!    if (.not. (mol_mult == 3 .or. mol_mult == 4)) then
+!      call show_message( &
+!        'SF-TDDFT only supports mult=3 (triplet) or mult=4 (quartet) references', &
+!        with_abort)
+!    end if 
+    
     scf_type = infos%control%scftype
     if (scf_type==3) roref = .true.
 
@@ -144,17 +178,9 @@ contains
     nvec = min(max(2*nstates, 5), mxvec)
     nmax = nvec
 
-    call infos%dat%remove_records(tags_alloc)
-
-    call infos%dat%reserve_data(OQP_td_bvec_mo, TA_TYPE_REAL64, &
-        xvec_dim*nstates, (/xvec_dim, nstates/), comment=OQP_td_bvec_mo_comment)
-    call infos%dat%reserve_data(OQP_td_t, TA_TYPE_REAL64, nbf2*2, (/ nbf2, 2 /), comment=OQP_td_t_comment)
-    call infos%dat%reserve_data(OQP_td_energies, TA_TYPE_REAL64, nstates, comment=OQP_td_energies_comment)
-
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, WITH_ABORT)
-    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo_out)
-    call tagarray_get_data(infos%dat, OQP_td_t, td_t)
-    call tagarray_get_data(infos%dat, OQP_td_energies, sf_energies)
+    call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
+    call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
+    call infos%dat%alloc_or_die(OQP_td_energies, (/ nstates /), sf_energies, description=OQP_td_energies_comment)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_SM, smat)
@@ -326,6 +352,10 @@ contains
       call sfresvec(scr3,bvec_mo,ab2_mo,vr_p,eex,nvec,rnorm,nstates)
       call sfqvec(scr3,xm,eex,nstates)
 
+!     Response-space symmetry blocking (no-op unless staged by pyoqp).
+      sym_ritz = matmul(bvec_mo(:,1:nvec), vr_p(1:nvec,1:nstates))
+      call sym_response_project(infos, sym_ritz, scr3, nstates)
+
       call rpaprint(eex, rnorm, cnvtol, iter, imax, nstates, do_neg=.true.)
 
       mxerr = maxval(rnorm)
@@ -378,7 +408,7 @@ contains
 
     do ist = 1, nstates
       call sfdmat(bvec_mo(:,ist),abxc,mo_a,ta,tb,nocca,noccb)
-      spin_square(ist) = get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,noccb)
+      spin_square(ist) = get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,noccb,nocca)
     end do
 
     call get_transitions(trans, nocca, noccb, nbf)

@@ -1,0 +1,42 @@
+oqp.analysis.density_diff
+=========================
+
+.. py:module:: oqp.analysis.density_diff
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Attachment / detachment densities for MRSF excited states (unrelaxed).
+
+      Given two roots ``i`` (reference state, default S0) and ``n``, the difference
+      density is ``Delta = gamma^n - gamma^i``.  Because both state 1-RDMs share the
+      same high-spin reference, the reference cancels and
+      ``Delta = Delta gamma^n - Delta gamma^i`` (the two exposed traceless diagonal
+      blocks).  Diagonalizing the symmetric ``Delta`` (in the orthonormal MO basis)
+      and splitting by eigenvalue sign yields the detachment (negative) and
+      attachment (positive) densities of Head-Gordon et al.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.analysis.density_diff.attachment_detachment
+
+
+Module Contents
+---------------
+
+.. py:function:: attachment_detachment(states, n, ref=0)
+
+   .. code-block:: text
+
+      Unrelaxed attachment/detachment analysis for the ref -> n transition.
+
+      Returns A, D (AO-basis density matrices), the natural orbitals/occupations,
+      and the promotion number n_promoted = Tr(A) = Tr(D).
+
+

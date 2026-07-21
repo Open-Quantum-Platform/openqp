@@ -75,6 +75,10 @@ module mod_grid_storage
     integer                    :: idAtm
     real(kind=fp)              :: rAtm
     real(KIND=fp), allocatable :: sph_radii(:)
+    !< Index-based pruning sectors (e.g. SG-2/SG-3): region i covers the
+    !< next sph_nrad(i) radial shells (ascending radius).  When allocated,
+    !< it takes precedence over the radius-based sph_radii regions.
+    integer, allocatable       :: sph_nrad(:)
     real(KIND=fp), allocatable :: rad_pts(:)
     real(KIND=fp), allocatable :: rad_wts(:)
   end type

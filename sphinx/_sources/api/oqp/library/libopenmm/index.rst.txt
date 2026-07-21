@@ -1,0 +1,59 @@
+oqp.library.libopenmm
+=====================
+
+.. py:module:: oqp.library.libopenmm
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP OpenMM MD class
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.libopenmm.QMMM_MD
+
+
+Module Contents
+---------------
+
+.. py:class:: QMMM_MD(mol)
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: nSteps
+
+
+   .. py:attribute:: timeStep
+
+
+   .. py:attribute:: init_scf
+
+
+   .. py:attribute:: nstate
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: atoms
+
+
+   .. py:attribute:: sp
+
+
+   .. py:attribute:: grad
+
+
+   .. py:method:: run_md()
+
+
+   .. py:method:: oqp_qmmm_single_point(itr)
+
+

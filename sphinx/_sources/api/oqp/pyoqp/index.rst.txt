@@ -1,0 +1,167 @@
+oqp.pyoqp
+=========
+
+.. py:module:: oqp.pyoqp
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      PyOQP
+
+      This module serves as the main entry point for the OQP (Open Quantum Package)
+      software. It handles command-line arguments, initializes the OQP environment,
+      and executes the appropriate computations or tests.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.pyoqp.Runner
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.pyoqp.main
+   oqp.pyoqp.generate_reference_cli
+   oqp.pyoqp.feature_coverage_cli
+   oqp.pyoqp.validate_examples_cli
+   oqp.pyoqp.run_tests
+
+
+Module Contents
+---------------
+
+.. py:class:: Runner(project=None, input_file=None, log=None, input_dict=None, silent=0, usempi=True, input_metadata=None)
+
+   .. code-block:: text
+
+      OQP main class for running calculations and tests.
+
+      one can read input parameters from text file using input_file, e.g,
+          OQP(project=project_name, log=log_file, input_file=a_text_file)
+
+      or
+
+      one can pass input parameters to OQP internally using input_dict, e.g.,
+          OQP(project=project_name, log=log_file, input_dict=USER_CONFIG)
+          USER_CONFIG follows the same format as OQP_CONFIG_SCHEMA
+
+
+
+   .. py:attribute:: mpi_manager
+
+
+   .. py:attribute:: run_func
+
+
+   .. py:attribute:: mol
+
+
+   .. py:method:: run(test_mod=False)
+
+      .. code-block:: text
+
+         Run the OQP calculation or test.
+
+         :param test_mod: Flag to run in test mode.
+         :type test_mod: bool
+
+
+
+   .. py:method:: results()
+
+      .. code-block:: text
+
+         Collect calculation results for internal Python communication.
+
+         :returns: A dictionary containing calculation results.
+         :rtype: dict
+
+
+
+   .. py:method:: reload()
+
+      .. code-block:: text
+
+         Reload calculation based on the specified guess type.
+
+
+
+   .. py:method:: back_door(data)
+
+      .. code-block:: text
+
+         Set back door data for the molecule.
+
+         :param data: Data to be set as back door for the molecule.
+
+
+
+   .. py:method:: test()
+
+      .. code-block:: text
+
+         Run tests and check results against reference data (json).
+
+
+
+.. py:function:: main()
+
+   .. code-block:: text
+
+      Main function to handle command-line arguments and run OQP.
+
+
+.. py:function:: generate_reference_cli(inputs)
+
+   .. code-block:: text
+
+      (Re)generate lean JSON test references for the given input files.
+
+      Runs each input and writes only the regression-registry keys (physics +
+      identity/metadata) next to the input, dropping internal OQP:: arrays. This is
+      the supported, repeatable way to add or refresh example references so the
+      committed set stays clean, small, and consistent with the registry. The
+      written references are validated against the registry before returning.
+
+
+.. py:function:: feature_coverage_cli(examples_dir)
+
+   .. code-block:: text
+
+      Gate: every opt-in feature flag in the input schema must be exercised by
+      at least one example, so a new feature cannot ship without a test. Exit 0
+      if covered (grandfathered gaps are warnings), 1 if a new flag is untested.
+
+
+.. py:function:: validate_examples_cli(examples_dir)
+
+   .. code-block:: text
+
+      Gate: every example reference must carry the regression values its
+      runtype/method/properties require (per the registry). Returns a process
+      exit code (0 = all good, 1 = at least one reference is missing a value).
+
+
+.. py:function:: run_tests(test_path, *, input_format='auto')
+
+   .. code-block:: text
+
+      Run OQP tests.
+
+      :param test_path: Path to the test directory or 'all' or 'other'.
+      :type test_path: str
+      :param input_format: ``auto`` (default), ``inp``, ``oqp``, or ``both``.
+      :type input_format: str
+
+      :returns: Test report.
+      :rtype: str
+
+

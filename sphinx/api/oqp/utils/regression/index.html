@@ -1,0 +1,465 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.utils.regression &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/utils/regression/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.utils.state_labels" href="../state_labels/index.html" />
+    <link rel="prev" title="oqp.utils.qmmm" href="../qmmm/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.utils</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.utils</a></li>
+      <li class="breadcrumb-item active">oqp.utils.regression</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/utils/regression/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.utils.regression">
+<span id="oqp-utils-regression"></span><h1>oqp.utils.regression<a class="headerlink" href="#module-oqp.utils.regression" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Single source of truth for what the example test suite regression-checks.
+
+Historically ``Molecule.check_ref`` compared *every* key in a reference JSON
+except a hand-maintained ``skip_keys`` blocklist. That silently failed to test
+quantities that live in sidecar files (IR/Raman intensities) or that were only
+stored under internal ``OQP::`` arrays (non-adiabatic couplings), and nothing
+flagged a newly added example whose reference was missing a value it should
+carry.
+
+This module replaces that with an explicit *allowlist* registry. Each entry
+declares a physics quantity, where it lives, the runtypes/methods/properties it
+applies to, and whether it is required (must be present and non-empty). The same
+registry drives three things so they cannot drift apart:
+
+  * ``keys_to_compare``  -&gt; what ``check_ref`` compares
+  * ``lean_keep``        -&gt; what ``save_data(lean=True)`` keeps
+  * ``missing_required`` -&gt; the validation gate run when examples are added
+
+Adding a new regression value is a one-line entry here.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.GRAD_RUNTYPES" title="oqp.utils.regression.GRAD_RUNTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GRAD_RUNTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.GEOMETRY_UNSTABLE_RUNTYPES" title="oqp.utils.regression.GEOMETRY_UNSTABLE_RUNTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GEOMETRY_UNSTABLE_RUNTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.IDENTITY_KEYS" title="oqp.utils.regression.IDENTITY_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IDENTITY_KEYS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.METADATA_KEYS" title="oqp.utils.regression.METADATA_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">METADATA_KEYS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.REGISTRY" title="oqp.utils.regression.REGISTRY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">REGISTRY</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.EXEMPT_FLAGS" title="oqp.utils.regression.EXEMPT_FLAGS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EXEMPT_FLAGS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.KNOWN_UNCOVERED" title="oqp.utils.regression.KNOWN_UNCOVERED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KNOWN_UNCOVERED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.RegKey" title="oqp.utils.regression.RegKey"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RegKey</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.keys_to_compare" title="oqp.utils.regression.keys_to_compare"><code class="xref py py-obj docutils literal notranslate"><span class="pre">keys_to_compare</span></code></a>(runtype[, excited, props])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.missing_required" title="oqp.utils.regression.missing_required"><code class="xref py py-obj docutils literal notranslate"><span class="pre">missing_required</span></code></a>(present_nonempty, runtype[, excited, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.lean_keep" title="oqp.utils.regression.lean_keep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lean_keep</span></code></a>(key)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.is_phase_invariant" title="oqp.utils.regression.is_phase_invariant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_phase_invariant</span></code></a>(key)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.skip_sub_keys" title="oqp.utils.regression.skip_sub_keys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">skip_sub_keys</span></code></a>(key)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.sidecar_keys" title="oqp.utils.regression.sidecar_keys"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sidecar_keys</span></code></a>(runtype[, excited, props])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.regression.validate_examples" title="oqp.utils.regression.validate_examples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_examples</span></code></a>(examples_dir)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.regression.feature_coverage" title="oqp.utils.regression.feature_coverage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">feature_coverage</span></code></a>(examples_dir[, schema_file])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.GRAD_RUNTYPES">
+<span class="sig-name descname"><span class="pre">GRAD_RUNTYPES</span></span><a class="headerlink" href="#oqp.utils.regression.GRAD_RUNTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.GEOMETRY_UNSTABLE_RUNTYPES">
+<span class="sig-name descname"><span class="pre">GEOMETRY_UNSTABLE_RUNTYPES</span></span><a class="headerlink" href="#oqp.utils.regression.GEOMETRY_UNSTABLE_RUNTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.IDENTITY_KEYS">
+<span class="sig-name descname"><span class="pre">IDENTITY_KEYS</span></span><a class="headerlink" href="#oqp.utils.regression.IDENTITY_KEYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.METADATA_KEYS">
+<span class="sig-name descname"><span class="pre">METADATA_KEYS</span></span><a class="headerlink" href="#oqp.utils.regression.METADATA_KEYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">RegKey</span></span><a class="headerlink" href="#oqp.utils.regression.RegKey" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>One regression quantity.
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.key">
+<span class="sig-name descname"><span class="pre">key</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.key" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.runtypes">
+<span class="sig-name descname"><span class="pre">runtypes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'*'</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.runtypes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.required">
+<span class="sig-name descname"><span class="pre">required</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.required" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.source">
+<span class="sig-name descname"><span class="pre">source</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'primary'</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.source" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.sidecar_field">
+<span class="sig-name descname"><span class="pre">sidecar_field</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.sidecar_field" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.phase_invariant">
+<span class="sig-name descname"><span class="pre">phase_invariant</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.phase_invariant" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.skip_sub">
+<span class="sig-name descname"><span class="pre">skip_sub</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">()</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.skip_sub" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.rtol">
+<span class="sig-name descname"><span class="pre">rtol</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.rtol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.needs_excited">
+<span class="sig-name descname"><span class="pre">needs_excited</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.needs_excited" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.needs_prop">
+<span class="sig-name descname"><span class="pre">needs_prop</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.needs_prop" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.exclude_runtypes">
+<span class="sig-name descname"><span class="pre">exclude_runtypes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">frozenset</span></em><a class="headerlink" href="#oqp.utils.regression.RegKey.exclude_runtypes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.field">
+<span class="sig-name descname"><span class="pre">field</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.RegKey.field" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>The field name to read from its source (sidecar field or the key).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.utils.regression.RegKey.applies">
+<span class="sig-name descname"><span class="pre">applies</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excited</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">props</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.RegKey.applies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.REGISTRY">
+<span class="sig-name descname"><span class="pre">REGISTRY</span></span><a class="headerlink" href="#oqp.utils.regression.REGISTRY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.keys_to_compare">
+<span class="sig-name descname"><span class="pre">keys_to_compare</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excited</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">props</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.keys_to_compare" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Registry keys that ``check_ref`` should compare in this context.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.missing_required">
+<span class="sig-name descname"><span class="pre">missing_required</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">present_nonempty</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excited</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">props</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.missing_required" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Required registry keys absent or empty in this reference -&gt; gate failures.
+
+``present_nonempty`` is the set of keys that exist and are non-empty in the
+reference (primary + sidecar merged).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.lean_keep">
+<span class="sig-name descname"><span class="pre">lean_keep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.lean_keep" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>True if a JSON key survives a lean (test-reference) dump.
+
+Keeps identity, metadata, and every registered physics key; drops internal
+``OQP::`` arrays and anything else not declared a regression target.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.is_phase_invariant">
+<span class="sig-name descname"><span class="pre">is_phase_invariant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.is_phase_invariant" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.skip_sub_keys">
+<span class="sig-name descname"><span class="pre">skip_sub_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.skip_sub_keys" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.sidecar_keys">
+<span class="sig-name descname"><span class="pre">sidecar_keys</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">runtype</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">excited</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">props</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.sidecar_keys" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Registry keys sourced from the .hess.json sidecar in this context.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.validate_examples">
+<span class="sig-name descname"><span class="pre">validate_examples</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">examples_dir</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.validate_examples" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validate every example reference under ``examples_dir``.
+
+Returns a list of ``(relative_inp_path, [missing_required_keys])`` for
+references that lack a required regression value for their runtype/method/
+properties. An empty list means every example carries everything the
+registry says it must -- this is the gate that fails when a new example (or
+a newly registered value) is added without its reference value.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.EXEMPT_FLAGS">
+<span class="sig-name descname"><span class="pre">EXEMPT_FLAGS</span></span><a class="headerlink" href="#oqp.utils.regression.EXEMPT_FLAGS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.regression.KNOWN_UNCOVERED">
+<span class="sig-name descname"><span class="pre">KNOWN_UNCOVERED</span></span><a class="headerlink" href="#oqp.utils.regression.KNOWN_UNCOVERED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.regression.feature_coverage">
+<span class="sig-name descname"><span class="pre">feature_coverage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">examples_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">schema_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.utils.regression.feature_coverage" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Check that every opt-in feature flag is exercised by an example.
+
+Returns ``(failures, grandfathered)``:
+  * ``failures``     -- [(flag, &#39;no example exercises it&#39;)] for flags that
+                        are neither exempt nor known-uncovered -&gt; gate fails.
+  * ``grandfathered``-- [(flag, reason)] tracked gaps that still need a test.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../qmmm/index.html" class="btn btn-neutral float-left" title="oqp.utils.qmmm" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../state_labels/index.html" class="btn btn-neutral float-right" title="oqp.utils.state_labels" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

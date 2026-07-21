@@ -1,0 +1,272 @@
+oqp.library.qmmm_connectivity
+=============================
+
+.. py:module:: oqp.library.qmmm_connectivity
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      QM/MM boundary (dangling-bond) connectivity across chemical bonds.
+
+      When a QM/MM partition cuts one or more covalent bonds, each severed QM–MM
+      bond leaves a *dangling bond* on the QM frontier atom.  The standard remedy is
+      to cap the dangling bond with a hydrogen **link atom** placed along the broken
+      QM–MM bond (the IMOMM / scaled-position scheme):
+
+          R_L = R_QM + g * (R_MM - R_QM),      g = (r_H + r_QM) / (r_QM + r_MM)
+
+      where ``r_X`` are covalent radii.  Because the link-atom position is a *fixed
+      linear function* of its two real host atoms, the energy gradient computed for
+      the link atom is redistributed onto them by the chain rule:
+
+          dE/dR_QM += (1 - g) * dE/dR_L
+          dE/dR_MM +=       g * dE/dR_L
+
+      so no extra (non-physical) degrees of freedom are introduced.
+
+      This module is deliberately free of any OpenMM / OpenQP dependency: it operates
+      on plain bond pairs, atomic numbers and coordinate arrays so it can be unit
+      tested in isolation and reused by every QM/MM code path.  The covalent-radii
+      table matches ``oqp.utils.qmmm`` so the two QM/MM paths place link atoms
+      identically.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_connectivity.COVALENT_RADII
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_connectivity.LinkAtom
+   oqp.library.qmmm_connectivity.VirtualCharge
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_connectivity.covalent_radius
+   oqp.library.qmmm_connectivity.link_g_factor
+   oqp.library.qmmm_connectivity.detect_link_atoms
+   oqp.library.qmmm_connectivity.link_atom_position
+   oqp.library.qmmm_connectivity.project_link_gradient
+   oqp.library.qmmm_connectivity.redistribute_frontier_charges
+   oqp.library.qmmm_connectivity.assemble_embedding_sites
+
+
+Module Contents
+---------------
+
+.. py:data:: COVALENT_RADII
+   :value: [0.0, 0.354, 0.849, 1.336, 1.01, 0.838, 0.757, 0.7, 0.658, 0.668, 0.92, 1.539, 1.421, 1.244,...
+
+
+.. py:function:: covalent_radius(z: int) -> float
+
+   .. code-block:: text
+
+      Covalent radius (arb. units, consistent within the table) for atomic
+      number ``z``.  Raises ``ValueError`` for elements outside the table.
+
+
+.. py:function:: link_g_factor(qm_z: int, mm_z: int) -> float
+
+   .. code-block:: text
+
+      Scaled-position factor ``g`` for a hydrogen link atom capping a
+      QM(``qm_z``)–MM(``mm_z``) bond.
+
+      ``g`` is the fraction of the QM→MM vector at which the capping hydrogen is
+      placed.  A physically sensible partition gives ``0 < g < 1``.
+
+
+.. py:class:: LinkAtom
+
+   .. code-block:: text
+
+      A hydrogen link atom capping one severed QM–MM bond.
+
+      .. attribute:: qm_index
+
+         Absolute (topology) index of the QM frontier atom.
+
+         :type: int
+
+      .. attribute:: mm_index
+
+         Absolute (topology) index of the MM host atom.
+
+         :type: int
+
+      .. attribute:: host_row
+
+         Row of the QM frontier atom within the ordered QM-atom list
+         (``qm_atoms``), used to redistribute the link-atom gradient.
+
+         :type: int
+
+      .. attribute:: g
+
+         Scaled-position factor (see :func:`link_g_factor`).
+
+         :type: float
+
+
+   .. py:attribute:: qm_index
+      :type:  int
+
+
+   .. py:attribute:: mm_index
+      :type:  int
+
+
+   .. py:attribute:: host_row
+      :type:  int
+
+
+   .. py:attribute:: g
+      :type:  float
+
+
+.. py:function:: detect_link_atoms(bonds, qm_atoms, z_of)
+
+   .. code-block:: text
+
+      Detect dangling bonds and build the list of hydrogen link atoms.
+
+      :param bonds: Covalent bonds as pairs of absolute atom indices (order irrelevant).
+      :type bonds: iterable of (int, int)
+      :param qm_atoms: Absolute indices of the QM-region atoms, in the order they are handed
+                       to the QM engine.
+      :type qm_atoms: sequence of int
+      :param z_of: Maps an absolute atom index to its atomic number.
+      :type z_of: callable(int) -> int
+
+      :returns: One entry per bond that has exactly one endpoint in the QM region,
+                ordered by (qm_index, mm_index) for determinism.
+      :rtype: list[LinkAtom]
+
+      :raises ValueError: If a single QM frontier atom is bonded to more than one MM atom
+       *through the same partition in a way that is ambiguous* — actually
+       multiple link atoms on one QM atom are allowed; the check here only
+       rejects a non-positive/degenerate ``g`` (bad QM/MM partition).
+
+
+.. py:function:: link_atom_position(qm_pos, mm_pos, g)
+
+   .. code-block:: text
+
+      Cartesian position of a link atom on the QM→MM bond.
+
+      ``qm_pos`` / ``mm_pos`` are length-3 sequences in any single length unit;
+      the returned array is in that same unit.
+
+
+.. py:function:: project_link_gradient(grad_link, g)
+
+   .. code-block:: text
+
+      Redistribute a link-atom gradient onto its (QM host, MM host).
+
+      Returns ``(grad_to_qm_host, grad_to_mm_host)`` such that their sum equals
+      ``grad_link`` (translational invariance of the capping constraint).
+
+
+.. py:class:: VirtualCharge
+
+   .. code-block:: text
+
+      A redistributed (virtual) embedding point charge at an M1-M2 bond
+      midpoint.
+
+      .. attribute:: charge
+
+         Point charge (elementary charge units).
+
+         :type: float
+
+      .. attribute:: hosts
+
+         Absolute atom indices ``(m1_index, m2_index)`` whose positions define
+         the virtual site.
+
+         :type: tuple[int, int]
+
+      .. attribute:: weights
+
+         Barycentric weights so that ``r_virtual = w0*R[m1] + w1*R[m2]`` (``0.5,
+         0.5`` for a bond midpoint).  A force ``f`` on the virtual charge maps to
+         ``w0*f`` on ``m1`` and ``w1*f`` on ``m2``.
+
+         :type: tuple[float, float]
+
+
+   .. py:attribute:: charge
+      :type:  float
+
+
+   .. py:attribute:: hosts
+      :type:  tuple
+
+
+   .. py:attribute:: weights
+      :type:  tuple
+
+
+.. py:function:: redistribute_frontier_charges(frontier, charge_of, scheme='rcd')
+
+   .. code-block:: text
+
+      Redistribute MM frontier-host (M1) charges for electrostatic embedding.
+
+      :param frontier: One ``(m1_index, [m2_index, ...])`` per *unique* MM host atom cut by the
+                       QM/MM boundary, with its MM neighbours M2.
+      :type frontier: iterable of (int, sequence[int])
+      :param charge_of: MM force-field charge (e) of an absolute atom index.
+      :type charge_of: callable(int) -> float
+      :param scheme: Redistribution scheme (see module notes above). ``'none'`` disables it
+                     (full-field embedding, the pre-RCD behaviour).
+      :type scheme: {'rcd', 'rc', 'z1', 'none'}
+
+      :returns: * **deleted** (*set[int]*) -- MM atoms whose embedding charge is removed (the M1 hosts).
+                * **delta_q** (*dict[int, float]*) -- Charge added to a *real* MM atom's embedding charge (the M2 corrections).
+                * **virtuals** (*list[VirtualCharge]*) -- Virtual midpoint charges to add to the embedding set.
+
+
+.. py:function:: assemble_embedding_sites(mm_idx, mm_charges, mm_positions, deleted, delta_q, virtuals)
+
+   .. code-block:: text
+
+      Assemble the embedding point-charge set the QM density is embedded in.
+
+      Combines the raw MM atoms with the frontier redistribution from
+      :func:`redistribute_frontier_charges`.
+
+      :param mm_idx: Absolute atom indices of the real MM atoms, in array order.
+      :type mm_idx: sequence[int]
+      :param mm_charges: Force-field charges (e), aligned with ``mm_idx``.
+      :type mm_charges: sequence[float]
+      :param mm_positions: Positions (any length unit), aligned with ``mm_idx``.
+      :type mm_positions: (M, 3) array
+      :param deleted: Output of :func:`redistribute_frontier_charges`.
+      :param delta_q: Output of :func:`redistribute_frontier_charges`.
+      :param virtuals: Output of :func:`redistribute_frontier_charges`.
+
+      :returns: * **charges** (*(S,) ndarray*) -- Embedding charges.
+                * **positions** (*(S, 3) ndarray*) -- Embedding positions (same unit as ``mm_positions``).
+                * **scatter** (*list[tuple[tuple[int, float], ...]]*) -- For each site, the ``(absolute_atom_index, weight)`` contributions that
+                  build its position, so a force ``f`` on site ``s`` adds ``weight*f`` to
+                  each contributing real atom (identity for a real atom, 0.5/0.5 for a
+                  midpoint).
+
+

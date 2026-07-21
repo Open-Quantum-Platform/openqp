@@ -1,0 +1,74 @@
+oqp.library.oqp_neb
+===================
+
+.. py:module:: oqp.library.oqp_neb
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      OQP nudged elastic band (NEB) for OpenQP.
+
+      Backend-agnostic (NumPy only) chain-of-states reaction-path optimizer.  The band
+      of images is optimized in Cartesian coordinates with:
+
+      * the improved tangent estimate (Henkelman & Jonsson, J. Chem. Phys. 113, 9978
+        (2000));
+      * a parallel spring force on the segment-length difference and the perpendicular
+        component of the true force;
+      * an optional climbing image (Henkelman, Uberuaga, Jonsson, J. Chem. Phys. 113,
+        9901 (2000)) that drives the highest-energy image to the saddle; and
+      * the FIRE optimizer (Bitzek et al., Phys. Rev. Lett. 97, 170201 (2006)), which
+        is robust for the non-conservative NEB force where a quasi-Newton RFO step is
+        not appropriate.
+
+      The endpoints (reactant/product) are held fixed.  The caller supplies an
+      ``energy_gradient(x_flat) -> (E, g_flat)`` callback (atomic units), so this
+      module is testable on analytic potentials without the compiled OQP core.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.oqp_neb.NEB
+
+
+Module Contents
+---------------
+
+.. py:class:: NEB(images, k_spring=0.05, climbing=False, climb_fmax=0.05, logger=None)
+
+   .. py:attribute:: images
+
+
+   .. py:attribute:: nimage
+
+
+   .. py:attribute:: k
+
+
+   .. py:attribute:: climbing
+      :value: False
+
+
+
+   .. py:attribute:: climb_fmax
+
+
+   .. py:attribute:: logger
+      :value: None
+
+
+
+   .. py:attribute:: energies
+
+
+   .. py:attribute:: gradients
+
+
+   .. py:method:: run(energy_gradient, fmax_tol=0.002, maxiter=200, dt=0.5, dt_max=1.0, maxmove=0.2, on_iteration=None, frms_tol=None)
+
+

@@ -1,0 +1,440 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.qmmm_md &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/qmmm_md/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.runfunc" href="../runfunc/index.html" />
+    <link rel="prev" title="oqp.library.qmmm_driver" href="../qmmm_driver/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.qmmm_md</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/qmmm_md/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.qmmm_md">
+<span id="oqp-library-qmmm-md"></span><h1>oqp.library.qmmm_md<a class="headerlink" href="#module-oqp.library.qmmm_md" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_md.md" title="oqp.library.qmmm_md.md"><code class="xref py py-obj docutils literal notranslate"><span class="pre">md</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_md.QMMM_MD" title="oqp.library.qmmm_md.QMMM_MD"><code class="xref py py-obj docutils literal notranslate"><span class="pre">QMMM_MD</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_md.parse_ini_to_config" title="oqp.library.qmmm_md.parse_ini_to_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_ini_to_config</span></code></a>(filepath)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.parse_ini_to_config">
+<span class="sig-name descname"><span class="pre">parse_ini_to_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_md.parse_ini_to_config" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Parse an INI-style configuration file into a flat dictionary
+with ``section.key`` keys.
+
+Numeric values are auto-converted to int or float.
+Entries with empty values are skipped.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">QMMM_MD</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">oqp_cfg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>QM/MM Molecular Dynamics with NVE / NVT / NPT support.
+
+All parameters are read from the configuration. Provide **exactly one** of:
+
+*   ``oqp_cfg``  - a ``dict`` with flat ``&quot;section.key&quot;`` entries
+    **or** a path to an INI file. QM/MM settings live under the
+    ``[qmmm]`` section / ``&quot;qmmm.*&quot;`` keys.
+
+*   ``mol`` - a pre-built OpenQP mol object whose
+    ``mol.config[&quot;qmmm&quot;]`` contains the same keys.
+
+Recognised ``[qmmm]`` keys
+--------------------------
+pdb_file           : str            (required)
+forcefield_files   : str            comma-separated list
+qm_atoms           : str or list    ``&quot;0,1,2&quot;`` or ``&quot;0-2&quot;``
+cutoff             : str            PME | NoCutoff | Ewald | ...
+embedding          : str            mechanical | electrostatic
+n_steps            : int            default 1000
+timestep           : float (fs)     default 1.0
+temperature        : float (K)      default 300.0
+ensemble           : str            nve | nvt | npt   (default nve)
+friction           : float (ps^-1)  default 1.0      (NVT/NPT only)
+pressure           : float (bar)    default 1.0      (NPT only)
+barostat_interval  : int            default 25       (NPT only)
+trajectory_format  : str            pdb | dcd        (default pdb)
+trajectory_file    : str            default qmmm_trajectory.&lt;format&gt;
+log_file           : str            default qmmm_trajectory.dat
+report_interval    : int            default 1
+energy_file        : str            default total_energy.npz
+qm_atoms_xyz       : str            optional XYZ file
+qm_list            : str or list    optional index mapping
+
+Saved observables (in ``energy_file`` as ``.npz``)
+--------------------------------------------------
+step          : MD step index
+time_ps       : simulation time (ps)
+E_pot         : potential energy (kJ/mol)
+E_kin         : kinetic energy (kJ/mol)
+E_tot         : total energy (kJ/mol)
+temperature   : instantaneous T from kinetic energy (K)
+volume_nm3    : box volume (nm^3), only populated for NPT
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.pdb">
+<span class="sig-name descname"><span class="pre">pdb</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.pdb" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.forcefield">
+<span class="sig-name descname"><span class="pre">forcefield</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.forcefield" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.qm_atoms">
+<span class="sig-name descname"><span class="pre">qm_atoms</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.qm_atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.cutoff">
+<span class="sig-name descname"><span class="pre">cutoff</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.cutoff" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.embedding">
+<span class="sig-name descname"><span class="pre">embedding</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.embedding" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.frontier_scheme">
+<span class="sig-name descname"><span class="pre">frontier_scheme</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.frontier_scheme" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.n_steps">
+<span class="sig-name descname"><span class="pre">n_steps</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.n_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.timestep">
+<span class="sig-name descname"><span class="pre">timestep</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.timestep" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.temperature">
+<span class="sig-name descname"><span class="pre">temperature</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.temperature" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.ensemble">
+<span class="sig-name descname"><span class="pre">ensemble</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.ensemble" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.friction">
+<span class="sig-name descname"><span class="pre">friction</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.friction" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.pressure">
+<span class="sig-name descname"><span class="pre">pressure</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.pressure" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.barostat_interval">
+<span class="sig-name descname"><span class="pre">barostat_interval</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.barostat_interval" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.trajectory_format">
+<span class="sig-name descname"><span class="pre">trajectory_format</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.trajectory_format" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.trajectory_file">
+<span class="sig-name descname"><span class="pre">trajectory_file</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.trajectory_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.log_file">
+<span class="sig-name descname"><span class="pre">log_file</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.log_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.report_interval">
+<span class="sig-name descname"><span class="pre">report_interval</span></span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.report_interval" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.energy_file">
+<span class="sig-name descname"><span class="pre">energy_file</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.energy_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.oqp_cfg">
+<span class="sig-name descname"><span class="pre">oqp_cfg</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.oqp_cfg" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.mol">
+<span class="sig-name descname"><span class="pre">mol</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.mol" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.oqp_driver">
+<span class="sig-name descname"><span class="pre">oqp_driver</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.oqp_driver" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.mm_systems">
+<span class="sig-name descname"><span class="pre">mm_systems</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.mm_systems" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.simulation_md">
+<span class="sig-name descname"><span class="pre">simulation_md</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.simulation_md" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.system_md">
+<span class="sig-name descname"><span class="pre">system_md</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.system_md" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.qmmm_ext">
+<span class="sig-name descname"><span class="pre">qmmm_ext</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.qmmm_ext" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.setup" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Full setup: build driver, MD system, and simulation context.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.step">
+<span class="sig-name descname"><span class="pre">step</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.step" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Perform one QM/MM MD step.
+
+:returns: **E_tot**
+:rtype: float   Total energy (kJ/mol).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.QMMM_MD.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_md.QMMM_MD.run" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Run the full simulation in the configured ensemble.
+
+:returns: Keys: step, time_ps, E_pot, E_kin, E_tot, temperature, volume_nm3.
+:rtype: dict of np.ndarray
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.qmmm_md.md">
+<span class="sig-name descname"><span class="pre">md</span></span><a class="headerlink" href="#oqp.library.qmmm_md.md" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../qmmm_driver/index.html" class="btn btn-neutral float-left" title="oqp.library.qmmm_driver" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../runfunc/index.html" class="btn btn-neutral float-right" title="oqp.library.runfunc" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

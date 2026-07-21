@@ -4,7 +4,10 @@ module libecp_result
 
     type, bind(c) :: ecp_result
         type(c_ptr) :: data
-        integer(c_int) :: size
+        ! 64-bit: the second-derivative payload is 3N(3N+1)/2 * nbf^2 doubles,
+        ! which overflows a 32-bit count already around ~50 atoms / 500 basis
+        ! functions. (Mirrors int64_t in source/wrapper/libecpint_wrapper.cpp.)
+        integer(c_int64_t) :: size
     end type ecp_result
 end module libecp_result
 
@@ -55,6 +58,13 @@ module libecpint_wrapper
             type(ecp_result) :: compute_first_derivs
             type(c_ptr), value :: integrator
         end function compute_first_derivs
+
+        function compute_second_derivs(integrator) bind(c, name="compute_second_derivs")
+            use iso_c_binding, only : c_ptr
+            use libecp_result
+            type(ecp_result) :: compute_second_derivs
+            type(c_ptr), value :: integrator
+        end function compute_second_derivs
 
         subroutine free_integrator(integrator) bind(c, name="free_integrator")
             use iso_c_binding, only : c_ptr

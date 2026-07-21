@@ -1,0 +1,95 @@
+oqp.library.neb_utils
+=====================
+
+.. py:module:: oqp.library.neb_utils
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Dependency-light helpers for geomeTRIC NEB endpoint paths.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.neb_utils.BOHR_TO_ANGSTROM
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.neb_utils.NEBImage
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.neb_utils.kabsch_align
+   oqp.library.neb_utils.interpolate_xyz_endpoints
+   oqp.library.neb_utils.write_neb_xyz
+
+
+Module Contents
+---------------
+
+.. py:data:: BOHR_TO_ANGSTROM
+   :value: 0.52917721092
+
+
+.. py:class:: NEBImage
+
+   .. code-block:: text
+
+      One NEB path image in user-facing Angstrom coordinates.
+
+
+   .. py:attribute:: symbols
+      :type:  list[str]
+
+
+   .. py:attribute:: coordinates_angstrom
+      :type:  list[list[float]]
+
+
+.. py:function:: kabsch_align(reference: Iterable[Iterable[float]], mobile: Iterable[Iterable[float]]) -> list[list[float]]
+
+   .. code-block:: text
+
+      Rigidly align ``mobile`` coordinates onto ``reference``.
+
+      Coordinates may use any common unit.  The returned coordinates retain the
+      reference centroid, and the fitted transform is constrained to a proper
+      rotation so a reflection cannot change molecular handedness.
+
+
+.. py:function:: interpolate_xyz_endpoints(reactant_xyz: str | pathlib.Path, product_xyz: str | pathlib.Path, nimage: int, align: bool = False) -> list[NEBImage]
+
+   .. code-block:: text
+
+      Return linearly interpolated NEB images including both endpoints.
+
+      Input and output coordinates are Angstrom, matching OpenQP XYZ/system input
+      conventions. Atom symbols/count/order must match exactly so each image can
+      be evaluated on the same state-specific surface.  With ``align=True``, the
+      product endpoint is first rigidly superimposed on the reactant, removing
+      overall translation and rotation before interpolation.
+
+
+.. py:function:: write_neb_xyz(path: str | pathlib.Path, symbols: Iterable[str], images_bohr: Iterable[Iterable[float]], energies: Iterable[float] | None = None) -> pathlib.Path
+
+   .. code-block:: text
+
+      Write a final NEB path as a standard multi-frame XYZ file.
+
+      ``images_bohr`` accepts flat ``3*natom`` arrays or ``(natom, 3)`` arrays.
+      Optional energies are written in Hartree in each frame's comment line.
+
+

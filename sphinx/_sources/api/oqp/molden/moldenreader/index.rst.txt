@@ -1,0 +1,49 @@
+oqp.molden.moldenreader
+=======================
+
+.. py:module:: oqp.molden.moldenreader
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Molden compatibility module
+      reader class
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.molden.moldenreader.MoldenReader
+
+
+Module Contents
+---------------
+
+.. py:class:: MoldenReader(filename)
+
+   .. code-block:: text
+
+      Class to read and process data from Molden format
+      Reads alpha and beta MOs vectors and energies
+
+
+   .. py:attribute:: sections
+      :value: None
+
+
+
+   .. py:attribute:: filename
+
+
+   .. py:method:: read_mo()
+
+      .. code-block:: text
+
+         Extracts and returns Molecular Orbital data from the file
+
+
+

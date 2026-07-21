@@ -3,11 +3,32 @@ module int2e_rotaxis
   use basis_tools, only: basis_set
   use boys_lut, only: fgrid, xgrid, rxinc, rfinc, rmr, tmax
   use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
-  use constants, only: pi
+  use constants, only: HARMONIC_ACTIVE, pi
   implicit none
 
   private
   public genr22
+  public genr22_pure
+  public genr22_reduce_pure
+  ! exported so the int2e_rotaxis_pure submodule gets external linkage
+  public genr22_core
+
+  !> Direct pure-spherical variant of genr22, implemented in
+  !> int_rotaxis_pure.F90. Harmonic-flagged d shells come out at
+  !> 2l+1 components; nbf returns the per-slot output dimensions
+  !> in canonical (flipped) shell order.
+  interface
+    module subroutine genr22_pure(basis, ppairs, grotspd, shell_ids, flips, cutoffs, nbf, emu2)
+      type(basis_set), intent(in) :: basis
+      type(int2_pair_storage), intent(in) :: ppairs
+      real(kind=dp), intent(inout) :: grotspd(*)
+      integer, intent(in) :: shell_ids(4)
+      integer, intent(out) :: flips(4)
+      type(int2_cutoffs_t), intent(in) :: cutoffs
+      integer, intent(out) :: nbf(4)
+      real(kind=dp), optional :: emu2
+    end subroutine genr22_pure
+  end interface
 
   real(dp), parameter :: acy_threshold = 1.0e-10_dp
   real(dp), parameter :: sqrt3 = sqrt(3.0_dp)
@@ -62,6 +83,32 @@ contains
     integer, intent(in) :: shell_ids(4)
     integer, intent(out) :: flips(4)
     type(int2_cutoffs_t), intent(in) :: cutoffs
+    real(kind=dp), optional :: emu2
+
+    real(kind=dp) :: prot(3,3)
+    integer :: jtype
+
+    call genr22_core(basis, ppairs, grotspd, shell_ids, flips, cutoffs, prot, jtype, emu2)
+    call r30s1d(jtype, grotspd, prot)
+
+  end subroutine genr22
+
+  !> Shared body of the rotated-axis ERI evaluation: geometry setup,
+  !> primitive q-loop accumulation, and assembly of the rotated-frame
+  !> block via mcdv_all. Returns the (transposed) back-rotation matrix
+  !> and jtype; the caller applies its own rotated->lab transformation.
+  subroutine genr22_core(basis, ppairs, grotspd, shell_ids, flips, cutoffs, prot, jtype_out, emu2)
+
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    type(int2_pair_storage), intent(in) :: ppairs
+    real(kind=dp), intent(inout) :: grotspd(*)
+    integer, intent(in) :: shell_ids(4)
+    integer, intent(out) :: flips(4)
+    type(int2_cutoffs_t), intent(in) :: cutoffs
+    real(kind=dp), intent(out) :: prot(3,3)
+    integer, intent(out) :: jtype_out
     real(kind=dp), optional :: emu2
 
     real(kind=dp) :: a(3), b(3), c(3), d(3), p(3,3), t(3)
@@ -291,11 +338,33 @@ contains
 
     call mcdv_all(grotspd, rdat,qx, qz, jtype)
 
-    p = transpose(p)
+    prot = transpose(p)
+    jtype_out = jtype
 
-    call r30s1d(jtype, grotspd, p)
+  end subroutine genr22_core
 
-  end subroutine genr22
+  subroutine genr22_reduce_pure(basis, shell_ids, flips, grotspd, nbf)
+    use int2_pure_generated, only: int2_project_pure_block
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    integer, intent(in) :: shell_ids(4), flips(4)
+    real(kind=dp), intent(inout) :: grotspd(:)
+    integer, intent(inout) :: nbf(4)
+
+    integer :: ids(4), am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
+
+    if (.not. HARMONIC_ACTIVE) return
+
+    ids = shell_ids(flips)
+    am_s = basis%am(ids([4,3,2,1]))
+    pure_s = basis%harmonic(ids([4,3,2,1]))
+    if (.not. any(pure_s == 1 .and. am_s >= 2)) return
+
+    nbf_s = nbf([4,3,2,1])
+    call int2_project_pure_block(grotspd, am_s, pure_s, nbf_s, nbf_out_s)
+    nbf = nbf_out_s([4,3,2,1])
+  end subroutine genr22_reduce_pure
 
   subroutine intclean(rdat,jtype)
     implicit none

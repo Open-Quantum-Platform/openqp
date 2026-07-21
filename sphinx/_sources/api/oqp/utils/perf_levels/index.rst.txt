@@ -1,0 +1,98 @@
+oqp.utils.perf_levels
+=====================
+
+.. py:module:: oqp.utils.perf_levels
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Centralised resolver for OpenQP's performance options and the ``perf`` preset.
+
+      Each performance knob is an ordinary **input key** (e.g. ``[scf] xc_c2f``,
+      ``[tdhf] resp_cutoff``) backed by a field on the shared ``control`` struct -- there are
+      no environment variables involved. ``[input] perf = 0|1|2|3`` is a preset that fills in
+      those input keys (the ones the user left at the sentinel ``auto``) before the config is
+      pushed to the native library. An explicit input key always overrides the preset.
+
+        perf = 0  strict reference / reproducible  -- every accelerator off, tightest cutoffs.
+        perf = 1  recommended production (exact)   -- only exact, proven-helpful knobs:
+                                                      MRSF response cutoff 1e-8, z-vector
+                                                      warm-start (+ the always-on Fock digest).
+        perf = 2  faster, tiny degradation         -- + coarse-to-fine XC grid + grad Schwarz
+                                                      cutoff 1e-8 (<=5e-7 a.u. on gradients).
+        perf = 3  aggressive, degradation allowed  -- looser cutoffs traded for speed: grad
+                                                      1e-7 (~1e-5 a.u.), response 1e-6 (~few ueV).
+
+      The accelerators that the CPU benchmark found net-negative or experimental -- Phi-cache,
+      IncDFT, FP32 and progressive screening (pscreen) -- are NOT enabled by any preset (they
+      stay available as explicit input keys, e.g. for GPU XC or regimes not covered here).
+
+      Precedence (low -> high): control-struct default  <  perf preset  <  explicit input key.
+      An input key set to ``auto`` (its default) defers to the preset; any other value overrides
+      it. ``perf`` unset (-1) leaves every key at its default -> identical to legacy behaviour.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.perf_levels.UNSET
+   oqp.utils.perf_levels.KNOBS
+   oqp.utils.perf_levels.NEW_INPUT_KEYS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.perf_levels.resolve
+   oqp.utils.perf_levels.validate
+   oqp.utils.perf_levels.format_report
+   oqp.utils.perf_levels.apply
+
+
+Module Contents
+---------------
+
+.. py:data:: UNSET
+   :value: -1
+
+
+.. py:data:: KNOBS
+   :value: [('scf', 'xc_c2f', ['off', 'off', 'on', 'on']), ('scf', 'xc_phi_cache', ['off', 'off', 'off',...
+
+
+.. py:data:: NEW_INPUT_KEYS
+
+.. py:function:: resolve(config, perf)
+
+   .. code-block:: text
+
+      Fill the perf input keys in ``config`` from the preset (in place).
+
+      A key is filled from the preset only when its value is the sentinel ``auto`` -- so an
+      explicit value (from the input file or a caller-supplied dict, even a fully
+      default-expanded one) always wins. Returns a list of (label, shown_value, source) with
+      source in {"input", "perf"}. ``perf`` unset -> no change, empty report.
+
+
+.. py:function:: validate(config, scf_conv=None, zv_conv=None)
+
+   .. code-block:: text
+
+      Warnings for risky resolved settings (reads the post-resolution config).
+
+
+.. py:function:: format_report(perf, report, warns)
+
+.. py:function:: apply(config, perf, scf_conv=None, zv_conv=None)
+
+   .. code-block:: text
+
+      Resolve into ``config`` (in place) + validate; return (report, warns).
+
+

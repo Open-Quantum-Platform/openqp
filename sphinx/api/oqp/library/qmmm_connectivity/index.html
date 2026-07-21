@@ -1,0 +1,485 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.library.qmmm_connectivity &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/library/qmmm_connectivity/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.library.qmmm_driver" href="../qmmm_driver/index.html" />
+    <link rel="prev" title="oqp.library.project_basis" href="../project_basis/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.library</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.library</a></li>
+      <li class="breadcrumb-item active">oqp.library.qmmm_connectivity</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/library/qmmm_connectivity/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.library.qmmm_connectivity">
+<span id="oqp-library-qmmm-connectivity"></span><h1>oqp.library.qmmm_connectivity<a class="headerlink" href="#module-oqp.library.qmmm_connectivity" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>QM/MM boundary (dangling-bond) connectivity across chemical bonds.
+
+When a QM/MM partition cuts one or more covalent bonds, each severed QM–MM
+bond leaves a *dangling bond* on the QM frontier atom.  The standard remedy is
+to cap the dangling bond with a hydrogen **link atom** placed along the broken
+QM–MM bond (the IMOMM / scaled-position scheme):
+
+    R_L = R_QM + g * (R_MM - R_QM),      g = (r_H + r_QM) / (r_QM + r_MM)
+
+where ``r_X`` are covalent radii.  Because the link-atom position is a *fixed
+linear function* of its two real host atoms, the energy gradient computed for
+the link atom is redistributed onto them by the chain rule:
+
+    dE/dR_QM += (1 - g) * dE/dR_L
+    dE/dR_MM +=       g * dE/dR_L
+
+so no extra (non-physical) degrees of freedom are introduced.
+
+This module is deliberately free of any OpenMM / OpenQP dependency: it operates
+on plain bond pairs, atomic numbers and coordinate arrays so it can be unit
+tested in isolation and reused by every QM/MM code path.  The covalent-radii
+table matches ``oqp.utils.qmmm`` so the two QM/MM paths place link atoms
+identically.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.COVALENT_RADII" title="oqp.library.qmmm_connectivity.COVALENT_RADII"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COVALENT_RADII</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.LinkAtom" title="oqp.library.qmmm_connectivity.LinkAtom"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LinkAtom</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.VirtualCharge" title="oqp.library.qmmm_connectivity.VirtualCharge"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VirtualCharge</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.covalent_radius" title="oqp.library.qmmm_connectivity.covalent_radius"><code class="xref py py-obj docutils literal notranslate"><span class="pre">covalent_radius</span></code></a>(→ float)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.link_g_factor" title="oqp.library.qmmm_connectivity.link_g_factor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">link_g_factor</span></code></a>(→ float)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.detect_link_atoms" title="oqp.library.qmmm_connectivity.detect_link_atoms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_link_atoms</span></code></a>(bonds, qm_atoms, z_of)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.link_atom_position" title="oqp.library.qmmm_connectivity.link_atom_position"><code class="xref py py-obj docutils literal notranslate"><span class="pre">link_atom_position</span></code></a>(qm_pos, mm_pos, g)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.project_link_gradient" title="oqp.library.qmmm_connectivity.project_link_gradient"><code class="xref py py-obj docutils literal notranslate"><span class="pre">project_link_gradient</span></code></a>(grad_link, g)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.redistribute_frontier_charges" title="oqp.library.qmmm_connectivity.redistribute_frontier_charges"><code class="xref py py-obj docutils literal notranslate"><span class="pre">redistribute_frontier_charges</span></code></a>(frontier, charge_of[, ...])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.library.qmmm_connectivity.assemble_embedding_sites" title="oqp.library.qmmm_connectivity.assemble_embedding_sites"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assemble_embedding_sites</span></code></a>(mm_idx, mm_charges, ...)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.COVALENT_RADII">
+<span class="sig-name descname"><span class="pre">COVALENT_RADII</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[0.0,</span> <span class="pre">0.354,</span> <span class="pre">0.849,</span> <span class="pre">1.336,</span> <span class="pre">1.01,</span> <span class="pre">0.838,</span> <span class="pre">0.757,</span> <span class="pre">0.7,</span> <span class="pre">0.658,</span> <span class="pre">0.668,</span> <span class="pre">0.92,</span> <span class="pre">1.539,</span> <span class="pre">1.421,</span> <span class="pre">1.244,...</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.COVALENT_RADII" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.covalent_radius">
+<span class="sig-name descname"><span class="pre">covalent_radius</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#oqp.library.qmmm_connectivity.covalent_radius" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Covalent radius (arb. units, consistent within the table) for atomic
+number ``z``.  Raises ``ValueError`` for elements outside the table.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.link_g_factor">
+<span class="sig-name descname"><span class="pre">link_g_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qm_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mm_z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#oqp.library.qmmm_connectivity.link_g_factor" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Scaled-position factor ``g`` for a hydrogen link atom capping a
+QM(``qm_z``)–MM(``mm_z``) bond.
+
+``g`` is the fraction of the QM→MM vector at which the capping hydrogen is
+placed.  A physically sensible partition gives ``0 &lt; g &lt; 1``.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.LinkAtom">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">LinkAtom</span></span><a class="headerlink" href="#oqp.library.qmmm_connectivity.LinkAtom" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>A hydrogen link atom capping one severed QM–MM bond.
+
+.. attribute:: qm_index
+
+   Absolute (topology) index of the QM frontier atom.
+
+   :type: int
+
+.. attribute:: mm_index
+
+   Absolute (topology) index of the MM host atom.
+
+   :type: int
+
+.. attribute:: host_row
+
+   Row of the QM frontier atom within the ordered QM-atom list
+   (``qm_atoms``), used to redistribute the link-atom gradient.
+
+   :type: int
+
+.. attribute:: g
+
+   Scaled-position factor (see :func:`link_g_factor`).
+
+   :type: float
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.LinkAtom.qm_index">
+<span class="sig-name descname"><span class="pre">qm_index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.LinkAtom.qm_index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.LinkAtom.mm_index">
+<span class="sig-name descname"><span class="pre">mm_index</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.LinkAtom.mm_index" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.LinkAtom.host_row">
+<span class="sig-name descname"><span class="pre">host_row</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.LinkAtom.host_row" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.LinkAtom.g">
+<span class="sig-name descname"><span class="pre">g</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.LinkAtom.g" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.detect_link_atoms">
+<span class="sig-name descname"><span class="pre">detect_link_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bonds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">qm_atoms</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">z_of</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_connectivity.detect_link_atoms" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Detect dangling bonds and build the list of hydrogen link atoms.
+
+:param bonds: Covalent bonds as pairs of absolute atom indices (order irrelevant).
+:type bonds: iterable of (int, int)
+:param qm_atoms: Absolute indices of the QM-region atoms, in the order they are handed
+                 to the QM engine.
+:type qm_atoms: sequence of int
+:param z_of: Maps an absolute atom index to its atomic number.
+:type z_of: callable(int) -&gt; int
+
+:returns: One entry per bond that has exactly one endpoint in the QM region,
+          ordered by (qm_index, mm_index) for determinism.
+:rtype: list[LinkAtom]
+
+:raises ValueError: If a single QM frontier atom is bonded to more than one MM atom
+ *through the same partition in a way that is ambiguous* — actually
+ multiple link atoms on one QM atom are allowed; the check here only
+ rejects a non-positive/degenerate ``g`` (bad QM/MM partition).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.link_atom_position">
+<span class="sig-name descname"><span class="pre">link_atom_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qm_pos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mm_pos</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">g</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_connectivity.link_atom_position" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Cartesian position of a link atom on the QM→MM bond.
+
+``qm_pos`` / ``mm_pos`` are length-3 sequences in any single length unit;
+the returned array is in that same unit.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.project_link_gradient">
+<span class="sig-name descname"><span class="pre">project_link_gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">grad_link</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">g</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_connectivity.project_link_gradient" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Redistribute a link-atom gradient onto its (QM host, MM host).
+
+Returns ``(grad_to_qm_host, grad_to_mm_host)`` such that their sum equals
+``grad_link`` (translational invariance of the capping constraint).
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.VirtualCharge">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">VirtualCharge</span></span><a class="headerlink" href="#oqp.library.qmmm_connectivity.VirtualCharge" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>A redistributed (virtual) embedding point charge at an M1-M2 bond
+midpoint.
+
+.. attribute:: charge
+
+   Point charge (elementary charge units).
+
+   :type: float
+
+.. attribute:: hosts
+
+   Absolute atom indices ``(m1_index, m2_index)`` whose positions define
+   the virtual site.
+
+   :type: tuple[int, int]
+
+.. attribute:: weights
+
+   Barycentric weights so that ``r_virtual = w0*R[m1] + w1*R[m2]`` (``0.5,
+   0.5`` for a bond midpoint).  A force ``f`` on the virtual charge maps to
+   ``w0*f`` on ``m1`` and ``w1*f`` on ``m2``.
+
+   :type: tuple[float, float]
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.VirtualCharge.charge">
+<span class="sig-name descname"><span class="pre">charge</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.VirtualCharge.charge" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.VirtualCharge.hosts">
+<span class="sig-name descname"><span class="pre">hosts</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.VirtualCharge.hosts" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.VirtualCharge.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></em><a class="headerlink" href="#oqp.library.qmmm_connectivity.VirtualCharge.weights" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.redistribute_frontier_charges">
+<span class="sig-name descname"><span class="pre">redistribute_frontier_charges</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">frontier</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_of</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scheme</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rcd'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_connectivity.redistribute_frontier_charges" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Redistribute MM frontier-host (M1) charges for electrostatic embedding.
+
+:param frontier: One ``(m1_index, [m2_index, ...])`` per *unique* MM host atom cut by the
+                 QM/MM boundary, with its MM neighbours M2.
+:type frontier: iterable of (int, sequence[int])
+:param charge_of: MM force-field charge (e) of an absolute atom index.
+:type charge_of: callable(int) -&gt; float
+:param scheme: Redistribution scheme (see module notes above). ``&#39;none&#39;`` disables it
+               (full-field embedding, the pre-RCD behaviour).
+:type scheme: {&#39;rcd&#39;, &#39;rc&#39;, &#39;z1&#39;, &#39;none&#39;}
+
+:returns: * **deleted** (*set[int]*) -- MM atoms whose embedding charge is removed (the M1 hosts).
+          * **delta_q** (*dict[int, float]*) -- Charge added to a *real* MM atom&#39;s embedding charge (the M2 corrections).
+          * **virtuals** (*list[VirtualCharge]*) -- Virtual midpoint charges to add to the embedding set.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.library.qmmm_connectivity.assemble_embedding_sites">
+<span class="sig-name descname"><span class="pre">assemble_embedding_sites</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mm_idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mm_charges</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mm_positions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deleted</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delta_q</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">virtuals</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.library.qmmm_connectivity.assemble_embedding_sites" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Assemble the embedding point-charge set the QM density is embedded in.
+
+Combines the raw MM atoms with the frontier redistribution from
+:func:`redistribute_frontier_charges`.
+
+:param mm_idx: Absolute atom indices of the real MM atoms, in array order.
+:type mm_idx: sequence[int]
+:param mm_charges: Force-field charges (e), aligned with ``mm_idx``.
+:type mm_charges: sequence[float]
+:param mm_positions: Positions (any length unit), aligned with ``mm_idx``.
+:type mm_positions: (M, 3) array
+:param deleted: Output of :func:`redistribute_frontier_charges`.
+:param delta_q: Output of :func:`redistribute_frontier_charges`.
+:param virtuals: Output of :func:`redistribute_frontier_charges`.
+
+:returns: * **charges** (*(S,) ndarray*) -- Embedding charges.
+          * **positions** (*(S, 3) ndarray*) -- Embedding positions (same unit as ``mm_positions``).
+          * **scatter** (*list[tuple[tuple[int, float], ...]]*) -- For each site, the ``(absolute_atom_index, weight)`` contributions that
+            build its position, so a force ``f`` on site ``s`` adds ``weight*f`` to
+            each contributing real atom (identity for a real atom, 0.5/0.5 for a
+            midpoint).
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../project_basis/index.html" class="btn btn-neutral float-left" title="oqp.library.project_basis" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../qmmm_driver/index.html" class="btn btn-neutral float-right" title="oqp.library.qmmm_driver" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

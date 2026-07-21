@@ -1,0 +1,50 @@
+oqp.periodic_table
+==================
+
+.. py:module:: oqp.periodic_table
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Description of chemical elements
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.periodic_table.MASSES
+   oqp.periodic_table.ELEMENTS_NAME
+   oqp.periodic_table.ELEMENTS_LONG_NAME
+   oqp.periodic_table.ELEMENTS
+   oqp.periodic_table.SYMBOL_MAP_1
+   oqp.periodic_table.SYMBOL_MAP
+   oqp.periodic_table.symbol
+
+
+Package Contents
+----------------
+
+.. py:data:: MASSES
+   :value: (0, 1.007825, 4.0026, 7.016, 9.01218, 11.00931, 12.0, 14.00307, 15.99491, 18.9984, 19.99244,...
+
+
+.. py:data:: ELEMENTS_NAME
+   :value: (None, 'H ', 'He', 'Li', 'Be', 'B ', 'C ', 'N ', 'O ', 'F ', 'Ne', 'Na', 'Mg', 'Al', 'Si', 'P ',...
+
+
+.. py:data:: ELEMENTS_LONG_NAME
+   :value: (None, 'hydrogen', 'helium', 'lithium', 'beryllium', 'boron', 'carbon', 'nitrogen', 'oxygen',...
+
+
+.. py:data:: ELEMENTS
+
+.. py:data:: SYMBOL_MAP_1
+
+.. py:data:: SYMBOL_MAP
+
+.. py:data:: symbol
+

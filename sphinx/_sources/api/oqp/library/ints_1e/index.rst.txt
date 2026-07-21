@@ -1,0 +1,24 @@
+oqp.library.ints_1e
+===================
+
+.. py:module:: oqp.library.ints_1e
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.ints_1e.ints_1e
+
+
+Module Contents
+---------------
+
+.. py:function:: ints_1e(mol)
+
+   .. code-block:: text
+
+      Compute a set of one-electron integrals
+
+

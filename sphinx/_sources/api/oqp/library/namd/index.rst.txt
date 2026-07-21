@@ -1,0 +1,440 @@
+oqp.library.namd
+================
+
+.. py:module:: oqp.library.namd
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Nonadiabatic molecular dynamics (NAMD) — Tully fewest-switches surface hopping
+      (FSSH) on MRSF-TDDFT adiabatic states.
+
+      Design
+      ------
+      The numerically critical surface-hopping physics lives in Fortran
+      (``source/modules/namd.F90`` -> C entry ``mrsf_namd_hop``); this Python driver
+      only *sequences* the existing electronic-structure drivers and integrates the
+      nuclei with velocity Verlet:
+
+        per step:  position update (Verlet)
+                   -> SinglePoint.reference()  (SCF)
+                   -> BasisOverlap.overlap()   (MO overlap vs previous step, phase aligned)
+                   -> SinglePoint.excitation() (MRSF energies + response vectors)
+                   -> Gradient (active state)
+                   -> velocity 2nd half-kick
+                   -> NACME.nacme()            (state overlap S = <i(t-dt)|j(t)>)
+                   -> oqp.mrsf_namd_hop()      (TDC, RK4 amplitude propagation, EDC,
+                                                trivial-crossing follow, FSSH hop +
+                                                isotropic velocity rescaling)
+                   -> on hop: recompute gradient on the new active surface
+                   -> output / restart
+
+      Units: coordinates in bohr, masses in electron masses, energies in Hartree,
+      velocities in bohr / atomic-time.  Time step is given in fs and converted.
+
+      This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.library.namd.FS_TO_AU
+   oqp.library.namd.KB_HARTREE
+   oqp.library.namd.AMU_TO_AU
+   oqp.library.namd.BOHR_TO_NM
+   oqp.library.namd.NM_TO_BOHR
+   oqp.library.namd.HABOHR_TO_KJMOLNM
+   oqp.library.namd.KJMOL_TO_HARTREE
+   oqp.library.namd.HA_TO_WAVENUM
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.namd.NAMD
+   oqp.library.namd.NAMD_QMMM
+   oqp.library.namd.NAMD_SOC
+   oqp.library.namd.NAMD_SOC_MCH
+   oqp.library.namd.NAMD_SOC_QMMM
+   oqp.library.namd.NAMD_SOC_MCH_QMMM
+
+
+Module Contents
+---------------
+
+.. py:data:: FS_TO_AU
+   :value: 41.341374575751
+
+
+.. py:data:: KB_HARTREE
+   :value: 3.166811563e-06
+
+
+.. py:data:: AMU_TO_AU
+   :value: 1822.888486209
+
+
+.. py:data:: BOHR_TO_NM
+   :value: 0.05291772109
+
+
+.. py:data:: NM_TO_BOHR
+   :value: 18.89726124636483
+
+
+.. py:data:: HABOHR_TO_KJMOLNM
+   :value: 49614.75258041956
+
+
+.. py:data:: KJMOL_TO_HARTREE
+   :value: 0.0003808798847829512
+
+
+.. py:class:: NAMD(mol)
+
+   .. code-block:: text
+
+      Driver for FSSH nonadiabatic molecular dynamics.
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: nstep
+
+
+   .. py:attribute:: dt_fs
+
+
+   .. py:attribute:: dt
+
+
+   .. py:attribute:: dt_max
+
+
+   .. py:attribute:: dt_adaptive
+
+
+   .. py:attribute:: dt_min
+
+
+   .. py:attribute:: dx_max
+
+
+   .. py:attribute:: active
+
+
+   .. py:attribute:: nstate
+
+
+   .. py:attribute:: substep
+
+
+   .. py:attribute:: decoherence
+      :value: 0
+
+
+
+   .. py:attribute:: edc_c
+
+
+   .. py:attribute:: thrshe
+
+
+   .. py:attribute:: tdc_scheme
+      :value: 0
+
+
+
+   .. py:attribute:: trivial
+      :value: 0
+
+
+
+   .. py:attribute:: trivial_thresh
+
+
+   .. py:attribute:: init_temp
+
+
+   .. py:attribute:: seed
+
+
+   .. py:attribute:: velocity_source
+      :value: ''
+
+
+
+   .. py:attribute:: natom
+
+
+   .. py:attribute:: mass
+
+
+   .. py:attribute:: rng
+
+
+   .. py:attribute:: coef
+
+
+   .. py:attribute:: vel
+
+
+   .. py:attribute:: prev_xyz
+      :value: None
+
+
+
+   .. py:attribute:: prev_data
+      :value: None
+
+
+
+   .. py:method:: run()
+
+
+.. py:class:: NAMD_QMMM(mol)
+
+   Bases: :py:obj:`NAMD`
+
+
+   .. code-block:: text
+
+      FSSH NAMD with electrostatic ESPF QM/MM embedding (non-periodic).
+
+      The QM region is the OpenQP Molecule; the MM region + QM/MM coupling are
+      handled by OpenMM via the OpenQpQMMM driver.  Per step:
+        * sync positions (QM Molecule + OpenMM context),
+        * MM electrostatic potential at QM atoms (POTMM),
+        * embedded SCF + MRSF excitation (all states),
+        * active-state embedded gradient = Gradient + grad_esp_qmmm_excited,
+        * ESPF QM charges -> MM forces (forces_mm),
+        * full-system velocity Verlet (QM+MM, atomic units),
+        * QM-only FSSH hop (rescale only QM velocities, as in GAMESS RESCALV).
+
+
+   .. py:attribute:: qm_atoms
+
+
+   .. py:attribute:: cutoff
+
+
+   .. py:attribute:: periodic
+
+
+   .. py:attribute:: pdb
+
+
+   .. py:attribute:: forcefield
+
+
+   .. py:attribute:: driver
+
+
+   .. py:attribute:: mm
+
+
+   .. py:attribute:: natom_all
+
+
+   .. py:attribute:: r_all
+
+
+   .. py:attribute:: m_all
+
+
+   .. py:attribute:: v_all
+
+
+   .. py:attribute:: qm_mass
+
+
+   .. py:method:: run()
+
+
+.. py:data:: HA_TO_WAVENUM
+   :value: 219474.6313708
+
+
+.. py:class:: NAMD_SOC(mol)
+
+   Bases: :py:obj:`NAMD`
+
+
+   .. code-block:: text
+
+      SOC-NAMD (intersystem crossing) on the SHARC spin-adiabatic representation.
+
+      soc_mrsf builds and diagonalises H = diag(E_MCH) + H_SOC, giving the
+      spin-adiabatic energies (OQP::soc_eval, cm^-1 relative to the lowest
+      excitation) and eigenvectors U (OQP::soc_evec_*).  Surface hopping is done
+      on these spin-adiabatic states.
+
+      Nuclei propagate on the active spin-adiabatic surface using the SHARC
+      weighted-MCH diagonal gradient (sum_i |U_i,a|^2 grad E_i^MCH, triplet Ms
+      sublevels sharing one gradient), which is correct through an S/T crossing
+      where SOC mixes states strongly.  The spin-adiabatic FSSH hopping layer uses
+      the local-diabatization propagator with substep energy integration and
+      U-phase tracking (block-Procrustes within degenerate Ms groups) on the
+      block-diagonal MCH state overlap.
+
+
+   .. py:attribute:: nstate_mrsf
+
+
+   .. py:attribute:: ns
+
+
+   .. py:attribute:: nt
+
+
+   .. py:attribute:: nstate_soc
+
+
+   .. py:attribute:: active
+
+
+   .. py:attribute:: coef
+
+
+   .. py:attribute:: e_ref
+      :value: 0.0
+
+
+
+   .. py:attribute:: e0
+      :value: 0.0
+
+
+
+   .. py:attribute:: init_state
+      :value: ''
+
+
+
+   .. py:attribute:: econs
+
+
+   .. py:attribute:: soc_du_dt_corr
+
+
+   .. py:attribute:: soc_tdc_grad_corr
+
+
+   .. py:method:: run()
+
+
+.. py:class:: NAMD_SOC_MCH(mol)
+
+   Bases: :py:obj:`NAMD_SOC`
+
+
+   .. code-block:: text
+
+      SOC-NAMD in the MCH (spin-pure) basis.
+
+      The active state is a single MCH basis function (singlet root or one
+      triplet Ms component), so the nuclear force is the exact MCH root gradient.
+      Electronic amplitudes are propagated by the SOC Hamiltonian in that MCH
+      basis instead of the spin-adiabatic local-diabatization propagator.
+
+
+   .. py:attribute:: coef
+
+
+   .. py:method:: run()
+
+
+.. py:class:: NAMD_SOC_QMMM(mol)
+
+   Bases: :py:obj:`NAMD_QMMM`
+
+
+   .. code-block:: text
+
+      SOC-NAMD (intersystem crossing) with electrostatic ESPF QM/MM embedding.
+
+      Union of the SHARC spin-adiabatic SOC-NAMD machinery (NAMD_SOC) and the
+      ESPF/OpenMM embedding (NAMD_QMMM).  Per step:
+        * sync positions (QM Molecule + OpenMM context),
+        * embedded SCF + singlet MRSF + triplet MRSF + soc_mrsf -> (E_diag, U),
+        * spin-adiabatic MCH overlap -> U-phase tracking -> overlap T,
+        * active-surface force = weighted-MCH diagonal gradient, each MCH
+          component carrying its own ESPF embedding gradient,
+        * ESPF QM charges (of the dominant MCH component) -> MM forces,
+        * full-system velocity Verlet (QM+MM, atomic units),
+        * local-diabatization propagation + spin-adiabatic fewest-switches hop,
+          rescaling QM velocities only (as in GAMESS RESCALV).
+
+      The SOC electronic/hopping kernels are borrowed from NAMD_SOC via explicit
+      NAMD_SOC.<method>(self, ...) calls so this class can inherit the QM/MM
+      embedding plumbing from NAMD_QMMM.
+
+
+   .. py:attribute:: nstate_mrsf
+
+
+   .. py:attribute:: ns
+
+
+   .. py:attribute:: nt
+
+
+   .. py:attribute:: nstate_soc
+
+
+   .. py:attribute:: active
+
+
+   .. py:attribute:: coef
+
+
+   .. py:attribute:: e_ref
+      :value: 0.0
+
+
+
+   .. py:attribute:: e0
+      :value: 0.0
+
+
+
+   .. py:attribute:: init_state
+      :value: ''
+
+
+
+   .. py:attribute:: econs
+
+
+   .. py:attribute:: soc_du_dt_corr
+
+
+   .. py:attribute:: soc_tdc_grad_corr
+
+
+   .. py:method:: run()
+
+
+.. py:class:: NAMD_SOC_MCH_QMMM(mol)
+
+   Bases: :py:obj:`NAMD_SOC_QMMM`
+
+
+   .. code-block:: text
+
+      QM/MM SOC-NAMD in the MCH basis with exact active-root QM gradient.
+
+
+   .. py:attribute:: coef
+
+
+   .. py:method:: run()
+
+

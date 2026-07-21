@@ -1,0 +1,240 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>namd_mod &ndash; OpenQP Fortran API</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
+    <link href="../css/local.css" rel="stylesheet">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+            </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>namd_mod
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+            <li class="list-inline-item" id="meta-author"><i class="fa fa-pencil"></i> Port: OpenQP NAMD; original algorithm: Seunghoon Lee (GAMESS)</li>
+            <li class="list-inline-item" id="meta-date"><i class="fa fa-calendar-o"></i> 2026-06</li>
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 0.5% of total for modules and submodules.">346 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/namd.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/namd.f90.html'>namd.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">namd_mod</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+    <em>None</em>
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      <p>@details
+  Faithful port of the surface-hopping numerics from the GAMESS <code>namd.src</code>
+  module (S. Lee), restructured into clean, argument-based modern Fortran so
+  the kernels are unit-testable and free of COMMON-block / dynamic-memory
+  coupling.  The physics mirrors the original exactly:</p>
+<div class="codehilite"><pre><span></span><code><span class="p">-</span> <span class="nf">time</span><span class="o">-</span><span class="n">derivative</span><span class="w"> </span><span class="n">couplings</span><span class="w"> </span><span class="p">(</span><span class="n">TDC</span><span class="p">)</span><span class="w"> </span><span class="n">from</span><span class="w"> </span><span class="n">wavefunction</span><span class="w"> </span><span class="n">overlaps</span>
+<span class="w">  </span><span class="n">between</span><span class="w"> </span><span class="n">consecutive</span><span class="w"> </span><span class="n">nuclear</span><span class="w"> </span><span class="n">steps</span><span class="w">        </span><span class="p">[</span><span class="n">GAMESS</span><span class="w"> </span><span class="n">NACVFD</span><span class="p">]</span>
+<span class="o">-</span><span class="w"> </span><span class="n">RK4</span><span class="w"> </span><span class="n">propagation</span><span class="w"> </span><span class="n">of</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">electronic</span><span class="w"> </span><span class="n">amplitudes</span>
+<span class="w">  </span><span class="n">i</span><span class="o">*</span><span class="n">hbar</span><span class="o">*</span><span class="err">\</span><span class="n">dot</span><span class="p">{</span><span class="n">c</span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">E</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">i</span><span class="o">*</span><span class="n">sigma</span><span class="p">)</span><span class="w"> </span><span class="n">c</span><span class="w">          </span><span class="p">[</span><span class="n">GAMESS</span><span class="w"> </span><span class="n">PPTDECOE</span><span class="o">/</span><span class="n">NDDTCR</span><span class="o">/</span><span class="n">NDDTCC</span><span class="p">]</span>
+<span class="o">-</span><span class="w"> </span><span class="n">cumulative</span><span class="w"> </span><span class="n">Tully</span><span class="w"> </span><span class="n">hopping</span><span class="w"> </span><span class="n">probabilities</span><span class="w">    </span><span class="p">[</span><span class="n">GAMESS</span><span class="w"> </span><span class="n">FSSHPRST</span><span class="o">/</span><span class="n">FSSHPR</span><span class="p">]</span>
+<span class="o">-</span><span class="w"> </span><span class="n">fewest</span><span class="o">-</span><span class="n">switches</span><span class="w"> </span><span class="n">hop</span><span class="w"> </span><span class="n">decision</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">isotropic</span>
+<span class="w">  </span><span class="n">velocity</span><span class="w"> </span><span class="n">rescaling</span><span class="w"> </span><span class="p">(</span><span class="n">energy</span><span class="w"> </span><span class="n">conservation</span><span class="p">)</span><span class="w">  </span><span class="p">[</span><span class="n">GAMESS</span><span class="w"> </span><span class="n">FSSH</span><span class="o">/</span><span class="n">FSSHT</span><span class="o">/</span><span class="n">RESCALV</span><span class="p">]</span>
+<span class="o">-</span><span class="w"> </span><span class="n">kinetic</span><span class="w"> </span><span class="n">energy</span><span class="w">                            </span><span class="p">[</span><span class="n">GAMESS</span><span class="w"> </span><span class="n">MDQKIN</span><span class="p">]</span>
+</code></pre></div>
+
+<p>Internal-conversion accuracy upgrades, added per a verified literature
+  survey (see session RESEARCH_ic_isc_methods.md) and absent from the GAMESS
+  reference:
+    - energy-based decoherence correction (EDC) — Granucci &amp; Persico,
+      J. Chem. Phys. 126, 134114 (2007); the SHARC default decoherence scheme
+    - trivial / unavoided-crossing detection with diabatic state following,
+      in the spirit of SC-FSSH — Wang &amp; Prezhdo, JPCL 5, 713 (2014)</p>
+<p>Planned next (documented, not yet implemented here):
+    - norm-preserving interpolation (NPI) time-derivative couplings
+      (Meek &amp; Levine, JPCL 5, 2351 (2014)): rigorous multistate form is the
+      real antisymmetric matrix logarithm of the Loewdin-orthonormalised
+      step overlap, T = logm(orth(S))/dt, which reduces to the exact 2-state
+      identity T*dt = arcsin(S_10).  Will replace namd_state_tdc when wired.
+    - intersystem crossing (ISC) via the SHARC spin-adiabatic representation:
+      diagonalise H = H_MCH + H_SOC, hop on the diagonal states, propagate
+      c_diag = U' . P_MCH . U . c_diag.  Requires MRSF Breit-Pauli SOC
+      matrix elements as input.</p>
+<p>Deliberate, documented deviations from the original ("the GAMESS code may
+  not be perfect"):
+    * Everything is in consistent atomic units (energies in Hartree,
+      velocities in bohr/atomic-time, masses in electron masses).  The
+      original mixed Hartree (FSSH) and kcal/mol (FSSHT, QM/MM) paths; here a
+      single code path is used and the caller converts units once.
+    * The O(nstate^2 * nsub) per-substep probability buffer of FSSHPR is
+      dropped: probabilities are accumulated on the fly, then clamped and
+      row-normalised once — numerically identical to the original sum.</p>
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+              </ul>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      
+      <br>
+
+
+
+
+
+
+
+
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,312 @@
+oqp.SimulationManager
+=====================
+
+.. py:module:: oqp.SimulationManager
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      SimulationManager — Unified Python interface for multi-scale simulations in OpenQP.
+
+      Supports four modes:
+          qp        : Pure QM single-point (OpenQP)
+          qmmm      : QM/MM (OpenQP + OpenMM via QMMM_MD)
+          namd      : Non-adiabatic MD (PyRAI2MD + OpenQP)
+          namd_qmmm : NAMD with QM/MM potential (PyRAI2MD + OpenQP + OpenMM)
+
+      Minimal usage
+      -------------
+          manager = SimulationManager.from_template(
+              "template_namd.json",
+              folder="Nac_run",
+              title="test1-1",
+              xyz="test1-1.xyz",
+          )
+          manager.show_config()
+          manager.run()
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.SimulationManager.ELEMENT_TO_Z
+   oqp.SimulationManager.BUILTIN_TEMPLATES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.SimulationManager.OpenQPEngine
+   oqp.SimulationManager.PyRAI2MDEngine
+   oqp.SimulationManager.SimulationManager
+
+
+Module Contents
+---------------
+
+.. py:data:: ELEMENT_TO_Z
+
+.. py:data:: BUILTIN_TEMPLATES
+
+.. py:class:: OpenQPEngine(config=None)
+
+   .. py:attribute:: Runner
+      :value: None
+
+
+
+   .. py:attribute:: config
+
+
+   .. py:attribute:: project
+
+
+   .. py:attribute:: workdir
+
+
+   .. py:attribute:: input_dict
+
+
+   .. py:attribute:: back_door_data
+
+
+   .. py:attribute:: results
+      :value: None
+
+
+
+   .. py:method:: setup_input(folder, openqp_content, title)
+
+
+   .. py:method:: setup_input_with_xyz(folder, openqp_content, xyz_content, title)
+
+
+   .. py:method:: prepare()
+
+
+   .. py:method:: run()
+
+
+   .. py:method:: run_qmmm()
+
+
+.. py:class:: PyRAI2MDEngine(mode, config=None)
+
+   .. py:attribute:: mode
+
+
+   .. py:attribute:: config
+
+
+   .. py:method:: prepare()
+
+
+   .. py:method:: setup_files(folder, input_content, openqp_content, xyz_content, title)
+
+      .. code-block:: text
+
+         Write the three NAMD files into folder:
+             title           — PyRAI2MD control file
+             title.openqp    — OpenQP electronic structure input
+             title.xyz       — molecular coordinates
+
+
+
+   .. py:method:: run(folder, title)
+
+
+.. py:class:: SimulationManager(mode=None, folder='.', title='test1-1', xyz=None, pdb=None, qm_atoms=None, sections=None, namd=None, template=None, openqp_content=None, xyz_content=None, input_content=None, configs=None)
+
+   .. code-block:: text
+
+      Unified interface for QM, QM/MM, NAMD, and NAMD-QM/MM simulations.
+
+      For NAMD modes, three files are generated in the working folder:
+          title           — PyRAI2MD control (&CONTROL, &MOLECULE, &openqp, &MD)
+          title.openqp    — OpenQP input ([input], [scf], [tdhf], [properties], ...)
+          title.xyz       — molecular coordinates
+
+      :param mode: One of 'qp', 'qmmm', 'namd', 'namd_qmmm'.
+      :type mode: str
+      :param folder: Working directory.
+      :type folder: str
+      :param title: Project name (used for all filenames).
+      :type title: str
+      :param xyz: XYZ coordinates.
+      :type xyz: str or path
+      :param pdb: PDB file for QM/MM modes.
+      :type pdb: str or path, optional
+      :param qm_atoms: QM atom selection for QM/MM (e.g. '0-2').
+      :type qm_atoms: str, optional
+      :param sections: OpenQP section overrides.
+      :type sections: dict, optional
+      :param namd: PyRAI2MD section overrides (control, molecule, openqp, md).
+      :type namd: dict, optional
+      :param template: JSON template path or built-in name.
+      :type template: str, optional
+      :param openqp_content: Pre-built inputs (bypass auto-generation).
+      :type openqp_content: str, optional
+      :param xyz_content: Pre-built inputs (bypass auto-generation).
+      :type xyz_content: str, optional
+      :param input_content: Pre-built inputs (bypass auto-generation).
+      :type input_content: str, optional
+      :param configs: Engine-level config overrides.
+      :type configs: dict, optional
+
+
+   .. py:attribute:: VALID_MODES
+
+
+   .. py:attribute:: mode
+
+
+   .. py:attribute:: folder
+      :value: '.'
+
+
+
+   .. py:attribute:: title
+      :value: 'test1-1'
+
+
+
+   .. py:attribute:: configs
+
+
+   .. py:attribute:: openqp
+      :value: None
+
+
+
+   .. py:attribute:: pyrai2md
+      :value: None
+
+
+
+   .. py:method:: check_dependencies()
+      :staticmethod:
+
+
+      .. code-block:: text
+
+         Print the installation status of all required packages.
+
+         .. rubric:: Example
+
+         SimulationManager.check_dependencies()
+         # OpenQP      (QM engine)    ✓ installed (0.3.1)
+         # OpenMM      (MM engine)    ✓ installed (8.1.1)
+         # PyRAI2MD    (NAMD driver)  ✗ not installed
+
+
+
+   .. py:method:: save_template(filepath, description=None)
+
+      .. code-block:: text
+
+         Save current settings as a reusable JSON template.
+
+
+
+   .. py:method:: from_template(template, **overrides)
+      :classmethod:
+
+
+      .. code-block:: text
+
+         Create a SimulationManager from a template with per-job overrides.
+
+
+
+   .. py:method:: list_templates(directory=None)
+      :staticmethod:
+
+
+      .. code-block:: text
+
+         List built-in and user templates.
+
+
+
+   .. py:method:: create_template(filepath, mode, description=None, sections=None, namd=None)
+      :staticmethod:
+
+
+      .. code-block:: text
+
+         Create a template JSON file from scratch.
+
+
+
+   .. py:method:: show_config(name=None)
+
+      .. code-block:: text
+
+         Inspect generated inputs.
+
+         name=None      → print all to console
+         name='openqp'  → return OpenQP input string
+         name='namd'    → return PyRAI2MD control string
+         name='xyz'     → return XYZ string
+         name='pdb'     → return PDB string
+         name='sections'→ return OpenQP sections dict
+         name='namd_sections' → return NAMD sections dict
+
+
+
+   .. py:method:: set_config(section, key, value)
+
+      .. code-block:: text
+
+         Modify OpenQP sections and regenerate .inp/.openqp.
+
+         .. rubric:: Example
+
+         manager.set_config("input", "basis", "cc-pvdz")
+         manager.set_config("tdhf", "nstate", 8)
+         manager.set_config("qmmm", "temperature", 350.0)
+
+
+
+   .. py:method:: set_namd_config(section, key, value)
+
+      .. code-block:: text
+
+         Modify PyRAI2MD control sections and regenerate control file.
+
+         :param section: One of 'control', 'molecule', 'openqp', 'md'.
+         :type section: str
+         :param key: Parameter name (e.g. 'step', 'temp', 'nstate').
+         :type key: str
+         :param value: New value.
+         :type value: any
+         :param Example: manager.set_namd_config("md", "step", 200)
+                         manager.set_namd_config("md", "temp", 350)
+                         manager.set_namd_config("molecule", "ci", 8)
+                         manager.set_namd_config("openqp", "threads", 80)
+
+
+
+   .. py:method:: set_xyz(xyz)
+
+
+   .. py:method:: set_pdb(pdb)
+
+
+   .. py:method:: prepare()
+
+
+   .. py:method:: run()
+
+      .. code-block:: text
+
+         Rewrite files from current config, then execute.
+
+
+

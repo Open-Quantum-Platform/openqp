@@ -1,6 +1,10 @@
 module tdhf_sf_lib
 
+    use, intrinsic :: ieee_arithmetic
+    use precision, only: dp
     use oqp_linalg
+
+    real(kind=dp), parameter :: SF_DAVIDSON_DENOMINATOR_FLOOR = 1.0e-8_dp
 
 contains
 
@@ -73,24 +77,31 @@ contains
     integer, intent(in) :: ndsr
 
     integer :: ii, ist, xvec_dim
-    real(kind=dp) :: sign, val1, val2
+    real(kind=dp) :: val1
 
     xvec_dim = ubound(xm, 1)
 
     do ist = 1, ndsr
       do ii = 1, xvec_dim
         val1 = eigv(ist)-xm(ii)
-        val2 = abs(val1)
-        if( val2<1.0D-12 )then
-          val1 = 1.0D-05
-        else if( val2<1.0D-05 )then
-          sign = val2/val1
-          val1 = sign*1.0D-05
+        if (.not. sf_davidson_safe_denominator(val1)) then
+          val1 = merge(SF_DAVIDSON_DENOMINATOR_FLOOR, -SF_DAVIDSON_DENOMINATOR_FLOOR, val1 >= 0.0_dp)
         end if
         q(ii,ist) = q(ii,ist)/val1
+        if (.not. ieee_is_finite(q(ii,ist))) q(ii,ist) = 0.0_dp
       end do
     end do
   end subroutine sfqvec
+
+  logical function sf_davidson_safe_denominator(denom)
+    use precision, only: dp
+
+    implicit none
+
+    real(kind=dp), intent(in) :: denom
+
+    sf_davidson_safe_denominator = ieee_is_finite(denom) .and. abs(denom) >= SF_DAVIDSON_DENOMINATOR_FLOOR
+  end function sf_davidson_safe_denominator
 
   subroutine sfesum(eiga,eigb,pmo,z,noca,nocb,ivec)
     use precision, only: dp
@@ -238,8 +249,26 @@ contains
 
   end subroutine get_transitions
 
+  pure function mrsf_state_label(mult, root) result(label)
+    implicit none
+    integer, intent(in) :: mult, root
+    character(len=12) :: label
+
+    label = ''
+    select case (mult)
+    case (1)
+      write(label,'("S",I0)') root-1
+    case (3)
+      write(label,'("T",I0)') root-1
+    case (5)
+      write(label,'("Q",I0)') root-1
+    case default
+      write(label,'("M",I0,"-",I0)') mult, root
+    end select
+  end function mrsf_state_label
+
   subroutine print_results(infos, bvec_mo, excitation_energy, &
-                           trans, dip, spin_square, nstates)
+                           trans, dip, spin_square, nstates, physical_mrsf_labels)
     use precision, only: dp
     use types, only: information
     use physical_constants, only: toev => ev2htree
@@ -253,9 +282,15 @@ contains
     real(kind=dp), intent(in), dimension(:,:,:) :: dip
     real(kind=dp), intent(in), dimension(:) :: spin_square
     integer, intent(in) :: nstates
+    logical, intent(in), optional :: physical_mrsf_labels
 
     integer :: istat, jstat, ij, i, j, nocca, noccb, xvec_dim, ndeex
     real(kind=dp) :: ydum, xdum, threshold, ROHF_energy, energ, f
+    logical :: mrsf_output
+    character(len=12) :: state_label, state_label_j
+
+    mrsf_output = .false.
+    if (present(physical_mrsf_labels)) mrsf_output = physical_mrsf_labels
 
     threshold = infos%control%conf_print_threshold
     xvec_dim = ubound(bvec_mo, 1)
@@ -266,7 +301,12 @@ contains
 
     do istat=1,nstates
       ydum = toev*excitation_energy(istat)
-      write(*,'(/,1x,"State #",I4,2X,"Energy =",F12.6,1X,"eV")') istat, ydum
+      if (mrsf_output) then
+        state_label = mrsf_state_label(infos%tddft%mult, istat)
+        write(*,'(/,1x,"State ",A,2X,"Energy =",F12.6,1X,"eV")') trim(state_label), ydum
+      else
+        write(*,'(/,1x,"State #",I4,2X,"Energy =",F12.6,1X,"eV")') istat, ydum
+      end if
 !     write(*,'(3x,"Symmetry of state =",4x,a)') '?a?a?'
       write(*,'(15x,"<S^2> =",1x,f9.4)') spin_square(istat)
       write(*,'(8x,"DRF",4x,"Coeff",8x,"OCC",7x,"VIR")')
@@ -285,8 +325,14 @@ contains
     write(*,'(1x, "State", 6x, "Energy", 7x,"Excitation", 3x, "Excitation(eV)", &
              &2x, "<S^2>", 9x, "Transition dipole moment, a.u.",&
              &8x, "Oscillator")')
-    write(*,'(11x, "Hartree", 11x, "eV", 10x, "rel. GS" &
-             &18x, "X", 10x, "Y", 10x, "Z", 8x,"Abs.", 6x, "strength")')
+    if (mrsf_output) then
+      state_label = mrsf_state_label(infos%tddft%mult, 1)
+      write(*,'(11x, "Hartree", 11x, "eV", 8x, "rel. ",A, &
+               &18x, "X", 10x, "Y", 10x, "Z", 8x,"Abs.", 6x, "strength")') trim(state_label)
+    else
+      write(*,'(11x, "Hartree", 11x, "eV", 10x, "rel. GS", &
+               &18x, "X", 10x, "Y", 10x, "Z", 8x,"Abs.", 6x, "strength")')
+    end if
 
     ndeex = 0
     do istat = 1, nstates
@@ -297,24 +343,47 @@ contains
     do istat = 1, ndeex
       energ = excitation_energy(istat)-excitation_energy(1)
       f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,1,istat)**2)
-      write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
-               &f5.3, 4(1x,f10.4),2x,f10.4)') &
-           istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
-           toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      if (mrsf_output) then
+        state_label = mrsf_state_label(infos%tddft%mult, istat)
+        write(*,'(x, a5, 1x, f17.10, 2f13.6, 6x, &
+                 &f5.3, 4(1x,f10.4),2x,f10.4)') &
+             trim(state_label), ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
+             toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      else
+        write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
+                 &f5.3, 4(1x,f10.4),2x,f10.4)') &
+             istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
+             toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      end if
     end do
 
-    ! Reference ROHF state
-    write(*,'(1x, i3, 1x, f17.10, 2f13.6, 8x,&
-            &"(ROHF/UHF Reference state)")') 0, ROHF_energy, 0.0_dp, -excitation_energy(1)*toev
+    ! The high-spin SCF determinant is an internal working reference for MRSF,
+    ! not the physical S0 state.  Keep the old numeric form for plain SF-TDDFT.
+    if (mrsf_output) then
+      write(*,'(1x, a5, 1x, f17.10, 2f13.6, 8x,&
+              &"(triplet ROHF/UHF internal working reference)")') &
+              'REF', ROHF_energy, 0.0_dp, -excitation_energy(1)*toev
+    else
+      write(*,'(1x, i3, 1x, f17.10, 2f13.6, 8x,&
+              &"(ROHF/UHF Reference state)")') 0, ROHF_energy, 0.0_dp, -excitation_energy(1)*toev
+    end if
 
     ! Excitation
     do istat=ndeex+1,nstates
       energ = excitation_energy(istat)-excitation_energy(1)
       f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,1,istat)**2)
-      write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
-               &f5.3, 4(1x,f10.4),2x,f10.4)') &
-           istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
-           toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      if (mrsf_output) then
+        state_label = mrsf_state_label(infos%tddft%mult, istat)
+        write(*,'(x, a5, 1x, f17.10, 2f13.6, 6x, &
+                 &f5.3, 4(1x,f10.4),2x,f10.4)') &
+             trim(state_label), ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
+             toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      else
+        write(*,'(x, i3, 1x, f17.10, 2f13.6, 6x, &
+                 &f5.3, 4(1x,f10.4),2x,f10.4)') &
+             istat, ROHF_energy+excitation_energy(istat), toev*excitation_energy(istat), &
+             toev*energ, spin_square(istat), dip(1:3,1,istat), sqrt(sum(dip(:,1,istat)**2)), f
+      end if
     end do
     write(*,*)
     write(*,"(2x,'Transition',3x,'Excitation',9x,'Transition dipole, a.u.',19x,'Oscillator',&
@@ -323,8 +392,16 @@ contains
        do jstat=istat+1, nstates
           energ = excitation_energy(jstat)-excitation_energy(istat)
           f = 2.0d0 / 3.0d0 * (energ) * sum(dip(:,istat,jstat)**2)
-    write(*,"(3x,i0,1x,'->',1x,i0,t11,3x,f11.6,3x,3f11.4,1x,f11.4,2x,f11.4)") &
-             istat,jstat,toev*energ,dip(1:3,istat,jstat), sqrt(sum(dip(:,istat,jstat)**2)), f
+          if (mrsf_output) then
+            state_label = mrsf_state_label(infos%tddft%mult, istat)
+            state_label_j = mrsf_state_label(infos%tddft%mult, jstat)
+            write(*,"(3x,a,1x,'->',1x,a,t11,3x,f11.6,3x,3f11.4,1x,f11.4,2x,f11.4)") &
+                 trim(state_label),trim(state_label_j),toev*energ,dip(1:3,istat,jstat), &
+                 sqrt(sum(dip(:,istat,jstat)**2)), f
+          else
+            write(*,"(3x,i0,1x,'->',1x,i0,t11,3x,f11.6,3x,3f11.4,1x,f11.4,2x,f11.4)") &
+                 istat,jstat,toev*energ,dip(1:3,istat,jstat), sqrt(sum(dip(:,istat,jstat)**2)), f
+          end if
        enddo
     enddo
     write(*,*)
@@ -933,7 +1010,7 @@ contains
 
   end subroutine sfrowcal
 
-  function get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,nocb) result(s2)
+  function get_spin_square(dmat_a,dmat_b,ta,tb,abxc,Smat,nocb,noca) result(s2)
   ! dmat_a / dmat_b -- alpha/beta density of the excited state
   ! ta / tb -- alpha/beta difference density matrix
     use precision, only : dp
@@ -947,13 +1024,13 @@ contains
       dmat_a, dmat_b, ta, tb
     real(kind=dp), intent(in), dimension(:,:) :: abxc
     real(kind=dp), intent(in), dimension(:) :: smat
-    integer, intent(in) :: nocb
-    real(kind=dp) :: s2
+    integer, intent(in) :: nocb, noca
+    real(kind=dp) :: s2, nsocc
 
     real(kind=dp), allocatable :: scr1(:), dmat_t(:), &
       dmat_t_sq(:,:), smat_sq(:,:), tmp1(:,:), tmp2(:,:)
     integer :: nbf, nbf_tri, ok
-    real(kind=dp) :: dum1, dum2, dum3, dum4
+    real(kind=dp) :: dum0, dum1, dum2, dum3, dum4
 
     nbf = ubound(abxc, 1)
     nbf_tri = ubound(dmat_a, 1)
@@ -968,6 +1045,8 @@ contains
     if (ok/=0) call show_message('Cannot allocate memory in qet_spin_square',with_abort)
 
    ! Calculate spin expectation values
+     nsocc = noca - nocb
+     dum0 = 0.25_dp*nsocc*(nsocc-2)
      dum1 = nocb+1
 
    ! Symmetric matrix scr1 = Smat*Dmat_a*Smat
@@ -1007,7 +1086,7 @@ contains
      call pack_matrix(tmp1, scr1)
      dum4 = traceprod_sym_packed(scr1, smat, nbf)/2.0_dp
 
-     s2 = dum1 + dum2 - dum3 + dum4**2
+     s2 = dum0 + dum1 + dum2 - dum3 + dum4**2
 
  end function get_spin_square
 

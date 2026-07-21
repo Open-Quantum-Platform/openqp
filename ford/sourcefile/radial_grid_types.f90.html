@@ -6,19 +6,35 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-      <meta name="description" content="">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
     <meta name="author" content="OpenQP Team" >
     <link rel="icon" href="../favicon.png">
 
-    <title>radial_grid_types.F90 &ndash; OPENQP</title>
+    <title>radial_grid_types.F90 &ndash; OpenQP Fortran API</title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
-    <link href="../css/pygments.css" rel="stylesheet">
-    <link href="../css/font-awesome.min.css" rel="stylesheet">
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
     <link href="../css/local.css" rel="stylesheet">
-
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link href="../css/pygments.css" rel="stylesheet">
     <script src="../js/svg-pan-zoom.min.js"></script>
   </head>
 
@@ -28,7 +44,7 @@
     <div class="container-fluid mb-sm-4 mb-xl-2">
       <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
         <div class="container">
-          <a class="navbar-brand" href="../index.html">OPENQP <small>v1.0-dev</small></a>
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
           <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
                   aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
                   <span class="navbar-toggler-icon">
@@ -36,23 +52,18 @@
 
           <div id="navbar" class="navbar-collapse collapse">
             <ul class="navbar-nav">
-                <li class="nav-item"><a class="nav-link" href="../page/index.html">OPENQP</a></li>
                   <li class="nav-item">
                     <a class="nav-link" href="../lists/files.html">Source Files</a>
                   </li>
                 <li class="nav-item">
                   <a class="nav-link" href="../lists/modules.html">Modules</a>
                 </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/procedures.html">Procedures</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/absint.html">Abstract Interfaces</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="../lists/types.html">Derived Types</a>
-                </li>
             </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
           </div><!--/.nav-collapse -->
         </div>
       </nav>
@@ -71,7 +82,7 @@
 
             <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
               <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
-                 title=" 0.6% of total for source files.">256 statements</a>
+                 title=" 0.4% of total for source files.">256 statements</a>
             </li>
 
             <li class="list-inline-item" id="source-file">
@@ -90,9 +101,11 @@
     </div>
   </div>
   <script>
-    $(function () {
-    $('[data-bs-toggle="tooltip"]').tooltip()
-    })
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
   </script>
 
   </div>
@@ -145,277 +158,7 @@
     <div class="col-md-9" id='text'>
       
       <br>
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">This file depends on</h3>
-          </div>
-          <div class="card-body">
-            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: sourcefile~~radial_grid_types.f90~~EfferentGraph Pages: 1 -->
-<svg id="sourcefileradial_grid_typesf90EfferentGraph" width="254pt" height="32pt"
- viewBox="0.00 0.00 254.00 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="sourcefile~~radial_grid_types.f90~~EfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>sourcefile~~radial_grid_types.f90~~EfferentGraph</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 250,-28 250,4 -4,4"/>
-<!-- sourcefile~radial_grid_types.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~EfferentGraph_node1" class="node">
-<title>sourcefile~radial_grid_types.f90</title>
-<polygon fill="none" stroke="#000000" points="246,-24 120,-24 120,0 246,0 246,-24"/>
-<text text-anchor="middle" x="183" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">radial_grid_types.F90</text>
-</g>
-<!-- sourcefile~precision.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~EfferentGraph_node2" class="node">
-<title>sourcefile~precision.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~EfferentGraph_node2"><a xlink:href="../sourcefile/precision.f90.html" xlink:title="precision.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="84,-24 0,-24 0,0 84,0 84,-24"/>
-<text text-anchor="middle" x="42" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">precision.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~radial_grid_types.f90&#45;&gt;sourcefile~precision.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~EfferentGraph_edge1" class="edge">
-<title>sourcefile~radial_grid_types.f90&#45;&gt;sourcefile~precision.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M119.9233,-12C111.4681,-12 102.8689,-12 94.6194,-12"/>
-<polygon fill="#000000" stroke="#000000" points="94.3943,-8.5001 84.3943,-12 94.3942,-15.5001 94.3943,-8.5001"/>
-</g>
-</g>
-</svg>
-</div>          <div>
-            <a type="button" class="graph-help" data-bs-toggle="modal" href="#EfferentGraph-help-text">Help</a>
-          </div>
-          <div class="modal fade" id="EfferentGraph-help-text" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-<p>Nodes of different colours represent the following: </p>
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: Graph Key Pages: 1 -->
-<svg width="202pt" height="32pt"
- viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>Graph Key</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
-<!-- Source File -->
-<g id="node1" class="node">
-<title>Source File</title>
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
-<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
-</g>
-<!-- This Page&#39;s Entity -->
-<g id="node2" class="node">
-<title>This Page&#39;s Entity</title>
-<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
-<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
-</g>
-</g>
-</svg>
 
-<p>Solid arrows point from a file to a file which it depends on. A file
-is dependent upon another if the latter must be compiled before the former
-can be.
-</p>
- </div>
-            </div>
-          </div>
-        </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header">
-            <h3 class="card-title">Files dependent on this one</h3>
-          </div>
-          <div class="card-body">
-            <div class="depgraph"><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: sourcefile~~radial_grid_types.f90~~AfferentGraph Pages: 1 -->
-<svg id="sourcefileradial_grid_typesf90AfferentGraph" width="487pt" height="225pt"
- viewBox="0.00 0.00 487.00 225.26" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph" class="graph" transform="scale(1 1) rotate(0) translate(4 221.2645)">
-<title>sourcefile~~radial_grid_types.f90~~AfferentGraph</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-221.2645 483,-221.2645 483,4 -4,4"/>
-<!-- sourcefile~radial_grid_types.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node1" class="node">
-<title>sourcefile~radial_grid_types.f90</title>
-<polygon fill="none" stroke="#000000" points="126,-129 0,-129 0,-105 126,-105 126,-129"/>
-<text text-anchor="middle" x="63" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">radial_grid_types.F90</text>
-</g>
-<!-- sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node2" class="node">
-<title>sourcefile~dft.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node2"><a xlink:href="../sourcefile/dft.f90.html" xlink:title="dft.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="216,-129 162,-129 162,-105 216,-105 216,-129"/>
-<text text-anchor="middle" x="189" y="-114.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">dft.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~dft.f90&#45;&gt;sourcefile~radial_grid_types.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge1" class="edge">
-<title>sourcefile~dft.f90&#45;&gt;sourcefile~radial_grid_types.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M161.9698,-117C154.2993,-117 145.5589,-117 136.5212,-117"/>
-<polygon fill="#000000" stroke="#000000" points="136.2322,-113.5001 126.2322,-117 136.2321,-120.5001 136.2322,-113.5001"/>
-</g>
-<!-- sourcefile~hf_energy.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node3" class="node">
-<title>sourcefile~hf_energy.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node3"><a xlink:href="../sourcefile/hf_energy.f90.html" xlink:title="hf_energy.f90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="479,-212 394,-212 394,-188 479,-188 479,-212"/>
-<text text-anchor="middle" x="436.5" y="-197.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_energy.f90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge2" class="edge">
-<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M393.7423,-210.7125C354.6766,-218.1536 296.4076,-223.2038 252,-201 225.938,-187.969 207.8604,-158.4624 197.957,-138.1349"/>
-<polygon fill="#000000" stroke="#000000" points="201.1149,-136.6247 193.7528,-129.0057 194.7567,-139.5529 201.1149,-136.6247"/>
-</g>
-<!-- sourcefile~scf.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node5" class="node">
-<title>sourcefile~scf.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node5"><a xlink:href="../sourcefile/scf.f90.html" xlink:title="scf.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="332,-192 278,-192 278,-168 332,-168 332,-192"/>
-<text text-anchor="middle" x="305" y="-177.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">scf.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge8" class="edge">
-<title>sourcefile~hf_energy.f90&#45;&gt;sourcefile~scf.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M393.8057,-193.5066C377.1956,-190.9803 358.3378,-188.1122 342.2852,-185.6708"/>
-<polygon fill="#000000" stroke="#000000" points="342.6059,-182.1794 332.1933,-184.1359 341.5533,-189.0998 342.6059,-182.1794"/>
-</g>
-<!-- sourcefile~hf_gradient.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node4" class="node">
-<title>sourcefile~hf_gradient.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node4"><a xlink:href="../sourcefile/hf_gradient.f90.html" xlink:title="hf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="353,-150 257,-150 257,-126 353,-126 353,-150"/>
-<text text-anchor="middle" x="305" y="-135.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">hf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge3" class="edge">
-<title>sourcefile~hf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M256.8133,-129.2765C246.665,-127.4394 236.1038,-125.5274 226.4217,-123.7746"/>
-<polygon fill="#000000" stroke="#000000" points="226.7853,-120.2836 216.3217,-121.9462 225.5382,-127.1717 226.7853,-120.2836"/>
-</g>
-<!-- sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge4" class="edge">
-<title>sourcefile~scf.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M277.8179,-170.4963C269.3772,-167.2114 260.1532,-163.2719 252,-159 238.6388,-151.9993 224.5976,-142.836 213.1707,-134.8553"/>
-<polygon fill="#000000" stroke="#000000" points="215.1735,-131.9848 204.9966,-129.0384 211.1148,-137.6881 215.1735,-131.9848"/>
-</g>
-<!-- sourcefile~tdhf_energy.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node6" class="node">
-<title>sourcefile~tdhf_energy.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node6"><a xlink:href="../sourcefile/tdhf_energy.f90.html" xlink:title="tdhf_energy.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="353.5,-108 256.5,-108 256.5,-84 353.5,-84 353.5,-108"/>
-<text text-anchor="middle" x="305" y="-93.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_energy.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge5" class="edge">
-<title>sourcefile~tdhf_energy.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M256.4777,-104.7842C246.356,-106.6166 235.8386,-108.5206 226.2037,-110.2648"/>
-<polygon fill="#000000" stroke="#000000" points="225.3722,-106.8584 216.1556,-112.0839 226.6192,-113.7464 225.3722,-106.8584"/>
-</g>
-<!-- sourcefile~tdhf_gradient.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node7" class="node">
-<title>sourcefile~tdhf_gradient.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node7"><a xlink:href="../sourcefile/tdhf_gradient.f90.html" xlink:title="tdhf_gradient.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="358,-66 252,-66 252,-42 358,-42 358,-66"/>
-<text text-anchor="middle" x="305" y="-51.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_gradient.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge6" class="edge">
-<title>sourcefile~tdhf_gradient.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M271.4398,-66.0561C264.8803,-68.7575 258.1368,-71.7846 252,-75 238.6388,-82.0007 224.5976,-91.164 213.1707,-99.1447"/>
-<polygon fill="#000000" stroke="#000000" points="211.1148,-96.3119 204.9966,-104.9616 215.1735,-102.0152 211.1148,-96.3119"/>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_node8" class="node">
-<title>sourcefile~tdhf_z_vector.f90</title>
-<g id="a_sourcefile~~radial_grid_types.f90~~AfferentGraph_node8"><a xlink:href="../sourcefile/tdhf_z_vector.f90.html" xlink:title="tdhf_z_vector.F90">
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="357.5,-24 252.5,-24 252.5,0 357.5,0 357.5,-24"/>
-<text text-anchor="middle" x="305" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">tdhf_z_vector.F90</text>
-</a>
-</g>
-</g>
-<!-- sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90 -->
-<g id="sourcefile~~radial_grid_types.f90~~AfferentGraph_edge7" class="edge">
-<title>sourcefile~tdhf_z_vector.f90&#45;&gt;sourcefile~dft.f90</title>
-<path fill="none" stroke="#000000" stroke-dasharray="5,2" d="M267.1158,-24.0014C261.7773,-26.5321 256.562,-29.5156 252,-33 229.5686,-50.133 211.2245,-77.2706 200.2296,-96.0425"/>
-<polygon fill="#000000" stroke="#000000" points="197.18,-94.325 195.3019,-104.7521 203.2725,-97.7721 197.18,-94.325"/>
-</g>
-</g>
-</svg>
-</div>          <div>
-            <a type="button" class="graph-help" data-bs-toggle="modal" href="#AfferentGraph-help-text">Help</a>
-          </div>
-          <div class="modal fade" id="AfferentGraph-help-text" tabindex="-1" role="dialog">
-            <div class="modal-dialog modal-lg" role="document">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h4 class="modal-title" id="-graph-help-label">Graph Key</h4>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-<p>Nodes of different colours represent the following: </p>
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<!-- Generated by graphviz version 2.40.1 (0)
- -->
-<!-- Title: Graph Key Pages: 1 -->
-<svg width="202pt" height="32pt"
- viewBox="0.00 0.00 201.50 32.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 28)">
-<title>Graph Key</title>
-<polygon fill="#ffffff" stroke="transparent" points="-4,4 -4,-28 197.5,-28 197.5,4 -4,4"/>
-<!-- Source File -->
-<g id="node1" class="node">
-<title>Source File</title>
-<polygon fill="#f0ad4e" stroke="#f0ad4e" points="71,-24 0,-24 0,0 71,0 71,-24"/>
-<text text-anchor="middle" x="35.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#ffffff">Source File</text>
-</g>
-<!-- This Page&#39;s Entity -->
-<g id="node2" class="node">
-<title>This Page&#39;s Entity</title>
-<polygon fill="none" stroke="#000000" points="193.5,-24 89.5,-24 89.5,0 193.5,0 193.5,-24"/>
-<text text-anchor="middle" x="141.5" y="-9.6" font-family="Helvetica,sans-Serif" font-size="10.50" fill="#000000">This Page&#39;s Entity</text>
-</g>
-</g>
-</svg>
-
-<p>Solid arrows point from a file to a file which it depends on. A file
-is dependent upon another if the latter must be compiled before the former
-can be.
-</p>
- </div>
-            </div>
-          </div>
-        </div>
-          </div>
-        </div>
-<br>
       <section>
         <h2><span class="anchor" id="src"></span>Source Code</h2>
         <div class="hl codehilite"><pre><span></span><a id="ln-1" name="ln-1" href="#ln-1"></a><span class="k">module </span><span class="n">dft_radial_grid_types</span>
@@ -846,9 +589,9 @@ can be.
         <div class="row justify-content-between">
           <div class="col">
             <p>
-              OPENQP
- was developed by OpenQP Team<br>              &copy; 2025 
-</p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
           </div>
           <div class="col">
             <p class="text-end">
@@ -860,24 +603,5 @@ can be.
         <br>
       </div> <!-- /container -->
     </footer>
-
-    <!-- Bootstrap core JavaScript -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>    
-
-    <!-- MathJax JavaScript
-             ================================================== -->
-             <!-- Placed at the end of the document so the pages load faster -->
-        <script type="text/x-mathjax-config">
-          MathJax.Hub.Config({
-          TeX: { extensions: ['AMSmath.js','AMSsymbols.js','noErrors.js','noUndefined.js'], equationNumbers: { autoNumber: 'AMS' } },
-          jax: ['input/TeX','input/MathML','output/HTML-CSS'],
-          extensions: ['tex2jax.js','mml2jax.js','MathMenu.js','MathZoom.js']
-          });
-        </script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
-
   </body>
 </html>

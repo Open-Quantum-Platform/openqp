@@ -1,3 +1,10 @@
+!> @file guess_json_mod.f90
+!> @brief Module to process stored SCF guess data in JSON format.
+!>
+!> This module provides routines to load the JSON formatted SCF guess,
+!> retrieve basis set and molecular orbital data, compute the initial
+!> density matrix for RHF or ROHF/UHF calculations, and broadcast the
+!> computed data in a parallel environment.
 module guess_json_mod
 
   implicit none
@@ -5,7 +12,7 @@ module guess_json_mod
   character(len=*), parameter :: module_name = "guess_json_mod"
 
 contains
-
+   !> @brief C binding for the guess_json routine.
   subroutine guess_json_C(c_handle) bind(C, name="guess_json")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
@@ -14,6 +21,13 @@ contains
     inf => oqp_handle_get_info(c_handle)
     call guess_json(inf)
   end subroutine guess_json_C
+
+  !> @brief Process SCF guess JSON data.
+  !>
+  !> This subroutine loads JSON data provided by Python via the tagarray interface.
+  !>
+  !> @param[in,out] infos Information object containing the basis set, atomic data,
+  !>                        control parameters, and JSON tag arrays required for processing.
 
   subroutine guess_json(infos)
     use precision, only: dp
@@ -79,13 +93,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    ! allocate beta
-    call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
-    call infos%dat%reserve_data(OQP_DM_B, TA_TYPE_REAL64, nbf2, comment=OQP_DM_B_comment)
-    call infos%dat%reserve_data(OQP_E_MO_B, TA_TYPE_REAL64, nbf, comment=OQP_E_MO_B_comment)
-    call infos%dat%reserve_data(OQP_VEC_MO_B, TA_TYPE_REAL64, nbf*nbf, (/ nbf, nbf /), comment=OQP_VEC_MO_B_comment)
-
-   ! load beta
+    ! Load beta orbitals from the JSON guess. For ROHF/UHF (scftype >= 2) these
+    ! are the supplied beta guess read by get_ab_initio_density below, so they
+    ! must be retrieved, NOT reallocated (alloc_or_die would discard the guess).
     call data_has_tags(infos%dat, tags_beta, module_name, subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
     call tagarray_get_data(infos%dat, OQP_E_MO_B, mo_energy_b)
@@ -93,7 +103,7 @@ contains
 
 
   !  For ROHF/UHF
-    if (INFOS%control%scftype >= 2) MO_B = MO_A
+    if (INFOS%control%scftype == 1) MO_B = MO_A
 
 ! Calculate Density Matrix
     if (pe%rank == root) then

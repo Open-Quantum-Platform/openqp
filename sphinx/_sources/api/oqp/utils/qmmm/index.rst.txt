@@ -1,0 +1,134 @@
+oqp.utils.qmmm
+==============
+
+.. py:module:: oqp.utils.qmmm
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.qmmm.force_field
+   oqp.utils.qmmm.nonbondedMethod
+   oqp.utils.qmmm.constraints
+   oqp.utils.qmmm.rigidWater
+   oqp.utils.qmmm.nSteps
+   oqp.utils.qmmm.timeStep
+   oqp.utils.qmmm.istate
+   oqp.utils.qmmm.qm_atoms
+   oqp.utils.qmmm.pdb_file
+   oqp.utils.qmmm.pdb0
+   oqp.utils.qmmm.forcefield0
+   oqp.utils.qmmm.system0
+   oqp.utils.qmmm.gradient_qmmm
+   oqp.utils.qmmm.bonded_info
+   oqp.utils.qmmm.covalent_radii
+   oqp.utils.qmmm.kj_per_mol_to_hartree
+   oqp.utils.qmmm.bohr_to_nm
+   oqp.utils.qmmm.unit_charge
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.qmmm.openmm_info
+   oqp.utils.qmmm.openmm_dump
+   oqp.utils.qmmm.openmm_update_system
+   oqp.utils.qmmm.openmm_init
+   oqp.utils.qmmm.openmm_system
+   oqp.utils.qmmm.openmm_potential
+   oqp.utils.qmmm.openmm_energy
+   oqp.utils.qmmm.openmm_gradient
+   oqp.utils.qmmm.form_gradient_qmmm
+
+
+Module Contents
+---------------
+
+.. py:data:: force_field
+   :value: None
+
+
+.. py:data:: nonbondedMethod
+   :value: None
+
+
+.. py:data:: constraints
+   :value: None
+
+
+.. py:data:: rigidWater
+   :value: False
+
+
+.. py:data:: nSteps
+   :value: 1
+
+
+.. py:data:: timeStep
+   :value: 1
+
+
+.. py:data:: istate
+   :value: 0
+
+
+.. py:data:: qm_atoms
+
+.. py:data:: pdb_file
+   :value: None
+
+
+.. py:data:: pdb0
+   :value: None
+
+
+.. py:data:: forcefield0
+   :value: None
+
+
+.. py:data:: system0
+   :value: None
+
+
+.. py:data:: gradient_qmmm
+
+.. py:data:: bonded_info
+   :value: []
+
+
+.. py:data:: covalent_radii
+   :value: [0.0, 0.354, 0.849, 1.336, 1.01, 0.838, 0.757, 0.7, 0.658, 0.668, 0.92, 1.539, 1.421, 1.244,...
+
+
+.. py:data:: kj_per_mol_to_hartree
+   :value: 0.000380879
+
+
+.. py:data:: bohr_to_nm
+   :value: 0.052917721092
+
+
+.. py:data:: unit_charge
+
+.. py:function:: openmm_info()
+
+.. py:function:: openmm_dump(pdbfile=None)
+
+.. py:function:: openmm_update_system(coordinates)
+
+.. py:function:: openmm_init(atom_list)
+
+.. py:function:: openmm_system()
+
+.. py:function:: openmm_potential(xyz)
+
+.. py:function:: openmm_energy()
+
+.. py:function:: openmm_gradient(xyz, oqp_charges)
+
+.. py:function:: form_gradient_qmmm(gradient_qm, gradient_mm)
+

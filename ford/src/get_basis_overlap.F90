@@ -104,14 +104,8 @@ contains
     nbf = basis%nbf
 
     ! Allocate and prepare data for output
-    call infos%dat%remove_records(tags_alloc)
-    call infos%dat%reserve_data(OQP_overlap_mo, TA_TYPE_REAL64, &
-          nbf*nbf, (/ nbf, nbf /), comment=OQP_overlap_mo_comment)
-    call infos%dat%reserve_data(OQP_overlap_ao, TA_TYPE_REAL64, &
-          nbf*nbf, (/ nbf, nbf /), comment=OQP_overlap_ao_comment)
-    call data_has_tags(infos%dat, tags_alloc, module_name, subroutine_name, with_abort)
-    call tagarray_get_data(infos%dat, OQP_overlap_mo, overlap_mo_out)
-    call tagarray_get_data(infos%dat, OQP_overlap_ao, overlap_ao_out)
+    call infos%dat%alloc_or_die(OQP_overlap_mo, (/ nbf, nbf /), overlap_mo_out, description=OQP_overlap_mo_comment)
+    call infos%dat%alloc_or_die(OQP_overlap_ao, (/ nbf, nbf /), overlap_ao_out, description=OQP_overlap_ao_comment)
 
     ! Load data from python level
     call data_has_tags(infos%dat, tags_general, module_name, subroutine_name, with_abort)
@@ -144,7 +138,7 @@ contains
 
     ! Output results: overlap between old and current MOs
     call print_results(overlap_mo_out, e_a, e_a_old, nbf, &
-                       infos%mol_prop%nelec_a, iw)
+                       int(infos%mol_prop%nelec_a), iw)
 
 !   Print timings
     call measure_time(print_total=1, log_unit=iw)

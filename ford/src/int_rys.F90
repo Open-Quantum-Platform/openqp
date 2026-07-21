@@ -1,7 +1,8 @@
 module int2e_rys
     use precision, only: dp
     use basis_tools, only: basis_set
-    use constants, only: bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z
+    use constants, only: HARMONIC_ACTIVE, bas_mxang, bas_mxcart, num_cart_bf, cart_x, cart_y, cart_z, shells_pnrm2
+    use int2_pure_generated, only: int2_shell_projection_t, int2_init_shell_projection
 
     integer, parameter :: MAXCONTR = 120
 
@@ -10,9 +11,22 @@ module int2e_rys
       integer :: at(4)
       integer :: am(4)
       integer :: nbf(4)
+      integer :: nbf_cart(4)
+      integer :: nbf_direct(4)
       integer :: flips(4)
       integer :: nroots
       logical :: iandj, kandl, same
+      logical :: direct_pure = .false.
+      ! projection tables cached per (l, pure); rebuilding them per quartet
+      ! was a measurable overhead in the direct-pure hot loop. Allocated on
+      ! first pure quartet rather than held as a static rank-2 component:
+      ! a default-initialized array-of-derived component here aborted at
+      ! runtime ("integer overflow when calculating the amount of memory to
+      ! allocate") with gfortran-14/-fdefault-integer-8 on linux-x86-64 in
+      ! the Docker CI smoke test, and the allocatable form also costs
+      ! nothing for Cartesian-only runs.
+      integer :: pure_flags(4) = 0
+      type(int2_shell_projection_t), allocatable :: proj_cache(:,:)
       real(kind=dp), allocatable :: gijkl(:)
       real(kind=dp), allocatable :: gnkl (:)
       real(kind=dp), allocatable :: gnm  (:)
@@ -39,6 +53,8 @@ module int2e_rys
     private
     public :: int2_rys_data_t
     public :: int2_rys_compute
+    public :: int2_rys_compute_ordered_am
+    public :: int2_rys_reduce_pure
     public :: rys_print_eri
 
 contains
@@ -137,16 +153,18 @@ contains
 
   end subroutine gdat_set_ids
 
-  subroutine int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2)
+  subroutine int2_rys_compute(ints, gdat, ppairs, zero_shq, mu2, basis, direct_pure)
 
     use int2_pairs, only: int2_pair_storage
     implicit none
 
-    type(int2_rys_data_t) :: gdat
+    type(int2_rys_data_t), intent(inout) :: gdat
     type(int2_pair_storage), intent(in) :: ppairs
     real(kind=dp), intent(inout) :: ints(*)
     real(kind=dp), intent(in), optional :: mu2
-    logical :: zero_shq
+    type(basis_set), intent(in), optional :: basis
+    logical, intent(in), optional :: direct_pure
+    logical, intent(out) :: zero_shq
 
     integer :: ijg, klg, maxgg, mmax, ng
     integer :: nmax
@@ -154,6 +172,7 @@ contains
     real(kind=dp) :: pfac, rho
     real(kind=dp) :: p(3), q(3)
     logical :: first
+    logical :: use_direct_pure
     integer :: id1, id2, ppid_p, ppid_q, npp_p, npp_q
     real(kind=dp) :: mu2_1
 
@@ -163,6 +182,9 @@ contains
 
 !   Prepare shell block
     call set_shells(gdat)
+    use_direct_pure = .false.
+    if (present(direct_pure)) use_direct_pure = direct_pure
+    if (use_direct_pure .and. present(basis)) call prepare_direct_pure(gdat, basis)
 
 
     id1 = maxval(gdat%id(1:2))
@@ -249,8 +271,82 @@ contains
       zero_shq = .false.
     end if
 
+    if (gdat%direct_pure) gdat%nbf = gdat%nbf_direct
 
   end subroutine int2_rys_compute
+
+  subroutine int2_rys_compute_ordered_am(ints, gdat, ppairs, ids, am, zero_shq)
+
+    use int2_pairs, only: int2_pair_storage
+    implicit none
+
+    real(kind=dp), intent(inout) :: ints(*)
+    type(int2_rys_data_t), intent(inout) :: gdat
+    type(int2_pair_storage), intent(in) :: ppairs
+    integer, intent(in) :: ids(4), am(4)
+    logical, intent(out) :: zero_shq
+
+    gdat%id = ids
+    gdat%am = am
+    gdat%flips = [1, 2, 3, 4]
+    call int2_rys_compute(ints, gdat, ppairs, zero_shq)
+
+  end subroutine int2_rys_compute_ordered_am
+
+  subroutine int2_rys_reduce_pure(basis, gdat, ints, nbf_out)
+    use cart2sph, only: cart2sph_eri
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    type(int2_rys_data_t), intent(in) :: gdat
+    real(kind=dp), intent(inout) :: ints(:)
+    integer, intent(out) :: nbf_out(4)
+
+    integer :: am_s(4), pure_s(4), nbf_s(4), nbf_out_s(4)
+
+    nbf_out = gdat%nbf
+    if (.not. HARMONIC_ACTIVE) return
+
+    am_s = gdat%am([4,3,2,1])
+    pure_s = basis%harmonic(gdat%id([4,3,2,1]))
+    if (.not. any(pure_s == 1 .and. am_s >= 2)) return
+
+    nbf_s = gdat%nbf([4,3,2,1])
+    call cart2sph_eri(ints, am_s, pure_s, nbf_s, nbf_out_s)
+    nbf_out = nbf_out_s([4,3,2,1])
+  end subroutine int2_rys_reduce_pure
+
+  subroutine prepare_direct_pure(gdat, basis)
+    implicit none
+
+    type(int2_rys_data_t), intent(inout) :: gdat
+    type(basis_set), intent(in) :: basis
+
+    integer :: pure_s(4)
+    integer :: s
+
+    gdat%direct_pure = .false.
+    if (.not. HARMONIC_ACTIVE) return
+
+    pure_s = basis%harmonic(gdat%id)
+    if (.not. any(pure_s == 1 .and. gdat%am >= 2)) return
+
+    gdat%direct_pure = .true.
+    if (.not. allocated(gdat%proj_cache)) then
+      block
+        integer :: l
+        allocate(gdat%proj_cache(0:bas_mxang, 0:1))
+        do l = 0, bas_mxang
+          call int2_init_shell_projection(l, 0, gdat%proj_cache(l,0))
+          call int2_init_shell_projection(l, 1, gdat%proj_cache(l,1))
+        end do
+      end block
+    end if
+    do s = 1, 4
+      gdat%pure_flags(s) = merge(1, 0, pure_s(s) == 1)
+      gdat%nbf_direct(s) = gdat%proj_cache(gdat%am(s), gdat%pure_flags(s))%nout
+    end do
+  end subroutine prepare_direct_pure
 
   subroutine compute(gdat, ng, nmax, mmax, ints)
 
@@ -278,7 +374,11 @@ contains
                 gdat%dij,gdat%dkl)
 
 !   compute integrals
-    call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    if (gdat%direct_pure) then
+      call compute_ints_direct_pure(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    else
+      call compute_ints(gdat, ng*gdat%nroots, gdat%ijklxyz, gdat%gijkl, ints)
+    end if
   end subroutine
 
   subroutine set_shells(gdat)
@@ -297,7 +397,10 @@ contains
     gdat%kandl = ksh == lsh
     gdat%same = ish == ksh.and.jsh == lsh
 
+    gdat%direct_pure = .false.
     gdat%nbf = num_cart_bf(gdat%am)
+    gdat%nbf_cart = gdat%nbf
+    gdat%nbf_direct = gdat%nbf
 
 !   Set number of quadrature points
     gdat%nroots = (sum(gdat%am)+2 )/2
@@ -563,7 +666,11 @@ contains
 
     type(int2_rys_data_t) :: gdat
     real(kind=dp) :: ints(*)
-    ints(1:product(gdat%nbf)) = 0
+    if (gdat%direct_pure) then
+      ints(1:product(gdat%nbf_direct)) = 0
+    else
+      ints(1:product(gdat%nbf)) = 0
+    end if
 
   end subroutine clear_ints
 
@@ -604,6 +711,78 @@ contains
     end do
 
   end subroutine compute_ints
+
+  subroutine compute_ints_direct_pure(gdat,ngnr,ijklxyz,g0,ints)
+
+    implicit none
+
+    type(int2_rys_data_t) :: gdat
+    integer :: ngnr
+    integer :: ijklxyz(:,:,:)
+    real(kind=dp) ::  g0(ngnr,3,*)
+    real(kind=dp), target :: ints(*)
+
+    integer :: i, j, k, l
+    integer :: nx, ny, nz
+    integer :: ti, tj, tk, tl
+    integer :: oi, oj, ok, ol
+    real(kind=dp) :: val, vi, vij, vijk
+    real(kind=dp), pointer :: p(:,:,:,:)
+
+    p(1:gdat%nbf_direct(4),1:gdat%nbf_direct(3),1:gdat%nbf_direct(2),1:gdat%nbf_direct(1)) &
+        => ints(1:product(gdat%nbf_direct))
+
+    associate ( pr1 => gdat%proj_cache(gdat%am(1), gdat%pure_flags(1)) &
+              , pr2 => gdat%proj_cache(gdat%am(2), gdat%pure_flags(2)) &
+              , pr3 => gdat%proj_cache(gdat%am(3), gdat%pure_flags(3)) &
+              , pr4 => gdat%proj_cache(gdat%am(4), gdat%pure_flags(4)) &
+              )
+
+    do i = 1, gdat%nbf_cart(1)
+      do j = 1, gdat%nbf_cart(2)
+        do k = 1, gdat%nbf_cart(3)
+          do l = 1, gdat%nbf_cart(4)
+            nx = ijklxyz(1,i,1)+ijklxyz(1,j,2)+ijklxyz(1,k,3)+ijklxyz(1,l,4)
+            ny = ijklxyz(2,i,1)+ijklxyz(2,j,2)+ijklxyz(2,k,3)+ijklxyz(2,l,4)
+            nz = ijklxyz(3,i,1)+ijklxyz(3,j,2)+ijklxyz(3,k,3)+ijklxyz(3,l,4)
+
+            associate ( x  => g0(:,1,nx) &
+                      , y  => g0(:,2,ny) &
+                      , z  => g0(:,3,nz) &
+                      )
+                val = sum(x*y*z) &
+                    * shells_pnrm2(i,gdat%am(1)) &
+                    * shells_pnrm2(j,gdat%am(2)) &
+                    * shells_pnrm2(k,gdat%am(3)) &
+                    * shells_pnrm2(l,gdat%am(4))
+            end associate
+            if (val == 0.0_dp) cycle
+
+            do ti = 1, pr1%nterm(i)
+              oi = pr1%out_idx(ti,i)
+              vi = val * pr1%coeff(ti,i)
+              do tj = 1, pr2%nterm(j)
+                oj = pr2%out_idx(tj,j)
+                vij = vi * pr2%coeff(tj,j)
+                do tk = 1, pr3%nterm(k)
+                  ok = pr3%out_idx(tk,k)
+                  vijk = vij * pr3%coeff(tk,k)
+                  do tl = 1, pr4%nterm(l)
+                    ol = pr4%out_idx(tl,l)
+                    p(ol,ok,oj,oi) = p(ol,ok,oj,oi) + vijk * pr4%coeff(tl,l)
+                  end do
+                end do
+              end do
+            end do
+
+          end do
+        end do
+      end do
+    end do
+
+    end associate
+
+  end subroutine compute_ints_direct_pure
 
   subroutine rys_print_eri(gdat, ints)
     use constants, only: shells_pnrm2

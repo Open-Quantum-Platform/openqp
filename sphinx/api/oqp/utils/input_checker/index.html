@@ -1,0 +1,588 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.utils.input_checker &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/utils/input_checker/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.utils.input_parser" href="../input_parser/index.html" />
+    <link rel="prev" title="oqp.utils.geometry" href="../geometry/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../quantum/index.html">oqp.quantum</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../quantum/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.utils</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.utils</a></li>
+      <li class="breadcrumb-item active">oqp.utils.input_checker</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/utils/input_checker/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.utils.input_checker">
+<span id="oqp-utils-input-checker"></span><h1>oqp.utils.input_checker<a class="headerlink" href="#module-oqp.utils.input_checker" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>OpenQP input checker with actionable diagnostics.
+</pre></div>
+</div>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.SUPPORTED_RUNTYPES" title="oqp.utils.input_checker.SUPPORTED_RUNTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SUPPORTED_RUNTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.NOT_AVAILABLE_RUNTYPES" title="oqp.utils.input_checker.NOT_AVAILABLE_RUNTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOT_AVAILABLE_RUNTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.ALL_RUNTYPES" title="oqp.utils.input_checker.ALL_RUNTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ALL_RUNTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.METHODS" title="oqp.utils.input_checker.METHODS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">METHODS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.SCF_TYPES" title="oqp.utils.input_checker.SCF_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCF_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.TDHF_TYPES" title="oqp.utils.input_checker.TDHF_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TDHF_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.MP2_VARIANTS" title="oqp.utils.input_checker.MP2_VARIANTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MP2_VARIANTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_BACKENDS" title="oqp.utils.input_checker.DFTB_BACKENDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_BACKENDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_TYPES" title="oqp.utils.input_checker.DFTB_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_SCC_MIXERS" title="oqp.utils.input_checker.DFTB_SCC_MIXERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_SCC_MIXERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_MODELS" title="oqp.utils.input_checker.DFTB_MODELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_MODELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_MODEL_DEFAULT_MRSF" title="oqp.utils.input_checker.DFTB_MODEL_DEFAULT_MRSF"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_MODEL_DEFAULT_MRSF</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_MODEL_DEFAULT_OPEN_SHELL" title="oqp.utils.input_checker.DFTB_MODEL_DEFAULT_OPEN_SHELL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_MODEL_DEFAULT_OPEN_SHELL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_MODEL_LOCKED_KEYS" title="oqp.utils.input_checker.DFTB_MODEL_LOCKED_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_MODEL_LOCKED_KEYS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DFTB_NATIVE_ONLY_KEYS" title="oqp.utils.input_checker.DFTB_NATIVE_ONLY_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DFTB_NATIVE_ONLY_KEYS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.GUESS_TYPES" title="oqp.utils.input_checker.GUESS_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GUESS_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.SCF_CONVERGERS" title="oqp.utils.input_checker.SCF_CONVERGERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCF_CONVERGERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.OPTIONAL_SCF_CONVERGERS" title="oqp.utils.input_checker.OPTIONAL_SCF_CONVERGERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OPTIONAL_SCF_CONVERGERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.DIIS_TYPES" title="oqp.utils.input_checker.DIIS_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DIIS_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.PCM_BACKENDS" title="oqp.utils.input_checker.PCM_BACKENDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCM_BACKENDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.PCM_MODES" title="oqp.utils.input_checker.PCM_MODES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCM_MODES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.PCM_MODELS" title="oqp.utils.input_checker.PCM_MODELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCM_MODELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.PCM_BACKEND_MODELS" title="oqp.utils.input_checker.PCM_BACKEND_MODELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PCM_BACKEND_MODELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.OPT_LIBS" title="oqp.utils.input_checker.OPT_LIBS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OPT_LIBS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.SCIPY_OPTIMIZERS" title="oqp.utils.input_checker.SCIPY_OPTIMIZERS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCIPY_OPTIMIZERS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.MECI_SEARCH" title="oqp.utils.input_checker.MECI_SEARCH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MECI_SEARCH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.SCF_PROPS" title="oqp.utils.input_checker.SCF_PROPS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SCF_PROPS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.NMR_GAUGES" title="oqp.utils.input_checker.NMR_GAUGES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NMR_GAUGES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.INIT_SCF_TYPES" title="oqp.utils.input_checker.INIT_SCF_TYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INIT_SCF_TYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.WIKI_HELP" title="oqp.utils.input_checker.WIKI_HELP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WIKI_HELP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.Diagnostic" title="oqp.utils.input_checker.Diagnostic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Diagnostic</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.CheckReport" title="oqp.utils.input_checker.CheckReport"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CheckReport</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.apply_dftb_model_default" title="oqp.utils.input_checker.apply_dftb_model_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_dftb_model_default</span></code></a>(→ str)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#oqp.utils.input_checker.analytic_hessian_capability" title="oqp.utils.input_checker.analytic_hessian_capability"><code class="xref py py-obj docutils literal notranslate"><span class="pre">analytic_hessian_capability</span></code></a>(→ tuple[str, str])</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.utils.input_checker.check_input_values" title="oqp.utils.input_checker.check_input_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_input_values</span></code></a>(→ CheckReport)</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.SUPPORTED_RUNTYPES">
+<span class="sig-name descname"><span class="pre">SUPPORTED_RUNTYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.SUPPORTED_RUNTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.NOT_AVAILABLE_RUNTYPES">
+<span class="sig-name descname"><span class="pre">NOT_AVAILABLE_RUNTYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.NOT_AVAILABLE_RUNTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.ALL_RUNTYPES">
+<span class="sig-name descname"><span class="pre">ALL_RUNTYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.ALL_RUNTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.METHODS">
+<span class="sig-name descname"><span class="pre">METHODS</span></span><a class="headerlink" href="#oqp.utils.input_checker.METHODS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.SCF_TYPES">
+<span class="sig-name descname"><span class="pre">SCF_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.SCF_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.TDHF_TYPES">
+<span class="sig-name descname"><span class="pre">TDHF_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.TDHF_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.MP2_VARIANTS">
+<span class="sig-name descname"><span class="pre">MP2_VARIANTS</span></span><a class="headerlink" href="#oqp.utils.input_checker.MP2_VARIANTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_BACKENDS">
+<span class="sig-name descname"><span class="pre">DFTB_BACKENDS</span></span><a class="headerlink" href="#oqp.utils.input_checker.DFTB_BACKENDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_TYPES">
+<span class="sig-name descname"><span class="pre">DFTB_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.DFTB_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_SCC_MIXERS">
+<span class="sig-name descname"><span class="pre">DFTB_SCC_MIXERS</span></span><a class="headerlink" href="#oqp.utils.input_checker.DFTB_SCC_MIXERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_MODELS">
+<span class="sig-name descname"><span class="pre">DFTB_MODELS</span></span><a class="headerlink" href="#oqp.utils.input_checker.DFTB_MODELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_MODEL_DEFAULT_MRSF">
+<span class="sig-name descname"><span class="pre">DFTB_MODEL_DEFAULT_MRSF</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dtcam-tb'</span></em><a class="headerlink" href="#oqp.utils.input_checker.DFTB_MODEL_DEFAULT_MRSF" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_MODEL_DEFAULT_OPEN_SHELL">
+<span class="sig-name descname"><span class="pre">DFTB_MODEL_DEFAULT_OPEN_SHELL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dftb+'</span></em><a class="headerlink" href="#oqp.utils.input_checker.DFTB_MODEL_DEFAULT_OPEN_SHELL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_MODEL_LOCKED_KEYS">
+<span class="sig-name descname"><span class="pre">DFTB_MODEL_LOCKED_KEYS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('omega',</span> <span class="pre">'cam_alpha',</span> <span class="pre">'cam_beta',</span> <span class="pre">'lc_gamma',</span> <span class="pre">'lc_ground_state',</span> <span class="pre">'w_scale',</span> <span class="pre">'response_w_scale',...</span></em><a class="headerlink" href="#oqp.utils.input_checker.DFTB_MODEL_LOCKED_KEYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DFTB_NATIVE_ONLY_KEYS">
+<span class="sig-name descname"><span class="pre">DFTB_NATIVE_ONLY_KEYS</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('c_mrsf',</span> <span class="pre">'c_mrsf_oo',</span> <span class="pre">'response_global_hybrid',</span> <span class="pre">'onsite_exchange_scale',</span> <span class="pre">'w_scale',...</span></em><a class="headerlink" href="#oqp.utils.input_checker.DFTB_NATIVE_ONLY_KEYS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.GUESS_TYPES">
+<span class="sig-name descname"><span class="pre">GUESS_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.GUESS_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.SCF_CONVERGERS">
+<span class="sig-name descname"><span class="pre">SCF_CONVERGERS</span></span><a class="headerlink" href="#oqp.utils.input_checker.SCF_CONVERGERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.OPTIONAL_SCF_CONVERGERS">
+<span class="sig-name descname"><span class="pre">OPTIONAL_SCF_CONVERGERS</span></span><a class="headerlink" href="#oqp.utils.input_checker.OPTIONAL_SCF_CONVERGERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.DIIS_TYPES">
+<span class="sig-name descname"><span class="pre">DIIS_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.DIIS_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.PCM_BACKENDS">
+<span class="sig-name descname"><span class="pre">PCM_BACKENDS</span></span><a class="headerlink" href="#oqp.utils.input_checker.PCM_BACKENDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.PCM_MODES">
+<span class="sig-name descname"><span class="pre">PCM_MODES</span></span><a class="headerlink" href="#oqp.utils.input_checker.PCM_MODES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.PCM_MODELS">
+<span class="sig-name descname"><span class="pre">PCM_MODELS</span></span><a class="headerlink" href="#oqp.utils.input_checker.PCM_MODELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.PCM_BACKEND_MODELS">
+<span class="sig-name descname"><span class="pre">PCM_BACKEND_MODELS</span></span><a class="headerlink" href="#oqp.utils.input_checker.PCM_BACKEND_MODELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.OPT_LIBS">
+<span class="sig-name descname"><span class="pre">OPT_LIBS</span></span><a class="headerlink" href="#oqp.utils.input_checker.OPT_LIBS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.SCIPY_OPTIMIZERS">
+<span class="sig-name descname"><span class="pre">SCIPY_OPTIMIZERS</span></span><a class="headerlink" href="#oqp.utils.input_checker.SCIPY_OPTIMIZERS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.MECI_SEARCH">
+<span class="sig-name descname"><span class="pre">MECI_SEARCH</span></span><a class="headerlink" href="#oqp.utils.input_checker.MECI_SEARCH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.SCF_PROPS">
+<span class="sig-name descname"><span class="pre">SCF_PROPS</span></span><a class="headerlink" href="#oqp.utils.input_checker.SCF_PROPS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.NMR_GAUGES">
+<span class="sig-name descname"><span class="pre">NMR_GAUGES</span></span><a class="headerlink" href="#oqp.utils.input_checker.NMR_GAUGES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.INIT_SCF_TYPES">
+<span class="sig-name descname"><span class="pre">INIT_SCF_TYPES</span></span><a class="headerlink" href="#oqp.utils.input_checker.INIT_SCF_TYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.WIKI_HELP">
+<span class="sig-name descname"><span class="pre">WIKI_HELP</span></span><a class="headerlink" href="#oqp.utils.input_checker.WIKI_HELP" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Diagnostic</span></span><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.severity">
+<span class="sig-name descname"><span class="pre">severity</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.severity" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.path">
+<span class="sig-name descname"><span class="pre">path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.message">
+<span class="sig-name descname"><span class="pre">message</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.message" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.value">
+<span class="sig-name descname"><span class="pre">value</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.expected">
+<span class="sig-name descname"><span class="pre">expected</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.expected" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.action">
+<span class="sig-name descname"><span class="pre">action</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.action" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.wiki">
+<span class="sig-name descname"><span class="pre">wiki</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.wiki" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.Diagnostic.to_text">
+<span class="sig-name descname"><span class="pre">to_text</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#oqp.utils.input_checker.Diagnostic.to_text" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">CheckReport</span></span><a class="headerlink" href="#oqp.utils.input_checker.CheckReport" title="Link to this definition"></a></dt>
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.diagnostics">
+<span class="sig-name descname"><span class="pre">diagnostics</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#oqp.utils.input_checker.Diagnostic" title="oqp.utils.input_checker.Diagnostic"><span class="pre">Diagnostic</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.diagnostics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.ok">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ok</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></em><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.ok" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.errors">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">errors</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#oqp.utils.input_checker.Diagnostic" title="oqp.utils.input_checker.Diagnostic"><span class="pre">Diagnostic</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.errors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.warnings">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">warnings</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#oqp.utils.input_checker.Diagnostic" title="oqp.utils.input_checker.Diagnostic"><span class="pre">Diagnostic</span></a><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.warnings" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.add">
+<span class="sig-name descname"><span class="pre">add</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">severity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wiki</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.add" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.CheckReport.to_text">
+<span class="sig-name descname"><span class="pre">to_text</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#oqp.utils.input_checker.CheckReport.to_text" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.apply_dftb_model_default">
+<span class="sig-name descname"><span class="pre">apply_dftb_model_default</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#oqp.utils.input_checker.apply_dftb_model_default" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Materialize the production default [dftb] model preset.
+
+MRSF-TDDFTB defaults to the published DTCAM-TB operator; the other
+open-shell SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
+compatibility protocol.  Closed-shell routes (singlet ground, TD-DFTB)
+and DFTB0 stay preset-free because the restricted reference has no
+long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
+and any tuned preset-locked key implies manual operator control (legacy
+inputs keep meaning what they said).  Returns the effective model string.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.analytic_hessian_capability">
+<span class="sig-name descname"><span class="pre">analytic_hessian_capability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#oqp.utils.input_checker.analytic_hessian_capability" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Return analytic-Hessian capability status and a precise reason.
+
+This checker is intentionally conservative: enabling a dispatch scaffold must
+not imply broad scientific support. Unsupported analytic Hessians fail at
+input-check time instead of silently falling back to numerical Hessians.
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.utils.input_checker.check_input_values">
+<span class="sig-name descname"><span class="pre">check_input_values</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">raise_error</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">emit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#oqp.utils.input_checker.CheckReport" title="oqp.utils.input_checker.CheckReport"><span class="pre">CheckReport</span></a></span></span><a class="headerlink" href="#oqp.utils.input_checker.check_input_values" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Validate an already parsed OpenQP config and return a diagnostic report.
+
+``input_dir`` is the directory of the input file, used to resolve paths
+(e.g. the NEB product endpoint) that are stored relative to the input file
+rather than the current working directory.
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../geometry/index.html" class="btn btn-neutral float-left" title="oqp.utils.geometry" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../input_parser/index.html" class="btn btn-neutral float-right" title="oqp.utils.input_parser" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

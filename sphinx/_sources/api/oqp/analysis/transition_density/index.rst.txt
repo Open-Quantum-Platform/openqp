@@ -1,0 +1,179 @@
+oqp.analysis.transition_density
+===============================
+
+.. py:module:: oqp.analysis.transition_density
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      MRSF excited-state densities read from the OQP tagarray bridge.
+
+      The MRSF energy driver (``tdhf_mrsf_energy``) exposes three arrays (written by
+      the ``misc-excited-analysis`` patch):
+
+      * ``OQP::td_trans_density_mo`` -- ``trden(nbf,nbf,nstates*nstates)`` in the
+        **alpha-MO basis**.  The off-diagonal blocks ``(ist != jst)`` are the
+        state-interaction one-particle transition density matrices (1-TDM)
+        :math:`\gamma^{i\to j}`; the diagonal blocks ``(ist == jst)`` are the
+        *traceless difference* 1-RDMs :math:`\Delta\gamma^{n}=\gamma^{n}-\gamma^{\rm ref}`.
+        Crucially, because the MRSF ground state ``S0`` is itself a response root
+        (not the reference), every block has **only occ-occ and vir-vir parts** --
+        the occ-vir block is zero.  This is the genuine state-interaction structure,
+        not a reference->amplitude object.
+      * ``OQP::td_trans_dipole`` -- ``dip(3,nstates,nstates)`` OQP's own transition
+        dipoles (a.u.) at the center of mass.
+      * ``OQP::td_dip_ao`` -- AO electric-dipole integrals (packed lower-triangle).
+
+      This module is validated at GATE 2: reconstructing
+      :math:`\mu^{i\to j}=-\mathrm{Tr}(\gamma^{i\to j}_{\rm AO}\,r)` from the exposed
+      1-TDM reproduces ``dip`` to ~1e-15, and ``Tr(gamma^n_AO . S) = N``.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.analysis.transition_density.MRSFExcitedStates
+
+
+Module Contents
+---------------
+
+.. py:class:: MRSFExcitedStates(mol)
+
+   .. code-block:: text
+
+      Excited-state density analysis for a finished MRSF calculation.
+
+      :param mol: A molecule whose MRSF energy run has completed in the *current*
+                  process (so the tagarray still holds the exposed densities).
+      :type mol: oqp.molecule.molecule.Molecule
+
+
+   .. py:attribute:: mol
+
+
+   .. py:attribute:: nbf
+
+
+   .. py:attribute:: na
+
+
+   .. py:attribute:: nb
+
+
+   .. py:attribute:: n_elec
+
+
+   .. py:attribute:: energies
+
+
+   .. py:attribute:: nstates
+
+
+   .. py:attribute:: C
+
+
+   .. py:attribute:: S
+
+
+   .. py:attribute:: R
+
+
+   .. py:attribute:: dip_oqp
+
+
+   .. py:attribute:: gamma_ref_mo
+
+
+   .. py:method:: tdm_mo(i, j)
+
+      .. code-block:: text
+
+         1-TDM gamma^{i->j} in the alpha-MO basis (0-based state indices).
+
+         Only the upper triangle is stored by OQP; gamma^{j->i} == (gamma^{i->j})^T.
+
+
+
+   .. py:method:: tdm_ao(i, j)
+
+      .. code-block:: text
+
+         1-TDM gamma^{i->j} in the AO basis: C gamma_mo C^T.
+
+
+
+   .. py:method:: diff_density_mo(n)
+
+      .. code-block:: text
+
+         Traceless difference density Delta gamma^n = gamma^n - gamma^ref (MO).
+
+
+
+   .. py:method:: state_density_mo(n)
+
+      .. code-block:: text
+
+         Unrelaxed state 1-RDM gamma^n in the MO basis (gamma_ref + Delta).
+
+
+
+   .. py:method:: state_density_ao(n)
+
+      .. code-block:: text
+
+         Unrelaxed state 1-RDM gamma^n in the AO basis.
+
+
+
+   .. py:method:: mo_density_ao(mo_index)
+
+      .. code-block:: text
+
+         AO density of a single (alpha) MO |phi><phi| (for cube export).
+
+
+
+   .. py:method:: transition_dipole(i, j)
+
+      .. code-block:: text
+
+         Reconstruct mu^{i->j} = -Tr(gamma_ao . r) (a.u.), x/y/z.
+
+
+
+   .. py:method:: oscillator_strength(i, j)
+
+      .. code-block:: text
+
+         f = (2/3) * dE * |mu|^2 (dE = |E_j - E_i| in a.u.).
+
+
+
+   .. py:method:: amplitude_matrix(n)
+
+      .. code-block:: text
+
+         Spin-adapted MRSF spin-flip amplitude matrix X^{(n)} (noca x nvirb).
+
+         Rows = alpha-occupied MOs 0..na-1 (holes), columns = beta-virtual MOs
+         nb..nbf-1 (particles).  Replicates the SOMO sqrt(2) handling of
+         ``get_mrsf_transition_density`` so that ``trans_den(X,X)`` reproduces the
+         exposed difference density (validated in the GATE 3 self-check).
+
+
+
+   .. py:method:: trans_den_from_amplitudes(xi, xj)
+
+      .. code-block:: text
+
+         Reproduce OQP's ``get_trans_den`` (alpha-MO basis) from amplitude
+         matrices of two roots.  Used to validate ``amplitude_matrix``.
+
+
+

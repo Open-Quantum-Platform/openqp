@@ -1,0 +1,124 @@
+oqp.library.qmmm_driver
+=======================
+
+.. py:module:: oqp.library.qmmm_driver
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_driver.OpenQpQMMM
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.qmmm_driver.unpack_lower_tri_single
+   oqp.library.qmmm_driver.unpack_lower_tri_multi
+   oqp.library.qmmm_driver.pack_lower_tri_single
+   oqp.library.qmmm_driver.read_xyz
+
+
+Module Contents
+---------------
+
+.. py:function:: unpack_lower_tri_single(packed_atom, nbf)
+
+   .. code-block:: text
+
+      Unpack a single lower-triangular packed array (length nbf*(nbf+1)/2)
+      into a full symmetric (nbf x nbf) matrix.
+
+
+.. py:function:: unpack_lower_tri_multi(packed, nbf, natm)
+
+.. py:function:: pack_lower_tri_single(full)
+
+.. py:function:: read_xyz(filepath)
+
+   .. code-block:: text
+
+      Read a standard XYZ file.
+
+      :returns: * **symbols** (*list of str*)
+                * **coords** (*np.ndarray, shape (natom, 3)  –  Angstroms*)
+
+
+.. py:class:: OpenQpQMMM(positions, topology, forcefield, qm_atoms, oqp_cfg=None, mol=None, Cutoff=app.NoCutoff, Embedding='mechanical', frontier_scheme='none')
+
+   .. code-block:: text
+
+      Low-level QM/MM driver using OpenMM (MM) + OpenQP (QM).
+
+      Two modes:
+        1. **Config mode** – ``oqp_cfg`` (dict).
+        2. **Mol mode**    – pre-built ``mol`` object.
+
+      Exactly one of ``oqp_cfg`` / ``mol`` must be provided.
+
+
+   .. py:attribute:: positions
+
+
+   .. py:attribute:: topology
+
+
+   .. py:attribute:: forcefield
+
+
+   .. py:attribute:: qm_atoms
+
+
+   .. py:attribute:: Cutoff
+
+
+   .. py:attribute:: Embedding
+      :value: 'mechanical'
+
+
+
+   .. py:attribute:: use_mol
+
+
+   .. py:attribute:: op
+      :value: None
+
+
+
+   .. py:attribute:: espf_full
+      :value: False
+
+
+
+   .. py:attribute:: link_atoms
+      :value: []
+
+
+
+   .. py:attribute:: frontier_scheme
+      :value: ''
+
+
+
+   .. py:attribute:: mm_systems
+
+
+   .. py:method:: forces_qm_openqp(potmm=None, potqm=None)
+
+
+   .. py:method:: forces_mm(pchg_qm)
+
+
+   .. py:method:: compute_force(positions, topology, mm_systems, qm_atoms)
+
+
+   .. py:method:: prepare_mm()
+
+
+   .. py:method:: electrostatic_potential()
+
+

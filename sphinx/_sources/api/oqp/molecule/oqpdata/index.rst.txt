@@ -1,0 +1,998 @@
+oqp.molecule.oqpdata
+====================
+
+.. py:module:: oqp.molecule.oqpdata
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Wrapper for OQP data
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.molecule.oqpdata.OQP_CONFIG_SCHEMA
+   oqp.molecule.oqpdata.TA_DIMENSIONS_LENGTH
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.molecule.oqpdata.OQPData
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.molecule.oqpdata.sarray
+   oqp.molecule.oqpdata.farray
+   oqp.molecule.oqpdata.iarray
+   oqp.molecule.oqpdata.barray
+   oqp.molecule.oqpdata.parray
+   oqp.molecule.oqpdata.string
+   oqp.molecule.oqpdata.optional_string
+   oqp.molecule.oqpdata.ispher_mode
+   oqp.molecule.oqpdata.path
+   oqp.molecule.oqpdata.compute_alpha_beta_electrons
+   oqp.molecule.oqpdata.read_system
+
+
+Module Contents
+---------------
+
+.. py:function:: sarray(strng)
+
+   .. code-block:: text
+
+      Convert array of parameters to list of strngs
+
+
+.. py:function:: farray(strng)
+
+   .. code-block:: text
+
+      Convert array of parameters to list of floats
+
+
+.. py:function:: iarray(strng)
+
+   .. code-block:: text
+
+      Convert array of parameters to list of integers
+
+
+.. py:function:: barray(strng)
+
+   .. code-block:: text
+
+      Convert comma-separated boolean parameters to a list of booleans.
+
+
+.. py:function:: parray(strng)
+
+   .. code-block:: text
+
+      Convert array of parameters to list of integer pairs
+
+
+.. py:function:: string(strng)
+
+   .. code-block:: text
+
+      Handle string parameters
+
+
+.. py:function:: optional_string(strng)
+
+   .. code-block:: text
+
+      Preserve a non-empty string, but represent an omitted option as None.
+
+
+.. py:function:: ispher_mode(strng)
+
+   .. code-block:: text
+
+      Normalize the ispher keyword to one of three modes:
+      'auto'  - per-shell AO convention from the basis-set metadata
+                (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
+      'true'  - force pure spherical for every l>=2 shell regardless of how
+                the basis was published (GAMESS ISPHER=1 semantics);
+      'false' - force Cartesian for every shell.
+      Booleans (from saved/dict configs) map to 'true'/'false'.
+
+
+.. py:function:: path(strng)
+
+   .. code-block:: text
+
+      Convert string to Path
+
+
+.. py:data:: OQP_CONFIG_SCHEMA
+
+.. py:data:: TA_DIMENSIONS_LENGTH
+   :value: 12
+
+
+.. py:class:: OQPData(silent=0)
+
+   .. code-block:: text
+
+      Wrapper for OQP data class
+
+
+   .. py:property:: typemap
+
+      .. code-block:: text
+
+         Access type map
+
+
+   .. py:attribute:: silent
+      :value: 0
+
+
+
+   .. py:attribute:: mol2
+      :value: []
+
+
+
+   .. py:method:: set_mol_charge(charge)
+
+      .. code-block:: text
+
+         Set charge of a molecule
+
+
+
+   .. py:method:: set_mol_multiplicity(multiplicity)
+
+      .. code-block:: text
+
+         Set multiplicity of the molecule
+
+
+
+   .. py:method:: set_scf_type(scftype)
+
+      .. code-block:: text
+
+         Set SCF type
+
+
+
+   .. py:method:: set_scf_maxit(maxit)
+
+      .. code-block:: text
+
+         Set maximum number of SCF iterations
+
+
+
+   .. py:method:: set_scf_maxdiis(maxdiis)
+
+      .. code-block:: text
+
+         Set maximum number of DIIS Equations
+
+
+
+   .. py:method:: set_scf_diis_reset_mod(diis_reset_mod)
+
+      .. code-block:: text
+
+         Set reset DIIS Equations for every diis_reset_mod
+
+
+
+   .. py:method:: set_scf_diis_reset_conv(diis_reset_conv)
+
+      .. code-block:: text
+
+         Set reset DIIS Equations for every diis_reset_mod
+
+
+
+   .. py:method:: set_scf_diis_type(diistype)
+
+      .. code-block:: text
+
+         Set DIIS method
+
+
+
+   .. py:method:: set_scf_cdiis_switch(cdiis_switch)
+
+      .. code-block:: text
+
+         DIIS error below which the DIIS cascade switches to C-DIIS
+
+
+
+   .. py:method:: set_scf_vdiis_vshift_switch(vdiis_vshift_switch)
+
+      .. code-block:: text
+
+         DIIS error below which the level shift is turned off (vDIIS)
+
+
+
+   .. py:method:: set_scf_vshift(vshift)
+
+      .. code-block:: text
+
+         Set Vshift size for better SCF convergency
+
+
+
+   .. py:method:: set_scf_mom(mom)
+
+      .. code-block:: text
+
+         Set MOM for better SCF convergency
+
+
+
+   .. py:method:: set_scf_mom_switch(mom_switch)
+
+      .. code-block:: text
+
+         Set MOM turn on criteria of DIIS error
+
+
+
+   .. py:method:: set_scf_pfon(pfon)
+
+      .. code-block:: text
+
+         pfon
+
+
+
+   .. py:method:: set_scf_pfon_start_temp(pfon_start_temp)
+
+      .. code-block:: text
+
+         pfon_start_temp
+
+
+
+   .. py:method:: set_scf_pfon_cooling_rate(pfon_cooling_rate)
+
+      .. code-block:: text
+
+         pfon_cooling_rate
+
+
+
+   .. py:method:: set_scf_pfon_nsmear(pfon_nsmear)
+
+      .. code-block:: text
+
+         pfon_cooling_rate
+
+
+
+   .. py:method:: set_scf_rstctmo(rstctmo)
+
+      .. code-block:: text
+
+         restrict MO
+
+
+
+   .. py:method:: set_scf_active_basis(active_basis)
+
+      .. code-block:: text
+
+         Select basis set: 0 => info%basis
+         1 => info%alt_basis
+
+
+
+   .. py:method:: set_scf_conv(conv)
+
+      .. code-block:: text
+
+         Set SCF convergence threshold
+
+
+
+   .. py:method:: set_scf_scal_rel(scal_rel)
+
+      .. code-block:: text
+
+         Set SCF convergence threshold
+
+
+
+   .. py:method:: set_scf_incremental(flag)
+
+      .. code-block:: text
+
+         Set incremental Fock matrix build
+
+
+
+   .. py:method:: set_scf_pscreen(flag)
+
+      .. code-block:: text
+
+         Enable progressive (iteration-dependent) integral screening
+
+
+
+   .. py:method:: set_scf_pscreen_k(k)
+
+      .. code-block:: text
+
+         Progressive screening coupling: tau_iter = k * diis_error
+
+
+
+   .. py:method:: set_scf_pscreen_cap(cap)
+
+      .. code-block:: text
+
+         Progressive screening loosest cutoff (upper clamp on tau_iter)
+
+
+
+   .. py:method:: set_scf_pscreen_tight(tight)
+
+      .. code-block:: text
+
+         Progressive screening: pin to int2e_cutoff once diis_error < tight
+
+
+
+   .. py:method:: set_scf_pscreen_xc_dcut(dcut)
+
+      .. code-block:: text
+
+         Progressive XC: loose grid density cutoff during the SCF descent (0=off)
+
+
+
+   .. py:method:: set_scf_pscreen_xc_aocut(aocut)
+
+      .. code-block:: text
+
+         Progressive XC: loose grid AO-prune threshold during the SCF descent (0=off)
+
+
+
+   .. py:method:: set_scf_pscreen_grid_rad(n)
+
+      .. code-block:: text
+
+         Progressive XC: coarse radial grid points during the SCF descent (0=off)
+
+
+
+   .. py:method:: set_scf_pscreen_grid_ang(n)
+
+      .. code-block:: text
+
+         Progressive XC: coarse angular (Lebedev) grid points during the SCF descent (0=off)
+
+
+
+   .. py:method:: set_scf_xc_c2f(v)
+
+      .. code-block:: text
+
+         Coarse-to-fine XC grid during SCF descent (on/off/auto).
+
+
+
+   .. py:method:: set_scf_xc_phi_cache(v)
+
+      .. code-block:: text
+
+         Cache collocation Phi across SCF iterations (on/off/auto).
+
+
+
+   .. py:method:: set_scf_xc_incdft(v)
+
+      .. code-block:: text
+
+         Incremental DFT (experimental; on/off/auto).
+
+
+
+   .. py:method:: set_scf_grad_cutoff(v)
+
+      .. code-block:: text
+
+         Schwarz cutoff for the 2e-derivative gradient build (number or auto).
+
+
+
+   .. py:method:: set_tdhf_resp_cutoff(v)
+
+      .. code-block:: text
+
+         MRSF response 2e-integral cutoff (number or auto).
+
+
+
+   .. py:method:: set_tdhf_fp32(v)
+
+      .. code-block:: text
+
+         FP32 MRSF response digestion (on/off/auto).
+
+
+
+   .. py:method:: set_tdhf_zv_warmstart(v)
+
+      .. code-block:: text
+
+         MRSF z-vector warm-start across geometry steps (on/off/auto).
+
+
+
+   .. py:method:: set_scf_converger_type(converger_type)
+
+      .. code-block:: text
+
+         Set SCF solver for SCF convergence:
+         converger_type (int): SOSCF algorithm type
+             0: DIIS
+             1: BFGS/SOSCF
+             2: TRAH
+
+
+
+   .. py:method:: set_soscf_lvl_shift(soscf_lvl_shift)
+
+      .. code-block:: text
+
+         SOSCF level-shift parameter.
+
+
+
+   .. py:method:: set_scf_verbose(verbose)
+
+      .. code-block:: text
+
+         Controls output verbosity
+
+
+
+   .. py:method:: set_trah_stability(flag: bool)
+
+      .. code-block:: text
+
+         Enable/disable Hessian/eigenspectrum stability analysis before TRAH.
+
+
+
+   .. py:method:: set_trah_line_search(flag: bool)
+
+      .. code-block:: text
+
+         Enable line search within TRAH micro-iterations.
+
+
+
+   .. py:method:: set_subsystem_solver(trh_sub_solver) -> None
+
+      .. code-block:: text
+
+         Select the TRAH subsystem solver.
+         Valid values:
+           0 : Davidson
+           1 : Jacobi–Davidson
+           2 : TCG
+
+
+
+   .. py:method:: set_trah_n_random_trial_vectors(n: int)
+
+      .. code-block:: text
+
+         Number of random trial vectors for initial subspace.
+
+
+
+   .. py:method:: set_trah_start_trust_radius(r0: float)
+
+      .. code-block:: text
+
+         Initial trust-region radius.
+
+
+
+   .. py:method:: set_trah_jacobi_davidson_start(trh_jd_start: int)
+
+      .. code-block:: text
+
+         Jacobi-Davidson start mode / option.
+
+
+
+   .. py:method:: set_trah_n_micro(k: int)
+
+      .. code-block:: text
+
+         Max micro-iterations per macro step.
+
+
+
+   .. py:method:: set_trah_global_red_factor(f: float)
+
+      .. code-block:: text
+
+         Global trust-radius reduction factor (0 < f < 1).
+
+
+
+   .. py:method:: set_trah_local_red_factor(f: float)
+
+      .. code-block:: text
+
+         Local trust-radius reduction factor (0 < f < 1).
+
+
+
+   .. py:method:: set_trah_impl(trh_impl) -> None
+
+      .. code-block:: text
+
+         Select the TRAH implementation.
+         Valid values:
+           auto   : native Fortran trust-region augmented-Hessian solver
+           native : native Fortran trust-region augmented-Hessian solver
+           otr    : external OpenTrustRegion library
+
+
+
+   .. py:method:: set_sd_scf(sd_scf)
+
+      .. code-block:: text
+
+         prevent running the first SD-SCF calculation
+
+
+
+   .. py:method:: set_pcm_enabled(enabled)
+
+      .. code-block:: text
+
+         Enable the PCM reaction-field contribution to the SCF (ddX backend)
+
+
+
+   .. py:method:: set_pcm_epsilon(epsilon)
+
+      .. code-block:: text
+
+         Set the PCM solvent dielectric constant
+
+
+
+   .. py:method:: set_qmmm_flag(qmmm_flag)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation type
+
+
+
+   .. py:method:: set_qmmm_forcefield(forcefield)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation forcefield
+
+
+
+   .. py:method:: set_qmmm_rigidwater(rigidwater)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation rigidWater
+
+
+
+   .. py:method:: set_qmmm_nonbondedmethod(nonbondedmethod)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation nonbondedMethod
+
+
+
+   .. py:method:: set_qmmm_constraints(constraints)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation constraints
+
+
+
+   .. py:method:: set_qmmm_nsteps(nsteps)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation constraints
+
+
+
+   .. py:method:: set_qmmm_timestep(timestep)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation constraints
+
+
+
+   .. py:method:: set_qmmm_istate(istate)
+
+      .. code-block:: text
+
+         Handle QM/MM calculation istate
+
+
+
+   .. py:method:: set_tdhf_type(td_type)
+
+      .. code-block:: text
+
+         Handle td-dft calculation type
+
+
+
+   .. py:method:: set_tdhf_nstate(nstate)
+
+      .. code-block:: text
+
+         Set number of states in tdhf calculation
+
+
+
+   .. py:method:: set_tdhf_target(target)
+
+      .. code-block:: text
+
+         Set target states in tdhf gradient calculation
+
+
+
+   .. py:method:: set_tdhf_maxit(maxit)
+
+      .. code-block:: text
+
+         Set max number of iterations in Davidson's eigensolver
+
+
+
+   .. py:method:: set_tdhf_maxit_zv(maxit_zv)
+
+      .. code-block:: text
+
+         Set max number of iterations in Davidson's eigensolver
+
+
+
+   .. py:method:: set_tdhf_conv(conv)
+
+      .. code-block:: text
+
+         Set SCF convergence threshold
+
+
+
+   .. py:method:: set_tdhf_zvconv(conv)
+
+      .. code-block:: text
+
+         Set SCF convergence threshold
+
+
+
+   .. py:method:: set_tdhf_multiplicity(multiplicity)
+
+      .. code-block:: text
+
+         Set multiplicity in tdhf calculation
+
+
+
+   .. py:method:: set_tdhf_nvdav(nvdav)
+
+      .. code-block:: text
+
+         Set max number of trial vectors in Davidson's eigensolver
+
+
+
+   .. py:method:: set_tdhf_tlf(tlf)
+
+      .. code-block:: text
+
+         Set TLF in tdhf NAC calculation
+
+
+
+   .. py:method:: set_tdhf_hfscale(hfscale)
+
+      .. code-block:: text
+
+         Set HF exact exchange scalar in response calculation
+
+
+
+   .. py:method:: set_tdhf_cam_alpha(cam_alpha)
+
+      .. code-block:: text
+
+         Set short range HF exact exchange scalar in response calculation
+
+
+
+   .. py:method:: set_tdhf_cam_beta(cam_beta)
+
+      .. code-block:: text
+
+         Set long range HF exact exchange scalar in response calculation
+
+
+
+   .. py:method:: set_tdhf_cam_mu(cam_mu)
+
+      .. code-block:: text
+
+         Set range separation parameter mu in response calculation
+
+
+
+   .. py:method:: set_tdhf_spc_coco(spc_coco)
+
+      .. code-block:: text
+
+         Set CO-CO spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+
+
+
+   .. py:method:: set_tdhf_spc_ovov(spc_ovov)
+
+      .. code-block:: text
+
+         Set OV-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+
+
+
+   .. py:method:: set_tdhf_spc_coov(spc_coov)
+
+      .. code-block:: text
+
+         Set CO-OV spin-pair coupling parameter (C=closed, O=open, V=virtual MOs) in MRSF calculation
+
+
+
+   .. py:method:: set_tdhf_ixcore(ixcore)
+
+
+   .. py:method:: set_tdhf_gmres_dim(gmres_dim)
+
+      .. code-block:: text
+
+         Set the restart dimension of GMRES during z-vector:
+         50 (default)
+
+
+
+   .. py:method:: set_tdhf_z_solver(z_solver)
+
+      .. code-block:: text
+
+         Set z-vector solver type:
+         0: CG (Conjugate Gradient, default) - for symmetric positive-definite (A+B)
+         1: GMRES (Generalized Minimal Residual) - legacy explicit fallback
+         2: MINRES (Minimal Residual) - symmetric, robust when (A+B) is indefinite
+         3: AUTO - try CG, fall back to MINRES then GMRES if a solver fails
+
+
+
+   .. py:method:: set_conf_threshold(conf_threshold)
+
+      .. code-block:: text
+
+         Set configuration printout option
+
+
+
+   .. py:method:: set_dft_functional(functional)
+
+      .. code-block:: text
+
+         Set DFT functional
+
+
+
+   .. py:method:: set_mp2_same_spin_scale(scale)
+
+      .. code-block:: text
+
+         Set standalone MP2 same-spin scale.
+
+
+
+   .. py:method:: set_mp2_opposite_spin_scale(scale)
+
+      .. code-block:: text
+
+         Set standalone MP2 opposite-spin scale.
+
+
+
+   .. py:method:: set_dftgrid_rad_type(radtype)
+
+      .. code-block:: text
+
+         Set radial grid type in DFT
+
+
+
+   .. py:method:: set_dftgrid_rad_npts(npts)
+
+      .. code-block:: text
+
+         Set number of radial grid points in DFT
+
+
+
+   .. py:method:: set_dftgrid_ang_npts(npts)
+
+      .. code-block:: text
+
+         Set number of angular grid points in DFT
+
+
+
+   .. py:method:: set_dftgrid_ao_threshold(do)
+
+      .. code-block:: text
+
+         Set grid_ao_threshold
+
+
+
+   .. py:method:: set_dftgrid_ao_pruned(do)
+
+      .. code-block:: text
+
+         Set grid_ao_pruned
+
+
+
+   .. py:method:: set_dftgrid_pruned_ao_sparsity_ratio(do)
+
+      .. code-block:: text
+
+         Set grid_ao_sparsity_ratio
+
+
+
+   .. py:method:: set_dftgrid_partfun(partfun)
+
+      .. code-block:: text
+
+         Set partition function in Becke's fuzzy cell method
+
+
+
+   .. py:method:: set_dftgrid_pruned(pruned)
+
+      .. code-block:: text
+
+         Set pruned grid
+
+
+
+   .. py:method:: set_dftgrid_hfscale(hfscale)
+
+      .. code-block:: text
+
+         Set HF exact exchange scalar in DFT calculation
+
+
+
+   .. py:method:: set_dftgrid_cam_flag(cam_flag)
+
+      .. code-block:: text
+
+         Set CAM flag in DFT calculation
+
+
+
+   .. py:method:: set_dftgrid_cam_alpha(cam_alpha)
+
+      .. code-block:: text
+
+         Set short range HF exact exchange scalar in DFT calculation
+
+
+
+   .. py:method:: set_dftgrid_cam_beta(cam_beta)
+
+      .. code-block:: text
+
+         Set long range HF exact exchange scalar in DFT calculation
+
+
+
+   .. py:method:: set_dftgrid_cam_mu(cam_mu)
+
+      .. code-block:: text
+
+         Set range separation parameter mu in DFT calculation
+
+
+
+   .. py:method:: set_system(system)
+
+      .. code-block:: text
+
+         Set up atomic data
+
+
+
+   .. py:method:: set_system2(system)
+
+      .. code-block:: text
+
+         Set up the second set of atomic data
+
+
+
+   .. py:method:: set_soc_2e(soc_2e)
+
+
+   .. py:method:: parse_section(config, section)
+
+
+   .. py:method:: apply_config(config)
+
+      .. code-block:: text
+
+         Apply the data from the OQP config
+         The latter has to be read from the input file
+
+
+
+   .. py:method:: get_basis()
+
+      .. code-block:: text
+
+         Get basis set from a molecule
+
+
+
+.. py:function:: compute_alpha_beta_electrons(n_e, mult)
+
+   .. code-block:: text
+
+      Compute number of alpha and beta electrons for a given total electron number and multiplicity
+      ne - total number of electrons
+      mult - multiplicity
+      returns (n_alpha, n_beta)
+
+
+.. py:function:: read_system(system)
+

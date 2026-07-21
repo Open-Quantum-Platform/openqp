@@ -1,0 +1,61 @@
+oqp.utils.file_utils
+====================
+
+.. py:module:: oqp.utils.file_utils
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Helper utilities for file manipulation
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.file_utils.try_basis
+   oqp.utils.file_utils.try_data_file
+   oqp.utils.file_utils.what_is_time
+   oqp.utils.file_utils.how_long
+   oqp.utils.file_utils.dump_log
+   oqp.utils.file_utils.dump_data
+   oqp.utils.file_utils.write_xyz
+   oqp.utils.file_utils.write_grad
+   oqp.utils.file_utils.write_config
+
+
+Module Contents
+---------------
+
+.. py:function:: try_basis(basis, path=None, fallback='6-31g')
+
+   .. code-block:: text
+
+      try various basis file locations and return the matching one
+
+
+.. py:function:: try_data_file(name)
+
+   .. code-block:: text
+
+      Resolve a data file shipped under share/basis_sets (installed) or the
+      source basis_sets/ tree (development).
+
+
+.. py:function:: what_is_time()
+
+.. py:function:: how_long(start, end)
+
+.. py:function:: dump_log(mol, title=None, section=None, info=None, must_print=False)
+
+.. py:function:: dump_data(mol, data, title=None, fpath='.')
+
+.. py:function:: write_xyz(atoms, coord, info)
+
+.. py:function:: write_grad(atoms, grad)
+
+.. py:function:: write_config(config)
+

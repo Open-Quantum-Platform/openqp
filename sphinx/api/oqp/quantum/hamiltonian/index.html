@@ -1,0 +1,363 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>oqp.quantum.hamiltonian &mdash; OpenQP Python API 1.2.1</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+
+  
+    <link rel="canonical" href="https://open-quantum-platform.github.io/openqp/sphinx/api/oqp/quantum/hamiltonian/index.html" />
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=ca842793"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="oqp.quantum.integrals" href="../integrals/index.html" />
+    <link rel="prev" title="oqp.quantum.fcidump" href="../fcidump/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            OpenQP Python API
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">oqp</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../../SimulationManager/index.html">oqp.SimulationManager</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../SimulationManager/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../analysis/index.html">oqp.analysis</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../analysis/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../export/index.html">oqp.export</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../export/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../interop/index.html">oqp.interop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../interop/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../library/index.html">oqp.library</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../library/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molden/index.html">oqp.molden</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molden/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../molecule/index.html">oqp.molecule</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../molecule/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../openqp/index.html">oqp.openqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../openqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../periodic_table/index.html">oqp.periodic_table</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#attributes">Attributes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../periodic_table/index.html#package-contents">Package Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../pyoqp/index.html">oqp.pyoqp</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#classes">Classes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pyoqp/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3 current"><a class="reference internal" href="../index.html">oqp.quantum</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../runtime/index.html">oqp.runtime</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#functions">Functions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../runtime/index.html#module-contents">Module Contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../../utils/index.html">oqp.utils</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html#submodules">Submodules</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#attributes">Attributes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#package-contents">Package Contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.RTLD"><code class="docutils literal notranslate"><span class="pre">RTLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.ffi"><code class="docutils literal notranslate"><span class="pre">ffi</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../index.html#oqp.attr_value"><code class="docutils literal notranslate"><span class="pre">attr_value</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">OpenQP Python API</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">oqp</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">oqp.quantum</a></li>
+      <li class="breadcrumb-item active">oqp.quantum.hamiltonian</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/api/oqp/quantum/hamiltonian/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-oqp.quantum.hamiltonian">
+<span id="oqp-quantum-hamiltonian"></span><h1>oqp.quantum.hamiltonian<a class="headerlink" href="#module-oqp.quantum.hamiltonian" title="Link to this heading"></a></h1>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Build the second-quantized molecular Hamiltonian from an OpenQP molecule.
+
+This is the bridge that turns a converged OpenQP mean-field calculation into
+the input expected by quantum-computing electronic-structure workflows
+(Qiskit Nature, OpenFermion, PennyLane-via-OpenFermion, Block2, ...). The
+output is either a :class:`MolecularHamiltonian` of NumPy tensors in the MO
+basis, or a FCIDUMP file.
+
+What OpenQP exposes today
+-------------------------
+The Python data container (``mol.data[...]``) provides everything needed for
+the *one-electron* part of the Hamiltonian and all metadata:
+
+* ``OQP::Hcore`` -- core Hamiltonian in the AO basis (packed triangular)
+* ``OQP::SM``    -- overlap (packed triangular)
+* ``OQP::VEC_MO_A`` / ``OQP::VEC_MO_B`` -- MO coefficients
+* ``enuc`` -- nuclear repulsion energy
+* ``nelec_A`` / ``nelec_B`` -- electron counts
+
+Two-electron integrals
+----------------------
+The two-electron repulsion integrals (ERIs) are produced by the Fortran getter
+``oqp.int2e(mol)``, which populates the ``OQP::ERI_AO`` tag with the full
+``nbf**4`` AO tensor (chemist notation). :func:`from_openqp` calls it
+automatically, so a converged calculation yields a complete FCIDUMP with no
+external integral source. The ERIs come from the same engine and AO basis as
+``OQP::Hcore`` and the MO coefficients, keeping the Hamiltonian consistent.
+
+This is the conventional in-core path (memory ~ ``nbf**4``); it is meant for
+small active systems / quantum-computing experiments, not production basis
+sets. Callers may still override the source with ``eri_ao=`` or an
+``eri_provider`` callable, or skip the two-body part with ``compute_eri=False``.
+</pre></div>
+</div>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.quantum.hamiltonian.MolecularHamiltonian" title="oqp.quantum.hamiltonian.MolecularHamiltonian"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MolecularHamiltonian</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#oqp.quantum.hamiltonian.from_openqp" title="oqp.quantum.hamiltonian.from_openqp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_openqp</span></code></a>(mol[, eri_ao, eri_provider, mo_coeff, ...])</p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">MolecularHamiltonian</span></span><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Second-quantized electronic Hamiltonian in the MO basis.
+
+.. attribute:: one_body
+
+   ``h_pq`` one-electron integrals.
+
+   :type: numpy.ndarray, shape (norb, norb)
+
+.. attribute:: two_body
+
+   ``(pq|rs)`` two-electron integrals (chemist notation). ``None`` when
+   ERIs were unavailable (one-electron-only export).
+
+   :type: numpy.ndarray or None, shape (norb, norb, norb, norb)
+
+.. attribute:: core_energy
+
+   Scalar energy (nuclear repulsion + any frozen-core contribution).
+
+   :type: float
+
+.. attribute:: n_electrons
+
+   Number of correlated electrons.
+
+   :type: int
+
+.. attribute:: ms2
+
+   ``2 * S_z`` = (n_alpha - n_beta).
+
+   :type: int
+
+.. attribute:: orbsym
+
+   Per-orbital symmetry labels (defaults to all 1).
+
+   :type: list of int
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.one_body">
+<span class="sig-name descname"><span class="pre">one_body</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.one_body" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.core_energy">
+<span class="sig-name descname"><span class="pre">core_energy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.core_energy" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.n_electrons">
+<span class="sig-name descname"><span class="pre">n_electrons</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.n_electrons" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.two_body">
+<span class="sig-name descname"><span class="pre">two_body</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.two_body" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.ms2">
+<span class="sig-name descname"><span class="pre">ms2</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.ms2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.orbsym">
+<span class="sig-name descname"><span class="pre">orbsym</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></em><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.orbsym" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.n_orbitals">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">n_orbitals</span></span><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.n_orbitals" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.MolecularHamiltonian.to_fcidump">
+<span class="sig-name descname"><span class="pre">to_fcidump</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tol</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-12</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.quantum.hamiltonian.MolecularHamiltonian.to_fcidump" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Write this Hamiltonian to a FCIDUMP file.
+
+Requires two-electron integrals to be present.
+</pre></div>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oqp.quantum.hamiltonian.from_openqp">
+<span class="sig-name descname"><span class="pre">from_openqp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mol</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eri_ao</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eri_provider</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mo_coeff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spin</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'alpha'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compute_eri</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oqp.quantum.hamiltonian.from_openqp" title="Link to this definition"></a></dt>
+<dd><div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Construct a :class:`MolecularHamiltonian` from an OpenQP ``Molecule``.
+
+:param mol: A molecule whose SCF has completed (MO coefficients populated).
+:type mol: oqp.molecule.molecule.Molecule
+:param eri_ao: Two-electron AO integrals ``(mu nu|la si)`` in chemist notation,
+               shape ``(nao, nao, nao, nao)``. If given, the two-body MO tensor is
+               built and a full FCIDUMP can be written.
+:type eri_ao: array_like, optional
+:param eri_provider: ``eri_provider(mol) -&gt; eri_ao``; used when ``eri_ao`` is not supplied.
+                     Lets callers plug in OpenQP&#39;s native ERIs (once exposed) or an
+                     external engine without changing this code.
+:type eri_provider: callable, optional
+:param mo_coeff: Override the MO coefficient matrix (AO rows, MO columns). Defaults to
+                 the converged restricted/alpha MOs (``OQP::VEC_MO_A``).
+:type mo_coeff: array_like, optional
+:param spin: Which set of converged MOs to use when ``mo_coeff`` is not given.
+:type spin: {&quot;alpha&quot;, &quot;beta&quot;}
+:param compute_eri: When no ``eri_ao``/``eri_provider`` is given, compute OpenQP&#39;s native
+                    AO ERIs via ``oqp.int2e`` (default). Set ``False`` to build a
+                    one-electron-only Hamiltonian (no two-body tensor, no FCIDUMP).
+:type compute_eri: bool
+
+:rtype: MolecularHamiltonian
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../fcidump/index.html" class="btn btn-neutral float-left" title="oqp.quantum.fcidump" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../integrals/index.html" class="btn btn-neutral float-right" title="oqp.quantum.integrals" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, OpenQP Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,344 @@
+oqp.openqp
+==========
+
+.. py:module:: oqp.openqp
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      High-level Python helpers for OpenQP calculations.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.openqp.OPTIMIZER_RUNTYPES
+   oqp.openqp.RUNTYPE_SECTIONS
+   oqp.openqp.OQP
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.openqp.OpenQP
+   oqp.openqp.OPENQP
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.openqp.dump_strings_from_parser
+
+
+Module Contents
+---------------
+
+.. py:function:: dump_strings_from_parser(parser)
+
+   .. code-block:: text
+
+      Extract a pure string dict from parser.
+
+
+.. py:data:: OPTIMIZER_RUNTYPES
+
+.. py:data:: RUNTYPE_SECTIONS
+
+.. py:class:: OpenQP(project='oqp_project', log=None, silent=0, usempi=True, config=None, **sections)
+
+   .. code-block:: text
+
+      OpenQP-native convenience layer over the OpenQP input schema.
+
+      This class is additive: it builds the same sectioned input dictionary used
+      by Runner and existing OpenQP input files, while making section-style
+      keyword editing concise in Python scripts.
+
+
+   .. py:attribute:: project
+      :value: 'oqp_project'
+
+
+
+   .. py:attribute:: log
+
+
+   .. py:attribute:: silent
+      :value: 0
+
+
+
+   .. py:attribute:: usempi
+      :value: True
+
+
+
+   .. py:attribute:: unit
+      :value: 'Angstrom'
+
+
+
+   .. py:attribute:: runner
+      :value: None
+
+
+
+   .. py:attribute:: mol
+      :value: None
+
+
+
+   .. py:attribute:: theory
+
+
+   .. py:attribute:: workflow
+
+
+   .. py:attribute:: settings
+
+
+   .. py:attribute:: control
+
+
+   .. py:attribute:: config_str
+
+
+   .. py:attribute:: config_typed
+
+
+   .. py:method:: from_pyscf(mol, **kwargs)
+      :classmethod:
+
+
+      .. code-block:: text
+
+         Build an OpenQP job from a PySCF-like Mole object without importing PySCF.
+
+         PySCF's spin convention is 2S, so spin=2 maps to multiplicity=3.
+
+
+
+   .. py:method:: molecule(system=None, system2=None, basis=None, charge=None, multiplicity=None, unit='Angstrom', geometry=None, geometry2=None, source='auto', timeout=10, **kwargs)
+
+      .. code-block:: text
+
+         Set molecular system data using OpenQP input-section keywords.
+
+
+
+   .. py:method:: qmmm(pdb_file=None, forcefield=None, forcefield_files=None, qm_atoms=None, cutoff=None, embedding=None, rigidwater=None, frontier_scheme=None, **kwargs)
+
+      .. code-block:: text
+
+         Enable ESPF QM/MM embedding and configure the ``[qmmm]`` section.
+
+         Sets ``[input] qmmm_flag=true`` and populates ``[qmmm]``. The QM geometry
+         and atom selection come from ``job.molecule("file.pdb <indices>")``.
+         When ``pdb_file`` or ``qm_atoms`` is omitted, it is inferred from that
+         molecular-system value for both single-point and molecular-dynamics
+         workflows. Combine with ``job.workflow.namd(...)`` for
+         (SOC-)NAMD-QMMM dynamics.
+
+         ``forcefield`` is an alias for the ``[qmmm] forcefield_files`` list.
+         ``qm_atoms`` accepts a string (``"0-2"`` / ``"0 1 2"``) or a list of
+         indices; a ``forcefield`` list is joined into a comma-separated string.
+
+         ``frontier_scheme`` sets the MM frontier-host (M1) charge treatment when
+         the QM/MM partition cuts a covalent bond in the ESPF path:
+         ``'none'`` (default, the validated full-field ESPF baseline), or the
+         optional redistributions ``'rcd'`` / ``'rc'`` / ``'z1'``. It is a no-op
+         for whole-molecule QM regions. Covalent QM/MM boundaries are handled by
+         the ground-state QM/MM MD path (``QMMM_MD``); the nonadiabatic
+         ``runtype=namd`` path does not yet append link atoms to its QM molecule
+         and raises on a covalent cut.
+
+         Any other ``[qmmm]`` keyword can be passed through as a keyword argument.
+
+
+
+   .. py:method:: hf(reference='rhf', runtype=None, multiplicity=None, basis=None, **scf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP HF setup for ordinary single-reference jobs.
+
+
+
+   .. py:method:: dft(functional, reference='rhf', runtype=None, multiplicity=None, basis=None, **scf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP DFT setup for ordinary Kohn-Sham jobs.
+
+
+
+   .. py:method:: mp2(reference='rhf', runtype=None, multiplicity=None, basis=None, variant=None, same_spin_scale=None, opposite_spin_scale=None, **scf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP MP2 setup for energy-only post-SCF jobs.
+
+
+
+   .. py:method:: tddft(functional, reference='rhf', runtype=None, multiplicity=1, basis=None, nstate=3, **tdhf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP TDDFT setup.
+
+
+
+   .. py:method:: sf_tddft(functional, reference='rohf', runtype=None, multiplicity=3, basis=None, nstate=3, **tdhf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP spin-flip TDDFT setup.
+
+
+
+   .. py:method:: mrsf(nstate=3, reference='rohf', multiplicity=3, runtype=None, functional=None, basis=None, **tdhf_keywords)
+
+      .. code-block:: text
+
+         Use a compact OpenQP MRSF-TDDFT setup with an optional functional.
+
+
+
+   .. py:property:: dftb
+
+      .. code-block:: text
+
+         Callable [dftb] section proxy.
+
+         ``job.dftb(...)`` runs the DFTB workflow helper below, while
+         ``job.dftb.option`` / ``job.dftb.option = value`` read and write the
+         [dftb] section like every other schema section.
+
+
+   .. py:method:: tddftb(**kwargs)
+
+      .. code-block:: text
+
+         Use the conventional singlet TD-DFTB (TDA) response helper.
+
+
+
+   .. py:method:: ground_dftb(**kwargs)
+
+      .. code-block:: text
+
+         Use the ground-state SCC-DFTB helper explicitly.
+
+
+
+   .. py:method:: sf_tddftb(**kwargs)
+
+      .. code-block:: text
+
+         Use the spin-flip TD-DFTB response helper.
+
+
+
+   .. py:method:: mrsf_tddftb(**kwargs)
+
+      .. code-block:: text
+
+         Use the mixed-reference spin-flip TD-DFTB response helper.
+
+
+
+   .. py:method:: soc(nstate=3, functional=None, reference='rohf', reference_multiplicity=3, soc_2e=1, scal_rel=2, basis=None, **tdhf_keywords)
+
+      .. code-block:: text
+
+         Use a compact MRSF-TDDFT SOC setup.
+
+
+
+   .. py:method:: section(section, **kwargs)
+
+      .. code-block:: text
+
+         Update one OpenQP section using keyword arguments.
+
+
+
+   .. py:method:: set(**kwargs)
+
+      .. code-block:: text
+
+         Update configuration with dotted OpenQP keys or section dictionaries.
+
+
+
+   .. py:method:: update(config=None, **kwargs)
+
+      .. code-block:: text
+
+         Update from a sectioned dictionary plus optional keyword overrides.
+
+
+
+   .. py:method:: to_input_dict()
+
+      .. code-block:: text
+
+         Return a copy of the sectioned input dictionary passed to Runner.
+
+
+
+   .. py:method:: run(run_type=None)
+
+      .. code-block:: text
+
+         Run the calculation and return the native OpenQP Molecule object.
+
+
+
+.. py:data:: OQP
+
+.. py:class:: OPENQP(cfg: dict, silent: bool = False)
+
+   .. py:attribute:: config_str
+
+
+   .. py:attribute:: config_typed
+
+
+   .. py:attribute:: runner
+
+
+   .. py:attribute:: mol
+
+
+   .. py:property:: sp
+
+      .. code-block:: text
+
+         SinglePoint view used by the ESPF QM/MM driver
+         (oqp.library.qmmm_driver) for embedded SCF / excitation calls
+         (``self.op.sp.*``). Built on first access and imported lazily so that
+         importing oqp.openqp / constructing OPENQP does not require the compiled
+         library.
+
+
+   .. py:method:: set(**kwargs)
+
+      .. code-block:: text
+
+         Update configuration. Write kwargs as strings into a fresh parser,
+         then validate to refresh typed view. Always pass strings to Molecule.
+
+
+
+   .. py:method:: run(run_type=None)
+
+

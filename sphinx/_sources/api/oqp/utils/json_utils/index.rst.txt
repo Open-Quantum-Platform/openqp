@@ -1,0 +1,38 @@
+oqp.utils.json_utils
+====================
+
+.. py:module:: oqp.utils.json_utils
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Helpers for presenting internal OpenQP arrays in JSON.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.json_utils.json_array
+
+
+Module Contents
+---------------
+
+.. py:function:: json_array(key, value)
+
+   .. code-block:: text
+
+      Return an array with axes laid out as documented for JSON output.
+
+      TD response vectors originate in Fortran as ``(N_DRF, N_States)``.  The
+      tag-array bridge exposes the contiguous buffer with that shape to NumPy,
+      whose default C-order interpretation groups adjacent values by the second
+      axis.  Rebuild these arrays from their state-major buffer so JSON rows are
+      DRFs and columns are states.  This conversion is intentionally limited to
+      serialization; the runtime/tag-array representation remains unchanged.
+
+

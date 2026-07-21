@@ -1,0 +1,43 @@
+oqp.runtime
+===========
+
+.. py:module:: oqp.runtime
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Helpers for locating OpenQP runtime files.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.runtime.library_suffix
+   oqp.runtime.resolve_oqp_root
+   oqp.runtime.basis_search_paths
+
+
+Module Contents
+---------------
+
+.. py:function:: library_suffix()
+
+.. py:function:: resolve_oqp_root(package_root=None)
+
+   .. code-block:: text
+
+      Choose one root containing the matching header and native library.
+
+      Installed wheels keep the Python package, header, native library, and data
+      files together under the package directory. Source-tree development usually
+      keeps the Python package under pyoqp/oqp and runtime files under the repo
+      root. OPENQP_ROOT is retained only as a compatibility fallback for layouts
+      that cannot be inferred from the package location.
+
+
+.. py:function:: basis_search_paths(root=None, package_root=None)
+

@@ -1,0 +1,90 @@
+oqp.quantum.fcidump
+===================
+
+.. py:module:: oqp.quantum.fcidump
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Read and write the FCIDUMP interchange format.
+
+      FCIDUMP is the de-facto standard exchange format for the second-quantized
+      molecular electronic Hamiltonian
+
+          H = E_core
+              + sum_{pq,s}        h_{pq}      a^+_{p,s} a_{q,s}
+              + 1/2 sum_{pqrs,st} (pq|rs)     a^+_{p,s} a^+_{r,t} a_{s,t} a_{q,s}
+
+      expressed over a set of (real, orthonormal) molecular spatial orbitals. It is
+      consumed directly by Qiskit Nature, OpenFermion (``MolecularData`` via
+      ``from_pyscf``/FCIDUMP loaders), PySCF (``pyscf.tools.fcidump``), Block2/DMRG,
+      and most active-space / quantum-computing front ends, which makes it the
+      shortest path from an OpenQP mean-field calculation to a quantum-computing
+      workflow.
+
+      This module has no dependency on the compiled ``oqp`` extension.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.quantum.fcidump.DEFAULT_TOLERANCE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.quantum.fcidump.write_fcidump
+   oqp.quantum.fcidump.read_fcidump
+
+
+Module Contents
+---------------
+
+.. py:data:: DEFAULT_TOLERANCE
+   :value: 1e-12
+
+
+.. py:function:: write_fcidump(filename, h1, h2, ecore, n_electrons, ms2=0, orbsym=None, isym=1, tol=DEFAULT_TOLERANCE)
+
+   .. code-block:: text
+
+      Write a FCIDUMP file.
+
+      :param filename: Output path.
+      :type filename: str
+      :param h1: One-electron MO integrals ``h_pq``.
+      :type h1: array_like, shape (norb, norb)
+      :param h2: Two-electron MO integrals ``(pq|rs)`` in chemist notation.
+      :type h2: array_like, shape (norb, norb, norb, norb)
+      :param ecore: Scalar (core / nuclear-repulsion + frozen-core) energy.
+      :type ecore: float
+      :param n_electrons: Number of correlated electrons.
+      :type n_electrons: int
+      :param ms2: ``2 * S_z`` (number of alpha minus beta electrons). Default 0.
+      :type ms2: int
+      :param orbsym: Per-orbital symmetry labels. Defaults to all-totally-symmetric (1).
+      :type orbsym: sequence of int, optional
+      :param isym: Spatial symmetry of the target state.
+      :type isym: int
+      :param tol: Integrals with magnitude at or below this are omitted.
+      :type tol: float
+
+
+.. py:function:: read_fcidump(filename)
+
+   .. code-block:: text
+
+      Read a FCIDUMP file produced by :func:`write_fcidump` (or PySCF).
+
+      Returns a dict with keys ``norb``, ``nelec``, ``ms2``, ``isym``,
+      ``orbsym``, ``h1`` (norb, norb), ``h2`` (norb^4, chemist notation, fully
+      symmetrized) and ``ecore``.
+
+

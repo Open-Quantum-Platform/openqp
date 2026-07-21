@@ -1,0 +1,19 @@
+oqp.library.project_basis
+=========================
+
+.. py:module:: oqp.library.project_basis
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.library.project_basis.project_basis
+
+
+Module Contents
+---------------
+
+.. py:function:: project_basis(mol)
+

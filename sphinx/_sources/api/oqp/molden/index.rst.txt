@@ -1,0 +1,23 @@
+oqp.molden
+==========
+
+.. py:module:: oqp.molden
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Molden compatibility module
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/molden/moldenreader/index
+   /api/oqp/molden/moldenwriter/index
+
+

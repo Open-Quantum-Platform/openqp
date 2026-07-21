@@ -1,0 +1,61 @@
+oqp.analysis.descriptors
+========================
+
+.. py:module:: oqp.analysis.descriptors
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Excited-state character descriptors for MRSF states.
+
+      * ``participation_ratio`` -- NTO participation ratio PR = (sum w)^2 / sum w^2.
+      * ``tozer_lambda`` -- Tozer's Lambda: NTO-weighted spatial overlap of the
+        hole/particle moduli (Lambda in [0,1]; high = local, low = charge transfer).
+      * ``fragment_ct_matrix`` -- Plasser/Lischka Omega matrix from the Loewdin-
+        orthogonalized spin-flip transition density, partitioned over atom fragments.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.analysis.descriptors.participation_ratio
+   oqp.analysis.descriptors.tozer_lambda
+   oqp.analysis.descriptors.fragment_ct_matrix
+
+
+Module Contents
+---------------
+
+.. py:function:: participation_ratio(weights)
+
+   .. code-block:: text
+
+      PR = (sum sigma^2)^2 / sum sigma^4 from NTO weights (= sigma^2).
+
+
+.. py:function:: tozer_lambda(ao, nto_exc, grid_points, dV, weight_thresh=1e-08)
+
+   .. code-block:: text
+
+      Tozer Lambda for an excitation, from its hole/particle NTOs.
+
+      Lambda = sum_k w_k O_k / sum_k w_k, with O_k = \int |phi_hole,k||phi_part,k|.
+      The NTO orbitals are valence and smooth, so a moderate grid suffices.
+
+
+.. py:function:: fragment_ct_matrix(states, ao, n, fragments)
+
+   .. code-block:: text
+
+      Fragment charge-transfer Omega matrix for excitation to root ``n``.
+
+      ``fragments``: list of lists of 0-based atom indices.  Builds the AO
+      spin-flip transition density T = C_occ X^{(n)} C_vir^T, Loewdin-orthogonalizes
+      (Ttil = S^{1/2} T S^{1/2}), and sums Ttil_{mu,nu}^2 over fragment blocks.
+      Row index = hole fragment, column index = particle fragment.
+
+

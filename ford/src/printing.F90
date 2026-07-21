@@ -75,6 +75,9 @@ contains
     integer, intent(in) :: mostart, moend
     integer :: mo0, mo1
 
+    if (.not. infos%mol_energy%SCF_converged &
+        .and. infos%control%verbose < 2) return
+
     write (iw,fmt="(/&
             &10x, 31('=')/&
             &10x, 'Molecular Orbitals and Energies'/&

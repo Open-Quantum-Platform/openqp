@@ -1,0 +1,228 @@
+oqp.utils.regression
+====================
+
+.. py:module:: oqp.utils.regression
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Single source of truth for what the example test suite regression-checks.
+
+      Historically ``Molecule.check_ref`` compared *every* key in a reference JSON
+      except a hand-maintained ``skip_keys`` blocklist. That silently failed to test
+      quantities that live in sidecar files (IR/Raman intensities) or that were only
+      stored under internal ``OQP::`` arrays (non-adiabatic couplings), and nothing
+      flagged a newly added example whose reference was missing a value it should
+      carry.
+
+      This module replaces that with an explicit *allowlist* registry. Each entry
+      declares a physics quantity, where it lives, the runtypes/methods/properties it
+      applies to, and whether it is required (must be present and non-empty). The same
+      registry drives three things so they cannot drift apart:
+
+        * ``keys_to_compare``  -> what ``check_ref`` compares
+        * ``lean_keep``        -> what ``save_data(lean=True)`` keeps
+        * ``missing_required`` -> the validation gate run when examples are added
+
+      Adding a new regression value is a one-line entry here.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   oqp.utils.regression.GRAD_RUNTYPES
+   oqp.utils.regression.GEOMETRY_UNSTABLE_RUNTYPES
+   oqp.utils.regression.IDENTITY_KEYS
+   oqp.utils.regression.METADATA_KEYS
+   oqp.utils.regression.REGISTRY
+   oqp.utils.regression.EXEMPT_FLAGS
+   oqp.utils.regression.KNOWN_UNCOVERED
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.regression.RegKey
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.regression.keys_to_compare
+   oqp.utils.regression.missing_required
+   oqp.utils.regression.lean_keep
+   oqp.utils.regression.is_phase_invariant
+   oqp.utils.regression.skip_sub_keys
+   oqp.utils.regression.sidecar_keys
+   oqp.utils.regression.validate_examples
+   oqp.utils.regression.feature_coverage
+
+
+Module Contents
+---------------
+
+.. py:data:: GRAD_RUNTYPES
+
+.. py:data:: GEOMETRY_UNSTABLE_RUNTYPES
+
+.. py:data:: IDENTITY_KEYS
+
+.. py:data:: METADATA_KEYS
+
+.. py:class:: RegKey
+
+   .. code-block:: text
+
+      One regression quantity.
+
+
+   .. py:attribute:: key
+      :type:  str
+
+
+   .. py:attribute:: runtypes
+      :type:  object
+      :value: '*'
+
+
+
+   .. py:attribute:: required
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: source
+      :type:  str
+      :value: 'primary'
+
+
+
+   .. py:attribute:: sidecar_field
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: phase_invariant
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: skip_sub
+      :type:  tuple
+      :value: ()
+
+
+
+   .. py:attribute:: rtol
+      :type:  float
+      :value: 0.0
+
+
+
+   .. py:attribute:: needs_excited
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: needs_prop
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: exclude_runtypes
+      :type:  frozenset
+
+
+   .. py:method:: field()
+
+      .. code-block:: text
+
+         The field name to read from its source (sidecar field or the key).
+
+
+
+   .. py:method:: applies(runtype, excited, props)
+
+
+.. py:data:: REGISTRY
+
+.. py:function:: keys_to_compare(runtype, excited=False, props=None)
+
+   .. code-block:: text
+
+      Registry keys that ``check_ref`` should compare in this context.
+
+
+.. py:function:: missing_required(present_nonempty, runtype, excited=False, props=None)
+
+   .. code-block:: text
+
+      Required registry keys absent or empty in this reference -> gate failures.
+
+      ``present_nonempty`` is the set of keys that exist and are non-empty in the
+      reference (primary + sidecar merged).
+
+
+.. py:function:: lean_keep(key)
+
+   .. code-block:: text
+
+      True if a JSON key survives a lean (test-reference) dump.
+
+      Keeps identity, metadata, and every registered physics key; drops internal
+      ``OQP::`` arrays and anything else not declared a regression target.
+
+
+.. py:function:: is_phase_invariant(key)
+
+.. py:function:: skip_sub_keys(key)
+
+.. py:function:: sidecar_keys(runtype, excited=False, props=None)
+
+   .. code-block:: text
+
+      Registry keys sourced from the .hess.json sidecar in this context.
+
+
+.. py:function:: validate_examples(examples_dir)
+
+   .. code-block:: text
+
+      Validate every example reference under ``examples_dir``.
+
+      Returns a list of ``(relative_inp_path, [missing_required_keys])`` for
+      references that lack a required regression value for their runtype/method/
+      properties. An empty list means every example carries everything the
+      registry says it must -- this is the gate that fails when a new example (or
+      a newly registered value) is added without its reference value.
+
+
+.. py:data:: EXEMPT_FLAGS
+
+.. py:data:: KNOWN_UNCOVERED
+
+.. py:function:: feature_coverage(examples_dir, schema_file=None)
+
+   .. code-block:: text
+
+      Check that every opt-in feature flag is exercised by an example.
+
+      Returns ``(failures, grandfathered)``:
+        * ``failures``     -- [(flag, 'no example exercises it')] for flags that
+                              are neither exempt nor known-uncovered -> gate fails.
+        * ``grandfathered``-- [(flag, reason)] tracked gaps that still need a test.
+
+

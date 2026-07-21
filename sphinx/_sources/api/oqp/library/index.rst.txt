@@ -1,0 +1,48 @@
+oqp.library
+===========
+
+.. py:module:: oqp.library
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Library of high-level OQP functions
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /api/oqp/library/baeka/index
+   /api/oqp/library/frequency/index
+   /api/oqp/library/guess/index
+   /api/oqp/library/ints_1e/index
+   /api/oqp/library/ints_2e/index
+   /api/oqp/library/libgeometric/index
+   /api/oqp/library/libopenmm/index
+   /api/oqp/library/liboqp/index
+   /api/oqp/library/libscipy/index
+   /api/oqp/library/namd/index
+   /api/oqp/library/neb_utils/index
+   /api/oqp/library/openqp_dftb/index
+   /api/oqp/library/oqp_coords/index
+   /api/oqp/library/oqp_engine/index
+   /api/oqp/library/oqp_irc/index
+   /api/oqp/library/oqp_neb/index
+   /api/oqp/library/project_basis/index
+   /api/oqp/library/qmmm_connectivity/index
+   /api/oqp/library/qmmm_driver/index
+   /api/oqp/library/qmmm_md/index
+   /api/oqp/library/runfunc/index
+   /api/oqp/library/scf_selector_model/index
+   /api/oqp/library/set_basis/index
+   /api/oqp/library/single_point/index
+   /api/oqp/library/solvent/index
+   /api/oqp/library/symmetry/index
+   /api/oqp/library/symmetry_detect/index
+
+

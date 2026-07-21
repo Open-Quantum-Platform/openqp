@@ -1,0 +1,72 @@
+oqp.utils.matrix
+================
+
+.. py:module:: oqp.utils.matrix
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Matrix manipulation utilities
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.matrix.DispersionModel
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.utils.matrix.unpack_symmetric
+   oqp.utils.matrix.pack_matrix
+   oqp.utils.matrix.orb_to_dens
+   oqp.utils.matrix.DampingParam
+
+
+Module Contents
+---------------
+
+.. py:function:: unpack_symmetric(matrix_packed, matrix_dim=None)
+
+   .. code-block:: text
+
+      Convert symmetric packed matrix to full square format
+
+
+.. py:function:: pack_matrix(matrix)
+
+   .. code-block:: text
+
+      Saving the lower triangular part of the matrix in a packed format,
+      which corresponds to the upper triangular part in Fortran notation.
+
+
+.. py:function:: orb_to_dens(v, x)
+
+   .. code-block:: text
+
+      Compute density matrix from a set of orbitals and respective occupation numbers.
+      Compute the transformation: D = V * diag(X) * V^T
+      :param V  - matrix of orbitals:
+      :param X  - vector of occupation numbers:
+
+      :returns: D  - density matrix
+
+
+.. py:class:: DispersionModel(atoms, coordinates)
+
+   .. py:attribute:: natom
+
+
+   .. py:method:: get_dispersion(model, grad)
+
+
+.. py:function:: DampingParam(method=None)
+

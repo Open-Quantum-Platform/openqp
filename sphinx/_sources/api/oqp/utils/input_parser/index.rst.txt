@@ -1,0 +1,71 @@
+oqp.utils.input_parser
+======================
+
+.. py:module:: oqp.utils.input_parser
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Input parser
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   oqp.utils.input_parser.OQPConfigParser
+
+
+Module Contents
+---------------
+
+.. py:class:: OQPConfigParser(*args, schema=None, **kwargs)
+
+   Bases: :py:obj:`configparser.ConfigParser`
+
+
+   .. code-block:: text
+
+      Extends configparser with validation schema
+
+
+   .. py:attribute:: schema
+      :value: None
+
+
+
+   .. py:method:: load_dict(input_dict)
+
+      .. code-block:: text
+
+         Assign dict to config
+
+
+
+   .. py:method:: print_config()
+
+      .. code-block:: text
+
+         Print resulting config
+
+
+
+   .. py:method:: strip_schema()
+
+      .. code-block:: text
+
+         Convert input schema to dictionary used by OQP
+
+
+
+   .. py:method:: validate()
+
+      .. code-block:: text
+
+         Validate configuration
+
+
+

@@ -1,0 +1,38 @@
+oqp.interop.compare
+===================
+
+.. py:module:: oqp.interop.compare
+
+.. autoapi-nested-parse::
+
+   .. code-block:: text
+
+      Tolerance harness: diff an OQP result against a parsed external result.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   oqp.interop.compare.compare_results
+   oqp.interop.compare.format_table
+
+
+Module Contents
+---------------
+
+.. py:function:: compare_results(ref, other, tolerances, ref_label='OQP', other_label='external')
+
+   .. code-block:: text
+
+      Compare two normalized result dicts under per-key tolerances.
+
+      Returns ``(rows, all_pass)`` where each row is
+      ``(quantity, delta, tolerance, status, note)``. A length mismatch (e.g. the
+      external code reported fewer states) is a FAIL, not a prefix-only PASS.
+
+
+.. py:function:: format_table(rows, ref_label='OQP', other_label='external', title=None)
+

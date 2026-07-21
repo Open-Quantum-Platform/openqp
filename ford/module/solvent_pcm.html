@@ -1,0 +1,269 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="Fortran source reference for Open Quantum Platform 1.2.1">
+    <meta name="author" content="OpenQP Team" >
+    <link rel="icon" href="../favicon.png">
+
+    <title>solvent_pcm &ndash; OpenQP Fortran API</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../css/brands.min.css" rel="stylesheet">
+    <link href="../css/regular.min.css" rel="stylesheet">
+    <link href="../css/solid.min.css" rel="stylesheet">
+    <link href="../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
+    <link href="../css/local.css" rel="stylesheet">
+    <link href="../css/pygments.css" rel="stylesheet">
+    <script src="../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../index.html">OpenQP Fortran API <small>1.2.1</small></a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                  <li class="nav-item">
+                    <a class="nav-link" href="../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../lists/modules.html">Modules</a>
+                </li>
+            </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>solvent_pcm
+      <small>Module</small>
+      
+    </h1>
+      <div class="container p-2 mb-4 bg-light border rounded-3">
+    <div class="row align-items-center justify-content-between" id="info-bar">
+      <div class="col">
+        <ul class="list-inline" style="margin-bottom:0px;display:inline">
+
+            <li class="list-inline-item" id="statements"><i class="fa fa-list-ol"></i>
+              <a data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-html="true"
+                 title=" 1.0% of total for modules and submodules.">652 statements</a>
+            </li>
+
+            <li class="list-inline-item" id="source-file">
+              <i class="fa fa-code"></i>
+              <a href="../src/solvent_pcm.F90"> Source File</a>
+            </li>
+        </ul>
+      </div>
+      <div class="col">
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../sourcefile/solvent_pcm.f90.html'>solvent_pcm.F90</a></li>
+            <li class="breadcrumb-item active" aria-current="page">solvent_pcm</li>
+          </ol>
+        </nav>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Enable Bootstrap tooltips
+    (function () {
+      const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+    })();
+  </script>
+
+  </div>
+
+  <div class="row">
+    <div class="col-md-3">
+        <div id="sidebar">
+      <h3>Contents</h3>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+    <em>None</em>
+
+  </div>
+
+    </div>
+
+    <div class="col-md-9" id='text'>
+      <p>declares the iso_c_binding interfaces to the two production C adapter
+entry points (source/solvent_ddx_adapter.c) and orchestrates the closed
+reaction-field loop inside a single SCF Fock build:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">D</span><span class="w">  </span><span class="o">-&gt;</span><span class="w">  </span><span class="n">phi_cav</span><span class="w">  </span><span class="o">-&gt;</span><span class="w">  </span><span class="n">ddX</span><span class="w"> </span><span class="n">q_cav</span><span class="w">  </span><span class="o">-&gt;</span><span class="w">  </span><span class="n">V_pcm</span><span class="w">  </span><span class="o">-&gt;</span><span class="w">  </span><span class="n">Fock</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">E_pcm</span>
+</code></pre></div>
+
+<p>The C adapter returns status 2 when OpenQP was built without OQP_ENABLE_DDX,
+so a PCM-enabled run on a non-ddX build aborts here with a clear message
+rather than silently producing a vacuum result.</p>
+<p>SOURCE CONSISTENCY (ddX forward Phi vs adjoint Psi):
+  * Phi (forward solve RHS): the EXACT total solute potential phi_cav at the
+    cavity points, built from the full AO density (electrostatic_potential_
+    unweighted) plus the analytic nuclear term.
+  * Psi (adjoint solve source): a FULL-DENSITY source. Atom-centered real
+    solid-harmonic multipoles M_lm are accumulated for l = 0..PCM_PSI_LMAX
+    (=8) from the full AO density by numerical quadrature over a dedicated
+    source-projection molecular grid that reproduces the reference
+    ddCOSMO/ddPCM density partition: per-atom (PARENT-ATOM) point
+    assignment with Becke-original (3-iteration) fuzzy-cell weights and
+    Treutler-Ahlrichs sqrt(R_i/R_j) atomic-size shifting over the Becke
+    Bragg-Slater table (H = 0.35 A), WITH the literature outside-sphere
+    leak continuation q<em>rsph^(2l+1)/r^(l+1) for r&gt;rsph
+    (build_full_density_multipoles / pcm_grid_update). The moments are in
+    the exact ddX harmonic convention -- the real-solid-harmonic basis is
+    evaluated by ddX's OWN routines (use ddx_harmonics: ylmscale, ylmbas)
+    so ddX stays an external, dynamically-linked dependency and no harmonic
+    code is vendored into OpenQP; only the interior/exterior leak
+    bookkeeping in pcm_accumulate_leak is OpenQP's. They are then mapped
+    to psi by the ddX rule psi(lm,isph)=4</em>pi/((2l+1) rsph^l) M_lm(isph)
+    using the production cavity radii (oqp_ddx_pcm_radii). The production
+    q_cav is the ddX adjoint charge from oqp_ddx_pcm_solve_psi(psi,
+    phi_cav): both the forward RHS and the adjoint source are full-density
+    quantities. This is recorded by "PCM diag pcm_source_mode=full_density_
+    multipoles_lmax8_exact_phi" and "PCM diag psi_source=full_density_grid_
+    multipoles_lmax8_becke3_treutler_parent_atom_leak".
+  * NOTE: the per-sphere moments are partition-defined integrals
+    (Becke-original/Treutler cells), the same convention the reference
+    ddPCM implementations project on their per-atom Becke grids; the two
+    codes agree in the fine-grid limit, with only quadrature-mesh
+    differences remaining (it is NOT claimed to be bit-identical to
+    PySCF's grid-projected psi).
+  * The legacy l&lt;=2 atom-centered Mulliken multipole solve (Phi AND Psi from
+    the l&lt;=2 source) is still run as a DIAGNOSTIC only, to report the
+    source-vs-exact phi residual and the q_cav shift between the old l&lt;=2 psi
+    and the new full-density psi (PCM diag q_cav_<em><em>vs</em></em>_rms).</p>
+<p>VALIDATED SCALAR CONVENTIONS (analytic Born-ion/ddX oracle gate):
+  * phi_cav sign:  phi_total = sum_k Z_k/|r-R_k| + phi_elec
+  * q_cav sign/scale: ddX cavity-projected adjoint charge (ddx_get_xi) used
+    directly as the external-charge vector for external_charge_potential.
+  * E_pcm: -0.5 * dot_product(phi_cav, q_cav), with NO additional dielectric
+    factor: ddX folds the full dielectric response into its ddPCM R_eps
+    operators, so -0.5<em><phi_cav, q_cav> = ddx_pcm_energy = the PHYSICAL
+    solvation free energy. Proven by the Born-ion oracle (point charge q
+    centered in a single sphere of radius R): -0.5</em><phi,q_cav> reproduces
+    -(1/2)(1-1/eps)*q^2/R to machine precision at eps = 78.3553 and eps = 2.
+    An extra f(eps) = (eps-1)/eps here (as in PySCF's solvent.ddpcm) would
+    double-count the dielectric scaling, by -1.3% at eps=78 and -50% at eps=2.
+The single canonical runtime path and these conventions are pinned by
+tests/test_pcm_canonical_runtime_path.py.</p>
+<br>          <div class="card mb-4">
+      <h3 class="card-header card-title bg-light">Uses</h3>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+              <ul class="list-inline">
+                  <li class="list-inline-item"><a href='int1.html'>int1</a></li>
+                  <li class="list-inline-item"><a href='mod_dft_gridint.html'>mod_dft_gridint</a></li>
+                  <li class="list-inline-item"><a href='dft.html'>dft</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/ieee_arithmetic'>ieee_arithmetic</a></li>
+                  <li class="list-inline-item"><a href='types.html'>types</a></li>
+                  <li class="list-inline-item"><a href='mod_dft_molgrid.html'>mod_dft_molgrid</a></li>
+                  <li class="list-inline-item"><a href='http://fortranwiki.org/fortran/show/iso_c_binding'>iso_c_binding</a></li>
+                  <li class="list-inline-item"><a href='messages.html'>messages</a></li>
+                  <li class="list-inline-item"><a href='oqp_tagarray_driver.html'>oqp_tagarray_driver</a></li>
+                  <li class="list-inline-item"><a href='precision.html'>precision</a></li>
+                  <li class="list-inline-item"><a href='mathlib.html'>mathlib</a></li>
+                  <li class="list-inline-item"><a href='io_constants.html'>io_constants</a></li>
+                  <li class="list-inline-item"><a href='mod_dft_partfunc.html'>mod_dft_partfunc</a></li>
+                  <li class="list-inline-item"><a href='basis_tools.html'>basis_tools</a></li>
+              </ul>
+            </li>
+        </ul>
+      </div>
+    </div>
+
+      
+      <br>
+
+
+
+
+
+
+
+
+
+
+
+    </div>
+  </div>
+
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              OpenQP Fortran API
+ was developed by OpenQP Team<br>              &copy; 2026 
+<br /><small>main@740611d</small></p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+            </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+  </body>
+</html>
