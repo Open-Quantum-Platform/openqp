@@ -1,0 +1,6 @@
+# Tests that were already failing when CI started running this suite.
+#
+# One pytest node ID per line; text after "#" is the reason. See conftest.py.
+# This file is meant to shrink to nothing -- fix a test, delete its line.
+#
+# (populated from the first full CI run)
