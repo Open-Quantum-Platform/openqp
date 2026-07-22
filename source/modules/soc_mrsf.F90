@@ -34,7 +34,7 @@ contains
 !>
 !>  State ordering in the SOC basis follows the GAMESS convention:
 !>    indices 1..ns        -> singlet states S0..S(ns-1)
-!>    indices ns+1..ns+3nt -> triplet Ms sublevels T1(Ms=-1,0,+1), T2(...), ...
+!>    indices ns+1..ns+3nt -> triplet Ms sublevels T0(Ms=-1,0,+1), T1(...), ...
 !>
 !> @param[inout] infos  OQP information struct (basis, atoms, control, tagarray, log)
   subroutine soc_mrsf(infos)
@@ -256,7 +256,7 @@ contains
             abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
 
             write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-              'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
+              'S', ist-1, 'T', jst-1, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
           end do
         end do
       end do
@@ -276,7 +276,7 @@ contains
               abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
 
               write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-                'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), &
+                'T', ist-1, trim(trip(ims_i)), 'T', jst-1, trim(trip(ims_j)), &
                 re1e, im1e, re2e, im2e, abs12e
             end do
           end do
@@ -835,8 +835,8 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   ! Basis ordering (GAMESS convention):
   !   rows/cols 1..ns              : singlets S_I
   !   rows/cols ns+1..ns+3*nt      : triplets, grouped as
-  !                                  (T_1,Ms=-1),(T_1,Ms=0),(T_1,Ms=+1),
-  !                                  (T_2,Ms=-1),(T_2,Ms=0),(T_2,Ms=+1), ...
+  !                                  (T_0,Ms=-1),(T_0,Ms=0),(T_0,Ms=+1),
+  !                                  (T_1,Ms=-1),(T_1,Ms=0),(T_1,Ms=+1), ...
   !   index helper: itrp(J,Ms) = ns + (J-1)*3 + (Ms+2)
   !
   ! S-T block (only T00aa needed; T00bb = -T00aa by time reversal):
@@ -1118,9 +1118,9 @@ subroutine print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energ
         ist    = (i - ns - 1)/3 + 1
         ms_idx = mod(i - ns - 1, 3)
         select case(ms_idx)
-          case(0); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '(-1)'
-          case(1); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '( 0)'
-          case(2); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '(+1)'
+          case(0); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '(-1)'
+          case(1); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '( 0)'
+          case(2); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '(+1)'
         end select
       end if
       do j = ioff+1, min(ioff+ncols, nstate)
@@ -1221,9 +1221,9 @@ subroutine print_soc_decomposition(iw, eval, evec, ns, nt)
       else
         ms_idx = mod(i - ns - 1, 3)
         select case(ms_idx)
-          case(0); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(-1)'
-          case(1); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '( 0)'
-          case(2); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(+1)'
+          case(0); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '(-1)'
+          case(1); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '( 0)'
+          case(2); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '(+1)'
         end select
       end if
       write(iw,'(a8,a,f5.1,a,a)', advance='no') &

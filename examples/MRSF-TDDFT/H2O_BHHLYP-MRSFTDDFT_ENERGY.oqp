@@ -1,0 +1,4 @@
+mrsf(nstate=3)/bhhlyp/6-31g*
+energy(S0)
+guess(type=huckel)
+geom="../geometries/H2O-0381125c86f2.xyz"

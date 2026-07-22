@@ -134,7 +134,7 @@ class DavidsonSolverStabilityTests(unittest.TestCase):
         first_output = min(
             src.index("call get_td_transition_dipole"),
             src.index("call td_print_results"),
-            src.index("call infos%dat%reserve_data(OQP_td_t"),
+            src.index("call infos%dat%alloc_or_die(OQP_td_t"),
         )
         self.assertLess(breakdown, first_output)
         guard_block = src[breakdown:first_output]

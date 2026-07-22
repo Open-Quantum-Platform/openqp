@@ -1,0 +1,4 @@
+rhf/6-31g*
+grad
+guess(type=huckel)
+geom="../geometries/H2O-0381125c86f2.xyz"

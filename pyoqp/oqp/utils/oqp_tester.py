@@ -9,9 +9,10 @@ Author: Konstantin Komarov
 Email: constlike@gmail.com
 Created: Aug 2024
 """
+import hashlib
+import json
 import os
 import sys
-import json
 import time
 import subprocess
 from typing import List, Dict, Any
@@ -43,7 +44,9 @@ class OQPTester:
     This class can run tests from specified directories:
       - 'openqp --run-tests path_to_folder': Run tests from a specific folder
       - 'openqp --run-tests other': Run tests from the 'other' folder in examples
-      - 'openqp --run-tests all': Run all tests from all folders in examples
+      - 'openqp --run-tests all': Run the standard suite across examples,
+        with documented slow/non-self-contained exclusions
+      - '--input-format auto|inp|oqp|both': Select the input syntax to test
     Can be used to run all tests in a specific folder.
 
     Attributes:
@@ -60,6 +63,22 @@ class OQPTester:
         "OQP_ENABLE_DDX",  # ddX / PCM continuum solvation built off
         "openqp-dftb not found",  # optional external openqp-dftb library absent
     )
+
+    _INPUT_FORMATS = frozenset({"auto", "inp", "oqp", "both"})
+
+    # Keep a deliberately small cross-section of paired legacy inputs in the
+    # ordinary suite.  Their .oqp counterparts exercise the new public syntax;
+    # these .inp decks make sure compatibility does not silently regress while
+    # avoiding a second run of every converted example.
+    _LEGACY_COMPATIBILITY_DECKS = frozenset({
+        "HF/H2O_RHF-HF_ENERGY.inp",
+        "MP2/h2o_ump2_6-31g.inp",
+        "MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp",
+        "NMR/H2O_RHF-NMR.inp",
+        "OPT/H2O_RHF-DFT_OPTIMIZE_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_BAEKA_OQP.inp",
+    })
 
     def __init__(self,
                  base_test_dir: str = None,
@@ -100,6 +119,7 @@ class OQPTester:
         self.start_time = None
         self.end_time = None
         self.status = 0
+        self.input_format = "auto"
 
         os.environ['OMP_NUM_THREADS'] = str(self.omp_threads)
 
@@ -107,6 +127,24 @@ class OQPTester:
         if self.mpi_manager.use_mpi:
             return 1
         return max(1, self.total_cpus // self.omp_threads)
+
+    @classmethod
+    def _normalize_input_format(cls, input_format: str = "auto") -> str:
+        """Return a validated test-input selector.
+
+        ``auto`` preserves the normal regression preference: concise ``.oqp``
+        decks, legacy-only ``.inp`` decks, and the small representative legacy
+        compatibility set. The other modes are exact extension filters within
+        the selected path or standard-suite scope.
+        """
+        normalized = str(input_format or "auto").strip().lower()
+        if normalized not in cls._INPUT_FORMATS:
+            choices = ", ".join(sorted(cls._INPUT_FORMATS))
+            raise ValueError(
+                f"Invalid test input format {input_format!r}; "
+                f"choose one of: {choices}"
+            )
+        return normalized
 
     def log(self, message: str):
         """Simple logging function to stdout."""
@@ -132,6 +170,57 @@ class OQPTester:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return "Unable to retrieve Git information"
 
+    def _is_legacy_compatibility_deck(self, input_file: str) -> bool:
+        """Return whether *input_file* is a selected legacy regression deck."""
+        base_test_dir = getattr(self, "base_test_dir", None)
+        candidates = set()
+        if base_test_dir:
+            try:
+                relative = os.path.relpath(
+                    os.path.abspath(input_file), os.path.abspath(base_test_dir)
+                )
+                candidates.add(relative.replace(os.sep, "/"))
+            except (TypeError, ValueError):
+                pass
+
+        # An explicit source-tree path such as ``--run_tests examples/OPT``
+        # may differ from the installed ``share/examples`` base chosen by the
+        # runner.  Match the stable category/name suffix as well so the same
+        # representative matrix is retained in either layout.
+        try:
+            absolute = os.path.abspath(input_file).replace(os.sep, "/")
+        except (TypeError, ValueError):
+            absolute = ""
+        return bool(candidates & self._LEGACY_COMPATIBILITY_DECKS) or any(
+            absolute.endswith(f"/{deck}")
+            for deck in self._LEGACY_COMPATIBILITY_DECKS
+        )
+
+    def _project_name_for_input(self, input_file: str) -> str:
+        """Return a collision-free project name for a paired legacy input."""
+        project_name = os.path.splitext(os.path.basename(input_file))[0]
+        input_stem, extension = os.path.splitext(input_file)
+        if (
+            extension.lower() == ".inp"
+            and os.path.isfile(f"{input_stem}.oqp")
+        ):
+            return f"{project_name}__legacy"
+        return project_name
+
+    def _case_output_dir(self, input_file: str,
+                         project_name: str = None) -> str:
+        """Return a deterministic, isolated output directory for one input.
+
+        Several geometry drivers intentionally write conventional artifact
+        names such as ``opt.xyz`` and ``opt_status.txt``. A test-specific
+        directory therefore protects paired ``.inp``/``.oqp`` jobs, as well as
+        unrelated decks with the same basename, when they run concurrently.
+        """
+        project_name = project_name or self._project_name_for_input(input_file)
+        real_input = os.path.realpath(os.path.abspath(input_file))
+        digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
+        return os.path.join(self.output_dir, f"{project_name}__{digest}")
+
     def run_single_test(self, input_file: str) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
@@ -142,8 +231,10 @@ class OQPTester:
         Returns:
             Dict[str, Any]: Dictionary containing test results.
         """
-        project_name = os.path.splitext(os.path.basename(input_file))[0]
-        log = os.path.join(self.output_dir, f"{project_name}.log")
+        project_name = self._project_name_for_input(input_file)
+        case_output_dir = self._case_output_dir(input_file, project_name)
+        os.makedirs(case_output_dir, exist_ok=True)
+        log = os.path.join(case_output_dir, f"{project_name}.log")
 
         usempi = True if self.mpi_manager.use_mpi > 0 else False
 
@@ -207,6 +298,18 @@ class OQPTester:
             # build without the optional DFTB backend still produces a green suite.
             needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
 
+            # The native optimizer covers the ordinary geometry workflows,
+            # but legacy constrained inputs may still explicitly select the
+            # optional geomeTRIC backend.  Its adapter raises this deliberately
+            # specific import error when the extra is not installed.  Match the
+            # adapter contract rather than every error mentioning "geometric"
+            # so unrelated import bugs remain visible as test failures.
+            needs_geometric_missing = (
+                type(err).__name__ in ('ModuleNotFoundError', 'ImportError')
+                and 'geometric is required for [optimize] lib=geometric'
+                in str(err).lower()
+            )
+
             if needs_openmm_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional OpenMM backend "
@@ -214,6 +317,10 @@ class OQPTester:
             elif needs_dftb_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional openqp-dftb backend "
+                                     "(not installed); skipped")
+            elif needs_geometric_missing:
+                result["status"] = "SKIPPED"
+                result["message"] = ("requires the optional geomeTRIC optimizer "
                                      "(not installed); skipped")
             elif is_irc_maxiter:
                 result["status"] = "PASSED"
@@ -235,8 +342,9 @@ class OQPTester:
         that child. We translate a non-zero exit (or a timeout) into an ERROR
         result for that one test rather than letting it crash the whole run.
         """
-        project_name = os.path.splitext(os.path.basename(input_file))[0]
-        log = os.path.join(self.output_dir, f"{project_name}.log")
+        project_name = self._project_name_for_input(input_file)
+        case_output_dir = self._case_output_dir(input_file, project_name)
+        log = os.path.join(case_output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
         cmd = [
@@ -300,23 +408,31 @@ class OQPTester:
             "execution_time": time.perf_counter() - start_time,
         }
 
-    def run_tests(self, test_path: str = 'all'):
+    def run_tests(self, test_path: str = 'all', *, input_format: str = 'auto'):
         """
         Run OpenQP tests based on the specified test path.
 
         Args:
             test_path (str): Path to test directory or specific input file.
                              Use 'all' to run all tests in the base directory.
+            input_format (str): ``auto`` (default), ``inp``, ``oqp``, or
+                                ``both``.
         """
 
+        self.input_format = self._normalize_input_format(input_format)
         self.start_time = time.perf_counter()
         if self.mpi_manager.rank == 0:
             if not os.path.exists(self.output_dir):
                 os.makedirs(self.output_dir)
 
-        input_files = self._get_input_files(test_path)
+        input_files = self._get_input_files(
+            test_path, input_format=self.input_format
+        )
         if not input_files:
-            return
+            raise ValueError(
+                f"No test inputs matched --input-format "
+                f"{self.input_format} for: {test_path}"
+            )
 
         if self.mpi_manager.use_mpi:
             for input_file in input_files:
@@ -350,7 +466,9 @@ class OQPTester:
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
 
-    def _get_input_files(self, test_path: str) -> List[str]:
+    def _get_input_files(self, test_path: str, *,
+                         input_format: str = 'auto') -> List[str]:
+        input_format = self._normalize_input_format(input_format)
         if test_path == 'all':
             test_dir = self.base_test_dir
         elif test_path == 'other':
@@ -359,26 +477,64 @@ class OQPTester:
             test_dir = os.path.join(self.base_test_dir, 'SCF')
         elif os.path.isdir(test_path):
             test_dir = test_path
-        elif os.path.isfile(test_path) and test_path.endswith('.inp'):
+        elif os.path.isfile(test_path) and test_path.lower().endswith(('.inp', '.oqp')):
+            lower_path = test_path.lower()
+            if lower_path.endswith('.resolved.oqp'):
+                raise ValueError(
+                    f"Resolved correction files are not regression inputs: {test_path}"
+                )
+            extension = os.path.splitext(lower_path)[1].lstrip('.')
+            if input_format not in {'auto', 'both', extension}:
+                raise ValueError(
+                    f"Test input {test_path} is .{extension}, but "
+                    f"--input-format {input_format} was requested"
+                )
             return [test_path]
         else:
-            print(f"Invalid test path: {test_path}")
-            return []
+            raise ValueError(f"Invalid test path: {test_path}")
 
-        input_files = [
+        candidates = sorted(
             os.path.join(root, file)
             for root, _, files in os.walk(test_dir)
             for file in files
-            if file.endswith('.inp')
-        ]
+            if file.lower().endswith(('.inp', '.oqp'))
+            and not file.lower().endswith('.resolved.oqp')
+        )
+
+        if input_format == 'inp':
+            input_files = [
+                path for path in candidates if path.lower().endswith('.inp')
+            ]
+        elif input_format == 'oqp':
+            input_files = [
+                path for path in candidates if path.lower().endswith('.oqp')
+            ]
+        elif input_format == 'both':
+            input_files = candidates
+        else:
+            # A same-stem .oqp is the public counterpart of its legacy .inp
+            # and shares the same reference JSON. The default auto matrix runs
+            # only the concise form for most pairs, while retaining a small
+            # representative legacy set. Paired legacy project/log names use a
+            # __legacy suffix so those intentional paired runs cannot race.
+            semantic_stems = {
+                os.path.splitext(path)[0]
+                for path in candidates if path.lower().endswith('.oqp')
+            }
+            input_files = [
+                path for path in candidates
+                if path.lower().endswith('.oqp')
+                or os.path.splitext(path)[0] not in semantic_stems
+                or self._is_legacy_compatibility_deck(path)
+            ]
         # The full-suite run ('all') skips a few examples that dominate CI
         # wall-clock; they still run when selected explicitly (a directory or a
-        # .inp path). See _skip_in_full_run for which and why.
+        # input-file path). See _skip_in_full_run for which and why.
         if test_path == 'all':
             input_files = [
                 f for f in input_files if not self._skip_in_full_run(f)
             ]
-        return input_files
+        return sorted(input_files)
 
     @staticmethod
     def _skip_in_full_run(input_file: str) -> bool:
@@ -413,7 +569,26 @@ class OQPTester:
 
         Analytical Hessians (type=analytical) and ordinary opt/TS runs are
         unaffected, and the skipped examples still run when invoked explicitly
-        by directory or .inp path."""
+        by directory or explicit input-file path."""
+        if input_file.lower().endswith('.oqp'):
+            try:
+                from oqp.utils.oqp_input import resolve_oqp_file
+                cfg = resolve_oqp_file(input_file, write_resolved=False).legacy_config
+            except (OSError, ValueError):
+                return False
+            input_cfg = cfg.get('input', {})
+            runtype = str(input_cfg.get('runtype', 'energy')).strip().lower()
+            hess_type = str(cfg.get('hess', {}).get('type', '')).strip().lower()
+            qmmm = str(input_cfg.get('qmmm_flag', 'false')).strip().lower() in {
+                'true', '1', 'yes', 'on'
+            }
+            method = str(input_cfg.get('method', 'hf')).strip().lower()
+            return (
+                runtype == 'irc'
+                or (runtype == 'hess' and hess_type != 'analytical')
+                or (qmmm and runtype != 'namd')
+                or method == 'dftb'
+            )
         try:
             with open(input_file, 'r', encoding='utf-8') as fh:
                 text = fh.read().lower().replace(' ', '')
@@ -503,6 +678,7 @@ Execution Date: {execution_date}
 Git Branch Info: {git_branch_info}
 Git Commit Info: {git_commit_info}
 Output dir: {self.output_dir}
+Input format: {getattr(self, 'input_format', 'auto')}
 Total tests: {len(self.results)}
 Passed: {passed}
 Failed: {failed}
@@ -533,23 +709,29 @@ Total execution time: {self.format_time(total_time)}
 
         return summary
 
-    def run(self, test_path: str = 'all') -> str:
+    def run(self, test_path: str = 'all', *, input_format: str = 'auto') -> str:
         """
         Run tests and generate a report.
 
         Args:
             test_path (str): Path to test directory or specific input file.
                              Use 'all' to run all tests in the base directory.
+            input_format (str): ``auto`` (default), ``inp``, ``oqp``, or
+                                ``both``.
 
         Returns:
             str: A formatted string containing the test report.
         """
-        self.log(f"Starting OpenQP tests for: {test_path}")
+        input_format = self._normalize_input_format(input_format)
+        self.log(
+            f"Starting OpenQP tests for: {test_path} "
+            f"(input format: {input_format})"
+        )
 
         if os.path.exists(self.report_file):
             os.remove(self.report_file)
 
-        self.run_tests(test_path)
+        self.run_tests(test_path, input_format=input_format)
         if self.mpi_manager.rank == 0:
             report = self.generate_report()
             self.log("OpenQP tests completed")
@@ -572,7 +754,7 @@ def _run_isolated_main(argv=None):
     from oqp.pyoqp import MPIManager
 
     parser = argparse.ArgumentParser(description="Run one OpenQP test in isolation")
-    parser.add_argument("--isolated", required=True, help="input .inp file")
+    parser.add_argument("--isolated", required=True, help="input .inp or .oqp file")
     parser.add_argument("--output-dir", required=True, help="shared output dir")
     parser.add_argument("--omp", type=int, default=1, help="OMP threads")
     args = parser.parse_args(argv)

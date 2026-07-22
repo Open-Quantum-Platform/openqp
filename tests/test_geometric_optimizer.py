@@ -1,7 +1,9 @@
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -90,6 +92,12 @@ def install_runfunc_stubs():
     for _cls in ("OQPOpt", "OQPTSOpt", "OQPMECIOpt", "OQPMECPOpt",
                  "OQPTCIOpt", "OQPNEBOpt", "OQPIRCOpt", "OQPMEPOpt"):
         setattr(liboqp, _cls, type(_cls, (), {}))
+
+    class OQPAutoMECIOpt:
+        def __init__(self, mol):
+            self.mol = mol
+
+    liboqp.OQPAutoMECIOpt = OQPAutoMECIOpt
     sys.modules["oqp.library.liboqp"] = liboqp
 
     return GeometricOpt, GeometricMECIOpt, GeometricMECPOpt, GeometricTSOpt, GeometricIRCOpt
@@ -109,6 +117,48 @@ def section_value(section_text, key):
         if stripped.startswith(f"{key}="):
             return stripped.split("=", 1)[1].strip()
     return None
+
+
+@contextmanager
+def load_oqp_tester(runner_class, module_name):
+    """Load OQPTester with a controlled Runner and no compiled extension."""
+    module_names = (
+        "oqp",
+        "oqp.utils",
+        "oqp.pyoqp",
+        "oqp.runtime",
+        module_name,
+    )
+    missing = object()
+    saved_modules = {
+        name: sys.modules.get(name, missing)
+        for name in module_names
+    }
+
+    try:
+        oqp = types.ModuleType("oqp")
+        oqp.__path__ = []
+        sys.modules["oqp"] = oqp
+
+        oqp_utils = types.ModuleType("oqp.utils")
+        oqp_utils.__path__ = []
+        sys.modules["oqp.utils"] = oqp_utils
+
+        pyoqp = types.ModuleType("oqp.pyoqp")
+        pyoqp.Runner = runner_class
+        sys.modules["oqp.pyoqp"] = pyoqp
+
+        runtime = types.ModuleType("oqp.runtime")
+        runtime.resolve_oqp_root = lambda: (str(ROOT), "test")
+        sys.modules["oqp.runtime"] = runtime
+
+        yield load_module(module_name, "pyoqp/oqp/utils/oqp_tester.py")
+    finally:
+        for name, module in saved_modules.items():
+            if module is missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
 
 
 class TestOptimizationExampleCaps(unittest.TestCase):
@@ -147,34 +197,40 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
     def setUp(self):
         install_minimal_oqp_stubs()
 
-    def test_geometric_optimizer_examples_are_available(self):
+    def test_constrained_optimization_is_now_a_native_example(self):
+        path = EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_OQP.inp"
+        self.assertTrue(path.is_file())
+        self.assertTrue(path.with_suffix(".json").is_file())
+        text = path.read_text()
+        self.assertIn("runtype=optimize", text)
+        self.assertIn("lib=oqp", text)
+        self.assertIn("freeze=distance(1,2)", text)
+        self.assertNotIn("[geometric]", text)
+        self.assertEqual(list(EXAMPLES_OPT.glob("*GEOMETRIC.inp")), [])
+
+    def test_primary_geometry_examples_use_the_native_backend(self):
         expected = {
-            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.inp": "runtype=optimize",
-            "H2O_RHF-DFT_OPTIMIZE_GEOMETRIC.json": None,
-            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.inp": "runtype=meci",
-            "C2H4_BHHLYP-MRSFTDDFT_MECI_GEOMETRIC.json": None,
-            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.inp": "runtype=mecp",
-            "C2H4_BHHLYP-MRSFTDDFT_MECP_GEOMETRIC.json": None,
-            "HCN_RHF-DFT_TS_GEOMETRIC.inp": "runtype=ts",
-            "HCN_RHF-DFT_TS_GEOMETRIC.json": None,
-            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.inp": "runtype=ts",
-            "HCN_BHHLYP-MRSFTDDFT_TS_GEOMETRIC.json": None,
-            "HCN_RHF-DFT_IRC_GEOMETRIC.inp": "runtype=irc",
-            "HCN_RHF-DFT_IRC_GEOMETRIC.json": None,
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.inp": "runtype=optimize",
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.constraints": "$freeze",
-            "HCN_RHF-DFT_CONSTRAINED_GEOMETRIC.json": None,
+            "H2O_RHF-DFT_OPTIMIZE.inp": "runtype=optimize",
+            "H2O_RHF-DFT_OPTIMIZE_OQP.inp": "runtype=optimize",
+            "HCN_RHF-DFT_CONSTRAINED_OQP.inp": "runtype=optimize",
+            "C2H4_BHHLYP-MRSFTDDFT_MECI.inp": "runtype=meci",
+            "C2H4_BHHLYP-MRSFTDDFT_MECP_OQP.inp": "runtype=mecp",
+            "C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp": "runtype=tci",
+            "C2H4_BHHLYP-MRSFTDDFT_MEP.inp": "runtype=mep",
+            "HCN_RHF-DFT_TS_OQP.inp": "runtype=ts",
+            "HCN_BHHLYP-MRSFTDDFT_TS_OQP.inp": "runtype=ts",
+            "HCN_RHF-DFT_IRC_OQP.inp": "runtype=irc",
+            "HCN_RHF-DFT_NEB_OQP.inp": "runtype=neb",
         }
 
-        missing = sorted(name for name in expected if not (EXAMPLES_OPT / name).is_file())
-        self.assertEqual(missing, [])
         for name, runtype in expected.items():
-            if not name.endswith(".inp"):
-                continue
-            text = (EXAMPLES_OPT / name).read_text()
+            path = EXAMPLES_OPT / name
+            self.assertTrue(path.is_file(), name)
+            self.assertTrue(path.with_suffix(".json").is_file(), path.with_suffix(".json").name)
+            text = path.read_text()
             self.assertIn(runtype, text)
-            self.assertIn("lib=geometric", text)
-            self.assertIn("[geometric]", text)
+            self.assertNotIn("lib=geometric", text)
+            self.assertNotIn("[geometric]", text)
 
     def test_geometric_config_supports_constraints_file_options(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
@@ -236,6 +292,28 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
+    def test_baeka_states_are_authoritative_over_legacy_pair(self):
+        input_checker = load_module(
+            "input_checker_baeka_states_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        config = {
+            "input": {"runtype": "meci", "method": "tdhf"},
+            "tdhf": {"nstate": 4},
+            "optimize": {
+                "lib": "oqp", "meci_search": "baeka",
+                "states": [2, 3, 4],
+                # These legacy pair values are intentionally contradictory;
+                # the multistate list is the BaekA source of truth.
+                "istate": 5, "jstate": 2,
+            },
+        }
+
+        report = input_checker.CheckReport()
+        input_checker._check_optimize(config, report)
+
+        self.assertTrue(report.ok, report.to_text())
+
     def test_get_optimizer_dispatches_geometric_optimize(self):
         GeometricOpt, _, _, _, _ = install_runfunc_stubs()
         runfunc = load_module(
@@ -272,6 +350,25 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
         optimizer = runfunc.get_optimizer(mol)
 
         self.assertIsInstance(optimizer, GeometricMECIOpt)
+        self.assertIs(optimizer.mol, mol)
+
+    def test_get_optimizer_dispatches_native_auto_meci(self):
+        install_runfunc_stubs()
+        runfunc = load_module(
+            "runfunc_native_auto_meci_under_test",
+            "pyoqp/oqp/library/runfunc.py",
+        )
+        auto_class = sys.modules["oqp.library.liboqp"].OQPAutoMECIOpt
+        mol = types.SimpleNamespace(
+            config={
+                "input": {"runtype": "meci"},
+                "optimize": {"lib": "oqp", "meci_search": "auto"},
+            }
+        )
+
+        optimizer = runfunc.get_optimizer(mol)
+
+        self.assertIsInstance(optimizer, auto_class)
         self.assertIs(optimizer.mol, mol)
 
     def test_input_checker_accepts_geometric_for_mecp(self):
@@ -371,6 +468,39 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertTrue(report.ok, report.to_text())
 
+    def test_tdhf_irc_state_is_positive_and_within_nstate(self):
+        input_checker = load_module(
+            "input_checker_full_irc_state_under_test",
+            "pyoqp/oqp/utils/input_checker.py",
+        )
+        base = {
+            "input": {"runtype": "irc", "method": "tdhf", "basis": "3-21g",
+                      "system": "\nH 0 0 0\nH 0 0 0.7"},
+            "guess": {},
+            "scf": {"type": "rohf", "multiplicity": 3},
+            "tdhf": {"type": "mrsf", "multiplicity": 3, "nstate": 2},
+            "properties": {},
+            "optimize": {"lib": "oqp", "istate": 0},
+            "hess": {"type": "numerical", "state": 1, "nproc": 1},
+        }
+
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("TDHF optimization cannot target state 0", report.to_text())
+
+        base["optimize"]["istate"] = 3
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("Requested state index exceeds", report.to_text())
+
+        base["optimize"]["istate"] = 1
+        base["hess"]["restart"] = True
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("restart artifacts are not yet signed", report.to_text())
+
+        base["hess"]["restart"] = False
+        base["input"]["qmmm_flag"] = True
+        report = input_checker.check_input_values(base, raise_error=False, emit=False)
+        self.assertIn("not connected to the active QM/MM force backend", report.to_text())
+
     def test_optimize_lib_default_is_oqp(self):
         text = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
 
@@ -416,6 +546,352 @@ class TestGeometricOptimizerConfig(unittest.TestCase):
 
         self.assertIsInstance(optimizer, GeometricIRCOpt)
         self.assertIs(optimizer.mol, mol)
+
+
+class TestOQPTesterCollection(unittest.TestCase):
+    REPRESENTATIVE_LEGACY_DECKS = (
+        "HF/H2O_RHF-HF_ENERGY.inp",
+        "MP2/h2o_ump2_6-31g.inp",
+        "MRSF-TDDFT/H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp",
+        "NMR/H2O_RHF-NMR.inp",
+        "OPT/H2O_RHF-DFT_OPTIMIZE_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_TCI_OQP.inp",
+        "OPT/C2H4_BHHLYP-MRSFTDDFT_BAEKA_OQP.inp",
+    )
+
+    @staticmethod
+    def _write(path, text=""):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def test_collection_keeps_only_representative_paired_legacy_decks(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for relative in self.REPRESENTATIVE_LEGACY_DECKS:
+                legacy = root / relative
+                self._write(legacy)
+                self._write(legacy.with_suffix(".oqp"))
+
+            ordinary_legacy = root / "HF/H2O_RHF-HF_GRADIENT.inp"
+            self._write(ordinary_legacy)
+            self._write(ordinary_legacy.with_suffix(".oqp"))
+            self._write(root / "HF/legacy_only.inp")
+            self._write(root / "HF/ignored.resolved.oqp")
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_collection_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                selected = {
+                    Path(path).relative_to(root).as_posix()
+                    for path in tester._get_input_files(str(root))
+                }
+
+        expected = set(self.REPRESENTATIVE_LEGACY_DECKS)
+        expected.update(
+            str(Path(relative).with_suffix(".oqp"))
+            for relative in self.REPRESENTATIVE_LEGACY_DECKS
+        )
+        expected.update({
+            "HF/H2O_RHF-HF_GRADIENT.oqp",
+            "HF/legacy_only.inp",
+        })
+        self.assertEqual(selected, expected)
+
+    def test_directory_collection_input_format_matrix(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            representative = root / self.REPRESENTATIVE_LEGACY_DECKS[0]
+            ordinary = root / "HF/ordinary_pair.inp"
+            legacy_only = root / "HF/legacy_only.inp"
+            oqp_only = root / "OQP_INPUT/semantic_only.oqp"
+            for path in (representative, ordinary, legacy_only, oqp_only):
+                self._write(path)
+            self._write(representative.with_suffix(".oqp"))
+            self._write(ordinary.with_suffix(".oqp"))
+            self._write(root / "HF/ignored.resolved.oqp")
+
+            expected = {
+                "auto": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.oqp",
+                    "HF/legacy_only.inp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+                "inp": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    "HF/ordinary_pair.inp",
+                    "HF/legacy_only.inp",
+                },
+                "oqp": {
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.oqp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+                "both": {
+                    self.REPRESENTATIVE_LEGACY_DECKS[0],
+                    str(Path(self.REPRESENTATIVE_LEGACY_DECKS[0]).with_suffix(".oqp")),
+                    "HF/ordinary_pair.inp",
+                    "HF/ordinary_pair.oqp",
+                    "HF/legacy_only.inp",
+                    "OQP_INPUT/semantic_only.oqp",
+                },
+            }
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_format_matrix_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                for input_format, wanted in expected.items():
+                    with self.subTest(input_format=input_format):
+                        selected_paths = tester._get_input_files(
+                            str(root), input_format=input_format
+                        )
+                        self.assertEqual(selected_paths, sorted(selected_paths))
+                        selected = {
+                            Path(path).relative_to(root).as_posix()
+                            for path in selected_paths
+                        }
+                        self.assertEqual(selected, wanted)
+
+    def test_explicit_file_respects_input_format(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy = root / "job.inp"
+            semantic = root / "job.oqp"
+            resolved = root / "job.resolved.oqp"
+            for path in (legacy, semantic, resolved):
+                self._write(path)
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_explicit_format_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+
+                for input_format in ("auto", "inp", "both"):
+                    with self.subTest(path="inp", input_format=input_format):
+                        self.assertEqual(
+                            tester._get_input_files(
+                                str(legacy), input_format=input_format
+                            ),
+                            [str(legacy)],
+                        )
+                for input_format in ("auto", "oqp", "both"):
+                    with self.subTest(path="oqp", input_format=input_format):
+                        self.assertEqual(
+                            tester._get_input_files(
+                                str(semantic), input_format=input_format
+                            ),
+                            [str(semantic)],
+                        )
+
+                with self.assertRaisesRegex(ValueError, "is .inp"):
+                    tester._get_input_files(str(legacy), input_format="oqp")
+                with self.assertRaisesRegex(ValueError, "is .oqp"):
+                    tester._get_input_files(str(semantic), input_format="inp")
+                with self.assertRaisesRegex(ValueError, "Resolved correction"):
+                    tester._get_input_files(str(resolved), input_format="auto")
+                with self.assertRaisesRegex(ValueError, "Invalid test input format"):
+                    tester._get_input_files(str(root), input_format="xyz")
+
+                empty = root / "empty"
+                empty.mkdir()
+                tester.output_dir = str(root / "output")
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                with self.assertRaisesRegex(ValueError, "No test inputs matched"):
+                    tester.run_tests(str(empty), input_format="oqp")
+
+    def test_all_preserves_standard_full_suite_exclusions_for_each_format(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            for stem in ("fast", "slow"):
+                self._write(root / f"HF/{stem}.inp")
+                self._write(root / f"HF/{stem}.oqp")
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_all_scope_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(root)
+                tester._skip_in_full_run = lambda path: Path(path).stem == "slow"
+                expected = {
+                    "auto": {"HF/fast.oqp"},
+                    "inp": {"HF/fast.inp"},
+                    "oqp": {"HF/fast.oqp"},
+                    "both": {"HF/fast.inp", "HF/fast.oqp"},
+                }
+                for input_format, wanted in expected.items():
+                    with self.subTest(input_format=input_format):
+                        selected = {
+                            Path(path).relative_to(root).as_posix()
+                            for path in tester._get_input_files(
+                                "all", input_format=input_format
+                            )
+                        }
+                        self.assertEqual(selected, wanted)
+
+    def test_paired_legacy_run_has_distinct_project_and_log(self):
+        class RecordingRunner:
+            calls = []
+
+            def __init__(self, **kwargs):
+                self.calls.append(kwargs)
+                self.kwargs = kwargs
+
+            def run(self, test_mod=False):
+                artifact = Path(self.kwargs["log"]).parent / "opt_status.txt"
+                artifact.write_text(self.kwargs["project"])
+
+            def test(self):
+                return "matched", 0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy = root / "HF/H2O_RHF-HF_ENERGY.inp"
+            semantic = legacy.with_suffix(".oqp")
+            self._write(legacy)
+            self._write(semantic)
+            output_dir = root / "output"
+            output_dir.mkdir()
+
+            with load_oqp_tester(
+                RecordingRunner, "oqp_tester_project_names_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(output_dir)
+                tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
+                legacy_result = tester.run_single_test(str(legacy))
+                semantic_result = tester.run_single_test(str(semantic))
+                legacy_artifact = (
+                    Path(legacy_result["log_file"]).parent / "opt_status.txt"
+                ).read_text()
+                semantic_artifact = (
+                    Path(semantic_result["log_file"]).parent / "opt_status.txt"
+                ).read_text()
+
+        self.assertEqual(legacy_result["project"], "H2O_RHF-HF_ENERGY__legacy")
+        self.assertEqual(
+            Path(legacy_result["log_file"]).name,
+            "H2O_RHF-HF_ENERGY__legacy.log",
+        )
+        self.assertEqual(semantic_result["project"], "H2O_RHF-HF_ENERGY")
+        self.assertEqual(
+            Path(semantic_result["log_file"]).name,
+            "H2O_RHF-HF_ENERGY.log",
+        )
+        self.assertEqual(
+            [call["project"] for call in RecordingRunner.calls],
+            ["H2O_RHF-HF_ENERGY__legacy", "H2O_RHF-HF_ENERGY"],
+        )
+        legacy_dir = Path(legacy_result["log_file"]).parent
+        semantic_dir = Path(semantic_result["log_file"]).parent
+        self.assertNotEqual(legacy_dir, semantic_dir)
+        self.assertEqual(legacy_artifact, "H2O_RHF-HF_ENERGY__legacy")
+        self.assertEqual(semantic_artifact, "H2O_RHF-HF_ENERGY")
+
+    def test_explicit_source_example_path_keeps_legacy_matrix(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            installed_examples = root / "installed/share/examples"
+            source_examples = root / "checkout/examples"
+            legacy = source_examples / "HF/H2O_RHF-HF_ENERGY.inp"
+            self._write(legacy)
+            self._write(legacy.with_suffix(".oqp"))
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_explicit_source_path_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.base_test_dir = str(installed_examples)
+                selected = {
+                    Path(path).relative_to(source_examples).as_posix()
+                    for path in tester._get_input_files(str(source_examples))
+                }
+
+        self.assertEqual(
+            selected,
+            {
+                "HF/H2O_RHF-HF_ENERGY.inp",
+                "HF/H2O_RHF-HF_ENERGY.oqp",
+            },
+        )
+
+    def test_controlled_runner_modules_are_restored(self):
+        class NoopRunner:
+            pass
+
+        module_name = "oqp_tester_module_restoration_under_test"
+        tracked = ("oqp", "oqp.utils", "oqp.pyoqp", "oqp.runtime", module_name)
+        missing = object()
+        before = {name: sys.modules.get(name, missing) for name in tracked}
+
+        with load_oqp_tester(NoopRunner, module_name):
+            self.assertIs(sys.modules["oqp.pyoqp"].Runner, NoopRunner)
+            self.assertIn(module_name, sys.modules)
+
+        for name, module in before.items():
+            if module is missing:
+                self.assertNotIn(name, sys.modules)
+            else:
+                self.assertIs(sys.modules.get(name), module)
+
+
+class TestOptionalGeometricExample(unittest.TestCase):
+    def _run_with_error(self, error):
+        class FailingRunner:
+            def __init__(self, **kwargs):
+                pass
+
+            def run(self, test_mod=False):
+                raise error
+
+        with load_oqp_tester(
+            FailingRunner,
+            f"oqp_tester_geometric_{type(error).__name__}_{id(error)}",
+        ) as tester_module:
+            with tempfile.TemporaryDirectory() as output_dir:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = output_dir
+                tester.mpi_manager = types.SimpleNamespace(use_mpi=0, rank=0)
+                return tester.run_single_test(
+                    str(EXAMPLES_OPT / "HCN_RHF-DFT_CONSTRAINED_OQP.inp")
+                )
+
+    def test_missing_optional_geometric_backend_is_still_a_recognized_adapter_error(self):
+        result = self._run_with_error(ModuleNotFoundError(
+            "geomeTRIC is required for [optimize] lib=geometric. "
+            "Install it with `pip install geometric`."
+        ))
+
+        self.assertEqual(result["status"], "SKIPPED")
+        self.assertIn("optional geomeTRIC optimizer", result["message"])
+
+    def test_unrelated_import_error_remains_visible(self):
+        result = self._run_with_error(
+            ModuleNotFoundError("No module named 'unrelated_backend'")
+        )
+
+        self.assertEqual(result["status"], "ERROR")
+        self.assertIn("unrelated_backend", result["message"])
 
 
 if __name__ == "__main__":

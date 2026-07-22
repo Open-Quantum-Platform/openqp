@@ -1,5 +1,7 @@
 """OQP run type functions"""
 
+import numpy as np
+
 import oqp
 import oqp.library
 from oqp.library.single_point import (
@@ -172,17 +174,34 @@ def compute_soc(mol):
     sp = SinglePoint(mol)
     ref_energy = sp.reference()          # SCF один раз
 
-    mol.data.set_tdhf_multiplicity(1)
-    mol.singlet_energies = sp.excitation(ref_energy)
+    td = mol.config['tdhf']
+    saved_mult = int(td.get('multiplicity', 1))
+    saved_nstate = int(td.get('nstate', 1))
+    ns = int(td.get('nstate_s', 0)) or saved_nstate
+    nt = int(td.get('nstate_t', 0)) or saved_nstate
 
-    mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
-    mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
+    def select_manifold(mult, nstate):
+        # Keep config and native state synchronized so Python/native log labels
+        # describe the manifold that is actually being calculated.
+        td['multiplicity'] = mult
+        td['nstate'] = nstate
+        mol.data.set_tdhf_multiplicity(mult)
+        mol.data.set_tdhf_nstate(nstate)
+        sp.nstate = nstate
+        mol.data['OQP::state_sign'] = np.ones(nstate)
 
-    mol.data.set_tdhf_multiplicity(3)
-    mol.triplet_energies = sp.excitation(ref_energy)
+    try:
+        select_manifold(1, ns)
+        mol.singlet_energies = sp.excitation(ref_energy)
+        mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-    mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
-    mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
+        select_manifold(3, nt)
+        mol.triplet_energies = sp.excitation(ref_energy)
+        mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
+        mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
+    finally:
+        select_manifold(saved_mult, saved_nstate)
 
     oqp.soc_mrsf(mol)
 
@@ -262,6 +281,23 @@ def compute_data(mol):
 def get_optimizer(mol):
     runtype = mol.config['input']['runtype']
     lib = mol.config['optimize']['lib']
+
+    # BaekA generalizes the adjacent-gap adaptive penalty from two to N states.
+    # It is selected as a MECI search algorithm rather than as a separate
+    # backend; the historical three-state ``tci`` spelling remains below.
+    meci_search = str(
+        mol.config['optimize'].get('meci_search', 'auto')
+    ).strip().lower()
+    if lib == 'oqp' and runtype == 'meci' and meci_search == 'auto':
+        # Lazy import preserves compatibility with lightweight dispatcher test
+        # doubles and keeps the automatic orchestration native-only.
+        from oqp.library.liboqp import OQPAutoMECIOpt
+        return OQPAutoMECIOpt(mol)
+    if lib == 'oqp' and runtype == 'meci' and meci_search == 'baeka':
+        # Lazy import keeps lightweight dispatcher test doubles compatible;
+        # normal OpenQP installations load the real native class here.
+        from oqp.library.liboqp import OQPBaekAOpt
+        return OQPBaekAOpt(mol)
 
     opt_lib = {
         'scipy': {

@@ -40,6 +40,14 @@ def string(strng):
     return strng.lower()
 
 
+def optional_string(strng):
+    """Preserve a non-empty string, but represent an omitted option as None."""
+    if strng is None:
+        return None
+    value = str(strng).strip()
+    return value or None
+
+
 def ispher_mode(strng):
     """Normalize the ispher keyword to one of three modes:
     'auto'  - per-shell AO convention from the basis-set metadata
@@ -88,6 +96,9 @@ OQP_CONFIG_SCHEMA = {
         'constraints': {'type': str, 'default': 'None'},
         'rigidwater': {'type': bool, 'default': 'False'},
         'nsteps': {'type': int, 'default': '1'},
+        # OpenMM QM/MM-MD surface. ``nsteps`` remains the legacy static-driver
+        # spelling; the MD engine intentionally uses the clearer ``n_steps``.
+        'n_steps': {'type': int, 'default': '1000'},
         'timestep': {'type': float, 'default': '1.0'},
         'istate': {'type': int, 'default': '0'},
         # NAMD-QMMM (Runner runtype=namd) keys
@@ -97,6 +108,20 @@ OQP_CONFIG_SCHEMA = {
         'cutoff': {'type': str, 'default': 'NoCutoff'},
         'embedding': {'type': str, 'default': 'electrostatic'},
         'temperature': {'type': float, 'default': '300.0'},
+        'ensemble': {'type': str, 'default': 'nve'},
+        'friction': {'type': float, 'default': '1.0'},
+        'pressure': {'type': float, 'default': '1.0'},
+        'barostat_interval': {'type': int, 'default': '25'},
+        'trajectory_format': {'type': str, 'default': 'pdb'},
+        'trajectory_file': {'type': str, 'default': ''},
+        'log_file': {'type': str, 'default': ''},
+        'report_interval': {'type': int, 'default': '1'},
+        'energy_file': {'type': str, 'default': ''},
+        # These two options are consumed as an optional pair by qmmm_md.  An
+        # empty schema default must remain "not supplied" instead of becoming
+        # an empty filename / integer list in that driver.
+        'qm_atoms_xyz': {'type': optional_string, 'default': ''},
+        'qm_list': {'type': optional_string, 'default': ''},
         # Frontier (M1) charge treatment across a covalent QM/MM cut for ESPF
         # embedding: none (default = full-field, the validated ESPF baseline;
         # ESPF's charge-operator coupling already suppresses spill-out) | rcd |
@@ -167,6 +192,11 @@ OQP_CONFIG_SCHEMA = {
         'response_max_iterations': {'type': int, 'default': '50'},
         'response_max_subspace': {'type': int, 'default': '100'},
         'response_solver': {'type': string, 'default': 'auto'},
+        # 0: quiet native kernels, 1: stages/summaries, 2: iteration detail.
+        'print_level': {'type': int, 'default': '1'},
+        # Upward root-pair oscillator strengths (unrelaxed
+        # TDA/state-interaction approximation).
+        'state_to_state_spectrum': {'type': bool, 'default': 'True'},
         'spc': {'type': float, 'default': '0.5'},
         'spc_coco': {'type': float, 'default': '-999.0'},
         'spc_ovov': {'type': float, 'default': '-999.0'},
@@ -184,6 +214,24 @@ OQP_CONFIG_SCHEMA = {
         'mrsf_shift_co': {'type': float, 'default': '0.0'},
         'mrsf_shift_ov': {'type': float, 'default': '0.0'},
         'mrsf_shift_cv': {'type': float, 'default': '0.0'},
+        # Full DTCAM operator surface (native backend). Defaults equal the
+        # openqp-dftb type defaults, so omitting them is bit-identical.
+        # model= applies a named published preset (resolved inside
+        # openqp-dftb, single source of truth); the input checker forbids
+        # combining it with individual operator keys.
+        'model': {'type': string, 'default': ''},
+        'c_mrsf': {'type': float, 'default': '-1.0'},
+        'c_mrsf_oo': {'type': float, 'default': '-1.0'},
+        'response_global_hybrid': {'type': bool, 'default': 'False'},
+        'onsite_exchange_scale': {'type': float, 'default': '0.0'},
+        'w_scale': {'type': float, 'default': '1.0'},
+        'response_w_scale': {'type': float, 'default': '-1.0'},
+        'response_omega': {'type': float, 'default': '-1.0'},
+        'response_cam_alpha': {'type': float, 'default': '-1.0'},
+        'response_cam_beta': {'type': float, 'default': '-1.0'},
+        'onsite_ss': {'type': float, 'default': '0.0'},
+        'onsite_sp': {'type': float, 'default': '0.0'},
+        'onsite_pp': {'type': float, 'default': '0.0'},
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {
@@ -281,6 +329,9 @@ OQP_CONFIG_SCHEMA = {
         'multiplicity': {'type': int, 'default': '1'},
         'conv': {'type': float, 'default': '1.0e-6'},
         'nstate': {'type': int, 'default': '1'},
+        # Optional per-manifold SOC counts. Zero means use nstate for both.
+        'nstate_s': {'type': int, 'default': '0'},
+        'nstate_t': {'type': int, 'default': '0'},
         'target': {'type': int, 'default': '1'},
         'zvconv': {'type': float, 'default': '1.0e-6'},
         'nvdav': {'type': int, 'default': '50'},
@@ -336,14 +387,29 @@ OQP_CONFIG_SCHEMA = {
         'istate': {'type': int, 'default': '1'},
         'jstate': {'type': int, 'default': '2'},
         'kstate': {'type': int, 'default': '3'},
+        # Ordered same-spin response roots for the BaekA multistate MECI
+        # algorithm.  The established two-state algorithms continue to use
+        # istate/jstate, and the legacy tci route keeps kstate.
+        'states': {'type': iarray, 'default': ''},
         'imult': {'type': int, 'default': '1'},
         'jmult': {'type': int, 'default': '3'},
         'energy_shift': {'type': float, 'default': '1e-6'},
         'energy_gap': {'type': float, 'default': '1e-5'},
-        'meci_search': {'type': str, 'default': 'penalty'},
+        # Native two-state searches start inexpensively with the conventional
+        # penalty and escalate to BaekA only when needed; multistate searches
+        # select BaekA directly. Other backends map auto to their penalty path.
+        'meci_search': {'type': str, 'default': 'auto'},
         'pen_sigma': {'type': float, 'default': '1.0'},
         'pen_alpha': {'type': float, 'default': '0.0'},
         'pen_incre': {'type': float, 'default': '1.0'},
+        # BaekA uses additive penalty updates.  Keep these separate from
+        # pen_incre, whose historical meaning is a multiplicative factor for
+        # the older penalty implementation.
+        'pen_delta': {'type': float, 'default': '0.025'},
+        'pen_jump': {
+            'type': farray,
+            'default': '10,10,25,25,100,100,1000,1000,3000',
+        },
         'gap_weight': {'type': float, 'default': '1.0'},
         'init_scf': {'type': bool, 'default': 'False'},
     },
@@ -360,25 +426,52 @@ OQP_CONFIG_SCHEMA = {
         'conmethod': {'type': int, 'default': '0'},
     },
     'oqp': {
-        'coordsys': {'type': str, 'default': 'tric'},
+        # ``auto`` is resolved by the shared native optimizer for every
+        # electronic method: DLC-RFO generally minimizes macro-iterations,
+        # with a smaller trust profile for large/flat systems.
+        'coordsys': {'type': str, 'default': 'auto'},
         'trust': {'type': float, 'default': '0.2'},
         'trust_max': {'type': float, 'default': '0.5'},
+        # A failed/stalled native minimum search is restarted from its
+        # lowest-energy geometry with a fresh model Hessian, DLC coordinates,
+        # and a smaller trust radius.  This stays entirely inside lib=oqp.
+        'auto_recovery': {'type': bool, 'default': 'True'},
+        'recovery_maxit': {'type': int, 'default': '30'},
+        'recovery_trust': {'type': float, 'default': '0.02'},
+        # Native constrained optimization.  Current public syntax accepts one
+        # or more frozen atom-pair distances, e.g. distance(1,2).
+        'freeze': {'type': str, 'default': ''},
         'follow': {'type': int, 'default': '0'},
+        # Optional real Cartesian Hessian used to initialize native P-RFO.
+        # ``model`` preserves the inexpensive Schlegel-model default.
+        'init_hessian': {'type': str, 'default': 'model'},
         'spring': {'type': float, 'default': '0.05'},
         'climb': {'type': bool, 'default': 'True'},
         'fmax': {'type': float, 'default': '2e-3'},
+        'frms': {'type': float, 'default': '2e-3'},
         'climb_fmax': {'type': float, 'default': '0.05'},
         'neb_dt': {'type': float, 'default': '0.5'},
         'maxmove': {'type': float, 'default': '0.2'},
+        'align': {'type': bool, 'default': 'True'},
         'opt_ends': {'type': bool, 'default': 'True'},
         'end_fmax': {'type': float, 'default': '1e-3'},
+        'neb_output': {'type': str, 'default': ''},
         'irc_step': {'type': float, 'default': '0.1'},
         'irc_direction': {'type': str, 'default': 'forward'},
         'mep_step': {'type': float, 'default': '0.1'},
+        'path_gtol': {'type': float, 'default': '1e-4'},
     },
     'neb': {
         'product': {'type': str, 'default': ''},
         'nimage': {'type': int, 'default': '5'},
+        # Legacy geomeTRIC NEB controls. Concise .oqp routes use the native
+        # spellings in [oqp] and never lower into these backend-specific keys.
+        'k': {'type': float, 'default': '1.0'},
+        'maxg': {'type': float, 'default': '0.1'},
+        'avgg': {'type': float, 'default': '0.05'},
+        'climb': {'type': float, 'default': '0.5'},
+        'align': {'type': bool, 'default': 'True'},
+        'optep': {'type': bool, 'default': 'False'},
     },
     'hess': {
         'type': {'type': string, 'default': 'numerical'},
@@ -422,7 +515,7 @@ OQP_CONFIG_SCHEMA = {
         'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction
         'soc_tdc_grad_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add MCH TDC-projected NAC gradient correction
         'grad_wthr': {'type': float, 'default': '0.001'},   # SOC weighted-MCH gradient weight threshold (small -> continuous force)
-        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T1/...); '' = use active index
+        'init_state': {'type': string, 'default': ''},      # SOC: start on this MCH char (S0/S1/T0/T1/...); '' = use active index
         'econs': {'type': bool, 'default': 'False'},        # temporary: per-step velocity rescale to conserve E_tot (band-aid for diagonal-gradient drift)
         'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
         'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
@@ -1326,13 +1419,17 @@ def compute_alpha_beta_electrons(n_e, mult):
 
 def read_system(system):
     system0 = system
-    system = system.split()
+    reference = system.strip()
+    lower_reference = reference.lower()
+    xyz_end = lower_reference.find('.xyz')
+    pdb_end = lower_reference.find('.pdb')
     """Set up atomic data"""
-    if system[0].lower().endswith('.xyz'):
-        if not os.path.exists(system[0]):
-            raise FileNotFoundError("XYZ file %s is not found!" % system[0])
+    if xyz_end >= 0:
+        xyz_path = reference[:xyz_end + 4].strip()
+        if not os.path.exists(xyz_path):
+            raise FileNotFoundError("XYZ file %s is not found!" % xyz_path)
 
-        with open(system[0], 'r') as xyzfile:
+        with open(xyz_path, 'r') as xyzfile:
             system = xyzfile.read().splitlines()
 
         num_atoms = int(system[0])
@@ -1350,14 +1447,16 @@ def read_system(system):
         y = [float(atoms[i][2]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
         z = [float(atoms[i][3]) / ANGSTROM_TO_BOHR for i in range(0, num_atoms)]
         mass = [MASSES[int(SYMBOL_MAP[atoms[i][0]])] for i in range(0, num_atoms)]
-    elif system[0].lower().endswith('.pdb'):
+    elif pdb_end >= 0:
+        pdb_path = reference[:pdb_end + 4].strip()
+        atom_tokens = reference[pdb_end + 4:].strip().split()
 
-        if not os.path.exists(system[0]):
-            raise FileNotFoundError("PDB file %s is not found!" % system[0])
-        qmmm.pdb_file=system[0]
+        if not os.path.exists(pdb_path):
+            raise FileNotFoundError("PDB file %s is not found!" % pdb_path)
+        qmmm.pdb_file=pdb_path
 
         atom_list = []
-        for i in system[1:]:
+        for i in atom_tokens:
            if i.find('-') != -1:
               start, end = map(int, i.split('-'))
               atom_list.extend(list(range(start, end + 1)))
@@ -1374,7 +1473,9 @@ def read_system(system):
         num_atoms, x, y, z, q, mass = qmmm.openmm_system()
     else:
         system = system0.split("\n")
-        system = system[1:]
+        if system and not system[0].strip():
+            system = system[1:]
+        system = [line for line in system if line.strip()]
         num_atoms = len(system)
         atoms = []
         for i, line in enumerate(system):

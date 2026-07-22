@@ -73,7 +73,10 @@ jobs:
             # (pyproject [tool.scikit-build], wheel.install-dir = oqp) bundles the
             # native library, header and share/ data into the installed package,
             # so "openqp" self-locates via resolve_oqp_root() with no extra wiring
-            # and runtime deps (numpy/scipy/geometric/...) come from pyproject.
+            # and required runtime deps (numpy/scipy/...) come from pyproject.
+            # geomeTRIC is an optional legacy backend.  The sole constrained
+            # compatibility example is reported as SKIPPED when that extra is
+            # absent, so the native-first CI installation does not require it.
             # USE_LIBINT/ENABLE_OPENMP are pyproject defaults (ILP64 is
             # unconditional); CI overrides the build type, the MPI matrix leg,
             # ENABLE_DDX, and the BLAS/LAPACK choice.

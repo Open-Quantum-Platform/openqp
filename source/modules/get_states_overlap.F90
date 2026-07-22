@@ -513,6 +513,35 @@ contains
 
     select case (itype)
     case (1)
+       if (i1 == i2) then
+    !     Diagonal element: principal minor with occupied orbital i1 deleted from
+    !     both determinants. The off-diagonal block layout below assumes imin < imax
+    !     and degenerates for i1 == i2: for i1 == 1 the (3,*)/(*,3) blocks start at
+    !     index 0 (out-of-bounds ddet writes), and for i1 >= 2 the overlapping block
+    !     writes delete orbital i1-1 instead of i1.
+          do i = 1, i1-1
+             do ipp = 1, i1-1
+                iipp = (ipp-1)*noc+i
+                ddet(iipp) = s_mo(i+ilow-1,ipp+ilow-1)
+             end do
+             do ipp = i1, noc
+                iipp = (ipp-1)*noc+i
+                ddet(iipp) = s_mo(i+ilow-1,ipp+1+ilow-1)
+             end do
+          end do
+          do i = i1, noc
+             do ipp = 1, i1-1
+                iipp = (ipp-1)*noc+i
+                ddet(iipp) = s_mo(i+1+ilow-1,ipp+ilow-1)
+             end do
+             do ipp = i1, noc
+                iipp = (ipp-1)*noc+i
+                ddet(iipp) = s_mo(i+1+ilow-1,ipp+1+ilow-1)
+             end do
+          end do
+          temp1 = comp_det(ddet, noc)
+          return
+       end if
        imin = min(i1,i2)
        imax = max(i1,i2)
     !  (1,1) block

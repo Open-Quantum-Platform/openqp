@@ -1,0 +1,4 @@
+mrsf-tddftb(nstate=3)
+grad(S0)
+guess(type=huckel)
+geom="../geometries/CH2-e41258125cee.xyz"

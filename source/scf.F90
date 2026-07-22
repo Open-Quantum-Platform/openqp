@@ -616,7 +616,7 @@ contains
     ! Only the options relevant to the active converger/features are printed,
     ! to keep the log focused (the previous version dumped every knob always).
     write(IW,'(/5X,"SCF options"/5X,18("-"))')
-    write(IW,'(5X,"SCF type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
+    write(IW,'(5X,"SCF reference type = ",A,5X,"MaxIT = ",I0,5X,"Conv = ",ES9.2)') &
                trim(scf_name), infos%control%maxit, infos%control%conv
     if (use_trah) then
       write(IW,'(5X,"Converger = TRAH (trust-region augmented Hessian)")')
@@ -968,20 +968,20 @@ contains
       !----------------------------------------------------------------------------
       ! Print iteration information
       if (infos%control%pfon) then
-        write(IW,fmt="(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
+        write(IW,fmt="(4x,i4.1,2x,a23,1x,a23,1x,i16,1x,a14,5x,f5.3,5x,a,5x,a,f9.2)") &
               iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
               fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name), "Temp:", pfon%temp
         write(IW,fmt="(100x,a,f9.2)") "Beta:", pfon%beta
       elseif (infos%control%converger_type == scf_bfgs) then
-        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,1x,a14,5x,f5.3,5x,a)') &
+        write(IW,'(4x,i4.1,2x,a23,1x,a23,1x,i16,1x,a14,1x,a14,5x,f5.3,5x,a)') &
               iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
               fmt_real14(rms_grad), fmt_real14(rms_dp), vshift, &
               trim(conv_res%active_converger_name)
       elseif(use_trah) then
 !              write(IW, "(10x, '')")
       else
-        write(IW,'(4x,i4.1,2x,a17,1x,a17,1x,i13,1x,a14,5x,f5.3,5x,a)') &
+        write(IW,'(4x,i4.1,2x,a23,1x,a23,1x,i16,1x,a14,5x,f5.3,5x,a)') &
               iter, fmt_real17(energy%etot), fmt_real17(energy%etot - e_old), nschwz, &
               fmt_real14(diis_error), vshift, &
               trim(conv_res%active_converger_name)
@@ -2012,28 +2012,20 @@ contains
      deallocate(WS, T, wrk)
    end subroutine rohf_fix
 
-  !> @brief Format a value for a 17-char SCF iteration table column.
-  !> @detail Uses the usual fixed-point form while the value fits the column
-  !>         and falls back to scientific notation (same width) otherwise, so
-  !>         pathological values print as numbers instead of '*****'.
+  !> @brief Format an SCF energy/delta without fixed-width overflow.
+  !> @detail Large-anion and early-iteration energies can exceed fixed-point
+  !>         fields.  A wide scientific field keeps every finite value
+  !>         printable and is stable for machine-readable logs.
   function fmt_real17(val) result(str)
     real(kind=dp), intent(in) :: val
-    character(len=17) :: str
-    if (val == val .and. abs(val) < 1.0e5_dp) then
-      write(str, '(f17.10)') val
-    else
-      write(str, '(es17.8e3)') val
-    end if
+    character(len=23) :: str
+    write(str, '(es23.12)') val
   end function fmt_real17
 
-  !> @brief Same as fmt_real17 for the 14-char error/gradient columns.
+  !> @brief Scientific notation for the 14-char error/gradient columns.
   function fmt_real14(val) result(str)
     real(kind=dp), intent(in) :: val
     character(len=14) :: str
-    if (val == val .and. abs(val) < 1.0e4_dp) then
-      write(str, '(f14.8)') val
-    else
-      write(str, '(es14.5e3)') val
-    end if
+    write(str, '(es14.6)') val
   end function fmt_real14
 end module scf

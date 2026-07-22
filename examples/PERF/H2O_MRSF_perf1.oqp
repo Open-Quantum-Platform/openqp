@@ -1,0 +1,6 @@
+mrsf(nstate=3)/bhhlyp/cc-pvdz
+perf=1
+energy(S0)
+guess(type=huckel)
+scf(conv=1e-08,maxit=100)
+geom="../geometries/H2O-95fa99c614ed.xyz"

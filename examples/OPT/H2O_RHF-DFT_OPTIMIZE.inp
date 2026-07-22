@@ -14,6 +14,9 @@ type=rhf
 multiplicity=1
 
 [optimize]
+lib=oqp
 istate=0
 maxit=1
 
+[oqp]
+auto_recovery=false

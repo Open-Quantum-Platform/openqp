@@ -1,0 +1,6 @@
+mrsf(nstate=6)/bhhlyp/6-31g*
+soc(soc_2e=1)
+guess(save_mol=true)
+scf(maxit=200,conv=1e-07,scal_rel=0)
+tdhf(conv=1e-07)
+geom="../geometries/CH3Br-82fdf47b3e2c.xyz"

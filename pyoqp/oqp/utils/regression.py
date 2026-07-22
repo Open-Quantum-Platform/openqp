@@ -232,7 +232,22 @@ def _safe_load(path):
 
 
 def _context_from_input(inp_path):
-    """Lightweight (runtype, excited, props) read straight from a .inp file."""
+    """Lightweight ``(runtype, excited, props)`` read from .inp or .oqp."""
+    if str(inp_path).lower().endswith('.oqp'):
+        try:
+            from oqp.utils.oqp_input import resolve_oqp_file
+            config = resolve_oqp_file(inp_path, write_resolved=False).legacy_config
+        except (OSError, ValueError):
+            return 'energy', False, []
+        input_cfg = config.get('input', {})
+        tdhf_cfg = config.get('tdhf', {})
+        prop_cfg = config.get('properties', {})
+        runtype = str(input_cfg.get('runtype', 'energy')).strip().lower()
+        tdhf_type = str(tdhf_cfg.get('type', '')).strip().lower()
+        excited = bool(tdhf_type and tdhf_type != 'none')
+        raw_props = str(prop_cfg.get('scf_prop', ''))
+        props = [p.strip().lower() for p in re.split(r'[,\s]+', raw_props) if p.strip()]
+        return runtype, excited, props
     try:
         text = open(inp_path, 'r').read()
     except OSError:
@@ -251,7 +266,7 @@ def _present_nonempty(ref_path, inp_path):
     """Registry keys that are present and non-empty in a reference (primary +
     sidecar), keyed by registry key name."""
     primary = _safe_load(ref_path)
-    sidecar = _safe_load(inp_path[:-4] + '.hess.json') if inp_path.endswith('.inp') else {}
+    sidecar = _safe_load(os.path.splitext(inp_path)[0] + '.hess.json')
     present = set()
     for e in REGISTRY:
         src = sidecar if e.source == 'sidecar' else primary
@@ -271,9 +286,19 @@ def validate_examples(examples_dir):
     a newly registered value) is added without its reference value.
     """
     failures = []
-    for inp in sorted(glob.glob(os.path.join(examples_dir, '**', '*.inp'),
-                                recursive=True)):
-        ref = inp[:-4] + '.json'
+    inputs = glob.glob(os.path.join(examples_dir, '**', '*.inp'), recursive=True)
+    inputs += glob.glob(os.path.join(examples_dir, '**', '*.oqp'), recursive=True)
+    semantic_stems = {
+        os.path.splitext(path)[0]
+        for path in inputs if path.lower().endswith('.oqp')
+    }
+    inputs = [
+        path for path in inputs
+        if path.lower().endswith('.oqp')
+        or os.path.splitext(path)[0] not in semantic_stems
+    ]
+    for inp in sorted(path for path in inputs if not path.endswith('.resolved.oqp')):
+        ref = os.path.splitext(inp)[0] + '.json'
         if not os.path.exists(ref):
             continue  # not a regression example (no committed reference)
         runtype, excited, props = _context_from_input(inp)
@@ -317,6 +342,9 @@ EXEMPT_FLAGS = {
     'md.econs': 'per-step velocity rescale to conserve E_tot; numerical stabilizer sub-knob',
     'md.soc_du_dt_corr': 'SOC adiabatic-basis dU/dt gradient correction; diagnostic numerical sub-knob',
     'md.soc_tdc_grad_corr': 'SOC adiabatic-basis TDC-projected gradient correction; diagnostic numerical sub-knob',
+    'dftb.response_global_hybrid': 'DTCAM development diagnostic (decoupled full-range response '
+                                   'gamma); production operator selection goes through [dftb] '
+                                   'model presets and is covered by the openqp-dftb golden suite',
 }
 
 # section.option -> reason. Real capability, tracked gap (needs an example).
@@ -326,6 +354,7 @@ KNOWN_UNCOVERED = {
     'scf.trh_stab': 'TRAH SCF stability-following (escape unstable solutions)',
     'optimize.init_scf': 'fresh initial-guess SCF each optimization step',
     'nac.bp': 'branching-plane analysis at conical intersections',
+    'neb.optep': 'legacy optional geomeTRIC endpoint optimization; native NEB uses oqp.opt_ends',
     # md.soc is exercised by examples/QMMM/H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp.
     'md.dt_adaptive': 'adaptive NAMD timestep (PR #205); needs a runtype=namd example',
     'qmmm.rigidwater': 'rigid-water SHAKE/RATTLE constraints for QM/MM MD (PR #205); needs a QM/MM MD example',

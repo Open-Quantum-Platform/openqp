@@ -1,0 +1,4 @@
+rks/bhhlyp/3-21g
+opt(maxit=3,energy_shift=1,rmsd_grad=1,max_grad=1,rmsd_step=1,max_step=1,coordsys=dlc,trust=0.05,trust_max=0.05,freeze="distance(1,2)")
+scf(maxit=30)
+geom="../geometries/CHN-d957be87de22.xyz"
