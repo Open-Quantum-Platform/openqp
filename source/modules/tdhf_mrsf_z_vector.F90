@@ -2371,6 +2371,27 @@ contains
             character(len=80) :: tags_gamma(1)
             integer(c_int32_t) :: gstat, gtag_id
             real(kind=dp), contiguous, pointer :: gam_tlf(:,:,:)
+            ! NAC Phase 12 (closed-form d_amp): if the bare interstate orbital
+            ! gradient L_pq = d(X_I^T A X_J)/d theta_pq is supplied in
+            ! OQP::nac_orbgrad_L, use it as the z-vector RHS density (Handy-Schaefer
+            ! interchange: the 2e/Fock response is in the LHS orbital Hessian, so
+            ! the RHS is the BARE property gradient). The block packing below then
+            ! forms L(hi,lo)-L(lo,hi), exactly as for the overlap gamma.
+            block
+              character(len=80) :: tag_L(1)
+              integer(c_int32_t) :: lstat, ltag_id
+              real(kind=dp), contiguous, pointer :: orbL(:)
+              tag_L(1) = "OQP::nac_orbgrad_L"
+              lstat = infos%dat%has_records(tag_L, ltag_id)
+              if (lstat == ta_ok) then
+                call tagarray_get_data(infos%dat, "OQP::nac_orbgrad_L", orbL)
+                wrk1(:,:) = reshape(orbL, (/ nbf, nbf /))
+                gstat = -999   ! signal: L was used, skip the gamma branches
+              end if
+            end block
+            if (gstat == -999) then
+              continue
+            else
             tags_gamma(1) = "OQP::nac_gamma_tlf"
             gstat = infos%dat%has_records(tags_gamma, gtag_id)
             if (gstat == ta_ok) then
@@ -2381,6 +2402,7 @@ contains
             else
               call get_mrsf_transition_density(infos, wrk1, bvec_mo, &
                                                mrsf_nac_istate, mrsf_nac_jstate)
+            end if
             end if
           end block
           rhs = 0.0_dp

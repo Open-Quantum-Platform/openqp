@@ -1347,6 +1347,577 @@ contains
 
 !###############################################################################
 
+!> @brief CLOSED-FORM interstate `esum` term: the explicit 1e/Fock part of the
+!>        matvec derivative X_I^T (dA/dR) X_J.
+!>
+!>   The MRSF matvec (tdhf_mrsf_energy.F90) builds A.x as
+!>     amo = mrsfmntoia(2e generalized Fock)      -> differentiates to `ana2e`
+!>         + mrsfesum(iatogen(x), fa, fb, amo)    -> the Fock part, THIS term
+!>   with fa = mo_a^T FOCK_A mo_a, fb = mo_b^T FOCK_B mo_b. mrsfesum performs the
+!>   TDA Fock contraction (F_vv X - X F_oo), so the coupling's Fock part is
+!>     X_I^T mrsfesum(iatogen(X_J), fa, fb).
+!>   Differentiating at FIXED MOs and FIXED (transported) amplitudes gives
+!>     esum^x = Tr(fa^x . Gam_A) + Tr(fb^x . Gam_B)
+!>            = Tr(P^IJ_a . dFOCK_A^skel/dR) + Tr(P^IJ_b . dFOCK_B^skel/dR)
+!>   where Gam_A = tij (alpha occ-occ), Gam_B = tab (beta virt-virt) are exactly
+!>   the interstate difference-density blocks from mrsf_interstate_tden, and
+!>     P^IJ_a = mo_a(:,1:nocca) tij mo_a(:,1:nocca)^T
+!>     P^IJ_b = mo_b(:,noccb+1:) tab mo_b(:,noccb+1:)^T.
+!>
+!>   CRITICAL (this is the p20 bug): dFOCK^skel is the PURE SKELETON Fock
+!>   derivative at FROZEN reference density (DM_A/DM_B) --
+!>     FOCK_A = h + J[Pa+Pb] - c_x K[Pa],  FOCK_B = h + J[Pa+Pb] - c_x K[Pb].
+!>   p20_esum_grad.py instead injected P^IJ as td_p and ran the FULL gradient
+!>   seam, which returns Tr(P^IJ dF/dR) PLUS P^IJ's own 2e response dG[P^IJ]
+!>   PLUS the W.dS^x overlap term -> ~20x too large. Here the 1e piece uses only
+!>   kinetic + nuclear-attraction (Hellmann-Feynman + Pulay) and DELIBERATELY
+!>   omits grad_ee_overlap (that W.dS^x term belongs to d_ov, not to esum), and
+!>   the 2e piece uses fock_deriv_contract_os at frozen densities.
+!>
+!>   NOTE: for a DFT reference the Fock also carries V_xc, whose derivative is
+!>   NOT included here; validate against an HF reference first.
+!>   Result -> OQP::nac_esum (3,natom).
+  subroutine mrsf_nac_esum_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_esum")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+    type(oqp_handle_t) :: c_handle
+    integer(c_int64_t), value :: istate, jstate
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_esum(inf, int(istate), int(jstate))
+  end subroutine mrsf_nac_esum_C
+
+  subroutine mrsf_nac_esum(infos, istate, jstate)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: show_message, with_abort
+    use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
+    use tdhf_mrsf_lib, only: mrsf_interstate_tden
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, &
+                    grad_ee_overlap
+    use scf_addons, only: fock_jk
+    use int1e_mod, only: int1e
+    use dft, only: dft_initialize, dftclean, dftexcor
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
+
+    implicit none
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_esum"
+    character(len=*), parameter :: OQP_nac_esum = "OQP::nac_esum"
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+    type(basis_set), pointer :: basis
+
+    real(kind=dp), contiguous, pointer :: bvec_mo(:,:), mo_a(:,:), mo_b(:,:), &
+                                          dmat_a(:), dmat_b(:)
+    real(kind=dp), pointer :: out(:,:)
+    real(kind=dp), allocatable :: tij(:,:), tab(:,:), pij_a(:,:), pij_b(:,:), &
+                                  pa(:,:), pb(:,:), ptot(:,:), scr(:,:), &
+                                  p1e(:), gx(:,:), g1(:,:)
+    real(kind=dp) :: hfscale, tol
+    integer :: nbf, nbf2, nocca, noccb, nvirb, natom, ok
+    character(len=80) :: tags_req(5)
+    type(dft_grid_t) :: molGrid
+    logical :: dft
+    real(kind=dp), allocatable :: xcd(:,:,:), xcp(:,:,:), gxc(:,:), gxc_keep(:,:), &
+                                  g1e_keep(:,:)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
+    nvirb = nbf - noccb
+    natom = ubound(infos%atoms%grad, 2)
+    tol = log(10.0_dp)*infos%control%int2e_cutoff
+
+    hfscale = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
+    dft = infos%control%hamilton == 20
+
+    tags_req(1) = OQP_td_bvec_mo
+    tags_req(2) = OQP_VEC_MO_A
+    tags_req(3) = OQP_VEC_MO_B
+    tags_req(4) = OQP_DM_A
+    tags_req(5) = OQP_DM_B
+    call data_has_tags(infos%dat, tags_req, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
+
+    allocate(tij(nocca,nocca), tab(nvirb,nvirb), &
+             pij_a(nbf,nbf), pij_b(nbf,nbf), &
+             pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf), scr(nbf,nbf), &
+             p1e(nbf2), gx(3,natom), g1(3,natom), source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+  ! (1) interstate difference-density blocks (SOMO-unfolded, symmetric)
+    call mrsf_interstate_tden(infos, bvec_mo, istate, jstate, tij, tab)
+
+  ! (2) to AO: P^IJ_a = mo_a(:,1:nocca) tij mo_a(:,1:nocca)^T
+    call dgemm('n','n', nbf, nocca, nocca, &
+               1.0_dp, mo_a, nbf, tij, nocca, 0.0_dp, scr, nbf)
+    call dgemm('n','t', nbf, nbf, nocca, &
+               1.0_dp, scr, nbf, mo_a, nbf, 0.0_dp, pij_a, nbf)
+  !     P^IJ_b = mo_b(:,noccb+1:nbf) tab mo_b(:,noccb+1:nbf)^T
+    scr = 0.0_dp
+    call dgemm('n','n', nbf, nvirb, nvirb, &
+               1.0_dp, mo_b(1,noccb+1), nbf, tab, nvirb, 0.0_dp, scr, nbf)
+    call dgemm('n','t', nbf, nbf, nvirb, &
+               1.0_dp, scr, nbf, mo_b(1,noccb+1), nbf, 0.0_dp, pij_b, nbf)
+
+  ! (3) explicit 1e: Tr[(P^IJ_a + P^IJ_b) . dh/dR]
+  !     kinetic + nuclear attraction ONLY -- grad_ee_overlap is EXCLUDED on
+  !     purpose (the W.dS^x term is part of d_ov, and including it was one of
+  !     the contaminations that made the p20 esum ~20x too big).
+    scr = pij_a + pij_b
+    call pack_matrix(scr, p1e)
+    call grad_ee_kinetic(basis, p1e, gx)
+    call grad_en_hellman_feynman(basis, infos%atoms%xyz, infos%atoms%zn, p1e, gx)
+    call grad_en_pulay(basis, infos%atoms%xyz, infos%atoms%zn, p1e, gx)
+
+  ! diagnostic split: export the 1e part alone so the 1e/2e balance can be checked
+    block
+      real(kind=dp), pointer :: o1(:,:)
+      call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_esum_1e' /))
+      call infos%dat%reserve_data('OQP::nac_esum_1e', ta_type_real64, 3*natom, (/ 3, natom /))
+      call tagarray_get_data(infos%dat, 'OQP::nac_esum_1e', o1)
+      o1 = gx
+    end block
+    allocate(g1e_keep(3,natom))
+    g1e_keep = gx        ! analytic 1e, retained for the 1e FD self-test below
+
+  ! (4) explicit 2e at FROZEN reference density:
+  !     Tr[P^IJ_a . dG^a[Pa,Pb]] + Tr[P^IJ_b . dG^b[Pa,Pb]]
+    call unpack_matrix(dmat_a, pa)
+    call unpack_matrix(dmat_b, pb)
+    ptot = pa + pb
+    g1 = 0.0_dp
+    call fock_deriv_contract_os(infos, basis, ptot, pa, pij_a, hfscale, g1)
+    gx = gx + g1
+    g1 = 0.0_dp
+    call fock_deriv_contract_os(infos, basis, ptot, pb, pij_b, hfscale, g1)
+    gx = gx + g1
+
+  ! (4b) explicit XC: Tr[P^IJ_a . dV_xc^a/dR] + Tr[P^IJ_b . dV_xc^b/dR] at the
+  !      FROZEN reference density. This is the same production routine the
+  !      validated MRSF gradient uses for its relaxed-density XC term, with the
+  !      relaxed density replaced by the interstate probe P^IJ. No xa/xb is
+  !      passed, so only the grad_v_xc branch runs (no f_xc kernel term, which
+  !      belongs to the transition-density/2e side, not to the Fock part).
+  !      NOTE two landmines: utddft_xc_gradient has `intent(out) dedft` (it
+  !      OVERWRITES -> accumulate through a scratch) and its da/db/pa/pb are
+  !      `intent(inout)` and get SCALED BY BASIS NORMS IN PLACE -> pass COPIES,
+  !      otherwise pij_a/pij_b are silently corrupted for anything downstream.
+    if (dft) then
+      allocate(xcd(nbf,nbf,2), xcp(nbf,nbf,2), gxc(3,natom), source=0.0_dp, stat=ok)
+      if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+      ! utddft_xc_gradient also carries a probe-INDEPENDENT ground-state XC
+      ! gradient piece (it depends only on da/db). That constant is NOT part of
+      ! Tr[P^IJ . dVxc/dR], so it must be removed by a zero-probe baseline --
+      ! the same gZ-gS seam pattern used elsewhere in this file. Diagnosed from
+      ! the XC FD test returning max|an-FD| = 8.8799e-02 IDENTICALLY for all
+      ! three pairs, which can only be a pair-independent additive term.
+      block
+        real(kind=dp), allocatable :: gxc0(:,:)
+        allocate(gxc0(3,natom), source=0.0_dp)
+        call dft_initialize(infos, basis, molGrid, verbose=.false.)
+        ! (a) with the interstate probe
+        xcd(:,:,1) = pa
+        xcd(:,:,2) = pb
+        xcp(:,:,1) = pij_a
+        xcp(:,:,2) = pij_b
+        call utddft_xc_gradient(basis=basis, molGrid=molGrid, dedft=gxc, &
+             da=xcd(:,:,1), db=xcd(:,:,2), &
+             pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
+             nmtx=1, threshold=0.0d0, infos=infos)
+        ! (b) baseline with a ZERO probe (fresh copies: da/db are scaled in place)
+        xcd(:,:,1) = pa
+        xcd(:,:,2) = pb
+        xcp = 0.0_dp
+        call utddft_xc_gradient(basis=basis, molGrid=molGrid, dedft=gxc0, &
+             da=xcd(:,:,1), db=xcd(:,:,2), &
+             pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
+             nmtx=1, threshold=0.0d0, infos=infos)
+        call dftclean(infos)
+        gxc = gxc - gxc0
+        deallocate(gxc0)
+      end block
+      gx = gx + gxc
+      allocate(gxc_keep(3,natom))
+      gxc_keep = gxc          ! retained for the XC FD self-test below
+      deallocate(xcd, xcp, gxc)
+    end if
+
+  ! (4c) Fock-weighted interstate density term  -Tr[W^IJ . S^x]  -> OQP::nac_wsx
+  !      (exported SEPARATELY; NOT added to gx, esum stays as validated).
+  !      Differentiating the Fock part of the coupling, Tr[Gam . C^T F_AO C]:
+  !        d/dR = Tr[Gam C^T dF_AO C]            <- esum (skeleton), validated
+  !             + Tr[M . U^x],  M = Gam F_MO + F_MO Gam
+  !      and orthonormality fixes the symmetric part U^x_sym = -1/2 S^x_MO, so
+  !        resp  ⊃  -Tr[W . S^x],   W = 1/2 C M C^T.
+  !      W is FOCK-WEIGHTED so it carries the orbital energies (core ~ -20 Ha) and
+  !      is therefore LARGE — this is the piece that cancels the large skeleton
+  !      esum. It is exactly the grad_ee_overlap contraction that was excluded
+  !      from esum; it belongs to resp, not to d_ov.
+    block
+      real(kind=dp), allocatable :: fa(:,:), fb(:,:), mA(:,:), mB(:,:), &
+                                    wao(:,:), wpk(:), gw(:,:), sc(:,:)
+      real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:)
+      real(kind=dp), pointer :: owsx(:,:)
+      real(kind=dp), allocatable :: fpk(:)
+      allocate(fa(nbf,nbf), fb(nbf,nbf), mA(nocca,nocca), mB(nvirb,nvirb), &
+               wao(nbf,nbf), wpk(nbf2), gw(3,natom), sc(nbf,nbf), fpk(nbf2), &
+               source=0.0_dp)
+      call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+      ! F in MO basis (same construction the matvec uses)
+      call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, fpk)
+      call unpack_matrix(fpk, fa)
+      call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, fpk)
+      call unpack_matrix(fpk, fb)
+      ! M_A = Gam_A F_oo + F_oo Gam_A   (alpha occ block)
+      mA = matmul(tij, fa(1:nocca,1:nocca)) + matmul(fa(1:nocca,1:nocca), tij)
+      ! M_B = Gam_B F_vv + F_vv Gam_B   (beta virt block)
+      mB = matmul(tab, fb(noccb+1:nbf,noccb+1:nbf)) &
+         + matmul(fb(noccb+1:nbf,noccb+1:nbf), tab)
+      ! W = 1/2 [ C_o M_A C_o^T + C_v M_B C_v^T ]
+      call dgemm('n','n', nbf, nocca, nocca, 0.5_dp, mo_a, nbf, mA, nocca, &
+                 0.0_dp, sc, nbf)
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, sc, nbf, mo_a, nbf, &
+                 0.0_dp, wao, nbf)
+      sc = 0.0_dp
+      call dgemm('n','n', nbf, nvirb, nvirb, 0.5_dp, mo_b(1,noccb+1), nbf, mB, &
+                 nvirb, 0.0_dp, sc, nbf)
+      call dgemm('n','t', nbf, nbf, nvirb, 1.0_dp, sc, nbf, mo_b(1,noccb+1), nbf, &
+                 1.0_dp, wao, nbf)
+      call pack_matrix(wao, wpk)
+      gw = 0.0_dp
+      call grad_ee_overlap(basis, wpk, gw)
+      gw = -gw
+      call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_wsx' /))
+      call infos%dat%reserve_data('OQP::nac_wsx', ta_type_real64, 3*natom, (/ 3, natom /))
+      call tagarray_get_data(infos%dat, 'OQP::nac_wsx', owsx)
+      owsx = gw
+      deallocate(fa, fb, mA, mB, wao, wpk, gw, sc, fpk)
+    end block
+
+  ! (5) OPTIONAL rigorous FD self-test of the 2e piece (env NAC_ESUM_FDTEST).
+  !     Central difference of  Tr[P^IJ_a . G^a[Pa,Pb]] + Tr[P^IJ_b . G^b[Pa,Pb]]
+  !     at FROZEN densities and FROZEN probe (fock_jk rebuilt at R+-h), which is
+  !     exactly what fock_deriv_contract_os must return. No SCF iteration, so the
+  !     reference is truncation-limited O(h^2) -- same design as fockx_os_selftest.
+    block
+      character(len=16) :: ev
+      real(kind=dp), allocatable :: dpack(:,:), fpack(:,:), g2an(:,:), g2fd(:,:)
+      real(kind=dp) :: hh, trp, trm
+      integer :: kk, aa, uu
+      call get_environment_variable('NAC_ESUM_FDTEST', ev)
+      if (len_trim(ev) > 0) then
+        allocate(dpack(nbf2,2), fpack(nbf2,2), g2an(3,natom), g2fd(3,natom))
+        ! NOTE: fock_deriv_contract_os has intent(out) gx and zeroes it, so the
+        ! two spin contributions MUST be accumulated through a scratch array.
+        g2an = 0.0_dp
+        call fock_deriv_contract_os(infos, basis, ptot, pa, pij_a, hfscale, g1)
+        g2an = g2an + g1
+        call fock_deriv_contract_os(infos, basis, ptot, pb, pij_b, hfscale, g1)
+        g2an = g2an + g1
+        call pack_matrix(pa, dpack(:,1))
+        call pack_matrix(pb, dpack(:,2))
+        g2fd = 0.0_dp
+        hh = 1.0e-4_dp
+        do kk = 1, natom
+          do aa = 1, 3
+            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+            fpack = 0.0_dp
+            call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
+            trp = tr_mg(pij_a, fpack(:,1), nbf) + tr_mg(pij_b, fpack(:,2), nbf)
+            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
+            fpack = 0.0_dp
+            call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
+            trm = tr_mg(pij_a, fpack(:,1), nbf) + tr_mg(pij_b, fpack(:,2), nbf)
+            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+            g2fd(aa,kk) = (trp - trm)/(2*hh)
+          end do
+        end do
+      ! ---- XC FD reference ------------------------------------------------
+      ! Central difference of Tr[P^IJ_a . Vxc^a] + Tr[P^IJ_b . Vxc^b] with the
+      ! probe P^IJ FROZEN and the MO coefficients FROZEN, rebuilding the DFT grid
+      ! at each displaced geometry (so grid-movement effects are included, which
+      ! the analytic utddft_xc_gradient also carries). dftexcor builds the packed
+      ! Vxc from FIXED MO coefficients => exactly the frozen-density / moving-basis
+      ! skeleton condition. MRSF is ROHF, so iscftyp=2 with beta MOs = alpha MOs,
+      ! matching the production ROHF branch in scf_addons.
+      ! NOTE: dftexcor has coeffa/coeffb intent(inout) and scales them in place,
+      ! so a FRESH copy must be handed over on every single call.
+        if (dft) then
+          block
+            real(kind=dp), allocatable :: fxc(:,:), cA(:,:), cB(:,:), gxcfd(:,:)
+            real(kind=dp) :: eexc, totele, totkin
+            allocate(fxc(nbf2,2), cA(nbf,nbf), cB(nbf,nbf), gxcfd(3,natom))
+            gxcfd = 0.0_dp
+            do kk = 1, natom
+              do aa = 1, 3
+                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+                cA = mo_a; cB = mo_a; fxc = 0.0_dp
+                call dft_initialize(infos, basis, molGrid, verbose=.false.)
+                call dftexcor(basis, molGrid, 2, fxc(:,1), fxc(:,2), cA, cB, &
+                              nbf, nbf2, eexc, totele, totkin, infos)
+                call dftclean(infos)
+                trp = tr_mg(pij_a, fxc(:,1), nbf) + tr_mg(pij_b, fxc(:,2), nbf)
+                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
+                cA = mo_a; cB = mo_a; fxc = 0.0_dp
+                call dft_initialize(infos, basis, molGrid, verbose=.false.)
+                call dftexcor(basis, molGrid, 2, fxc(:,1), fxc(:,2), cA, cB, &
+                              nbf, nbf2, eexc, totele, totkin, infos)
+                call dftclean(infos)
+                trm = tr_mg(pij_a, fxc(:,1), nbf) + tr_mg(pij_b, fxc(:,2), nbf)
+                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+                gxcfd(aa,kk) = (trp - trm)/(2*hh)
+              end do
+            end do
+            open(newunit=uu, file='/tmp/nac_esum_xcfd.out', status='replace', action='write')
+            write(uu,'(a,2i4)')    'pair                    = ', istate, jstate
+            write(uu,'(a,es12.4)') 'esum XC max|an - FD|    = ', maxval(abs(gxc_keep-gxcfd))
+            write(uu,'(a,es12.4)') 'esum XC |an|            = ', sqrt(sum(gxc_keep**2))
+            write(uu,'(a,es12.4)') 'esum XC |FD|            = ', sqrt(sum(gxcfd**2))
+            write(uu,'(a)') 'analytic gxc(:,1):'
+            write(uu,'(3es16.8)') gxc_keep(:,1)
+            write(uu,'(a)') 'finite-d gxc(:,1):'
+            write(uu,'(3es16.8)') gxcfd(:,1)
+            close(uu)
+            deallocate(fxc, cA, cB, gxcfd)
+          end block
+        end if
+
+      ! ---- 1e FD reference ------------------------------------------------
+      ! Central difference of Tr[(P^IJ_a + P^IJ_b) . Hcore(R)] with the probe
+      ! FROZEN, rebuilding the 1e integrals (int1e -> OQP::Hcore) at each
+      ! displaced geometry. This is the piece the logtol bug hit and the only
+      ! one never independently checked.
+        block
+          real(kind=dp), allocatable :: g1fd(:,:), psum(:,:)
+          real(kind=dp), contiguous, pointer :: hc(:)
+          allocate(g1fd(3,natom), psum(nbf,nbf))
+          psum = pij_a + pij_b
+          g1fd = 0.0_dp
+          do kk = 1, natom
+            do aa = 1, 3
+              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+              call int1e(infos)
+              call tagarray_get_data(infos%dat, OQP_Hcore, hc)
+              trp = tr_mg(psum, hc, nbf)
+              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
+              call int1e(infos)
+              call tagarray_get_data(infos%dat, OQP_Hcore, hc)
+              trm = tr_mg(psum, hc, nbf)
+              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
+              g1fd(aa,kk) = (trp - trm)/(2*hh)
+            end do
+          end do
+          call int1e(infos)   ! restore Hcore/S at the original geometry
+          open(newunit=uu, file='/tmp/nac_esum_1efd.out', status='replace', action='write')
+          write(uu,'(a,2i4)')    'pair                    = ', istate, jstate
+          write(uu,'(a,es12.4)') 'esum 1e max|an - FD|    = ', maxval(abs(g1e_keep-g1fd))
+          write(uu,'(a,es12.4)') 'esum 1e |an|            = ', sqrt(sum(g1e_keep**2))
+          write(uu,'(a,es12.4)') 'esum 1e |FD|            = ', sqrt(sum(g1fd**2))
+          write(uu,'(a)') 'analytic g1(:,1):'
+          write(uu,'(3es16.8)') g1e_keep(:,1)
+          write(uu,'(a)') 'finite-d g1(:,1):'
+          write(uu,'(3es16.8)') g1fd(:,1)
+          close(uu)
+          deallocate(g1fd, psum)
+        end block
+
+        open(newunit=uu, file='/tmp/nac_esum_fdtest.out', status='replace', action='write')
+        write(uu,'(a,2i4)')   'pair                     = ', istate, jstate
+        write(uu,'(a,es12.4)') 'esum 2e  max|an - FD|    = ', maxval(abs(g2an-g2fd))
+        write(uu,'(a,es12.4)') 'esum 2e  |an|            = ', sqrt(sum(g2an**2))
+        write(uu,'(a,es12.4)') 'esum 2e  |FD|            = ', sqrt(sum(g2fd**2))
+        write(uu,'(a)') 'analytic g2(:,1):'
+        write(uu,'(3es16.8)') g2an(:,1)
+        write(uu,'(a)') 'finite-d g2(:,1):'
+        write(uu,'(3es16.8)') g2fd(:,1)
+        if (maxval(abs(g2an-g2fd)) < 1.0e-6_dp) then
+          write(uu,'(a)') 'NAC_ESUM_2E_FDTEST PASS'
+        else
+          write(uu,'(a)') 'NAC_ESUM_2E_FDTEST FAIL'
+        end if
+        close(uu)
+        deallocate(dpack, fpack, g2an, g2fd)
+      end if
+    end block
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_esum /))
+    call infos%dat%reserve_data(OQP_nac_esum, ta_type_real64, 3*natom, (/ 3, natom /))
+    call tagarray_get_data(infos%dat, OQP_nac_esum, out)
+    out = gx
+
+    write(iw,'(/5X,"=== NAC closed-form esum(",I0,",",I0,") computed ===")') &
+         istate, jstate
+    deallocate(tij, tab, pij_a, pij_b, pa, pb, ptot, scr, p1e, gx, g1)
+    if (allocated(gxc_keep)) deallocate(gxc_keep)
+    if (allocated(g1e_keep)) deallocate(g1e_keep)
+
+  contains
+    !> Tr(M . G) for square symmetric M and packed symmetric G.
+    pure function tr_mg(m, gp, n) result(tr)
+      real(kind=dp), intent(in) :: m(:,:), gp(:)
+      integer, intent(in) :: n
+      real(kind=dp) :: tr
+      integer :: ii, jj, ij
+      tr = 0.0_dp
+      ij = 0
+      do ii = 1, n
+        do jj = 1, ii
+          ij = ij + 1
+          if (ii == jj) then
+            tr = tr + m(ii,ii)*gp(ij)
+          else
+            tr = tr + 2.0_dp*m(ii,jj)*gp(ij)
+          end if
+        end do
+      end do
+    end function tr_mg
+  end subroutine mrsf_nac_esum
+
+!###############################################################################
+
+!> @brief Phase 12 (closed-form NAC): the interstate matvec derivative
+!>        X_i^T (dA/dR) X_j by FORTRAN-LEVEL polarization of the analytic MRSF
+!>        gradient. The excited-state gradient G(X) = E0^xi + Omega^xi(X) with
+!>        Omega^xi(X) = X^T(dA/dR)X a pure quadratic form in the amplitude (Lee
+!>        JCP 150,184111 Eq 3.21: no state eigenvalue in the assembly). Hence
+!>          X_i^T(dA)X_j = 1/2[ G(X_i+X_j) - G(X_i) - G(X_j) + G(0) ]
+!>        (coeffs sum to 0 so the ground gradient E0^xi cancels). Each G is the
+!>        FULL existing z-vector + gradient with the amplitude injected in the
+!>        target column IN FORTRAN (no Python set_tdhf_target reload). Result to
+!>        OQP::nac_amp_polar (3,natom). Divide by (Om_j-Om_i) in Python for d_amp.
+!>        NOTE: requires mrsf_nac_cphf_mode = .false. (standard RHS, not the
+!>        overlap-gamma NAC-CPHF override) — caller must NOT set_mrsf_nac_cphf.
+  subroutine mrsf_nac_polarize_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_polarize")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use, intrinsic :: iso_c_binding, only: c_int64_t
+    type(oqp_handle_t) :: c_handle
+    integer(c_int64_t), value :: istate, jstate
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_polarize(inf, int(istate), int(jstate))
+  end subroutine mrsf_nac_polarize_C
+
+  subroutine mrsf_nac_polarize(infos, istate, jstate)
+    use io_constants, only: iw
+    use oqp_tagarray_driver
+    use types, only: information
+    use tdhf_mrsf_z_vector_mod, only: tdhf_mrsf_z_vector
+
+    implicit none
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+
+    character(len=*), parameter :: OQP_nac_amp_polar = "OQP::nac_amp_polar"
+    real(kind=dp), contiguous, pointer :: bvec_mo(:,:)
+    real(kind=dp), pointer :: out(:,:)
+    real(kind=dp), allocatable :: save_bvec(:,:), Xi(:), Xj(:), accum(:,:)
+    real(kind=dp) :: coef(4)
+    integer :: natom, save_target, c, nx, nst
+    character(len=80) :: tags_req(1)
+
+    tags_req(1) = OQP_td_bvec_mo
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+    nx  = size(bvec_mo, 1)
+    nst = size(bvec_mo, 2)
+    natom = ubound(infos%atoms%grad, 2)
+
+    allocate(save_bvec(nx, nst), Xi(nx), Xj(nx), accum(3, natom))
+    save_bvec = bvec_mo
+    save_target = infos%tddft%target_state
+    Xi = bvec_mo(:, istate)
+    Xj = bvec_mo(:, jstate)
+    accum = 0.0_dp
+    coef = (/ 0.5_dp, -0.5_dp, -0.5_dp, 0.5_dp /)   ! X_i+X_j, X_i, X_j, 0
+    infos%tddft%target_state = istate
+
+    ! ---- Homogeneity diagnostic (env NAC_HOMOG) --------------------------
+    ! Decisive test of the degree-2 premise behind polarization. Evaluate the
+    ! analytic gradient G along scales s = 0,1,2,3 of the istate amplitude and
+    ! dump each to OQP::nac_homog(3,natom,4). If G(X)=c+L(X)+X^T(dA)X (degree<=2)
+    ! then with D_s = G(sX)-G(0): (D3-3 D1) = 6Q and (D2-2 D1) = 2Q, so the ratio
+    ! (D3-3 D1)/(D2-2 D1) == 3 EXACTLY (componentwise). A ratio != 3 proves a
+    ! degree>2 / non-polynomial term in the ground-config channel, which is the
+    ! ONLY way polarization can be deficient while every operator is bilinear.
+    block
+      character(len=16) :: ev_homog
+      real(kind=dp), pointer :: homog_out(:,:)
+      real(kind=dp), allocatable :: homog(:,:,:)
+      real(kind=dp) :: scl(4)
+      call get_environment_variable('NAC_HOMOG', ev_homog)
+      if (len_trim(ev_homog) > 0) then
+        allocate(homog(3, natom, 4))
+        scl = (/ 0.0_dp, 1.0_dp, 2.0_dp, 3.0_dp /)
+        do c = 1, 4
+          bvec_mo(:, istate) = scl(c) * Xi
+          infos%atoms%grad = 0.0_dp
+          call tdhf_mrsf_z_vector(infos)
+          call tdhf_mrsf_gradient(infos)
+          homog(:, :, c) = infos%atoms%grad
+        end do
+        bvec_mo = save_bvec
+        infos%tddft%target_state = save_target
+        infos%atoms%grad = 0.0_dp
+        call infos%dat%remove_records((/ character(len=80) :: 'OQP::nac_homog' /))
+        call infos%dat%reserve_data('OQP::nac_homog', ta_type_real64, &
+             3*natom*4, (/ 3*natom, 4 /))
+        call tagarray_get_data(infos%dat, 'OQP::nac_homog', homog_out)
+        homog_out = reshape(homog, (/ 3*natom, 4 /))
+        write(iw,'(/5X,"=== NAC homogeneity dump (scales 0,1,2,3) done ===")')
+        deallocate(homog, save_bvec, Xi, Xj, accum)
+        return
+      end if
+    end block
+
+    do c = 1, 4
+      select case (c)
+        case (1); bvec_mo(:, istate) = Xi + Xj
+        case (2); bvec_mo(:, istate) = Xi
+        case (3); bvec_mo(:, istate) = Xj
+        case (4); bvec_mo(:, istate) = 0.0_dp
+      end select
+      infos%atoms%grad = 0.0_dp
+      call tdhf_mrsf_z_vector(infos)
+      call tdhf_mrsf_gradient(infos)
+      accum = accum + coef(c) * infos%atoms%grad
+    end do
+
+    ! restore
+    bvec_mo = save_bvec
+    infos%tddft%target_state = save_target
+    infos%atoms%grad = 0.0_dp
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_amp_polar /))
+    call infos%dat%reserve_data(OQP_nac_amp_polar, ta_type_real64, &
+         3*natom, (/ 3, natom /))
+    call tagarray_get_data(infos%dat, OQP_nac_amp_polar, out)
+    out = accum
+
+    write(iw,'(/5X,"=== NAC polarization X_",I0,"^T dA X_",I0," computed ===")') &
+         istate, jstate
+    deallocate(save_bvec, Xi, Xj, accum)
+  end subroutine mrsf_nac_polarize
+
+!###############################################################################
+
 !> @brief Phase 11 self-test: at I=J the bilinear NAC compute-data type must
 !>        reproduce the production grd2_mrsf_compute_data_t two-electron
 !>        gradient bit-for-bit. Reads the same tagarrays the production gradient
