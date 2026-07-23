@@ -33,6 +33,8 @@ fixtures; the tests skip cleanly when any of these is absent.
 
 import os
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
@@ -57,7 +59,7 @@ except Exception:  # pragma: no cover - optional dependency
     _HAVE_OPENMM = False
 
 try:
-    from oqp.library.qmmm_driver import OpenQpQMMM
+    from oqp.library.qmmm_driver import OpenQpQMMM, _normalize_embedding
     _HAVE_OQP = True
 except Exception:  # pragma: no cover - uncompiled backend / missing OPENQP_ROOT
     _HAVE_OQP = False
@@ -253,6 +255,88 @@ def _dftb_cfg(parameter_path, *, excited=False):
     else:
         cfg.update({"properties.grad": "0", "dftb.type": "ground", "scf.type": "rhf"})
     return cfg
+
+
+@unittest.skipUnless(_HAVE_OQP, "compiled OpenQP backend unavailable")
+class TestEmbeddingNormalization(unittest.TestCase):
+    """`_normalize_embedding` is a pure function -- no OpenMM, no SCF.
+
+    Kept out of the OpenMM-gated class below so these actually run: gating a
+    string-validation test behind a simulation backend means it never executes
+    anywhere, which is how the typo-tolerance it guards got in.
+    """
+
+    def test_unknown_embedding_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown QM/MM embedding"):
+            _normalize_embedding("electrostatc")
+
+    def test_embedding_is_case_normalized(self):
+        self.assertEqual(_normalize_embedding(" Mechanical "), "mechanical")
+
+    def test_every_dispatched_embedding_is_accepted(self):
+        # The dispatch in compute_force/espf_full branches on these exact
+        # spellings; if one were missing from _VALID_EMBEDDINGS the driver
+        # would reject a mode it can actually run.
+        for embedding in ("mechanical", "electrostatic", "espf",
+                          "espf_full", "split"):
+            self.assertEqual(_normalize_embedding(embedding), embedding)
+
+
+@unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP,
+                     "OpenMM or compiled OpenQP backend unavailable")
+class TestQMMMDFTBEmbeddingDispatch(unittest.TestCase):
+    def test_mechanical_embedding_passes_none_to_dftb(self):
+        driver = object.__new__(OpenQpQMMM)
+        driver.use_mol = True
+        driver.Embedding = "mechanical"
+        driver.mol = SimpleNamespace(
+            config={"input": {"method": "dftb"}}
+        )
+        driver._update_mol_positions = mock.Mock()
+        expected = object()
+        driver._forces_qm_dftb = mock.Mock(return_value=expected)
+
+        result = driver.forces_qm_openqp(
+            potmm=np.zeros(2), potqm=np.zeros((2, 2))
+        )
+
+        self.assertIs(result, expected)
+        driver._forces_qm_dftb.assert_called_once_with(driver.mol, None)
+
+    def test_electrostatic_embedding_forwards_the_field_to_dftb(self):
+        # Counterpart to the mechanical case: without this, a dispatch that
+        # passed None unconditionally would still satisfy the test above.
+        driver = object.__new__(OpenQpQMMM)
+        driver.use_mol = True
+        driver.Embedding = "electrostatic"
+        driver.mol = SimpleNamespace(config={"input": {"method": "dftb"}})
+        driver._update_mol_positions = mock.Mock()
+        driver._forces_qm_dftb = mock.Mock(return_value=object())
+        potmm = np.arange(2, dtype=float)
+
+        driver.forces_qm_openqp(potmm=potmm, potqm=np.zeros((2, 2)))
+
+        forwarded = driver._forces_qm_dftb.call_args[0][1]
+        self.assertIsNotNone(forwarded)
+        np.testing.assert_allclose(forwarded, potmm)
+
+    def test_zero_embedding_matches_the_electrostatic_array_shapes(self):
+        # _zero_embedding must be sized like the arrays the ESPF path builds
+        # (nqm + nlink), or the einsum against espf_op_corr silently mismatches.
+        driver = object.__new__(OpenQpQMMM)
+        driver.qm_atoms = np.array([0, 1, 2])
+        driver.link_atoms = [object(), object()]
+
+        potmm, potqm = driver._zero_embedding()
+
+        nqm_c = len(driver.qm_atoms) + len(driver.link_atoms)
+        self.assertEqual(potmm.shape, (nqm_c,))
+        self.assertEqual(potqm.shape, (nqm_c, nqm_c))
+        self.assertEqual(potmm.dtype, np.float64)
+        self.assertEqual(potqm.dtype, np.float64)
+        # "Zero field" is the whole correctness argument -- assert it.
+        self.assertFalse(potmm.any())
+        self.assertFalse(potqm.any())
 
 
 @unittest.skipUnless(_HAVE_OPENMM and _HAVE_OQP, "OpenMM or compiled OpenQP backend unavailable")
