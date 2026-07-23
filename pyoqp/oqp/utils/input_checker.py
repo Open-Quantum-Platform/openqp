@@ -43,11 +43,13 @@ DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
                "dftb+", "dftbplus", "dftb_plus"}
 # Production defaults when no model= is named and no preset-locked key is
 # tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; the other
-# OPEN-SHELL SCC routes (SF, open-shell ground) run the DFTB+ compatibility
-# protocol.  Closed-shell routes (singlet ground, TD-DFTB) and DFTB0 stay
-# preset-free: LC-DFTB2 is not implemented for the restricted reference, and
-# the native library rejects lc_ground_state there.
-DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
+# OPEN-SHELL SCC routes (MRSF, SF, open-shell ground) run the DFTB+
+# compatibility protocol (conventional LC-DFTB2, SPC=0.5) by default.  DTCAM-TB
+# is the tuned, published operator and is opt-in only: request it explicitly
+# with [dftb] model=dtcam-tb.  Closed-shell routes (singlet ground, TD-DFTB)
+# and DFTB0 stay preset-free: LC-DFTB2 is not implemented for the restricted
+# reference, and the native library rejects lc_ground_state there.
+DFTB_MODEL_DEFAULT_MRSF = "dftb+"
 DFTB_MODEL_DEFAULT_OPEN_SHELL = "dftb+"
 # Keys a [dftb] model preset fixes; the checker refuses to combine them with
 # model= (the preset overrides them inside openqp-dftb, so a user-tuned value
@@ -71,6 +73,53 @@ DFTB_MODEL_LOCKED_KEYS = (
     "scc_mixing", "scc_history", "scc_max_step",
     "scc_tolerance", "max_scc_iterations", "response_solver", "zvector",
 )
+
+# Top-level [input] method shorthands for the DFTB response families.  Writing
+# method=mrsf-tddftb / sf-tddftb / tddftb is equivalent to method=dftb with the
+# matching [dftb]/[tdhf] type and the reference each family needs (ROKS triplet
+# for the spin-flip families, closed-shell RHF for plain TD-DFTB).  Expanded
+# before validation so the rest of the checker sees the canonical method=dftb.
+DFTB_METHOD_ALIASES = {
+    "mrsf-tddftb": "mrsf", "mrsftddftb": "mrsf", "mrsf-dftb": "mrsf",
+    "sf-tddftb": "sf", "sftddftb": "sf", "sf-dftb": "sf",
+    "tddftb": "tddftb", "td-dftb": "tddftb", "tda-dftb": "tddftb",
+    "tddftb-tda": "tddftb", "tda-tddftb": "tddftb",
+}
+
+
+def expand_dftb_method_alias(config: dict[str, Any]) -> str:
+    """Expand a top-level [input] method DFTB-response alias in place.
+
+    method=mrsf-tddftb / sf-tddftb / tddftb becomes method=dftb plus the
+    canonical [dftb] type and the family's reference ([scf] type + reference
+    multiplicity, [tdhf] type).  Because the parsed config always carries schema
+    defaults, the implied keys are set authoritatively (the alias defines them);
+    use the explicit method=dftb route for a non-standard reference.  Returns the
+    canonical dftb type when an alias was expanded, else "".
+    """
+    if not isinstance(config, dict):
+        return ""
+    method = _as_lower(_get(config, "input", "method", ""))
+    dftb_type = DFTB_METHOD_ALIASES.get(method)
+    if dftb_type is None:
+        return ""
+    config.setdefault("input", {})["method"] = "dftb"
+    dftb = config.setdefault("dftb", {})
+    dftb["type"] = dftb_type
+    dftb["backend"] = _get(config, "dftb", "backend", "native") or "native"
+    tdhf = config.setdefault("tdhf", {})
+    scf = config.setdefault("scf", {})
+    if dftb_type in ("sf", "mrsf"):
+        tdhf["type"] = dftb_type
+        scf["type"] = "rohf"
+        scf["multiplicity"] = 3
+    else:  # plain closed-shell TD-DFTB (TDA)
+        tdhf["type"] = "tda"
+        scf["type"] = "rhf"
+        scf["multiplicity"] = 1
+    return dftb_type
+
+
 # New-generation operator keys the probe CLI never forwards (native only).
 DFTB_NATIVE_ONLY_KEYS = (
     "c_mrsf", "c_mrsf_oo", "response_global_hybrid", "onsite_exchange_scale",
@@ -890,9 +939,10 @@ def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
 def apply_dftb_model_default(config: dict[str, Any]) -> str:
     """Materialize the production default [dftb] model preset.
 
-    MRSF-TDDFTB defaults to the published DTCAM-TB operator; the other
-    open-shell SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
-    compatibility protocol.  Closed-shell routes (singlet ground, TD-DFTB)
+    All open-shell SCC routes (MRSF-TDDFTB, SF-TDDFTB, open-shell ground)
+    default to the DFTB+ compatibility protocol (conventional LC-DFTB2,
+    SPC=0.5).  The tuned DTCAM-TB operator is opt-in: request it with
+    [dftb] model=dtcam-tb.  Closed-shell routes (singlet ground, TD-DFTB)
     and DFTB0 stay preset-free because the restricted reference has no
     long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
     and any tuned preset-locked key implies manual operator control (legacy
@@ -3072,6 +3122,9 @@ def check_input_values(
     """
 
     report = CheckReport()
+    # Expand top-level DFTB response shorthands (method=mrsf-tddftb / sf-tddftb /
+    # tddftb) to the canonical method=dftb form before any validation runs.
+    expand_dftb_method_alias(config)
     method = _as_lower(_get(config, "input", "method", "hf"))
 
     if method not in METHODS:
@@ -3081,7 +3134,8 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf, tdhf, mp2, or dftb.",
+            action="Choose hf, tdhf, mp2, or dftb (or the DFTB shortcuts "
+                   "mrsf-tddftb, sf-tddftb, tddftb).",
             wiki=WIKI_HELP["input.method"],
         )
 
