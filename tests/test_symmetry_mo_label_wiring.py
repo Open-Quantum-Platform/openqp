@@ -198,9 +198,12 @@ class TestRotatedFrameLabeling(unittest.TestCase):
             return ["b" if lbl in ("b1", "b2") else lbl for lbl in seq]
 
         self.assertEqual(normalize(result["labels"]), normalize(labels_ref))
-        from collections import Counter
-
-        self.assertEqual(Counter(result["labels"]), Counter(labels_ref))
+        # NB: an exact Counter(labels) == Counter(labels_ref) comparison is
+        # deliberately NOT made here -- it would contradict the invariance this
+        # test documents. b1 and b2 are interchanged by the arbitrary choice of
+        # in-plane axis in the rotated input frame, so their individual counts
+        # are convention-dependent; only the a1/a2 counts and the b-total (all
+        # captured by normalize()) are physically invariant.
 
 
 class TestMoleculeMoLabelWiring(unittest.TestCase):

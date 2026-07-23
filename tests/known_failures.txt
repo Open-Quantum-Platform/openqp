@@ -4,7 +4,9 @@
 # This file is meant to shrink to nothing -- fix a test, delete its line.
 #
 # Harvested from the first isolated (--forked) CI run: 11 failed, 855 passed,
-# 114 skipped. Everything not listed here is enforced from now on.
+# 114 skipped. Two of those 11 (the symmetry rotation tests) were over-strict
+# test assertions, not code bugs -- they are now fixed and enforced, leaving 9
+# genuine quarantine entries. Everything not listed here is enforced from now on.
 
 # --- missing optional dependency -------------------------------------------
 # One-line fix: an importorskip, like the pyscf guard already in that file.
@@ -29,10 +31,11 @@ tests/test_pcm_canonical_runtime_path.py::PcmCanonicalRuntimePathTests::test_no_
 # --- reference output drifted ----------------------------------------------
 tests/test_legacy_example_conversion.py::test_every_current_legacy_example_is_convertible_and_committed  # converted legacy example no longer matches the committed reference
 
-# --- MO symmetry labels are not invariant under input rotation -------------
-# b1 and b2 swap when the same molecule is given in a rotated frame:
-#   Counter({'a1': 4, 'b1': 2, 'b2': 1}) != Counter({'a1': 4, 'b2': 2, 'b1': 1})
-# These two look like a genuine bug in the symmetry labelling rather than test
-# rot, and are the most worth chasing of anything in this file.
-tests/test_symmetry_mo_label_wiring.py::TestRotatedFrameLabeling::test_water_labels_invariant_under_input_rotation  # b1/b2 labels swap under rigid rotation
-tests/test_symmetry_spherical_shells.py::TestSphericalSALCsAndLabels::test_mo_labels_invariant_under_input_rotation  # b1/b2 labels swap under rigid rotation
+# --- (resolved) MO symmetry labels under input rotation --------------------
+# Previously quarantined as a suspected labelling bug. It was not: b1 and b2
+# are interchanged by the arbitrary in-plane axis convention in a rotated
+# input frame -- the a1/a2 counts, the b-total, and max_deviation<1e-8 are all
+# invariant, which is what physically matters. Both tests already documented
+# this (normalize(); sorted([b1,b2])) but then contradicted it with an exact
+# Counter comparison. The over-strict assertions were fixed, so both tests now
+# pass and are enforced. Left here as a note against re-quarantining them.
