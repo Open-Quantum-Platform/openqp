@@ -1,0 +1,51 @@
+# Tests that were already failing when CI started running this suite.
+#
+# One pytest node ID per line; text after "#" is the reason. See conftest.py.
+# This file is meant to shrink to nothing -- fix a test, delete its line.
+#
+# Harvested from the first isolated (--forked) CI run: 11 failed, 855 passed,
+# 114 skipped. Two of those 11 (the symmetry rotation tests) were over-strict
+# test assertions, not code bugs -- they are now fixed and enforced, leaving 9
+# genuine quarantine entries. Everything not listed here is enforced from now on.
+
+# --- missing optional dependency -------------------------------------------
+# One-line fix: an importorskip, like the pyscf guard already in that file.
+tests/test_excited_toolkit.py::test_integration_keystone_qcschema_fcidump  # ModuleNotFoundError: No module named 'qcelemental'
+
+# --- assertions on source text that has since been rewritten ---------------
+# These grep Fortran/CMake/README files for literal strings. The code moved on
+# and the tests did not; each needs re-pointing at whatever now expresses the
+# property, or deleting if the property is gone.
+tests/test_int2_openmp_workshare.py::Int2OpenMPWorkshareTests::test_precomputed_shell_pair_map_preserves_descending_i_then_ascending_j_order  # 'ij_pair = 0' no longer in the int2 source
+tests/test_opentrustregion_linalg_config.py::OpenTrustRegionLinalgConfigTests::test_external_projects_receive_make_program_when_set  # 'string(MD5 _oqp_external_make_program_hash ...)' no longer in external/CMakeLists.txt
+tests/test_opentrustregion_linalg_config.py::OpenTrustRegionLinalgConfigTests::test_libtagarray_accepts_default_integer_reserve_sizes  # libtagarray-v0.0.6-default-integer-shapes.patch no longer referenced
+tests/test_readme_log_metadata.py::ReadmeLogMetadataTests::test_requested_contributors_are_listed  # README no longer lists VladimirMakhnev
+tests/test_scf_iteration_log_format.py::test_formatters_fall_back_to_same_width_scientific_notation  # '(f17.10)' no longer in the scf source
+tests/test_symmetry_parser_checker.py::TestSymmetryParserAndMetadataGates::test_schema_does_not_wire_symmetry_handlers_by_default  # '"symmetry": {' no longer in oqpdata.py
+
+# --- a real policy violation, not a stale test -----------------------------
+# The test asserts the production runtime never imports pyscf; the FCIDUMP
+# export module now does. Either that import is wrong or the policy changed.
+tests/test_pcm_canonical_runtime_path.py::PcmCanonicalRuntimePathTests::test_no_pyscf_dependency_in_production_runtime  # 'from pyscf' found in the production FCIDUMP path
+
+# --- reference output drifted ----------------------------------------------
+tests/test_legacy_example_conversion.py::test_every_current_legacy_example_is_convertible_and_committed  # converted legacy example no longer matches the committed reference
+
+# --- xTB concise-.oqp integration incomplete (PR #269 follow-up) ------------
+# method=xtb was added to the sectioned input, schema, and native adapter, but
+# the [xtb] section is not yet wired into the concise .oqp converter
+# (oqp_input.py SECTION_NAMES + route-models), and the xTB example geometries
+# are not regenerated into the shared geometry catalog. These two tests enforce
+# that wiring. Unquarantine when xTB .oqp converter support + example-catalog
+# regeneration land (run tools/convert_legacy_examples.py and commit the diff).
+tests/test_oqp_input_schema_manifest.py::test_every_schema_keyword_has_exactly_one_semantic_input_owner  # [xtb] in OQP_CONFIG_SCHEMA but not in oqp_input SECTION_NAMES/converter
+tests/test_legacy_example_conversion.py::test_shared_xyz_catalog_is_real_cartesian_geometry_only  # xTB example geometries not regenerated into the shared catalog
+
+# --- (resolved) MO symmetry labels under input rotation --------------------
+# Previously quarantined as a suspected labelling bug. It was not: b1 and b2
+# are interchanged by the arbitrary in-plane axis convention in a rotated
+# input frame -- the a1/a2 counts, the b-total, and max_deviation<1e-8 are all
+# invariant, which is what physically matters. Both tests already documented
+# this (normalize(); sorted([b1,b2])) but then contradicted it with an exact
+# Counter comparison. The over-strict assertions were fixed, so both tests now
+# pass and are enforced. Left here as a note against re-quarantining them.

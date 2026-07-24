@@ -172,6 +172,41 @@ jobs:
               exit 1
             fi
 
+         # The example suite above validates numerical references end to end, but
+         # it never touches the pure-Python layer -- the tests/ pytest suite was
+         # not executed by CI at all, so everything under pyoqp/oqp (the analysis
+         # toolkit, the interop/export APIs, the input handling) could regress
+         # silently. Run it on one leg: it is Python-only, so a second OS or the
+         # MPI leg would re-run identical assertions against the same code.
+         - name: Run Python test suite
+           if: ${{ matrix.MPI == 'OFF' && matrix.os == 'ubuntu-24.04' }}
+           run: |
+            # --forked is not optional here: 39 test files mutate sys.modules,
+            # and tests/test_analytic_hessian.py replaces the whole `oqp`
+            # package with a stub. Sharing one interpreter lets that leak into
+            # unrelated tests, so the set of failures depends on execution
+            # order. One process per test makes the result deterministic.
+            # xdist on top of it recovers the wall-clock the isolation costs.
+            pip install pytest pytest-xdist pytest-forked
+            # Tests that need a build gate on OPENQP_ROOT. The installed package
+            # self-locates via resolve_oqp_root(), so point the variable at the
+            # package directory to opt those integration tests in rather than
+            # letting them skip silently in the one job that can run them.
+            # `tail -n1`: importing oqp on the non-MPI leg prints "Failed to
+            # import mpi4py" to stdout (pyoqp/oqp/utils/mpi_utils.py), which
+            # would otherwise be captured as a garbage first line of the path.
+            # Take only the last line -- the dirname print -- so the variable
+            # is a clean path, not "Failed to import mpi4py\n<path>".
+            OPENQP_ROOT="$(python -c 'import oqp, os; print(os.path.dirname(oqp.__file__))' | tail -n1)"
+            export OPENQP_ROOT
+            echo "OPENQP_ROOT=$OPENQP_ROOT"
+            # `python -m pytest`, not bare `pytest`: the -m form puts the repo
+            # root on sys.path, and tests/test_periodic_table.py imports
+            # `pyoqp.oqp.periodic_table` through the source tree rather than the
+            # installed `oqp` package. Bare pytest only adds tests/ and the
+            # module fails to import.
+            python -m pytest tests -q -n auto --forked --tb=short -rf
+
    # macOS legs: build with PURE DEFAULTS (no LINALG flags) so CI exercises the
    # native-BLAS platform policy exactly as users hit it: LINALG_LIB=auto must
    # resolve to Apple Accelerate ILP64 -- OpenQP is ILP64-only, one uniform

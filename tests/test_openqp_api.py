@@ -63,6 +63,14 @@ SCHEMA = {
         "parameter_path": {"type": str, "default": ""},
         "nstate": {"type": int, "default": "3"},
     },
+    "xtb": {
+        "backend": {"type": _string, "default": "native"},
+        "type": {"type": _string, "default": "auto"},
+        "parameter_path": {"type": str, "default": ""},
+        "model": {"type": _string, "default": "gfn1"},
+        "lc_ground_state": {"type": bool, "default": "False"},
+        "nstate": {"type": int, "default": "3"},
+    },
     "mp2": {
         "variant": {"type": _string, "default": "mp2"},
         "same_spin_scale": {"type": float, "default": "1.0"},
@@ -138,6 +146,7 @@ def load_openqp_module():
         "oqp.utils.geometry",
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
+        "oqp.utils.tb_backends",
         "oqp.utils.state_labels",
         "openqp_under_test",
     )
@@ -167,6 +176,7 @@ def load_openqp_module():
         _load_module("oqp.utils.geometry", ROOT / "pyoqp/oqp/utils/geometry.py")
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
+        _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
         _load_module("oqp.utils.state_labels", ROOT / "pyoqp/oqp/utils/state_labels.py")
 
         class FakeMol:
@@ -1099,6 +1109,66 @@ $$$$
         )
         # The MRSF-TDDFTB workflow guard must accept SOC/NAMD (they are wired for
         # method=dftb), matching the input-file validation path.
+        job._require_mrsf_theory_for("SOC")
+        job._require_mrsf_theory_for("NAMD")
+
+    def test_xtb_helper_builds_mrsf_tddftb_input(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g", charge=0)
+            .xtb(runtype="grad", response_type="mrsf", nstate=3,
+                 parameter_path="/tmp/gfn1.opxtb")
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["input"]["method"], "xtb")
+        self.assertEqual(config["input"]["runtype"], "grad")
+        self.assertEqual(config["xtb"]["type"], "mrsf")
+        self.assertEqual(config["tdhf"]["type"], "mrsf")
+        self.assertEqual(config["xtb"]["parameter_path"], "/tmp/gfn1.opxtb")
+
+    def test_xtb_tda_alias_canonicalizes_backend_type(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_tda")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="tda", parameter_path="/tmp/gfn1.opxtb")
+        )
+        config = job.to_input_dict()
+        # backend method name is canonicalized to tddftb; tdhf.type stays tda.
+        self.assertEqual(config["xtb"]["type"], "tddftb")
+        self.assertEqual(config["tdhf"]["type"], "tda")
+
+    def test_xtb_helper_drains_gfn1_model_keyword_into_section(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_lc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="mrsf", parameter_path="/tmp/gfn1.opxtb",
+                 model="gfn1", lc_ground_state=True)
+        )
+        config = job.to_input_dict()
+        # [xtb]-only schema keywords are routed into the [xtb] section rather
+        # than leaking into the [tdhf] response block.
+        self.assertEqual(config["xtb"]["model"], "gfn1")
+        self.assertEqual(config["xtb"]["lc_ground_state"], "True")
+        self.assertNotIn("model", config["tdhf"])
+        self.assertNotIn("lc_ground_state", config["tdhf"])
+
+    def test_xtb_mrsf_permits_soc_and_namd_workflows(self):
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2_xtb_soc")
+            .molecule([("H", (0, 0, 0)), ("H", (0, 0, 1.4))], basis="sto-3g")
+            .xtb(response_type="mrsf", parameter_path="/tmp/gfn1.opxtb")
+        )
+        # The MRSF-xTB workflow guard must accept SOC/NAMD (they are wired for
+        # method=xtb through the shared TB dispatch), matching the input-file
+        # validation path.
         job._require_mrsf_theory_for("SOC")
         job._require_mrsf_theory_for("NAMD")
 

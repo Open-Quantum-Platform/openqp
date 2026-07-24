@@ -18,7 +18,8 @@ from .compare import compare_results, format_table
 # excited-state analysis
 from oqp.analysis import (
     MRSFExcitedStates, nto_excitation, nto_transition, attachment_detachment,
-    participation_ratio, tozer_lambda, fragment_ct_matrix, AOBasis, make_box_grid,
+    participation_ratio, tozer_lambda, fragment_ct_matrix,
+    analyze_mrsf_transition, infer_molecular_plane, AOBasis, make_box_grid,
 )
 # export formats (cubes, QCSchema, FCIDUMP)
 from oqp.export import (
@@ -33,6 +34,7 @@ __all__ = [
     # analysis
     "MRSFExcitedStates", "nto_excitation", "nto_transition", "attachment_detachment",
     "participation_ratio", "tozer_lambda", "fragment_ct_matrix", "AOBasis", "make_box_grid",
+    "analyze_mrsf_transition", "infer_molecular_plane",
     # export
     "CubeExporter", "to_qcschema", "validate_qcschema", "dump_fcidump", "verify_fcidump_fci",
     # FCIDUMP / Hamiltonian
