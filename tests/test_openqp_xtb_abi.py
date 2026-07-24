@@ -125,7 +125,11 @@ _IDX_SCC_TOL_XTB = 28
 def _record_state_gradient(adapter_cls, mol):
     lib = _RecorderLib(adapter_cls.SYMBOL_PREFIX)
     adapter = adapter_cls(mol)
-    with mock.patch.object(ctypes, "CDLL", lambda path: lib):
+    # _run_native emits progress/settings logs via dump_log (which needs a real
+    # mol.log path and full molecule surface); this test only inspects the
+    # recorded ctypes argument layout, so neutralize logging for the mock mol.
+    with mock.patch.object(ctypes, "CDLL", lambda path: lib), \
+            mock.patch("oqp.library.openqp_dftb.dump_log", lambda *a, **k: None):
         adapter._run_native("mrsf", 1, need_grad=False)
     func = getattr(lib, f"{adapter_cls.SYMBOL_PREFIX}_state_gradient")
     # _native_library must have pinned restype on the looked-up symbol.
