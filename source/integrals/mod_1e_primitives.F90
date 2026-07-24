@@ -3372,8 +3372,7 @@ END SUBROUTINE
 !>     gfull(nj, ni, nl, nk, xyz, t)
 !>       = G_{ni,nj | nk,nl}^{xyz} for Rys root t
 !>
-!>   after both electron-1 and electron-2 HRR transfers, exactly as
-!>   GAMESS XYZ2E builds XINT(1+NI+MAXP1*NJ, 1+NK+MAXP*NL).
+!>   after both electron-1 and electron-2 HRR transfers.
 !>
 !>   Calling convention in comp_soc_int2_prim:
 !>     for each (k,l) subshell with angular powers (nxk,nyk,nzk), (nxl,nyl,nzl):
@@ -3382,7 +3381,7 @@ END SUBROUTINE
 !>       xyzin(nj,ni,3,t) = gfull(nj,ni,nzl,nzk,3,t)
 !>     call soc_xyz_ij(xyzin, ...) as in the 1e case.
 !>
-!>   Corresponds to GAMESS SOINT2 + XYZ2E.
+!>   Implements the OpenQP two-electron SOC integral path.
 !>
 !> @param[inout] ryscomp   Rys object; caller sets nroots; x is set here
 !> @param[in]    cpij      shell pair electron 1 (bra=I, ket=J)
@@ -3414,7 +3413,7 @@ END SUBROUTINE
     REAL(real64) :: expe
     REAL(real64) :: c00(3), cp00(3), dij(3), dkl(3), pq(3)
     integer :: nj_e1, ni_max, n_lo, n_hi
-    ! --- intermediate 2D table (GAMESS-style packed: row=electron1, col=electron2) ---
+    ! --- intermediate 2D table (row=electron1, col=electron2) ---
     ! Dimensions: (0:maxij+1, 0:maxkl+1, 3)
     ! Row index N = NI + maxp1*NJ  where maxp1 = maxij+1
     ! Col index M = NK + maxp *NL  where maxp  = maxkl+1
@@ -3436,18 +3435,18 @@ END SUBROUTINE
 
     CALL ryscomp%evaluate()
 
-    maxij = iang + jang + 1   ! = MAXIJ in GAMESS
-    maxkl = kang + lang        ! = MAXKL in GAMESS
+    maxij = iang + jang + 1
+    maxkl = kang + lang
     maxp1 = maxij + 1 ! MAX_ANG + 2 !maxij + 1          ! stride for NJ in row index
     maxp  = maxkl + 1 ! MAX_ANG + 1 !maxkl + 1          ! stride for NL in col index
 
 
 !    print *, 'maxij=', maxij, ' maxp1=', maxp1, ' g size dim1=', maxij+2
-    ! Shifts for HRR (GAMESS: DXIJ, DXKL etc.)
+    ! Shifts for horizontal recurrence relations.
     dij = cpij%ri - cpij%rj   ! A - B
     dkl = cpkl%ri - cpkl%rj   ! C - D
 
-    ! Prefactor without Rys weight (GAMESS: EXPE without W(t))
+    ! Prefactor without the Rys weight.
     expe = PI252 / (ppij%aa * ppkl%aa * SQRT(aandb)) &
          * EXP(-ryscomp%x / rho)!* ppij%expfac * ppkl%expfac
 !write(*,'(a,5e20.12)') 'OQP expe rho x ai aj:', &
@@ -3461,10 +3460,10 @@ END SUBROUTINE
     ! ----------------------------------------------------------------
     DO t = 1, ryscomp%nroots
         g = 0.0_real64        
-        ! F00 = EXPE * W(t)  (GAMESS notation)
+        ! F00 = EXPE * W(t).
         f00 = expe * ryscomp%w(t)
 !if (t == 1) write(*,'(a,3e20.12)') 'OQP f00 w(1) t=1:', f00, ryscomp%w(t), ryscomp%u(t)
-        ! VRR recurrence coefficients (GAMESS: B00, B10, BP01, XC00, XCP00)
+        ! Vertical-recurrence coefficients B00, B10, BP01, XC00, XCP00.
         ! denom = 2*(aa*bb + u*rho*(aa+bb))
         ASSOCIATE (uu => ryscomp%u(t))
         b00  = uu*rho          / (2*(ppij%aa*ppkl%aa + uu*rho*aandb))
@@ -3477,7 +3476,7 @@ END SUBROUTINE
         cp00 = (ppkl%r - cpkl%ri) - 2*b00*ppij%aa * pq   ! XCP00
 
         ! ----------------------------------------------------------------
-        ! Seed values  (GAMESS XYZ2E: XINT(1,1) etc.)
+        ! Seed values for the recurrence.
         ! In OQP packed: N=0 → NI=0,NJ=0; M=0 → NK=0,NL=0
         ! z-component carries F00 (the Rys weight × prefactor)
         ! ----------------------------------------------------------------
@@ -3502,7 +3501,7 @@ END SUBROUTINE
 !        if (t==1) print *, 'after seed g(1,1,3)=', g(1,1,3)
         ! ----------------------------------------------------------------
         ! VRR for electron 1 (N increases, M=0 and M=1)
-        ! GAMESS loop 30: C10 = 0; CP10 = B00
+        ! Electron-1 recurrence starts with C10 = 0 and CP10 = B00.
         !   G(N+1,0) = C10*G(N-1,0) + C00*G(N,0)   [C10 = (N-1)*B10]
         !   G(N+1,1) = CP10*G(N,0)  + CP00*G(N+1,0) [CP10 = N*B00]
         ! ----------------------------------------------------------------
@@ -3518,7 +3517,7 @@ END SUBROUTINE
 !        if (t==1) print *, 'after VRR1 g(1,1,1)=', g(1,1,1)
         ! ----------------------------------------------------------------
         ! VRR for electron 2 (M increases, N=0 and N=1)
-        ! GAMESS loop 60: CP01 = 0; C01 = B00
+        ! Electron-2 recurrence starts with CP01 = 0 and C01 = B00.
         !   G(0,M+1) = CP01*G(0,M-1) + CP00*G(0,M)   [CP01 = (M-1)*BP01]
         !   G(1,M+1) = C01*G(0,M)    + C00*G(0,M+1)  [C01  = M*B00]
         ! ----------------------------------------------------------------
@@ -3529,7 +3528,7 @@ END SUBROUTINE
             c01  = c01  + b00
             g(0, m, :) = cp01*g(0, m-2, :) + cp00*g(0, m-1, :)
             g(1, m, :) = c01*g(0, m-1, :) + c00*g(0, m, :)
-            ! mixed recurrence for N >= 2  (GAMESS loop 50)
+            ! Mixed recurrence for N >= 2.
             ! G(N,M+1) = CP01*G(N,M-1) + CP10_m*G(N-1,M) + CP00*G(N,M)
             ! CP10_m starts at B00 and increments by B00 per N step
             cp10 = b00
@@ -3547,7 +3546,7 @@ END SUBROUTINE
         ! G(NI, NJ) = G(NI+1, NJ-1) + dij * G(NI, NJ-1)
         ! In packed form: g(NI + maxp1*NJ, M) = g(NI + maxp1*(NJ-1) + 1, M)
         !                                       + dij * g(NI + maxp1*(NJ-1), M)
-        ! GAMESS: backward loop over NI is required.
+        ! A backward loop over NI is required.
         ! ----------------------------------------------------------------
         DO nj = 1, jang + 1
 !            if (t==1 .and. nj==1) print *, 'HRR1 start nj=1 g(0,0,3)=', g(0,0,3)
@@ -3578,7 +3577,7 @@ END SUBROUTINE
 !            END DO
 !        END DO
 
-! СТАЛО (все NJ строки как в GAMESS):
+! Complete all NJ rows:
          DO nl = 1, lang
              DO nk = maxkl - nl, 0, -1
                  DO nj_e1 = 0, jang + 1
@@ -3631,8 +3630,8 @@ END SUBROUTINE
 !>
 !> where Lx = <d/dy mu | 1/r12 | d/dz nu> - <d/dz mu | 1/r12 | d/dy nu>
 !>
-!> Correspondence with GAMESS SOINT2:
-!>   - QGaussRys2e  builds gfull  ←→  XYZ2E builds XINT/YINT/ZINT + XINTI/YINTJ etc.
+!> OpenQP implementation map:
+!>   - QGaussRys2e builds the gfull X/Y/Z integral and derivative tables.
 !>   - gfull(nj,ni,nl,nk,xyz,t)  ←→  XINT(1+ni+MAXP1*nj, 1+nk+MAXP*nl)
 !>   - loop over (i,j)           ←→  DO 7700 I / DO 7600 J
 !>   - loop over (k,l)           ←→  DO 7500 K / DO 7400 L
@@ -3692,12 +3691,12 @@ END SUBROUTINE
                 knao => cpkl%inao,    lnao => cpkl%jnao )
 
     ! Number of Rys roots: total angular momentum of all four shells + 1
-    ! GAMESS: NROOTS = MAXNM/2 + 1 where MAXNM = ILAM+JLAM+KLAM+LLAM+1
+    ! NROOTS = MAXNM/2 + 1 where MAXNM is the total angular momentum plus one.
     nroots_2e      = (iang + jang + kang + lang + 1)/2 + 1
     ryscomp%nroots = nroots_2e
 
     ! Build the 4-index 1D integral table via Rys quadrature + VRR + HRR
-    ! GAMESS equivalent: XYZ2E → XINT(N,M), YINT(N,M), ZINT(N,M)
+    ! Produces the XINT(N,M), YINT(N,M), and ZINT(N,M) equivalents.
     call QGaussRys2e(ryscomp, cpij, idij, cpkl, idkl, gfull)
 
 
@@ -3708,8 +3707,9 @@ END SUBROUTINE
 !      gfull(0,0,0,1,1,1)      ! XINT(1,2) = XCP00
 !    endif
     ! Contraction prefactor for electron 1 primitive pair
-    ! GAMESS: FACI*CONJ(J) are absorbed here; CONK*PNRM(K)*CONL*PNRM(L) go in (k,l) loop
-    ! In OQP: pp%expfac already contains exp(-ai*aj/aa * |A-B|^2) * (pi/aa)^1.5
+    ! The electron-1 factors are absorbed here; electron-2 contraction factors
+    ! are applied in the (k,l) loop.  pp%expfac already contains
+    ! exp(-ai*aj/aa * |A-B|^2) * (pi/aa)^1.5.
     !         EXPE is inside gfull (built into F00 = EXPE * w_t)
     !         So dij_fac here = 1.0 — all factors are already in gfull
     !         This mirrors how comp_soc_int1_prim uses dij = pp%expfac * TWOPI * pp%aa1
@@ -3717,12 +3717,12 @@ END SUBROUTINE
     ! Contraction coefficients are applied in the outer loop (compute_som2e_ao).
     dij_fac = cpij%p(idij)%expfac * cpkl%p(idkl)%expfac! 1.0_real64
 
-    ! --- Loop over subshell indices of electron 1 (GAMESS: DO 7700 I / DO 7600 J) ---
+    ! --- Loop over subshell indices of electron 1 ---
     ij   = 0
     jmax = jnao
     do i = 1, inao
         nxi = CART_X(i, iang);  nyi = CART_Y(i, iang);  nzi = CART_Z(i, iang)
-        ! GAMESS: if IIEQJJ then JJMAX = I-1 (handled by cp%iandj in OQP)
+        ! For identical shells, cp%iandj limits JJMAX to I-1.
         if (cpij%iandj) jmax = i - 1
 
         do j = 1, jmax
@@ -3732,14 +3732,14 @@ END SUBROUTINE
 !            write(*,'(a,4i4)') 'DBG i j ij jmax=', i, j, ij, jmax
             ! Extract xyzin slice for this (i,j) pair from gfull:
             ! xyzin(nxl, nxk, 1, t) = gfull(nxj, nxi, nxl, nxk, 1, t)
-            ! This replaces the XINT(NXX, MX) lookup in GAMESS
+            ! This directly supplies the XINT(NXX, MX) value.
 
-            ! --- Loop over subshell indices of electron 2 (GAMESS: DO 7500 K / DO 7400 L) ---
+            ! --- Loop over subshell indices of electron 2 ---
             lx = 0.0_real64;  ly = 0.0_real64;  lz = 0.0_real64
 !       write(*,'(a,3i4,e14.6)') 'DBG i j ij lx=', i, j, ij, lx
             do k = 1, knao
                 nxk = CART_X(k, kang);  nyk = CART_Y(k, kang);  nzk = CART_Z(k, kang)
-                ! GAMESS: if KKEQLL then LLMAX = K
+                ! For identical shells, limit LLMAX to K.
                 lmax = lnao
                 if (cpkl%iandj) lmax = k
 
@@ -3747,12 +3747,13 @@ END SUBROUTINE
                     nxl = CART_X(l, lang);  nyl = CART_Y(l, lang);  nzl = CART_Z(l, lang)
 
                     ! Build xyzin for this (k,l) pair by taking the appropriate slice of gfull
-                    ! GAMESS: MX=1+NX(K)+MAXP*NX(L), then XINT(NXX,MX) = gfull(nyj,nyi,nyl,nyk,2,t)
+                    ! MX=1+NX(K)+MAXP*NX(L), with XINT(NXX,MX) supplied by
+                    ! gfull(nyj,nyi,nyl,nyk,2,t).
                     !
                     ! xyzin(nxl, nxk, xyz, t) = gfull(nxj, nxi, nxl, nxk, xyz, t)
                     ! but we need to build derivatives di, dj from xyzin first.
                     ! Here we directly use gfull elements in the Lx formula,
-                    ! following GAMESS: SOL(1) = (YINTI(NYY,MY)*ZINTJ(NZZ,MZ)
+                    ! using SOL(1) = (YINTI(NYY,MY)*ZINTJ(NZZ,MZ)
                     !                           - YINTJ(NYY,MY)*ZINTI(NZZ,MZ)) * XINT(NXX,MX)
                     !
                     ! In OQP notation (after soc_xyz_ij on the (nxl,nxk) slice):
@@ -3762,7 +3763,7 @@ END SUBROUTINE
 
                     ! Build xyzin for this (k,l) pair: three separate slices of gfull,
                     ! one per Cartesian component. Each component uses its own (nl,nk) index.
-                    ! GAMESS: MX=1+NX(K)+MAXP*NX(L) selects col in XINT/YINT/ZINT.
+                    ! MX=1+NX(K)+MAXP*NX(L) selects the XINT/YINT/ZINT column.
                     !   xyzin(:,:,1,:) <- gfull(:,:, nxl, nxk, 1, :)
                     !   xyzin(:,:,2,:) <- gfull(:,:, nyl, nyk, 2, :)
                     !   xyzin(:,:,3,:) <- gfull(:,:, nzl, nzk, 3, :)
@@ -3775,7 +3776,7 @@ END SUBROUTINE
 
                     ! Build derivatives di(m,n) = n*xyzin(m,n-1) - 2*ai*xyzin(m,n+1)  [bra]
                     !              and dj(m,n) = m*xyzin(m-1,n) - 2*aj*xyzin(m+1,n)  [ket]
-                    ! GAMESS: YINTI(NYY,MY) = NI*YINT(NI-1,MY) - 2*AI*YINT(NI+1,MY)
+                    ! YINTI(NYY,MY) = NI*YINT(NI-1,MY) - 2*AI*YINT(NI+1,MY).
                     call soc_xyz_ij(xyzin, iang, jang, ppij%ai, ppij%aj, nroots_2e, di, dj)
 
 !if (iang==1 .and. jang==0 .and. kang==0 .and. idij==1 .and. idkl==1) then
@@ -3785,7 +3786,7 @@ END SUBROUTINE
 !    di(nxj,nxi,1,1), dj(nxj,nxi,1,1)
 !endif
 
-                    ! --- Lx, Ly, Lz (GAMESS: SOL(1), SOL(2), SOL(3)) ---
+                    ! --- Lx, Ly, Lz from SOL(1), SOL(2), SOL(3) ---
                     ! SOL(1) = (YINTI(NYY,MY)*ZINTJ(NZZ,MZ) - YINTJ(NYY,MY)*ZINTI(NZZ,MZ))
                     !        * XINT(NXX,MX)
                     ! In OQP:
@@ -3826,8 +3827,8 @@ END SUBROUTINE
 !    write(*,'(a,3e14.6)') 'OQP lx ly lz:', lx, ly, lz
 !end if
             ! Accumulate into socblk
-            ! GAMESS: SO2AO -= TDENFC * SOL  where TDENFC = FACK*CONL*PNRM(L)
-            ! In OQP: dij_fac carries the primitive prefactor; contraction
+            ! Accumulate SO2AO -= TDENFC * SOL.  Here dij_fac carries the
+            ! primitive prefactor; contraction
             !         weights from p_kl are applied in the outer loop (compute_som2e_ao)
             socblk(ij, 1) = socblk(ij, 1) - dij_fac * lx
             socblk(ij, 2) = socblk(ij, 2) - dij_fac * ly

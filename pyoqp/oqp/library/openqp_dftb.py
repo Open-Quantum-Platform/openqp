@@ -1634,7 +1634,7 @@ class OpenQPDFTBAdapter:
         """Raw one-center MRSF SOC matrix (no alpha^2/2) via libopenqp_dftb_c.
 
         Inputs are Fortran-flat 1-D arrays; returns (hsoc_re, hsoc_im) as
-        (dim, dim) numpy arrays in the GAMESS state ordering, where the
+        (dim, dim) numpy arrays in the OpenQP state ordering, where the
         row/column index layout matches the native soc_mrsf convention.
         """
         lib = self._native_library()

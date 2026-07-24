@@ -410,7 +410,7 @@ class NAMD_QMMM(NAMD):
       * active-state embedded gradient = Gradient + grad_esp_qmmm_excited,
       * ESPF QM charges -> MM forces (forces_mm),
       * full-system velocity Verlet (QM+MM, atomic units),
-      * QM-only FSSH hop (rescale only QM velocities, as in GAMESS RESCALV).
+      * QM-only FSSH hop with rescaling of QM velocities only.
     """
 
     def __init__(self, mol):
@@ -654,9 +654,8 @@ class NAMD_QMMM(NAMD):
             # for the classical coupling forces in _total_force.
             return g
         # ESPF_ROHF=1: use the ROHF reference density for ESPF charges and
-        # gradient, matching GAMESS which always fits ESPF from the SCF (ROHF)
-        # density regardless of the target excited state.  Combined with
-        # ESPF_GAMESS=1 this reproduces GAMESS QM/MM energy conservation for
+        # gradient regardless of the target excited state.  Combined with
+        # ESPF_HARD_GRID=1 this provides stable QM/MM energy conservation for
         # direct validation.  Default (ESPF_ROHF unset): physically correct
         # S1 relaxed density via grad_esp_qmmm_excited.
         if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
@@ -1601,7 +1600,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
       * ESPF QM charges (of the dominant MCH component) -> MM forces,
       * full-system velocity Verlet (QM+MM, atomic units),
       * local-diabatization propagation + spin-adiabatic fewest-switches hop,
-        rescaling QM velocities only (as in GAMESS RESCALV).
+        rescaling QM velocities only.
 
     The SOC electronic/hopping kernels are borrowed from NAMD_SOC via explicit
     NAMD_SOC.<method>(self, ...) calls so this class can inherit the QM/MM
@@ -1725,8 +1724,8 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             Gradient(mol).gradient()
             gi = np.array(mol.grads[state]).reshape((self.natom, 3))
             # ESPF_ROHF=1: use ROHF reference density for ESPF gradient across
-            # all SOC MCH components, matching GAMESS behaviour and ensuring
-            # the ESPF energy is constant across state hops.
+            # all SOC MCH components, ensuring the ESPF energy is constant
+            # across state hops.
             if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
                 oqp.form_esp_charges(mol)
                 oqp.grad_esp_qmmm(mol)
