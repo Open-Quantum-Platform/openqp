@@ -281,6 +281,7 @@ void lowdin(struct oqp_handle_t *inf);
 void oqp_dftd4_disp(int nat, const int *z, const double *xyz,
                     const char *func, int lfunc, int do_grad,
                     double *energy, double *grad, int *ier);
+
 void soc_mrsf(struct oqp_handle_t *inf);
 void dk_scalar(struct oqp_handle_t *inf);
 void nmr_shielding(struct oqp_handle_t *inf);

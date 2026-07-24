@@ -40,15 +40,21 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 
 #### Geometry & Reaction Paths
 
-| Workflow | `runtype` | Backends |
+| Workflow | `runtype` | Default execution |
 | --- | --- | --- |
 | Energy / gradient / Hessian | `energy`, `grad`, `hess` | native |
-| Minimization & transition states | `optimize`, `ts` | `oqp` (native), [geomeTRIC](https://github.com/leeping/geomeTRIC), SciPy |
-| Conical intersections | `meci`, `mecp`, `tci` | `oqp`, geomeTRIC, SciPy |
-| Reaction paths | `irc`, `mep`, `neb` | `oqp`, geomeTRIC, SciPy |
+| Minimization & transition states | `optimize`, `ts` | native OQP |
+| Conical intersections | `meci`, `mecp`, `tci` | native OQP |
+| Reaction paths | `irc`, `mep`, `neb` | native OQP |
 | Nonadiabatic data | `nac`, `nacme` | native |
 
-The built-in native optimizer (`lib=oqp`) uses redundant-internal / DLC / TRIC coordinates with a restricted-step RFO step and needs no external optimizer package.
+The built-in optimizer uses redundant-internal / DLC / TRIC coordinates with
+restricted-step RFO/P-RFO and needs no external optimizer package.  It covers
+all primary geometry and reaction-path workflows above, including aligned,
+endpoint-optimized climbing-image NEB and optional numerical/analytical initial
+Hessians for transition-state searches. SciPy and
+[geomeTRIC](https://github.com/leeping/geomeTRIC) remain optional compatibility
+backends for advanced constrained optimization.
 
 **Tutorials:** [Geometry optimization & TS](https://open-quantum-platform.github.io/openqp-tutorials/geometry-optimization/) · [Conical intersections](https://open-quantum-platform.github.io/openqp-tutorials/conical-intersections/)
 
@@ -122,10 +128,22 @@ The package install keeps the Python wrapper, native library, headers, and data 
 ### First Run
 
 ```bash
-openqp examples/HF/H2O_RHF-HF_ENERGY.inp          # OpenMP / sequential run
-mpirun -np <n> openqp any_example_file.inp        # MPI run
-openqp --run_tests all                            # run the packaged example tests
+openqp examples/HF/H2O_RHF-HF_ENERGY.oqp          # OpenMP / sequential run
 ```
+
+Every legacy example has a concise `.oqp` companion. To run the regression
+suite exclusively with concise inputs, use `--input-format`:
+
+```bash
+openqp --run_tests all --input-format oqp         # standard suite through .oqp
+```
+
+Omitting the selector uses `auto`: it prefers `.oqp`, retains any legacy-only
+inputs, and keeps a small representative legacy compatibility set. The
+historical `all` scope still excludes unusually slow or non-self-contained
+examples; selecting an explicit directory applies the requested format to every
+input in that directory. Each calculation receives an isolated output folder,
+so paired optimization artifacts cannot overwrite one another.
 
 Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_threads=16`.
 

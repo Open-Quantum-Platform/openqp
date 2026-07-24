@@ -16,7 +16,9 @@ from oqp.utils.mpi_utils import MPIManager, MPIPool
 # DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
 # exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
 # there is no longer a Python <= 3.12 constraint.
-dftd_installed = 'dftd4 (native)' if hasattr(oqp.lib, 'oqp_dftd4_disp') else 'not available'
+dftd_installed = ('dftd4 (native)'
+                  if hasattr(getattr(oqp, 'lib', None), 'oqp_dftd4_disp')
+                  else 'not available')
 
 
 def dftd4_native_disp(atoms, coordinates, functional, do_grad):
@@ -45,7 +47,9 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
+from oqp.utils.state_labels import is_mrsf, public_state_label
 import oqp.utils.qmmm as qmmm
 
 MP2_VARIANT_SCALES = {
@@ -403,6 +407,8 @@ class SinglePoint(Calculator):
 
     def energy(self, do_init_scf=True, restore_scf_converger=True):
         # check method
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).energy()
         if self.method not in ['hf', 'tdhf', 'mp2']:
             raise ValueError(f'Unknown method type {self.method}')
 
@@ -452,6 +458,9 @@ class SinglePoint(Calculator):
                 og_vec[[i - 1, j - 1]] = og_vec[[j - 1, i - 1]]
 
     def reference(self, do_init_scf=True):
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).reference()
+
         dump_log(self.mol, title='PyOQP: Entering Electronic Energy Calculation', section='input')
 
         # Experimental petite-list reduction (no-op unless
@@ -642,6 +651,19 @@ class SinglePoint(Calculator):
         # Drop the primary and de-duplicate while preserving order.
         _seen = set()
         chain = [c for c in chain if c != primary and not (c in _seen or _seen.add(c))]
+        # TRAH is not occupation constrained and may rotate a MOM/rstctmo
+        # core-hole reference into a different electronic state.  Keep the
+        # occupation-preserving recovery stages, but never silently enter TRAH
+        # for a restricted-orbital calculation.
+        rstctmo = bool(scf_config.get('rstctmo', False))
+        if rstctmo and 'trah' in chain:
+            chain = [c for c in chain if c != 'trah']
+            dump_log(
+                self.mol,
+                title='PyOQP: TRAH recovery disabled because scf.rstctmo=true; '
+                      'TRAH cannot preserve the requested orbital ordering',
+                section='input',
+            )
         for conv in chain:
             if converged:
                 break
@@ -667,7 +689,8 @@ class SinglePoint(Calculator):
         # is reverted below by restoring the snapshot.
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
-        if converged and stability and primary != 'trah' and (self.method == 'hf' or spin_flip_reference):
+        if (converged and stability and not rstctmo and primary != 'trah'
+                and (self.method == 'hf' or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
@@ -790,6 +813,9 @@ class SinglePoint(Calculator):
         return snap
 
     def excitation(self, ref_energy):
+        if is_tb_method(self.method):
+            return make_tb_adapter(self.mol).excitation(ref_energy)
+
         # Response-space symmetry blocking (no-op unless
         # [symmetry] use_response_symmetry is enabled).
         if getattr(self.mol, 'symmetry_metadata', None) and \
@@ -882,7 +908,7 @@ class Gradient(Calculator):
 
     def gradient(self):
         # check method
-        if self.method not in ['hf', 'tdhf']:
+        if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
@@ -898,6 +924,8 @@ class Gradient(Calculator):
             grads = self.scf_grad()
         elif self.method == 'tdhf':
             grads = self.tddft_grad()
+        elif is_tb_method(self.method):
+            grads = make_tb_adapter(self.mol).gradient(self.grads)
 
         # Petite-list runs produce a skeleton two-electron gradient; project
         # onto the totally symmetric component (exact for 1-dim irreps; all
@@ -930,7 +958,9 @@ class Gradient(Calculator):
 
         grads = np.zeros((self.nstate + 1, self.natom, 3))
         for i in self.grads:
-            dump_log(self.mol, title='PyOQP: Gradient of Root %s' % i)
+            target = (public_state_label(self.mol.config, i)
+                      if is_mrsf(self.mol.config) else 'Root %s' % i)
+            dump_log(self.mol, title='PyOQP: Gradient of %s' % target)
             self.mol.data.set_tdhf_target(i)
             self.zvec_func[self.td](self.mol)
 
@@ -1017,7 +1047,14 @@ class Hessian(Calculator):
                         target.write('\n')
             os.remove(native_cphf_log)
 
-    def hessian(self):
+    def hessian(self, analysis=True):
+        """Compute/read the Hessian, optionally skipping vibrational analysis.
+
+        Native TS and IRC drivers need only the Cartesian matrix.  Passing
+        ``analysis=False`` avoids normal modes, IR/Raman property displacements,
+        thermochemistry, and cache output while leaving the standalone Hessian
+        workflow unchanged.
+        """
         dump_log(self.mol, title='PyOQP: Entering Hessian Calculation')
 
         if self.read:
@@ -1033,9 +1070,12 @@ class Hessian(Calculator):
                 dump_log(self.mol, title='PyOQP: numerical hessian calculations failed')
                 return None
             else:
+                self.mol.hessian = np.asarray(hessian, dtype=float)
+                if not analysis:
+                    dump_log(self.mol, title='PyOQP: Hessian Matrix Ready')
+                    return self.mol.hessian
                 freqs, modes, inertia = normal_mode(self.mol.get_system(), self.mol.get_mass(), hessian)
                 self.mol.freqs = freqs
-                self.mol.hessian = hessian
                 self.mol.modes = modes
                 self.mol.inertia = inertia
                 self._compute_vibrational_intensities(modes)
@@ -1050,6 +1090,10 @@ class Hessian(Calculator):
                 # save mol
                 if self.save_mol:
                     self.mol.save_data()
+
+        if not analysis:
+            dump_log(self.mol, title='PyOQP: Hessian Matrix Ready')
+            return np.asarray(hessian, dtype=float)
 
         dump_log(self.mol, title='PyOQP: Frequencies', section='freq', info=freqs)
         dump_log(
@@ -1070,6 +1114,8 @@ class Hessian(Calculator):
                 mult=self.hess_mult,
             )
             dump_log(self.mol, title='PyOQP: Thermochemistry at %-10.2f K' % t, section='thermo', info=thermal_data)
+
+        return np.asarray(hessian, dtype=float)
 
     def _native_property_tensors_at(self, coord_bohr):
         """Return native OpenQP dipole (a.u.) and static polarizability at displaced geometry."""
@@ -1495,12 +1541,75 @@ class BasisOverlap(Calculator):
         # load previous data
         self.load_previous_data()
 
+        if is_tb_method(self.mol.config['input']['method']):
+            # TB minimal basis: cross-geometry overlap from the TB backend
+            # library (the Gaussian path cannot serve it).
+            self.dftb_overlap()
+            return
+
         # compute basis overlap
         self.overlap_func(self.mol)
 
         # align mo before tdhf
         if self.align_type != 'no':
             self.align_mo()
+
+    def dftb_overlap(self):
+        """Cross-geometry MO overlap + MO alignment for the TB backends.
+
+        Serves method=dftb and method=xtb through make_tb_adapter. Mirrors
+        overlap_func + align_mo: computes the column-normalized MO
+        overlap tag from the SK cross overlap, sign-fixes (and optionally
+        reorders) the current MOs blockwise against the previous step, and
+        recomputes the overlap with the aligned MOs.
+        """
+        adapter = make_tb_adapter(self.mol)
+        data = self.mol.data
+        dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
+        nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+        mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
+        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+
+        def compute():
+            return adapter.states_overlap(
+                np.asarray(data["OQP::xyz_old"]).ravel(),
+                np.asarray(self.mol.get_system(), dtype=float).ravel(),
+                np.asarray(data["OQP::VEC_MO_A_old"]).ravel(),
+                np.asarray(data["OQP::VEC_MO_A"]).ravel(),
+                np.asarray(data["OQP::td_bvec_mo_old"]).ravel(),
+                np.asarray(data["OQP::td_bvec_mo"]).ravel(),
+                noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
+
+        s_mo, _ = compute()
+        data["OQP::overlap_mo_non_orthogonal"] = s_mo
+
+        if self.align_type == 'no':
+            return
+
+        current_mo = copy.deepcopy(np.asarray(data["OQP::VEC_MO_A"]))
+        current_energy = copy.deepcopy(np.asarray(data["OQP::E_MO_A"]))
+        nocc = noca
+
+        occ_order, occ_sign = self.find_vec_order(s_mo[:nocc - 2, : nocc - 2])
+        somo_order, somo_sign = self.find_vec_order(s_mo[nocc - 2: nocc, nocc - 2: nocc])
+        vir_order, vir_sign = self.find_vec_order(s_mo[nocc:, nocc:])
+
+        mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
+        mo_sign = np.concatenate((occ_sign, somo_sign, vir_sign)).reshape((-1, 1))
+
+        current_mo = current_mo * mo_sign
+        if self.align_type == 'reorder':
+            current_mo = current_mo[np.argsort(mo_order)]
+            current_energy = current_energy[np.argsort(mo_order)]
+
+        data["OQP::VEC_MO_A"] = current_mo
+        data["OQP::VEC_MO_B"] = current_mo.copy()
+        data["OQP::E_MO_A"] = current_energy
+        data["OQP::E_MO_B"] = current_energy.copy()
+        dump_log(self.mol, title='PyOQP: Aligning MOs')
+
+        s_mo, _ = compute()
+        data["OQP::overlap_mo_non_orthogonal"] = s_mo
 
     def load_previous_data(self):
         dump_log(self.mol, title='PyOQP: Loading Previous Data')
@@ -1528,8 +1637,11 @@ class BasisOverlap(Calculator):
                     # compute data for previous step
                     self.mol.idx = 2
                     self.mol.update_system(previous_coord)
-                    oqp.library.ints_1e(self.mol)
-                    oqp.library.guess(self.mol)
+                    if not is_tb_method(self.mol.config['input']['method']):
+                        # Gaussian-basis integrals/guess; the TB backends are
+                        # self-contained and publish their own tags in energy().
+                        oqp.library.ints_1e(self.mol)
+                        oqp.library.guess(self.mol)
                     SinglePoint(self.mol).energy()
                     LastStep(self.mol).compute(self.mol)
                     previous_xyz = previous_coord
@@ -1655,6 +1767,26 @@ class NACME(BasisOverlap):
 
         dump_log(self.mol, title='PyOQP: Aligning X amplitudes')
 
+    def dftb_states_overlap(self):
+        """TB state overlap from the ALIGNED MO/X tags (native tag layout).
+
+        Serves method=dftb and method=xtb through make_tb_adapter."""
+        adapter = make_tb_adapter(self.mol)
+        data = self.mol.data
+        dims = np.asarray(data["OQP::dftb_wf_dims"]).ravel()
+        nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+        mult = int(tb_config(self.mol.config).get('target_multiplicity', 1))
+        tlf = int(self.mol.config.get('tdhf', {}).get('tlf', 2))
+        _, s_st = adapter.states_overlap(
+            np.asarray(data["OQP::xyz_old"]).ravel(),
+            np.asarray(self.mol.get_system(), dtype=float).ravel(),
+            np.asarray(data["OQP::VEC_MO_A_old"]).ravel(),
+            np.asarray(data["OQP::VEC_MO_A"]).ravel(),
+            np.asarray(data["OQP::td_bvec_mo_old"]).ravel(),
+            np.asarray(data["OQP::td_bvec_mo"]).ravel(),
+            noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
+        data["OQP::td_states_overlap"] = s_st
+
     def nacme(self):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
@@ -1668,7 +1800,10 @@ class NACME(BasisOverlap):
         self.align_x()
 
         # compute state overlap
-        oqp.get_states_overlap(self.mol)
+        if is_tb_method(self.mol.config['input']['method']):
+            self.dftb_states_overlap()
+        else:
+            oqp.get_states_overlap(self.mol)
         state_overlap = self.mol.data["OQP::td_states_overlap"]
 
         # compute time-derivative nac

@@ -1,0 +1,47 @@
+# MRSF S1 gradient on the LC-GFN1-xTB reference with the optional OpenQP-xTB
+# backend.
+#
+#    group   keyword          value
+#  --------------------------------------
+#    input   method           xtb
+#    input   runtype          grad
+#    tdhf    type             mrsf
+#    xtb     type             mrsf
+#    xtb     parameter_path   <converter-generated .opxtb file>
+#
+# The xTB backend is an optional external library (libopenqp_xtb_c); set
+# [xtb] parameter_path to a converter-generated .opxtb parameter file
+# (gfn1.opxtb below is a placeholder). The analytic state gradient uses the
+# Z-vector path by default (zvector=true).
+[input]
+system=
+   6   0.000000000   0.000000000   0.667480000
+   6   0.000000000   0.000000000  -0.667480000
+   1   0.000000000   0.922832000   1.237695000
+   1   0.000000000  -0.922832000   1.237695000
+   1   0.000000000   0.922832000  -1.237695000
+   1   0.000000000  -0.922832000  -1.237695000
+charge=0
+runtype=grad
+basis=sto-3g
+functional=
+method=xtb
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=3
+
+[xtb]
+backend=native
+type=mrsf
+parameter_path=gfn1.opxtb
+
+[properties]
+grad=1

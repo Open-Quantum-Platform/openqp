@@ -1,0 +1,3 @@
+mrsf(nstate=2)/bhhlyp/6-31g*
+hess(S0,clean=true)
+geom="../geometries/H2O-781cba5cd72b.xyz"

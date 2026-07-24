@@ -1,0 +1,5 @@
+rks/bhhlyp/6-31g*
+grad
+guess(type=huckel)
+dftgrid(rad_type=becke)
+geom="../geometries/H2O-0381125c86f2.xyz"

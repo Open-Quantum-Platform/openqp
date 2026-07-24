@@ -32,9 +32,9 @@ contains
 !>    5. Assemble the SOC Hamiltonian in the (singlet + 3*triplet) basis
 !>    6. Diagonalize to obtain SOC-corrected adiabatic energies and eigenvectors
 !>
-!>  State ordering in the SOC basis follows the GAMESS convention:
+!>  State ordering in the OpenQP SOC basis is:
 !>    indices 1..ns        -> singlet states S0..S(ns-1)
-!>    indices ns+1..ns+3nt -> triplet Ms sublevels T1(Ms=-1,0,+1), T2(...), ...
+!>    indices ns+1..ns+3nt -> triplet Ms sublevels T0(Ms=-1,0,+1), T1(...), ...
 !>
 !> @param[inout] infos  OQP information struct (basis, atoms, control, tagarray, log)
   subroutine soc_mrsf(infos)
@@ -256,7 +256,7 @@ contains
             abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
 
             write(iw,'(5x,a,i0,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-              'S', ist-1, 'T', jst, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
+              'S', ist-1, 'T', jst-1, trim(trip(ims)), re1e, im1e, re2e, im2e, abs12e
           end do
         end do
       end do
@@ -276,7 +276,7 @@ contains
               abs12e = sqrt((re1e + re2e)**2 + (im1e + im2e)**2)
 
               write(iw,'(5x,a,i0,a,4x,"/",x,a,i0,a,x,4f12.4,f18.12)') &
-                'T', ist, trim(trip(ims_i)), 'T', jst, trim(trip(ims_j)), &
+                'T', ist-1, trim(trip(ims_i)), 'T', jst-1, trim(trip(ims_j)), &
                 re1e, im1e, re2e, im2e, abs12e
             end do
           end do
@@ -432,18 +432,17 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
 
 end subroutine compute_soc_ao
 
-!> @brief Print a packed SOC AO integral matrix in GAMESS-compatible format
+!> @brief Print a packed SOC AO integral matrix in a compact block format
 !> @details
 !>  Writes the lower-triangular AO integral matrix to unit iw in blocks of
-!>  NCOLS=5 columns, with basis function labels and row indices, matching
-!>  the layout used in GAMESS for direct comparison.
+!>  NCOLS=5 columns, with basis function labels and row indices.
 !>
 !> @param[in]  iw     Log file unit
 !> @param[in]  comp   Component label ('LX', 'LY', or 'LZ')
 !> @param[in]  mat    Packed lower-triangular AO matrix (nbf*(nbf+1)/2)
 !> @param[in]  nbf    Number of basis functions
 !> @param[in]  basis  Basis set descriptor (used for bf_label)
-subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
+subroutine print_soc_ao(iw, comp, mat, nbf, basis)
   use basis_tools, only: basis_set
   use precision,   only: dp
   implicit none
@@ -485,7 +484,7 @@ subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
   end do
   write(iw, *)
 
-end subroutine print_soc_ao_gamess
+end subroutine print_soc_ao
 
 !> @brief Transform a packed antisymmetric SOC AO matrix to the MO basis
 !> @details
@@ -546,7 +545,7 @@ end subroutine ao2mo_soc
 !>    t11ab(I,J,t,u)  -- triplet I / triplet J, Ms=+1/-1 component (alpha-beta)
 !>
 !>  The Davidson eigenvectors are first reordered to the Ms-resolved form required
-!>  by the GAMESS SOC convention (see compute_soc_matrix for the state ordering).
+!>  by the OpenQP SOC convention (see compute_soc_matrix for the state ordering).
 !>  The open-shell ROHF reference determines the active MO indices (iO1, iO2, iC).
 !>
 !> @param[in]  bvec_s   Singlet Davidson vectors (xvec_dim x ns)
@@ -832,11 +831,11 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   !
   ! Assemble the full SOC Hamiltonian in the basis of MRSF spin-states.
   !
-  ! Basis ordering (GAMESS convention):
+  ! OpenQP basis ordering:
   !   rows/cols 1..ns              : singlets S_I
   !   rows/cols ns+1..ns+3*nt      : triplets, grouped as
-  !                                  (T_1,Ms=-1),(T_1,Ms=0),(T_1,Ms=+1),
-  !                                  (T_2,Ms=-1),(T_2,Ms=0),(T_2,Ms=+1), ...
+  !                                  (T_0,Ms=-1),(T_0,Ms=0),(T_0,Ms=+1),
+  !                                  (T_1,Ms=-1),(T_1,Ms=0),(T_1,Ms=+1), ...
   !   index helper: itrp(J,Ms) = ns + (J-1)*3 + (Ms+2)
   !
   ! S-T block (only T00aa needed; T00bb = -T00aa by time reversal):
@@ -856,13 +855,13 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   !   <T_I,Ms=0 | h_soc |T_J,Ms=0 > = sum_tu (celm_aa*T110aa + celm_bb*T110bb)
   !   <T_I,Ms=-1| h_soc |T_J,Ms=-1> = sum_tu (celm_aa*Tm11m1aa + celm_bb*Tm11m1bb)
   !
-  ! Spin matrix elements (spnfac absorbed, GAMESS convention):
+  ! Spin matrix elements (spnfac absorbed):
   !   celm_aa = (0, -Lz(t,u)/2)
   !   celm_bb = -celm_aa = (0, +Lz(t,u)/2)
   !   celm_ba = (Ly(t,u)/4, -Lx(t,u)/4)   [S- component; spnfac=0.5 already absorbed]
   !   celm_ab = (Ly(t,u)/4,  Lx(t,u)/4)   [S+ component]
   !
-  ! Note: celm_ba here = sqrt(0.5)*0.5*(Ly-iLx) per GAMESS lines 1108-1110.
+  ! Note: celm_ba here = sqrt(0.5)*0.5*(Ly-iLx).
   !       The extra sqrt(0.5) from the spin ladder operator S- is the spnfac.
   !
   ! Output: hsoc(nstate, nstate), nstate = ns + 3*nt, in Hartree.
@@ -1118,9 +1117,9 @@ subroutine print_soc_eigenvalues(iw, eval, evec, singlet_energies, triplet_energ
         ist    = (i - ns - 1)/3 + 1
         ms_idx = mod(i - ns - 1, 3)
         select case(ms_idx)
-          case(0); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '(-1)'
-          case(1); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '( 0)'
-          case(2); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist, '(+1)'
+          case(0); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '(-1)'
+          case(1); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '( 0)'
+          case(2); write(iw,'(3x,a1,i3,a)', advance='no') 'T', ist-1, '(+1)'
         end select
       end if
       do j = ioff+1, min(ioff+ncols, nstate)
@@ -1221,9 +1220,9 @@ subroutine print_soc_decomposition(iw, eval, evec, ns, nt)
       else
         ms_idx = mod(i - ns - 1, 3)
         select case(ms_idx)
-          case(0); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(-1)'
-          case(1); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '( 0)'
-          case(2); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3+1, '(+1)'
+          case(0); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '(-1)'
+          case(1); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '( 0)'
+          case(2); write(label,'(a1,i0,a)') 'T', (i-ns-1)/3, '(+1)'
         end select
       end if
       write(iw,'(a8,a,f5.1,a,a)', advance='no') &

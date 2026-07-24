@@ -64,7 +64,7 @@ unset(_oqp_env_cc)
 unset(_oqp_env_cxx)
 
 project(Open-Quantum-Package
-  VERSION 1.2.0
+  VERSION 1.2.1
   LANGUAGES C CXX Fortran)
 
 set(CMAKE_Fortran_STANDARD 2003)
@@ -73,6 +73,15 @@ include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
+option(ENABLE_OPENQP_DFTB
+    "Convenience hook: also build openqp-dftb and stage its libopenqp_dftb_c shared library (never linked into liboqp)" OFF)
+set(OPENQP_DFTB_GIT_REPOSITORY "https://github.com/Open-Quantum-Platform/openqp-dftb.git"
+    CACHE STRING "Git repository used when ENABLE_OPENQP_DFTB builds openqp-dftb.")
+set(OPENQP_DFTB_GIT_TAG "main"
+    CACHE STRING "Git ref used when ENABLE_OPENQP_DFTB builds openqp-dftb.")
+set(OPENQP_DFTB_SOURCE_DIR "" CACHE PATH
+    "Optional local openqp-dftb source checkout for ENABLE_OPENQP_DFTB builds.")
+mark_as_advanced(OPENQP_DFTB_GIT_REPOSITORY OPENQP_DFTB_GIT_TAG OPENQP_DFTB_SOURCE_DIR)
 option(OQP_REUSE_EXTERNALS
        "Reuse bundled external dependency builds across fresh OpenQP build directories"
        ON)

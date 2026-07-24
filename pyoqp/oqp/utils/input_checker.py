@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import math
 import multiprocessing
 import os
+import re
 from typing import Any
 
 from oqp.utils.mpi_utils import MPIManager
@@ -18,7 +19,7 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-METHODS = {"hf", "tdhf", "mp2"}
+METHODS = {"hf", "tdhf", "mp2", "dftb", "xtb"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 MP2_VARIANTS = {
@@ -30,6 +31,52 @@ MP2_VARIANTS = {
     "scs-mi", "scs-mi-mp2",
     "custom",
 }
+DFTB_BACKENDS = {"auto", "native", "probe"}
+DFTB_TYPES = {
+    "auto", "ground", "dftb", "dftb0", "ground_noscc", "noscc",
+    "tddftb", "tda", "td-dftb", "sf", "sftddftb", "sf-tddftb",
+    "mrsf", "mrsftddftb", "mrsf-tddftb",
+}
+DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
+
+DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
+               "dftb+", "dftbplus", "dftb_plus"}
+# Production defaults when no model= is named and no preset-locked key is
+# tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; the other
+# OPEN-SHELL SCC routes (SF, open-shell ground) run the DFTB+ compatibility
+# protocol.  Closed-shell routes (singlet ground, TD-DFTB) and DFTB0 stay
+# preset-free: LC-DFTB2 is not implemented for the restricted reference, and
+# the native library rejects lc_ground_state there.
+DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
+DFTB_MODEL_DEFAULT_OPEN_SHELL = "dftb+"
+# Keys a [dftb] model preset fixes; the checker refuses to combine them with
+# model= (the preset overrides them inside openqp-dftb, so a user-tuned value
+# would be silently discarded).  ``scc_mixer`` is intentionally excluded:
+# selecting the first-try convergence algorithm (Broyden versus charge/spin
+# TRAH) is a numerical recovery choice, and the native C API applies that
+# explicit override after loading the operator preset.
+DFTB_MODEL_LOCKED_KEYS = (
+    "omega", "cam_alpha", "cam_beta", "lc_gamma", "lc_ground_state",
+    "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
+    "response_cam_beta", "c_mrsf", "c_mrsf_oo", "response_global_hybrid",
+    "onsite_exchange_scale", "spc", "spc_coco", "spc_ovov", "spc_coov",
+    "onsite_ss", "onsite_sp", "onsite_pp",
+    "mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv",
+    # The preset also fixes the numerical protocol (openqp-dftb
+    # openqp_dftb_apply_dtcam_tb_preset): Broyden mixing, SCC budget and
+    # tolerance, the Davidson response solver, and the Z-vector gradient
+    # path. Keys the preset does NOT touch (response_tolerance,
+    # response_max_iterations, response_max_subspace, nstate, ...) stay
+    # user-tunable and are deliberately absent here.
+    "scc_mixing", "scc_history", "scc_max_step",
+    "scc_tolerance", "max_scc_iterations", "response_solver", "zvector",
+)
+# New-generation operator keys the probe CLI never forwards (native only).
+DFTB_NATIVE_ONLY_KEYS = (
+    "c_mrsf", "c_mrsf_oo", "response_global_hybrid", "onsite_exchange_scale",
+    "w_scale", "response_w_scale", "response_omega", "response_cam_alpha",
+    "response_cam_beta", "onsite_ss", "onsite_sp", "onsite_pp",
+)
 GUESS_TYPES = {"huckel", "modhuckel", "hcore", "json", "auto", "sap", "minao"}
 SCF_CONVERGERS = {"diis", "soscf", "trah", "auto", "ml"}
 OPTIONAL_SCF_CONVERGERS = SCF_CONVERGERS | {"none", ""}
@@ -43,14 +90,14 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"penalty", "ubp", "hybrid"}
+MECI_SEARCH = {"auto", "penalty", "ubp", "hybrid", "baeka"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, or method=dftb for the optional external DFTB+ backend.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=dftb for the optional OpenQP-DFTB backend, or method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend.",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -63,6 +110,10 @@ WIKI_HELP = {
     "pcm.mode": "Use mode=reference_scf for MRSF-compatible PCM on the RHF/ROHF reference. post_state_correction and reference_scf_plus_post_state are planned perturbative extensions.",
     "optimize.lib": "oqp is the default optimizer backend: the built-in NumPy/SciPy optimizer (redundant internals/DLC/TRIC + restricted-step RFO) supporting optimize, ts, meci, mecp, tci, neb, irc, and mep. geometric (the external geomeTRIC package) supports optimize, MECI, MECP, TS, IRC, and NEB. scipy supports optimize, meci, mecp, and mep.",
     "nac.states": "Use state pairs such as 1 2,2 3 for NAC calculations. Each index must be a TDHF excited state.",
+    "dftb.parameter_path": "Set [dftb] parameter_path to an .opdftb file or an SKF parameter directory; OPENQP_DFTB_PARAMETER_PATH may also provide it. When neither is set, the bundled openqp-dftb parameter set (OB2W0PT3 with the official spinw.txt) is used automatically if installed.",
+    "dftb.namd": "OpenQP-DFTB can provide NAMD surface data through runtype=data. NAC/NACME requires an implemented DFTB state-overlap backend.",
+    "xtb.parameter_path": "Set [xtb] parameter_path to an .opxtb parameter file (converter-generated); OPENQP_XTB_PARAMETER_PATH may also provide it.",
+    "xtb.namd": "OpenQP-xTB can provide NAMD surface data through runtype=data. NAC/NACME requires an implemented xTB state-overlap backend.",
 }
 
 
@@ -365,8 +416,39 @@ def _iter_coordinate_lines(system: str) -> tuple[list[str], str | None]:
 
     first_line = lines[0].strip()
     if first_line:
+        # A QM/MM reference such as ``mol.pdb 0 1 2`` also has three finite
+        # numeric fields after its first token.  Recognize supported geometry
+        # filenames before applying the inline-coordinate heuristic.
+        path_token, _ = _split_geometry_reference(first_line)
+        if path_token.lower().endswith((".xyz", ".pdb")):
+            return [], first_line
+
+        fields = first_line.split()
+        try:
+            is_coordinate = len(fields) >= 4 and all(
+                math.isfinite(float(value)) for value in fields[1:4]
+            )
+        except ValueError:
+            is_coordinate = False
+        if is_coordinate:
+            return [line for line in lines if line.strip()], None
         return [], first_line
     return [line for line in lines[1:] if line.strip()], None
+
+
+def _split_geometry_reference(reference: str) -> tuple[str, list[str]]:
+    """Split an XYZ/PDB reference without breaking paths that contain spaces."""
+    stripped = reference.strip()
+    lower = stripped.lower()
+    for suffix in (".xyz", ".pdb"):
+        end = lower.find(suffix)
+        if end >= 0:
+            end += len(suffix)
+            path = stripped[:end].strip()
+            trailing = stripped[end:].strip().split()
+            return path, trailing
+    tokens = stripped.split()
+    return (tokens[0], tokens[1:]) if tokens else ("", [])
 
 
 def _max_state(values: list[Any]) -> int:
@@ -478,8 +560,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
         # runs append the QM-region atom indices after a .pdb path
         # (e.g. "mol.pdb 9 10 17-19"), so validate the path token alone rather
         # than the whole line (which never exists as a file).
-        tokens = xyz_path.split()
-        path_token = tokens[0]
+        path_token, trailing_tokens = _split_geometry_reference(xyz_path)
         resolved = os.path.abspath(path_token)
         if path_token.lower().endswith(".pdb"):
             if not os.path.exists(resolved):
@@ -492,7 +573,7 @@ def _check_system(config: dict[str, Any], report: CheckReport) -> None:
                     wiki=WIKI_HELP["input.system"],
                 )
             else:
-                _check_qm_atom_indices(tokens[1:], report)
+                _check_qm_atom_indices(trailing_tokens, report)
         elif not os.path.exists(resolved):
             report.add(
                 "ERROR",
@@ -788,6 +869,673 @@ def _check_pcm(config: dict[str, Any], report: CheckReport) -> None:
                 action="Use runtype=energy; gradients/optimizations require a separate analytic-gradient implementation.",
                 wiki=WIKI_HELP["pcm.enabled"],
             )
+
+
+def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
+    """True when a [dftb] key differs from its schema default (i.e. the user
+    tuned it). The parsed config always carries defaults, so presence alone
+    cannot distinguish user intent."""
+    from oqp.molecule.oqpdata import OQP_CONFIG_SCHEMA
+    spec = OQP_CONFIG_SCHEMA.get("dftb", {}).get(key)
+    if spec is None:
+        return False
+    value = _get(config, "dftb", key, None)
+    if value is None:
+        return False
+    default_raw = spec.get("default", "")
+    try:
+        return abs(float(value) - float(default_raw)) > 1e-300
+    except (TypeError, ValueError):
+        return str(value).strip().lower() != str(default_raw).strip().lower()
+
+
+def apply_dftb_model_default(config: dict[str, Any]) -> str:
+    """Materialize the production default [dftb] model preset.
+
+    MRSF-TDDFTB defaults to the published DTCAM-TB operator; the other
+    open-shell SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
+    compatibility protocol.  Closed-shell routes (singlet ground, TD-DFTB)
+    and DFTB0 stay preset-free because the restricted reference has no
+    long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
+    and any tuned preset-locked key implies manual operator control (legacy
+    inputs keep meaning what they said).  Returns the effective model string.
+    """
+    if _as_lower(_get(config, "input", "method", "hf")) != "dftb":
+        return ""
+    dftb = config.get("dftb")
+    if not isinstance(dftb, dict):
+        return ""
+    model = _as_lower(_get(config, "dftb", "model", ""))
+    if model == "none":
+        dftb["model"] = ""
+        return ""
+    if model:
+        return model
+    # Presets are resolved inside the native library; the probe backend
+    # cannot carry them, so it keeps the explicit-keys route.
+    if _as_lower(_get(config, "dftb", "backend", "native")) not in {
+            "native", "auto"}:
+        return ""
+    from oqp.utils.state_labels import resolved_dftb_type  # noqa: PLC0415
+    route = resolved_dftb_type(config)
+    if any(_dftb_key_customized(config, key)
+           for key in DFTB_MODEL_LOCKED_KEYS):
+        return ""
+    if route == "mrsf":
+        dftb["model"] = DFTB_MODEL_DEFAULT_MRSF
+    elif route == "sf" or (
+            route == "ground"
+            and _get(config, "dftb", "reference_multiplicity", 0)
+            and int(_get(config, "dftb", "reference_multiplicity", 0)) > 1):
+        dftb["model"] = DFTB_MODEL_DEFAULT_OPEN_SHELL
+    else:
+        # Closed-shell routes (singlet ground, TD-DFTB) and DFTB0: the
+        # restricted reference has no LC yet, so no preset default.
+        return ""
+    return dftb["model"]
+
+
+def _check_dftb(config: dict[str, Any], report: CheckReport) -> None:
+    _check_tb(config, report, section="dftb")
+
+
+def _check_xtb(config: dict[str, Any], report: CheckReport) -> None:
+    _check_tb(config, report, section="xtb")
+
+
+def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> None:
+    """Validate the [dftb]/[xtb] TB backend section (shared option family)."""
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method != section:
+        return
+    is_xtb = section == "xtb"
+    disp = "OpenQP-xTB" if is_xtb else "OpenQP-DFTB"     # display name
+    short = "xTB" if is_xtb else "DFTB"                  # terse family name
+    lib_stem = "libopenqp_xtb_c" if is_xtb else "libopenqp_dftb_c"
+
+    backend = _as_lower(_get(config, section, "backend", "native"))
+    dftb_type = _as_lower(_get(config, section, "type", "auto"))
+    # Canonicalize response-type aliases so the runtype/NAMD/SOC gates below see
+    # a single spelling per family (e.g. mrsftddftb/mrsf-tddftb -> mrsf).
+    _DFTB_TYPE_CANON = {
+        "dftb": "ground", "dftb0": "ground_noscc", "noscc": "ground_noscc",
+        "td-dftb": "tddftb", "tda": "tddftb",
+        "sftddftb": "sf", "sf-tddftb": "sf",
+        "mrsftddftb": "mrsf", "mrsf-tddftb": "mrsf",
+    }
+    dftb_type_canon = _DFTB_TYPE_CANON.get(dftb_type, dftb_type)
+    parameter_path = _get(config, section, "parameter_path", "")
+    executable = _get(config, section, "executable", "")
+    runtype = _as_lower(_get(config, "input", "runtype", "energy"))
+    td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    nstate = _get(config, "tdhf", "nstate", 1)
+    grad_states = _as_list(_get(config, "properties", "grad", []))
+    istate = _get(config, "optimize", "istate", 0)
+    jstate = _get(config, "optimize", "jstate", 0)
+
+    allowed_backends = {"auto", "native"} if is_xtb else DFTB_BACKENDS
+    if backend not in allowed_backends:
+        message = (f"{disp} does not support the probe backend (DFTB-only "
+                   "developer fallback)." if is_xtb and backend == "probe"
+                   else f"Unknown {disp} backend.")
+        action_tail = ("." if is_xtb
+                       else "; probe is only an explicit developer fallback.")
+        report.add(
+            "ERROR",
+            f"{section}.backend",
+            message,
+            value=backend,
+            expected=", ".join(sorted(allowed_backends)),
+            action=f"Use native (loads the standalone {lib_stem} shared library){action_tail}",
+        )
+
+    if backend == "probe" and not is_xtb and runtype in {"nacme", "nac", "namd", "soc"}:
+        report.add(
+            "ERROR",
+            f"{section}.backend",
+            f"{disp} nacme/nac/namd/soc require the native backend.",
+            value=backend,
+            expected="native",
+            action=f"Use [{section}] backend=native: the probe executable only returns "
+                   "energies/gradients and cannot publish the MO/response-vector "
+                   "tags or the state-overlap/SOC entry points these workflows need.",
+        )
+
+    if backend == "probe" and not is_xtb:
+        # The probe executable receives only a fixed subset of scalar controls;
+        # options it cannot forward would be silently ignored, so reject them
+        # rather than run with probe defaults.
+        _probe_unforwarded = []
+        if int(_get(config, section, "target_multiplicity", 1)) != 1:
+            _probe_unforwarded.append("target_multiplicity")
+        for _ch in ("spc_coco", "spc_ovov", "spc_coov"):
+            if float(_get(config, section, _ch, -999.0)) != -999.0:
+                _probe_unforwarded.append(_ch)
+        for _sh in ("mrsf_shift_oo", "mrsf_shift_co", "mrsf_shift_ov", "mrsf_shift_cv"):
+            if float(_get(config, section, _sh, 0.0)) != 0.0:
+                _probe_unforwarded.append(_sh)
+        _lc = _get(config, section, "lc_ground_state", False)
+        if (_lc is True) or (str(_lc).lower() in ("true", "1", "on", "yes")):
+            _probe_unforwarded.append("lc_ground_state")
+        _zv = _get(config, section, "zvector", True)
+        if (_zv is False) or (str(_zv).lower() in ("false", "0", "off", "no")):
+            _probe_unforwarded.append("zvector")
+        # Response-solver / reference controls the probe CLI also never forwards.
+        if float(_get(config, section, "response_tolerance", 1.0e-6)) != 1.0e-6:
+            _probe_unforwarded.append("response_tolerance")
+        if int(_get(config, section, "response_max_iterations", 50)) != 50:
+            _probe_unforwarded.append("response_max_iterations")
+        if int(_get(config, section, "response_max_subspace", 100)) != 100:
+            _probe_unforwarded.append("response_max_subspace")
+        if str(_get(config, section, "response_solver", "auto")).lower() != "auto":
+            _probe_unforwarded.append("response_solver")
+        if int(_get(config, section, "reference_multiplicity", 0)) != 0:
+            _probe_unforwarded.append("reference_multiplicity")
+        _sc = _get(config, section, "spin_complete", True)
+        if (_sc is False) or (str(_sc).lower() in ("false", "0", "off", "no")):
+            _probe_unforwarded.append("spin_complete")
+        for _op in DFTB_NATIVE_ONLY_KEYS:
+            if _dftb_key_customized(config, _op):
+                _probe_unforwarded.append(_op)
+        if _probe_unforwarded:
+            report.add(
+                "ERROR",
+                f"{section}.backend",
+                f"{disp} backend=probe cannot forward these options to the "
+                "probe executable; they would be silently ignored.",
+                value=", ".join(_probe_unforwarded),
+                expected="native",
+                action=f"Use [{section}] backend=native for target_multiplicity, "
+                       "per-channel spc_*, mrsf_shift_*, lc_ground_state, "
+                       "zvector=false, or the DTCAM operator keys.",
+            )
+
+    model = _as_lower(_get(config, "dftb", "model", ""))
+    if model == "none":
+        # Explicit opt-out of the SF/MRSF dtcam-tb default: explicit-keys route.
+        model = ""
+    if model:
+        if model not in DFTB_MODELS:
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "Unknown OpenQP-DFTB operator model preset.",
+                value=model,
+                expected=", ".join(sorted(DFTB_MODELS)),
+                action="Use model=dtcam-tb (DTCAM-TB paper vector), "
+                       "model=dftb+ (DFTB+ default LC-DFTB protocol), or "
+                       "omit model and set the operator keys individually.",
+            )
+        if backend == "probe":
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "Operator model presets require the native backend.",
+                value=backend,
+                expected="native",
+                action="Use backend=native (presets are resolved inside openqp-dftb).",
+            )
+        # LC-DFTB2 exists only for the spin-polarized (ROKS) reference; the
+        # native library rejects lc_ground_state on the closed-shell
+        # restricted path, so surface that at input time for LC presets.
+        if model in {"dftb+", "dftbplus", "dftb_plus"} and \
+                dftb_type_canon in {"ground", "ground_noscc", "tddftb"}:
+            reference_multiplicity = _get(
+                config, "dftb", "reference_multiplicity", 0)
+            try:
+                reference_multiplicity = int(reference_multiplicity)
+            except (TypeError, ValueError):
+                reference_multiplicity = 0
+            if reference_multiplicity <= 1:
+                report.add(
+                    "ERROR",
+                    "dftb.model",
+                    "model=dftb+ sets an LC-DFTB2 (lc_ground_state) "
+                    "reference, which is only implemented for the "
+                    "spin-polarized (ROKS) path.",
+                    value=f"{model} with closed-shell type={dftb_type_canon}",
+                    expected="an SF/MRSF route or reference_multiplicity > 1",
+                    action="Use type=sf/mrsf, set reference_multiplicity > 1, "
+                           "or drop model= (closed-shell runs stay preset-free).",
+                )
+        conflicting = [
+            key for key in DFTB_MODEL_LOCKED_KEYS
+            if _dftb_key_customized(config, key)
+        ]
+        if conflicting:
+            report.add(
+                "ERROR",
+                "dftb.model",
+                "A model preset fixes the operator and numerical protocol; "
+                "only the explicit SCC mixer override is allowed.",
+                value=", ".join(conflicting),
+                expected=f"model={model} with no tuned operator keys",
+                action="Remove the listed [dftb] keys or drop model= to tune manually.",
+            )
+
+    scf_prop = _as_list(_get(config, "properties", "scf_prop", []))
+    if scf_prop:
+        report.add(
+            "ERROR",
+            "properties.scf_prop",
+            f"{disp} does not implement SCF property analyses "
+            "(mulliken/lowdin/nmr/...); they dispatch to Gaussian-basis "
+            f"routines the {short} adapter never initializes.",
+            value=", ".join(str(v) for v in scf_prop),
+            expected=f"omit properties.scf_prop for method={section}",
+            action="Remove properties.scf_prop, or use an all-electron method for SCF properties.",
+        )
+
+    if bool(_get(config, "pcm", "enabled", False)):
+        report.add(
+            "ERROR",
+            "pcm.enabled",
+            f"{disp} does not consume a PCM solvent reaction field; the {short} "
+            "energy/gradient path returns directly from the adapter and never "
+            "calls ddX/PCM, so enabling PCM would silently produce gas-phase "
+            f"{short} results instead of solvated ones.",
+            value=True,
+            expected=f"pcm.enabled=false for method={section}",
+            action=f"Disable [pcm] enabled for method={section}, or use an all-electron "
+                   "method for PCM solvation.",
+            wiki=WIKI_HELP["pcm.enabled"],
+        )
+
+    if dftb_type not in DFTB_TYPES:
+        report.add(
+            "ERROR",
+            f"{section}.type",
+            f"Unknown {disp} calculation type.",
+            value=dftb_type,
+            expected="ground, tddftb, sf, mrsf, or auto",
+            action="Use auto to derive the DFTB response type from [tdhf] type, or set it explicitly.",
+        )
+
+    explicit_response_types = {
+        "tddftb": {"rpa", "tda"},
+        "sf": {"sf"},
+        "mrsf": {"mrsf"},
+    }
+    compatible_tdhf_types = explicit_response_types.get(dftb_type_canon)
+    if (
+        dftb_type != "auto"
+        and compatible_tdhf_types is not None
+        and td_type not in compatible_tdhf_types
+    ):
+        report.add(
+            "ERROR",
+            "dftb.type",
+            "Explicit OpenQP-DFTB response type conflicts with [tdhf] type.",
+            value={"dftb.type": dftb_type, "tdhf.type": td_type},
+            expected="tdhf.type=" + "/".join(sorted(compatible_tdhf_types)),
+            action="Align [dftb] type with [tdhf] type, or use [dftb] type=auto.",
+        )
+
+    auto_ground = (
+        dftb_type == "auto"
+        and (
+            (runtype in {"energy", "grad"} and not any(int(state) > 0 for state in grad_states))
+            or (runtype in {"optimize", "mep"} and int(istate) == 0)
+        )
+    )
+    conventional_tddftb = dftb_type_canon == "tddftb" or (
+        dftb_type == "auto" and td_type in {"rpa", "tda"} and not auto_ground
+    )
+    if conventional_tddftb:
+        target_mult = int(_get(config, "dftb", "target_multiplicity", 1))
+        reference_mult = int(_get(config, "dftb", "reference_multiplicity", 0))
+        td_mult = int(_get(config, "tdhf", "multiplicity", 1))
+        if target_mult != 1 or td_mult != 1 or reference_mult not in {0, 1}:
+            report.add(
+                "ERROR",
+                "dftb.target_multiplicity",
+                "Conventional TD-DFTB currently implements a closed-shell singlet "
+                "reference and singlet TDA response only.",
+                value={
+                    "reference": reference_mult or 1,
+                    "dftb_target": target_mult,
+                    "tdhf_target": td_mult,
+                },
+                expected="reference and target multiplicity 1",
+                action="Use SF-TDDFTB or MRSF-TDDFTB for triplet-state calculations.",
+            )
+
+    lc_gamma = _as_lower(_get(config, section, "lc_gamma", "ok" if is_xtb else "yukawa"))
+    lc_gamma_allowed = {"yukawa", "erf", "ok"} if is_xtb else {"yukawa", "erf"}
+    if lc_gamma not in lc_gamma_allowed:
+        report.add(
+            "ERROR",
+            f"{section}.lc_gamma",
+            f"Unknown {disp} long-range gamma kernel.",
+            value=lc_gamma,
+            expected="yukawa, erf, or ok" if is_xtb else "yukawa or erf",
+            action=("Use ok (Ohno-Klopman, the GFN1 default), yukawa, or erf (erf(omega R)/R)."
+                    if is_xtb else
+                    "Use yukawa (DFTB+ LC-DFTB2 Yukawa-Slater gamma) or erf (erf(omega R)/R)."),
+        )
+
+    response_solver = _as_lower(_get(config, section, "response_solver", "auto"))
+    if response_solver not in {"auto", "dense", "davidson"}:
+        report.add(
+            "ERROR",
+            f"{section}.response_solver",
+            f"Unknown {disp} response solver.",
+            value=response_solver,
+            expected="auto, dense, or davidson",
+            action="Use auto unless you need to force a specific eigensolver.",
+        )
+
+    print_level = int(_get(config, "dftb", "print_level", 1))
+    if print_level not in {0, 1, 2}:
+        report.add(
+            "ERROR",
+            "dftb.print_level",
+            "Unknown OpenQP-DFTB native trace level.",
+            value=print_level,
+            expected="0, 1, or 2",
+            action="Use 0 for quiet, 1 for stage summaries, or 2 for iteration detail.",
+        )
+
+    target_multiplicity = int(_get(config, section, "target_multiplicity", 1))
+    if target_multiplicity not in (1, 3):
+        report.add(
+            "ERROR",
+            f"{section}.target_multiplicity",
+            f"{disp} MRSF/SF response states must be singlet or triplet.",
+            value=target_multiplicity,
+            expected="1 or 3",
+            action="Use 1 for singlet response states or 3 for triplet response states.",
+        )
+
+    param_env = "OPENQP_XTB_PARAMETER_PATH" if is_xtb else "OPENQP_DFTB_PARAMETER_PATH"
+    if not parameter_path and not os.environ.get(param_env):
+        if is_xtb:
+            # openqp-xtb ships no bundled default parameter set; an explicit
+            # converter-generated .opxtb source is always required.
+            report.add(
+                "ERROR",
+                f"{section}.parameter_path",
+                f"{disp} requires an explicit parameter source.",
+                expected=".opxtb parameter file (converter-generated)",
+                action=f"Set [{section}] parameter_path, or export {param_env}.",
+                wiki=WIKI_HELP[f"{section}.parameter_path"],
+            )
+        else:
+            # The openqp-dftb wheel ships a bundled default parameter set
+            # (OB2W0PT3 with the official spinw.txt); when it is resolvable the
+            # runtime uses it automatically and no explicit source is required.
+            bundled = None
+            try:
+                import openqp_dftb  # noqa: PLC0415
+
+                bundled = openqp_dftb.default_parameter_path()
+            except (ImportError, AttributeError, FileNotFoundError):
+                bundled = None
+            if not bundled:
+                report.add(
+                    "ERROR",
+                    "dftb.parameter_path",
+                    "OpenQP-DFTB could not resolve a parameter source.",
+                    expected="bundled parameters, an .opdftb file, or an SKF directory",
+                    action=(
+                        "Install an openqp-dftb wheel with bundled parameters, set "
+                        "[dftb] parameter_path, or export OPENQP_DFTB_PARAMETER_PATH."
+                    ),
+                    wiki=WIKI_HELP["dftb.parameter_path"],
+                )
+
+    if backend == "probe" and not is_xtb and not executable and not os.environ.get("OPENQP_DFTB_STATE_GRADIENT_PROBE"):
+        report.add(
+            "WARNING",
+            f"{section}.executable",
+            "Probe backend selected without an explicit probe executable.",
+            action="Set [dftb] executable or put openqp_dftb_state_gradient_probe on PATH.",
+        )
+
+    for path, value in (
+        (f"{section}.scc_tolerance", _get(config, section, "scc_tolerance", 1.0e-8)),
+        (f"{section}.response_tolerance", _get(config, section, "response_tolerance", 1.0e-6)),
+        (f"{section}.scc_mixing", _get(config, section, "scc_mixing", 0.35)),
+    ):
+        if value <= 0.0:
+            report.add(
+                "ERROR",
+                path,
+                f"{short} numeric option must be positive.",
+                value=value,
+                action="Use a positive value.",
+            )
+
+    for path, value in (
+        (f"{section}.omega", _get(config, section, "omega", 0.3)),
+        (f"{section}.cam_alpha", _get(config, section, "cam_alpha", 0.0)),
+        (f"{section}.cam_beta", _get(config, section, "cam_beta", 1.0)),
+    ):
+        if value < 0.0:
+            report.add(
+                "ERROR",
+                path,
+                f"{short} range-separation/CAM option must be non-negative.",
+                value=value,
+                action="Use zero or a positive value.",
+            )
+
+    if _get(config, section, "scc_mixing", 0.35) > 1.0:
+        report.add(
+            "ERROR",
+            f"{section}.scc_mixing",
+            "SCC mixing must be in the interval (0, 1].",
+            value=_get(config, section, "scc_mixing", 0.35),
+            action="Reduce the population-vector mixing fraction.",
+        )
+
+    for path in ("scc_history", "max_scc_iterations", "response_max_iterations", "response_max_subspace", "timeout"):
+        value = _get(config, section, path, 1)
+        if value <= 0:
+            report.add(
+                "ERROR",
+                f"{section}.{path}",
+                f"{short} integer option must be positive.",
+                value=value,
+                action="Use a positive integer.",
+            )
+
+    if _get(config, section, "scc_max_step", 0.5) < 0.0:
+        report.add(
+            "ERROR",
+            f"{section}.scc_max_step",
+            "SCC mixer max step must be non-negative.",
+            value=_get(config, section, "scc_max_step", 0.5),
+            action="Use zero to disable the cap or a positive cap.",
+        )
+
+    if _get(config, section, "spc", 0.5) < 0.0 and abs(_get(config, section, "spc", 0.5) + 1.0) > 1.0e-12:
+        report.add(
+            "ERROR",
+            f"{section}.spc",
+            "MRSF spin-pair coupling must be non-negative, or -1 to inherit the CAM exchange fraction.",
+            value=_get(config, section, "spc", 0.5),
+            action=f"Use 0.5 for the current {disp} production calibration.",
+        )
+
+    if _as_lower(_get(config, section, "scc_mixer", "auto")) not in DFTB_SCC_MIXERS:
+        report.add(
+            "ERROR",
+            f"{section}.scc_mixer",
+            f"Unknown {short} SCC mixer.",
+            value=_get(config, section, "scc_mixer", "auto"),
+            expected=", ".join(sorted(DFTB_SCC_MIXERS)),
+            action="Use auto, anderson, broyden, diis, trust/trah, or linear.",
+        )
+
+    # QM/MM (ESPF/OpenMM) with the DFTB backend: the openqp-dftb library takes
+    # the MM electrostatic potential directly into the SCC Hamiltonian
+    # (mol.dftb_external_potential), so the OpenQpQMMM/QMMM_MD drivers support
+    # method=dftb with full-ESPF electrostatic or mechanical embedding
+    # (including hydrogen link atoms across covalent QM/MM cuts). The legacy
+    # 'split' scheme (QM point charges routed through OpenMM) is rejected: it
+    # would double-count the coupling already inside the embedded DFTB energy.
+    # runtype=namd with method=dftb stays blocked by the generic NAMD gate
+    # until a DFTB state-overlap/NACME backend exists.
+    if bool(_get(config, "input", "qmmm_flag", False)):
+        embedding = str(
+            _get(config, "qmmm", "embedding", "electrostatic") or "electrostatic"
+        ).strip().lower()
+        if embedding == "split":
+            report.add(
+                "ERROR",
+                "qmmm.embedding",
+                f"{disp} QM/MM does not support the legacy 'split' embedding.",
+                value=embedding,
+                expected="electrostatic, espf, or mechanical",
+                action="Use [qmmm] embedding=electrostatic (full-ESPF scheme) "
+                       f"or mechanical with method={section}.",
+            )
+        if runtype == "namd":
+            soc_val = _get(config, "md", "soc", False)
+            soc_on = (soc_val is True) or (str(soc_val).lower() in ("true", "1", "on", "yes"))
+            if soc_on:
+                report.add(
+                    "ERROR",
+                    "md.soc",
+                    f"{disp} SOC-NAMD with QM/MM embedding is not yet wired: "
+                    "the SOC electronic/gradient path still uses the native ESPF "
+                    f"hcore/gradient hooks, which the {short} backend does not consume.",
+                    value="soc=true with qmmm_flag=true",
+                    expected=f"gas-phase SOC-NAMD (qmmm_flag=false), or non-SOC {short} QM/MM NAMD",
+                    action=f"Disable [md] soc for {short} QM/MM NAMD, or run SOC-NAMD without QM/MM.",
+                )
+            if embedding == "mechanical":
+                report.add(
+                    "ERROR",
+                    "qmmm.embedding",
+                    f"{disp} QM/MM NAMD requires full-ESPF electrostatic embedding; "
+                    "the mechanical path raises at the first electronic step.",
+                    value=embedding,
+                    expected="electrostatic",
+                    action=f"Use [qmmm] embedding=electrostatic for {short} QM/MM NAMD.",
+                )
+
+    allowed_runtype = {"energy", "grad", "optimize", "meci", "mep", "data"}
+    td_type_for_namd = _as_lower(_get(config, "tdhf", "type", "rpa"))
+    if td_type_for_namd == "mrsf" and dftb_type_canon in {"auto", "mrsf"}:
+        # MRSF-TDDFTB has a state-overlap (TLF) backend and one-center SOC:
+        # overlap-based couplings and surface hopping are available.
+        allowed_runtype |= {"nac", "nacme", "namd", "soc"}
+    if runtype in {"nac", "nacme", "bp"} and runtype not in allowed_runtype:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            f"{disp} NAMD coupling requires the MRSF state-overlap backend of the {short} response.",
+            value=runtype,
+            expected=f"tdhf.type=mrsf (and {section}.type auto/mrsf) for nac/nacme; bp is not available",
+            action="Use tdhf.type=mrsf for DFTB nonadiabatic couplings.",
+            wiki=WIKI_HELP[f"{section}.namd"],
+        )
+    elif runtype not in allowed_runtype:
+        report.add(
+            "ERROR",
+            "input.runtype",
+            f"{disp} is currently wired only through energy/gradient-driven workflows.",
+            value=runtype,
+            expected=", ".join(sorted(allowed_runtype)),
+            action=f"Use energy, grad, data, optimize, meci, or mep until Hessian/NAC/SOC {short} hooks are implemented.",
+        )
+
+    # [properties] nac also routes into the NAC state-overlap path (e.g. inside
+    # runtype=data), not only the standalone nac/nacme runtypes gated above.
+    props_nac = _as_list(_get(config, "properties", "nac", []))
+    if props_nac and "nac" not in allowed_runtype and runtype not in {"nac", "nacme", "bp"}:
+        report.add(
+            "ERROR",
+            "properties.nac",
+            "OpenQP-DFTB NAC requested via [properties] nac requires the "
+            "MRSF-TDDFTB state-overlap backend.",
+            value=", ".join(str(v) for v in props_nac),
+            expected="tdhf.type=mrsf (and dftb.type auto/mrsf)",
+            action="Use tdhf.type=mrsf for DFTB nonadiabatic couplings, or drop properties.nac.",
+        )
+
+    ground_like = dftb_type in {"ground", "dftb", "dftb0", "ground_noscc", "noscc"}
+    if dftb_type == "auto" and runtype in {"optimize", "mep"} and int(istate) == 0:
+        ground_like = True
+
+    if not ground_like and td_type not in {"rpa", "tda", "sf", "mrsf"}:
+        report.add(
+            "ERROR",
+            "tdhf.type",
+            ("OpenQP-xTB response hooks support TD/TDA, SF, and MRSF responses."
+             if is_xtb else
+             "OpenQP-DFTB response hooks support TDDFTB/TDA, SF-TDDFTB, and MRSF-TDDFTB."),
+            value=td_type,
+            expected="rpa/tda, sf, or mrsf",
+            action=f"Set [tdhf] type=tda, sf, or mrsf, or set [{section}] type=ground for S0 {short}.",
+        )
+
+    if not ground_like:
+        try:
+            nstate_val = int(nstate)
+        except (TypeError, ValueError):
+            nstate_val = 0
+        if nstate_val < 1:
+            report.add(
+                "ERROR",
+                "tdhf.nstate",
+                f"{disp} excited-state response needs at least one root.",
+                value=nstate,
+                expected="tdhf.nstate >= 1",
+                action="Set [tdhf] nstate to the number of response roots (>= 1).",
+            )
+
+    if is_xtb:
+        model = _as_lower(_get(config, section, "model", "gfn1"))
+        if model not in {"gfn1"}:
+            report.add(
+                "ERROR",
+                "xtb.model",
+                "Unknown OpenQP-xTB model.",
+                value=model,
+                expected="gfn1",
+                action="Use model=gfn1 (LC-GFN1-xTB); the DFTB2 model lives in the [dftb] backend.",
+            )
+        spin_scale = _get(config, section, "spin_scale", 1.0)
+        if spin_scale <= 0.0:
+            report.add(
+                "ERROR",
+                "xtb.spin_scale",
+                "xTB spin-polarization scale must be positive.",
+                value=spin_scale,
+                action="Use spin_scale > 0 (1.0 = unscaled spGFN1 W constants).",
+            )
+
+    requested = []
+    if runtype in {"grad", "data"}:
+        requested.extend(grad_states)
+    if runtype in {"optimize", "mep"}:
+        requested.append(istate)
+    if runtype == "meci":
+        requested.extend([istate, jstate])
+    max_requested = _max_state(requested)
+
+    if ground_like and max_requested > 0:
+        report.add(
+            "ERROR",
+            f"{section}.type",
+            f"Ground-state {short} can only target state 0.",
+            value={"type": dftb_type, "requested_state": max_requested},
+            expected="state 0",
+            action=f"Use [{section}] type=tddftb/sf/mrsf for excited states.",
+        )
+
+    if not ground_like and max_requested > nstate:
+        report.add(
+            "ERROR",
+            "tdhf.nstate",
+            f"{short} requested state is above the solved response space.",
+            value={"nstate": nstate, "requested_state": max_requested},
+            expected=f"nstate >= {max_requested}",
+            action="Increase [tdhf] nstate.",
+        )
 
 
 def _check_scf(config: dict[str, Any], report: CheckReport) -> None:
@@ -1166,11 +1914,16 @@ def _check_requested_states(config: dict[str, Any], report: CheckReport) -> None
     requested = []
     if runtype == "grad":
         requested.extend(_as_list(_get(config, "properties", "grad", [])))
-    if runtype in {"optimize", "mep", "ts"}:
+    if runtype in {"optimize", "mep", "ts", "irc", "neb"}:
         requested.append(_get(config, "optimize", "istate", 0))
     if runtype in {"meci", "mecp"}:
-        requested.append(_get(config, "optimize", "istate", 0))
-        requested.append(_get(config, "optimize", "jstate", 0))
+        search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
+        multistates = _as_list(_get(config, "optimize", "states", []))
+        if runtype == "meci" and search in {"auto", "baeka"} and multistates:
+            requested.extend(multistates)
+        else:
+            requested.append(_get(config, "optimize", "istate", 0))
+            requested.append(_get(config, "optimize", "jstate", 0))
     if runtype == "tci":
         requested.append(_get(config, "optimize", "istate", 0))
         requested.append(_get(config, "optimize", "jstate", 0))
@@ -1263,7 +2016,7 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
 
     if runtype == "namd":
         td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
-        if method != "tdhf" or td_type != "mrsf":
+        if method not in {"tdhf", "dftb", "xtb"} or td_type != "mrsf":
             report.add(
                 "ERROR",
                 "input.runtype",
@@ -1342,6 +2095,33 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     if runtype in {"optimize", "meci", "mecp", "mep", "ts", "irc", "neb"}:
         _check_optimize(config, report)
 
+    if method in ("dftb", "xtb") and runtype in {"nac", "bp"}:
+        # numerical NAC vectors / branching-plane are not wired for DFTB; the
+        # DFTB runtype gate in _check_dftb already reports the unsupported case.
+        # Still validate the NAC worker count so an invalid [nac] nproc is caught
+        # in preflight rather than crashing multiprocessing.Pool(processes=0).
+        if runtype == "nac":
+            nac_nproc = _get(config, "nac", "nproc", 1)
+            try:
+                nac_nproc_int = int(nac_nproc)
+            except (TypeError, ValueError):
+                nac_nproc_int = 0
+            if nac_nproc_int < 1:
+                report.add(
+                    "ERROR",
+                    "nac.nproc",
+                    "Number of NAC workers must be positive.",
+                    value=nac_nproc,
+                    expected="nac.nproc >= 1",
+                    action="Set [nac] nproc to a positive integer.",
+                )
+        return
+    if method in ("dftb", "xtb") and runtype == "nacme":
+        # DFTB nacme IS wired (TLF state-overlap backend), but it still needs the
+        # previous-step geometry; run only that portion of the nacme validation.
+        _check_dftb_nacme_previous_geometry(config, report)
+        return
+
     if runtype == "neb":
         _check_neb(config, report, input_dir)
 
@@ -1368,7 +2148,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
     kstate = _get(config, "optimize", "kstate", 0)
     imult = _get(config, "optimize", "imult", 1)
     jmult = _get(config, "optimize", "jmult", 1)
-    meci_search = _as_lower(_get(config, "optimize", "meci_search", "penalty"))
+    meci_search = _as_lower(_get(config, "optimize", "meci_search", "auto"))
+    meci_states = _as_list(_get(config, "optimize", "states", []))
+
+    if bool(_get(config, "input", "qmmm_flag", False)):
+        report.add(
+            "ERROR",
+            "input.qmmm_flag",
+            "Geometry and reaction-path drivers are not connected to the active QM/MM force backend.",
+            value=f"qmmm_flag=true/runtype={runtype}",
+            expected="a supported QM/MM energy, md, or namd workflow",
+            action="Disable qmmm_flag for this geometry job; do not run a gas-phase optimizer on embedded coordinates.",
+        )
 
     if lib not in OPT_LIBS:
         report.add(
@@ -1377,7 +2168,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "Unknown optimization library.",
             value=lib,
             expected=", ".join(sorted(OPT_LIBS)),
-            action="Use scipy or geometric.",
+            action="Use oqp (recommended), scipy, or geometric.",
             wiki=WIKI_HELP["optimize.lib"],
         )
         return
@@ -1392,6 +2183,145 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Use a supported SciPy optimizer.",
         )
 
+    if lib == "oqp":
+        auto_recovery = _get(config, "oqp", "auto_recovery", True)
+        if not isinstance(auto_recovery, bool):
+            report.add(
+                "ERROR", "oqp.auto_recovery",
+                "Native optimizer recovery must be a boolean.",
+                value=auto_recovery, expected="true or false",
+                action="Set [oqp] auto_recovery=true to enable the safe restart.",
+            )
+        recovery_maxit = _get(config, "oqp", "recovery_maxit", 30)
+        try:
+            valid_recovery_maxit = int(recovery_maxit) > 0
+        except (TypeError, ValueError):
+            valid_recovery_maxit = False
+        if not valid_recovery_maxit:
+            report.add(
+                "ERROR", "oqp.recovery_maxit",
+                "Native optimizer recovery needs a positive step budget.",
+                value=recovery_maxit, expected="a positive integer",
+                action="Set [oqp] recovery_maxit=30 or another positive integer.",
+            )
+        recovery_trust = _get(config, "oqp", "recovery_trust", 0.02)
+        try:
+            valid_recovery_trust = (
+                math.isfinite(float(recovery_trust))
+                and float(recovery_trust) > 0.0
+            )
+        except (TypeError, ValueError):
+            valid_recovery_trust = False
+        if not valid_recovery_trust:
+            report.add(
+                "ERROR", "oqp.recovery_trust",
+                "Native optimizer recovery trust radius must be positive.",
+                value=recovery_trust, expected="a finite positive number",
+                action="Set [oqp] recovery_trust=0.02.",
+            )
+
+        freeze = str(_get(config, "oqp", "freeze", "") or "").strip()
+        if freeze:
+            if runtype != "optimize":
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Frozen-distance constraints are currently supported only for a native minimum search.",
+                    value=runtype, expected="runtype=optimize",
+                    action="Use a separate opt job for the constrained minimum.",
+                )
+            pattern = re.compile(
+                r"(?:distance|r)\(\s*(\d+)\s*,\s*(\d+)\s*\)", re.I
+            )
+            items = [item.strip() for item in freeze.split(";") if item.strip()]
+            valid = bool(items)
+            for item in items:
+                match = pattern.fullmatch(item)
+                if not match or int(match.group(1)) < 1 or int(match.group(2)) < 1 \
+                        or int(match.group(1)) == int(match.group(2)):
+                    valid = False
+                    break
+            if not valid:
+                report.add(
+                    "ERROR", "oqp.freeze",
+                    "Invalid native frozen-distance expression.",
+                    value=freeze, expected="distance(1,2);distance(2,3)",
+                    action="Use one-based distinct atom pairs separated by semicolons.",
+                )
+
+        init_hessian = _as_lower(_get(config, "oqp", "init_hessian", "model"))
+        if init_hessian not in {"model", "numerical", "analytical"}:
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "Unknown native initial-Hessian policy.",
+                value=init_hessian,
+                expected="model, numerical, or analytical",
+                action="Use model unless a fresh numerical or analytical TS Hessian is required.",
+            )
+        elif init_hessian != "model" and runtype != "ts":
+            report.add(
+                "ERROR", "oqp.init_hessian",
+                "A real native initial Hessian is currently consumed only by runtype=ts.",
+                value=f"{runtype}/{init_hessian}",
+                expected="runtype=ts",
+                action="Use oqp.init_hessian=model or switch to a native TS search.",
+            )
+        elif init_hessian == "analytical":
+            capability, reason = analytic_hessian_capability(config)
+            if capability != "supported":
+                report.add(
+                    "ERROR", "oqp.init_hessian",
+                    "Analytical native TS initialization is unavailable for this method/state.",
+                    value=init_hessian,
+                    expected="a supported HF/DFT ground-state analytic Hessian",
+                    action=reason,
+                )
+            max_l = _basis_max_angular_momentum(config)
+            if max_l is not None and max_l >= 4:
+                report.add(
+                    "ERROR", "input.basis",
+                    "Analytical native TS initialization supports basis angular momentum only up to L=3.",
+                    value=f"max L={max_l}",
+                    expected="max L <= 3",
+                    action="Use hessian=numerical for this TS search, or choose a basis without g/higher functions.",
+                )
+
+        hess_restart = _get(config, "hess", "restart", False)
+        if (runtype == "irc" and hess_restart) or (
+                runtype == "ts" and init_hessian != "model" and hess_restart):
+            report.add(
+                "ERROR", "hess.restart",
+                "Native TS/IRC Hessian restart artifacts are not yet signed to a geometry and electronic model.",
+                value=hess_restart,
+                expected="False",
+                action="Set [hess] restart=False; standalone numerical Hessian restart remains available.",
+            )
+
+        irc_direction = _as_lower(_get(config, "oqp", "irc_direction", "forward"))
+        if runtype == "irc" and irc_direction not in {"forward", "backward", "reverse"}:
+            report.add(
+                "ERROR", "oqp.irc_direction",
+                "Unknown native IRC direction.",
+                value=irc_direction,
+                expected="forward or backward",
+                action="Set irc_direction=forward or irc_direction=backward.",
+            )
+
+        if runtype in {"irc", "mep"}:
+            path_gtol = _get(config, "oqp", "path_gtol", 1.0e-4)
+            try:
+                path_gtol_value = float(path_gtol)
+                valid_path_gtol = math.isfinite(path_gtol_value) and path_gtol_value > 0
+            except (TypeError, ValueError):
+                valid_path_gtol = False
+            if not valid_path_gtol:
+                report.add(
+                    "ERROR", "oqp.path_gtol",
+                    "Native path gradient tolerance must be positive.",
+                    value=path_gtol,
+                    expected="> 0",
+                    action="Set path_gtol to a positive value such as 1e-4.",
+                )
+
     if method == "hf" and istate > 0:
         report.add(
             "ERROR",
@@ -1402,7 +2332,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Set istate=0 or switch to method=tdhf.",
         )
 
-    if method == "tdhf" and runtype in {"optimize", "mep", "ts"} and istate == 0:
+    if method == "tdhf" and runtype in {"optimize", "mep", "ts", "irc", "neb"} and istate == 0:
         report.add(
             "ERROR",
             "optimize.istate",
@@ -1413,16 +2343,17 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if runtype == "meci":
-        if method != "tdhf":
+        if method not in {"tdhf", "dftb", "xtb"}:
             report.add(
                 "ERROR",
                 "input.method",
-                "MECI optimization requires method=tdhf.",
+                "MECI optimization requires an excited-state method.",
                 value=method,
-                expected="tdhf",
-                action="Set [input] method=tdhf and configure [tdhf].",
+                expected="tdhf, dftb, or xtb",
+                action="Set [input] method=tdhf, dftb, or xtb and configure the response state space.",
             )
-        if jstate <= istate:
+        if (meci_search not in {"auto", "baeka"} or not meci_states) \
+                and jstate <= istate:
             report.add(
                 "ERROR",
                 "optimize.jstate",
@@ -1438,7 +2369,114 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use penalty, ubp, or hybrid.",
+                action="Use auto (recommended), penalty, ubp, hybrid, or baeka.",
+            )
+        elif meci_search in {"auto", "baeka"}:
+            selected = meci_states or [istate, jstate]
+            try:
+                selected = [int(state) for state in selected]
+            except (TypeError, ValueError):
+                selected = []
+            if len(selected) < 2:
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires at least two response roots.",
+                    value=meci_states,
+                    expected="two or more increasing roots",
+                    action="Set states=1,2 or a longer consecutive list.",
+                )
+            elif any(state < 1 for state in selected):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA states must be positive response roots; root 0 is the internal reference.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Use positive response-root indices only.",
+                )
+            elif any(right != left + 1
+                     for left, right in zip(selected, selected[1:])):
+                report.add(
+                    "ERROR", "optimize.states",
+                    "BaekA MECI requires distinct, increasing, consecutive response roots.",
+                    value=selected,
+                    expected="1,2 or 1,2,3,...",
+                    action="Sort the roots and include every intervening state.",
+                )
+            if lib != "oqp" and (
+                    meci_search == "baeka" or len(selected) > 2):
+                report.add(
+                    "ERROR", "optimize.lib",
+                    "BaekA multistate MECI is implemented by the native oqp optimizer.",
+                    value=lib, expected="oqp",
+                    action="Set [optimize] lib=oqp.",
+                )
+
+            scalar_controls = {
+                "pen_sigma": (1.0, "initial sigma"),
+                "pen_alpha": (0.0, "alpha in Hartree"),
+                "pen_delta": (0.025, "additive delta_beta"),
+                "gap_weight": (1.0, "gap weight"),
+                "energy_gap": (1.0e-4, "outer-span gap tolerance"),
+            }
+            for key, (default, label) in scalar_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    if key == "gap_weight":
+                        valid = math.isfinite(value) and value == 1.0
+                    else:
+                        valid = math.isfinite(value) and (
+                            value > 0 or (key == "pen_alpha" and value == 0)
+                        )
+                except (TypeError, ValueError):
+                    valid = False
+                if not valid:
+                    if key == "gap_weight":
+                        report.add(
+                            "ERROR", "optimize.gap_weight",
+                            "BaekA fixes gap_weight at 1.0; sigma is the published penalty multiplier.",
+                            value=raw, expected="1.0",
+                            action="Set gap_weight=1.0 and adjust pen_sigma if needed.",
+                        )
+                        continue
+                    report.add(
+                        "ERROR", f"optimize.{key}",
+                        f"BaekA {label} must be positive.",
+                        value=raw, expected="> 0",
+                        action=("Use pen_alpha=0.02; alpha has energy units. "
+                                "The legacy zero sentinel also selects 0.02 for BaekA."
+                                if key == "pen_alpha" else "Use a positive value."),
+                    )
+
+            jumps = _get(
+                config, "optimize", "pen_jump",
+                [10, 10, 25, 25, 100, 100, 1000, 1000, 3000],
+            )
+            if isinstance(jumps, str):
+                jumps = [item.strip() for item in jumps.split(",") if item.strip()]
+            elif not isinstance(jumps, (list, tuple)):
+                jumps = [jumps]
+            try:
+                jumps = [float(item) for item in jumps]
+                valid_jumps = bool(jumps) and all(
+                    math.isfinite(item) and item > 0 for item in jumps
+                )
+            except (TypeError, ValueError):
+                valid_jumps = False
+            if not valid_jumps:
+                report.add(
+                    "ERROR", "optimize.pen_jump",
+                    "BaekA beta jump schedule must contain positive values.",
+                    value=jumps, expected="10,10,25,...",
+                    action="Provide a non-empty comma-separated positive schedule.",
+                )
+        elif meci_states:
+            report.add(
+                "ERROR", "optimize.states",
+                "The multistate roots list is used only by meci_search=baeka.",
+                value=meci_states,
+                expected="meci_search=baeka",
+                action="Remove states or select the BaekA algorithm.",
             )
 
     if runtype == "mecp" and imult == jmult:
@@ -1457,18 +2495,18 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             "optimize.lib",
             "This runtype is not wired to the SciPy optimizer map.",
             value=f"{lib}/{runtype}",
-            expected="geometric",
-            action="Use [optimize] lib=geometric for runtype=ts/irc.",
+            expected="oqp or geometric",
+            action="Use [optimize] lib=oqp (recommended) or lib=geometric for runtype=ts/irc.",
         )
 
     if runtype == "neb" and lib not in {"geometric", "oqp"}:
         report.add(
             "ERROR",
             "optimize.lib",
-            "NEB is wired through geomeTRIC and the oqp optimizer.",
+            "NEB is wired through the native oqp optimizer and the optional geomeTRIC backend.",
             value=lib,
-            expected="geometric or oqp",
-            action="Set [optimize] lib=geometric or lib=oqp for runtype=neb.",
+            expected="oqp or geometric",
+            action="Set [optimize] lib=oqp (recommended) or lib=geometric for runtype=neb.",
         )
 
     if lib == "geometric" and runtype not in {"optimize", "meci", "mecp", "ts", "irc", "neb"}:
@@ -1520,6 +2558,7 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
                input_dir: str | None = None) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     istate = _get(config, "optimize", "istate", 0)
+    lib = _as_lower(_get(config, "optimize", "lib", "oqp"))
     product = _get(config, "neb", "product", "")
     nimage = _get(config, "neb", "nimage", 5)
 
@@ -1577,12 +2616,89 @@ def _check_neb(config: dict[str, Any], report: CheckReport,
             action="Set [neb] nimage=3 or larger.",
         )
 
+    if lib == "oqp":
+        # Keep sectioned legacy inputs as strict as the concise .oqp parser.
+        # These controls are consumed only by the native NEB implementation.
+        numeric_controls = {
+            "spring": (0.05, 0.0, True),
+            "fmax": (2.0e-3, 0.0, False),
+            "frms": (2.0e-3, 0.0, False),
+            "climb_fmax": (0.05, 0.0, False),
+            "neb_dt": (0.5, 0.0, False),
+            "maxmove": (0.2, 0.0, False),
+            "end_fmax": (1.0e-3, 0.0, False),
+        }
+        for key, (default, lower, inclusive) in numeric_controls.items():
+            value = _get(config, "oqp", key, default)
+            try:
+                number = float(value)
+                valid = math.isfinite(number) and (
+                    number >= lower if inclusive else number > lower
+                )
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
+                relation = ">=" if inclusive else ">"
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB control.",
+                    value=value,
+                    expected=f"a finite number {relation} {lower:g}",
+                    action=f"Set [oqp] {key} to a valid native NEB value.",
+                )
+
+        for key in ("climb", "align", "opt_ends"):
+            value = _get(config, "oqp", key, True)
+            if not isinstance(value, bool):
+                report.add(
+                    "ERROR",
+                    f"oqp.{key}",
+                    "Invalid native NEB switch.",
+                    value=value,
+                    expected="true or false",
+                    action=f"Set [oqp] {key}=true or false.",
+                )
+
+        climb = _get(config, "oqp", "climb", True)
+        try:
+            fmax = float(_get(config, "oqp", "fmax", 2.0e-3))
+            climb_fmax = float(_get(config, "oqp", "climb_fmax", 0.05))
+        except (TypeError, ValueError):
+            fmax = climb_fmax = float("nan")
+        if (isinstance(climb, bool) and climb
+                and math.isfinite(fmax) and math.isfinite(climb_fmax)
+                and climb_fmax < fmax):
+            report.add(
+                "ERROR",
+                "oqp.climb_fmax",
+                "Climbing-image activation must occur before final NEB convergence.",
+                value=climb_fmax,
+                expected="climb_fmax >= fmax when climb=true",
+                action="Increase climb_fmax or disable climbing-image NEB.",
+            )
+
 
 def _check_soc(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
     scf_mult = _get(config, "scf", "multiplicity", 1)
+
+    if method in ("dftb", "xtb"):
+        # MRSF one-center SOC: the ROKS triplet reference is implied
+        # by the TB backend (the adapter enforces it), so only the response
+        # type needs checking here.
+        if td_type != "mrsf":
+            report.add(
+                "ERROR",
+                "tdhf.type",
+                "SOC requires tdhf.type=mrsf.",
+                value=td_type,
+                expected="mrsf",
+                action="Set [tdhf] type=mrsf.",
+            )
+        return
 
     if method != "tdhf":
         report.add(
@@ -1737,6 +2853,17 @@ def _check_hess(config: dict[str, Any], report: CheckReport) -> None:
     nproc = _get(config, "hess", "nproc", 1)
     temperatures = _as_list(_get(config, "hess", "temperature", []))
 
+    if hess_type not in {"numerical", "analytical"}:
+        report.add(
+            "ERROR",
+            "hess.type",
+            "Unknown Hessian type.",
+            value=hess_type,
+            expected="numerical or analytical",
+            action="Set [hess] type=numerical or type=analytical.",
+        )
+        return
+
     if hess_type == "analytical":
         capability, reason = analytic_hessian_capability(config)
         if capability != "supported":
@@ -1808,6 +2935,17 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
     td_type = _as_lower(_get(config, "tdhf", "type", "rpa"))
     nproc = _get(config, "nac", "nproc", 1)
     states = _as_list(_get(config, "nac", "states", []))
+    nac_type = _as_lower(_get(config, "nac", "type", "numerical"))
+
+    if nac_type != "numerical":
+        report.add(
+            "ERROR",
+            "nac.type",
+            "Analytical NAC vectors are not available.",
+            value=nac_type,
+            expected="numerical",
+            action="Set [nac] type=numerical.",
+        )
 
     if method != "tdhf":
         report.add(
@@ -1871,6 +3009,50 @@ def _check_nac(config: dict[str, Any], report: CheckReport) -> None:
                 )
 
     _add_cpu_info(report, "nac.nproc", nproc, False)
+
+
+def _check_dftb_nacme_previous_geometry(config: dict[str, Any], report: CheckReport) -> None:
+    """DFTB nacme reuses the previous-geometry validation of _check_nacme
+    (presence, system2 path existence, non-empty inline geometry, nac.align)
+    without the all-electron method=tdhf gate of _check_nac."""
+    guess_file2 = _get(config, "guess", "file2", "")
+    system2 = _get(config, "input", "system2", "")
+
+    if not guess_file2 and not system2:
+        report.add(
+            "ERROR",
+            "input.system2",
+            "NACME overlap needs previous-step information from guess.file2 or input.system2.",
+            action="Set [guess] file2 to a restart JSON or provide [input] system2.",
+        )
+
+    if system2:
+        inline_lines, xyz_path = _iter_coordinate_lines(system2)
+        if xyz_path and not os.path.exists(os.path.abspath(xyz_path)):
+            report.add(
+                "ERROR",
+                "input.system2",
+                "Referenced system2 XYZ file does not exist.",
+                value=xyz_path,
+                action="Fix the system2 file path.",
+            )
+        if not xyz_path and not inline_lines:
+            report.add(
+                "ERROR",
+                "input.system2",
+                "system2 is set but empty.",
+                action="Provide a previous geometry or remove system2.",
+            )
+
+    align = _as_lower(_get(config, "nac", "align", "reorder"))
+    if align not in {"no", "reorder"}:
+        report.add(
+            "WARNING",
+            "nac.align",
+            "Only align=no and align=reorder are clearly handled by the Python layer.",
+            value=align,
+            action="Use align=reorder unless you have implemented another mode downstream.",
+        )
 
 
 def _check_nacme(config: dict[str, Any], report: CheckReport) -> None:
@@ -1959,7 +3141,7 @@ def check_input_values(
             "Unknown electronic structure method.",
             value=method,
             expected=", ".join(sorted(METHODS)),
-            action="Choose hf, tdhf, or mp2.",
+            action="Choose hf, tdhf, mp2, dftb, or xtb.",
             wiki=WIKI_HELP["input.method"],
         )
 
@@ -1967,6 +3149,8 @@ def check_input_values(
     _check_basis(config, report)
     _check_guess(config, report)
     _check_pcm(config, report)
+    _check_dftb(config, report)
+    _check_xtb(config, report)
     _check_scf(config, report)
     _check_symmetry(config, report)
     _check_tdhf(config, report)

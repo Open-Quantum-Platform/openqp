@@ -154,6 +154,7 @@ contains
 
     logical :: dft = .false.
     integer :: scf_type, mol_mult
+    character(len=16) :: method_name
 
     logical :: umrsf
 
@@ -180,11 +181,22 @@ contains
     open (unit=iw, file=infos%log_filename, position="append")
 
     umrsf = infos%tddft%umrsf
+    dft = infos%control%hamilton == 20 ! dft or hf
   !
     if (umrsf) then
-      call print_module_info('UMRSF_TDHF_Energy','Computing Energy of UMRSF-TDDFT')
+      if (dft) then
+        method_name = 'UMRSF-TDDFT'
+      else
+        method_name = 'UMRSF-TDHF'
+      end if
+      call print_module_info('UMRSF_TDHF_Energy','Computing Energy of '//trim(method_name))
     else
-      call print_module_info('MRSF_TDHF_Energy','Computing Energy of MRSF-TDDFT')
+      if (dft) then
+        method_name = 'MRSF-TDDFT'
+      else
+        method_name = 'MRSF-TDHF'
+      end if
+      call print_module_info('MRSF_TDHF_Energy','Computing Energy of '//trim(method_name))
     end if
 
   ! Load basis set
@@ -196,7 +208,6 @@ contains
     call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
 
    ! Input parameters
-    dft = infos%control%hamilton == 20 ! dft or hf
     mrst = infos%tddft%mult
     nstates = infos%tddft%nstate
     target_state = infos%tddft%target_state
@@ -206,17 +217,15 @@ contains
 
     mol_mult = infos%mol_prop%mult
     if (umrsf) then
-      if (mol_mult/=3) call show_message('UMRSF-TDDFT are available for UHF ref.&
-          &with ONLY triplet multiplicity(mult=3)',with_abort)
+      if (mol_mult/=3) call show_message('UMRSF requires a triplet UHF internal reference (mult=3).',with_abort)
     else
-      if (mol_mult/=3) call show_message('MRSF-TDDFT are available for ROHF ref.&
-          &with ONLY triplet multiplicity(mult=3)',with_abort)
+      if (mol_mult/=3) call show_message('MRSF requires a triplet ROHF internal reference (mult=3).',with_abort)
     end if
     scf_type = infos%control%scftype
     if (.not. umrsf .and. scf_type==3) roref = .true.
 
     if (umrsf .and. scf_type/=2) then
-      call show_message('UMRSF-TDDFT requires UHF reference (SCFTYPE=2).',with_abort)
+      call show_message('UMRSF requires a UHF internal reference (SCFTYPE=2).',with_abort)
     else if (umrsf) then
       uhfref = .true.
     end if
@@ -380,7 +389,7 @@ contains
       write(*,'(5x,"Initial vectors:                  ",1x,I0)') nvec
       if (.not. (infos%tddft%ixcore_len == 0)) &
         write(*,'(5x,"Ixcore (MO index):                ",1x,I0)') ixcore_ptr
-      write(*, '(/7x,"Fitting parameters for MRSF-TDDFT")')
+      write(*, '(/7x,"Fitting parameters for ",A)') trim(method_name)
       if (.not.infos%dft%cam_flag) then
         write(*, '(10x,"Exact HF exchange:")')
         write(*, '(5x,"Reference: |", t20, f6.3, t29, "|")') infos%dft%HFscale
@@ -860,7 +869,8 @@ contains
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
     infos%mol_energy%excited_energy = mrsf_energies(infos%tddft%target_state)
-    call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates)
+    call print_results(infos, bvec_mo, eex, trans, dip, squared_S, nstates, &
+                       physical_mrsf_labels=.true.)
     call flush(iw)
 
     call int2_driver%clean()

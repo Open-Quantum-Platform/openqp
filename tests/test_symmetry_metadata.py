@@ -252,6 +252,7 @@ class TestSymmetryMetadata(unittest.TestCase):
         molecule.log = '/tmp/placeholder.log'
         molecule.idx = 1
         molecule.config = {}
+        molecule.mrsf_ekt_results_by_kind = {}
 
         class _StubData:
             def __getitem__(self, key):
@@ -259,11 +260,11 @@ class TestSymmetryMetadata(unittest.TestCase):
 
         molecule.data = _StubData()
         molecule.energies = np.array([-1.23])
-        molecule.hessian = np.array([1.0])
+        molecule.hessian = np.eye(9)
         molecule.hessian_metadata = {}
         molecule.freqs = np.array([1.0])
-        molecule.modes = np.array([1.0])
-        molecule.inertia = np.array([1.0])
+        molecule.modes = np.ones((1, 9))
+        molecule.inertia = np.ones(3)
         molecule.infrared_intensities = np.zeros(0)
         molecule.raman_activities = np.zeros(0)
         molecule.vibrational_intensity_metadata = {}
@@ -272,7 +273,7 @@ class TestSymmetryMetadata(unittest.TestCase):
 
         molecule.get_atoms = lambda: np.array([1, 1, 8], dtype=int)
         molecule.get_system = lambda: np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0])
-        molecule.get_mass = lambda: np.array([1.0])
+        molecule.get_mass = lambda: np.array([1.0, 1.0, 16.0])
         molecule.get_grad = lambda: []
         molecule.get_nac = lambda: []
         molecule.get_soc = lambda: []
@@ -294,8 +295,44 @@ class TestSymmetryMetadata(unittest.TestCase):
             with open(str(Path(tmp) / 'run.hess.json'), 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
+            molecule.hessian = np.zeros((9, 9))
+            molecule.freqs = np.zeros(1)
+            # Thermochemistry may read a Hessian sidecar before any SinglePoint
+            # calculation has populated Molecule.energies.
+            molecule.energies = None
+            molecule.read_freqs()
+            self.assertTrue(np.array_equal(molecule.hessian, np.eye(9)))
+            self.assertTrue(np.array_equal(molecule.freqs, np.array([1.0])))
+
+            molecule.get_mass = lambda: np.array([2.0, 1.0, 16.0])
+            with self.assertRaisesRegex(ValueError, 'isotopic masses'):
+                molecule.read_freqs()
+            molecule.get_mass = lambda: np.array([1.0, 1.0, 16.0])
+
+            molecule.config = {'input': {'basis': 'different'}}
+            with self.assertRaisesRegex(ValueError, 'electronic-model configuration/state'):
+                molecule.read_freqs()
+
+            molecule.config = {}
+            corrupt = dict(data)
+            corrupt['freqs'] = [float('nan')]
+            with open(str(Path(tmp) / 'run.hess.json'), 'w', encoding='utf-8') as f:
+                json.dump(corrupt, f)
+            with self.assertRaisesRegex(ValueError, 'cached frequencies'):
+                molecule.read_freqs()
+
+            unsigned = dict(data)
+            unsigned.pop('hessian_cache_version')
+            unsigned.pop('hessian_request')
+            with open(str(Path(tmp) / 'run.hess.json'), 'w', encoding='utf-8') as f:
+                json.dump(unsigned, f)
+            with self.assertRaisesRegex(ValueError, 'current versioned model-configuration/state'):
+                molecule.read_freqs()
+
         self.assertIn('symmetry_metadata', data)
         self.assertEqual(data['symmetry_metadata']['subgroup'], 'c1')
+        self.assertIn('hessian_request', data)
+        self.assertEqual(data['hessian_cache_version'], 2)
 
 
 if __name__ == '__main__':

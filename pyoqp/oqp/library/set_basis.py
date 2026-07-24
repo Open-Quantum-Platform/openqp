@@ -12,6 +12,50 @@ import json
 from oqp.molecule.oqpdata import compute_alpha_beta_electrons, ispher_mode
 
 
+def _looks_like_atom_record(line):
+    """Return whether *line* starts an inline Cartesian atom record.
+
+    ``basis=library`` atom records carry a fifth tag column, but detecting the
+    geometry must depend only on the element plus three coordinates.  This
+    keeps the later, more useful "add a tag" diagnostic for malformed inline
+    input instead of misreporting the first atom as a missing filename.
+    """
+
+    fields = str(line).split()
+    if len(fields) < 4:
+        return False
+    try:
+        [float(value) for value in fields[1:4]]
+    except ValueError:
+        return False
+    return True
+
+
+def _tagged_geometry_lines(system):
+    """Read tagged inline geometry or a legacy file-backed tagged XYZ."""
+
+    lines = [line for line in str(system).splitlines() if line.strip()]
+    if not lines:
+        raise FileNotFoundError("Tagged basis mode requires a molecular geometry.")
+
+    if _looks_like_atom_record(lines[0]):
+        return lines
+
+    xyz_path = lines[0].strip()
+    if not os.path.exists(xyz_path):
+        raise FileNotFoundError("XYZ file %s is not found!" % xyz_path)
+
+    with open(xyz_path, 'r', encoding='utf-8') as xyzfile:
+        xyz_lines = xyzfile.read().splitlines()
+    try:
+        num_atoms = int(xyz_lines[0])
+    except (IndexError, ValueError) as exc:
+        raise ValueError(
+            "Tagged XYZ file %s must start with an atom count." % xyz_path
+        ) from exc
+    return xyz_lines[2: 2 + num_atoms]
+
+
 class BasisData:
     def __init__(self, mol):
         self.mol = mol
@@ -81,8 +125,8 @@ class BasisData:
             # 'gto_cartesian' | 'gto' (s/p, where Cartesian == spherical).
             # ispher=auto selects the AO convention the basis was published
             # with, e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical
-            # (5d); ispher=true forces pure spherical for every shell (GAMESS
-            # ISPHER=1); ispher=false deactivates the harmonic gate globally.
+            # (5d); ispher=true forces pure spherical functions for every shell;
+            # ispher=false deactivates the harmonic gate globally.
             shell_ft = shell.get('function_type', 'gto')
             shell_is_spherical = shell_ft.endswith('spherical')
             force_spherical = self._ispher_mode() == 'true'
@@ -140,26 +184,14 @@ class BasisData:
         """
         if self.mol.config["input"]["basis"] == 'library':
             basis_tags = []
-            system = self.mol.config["input"]["system"]
-            system = system.split("\n")
-            if system[0]:
-                if not os.path.exists(system[0]):
-                    raise FileNotFoundError("XYZ file %s is not found!" % system[0])
-
-                with open(system[0], 'r') as xyzfile:
-                    system = xyzfile.read().splitlines()
-
-                num_atoms = int(system[0])
-                system = system[2: 2 + num_atoms]
-            else:
-                system = system[1:]
+            system = _tagged_geometry_lines(
+                self.mol.config["input"]["system"]
+            )
 
             for i, line in enumerate(system):
                 parts = line.split()
                 if len(parts) < 5:
-                    basis_tags.clear()
                     raise FileNotFoundError(f"Please correctly add a tag for each atom. ({parts})")
-                    break
                 basis_tags.append(parts[4])
 
             basis_list_str = self.mol.config["input"]["library"].strip()

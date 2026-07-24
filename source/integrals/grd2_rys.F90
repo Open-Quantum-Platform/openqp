@@ -1761,7 +1761,7 @@ end subroutine compute_soc2e_ints
 !> @brief Apply derivative recurrence to build Cartesian 2e SOC integrals
 !> @details
 !>  Uses the relation d/dA phi_i(A) = i*phi_{i-1}(A) - 2*alpha*phi_{i+1}(A)
-!>  (identical to GAMESS XYZ2E, routines XINTI/XINTJ) to build the fi and fj
+!>  to build the fi and fj
 !>  arrays from the base integrals g0. These are subsequently contracted in
 !>  compute_soc2e_ao to form the mean-field SOC AO matrix element.
 !>

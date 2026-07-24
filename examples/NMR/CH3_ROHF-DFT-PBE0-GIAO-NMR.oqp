@@ -1,0 +1,6 @@
+roks/pbe0/sto-3g
+mult=2
+guess(type=huckel)
+dftgrid(rad_type=mhl,rad_npts=99,ang_npts=302)
+properties(scf_prop=nmr,nmr_gauge=giao)
+geom="../geometries/CH3-0b060bed6a1d.xyz"

@@ -15,6 +15,8 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.tb_backends import is_tb_method
+from oqp.utils.state_labels import canonical_dftb_type
 
 
 def dump_strings_from_parser(parser):
@@ -85,6 +87,34 @@ class _WorkflowSectionProxy(_SectionProxy):
         if runtype is not None:
             self._owner._control(runtype=runtype)
         return super().__call__(**kwargs)
+
+
+class _DFTBSectionProxy(_SectionProxy):
+    """Callable [dftb] section proxy.
+
+    ``job.dftb(...)`` runs the DFTB workflow helper (method=dftb plus the
+    response-type plumbing), while ``job.dftb.option`` reads and
+    ``job.dftb.option = value`` writes the [dftb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._dftb(*args, **kwargs)
+
+
+class _XTBSectionProxy(_SectionProxy):
+    """Callable [xtb] section proxy.
+
+    ``job.xtb(...)`` runs the OpenQP-xTB workflow helper (method=xtb plus the
+    response-type plumbing), while ``job.xtb.option`` reads and
+    ``job.xtb.option = value`` writes the [xtb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._xtb(*args, **kwargs)
 
 
 class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
@@ -235,6 +265,25 @@ class _TheoryProxy:
 
     def tdhf(self, **kwargs):
         return self._owner._theory("tdhf", **kwargs)
+
+    def dftb(self, **kwargs):
+        return self._owner._dftb(**kwargs)
+
+    def xtb(self, **kwargs):
+        return self._owner._xtb(**kwargs)
+
+    def ground_dftb(self, **kwargs):
+        return self._owner.ground_dftb(**kwargs)
+
+    def tddftb(self, **kwargs):
+        return self._owner.tddftb(**kwargs)
+
+    def sf_tddftb(self, **kwargs):
+        return self._owner.sf_tddftb(**kwargs)
+
+    def mrsf_tddftb(self, **kwargs):
+        return self._owner.mrsf_tddftb(**kwargs)
+
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -443,10 +492,11 @@ class OpenQP:
         """Enable ESPF QM/MM embedding and configure the ``[qmmm]`` section.
 
         Sets ``[input] qmmm_flag=true`` and populates ``[qmmm]``. The QM geometry
-        and atom selection come from ``job.molecule("file.pdb <indices>")`` for a
-        single-point QM/MM energy; QM/MM molecular dynamics (``runtype=namd``)
-        additionally reads ``pdb_file``/``forcefield``/``qm_atoms`` here. Combine
-        with ``job.workflow.namd(...)`` for (SOC-)NAMD-QMMM dynamics.
+        and atom selection come from ``job.molecule("file.pdb <indices>")``.
+        When ``pdb_file`` or ``qm_atoms`` is omitted, it is inferred from that
+        molecular-system value for both single-point and molecular-dynamics
+        workflows. Combine with ``job.workflow.namd(...)`` for
+        (SOC-)NAMD-QMMM dynamics.
 
         ``forcefield`` is an alias for the ``[qmmm] forcefield_files`` list.
         ``qm_atoms`` accepts a string (``"0-2"`` / ``"0 1 2"``) or a list of
@@ -470,6 +520,12 @@ class OpenQP:
             ff = ",".join(str(item) for item in ff)
         if isinstance(qm_atoms, (list, tuple)):
             qm_atoms = " ".join(str(index) for index in qm_atoms)
+        system = self.config_str.get("input", {}).get("system")
+        inferred_pdb, inferred_qm_atoms = self._qmmm_selection_from_system(system)
+        if pdb_file is None:
+            pdb_file = inferred_pdb
+        if qm_atoms is None:
+            qm_atoms = inferred_qm_atoms
 
         self.set(**{"input.qmmm_flag": True})
         updates = {}
@@ -491,6 +547,23 @@ class OpenQP:
         if updates:
             self.section("qmmm", **updates)
         return self
+
+    @staticmethod
+    def _qmmm_selection_from_system(system):
+        """Return the PDB path and atom selector from ``input.system``."""
+        if not isinstance(system, str):
+            return None, None
+        first_line = next(
+            (line.strip() for line in system.splitlines() if line.strip()),
+            "",
+        )
+        if not first_line:
+            return None, None
+        fields = first_line.split()
+        if not fields[0].lower().endswith(".pdb"):
+            return None, None
+        selector = " ".join(fields[1:]) or None
+        return fields[0], selector
 
     @staticmethod
     def _looks_like_basis(value):
@@ -628,6 +701,62 @@ class OpenQP:
                 multiplicity=multiplicity,
                 **keywords,
             )
+        if method_key in {"dftb", "openqp-dftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tddftb", "td-dftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-tddftb", "sf-td-dftb", "sftddftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-tddftb", "mrsf-td-dftb", "mrsftddftb"}:
+            return self._dftb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"xtb", "openqp-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tdxtb", "td-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-xtb", "sf-td-xtb", "sfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-xtb", "mrsf-td-xtb", "mrsfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
         if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
             if functional is None:
                 raise ValueError("SF-TDDFT theory requires functional=...")
@@ -653,7 +782,7 @@ class OpenQP:
             )
         raise ValueError(
             "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
-            "sf-tddft, or mrsf-tddft."
+            "sf-tddft, mrsf-tddft, dftb, or xtb."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -817,6 +946,126 @@ class OpenQP:
         updates.update(tdhf_keywords)
         return self.tdhf(**updates)
 
+    @property
+    def dftb(self):
+        """Callable [dftb] section proxy.
+
+        ``job.dftb(...)`` runs the DFTB workflow helper below, while
+        ``job.dftb.option`` / ``job.dftb.option = value`` read and write the
+        [dftb] section like every other schema section.
+        """
+        return _DFTBSectionProxy(self, "dftb")
+
+    def tddftb(self, **kwargs):
+        """Use the conventional singlet TD-DFTB (TDA) response helper."""
+        return self._dftb(response_type="tddftb", **kwargs)
+
+    def ground_dftb(self, **kwargs):
+        """Use the ground-state SCC-DFTB helper explicitly."""
+        return self._dftb(response_type="ground", **kwargs)
+
+    def sf_tddftb(self, **kwargs):
+        """Use the spin-flip TD-DFTB response helper."""
+        return self._dftb(response_type="sf", **kwargs)
+
+    def mrsf_tddftb(self, **kwargs):
+        """Use the mixed-reference spin-flip TD-DFTB response helper."""
+        return self._dftb(response_type="mrsf", **kwargs)
+
+    def _dftb(self, runtype=None, response_type="mrsf", nstate=3,
+              parameter_path=None, **keywords):
+        """Use the optional OpenQP-DFTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "dftb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        dftb_schema = OQP_CONFIG_SCHEMA.get("dftb", {})
+        dftb_updates = {}
+        if parameter_path is not None:
+            dftb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is a
+        # [dftb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.dftb(type=...) and silently fall back to response_type.
+        requested_type = canonical_dftb_type(keywords.pop("type", response_type))
+        for key in list(keywords.keys()):
+            if key in dftb_schema and key != "type":
+                dftb_updates[key] = keywords.pop(key)
+
+        tdhf_type = {
+            "ground": "tda",
+            "ground_noscc": "tda",
+            "tddftb": "tda",
+            "sf": "sf",
+            "mrsf": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("DFTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        dftb_updates["type"] = requested_type
+        self.section("dftb", **dftb_updates)
+        if requested_type in {"sf", "mrsf"}:
+            self.scf(type="rohf", multiplicity=3)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
+
+    @property
+    def xtb(self):
+        """Callable [xtb] section proxy.
+
+        ``job.xtb(...)`` runs the xTB workflow helper below, while
+        ``job.xtb.option`` / ``job.xtb.option = value`` read and write the
+        [xtb] section like every other schema section.
+        """
+        return _XTBSectionProxy(self, "xtb")
+
+    def _xtb(self, runtype=None, response_type="mrsf", nstate=3,
+             parameter_path=None, **keywords):
+        """Use the optional OpenQP-xTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "xtb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        xtb_schema = OQP_CONFIG_SCHEMA.get("xtb", {})
+        xtb_updates = {}
+        if parameter_path is not None:
+            xtb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is an
+        # [xtb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.xtb(type=...) and silently fall back to response_type.
+        requested_type = str(keywords.pop("type", response_type)).lower()
+        for key in list(keywords.keys()):
+            if key in xtb_schema and key != "type":
+                xtb_updates[key] = keywords.pop(key)
+
+        xtb_type = requested_type
+        tdhf_type = {
+            "ground": "tda",
+            "dftb": "tda",
+            "dftb0": "tda",
+            "noscc": "tda",
+            "ground_noscc": "tda",
+            "tddftb": "tda",
+            "td-dftb": "tda",
+            "tda": "tda",
+            "sf": "sf",
+            "sftddftb": "sf",
+            "sf-tddftb": "sf",
+            "mrsf": "mrsf",
+            "mrsftddftb": "mrsf",
+            "mrsf-tddftb": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("xTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
+        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
+        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
+        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
+        xtb_updates["type"] = _BACKEND_TYPE.get(xtb_type, xtb_type)
+        self.section("xtb", **xtb_updates)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
+
     def soc(self, nstate=3, functional=None, reference="rohf",
             reference_multiplicity=3, soc_2e=1, scal_rel=2,
             basis=None, **tdhf_keywords):
@@ -864,10 +1113,16 @@ class OpenQP:
     def _require_mrsf_theory_for(self, workflow_name):
         method = str(self.config_typed.get("input", {}).get("method", "")).lower()
         response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
-        if method != "tdhf" or response != "mrsf":
+        # TB backends ([dftb]/[xtb] section named after the method): the MRSF
+        # response type may be explicit or derived (type=auto).
+        tb_type = str(self.config_typed.get(method, {}).get("type", "auto")).lower()
+        tb_mrsf = is_tb_method(method) and tb_type in {
+            "auto", "mrsf", "mrsftddftb", "mrsf-tddftb"} and response == "mrsf"
+        if not ((method == "tdhf" and response == "mrsf") or tb_mrsf):
             raise ValueError(
-                f"{workflow_name} is currently supported only with MRSF-TDDFT. "
-                "Call job.theory('mrsf-tddft', ...) before selecting this workflow."
+                f"{workflow_name} is currently supported only with MRSF-TDDFT "
+                "or MRSF-TDDFTB. Call job.theory('mrsf-tddft', ...) or "
+                "job.dftb(response_type='mrsf', ...) before selecting this workflow."
             )
 
     def _require_reference_scf_theory_for(self, workflow_name):
@@ -919,6 +1174,23 @@ class OpenQP:
     def _set_optimize_options(self, **kwargs):
         """Set optimizer options, routing backend-specific keys by lib."""
         requested = dict(kwargs)
+        public_aliases = {
+            "algorithm": "meci_search",
+            "sigma": "pen_sigma",
+            "alpha": "pen_alpha",
+            "delta_beta": "pen_delta",
+            "beta_schedule": "pen_jump",
+            "gap": "energy_gap",
+        }
+        for public, internal in public_aliases.items():
+            if public not in requested:
+                continue
+            if internal in requested:
+                raise ValueError(
+                    f"Optimizer option '{internal}' is specified twice through "
+                    f"'{public}' and '{internal}'."
+                )
+            requested[internal] = requested.pop(public)
         lib_value = requested.pop(
             "lib",
             self.config_typed.get("optimize", {}).get("lib", "oqp"),
@@ -931,6 +1203,8 @@ class OpenQP:
 
         updates = {"optimize.lib": lib_name}
         for option, value in requested.items():
+            if option in {"states", "pen_jump"} and isinstance(value, (list, tuple)):
+                value = ",".join(str(item) for item in value)
             if option in optimize_schema:
                 updates[f"optimize.{option}"] = value
             elif option in backend_schema:

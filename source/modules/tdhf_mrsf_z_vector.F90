@@ -1073,7 +1073,7 @@ contains
     use tdhf_lib, only: int2_tdgrd_data_t
     use tdhf_mrsf_lib, only: int2_mrsf_data_t
     use tdhf_lib, only: iatogen, mntoia
-    use tdhf_sf_lib, only: sfrorhs, &
+    use tdhf_sf_lib, only: sfrorhs, mrsf_state_label, &
       sfromcal, sfrogen, sfrolhs, pcgrbpini, &
       pcgb, sfropcal, sfdmat
     use dft, only: dft_initialize, dftclean
@@ -1149,6 +1149,8 @@ contains
     character :: zv_gname_save(16)
     integer :: ig
     character(len=10) :: solver_name
+    character(len=12) :: target_label
+    character(len=16) :: method_name
 
     logical :: dft, mrsf_zvector_breakdown
     integer :: scf_type, mol_mult, target_state
@@ -1165,15 +1167,20 @@ contains
       OQP_FOCK_A, OQP_E_MO_A, OQP_VEC_MO_A, OQP_FOCK_B, OQP_VEC_MO_B, OQP_td_bvec_mo, OQP_td_t, &
       OQP_td_energies /)
 
+    dft = infos%control%hamilton == 20
+    if (dft) then
+      method_name = 'MRSF-TDDFT'
+    else
+      method_name = 'MRSF-TDHF'
+    end if
+
     mol_mult = infos%mol_prop%mult
     if (mol_mult/=3) call show_message(&
-            'MRSF-TDDFT are available for ROHF/UHF ref.&
-            &with ONLY triplet multiplicity(mult=3)', with_abort)
+            'MRSF requires a triplet ROHF/UHF internal reference (mult=3).', with_abort)
 
     scf_type = infos%control%scftype
     if (scf_type==3) roref = .true.
 
-    dft = infos%control%hamilton == 20
     mrsf_zvector_breakdown = .false.
 
   ! Optional per-iteration profiler (env OQP_MRSF_ZV_TIMERS; default off)
@@ -1185,7 +1192,7 @@ contains
   ! 3. LOG: Write: Main output file
     open (unit=iw, file=infos%log_filename, position="append")
   !
-    call print_module_info('MRSF_TDHF_Z_Vector','Solving Z-Vector for MRSF-TDDFT')
+    call print_module_info('MRSF_TDHF_Z_Vector','Solving Z-Vector for '//trim(method_name))
 
   ! Readings
 
@@ -1301,6 +1308,7 @@ contains
     tb => td_t(:,2)
 
     target_state = min(infos%tddft%target_state, infos%tddft%nstate)
+    target_label = mrsf_state_label(infos%tddft%mult, target_state)
     if (target_state /=infos%tddft%target_state) then
       write(*,'(/1x,66("-")&
                &/1x,"WARNING: Target state has been changed to the max available nstates"/&
@@ -1348,19 +1356,21 @@ contains
         zv_prog_k, zv_rc_save, zv_prog_cap, zv_prog_pin
 
     write(*,'(/1x,71("-")&
-             &/19x,"MRSF-DFT ENERGY GRADIENT CALCULATION"&
-             &/1x,71("-")/)')
+             &/18x,A," ENERGY GRADIENT CALCULATION"&
+             &/1x,71("-")/)') trim(method_name)
 
     write(iw,fmt='(5x,a/&
                   &5x,16("-")/&
-                  &5x,a,x,i0,x,f17.10,x,"Hartree"/&
+                  &5x,a,x,a,x,f17.10,x,"Hartree"/&
+                  &5x,a,x,i0/&
                   &5x,a,x,i0/&
                   &5x,a,x,e10.4/&
                   &5x,a,x,i0/&
                   &5x,a,x,a)') &
         'Z-vector options' &
-      , 'Target state       is', target_state, infos%mol_energy%energy+mrsf_energies(target_state) &
-      , 'Multiplicity       is', infos%tddft%mult &
+      , 'Physical target state is', trim(target_label), infos%mol_energy%energy+mrsf_energies(target_state) &
+      , 'Internal response root is', target_state &
+      , 'Target spin multiplicity is', infos%tddft%mult &
       , 'Convergence        is', infos%tddft%zvconv &
       , 'Maximum iterations is', infos%control%maxit_zv &
       , 'Solver method      is', trim(solver_name)

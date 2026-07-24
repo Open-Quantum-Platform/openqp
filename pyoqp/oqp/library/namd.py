@@ -30,10 +30,12 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import re
 import numpy as np
 
 import oqp
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
+from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_section_name
 from oqp.utils.file_utils import dump_log
 
 # 1 fs in atomic units of time
@@ -64,6 +66,63 @@ _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _NPARAMS = 16
+
+
+def _parse_soc_init_state(label, ns, nt, *, public_labels=False):
+    """Return ``(multiplicity, zero_based_root, public_label)`` for SOC-NAMD.
+
+    Canonical ``.oqp`` inputs use the public MRSF labels ``S0/T0`` for the
+    lowest roots.  Historical ``[md] init_state`` values, however, numbered
+    triplets as ``T1, T2, ...``.  Keep that legacy spelling working while also
+    accepting ``T0`` as an unambiguous alias for the first legacy triplet.
+    Bounds are checked here so an invalid label never reaches a NumPy index.
+    """
+    text = str(label or "").strip().upper()
+    match = re.fullmatch(r"([ST])(\d+)", text)
+    if match is None:
+        raise ValueError(
+            "[md] init_state must be an MRSF state label such as S0, S1, T0, or T1"
+        )
+
+    manifold, requested = match.group(1), int(match.group(2))
+    if manifold == "S":
+        mult = 1
+        root = requested
+        count = int(ns)
+    else:
+        mult = 3
+        count = int(nt)
+        # .oqp state names are uniformly zero based.  Legacy INI/API decks
+        # historically used T1 for the first triplet; T0 is accepted there as
+        # a transition-friendly alias rather than producing a negative index.
+        root = requested if public_labels else max(0, requested - 1)
+
+    if root < 0 or root >= count:
+        last = max(0, count - 1)
+        if manifold == "T" and not public_labels:
+            valid = "T1" if count == 1 else "T1-T%d" % count
+            valid += " (T0 is also accepted for the first root)"
+        else:
+            valid = "%s0" % manifold if count == 1 else "%s0-%s%d" % (
+                manifold, manifold, last)
+        raise ValueError(
+            "[md] init_state='%s' is outside the SOC MCH basis; available %s states: %s"
+            % (text, manifold, valid)
+        )
+
+    return mult, root, "%s%d" % (manifold, root)
+
+
+def _select_response_manifold(mol, multiplicity):
+    """Synchronize native, config, DFTB, and log-facing target spin state."""
+    mult = int(multiplicity)
+    mol.config['tdhf']['multiplicity'] = mult
+    mol.data.set_tdhf_multiplicity(mult)
+    # Both tight-binding backends (dftb and xtb) mirror the target multiplicity
+    # into their own [dftb]/[xtb] section so the native library selects the
+    # matching MRSF response manifold.
+    if is_tb_method(mol.config['input']['method']):
+        mol.config[tb_section_name(mol.config)]['target_multiplicity'] = mult
 
 
 class NAMD:
@@ -351,7 +410,7 @@ class NAMD_QMMM(NAMD):
       * active-state embedded gradient = Gradient + grad_esp_qmmm_excited,
       * ESPF QM charges -> MM forces (forces_mm),
       * full-system velocity Verlet (QM+MM, atomic units),
-      * QM-only FSSH hop (rescale only QM velocities, as in GAMESS RESCALV).
+      * QM-only FSSH hop with rescaling of QM velocities only.
     """
 
     def __init__(self, mol):
@@ -532,6 +591,28 @@ class NAMD_QMMM(NAMD):
         mol = self.mol
         potmm, potqm = self.driver.electrostatic_potential()
 
+        if is_tb_method(str(mol.config['input']['method'])):
+            # DFTB electrostatic embedding: the openqp-dftb library folds the
+            # per-atom MM potential (Hartree/e) directly into the SCC
+            # Hamiltonian, so there is no ESPF operator / hcore mutation here.
+            # POTQM stays zeroed (same resolution as the native path below).
+            # Only the full-ESPF scheme is supported: the legacy 'split'
+            # scheme would double-count the coupling already inside the
+            # embedded DFTB state energy.
+            if not getattr(self.driver, 'espf_full', False):
+                raise NotImplementedError(
+                    "NAMD QM/MM with method=dftb/xtb requires [qmmm] embedding="
+                    "electrostatic/espf (full-ESPF scheme).")
+            mol.dftb_external_potential = np.asarray(potmm, dtype=float)
+            sp = SinglePoint(mol)
+            ref = sp.reference()
+            if with_overlap:
+                mol.back_door = (self.prev_xyz, self.prev_data)
+                BasisOverlap(mol).overlap()
+            sp.excitation(ref)
+            LastStep(mol).compute(mol)
+            return potmm, potqm
+
         sp = SinglePoint(mol)
         sp._prep_guess()
         nat = mol.data["natom"]
@@ -564,10 +645,17 @@ class NAMD_QMMM(NAMD):
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
         g = np.array(mol.grads[self.active]).reshape(-1, 3)
+        if is_tb_method(str(mol.config['input']['method'])):
+            # The DFTB analytic gradient is d(E_embedded)/dR at FIXED potential
+            # values: the charge-response (Pulay-type) coupling term is already
+            # inside it, so the native grad_esp_qmmm(_excited)/OQP::ESPF_GRAD
+            # addition is skipped. The adapter has also just published
+            # OQP::partial_charges (relaxed net charges of the active state)
+            # for the classical coupling forces in _total_force.
+            return g
         # ESPF_ROHF=1: use the ROHF reference density for ESPF charges and
-        # gradient, matching GAMESS which always fits ESPF from the SCF (ROHF)
-        # density regardless of the target excited state.  Combined with
-        # ESPF_GAMESS=1 this reproduces GAMESS QM/MM energy conservation for
+        # gradient regardless of the target excited state.  Combined with
+        # ESPF_HARD_GRID=1 this provides stable QM/MM energy conservation for
         # direct validation.  Default (ESPF_ROHF unset): physically correct
         # S1 relaxed density via grad_esp_qmmm_excited.
         if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
@@ -696,8 +784,19 @@ class NAMD_QMMM(NAMD):
             f_all[m] = f_all[m] + fm[j]
         f_all -= f_all.mean(axis=0)
 
-        eqm = float(mol.energies[self.active]) + float(
-            np.dot(np.array(mol.get_atoms2("charge")), potmm))
+        if is_tb_method(str(mol.config['input']['method'])):
+            # The DFTB embedded state energy is already COMPLETE: the library
+            # folds the MM potential into the SCC Hamiltonian and the returned
+            # energy includes the full net-charge coupling
+            #   E_ext = sum_A q_A phi_A   (q_A = NET atomic charge, cores +
+            # electrons; dE/dphi_A = +q_A, verified by finite differences).
+            # The native path below instead carries only the electronic
+            # coupling in the embedded SCF and must add the nuclear term
+            # sum_A Z_A phi_A -- do NOT add it for dftb.
+            eqm = float(mol.energies[self.active])
+        else:
+            eqm = float(mol.energies[self.active]) + float(
+                np.dot(np.array(mol.get_atoms2("charge")), potmm))
         return f_all, eqm + emm
 
     # ------------------------------------------------------------------ #
@@ -805,7 +904,7 @@ class NAMD_SOC(NAMD):
         except Exception:
             self.grad_wthr = 0.05
         # optional: choose the initial active state by MCH spin character
-        # (e.g. 'S1') instead of a fixed spin-adiabatic index -- robust when the
+        # (e.g. 'S1' or 'T0') instead of a fixed spin-adiabatic index -- robust when the
         # spin-adiabatic ordering is ambiguous at the start (S/T near-degeneracy)
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
         _ev = mol.config['md'].get('econs', False)
@@ -817,28 +916,35 @@ class NAMD_SOC(NAMD):
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
-        """If [md] init_state names an MCH state (S0/S1/.../T1/T2/...), set the
+        """If [md] init_state names an MCH state (S0/S1/.../T0/T1/...), set the
         active spin-adiabatic state to the adiabat with the largest character of
         that MCH state at t=0 (summing the three Ms sublevels for a triplet).
         Otherwise keep the configured integer active index."""
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        n = int(label[1:])
+        mult, n, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             mch_idx = [n]                                  # singlet root: S0=0, S1=1, ...
         else:
-            base = self.ns + (n - 1) * 3
+            base = self.ns + n * 3
             mch_idx = [base, base + 1, base + 2]           # triplet Ms sublevels
         char = (np.abs(u[mch_idx, :]) ** 2).sum(axis=0)    # character per adiabat
         a = int(np.argmax(char))
         self.active = a + 1
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[a] = 1.0 + 0.0j
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
         dump_log(self.mol, title=(
-            f'SOC-NAMD: initial active set to adiabat {self.active} by {label} '
-            f'character ({char[a]*100:.1f}% {label})'))
+            f'SOC-NAMD: initial active set to adiabat {self.active} by {state_note} '
+            f'character ({char[a]*100:.1f}% {public_label})'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc(self, with_overlap=False):
@@ -856,21 +962,26 @@ class NAMD_SOC(NAMD):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()                     # sets OQP::overlap_mo
 
-        mol.data.set_tdhf_multiplicity(1)
+        is_dftb = is_tb_method(mol.config['input']['method'])
+
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)           # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -892,16 +1003,22 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         ns, nt, n = self.ns, self.nt, self.nstate_soc
 
-        mol.data.set_tdhf_multiplicity(1)
+        _select_response_manifold(mol, 1)
         mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
-        oqp.get_states_overlap(mol)
+        if is_tb_method(mol.config['input']['method']):
+            _dftb_spatial_overlap(mol, 1)
+        else:
+            oqp.get_states_overlap(mol)
         s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
 
-        mol.data.set_tdhf_multiplicity(3)
+        _select_response_manifold(mol, 3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
-        oqp.get_states_overlap(mol)
+        if is_tb_method(mol.config['input']['method']):
+            _dftb_spatial_overlap(mol, 3)
+        else:
+            oqp.get_states_overlap(mol)
         s_t = np.array(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
 
         s = np.zeros((n, n))
@@ -1048,17 +1165,16 @@ class NAMD_SOC(NAMD):
         state: root 1 = S0, root 2 = S1, ...  (S0 is the lowest eigenvalue of
         the MRSF orbital-Hessian response, so it has a normal MRSF gradient.)
         Hence the singlet block index k maps to target k+1 (k=0->S0, k=1->S1).
-        The triplet block is also 1-based per multiplicity (T1=target 1, ...);
+        The triplet block is also 1-based internally (T0=target 1, ...);
         the three Ms sublevels of a spatial triplet share one target."""
         if k < self.ns:
             return 1, k + 1                               # singlet root: S0=1, S1=2, ...
-        return 3, (k - self.ns) // 3 + 1                  # triplet root: T1=1, T2=2, ...
+        return 3, (k - self.ns) // 3 + 1                  # triplet root: T0=1, T1=2, ...
 
     @staticmethod
     def _mch_label(mult, target):
-        """Human-readable MCH state name for a (mult, MRSF target): singlet
-        target t -> S(t-1) (so target 1 = S0), triplet target t -> T(t)."""
-        return f'S{target - 1}' if mult == 1 else f'T{target}'
+        """Human-readable zero-based MCH state name for an internal target."""
+        return f'S{target - 1}' if mult == 1 else f'T{target - 1}'
 
     def _mch_energies_abs(self):
         """Absolute MCH energies expanded over singlet + triplet Ms sublevels."""
@@ -1193,7 +1309,7 @@ class NAMD_SOC(NAMD):
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1308,18 +1424,25 @@ class NAMD_SOC_MCH(NAMD_SOC):
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        target = int(label[1:])
+        mult, target, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             active = target + 1                         # S0 -> MCH basis 1
         else:
-            active = self.ns + (target - 1) * 3 + 1      # choose Ms=-1 member
-        if not (1 <= active <= self.nstate_soc):
-            raise ValueError(f"[md] init_state='{label}' is outside the SOC MCH basis")
+            active = self.ns + target * 3 + 1            # T0 -> first triplet Ms member
         self.active = active
         self.coef[:] = 0.0
         self.coef[self.active - 1] = 1.0 + 0.0j
-        dump_log(self.mol, title=f'SOC-MCH-NAMD: initial active set to MCH state {self._mch_active_label(self.active)}')
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
+        dump_log(self.mol, title=(
+            f'SOC-MCH-NAMD: initial active set to MCH state '
+            f'{self._mch_active_label(self.active)} from {state_note}'))
 
     def _mch_active_label(self, active):
         k = active - 1
@@ -1332,7 +1455,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
     def _mch_exact_gradient(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1477,7 +1600,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
       * ESPF QM charges (of the dominant MCH component) -> MM forces,
       * full-system velocity Verlet (QM+MM, atomic units),
       * local-diabatization propagation + spin-adiabatic fewest-switches hop,
-        rescaling QM velocities only (as in GAMESS RESCALV).
+        rescaling QM velocities only.
 
     The SOC electronic/hopping kernels are borrowed from NAMD_SOC via explicit
     NAMD_SOC.<method>(self, ...) calls so this class can inherit the QM/MM
@@ -1550,21 +1673,26 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             mol.back_door = (self.prev_xyz, self.prev_data)
             BasisOverlap(mol).overlap()
 
-        mol.data.set_tdhf_multiplicity(1)
+        is_dftb = is_tb_method(mol.config['input']['method'])
+
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_triplet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_t'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        oqp.soc_mrsf(mol)
+        if is_dftb:
+            _dftb_soc_tags(mol)
+        else:
+            oqp.soc_mrsf(mol)
 
         eval_wn = np.array(mol.data['OQP::soc_eval']).reshape(-1)            # cm^-1 rel e0
         u = (np.array(mol.data['OQP::soc_evec_re'])
@@ -1590,14 +1718,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         g = np.zeros((self.natom, 3))
         pchg_dom = None
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
             gi = np.array(mol.grads[state]).reshape((self.natom, 3))
             # ESPF_ROHF=1: use ROHF reference density for ESPF gradient across
-            # all SOC MCH components, matching GAMESS behaviour and ensuring
-            # the ESPF energy is constant across state hops.
+            # all SOC MCH components, ensuring the ESPF energy is constant
+            # across state hops.
             if os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'):
                 oqp.form_esp_charges(mol)
                 oqp.grad_esp_qmmm(mol)
@@ -1778,7 +1906,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
     def _mch_exact_gradient_qmmm(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1869,3 +1997,48 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                    f'E_kin={ekin:.8f}  hop={hopped}  '
                    f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+
+
+def _dftb_soc_tags(mol):
+    """Build OQP::soc_* tags for method=dftb/xtb (one-center SOC + numpy eigh)."""
+    from oqp.library.openqp_dftb import HA_TO_WAVENUMBER, FINE_STRUCTURE
+    adapter = make_tb_adapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    x_s = np.asarray(data['OQP::td_bvec_mo_s'])
+    x_t = np.asarray(data['OQP::td_bvec_mo_t'])
+    hsoc_re, hsoc_im = adapter.soc_matrix(
+        np.asarray(data['OQP::VEC_MO_A']).ravel(), x_s.ravel(), x_t.ravel(),
+        noca=noca, nocb=nocb)
+    e_s = np.asarray(data['OQP::td_singlet_energies']).ravel()
+    e_t = np.asarray(data['OQP::td_triplet_energies']).ravel()
+    e0 = min(e_s[0], e_t[0])
+    diag = np.concatenate([e_s - e0, np.repeat(e_t - e0, 3)]) * HA_TO_WAVENUMBER
+    dfac = 0.5 * FINE_STRUCTURE ** 2 * HA_TO_WAVENUMBER
+    h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
+    eigenvalues, eigenvectors = np.linalg.eigh(h_total)
+    fortran_tag = adapter._fortran_tag
+    data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
+    data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
+    data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
+    data['OQP::soc_hsoc_re'] = fortran_tag(np.ascontiguousarray(hsoc_re))
+    data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
+
+
+def _dftb_spatial_overlap(mol, multiplicity):
+    """TB (dftb/xtb) spatial state overlap for the current td_bvec_mo(_old) tags."""
+    adapter = make_tb_adapter(mol)
+    data = mol.data
+    dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
+    nbf, noca, nocb = (int(round(v)) for v in dims[:3])
+    tlf = int(mol.config.get('tdhf', {}).get('tlf', 2))
+    _, s_st = adapter.states_overlap(
+        np.asarray(data['OQP::xyz_old']).ravel(),
+        np.asarray(mol.get_system(), dtype=float).ravel(),
+        np.asarray(data['OQP::VEC_MO_A_old']).ravel(),
+        np.asarray(data['OQP::VEC_MO_A']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo_old']).ravel(),
+        np.asarray(data['OQP::td_bvec_mo']).ravel(),
+        noca=noca, nocb=nocb, multiplicity=multiplicity, tlf_order=tlf)
+    data['OQP::td_states_overlap'] = s_st
