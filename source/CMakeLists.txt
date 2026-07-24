@@ -42,6 +42,8 @@ target_link_libraries(oqp ${CMAKE_DL_LIBS})
 if("${CMAKE_Fortran_COMPILER_ID}" STREQUAL "GNU")
   target_link_libraries(oqp stdc++)
 endif()
+# Optional GPU acceleration: no-op unless OPENQP_WITH_GPU=ON (see cmake/openqp_gpu.cmake).
+openqp_gpu_attach(oqp)
 target_link_directories(oqp PUBLIC ${LIBXC_LIBRARY_DIR})
 target_include_directories(oqp PUBLIC ${LIBXC_INCLUDE_DIR})
 target_link_directories(oqp PUBLIC ${TAGARRAY_LIBRARY_DIR})
