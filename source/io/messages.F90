@@ -2,7 +2,7 @@
 !> @brief   This module provides routines where the output is
 !> @details Mostly, this file is needed for simplifying of usage
 !>            the LibXC interface in different software
-!>          For GAMESS(US), this file can be expanded for other messages
+!>          This file can be expanded for additional OpenQP messages.
 !>            For example, aborting with printing custom message
 !> @author  Igor S. Gerasimov
 !> @date    July, 2021 - Initial release -

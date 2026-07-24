@@ -413,7 +413,7 @@ class Molecule:
             return None
 
     def reorient_for_integral_symmetry(self):
-        """GAMESS-style reorientation to the standard frame (geometry only).
+        """OpenQP reorientation to the standard frame (geometry only).
 
         Call before the guess/basis stage; ``stage_integral_symmetry_maps``
         completes the activation once the basis is available. No-op unless
@@ -468,7 +468,7 @@ class Molecule:
                 meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
                 return False
 
-            # GAMESS-style contract: ALL outputs (geometry, gradients, MOs)
+            # OpenQP contract: ALL outputs (geometry, gradients, MOs)
             # are consistently in the standard orientation. The transform
             # below maps user input axes to it:
             #   r_std = (r_input - origin) @ rotation^T

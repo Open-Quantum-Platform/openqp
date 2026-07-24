@@ -134,6 +134,14 @@ def load_runfunc_with_stubs():
     namd = types.ModuleType("oqp.library.namd")
     setattr(namd, "NAMD", _Noop)
 
+    # runfunc dispatches TB methods through the real (dependency-free) helper.
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+    tb_spec = importlib.util.spec_from_file_location(
+        "oqp.utils.tb_backends", ROOT / "pyoqp" / "oqp" / "utils" / "tb_backends.py")
+    assert tb_spec is not None and tb_spec.loader is not None
+    tb_backends = importlib.util.module_from_spec(tb_spec)
+
     saved = {name: sys.modules.get(name) for name in (
         "oqp",
         "oqp.library",
@@ -143,6 +151,8 @@ def load_runfunc_with_stubs():
         "oqp.library.libgeometric",
         "oqp.library.liboqp",
         "oqp.library.namd",
+        "oqp.utils",
+        "oqp.utils.tb_backends",
     )}
     sys.modules.update({
         "oqp": oqp,
@@ -153,8 +163,11 @@ def load_runfunc_with_stubs():
         "oqp.library.libgeometric": libgeometric,
         "oqp.library.liboqp": liboqp,
         "oqp.library.namd": namd,
+        "oqp.utils": utils,
+        "oqp.utils.tb_backends": tb_backends,
     })
     try:
+        tb_spec.loader.exec_module(tb_backends)
         spec = importlib.util.spec_from_file_location("runfunc_under_test", RUNFUNC)
         assert spec is not None
         assert spec.loader is not None
@@ -170,9 +183,13 @@ def load_runfunc_with_stubs():
 
 
 def load_input_checker_with_minimal_stubs():
-    """Load the real input checker with only its lightweight oqp stubs."""
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
+    """Load the real input checker with only its lightweight oqp stubs.
+
+    The stubs are restored afterwards: leaving a minimal fake
+    oqp.utils.mpi_utils (or a bare non-package "oqp") in sys.modules would
+    break any later first-time import of real oqp modules in the same pytest
+    process (e.g. the oqp.library adapter imports of other test files).
+    """
     mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
 
     class MPIManager:
@@ -180,16 +197,28 @@ def load_input_checker_with_minimal_stubs():
         size = 1
 
     setattr(mpi_utils, "MPIManager", MPIManager)
+
+    stub_names = ("oqp", "oqp.utils", "oqp.utils.mpi_utils")
+    saved = {name: sys.modules.get(name) for name in stub_names}
+    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
+    sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
     sys.modules["oqp.utils.mpi_utils"] = mpi_utils
-    spec = importlib.util.spec_from_file_location(
-        "input_checker_rohf_nmr_under_test", INPUT_CHECKER
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "input_checker_rohf_nmr_under_test", INPUT_CHECKER
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value
 
 
 class ROHFStatusAndInterfaceTests(unittest.TestCase):

@@ -105,11 +105,9 @@ module qmmm_mod
     use_relaxed = .true.
 
     ! ESPF_ROHF=1: use the ROHF reference density for ESPF charge fitting instead
-    ! of the S1 relaxed density.  This matches GAMESS's ESPF implementation, which
-    ! always fits charges from the ROHF reference (not the response density).  With
-    ! the hard-pruned GAMESS grid (ESPF_GAMESS=1), the ROHF density has smaller
-    ! ESPF fitting residuals at the grid boundary, so the force discontinuity when
-    ! points blink in/out is much smaller -- reproducing GAMESS-level conservation.
+    ! of the S1 relaxed density.  With the hard-pruned grid (ESPF_HARD_GRID=1),
+    ! the ROHF density has smaller ESPF fitting residuals at the grid boundary,
+    ! reducing force discontinuities when points enter or leave the grid.
     block
       character(len=8) :: env_r
       integer :: st_r
@@ -903,9 +901,8 @@ module qmmm_mod
     basis%atoms => infos%atoms
     use_relaxed = .true.
     ! ESPF_ROHF=1: use ROHF reference density in the ESPF gradient.  The ROHF
-    ! density has smaller ESP fitting residuals at grid-boundary points; when the
-    ! GAMESS hard-pruned grid (ESPF_GAMESS=1) removes those points the force
-    ! discontinuity is therefore much smaller, reproducing GAMESS energy conservation.
+    ! density has smaller ESP fitting residuals at grid-boundary points; with the
+    ! hard-pruned grid (ESPF_HARD_GRID=1), this reduces force discontinuities.
     block
       character(len=8) :: env_r2
       integer :: st_r2
@@ -915,7 +912,7 @@ module qmmm_mod
       end if
     end block
     ! The legacy espf_grad weight term is replaced by the complete pseudoinverse
-    ! derivative (espf_grad_weight, ported from GAMESS DVESPF/INIDZ): FD-verified
+    ! derivative implemented in espf_grad_weight.  It is FD-verified
     ! to cut the QM-atom force-energy inconsistency from RMS 1.6e-3 to 5.2e-4
     ! Ha/bohr at large displacement.  Set ESPF_LEGACY=1 to restore the old term.
     skip_legacy = .true.
@@ -963,7 +960,7 @@ module qmmm_mod
       dens = dens + td_p(:,1) + td_p(:,2)
     else
       ! ESPF_ROHF=1: stop at the ROHF reference density -- do NOT add td_abxc.
-      ! This mirrors GAMESS, which always uses the ROHF density for ESPF fitting
+      ! This option uses the ROHF reference density for ESPF fitting
       ! (not the response/relaxed density).
       continue
     end if
@@ -1072,14 +1069,13 @@ module qmmm_mod
 !>         electronic ESP at grid point k.  The coupling energy contains
 !>         E = sum_i a_i sum_k Z_{i,k} u_k  with a_i = phi_i - <phi> (mean-removed
 !>         MM potential).  grad_elpot already differentiates u_k at fixed Z; this
-!>         routine adds the term from dZ/dR (the GAMESS DVESPF/INIDZ "DTZ.V"
-!>         contribution), with the atom-centred grid treated as fixed (matching
-!>         GAMESS).  Closed form (M = T^T T, Minv = Z Z^T):
+!>         routine adds the term from dZ/dR, with the atom-centred grid treated
+!>         as fixed.  Closed form (M = T^T T, Minv = Z Z^T):
 !>           b = Minv a,  g = Z u,  G = T^T g,  B = T^T b
 !>           dE/dR_{J,c} = sum_k dT(J,k,c) [ b_J (u_k - G_k) - g_J B_k ]
 !>           dT(J,k,c) = (g_k - R_J)_c / |g_k - R_J|^3
 !>
-!> @author  ported/derived from GAMESS espf.src (INIDZ/DVESPF), 2026-06
+!> @author  OpenQP development team, 2026-06
 !>
 !> @detail  Smooth-switching mode (ESPF_SMOOTH=1): the grid carries smooth
 !>          weights s_k (espf_smooth_s) and Z = M^-1 T diag(s), M = T diag(s) T^T.
@@ -1407,15 +1403,15 @@ module qmmm_mod
 
     integer :: nadd, nleb, ok
     integer :: i, j, k, layer, iz
-    logical :: keepall, smooth, gamess_mode
+    logical :: keepall, smooth, hard_grid_mode
     character(len=16) :: env_k
     integer :: st_k
     real(kind=dp) :: sw_delta, sw_scale, rmax_i, vdwenv_i, prec1_bohr
-    real(kind=dp), allocatable :: gamess_vdw(:)
+    real(kind=dp), allocatable :: hard_grid_vdw(:)
 
-    !> GAMESS ESPF VDW radii (Å, from LEBGRD in espf.src, Emsley 1991 + Bondi 1964).
+    !> Hard-grid ESPF VDW radii (Å; Emsley 1991 + Bondi 1964).
     !> Zero entries fall back to OpenQP's ELEMENTS_VDW_RADII at runtime.
-    real(kind=dp), parameter :: gamess_rvdw_ang(104) = [ &
+    real(kind=dp), parameter :: hard_grid_rvdw_ang(104) = [ &
       1.20_dp, 1.22_dp,                                                & ! H, He
       0.00_dp, 0.00_dp,                                                & ! Li, Be
       2.08_dp, 1.85_dp, 1.54_dp, 1.50_dp, 1.35_dp, 1.60_dp,          & ! B-Ne
@@ -1440,13 +1436,13 @@ module qmmm_mod
       0.00_dp, 0.00_dp, 0.00_dp                                        & ! Db, Sg, Bh (pad to 104)
     ]
 
-    ! npt may be larger than npt_layer total when GAMESS mode adds 146/shell;
+    ! npt may be larger than npt_layer total when hard-grid mode adds 146/shell;
     ! use max(npt, nat*nlayers*146) in the caller, or just pad npt there.
     allocate(leb(max(maxval(npt_layer),146),3), &
              lebw(max(maxval(npt_layer),146)), &
              vdwrad(nat), &
              excl_vdw(nat), &
-             gamess_vdw(nat), &
+             hard_grid_vdw(nat), &
              neigh(nat), &
              wt(npt), &
              stat=ok)
@@ -1467,7 +1463,7 @@ module qmmm_mod
     end if
     ! Smooth-switching weighted ESPF grid (DEFAULT): keep all points + smooth
     ! weights for energy-conserving dynamics.  ESPF_SMOOTH=0 restores the hard
-    ! VDW-pruned grid (matches the original/GAMESS grid).
+    ! VDW-pruned grid.
     smooth = .true.
     call get_environment_variable('ESPF_SMOOTH', env_k, status=st_k)
     if (st_k == 0) then
@@ -1485,26 +1481,26 @@ module qmmm_mod
     end if
     if (smooth) keepall = .true.
 
-!   GAMESS-identical mode: ESPF_GAMESS=1 reproduces GAMESS LEBGRD exactly
-!   (RVDW table from Emsley 1991/Bondi 1964, NANG=146 Lebedev per shell,
-!    linear shell placement RINC=IS*(4r-r-0.1)/NRAD, fixed r+0.1 Å exclusion).
-    gamess_mode = .false.
-    call get_environment_variable('ESPF_GAMESS', env_k, status=st_k)
+!   Deterministic hard-grid mode: ESPF_HARD_GRID=1 uses the Emsley 1991/Bondi
+!   1964 RVDW table, NANG=146 Lebedev points per shell, linear shell placement
+!   RINC=IS*(4r-r-0.1)/NRAD, and fixed r+0.1 Å exclusion.
+    hard_grid_mode = .false.
+    call get_environment_variable('ESPF_HARD_GRID', env_k, status=st_k)
     if (st_k == 0) then
-      if (trim(env_k) == '1' .or. trim(env_k) == 'on') gamess_mode = .true.
+      if (trim(env_k) == '1' .or. trim(env_k) == 'on') hard_grid_mode = .true.
     end if
-    prec1_bohr = 0.1_dp * ANGSTROM_TO_BOHR  ! GAMESS PREC1 = 0.1 Å
-    ! Build GAMESS VDW radius array in bohr; fall back to OpenQP for unknown elements
+    prec1_bohr = 0.1_dp * ANGSTROM_TO_BOHR
+    ! Build the hard-grid VDW radius array in bohr; fall back for unknown elements.
     do i = 1, nat
       iz = int(zn(i))
-      if (iz >= 1 .and. iz <= size(gamess_rvdw_ang) .and. gamess_rvdw_ang(iz) > 0.0_dp) then
-        gamess_vdw(i) = gamess_rvdw_ang(iz) * ANGSTROM_TO_BOHR
+      if (iz >= 1 .and. iz <= size(hard_grid_rvdw_ang) .and. hard_grid_rvdw_ang(iz) > 0.0_dp) then
+        hard_grid_vdw(i) = hard_grid_rvdw_ang(iz) * ANGSTROM_TO_BOHR
       else
-        gamess_vdw(i) = ELEMENTS_VDW_RADII(iz)
+        hard_grid_vdw(i) = ELEMENTS_VDW_RADII(iz)
       end if
     end do
-    ! GAMESS mode forces hard pruning (no smooth, no keepall)
-    if (gamess_mode) then
+    ! Hard-grid mode forces hard pruning (no smooth, no keepall).
+    if (hard_grid_mode) then
       smooth  = .false.
       keepall = .false.
     end if
@@ -1531,8 +1527,8 @@ module qmmm_mod
 !     • Intermediate-zone points (1.4–2.0 × r_vdw from neighbours) are admitted
 !       on outer shells but at physically reasonable positions (not near singularity).
 !   This is the correct fixed-scale complement to OpenQP's 1.4–2.0 shell scheme.
-    if (gamess_mode) then
-      excl_vdw = gamess_vdw + prec1_bohr        ! GAMESS: r_vdw + 0.1 Å (fixed, Emsley radii)
+    if (hard_grid_mode) then
+      excl_vdw = hard_grid_vdw + prec1_bohr
     else
       excl_vdw = ELEMENTS_VDW_RADII(int(zn)) * layers(1)  ! = 1.4 × r_vdw (innermost layer)
     end if
@@ -1541,11 +1537,12 @@ module qmmm_mod
     do layer = 1, nlayers
 
 !     Get the atomic radii on which to place new grid layer
-      if (gamess_mode) then
-        ! GAMESS shell radius: IS*(RMAX-VDWEnv)/NRAD where RMAX=4*r_vdw, VDWEnv=r_vdw+0.1 Å
-        ! => layer*(nlayers*gamess_vdw - gamess_vdw - prec1)/nlayers
+      if (hard_grid_mode) then
+        ! Shell radius: IS*(RMAX-VDWEnv)/NRAD where RMAX=4*r_vdw and
+        ! VDWEnv=r_vdw+0.1 Å.
         do i = 1, nat
-          vdwrad(i) = real(layer,dp) * (real(nlayers,dp)*gamess_vdw(i) - gamess_vdw(i) - prec1_bohr) &
+          vdwrad(i) = real(layer,dp) * &
+                    (real(nlayers,dp)*hard_grid_vdw(i) - hard_grid_vdw(i) - prec1_bohr) &
                     / real(nlayers,dp)
         end do
       else
@@ -1553,7 +1550,7 @@ module qmmm_mod
       end if
 
 !     Get grid
-      if (gamess_mode) then
+      if (hard_grid_mode) then
         nleb = 146
         leb = 0; lebw = 0
         call lebedev_get_grid(nleb, leb, lebw, 0)   ! type 0 = standard Lebedev, NANG=146
@@ -1566,11 +1563,10 @@ module qmmm_mod
 
 !     Add new grid layer for each atom, remove inner points
       do i = 1, nat
-        ! GAMESS: atom IA is included in its own exclusion loop, so IS=1 shell
-        ! (radius < r_vdw+0.1) is always fully self-excluded.  add_atom_grid skips
-        ! self (cur_atom), so mimic GAMESS by skipping this layer when the shell
-        ! radius is within the atom's own exclusion sphere.
-        if (gamess_mode .and. vdwrad(i) <= excl_vdw(i)) then
+        ! The first shell (radius < r_vdw+0.1) is fully self-excluded.  Because
+        ! add_atom_grid skips self (cur_atom), skip the layer explicitly when its
+        ! radius lies inside the atom's own exclusion sphere.
+        if (hard_grid_mode .and. vdwrad(i) <= excl_vdw(i)) then
           nadd = 0
           nptcur = nptcur + nadd
           cycle
@@ -1641,8 +1637,8 @@ module qmmm_mod
         block
           integer :: ud
           open(newunit=ud, file='/tmp/espf_npts.txt', position='append', action='write')
-          if (gamess_mode) then
-            write(ud,'(a,i7)') 'GAMESS nptcur=', nptcur
+          if (hard_grid_mode) then
+            write(ud,'(a,i7)') 'hard-grid nptcur=', nptcur
           else if (smooth) then
             write(ud,'(a,i7,a,f5.2,a,f5.2)') 'smooth nptcur=', nptcur, &
                   '  scale=', sw_scale, '  delta=', sw_delta

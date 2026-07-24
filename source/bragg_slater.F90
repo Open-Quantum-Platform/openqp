@@ -5,14 +5,14 @@ module bragg_slater_radii
 
   private
   public BRSL_NUM_ELEMENTS
-  public BRSL_TYPE_GAMESS
+  public BRSL_TYPE_STANDARD
   public BRSL_TYPE_GILL
   public BRSL_TYPE_TA
   public BRSL_TYPE_BECKE
   public set_bragg_slater
 
   integer, parameter :: BRSL_NUM_ELEMENTS  = 137
-  integer, parameter :: BRSL_TYPE_GAMESS = 0
+  integer, parameter :: BRSL_TYPE_STANDARD = 0
   integer, parameter :: BRSL_TYPE_GILL = 1
   integer, parameter :: BRSL_TYPE_TA = 2
   integer, parameter :: BRSL_TYPE_BECKE = 3
@@ -23,7 +23,7 @@ module bragg_slater_radii
 ! reasonable looking data (source unknown). Slater's table
 ! stops at the element americium, the extension is probably
 ! reasonable for actinides but not all the way to z=137!
-  real(kind=dp), parameter :: brsl_values_gamess(BRSL_NUM_ELEMENTS) = [&
+  real(kind=dp), parameter :: brsl_values_standard(BRSL_NUM_ELEMENTS) = [&
     0.52917D+00, 0.31D+00, 1.45D+00, 1.05D+00, 0.85D+00, &
     0.70D+00, 0.65D+00, 0.60D+00, 0.50D+00, 0.38D+00, 1.80D+00, &
     1.50D+00, 1.25D+00, 1.10D+00, 1.00D+00, 1.00D+00, 1.00D+00, &
@@ -157,8 +157,8 @@ contains
     integer, intent(in) :: bstype
 
     select case (bstype)
-    case (BRSL_TYPE_GAMESS)
-      array = brsl_values_gamess
+    case (BRSL_TYPE_STANDARD)
+      array = brsl_values_standard
 
     case (BRSL_TYPE_TA)
       array = brsl_values_treutler

@@ -125,8 +125,8 @@ class BasisData:
             # 'gto_cartesian' | 'gto' (s/p, where Cartesian == spherical).
             # ispher=auto selects the AO convention the basis was published
             # with, e.g. 6-31G* -> Cartesian (6d), cc-pVDZ/def2 -> spherical
-            # (5d); ispher=true forces pure spherical for every shell (GAMESS
-            # ISPHER=1); ispher=false deactivates the harmonic gate globally.
+            # (5d); ispher=true forces pure spherical functions for every shell;
+            # ispher=false deactivates the harmonic gate globally.
             shell_ft = shell.get('function_type', 'gto')
             shell_is_spherical = shell_ft.endswith('spherical')
             force_spherical = self._ispher_mode() == 'true'

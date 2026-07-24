@@ -62,6 +62,7 @@ class OQPTester:
     _OPTIONAL_FEATURE_SENTINELS = (
         "OQP_ENABLE_DDX",  # ddX / PCM continuum solvation built off
         "openqp-dftb not found",  # optional external openqp-dftb library absent
+        "openqp-xtb not found",  # optional external openqp-xtb library absent
     )
 
     _INPUT_FORMATS = frozenset({"auto", "inp", "oqp", "both"})
@@ -297,6 +298,7 @@ class OQPTester:
             # FileNotFoundError("openqp-dftb not found ..."); report SKIPPED so a
             # build without the optional DFTB backend still produces a green suite.
             needs_dftb_missing = 'openqp-dftb not found' in str(err).lower()
+            needs_xtb_missing = 'openqp-xtb not found' in str(err).lower()
 
             # The native optimizer covers the ordinary geometry workflows,
             # but legacy constrained inputs may still explicitly select the
@@ -317,6 +319,10 @@ class OQPTester:
             elif needs_dftb_missing:
                 result["status"] = "SKIPPED"
                 result["message"] = ("requires the optional openqp-dftb backend "
+                                     "(not installed); skipped")
+            elif needs_xtb_missing:
+                result["status"] = "SKIPPED"
+                result["message"] = ("requires the optional openqp-xtb backend "
                                      "(not installed); skipped")
             elif needs_geometric_missing:
                 result["status"] = "SKIPPED"
@@ -601,6 +607,10 @@ class OQPTester:
         if 'qmmm_flag=true' in text and 'runtype=namd' not in text:
             return True
         if 'method=dftb' in text:
+            return True
+        if 'method=xtb' in text:
+            # Same story as method=dftb: needs the optional external openqp-xtb
+            # library (libopenqp_xtb_c) and a converter-generated .opxtb file.
             return True
         return False
 

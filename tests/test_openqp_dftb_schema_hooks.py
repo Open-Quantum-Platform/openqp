@@ -187,13 +187,14 @@ spc = 0.5
         self.assertIn("state-overlap backend", report.to_text())
 
     def test_single_point_routes_dftb_to_adapter(self):
+        # method=dftb (and method=xtb) dispatch through the shared TB helpers.
         text = (ROOT / "pyoqp" / "oqp" / "library" / "single_point.py").read_text(encoding="utf-8")
-        self.assertIn("from oqp.library.openqp_dftb import OpenQPDFTBAdapter", text)
-        self.assertIn("if self.method == 'dftb':", text)
-        self.assertIn("OpenQPDFTBAdapter(self.mol).energy()", text)
-        self.assertIn("OpenQPDFTBAdapter(self.mol).gradient(self.grads)", text)
-        self.assertIn("OpenQPDFTBAdapter(self.mol).reference()", text)
-        self.assertIn("OpenQPDFTBAdapter(self.mol).excitation(ref_energy)", text)
+        self.assertIn("from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config", text)
+        self.assertIn("if is_tb_method(self.method):", text)
+        self.assertIn("make_tb_adapter(self.mol).energy()", text)
+        self.assertIn("make_tb_adapter(self.mol).gradient(self.grads)", text)
+        self.assertIn("make_tb_adapter(self.mol).reference()", text)
+        self.assertIn("make_tb_adapter(self.mol).excitation(ref_energy)", text)
 
     def test_adapter_exposes_reference_excitation_for_namd_driver_shape(self):
         text = (ROOT / "pyoqp" / "oqp" / "library" / "openqp_dftb.py").read_text(encoding="utf-8")
