@@ -15,6 +15,7 @@ from oqp.utils.geometry import (
 )
 from oqp.utils.input_parser import OQPConfigParser
 from oqp.utils.kword_map import resolve_param_key
+from oqp.utils.tb_backends import is_tb_method
 from oqp.utils.state_labels import canonical_dftb_type
 
 
@@ -100,6 +101,20 @@ class _DFTBSectionProxy(_SectionProxy):
 
     def __call__(self, *args, **kwargs):
         return self._owner._dftb(*args, **kwargs)
+
+
+class _XTBSectionProxy(_SectionProxy):
+    """Callable [xtb] section proxy.
+
+    ``job.xtb(...)`` runs the OpenQP-xTB workflow helper (method=xtb plus the
+    response-type plumbing), while ``job.xtb.option`` reads and
+    ``job.xtb.option = value`` writes the [xtb] section through the standard
+    schema interface -- a plain method here would shadow the ``__getattr__``
+    section proxy and break attribute access for this one section.
+    """
+
+    def __call__(self, *args, **kwargs):
+        return self._owner._xtb(*args, **kwargs)
 
 
 class _WorkflowOptimizeProxy(_WorkflowSectionProxy):
@@ -254,6 +269,9 @@ class _TheoryProxy:
     def dftb(self, **kwargs):
         return self._owner._dftb(**kwargs)
 
+    def xtb(self, **kwargs):
+        return self._owner._xtb(**kwargs)
+
     def ground_dftb(self, **kwargs):
         return self._owner.ground_dftb(**kwargs)
 
@@ -265,6 +283,7 @@ class _TheoryProxy:
 
     def mrsf_tddftb(self, **kwargs):
         return self._owner.mrsf_tddftb(**kwargs)
+
 
     def tddft(self, functional=None, **kwargs):
         if functional is None:
@@ -710,6 +729,34 @@ class OpenQP:
                 nstate=nstate,
                 **keywords,
             )
+        if method_key in {"xtb", "openqp-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "ground"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"tdxtb", "td-xtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type=keywords.pop("response_type", "tddftb"),
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"sf-xtb", "sf-td-xtb", "sfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="sf",
+                nstate=nstate,
+                **keywords,
+            )
+        if method_key in {"mrsf-xtb", "mrsf-td-xtb", "mrsfxtb"}:
+            return self._xtb(
+                runtype=runtype,
+                response_type="mrsf",
+                nstate=nstate,
+                **keywords,
+            )
         if method_key in {"sf-tddft", "sf-td-dft", "sftddft"}:
             if functional is None:
                 raise ValueError("SF-TDDFT theory requires functional=...")
@@ -735,7 +782,7 @@ class OpenQP:
             )
         raise ValueError(
             "Unknown theory method. Use hf, dft, mp2, tdhf, tddft, "
-            "sf-tddft, mrsf-tddft, or dftb."
+            "sf-tddft, mrsf-tddft, dftb, or xtb."
         )
 
     def hf(self, reference="rhf", runtype=None, multiplicity=None,
@@ -961,6 +1008,64 @@ class OpenQP:
             self.scf(type="rohf", multiplicity=3)
         return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
 
+    @property
+    def xtb(self):
+        """Callable [xtb] section proxy.
+
+        ``job.xtb(...)`` runs the xTB workflow helper below, while
+        ``job.xtb.option`` / ``job.xtb.option = value`` read and write the
+        [xtb] section like every other schema section.
+        """
+        return _XTBSectionProxy(self, "xtb")
+
+    def _xtb(self, runtype=None, response_type="mrsf", nstate=3,
+             parameter_path=None, **keywords):
+        """Use the optional OpenQP-xTB backend through the normal OpenQP workflow."""
+        input_updates = {"method": "xtb", "functional": ""}
+        if runtype is not None:
+            input_updates["runtype"] = runtype
+        self.input(**input_updates)
+
+        xtb_schema = OQP_CONFIG_SCHEMA.get("xtb", {})
+        xtb_updates = {}
+        if parameter_path is not None:
+            xtb_updates["parameter_path"] = parameter_path
+        # Resolve the response type BEFORE draining schema keywords: `type` is an
+        # [xtb] schema key, so the generic drain below would otherwise consume
+        # an explicit job.xtb(type=...) and silently fall back to response_type.
+        requested_type = str(keywords.pop("type", response_type)).lower()
+        for key in list(keywords.keys()):
+            if key in xtb_schema and key != "type":
+                xtb_updates[key] = keywords.pop(key)
+
+        xtb_type = requested_type
+        tdhf_type = {
+            "ground": "tda",
+            "dftb": "tda",
+            "dftb0": "tda",
+            "noscc": "tda",
+            "ground_noscc": "tda",
+            "tddftb": "tda",
+            "td-dftb": "tda",
+            "tda": "tda",
+            "sf": "sf",
+            "sftddftb": "sf",
+            "sf-tddftb": "sf",
+            "mrsf": "mrsf",
+            "mrsftddftb": "mrsf",
+            "mrsf-tddftb": "mrsf",
+        }.get(requested_type)
+        if tdhf_type is None:
+            raise ValueError("xTB response_type must be ground, tddftb, sf, or mrsf.")
+
+        # The backend's response-method names are ground/tddftb/sf/mrsf; map the
+        # tda/td-dftb aliases onto tddftb so the explicit request and the auto
+        # path (tdhf.type=tda/rpa -> tddftb) reach the same backend method.
+        _BACKEND_TYPE = {"tda": "tddftb", "td-dftb": "tddftb"}
+        xtb_updates["type"] = _BACKEND_TYPE.get(xtb_type, xtb_type)
+        self.section("xtb", **xtb_updates)
+        return self.tdhf(type=tdhf_type, nstate=nstate, **keywords)
+
     def soc(self, nstate=3, functional=None, reference="rohf",
             reference_multiplicity=3, soc_2e=1, scal_rel=2,
             basis=None, **tdhf_keywords):
@@ -1008,10 +1113,12 @@ class OpenQP:
     def _require_mrsf_theory_for(self, workflow_name):
         method = str(self.config_typed.get("input", {}).get("method", "")).lower()
         response = str(self.config_typed.get("tdhf", {}).get("type", "")).lower()
-        dftb_type = str(self.config_typed.get("dftb", {}).get("type", "auto")).lower()
-        dftb_mrsf = method == "dftb" and dftb_type in {
+        # TB backends ([dftb]/[xtb] section named after the method): the MRSF
+        # response type may be explicit or derived (type=auto).
+        tb_type = str(self.config_typed.get(method, {}).get("type", "auto")).lower()
+        tb_mrsf = is_tb_method(method) and tb_type in {
             "auto", "mrsf", "mrsftddftb", "mrsf-tddftb"} and response == "mrsf"
-        if not ((method == "tdhf" and response == "mrsf") or dftb_mrsf):
+        if not ((method == "tdhf" and response == "mrsf") or tb_mrsf):
             raise ValueError(
                 f"{workflow_name} is currently supported only with MRSF-TDDFT "
                 "or MRSF-TDDFTB. Call job.theory('mrsf-tddft', ...) or "

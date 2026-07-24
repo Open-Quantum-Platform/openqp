@@ -165,7 +165,15 @@ class TestSphericalSALCsAndLabels(unittest.TestCase):
             matrix_key="matrix_input_frame",
         )
         self.assertLess(result["max_deviation"], 1.0e-8)
-        self.assertEqual(Counter(result["labels"]), Counter(labels_ref))
+        # b1 and b2 are interchanged by the in-plane axis convention in the
+        # rotated input frame (see the 2/3 split documented in
+        # test_pure_d_shell_labels above), so compare modulo that swap: a1/a2
+        # counts and the {b1,b2} multiset are invariant, the individual b1/b2
+        # counts are not.
+        def _collapse(labels):
+            return Counter("b" if lbl in ("b1", "b2") else lbl for lbl in labels)
+
+        self.assertEqual(_collapse(result["labels"]), _collapse(labels_ref))
 
     def test_reduction_maps_with_pure_shells(self):
         maps = self.symmetry.build_reduction_maps(
