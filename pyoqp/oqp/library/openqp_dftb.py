@@ -1944,18 +1944,20 @@ HA_TO_WAVENUMBER = 219474.6313708
 FINE_STRUCTURE = 7.2973525693e-3
 
 
-def dftb_soc(mol):
-    """Standalone SOC driver for method=dftb (mirror of the native compute_soc).
+def _tb_soc(mol, adapter_cls):
+    """Shared SOC driver for the tight-binding backends (dftb/xtb).
 
     Runs the MRSF response for both target multiplicities from the same ROKS
     reference, builds the one-center SOC matrix, diagonalizes
     diag((E - e0) * ha2wn) + hsoc * (alpha^2/2 * ha2wn) in numpy, and fills the
     same OQP:: tags the native soc_mrsf produces (soc_eval in cm^-1 relative to
     the lowest MCH excitation; soc_hsoc_* raw, without the alpha^2/2 prefactor).
+    The backend (its section name and native library) is selected by
+    ``adapter_cls`` -- OpenQPDFTBAdapter for dftb, OpenQPXTBAdapter for xtb.
     """
-    adapter = OpenQPDFTBAdapter(mol)
+    adapter = adapter_cls(mol)
     data = mol.data
-    dftb = mol.config['dftb']
+    dftb = mol.config[adapter_cls.SECTION]
     tdhf = mol.config['tdhf']
     saved = dftb.get('target_multiplicity', 1)
     saved_mult = int(tdhf.get('multiplicity', 1))
@@ -1972,7 +1974,7 @@ def dftb_soc(mol):
 
     try:
         select_manifold(1, ns)
-        singlet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        singlet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_singlet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_s = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_s'] = x_s.copy()
@@ -1980,7 +1982,7 @@ def dftb_soc(mol):
         dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
 
         select_manifold(3, nt)
-        triplet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        triplet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_triplet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_t = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_t'] = x_t.copy()
@@ -2008,7 +2010,7 @@ def dftb_soc(mol):
     h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
     eigenvalues, eigenvectors = np.linalg.eigh(h_total)
 
-    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    fortran_tag = adapter_cls._fortran_tag
     data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
     data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
     data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
@@ -2016,3 +2018,8 @@ def dftb_soc(mol):
     data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
     mol.soc = eigenvalues.real
     return eigenvalues.real
+
+
+def dftb_soc(mol):
+    """Standalone SOC driver for method=dftb (see _tb_soc)."""
+    return _tb_soc(mol, OpenQPDFTBAdapter)
