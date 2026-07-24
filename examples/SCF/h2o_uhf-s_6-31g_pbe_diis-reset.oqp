@@ -1,0 +1,6 @@
+uks/pbe/6-31g
+d4=false
+guess(type=huckel,save_mol=true)
+scf(maxit=30,maxdiis=7,diis_reset_mod=5,diis_reset_conv=0.005,conv=1e-06)
+dftgrid(rad_npts=96,ang_npts=302,pruned="")
+geom="../geometries/H2O-0381125c86f2.xyz"

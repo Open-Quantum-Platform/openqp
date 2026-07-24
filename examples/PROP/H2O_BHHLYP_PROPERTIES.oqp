@@ -1,0 +1,5 @@
+rks/bhhlyp/6-31g*
+guess(type=huckel)
+dftgrid(rad_type=becke)
+properties(scf_prop="el_mom,mulliken,lowdin,resp")
+geom="../geometries/H2O-0381125c86f2.xyz"

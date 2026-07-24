@@ -2,6 +2,7 @@
 functional = bhhlyp
 basis      = 6-31g
 qmmm_flag  = true
+runtype    = md
 
 [scf]
 type  = rhf

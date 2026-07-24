@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name="OpenQP",
-    version="1.2.0",
+    version="1.2.1",
     author="Jingbai Li",
     author_email="lijingbai@zspu.edu.cn",
     description="Python Wrapper for Open Quantum Platform",
@@ -16,7 +16,6 @@ setup(
     install_requires=[
         'numpy>=1.20.0',
         'scipy>=1.10.0',
-        'geometric>=1.0',
         # 'dftd4>=3.5.0',
         'cffi>=1.16.0',
         'mpi4py>=4.0.0',
@@ -24,6 +23,7 @@ setup(
         'openmm>=8.1.1',
     ],
     extras_require={
+        'geometric': ['geometric>=1.0'],
     },
     packages=find_packages(),
     include_package_data=False,

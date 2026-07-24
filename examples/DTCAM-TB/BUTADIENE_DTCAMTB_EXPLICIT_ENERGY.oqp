@@ -1,0 +1,4 @@
+mrsf-tddftb(nstate=3)
+energy(S0)
+dftb(lc_ground_state=true,lc_gamma=erf,omega=0.3,cam_alpha=0.0,cam_beta=0.04,w_scale=1.0,response_w_scale=0.6375,response_omega=0.2625,response_cam_alpha=0.0,response_cam_beta=1.0125,spc_coco=1.025,spc_ovov=0.25,spc_coov=0.2625,onsite_pp=-0.0125,scc_mixer=broyden,scc_mixing=0.35,scc_history=12,scc_max_step=1.0,scc_tolerance=1e-08,max_scc_iterations=4000,response_solver=davidson)
+geom="../geometries/C4H6-e783f4d884c7.xyz"

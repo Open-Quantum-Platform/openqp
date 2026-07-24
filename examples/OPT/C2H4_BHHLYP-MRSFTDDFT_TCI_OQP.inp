@@ -39,3 +39,4 @@ max_step=8e-3
 [oqp]
 coordsys=auto
 trust=0.15
+auto_recovery=false

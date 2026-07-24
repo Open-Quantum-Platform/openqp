@@ -1,0 +1,6 @@
+mrsf(nstate=10)/bhhlyp/lanl2dz
+energy(S0)
+guess(type=huckel,save_mol=false)
+dftgrid(rad_npts=96,ang_npts=302,pruned="")
+tdhf(maxit=30,conv=1e-08,zvconv=1e-10)
+geom="../geometries/ClNa-0ed89ad56c59.xyz"

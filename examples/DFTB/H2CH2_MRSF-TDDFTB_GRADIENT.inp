@@ -1,4 +1,4 @@
-# MRSF-TDDFTB S1 gradient with the optional OpenQP-DFTB backend.
+# MRSF-TDDFTB S0 gradient with the optional OpenQP-DFTB backend.
 #
 #    group   keyword          value
 #  --------------------------------------
@@ -6,11 +6,13 @@
 #    input   runtype          grad
 #    tdhf    type             mrsf
 #    dftb    type             mrsf
-#    dftb    parameter_path   <SKF dir or .opdftb file>
+#    dftb    parameter_path   (optional: SKF dir or .opdftb file)
 #
-# The DFTB backend is an optional external library (libopenqp_dftb_c); set
-# [dftb] parameter_path to a Slater-Koster parameter set. See the
-# openqp-docs [dftb] keyword page and the MRSF-TDDFTB workflow page.
+# The DFTB backend is an optional external library (libopenqp_dftb_c). With
+# parameter_path empty the bundled openqp-dftb OB2W0PT3 SKF set (official
+# spinw.txt included) is resolved automatically; set [dftb] parameter_path
+# or OPENQP_DFTB_PARAMETER_PATH only to use another Slater-Koster set. See
+# the openqp-docs [dftb] keyword page and the MRSF-TDDFTB workflow page.
 [input]
 system=
    6   0.000000000   0.000000000   0.000000000
@@ -36,7 +38,6 @@ nstate=3
 [dftb]
 backend=native
 type=mrsf
-parameter_path=params
 
 [properties]
 grad=1

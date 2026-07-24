@@ -104,6 +104,13 @@ SCHEMA = {
         "lib": {"type": _string, "default": "oqp"},
         "istate": {"type": int, "default": "1"},
         "jstate": {"type": int, "default": "2"},
+        "states": {"type": str, "default": ""},
+        "meci_search": {"type": _string, "default": "penalty"},
+        "pen_sigma": {"type": float, "default": "1.0"},
+        "pen_alpha": {"type": float, "default": "0.0"},
+        "pen_delta": {"type": float, "default": "0.025"},
+        "pen_jump": {"type": str, "default": "10,25"},
+        "energy_gap": {"type": float, "default": "1e-5"},
         "maxit": {"type": int, "default": "30"},
     },
     "oqp": {
@@ -140,6 +147,7 @@ def load_openqp_module():
         "oqp.utils.input_parser",
         "oqp.utils.kword_map",
         "oqp.utils.tb_backends",
+        "oqp.utils.state_labels",
         "openqp_under_test",
     )
     saved_modules = {name: sys.modules.get(name) for name in stub_names}
@@ -169,6 +177,7 @@ def load_openqp_module():
         _load_module("oqp.utils.input_parser", ROOT / "pyoqp/oqp/utils/input_parser.py")
         _load_module("oqp.utils.kword_map", ROOT / "pyoqp/oqp/utils/kword_map.py")
         _load_module("oqp.utils.tb_backends", ROOT / "pyoqp/oqp/utils/tb_backends.py")
+        _load_module("oqp.utils.state_labels", ROOT / "pyoqp/oqp/utils/state_labels.py")
 
         class FakeMol:
             def __init__(self):
@@ -578,6 +587,29 @@ $$$$
         self.assertEqual(config["optimize"]["istate"], "1")
         self.assertEqual(config["optimize"]["jstate"], "2")
 
+    def test_meci_public_baeka_aliases_map_to_optimizer_schema(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="baeka").molecule(geometry="water")
+
+        job.workflow.meci(
+            states=[1, 2, 3],
+            algorithm="baeka",
+            sigma=2.0,
+            alpha=0.02,
+            delta_beta=0.05,
+            beta_schedule=[10, 25],
+            gap=1.0e-4,
+        )
+
+        optimize = job.to_input_dict()["optimize"]
+        self.assertEqual(optimize["meci_search"], "baeka")
+        self.assertEqual(optimize["states"], "1,2,3")
+        self.assertEqual(optimize["pen_sigma"], "2.0")
+        self.assertEqual(optimize["pen_alpha"], "0.02")
+        self.assertEqual(optimize["pen_delta"], "0.05")
+        self.assertEqual(optimize["pen_jump"], "10,25")
+        self.assertEqual(optimize["energy_gap"], "0.0001")
+
     def test_workflow_sublevels_set_runtype_and_sections(self):
         openqp = load_openqp_module()
         job = (
@@ -816,6 +848,8 @@ $$$$
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["qmmm"]["embedding"], "electrostatic")
+        self.assertEqual(config["qmmm"]["pdb_file"], "ala.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "9 10 17 18 19")
 
     def test_qmmm_frontier_scheme_sets_section_key(self):
         openqp = load_openqp_module()
@@ -833,7 +867,6 @@ $$$$
         openqp = load_openqp_module()
         job = openqp.OpenQP(project="qmmm_md").molecule("m.pdb 0 1 2", basis="6-31g")
         job.qmmm(
-            pdb_file="m.pdb",
             forcefield=["amber14-all.xml", "amber14/tip3p.xml"],
             qm_atoms=[0, 1, 2],
             cutoff="PME",
@@ -843,6 +876,7 @@ $$$$
         self.assertEqual(
             config["qmmm"]["forcefield_files"], "amber14-all.xml,amber14/tip3p.xml"
         )
+        self.assertEqual(config["qmmm"]["pdb_file"], "m.pdb")
         self.assertEqual(config["qmmm"]["qm_atoms"], "0 1 2")
         self.assertEqual(config["qmmm"]["cutoff"], "PME")
         with self.assertRaisesRegex(ValueError, "either forcefield or forcefield_files"):
@@ -852,14 +886,16 @@ $$$$
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="socnamd_qmmm")
-            .molecule("chromo.pdb 0 1 2 3 4", basis="6-31g*")
+            .molecule("chromo.pdb 0-4", basis="6-31g*")
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
-            .qmmm(pdb_file="chromo.pdb", qm_atoms="0-4", cutoff="PME")
+            .qmmm(cutoff="PME")
         )
         job.workflow.namd(soc=True, soc_basis="mch", nstep=200, dt=0.5, init_state="S1")
         config = job.to_input_dict()
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
+        self.assertEqual(config["qmmm"]["pdb_file"], "chromo.pdb")
+        self.assertEqual(config["qmmm"]["qm_atoms"], "0-4")
         self.assertEqual(config["tdhf"]["type"], "mrsf")
         self.assertEqual(config["md"]["soc"], "True")
         self.assertEqual(config["md"]["soc_basis"], "mch")

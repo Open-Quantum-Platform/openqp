@@ -1,0 +1,4 @@
+tdhf(nstate=3)/6-31g*
+grad(S3)
+guess(type=huckel)
+geom="../geometries/H2O-0381125c86f2.xyz"

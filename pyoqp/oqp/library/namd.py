@@ -30,6 +30,7 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import re
 import numpy as np
 
 import oqp
@@ -65,6 +66,63 @@ _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
 _NPARAMS = 16
+
+
+def _parse_soc_init_state(label, ns, nt, *, public_labels=False):
+    """Return ``(multiplicity, zero_based_root, public_label)`` for SOC-NAMD.
+
+    Canonical ``.oqp`` inputs use the public MRSF labels ``S0/T0`` for the
+    lowest roots.  Historical ``[md] init_state`` values, however, numbered
+    triplets as ``T1, T2, ...``.  Keep that legacy spelling working while also
+    accepting ``T0`` as an unambiguous alias for the first legacy triplet.
+    Bounds are checked here so an invalid label never reaches a NumPy index.
+    """
+    text = str(label or "").strip().upper()
+    match = re.fullmatch(r"([ST])(\d+)", text)
+    if match is None:
+        raise ValueError(
+            "[md] init_state must be an MRSF state label such as S0, S1, T0, or T1"
+        )
+
+    manifold, requested = match.group(1), int(match.group(2))
+    if manifold == "S":
+        mult = 1
+        root = requested
+        count = int(ns)
+    else:
+        mult = 3
+        count = int(nt)
+        # .oqp state names are uniformly zero based.  Legacy INI/API decks
+        # historically used T1 for the first triplet; T0 is accepted there as
+        # a transition-friendly alias rather than producing a negative index.
+        root = requested if public_labels else max(0, requested - 1)
+
+    if root < 0 or root >= count:
+        last = max(0, count - 1)
+        if manifold == "T" and not public_labels:
+            valid = "T1" if count == 1 else "T1-T%d" % count
+            valid += " (T0 is also accepted for the first root)"
+        else:
+            valid = "%s0" % manifold if count == 1 else "%s0-%s%d" % (
+                manifold, manifold, last)
+        raise ValueError(
+            "[md] init_state='%s' is outside the SOC MCH basis; available %s states: %s"
+            % (text, manifold, valid)
+        )
+
+    return mult, root, "%s%d" % (manifold, root)
+
+
+def _select_response_manifold(mol, multiplicity):
+    """Synchronize native, config, DFTB, and log-facing target spin state."""
+    mult = int(multiplicity)
+    mol.config['tdhf']['multiplicity'] = mult
+    mol.data.set_tdhf_multiplicity(mult)
+    # Both tight-binding backends (dftb and xtb) mirror the target multiplicity
+    # into their own [dftb]/[xtb] section so the native library selects the
+    # matching MRSF response manifold.
+    if is_tb_method(mol.config['input']['method']):
+        mol.config[tb_section_name(mol.config)]['target_multiplicity'] = mult
 
 
 class NAMD:
@@ -847,7 +905,7 @@ class NAMD_SOC(NAMD):
         except Exception:
             self.grad_wthr = 0.05
         # optional: choose the initial active state by MCH spin character
-        # (e.g. 'S1') instead of a fixed spin-adiabatic index -- robust when the
+        # (e.g. 'S1' or 'T0') instead of a fixed spin-adiabatic index -- robust when the
         # spin-adiabatic ordering is ambiguous at the start (S/T near-degeneracy)
         self.init_state = str(mol.config['md'].get('init_state', '') or '').strip()
         _ev = mol.config['md'].get('econs', False)
@@ -859,28 +917,35 @@ class NAMD_SOC(NAMD):
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
-        """If [md] init_state names an MCH state (S0/S1/.../T1/T2/...), set the
+        """If [md] init_state names an MCH state (S0/S1/.../T0/T1/...), set the
         active spin-adiabatic state to the adiabat with the largest character of
         that MCH state at t=0 (summing the three Ms sublevels for a triplet).
         Otherwise keep the configured integer active index."""
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        n = int(label[1:])
+        mult, n, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             mch_idx = [n]                                  # singlet root: S0=0, S1=1, ...
         else:
-            base = self.ns + (n - 1) * 3
+            base = self.ns + n * 3
             mch_idx = [base, base + 1, base + 2]           # triplet Ms sublevels
         char = (np.abs(u[mch_idx, :]) ** 2).sum(axis=0)    # character per adiabat
         a = int(np.argmax(char))
         self.active = a + 1
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[a] = 1.0 + 0.0j
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
         dump_log(self.mol, title=(
-            f'SOC-NAMD: initial active set to adiabat {self.active} by {label} '
-            f'character ({char[a]*100:.1f}% {label})'))
+            f'SOC-NAMD: initial active set to adiabat {self.active} by {state_note} '
+            f'character ({char[a]*100:.1f}% {public_label})'))
 
     # ------------------------------------------------------------------ #
     def _electronic_soc(self, with_overlap=False):
@@ -900,18 +965,14 @@ class NAMD_SOC(NAMD):
 
         is_dftb = is_tb_method(mol.config['input']['method'])
 
-        mol.data.set_tdhf_multiplicity(1)
-        if is_dftb:
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = 1
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
-        if is_dftb:
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = 3
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -943,7 +1004,7 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         ns, nt, n = self.ns, self.nt, self.nstate_soc
 
-        mol.data.set_tdhf_multiplicity(1)
+        _select_response_manifold(mol, 1)
         mol.data['OQP::td_bvec_mo'] = self.sbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_sbvec.copy()
         if is_tb_method(mol.config['input']['method']):
@@ -952,7 +1013,7 @@ class NAMD_SOC(NAMD):
             oqp.get_states_overlap(mol)
         s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
 
-        mol.data.set_tdhf_multiplicity(3)
+        _select_response_manifold(mol, 3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
         mol.data['OQP::td_bvec_mo_old'] = self.prev_tbvec.copy()
         if is_tb_method(mol.config['input']['method']):
@@ -1105,17 +1166,16 @@ class NAMD_SOC(NAMD):
         state: root 1 = S0, root 2 = S1, ...  (S0 is the lowest eigenvalue of
         the MRSF orbital-Hessian response, so it has a normal MRSF gradient.)
         Hence the singlet block index k maps to target k+1 (k=0->S0, k=1->S1).
-        The triplet block is also 1-based per multiplicity (T1=target 1, ...);
+        The triplet block is also 1-based internally (T0=target 1, ...);
         the three Ms sublevels of a spatial triplet share one target."""
         if k < self.ns:
             return 1, k + 1                               # singlet root: S0=1, S1=2, ...
-        return 3, (k - self.ns) // 3 + 1                  # triplet root: T1=1, T2=2, ...
+        return 3, (k - self.ns) // 3 + 1                  # triplet root: T0=1, T1=2, ...
 
     @staticmethod
     def _mch_label(mult, target):
-        """Human-readable MCH state name for a (mult, MRSF target): singlet
-        target t -> S(t-1) (so target 1 = S0), triplet target t -> T(t)."""
-        return f'S{target - 1}' if mult == 1 else f'T{target}'
+        """Human-readable zero-based MCH state name for an internal target."""
+        return f'S{target - 1}' if mult == 1 else f'T{target - 1}'
 
     def _mch_energies_abs(self):
         """Absolute MCH energies expanded over singlet + triplet Ms sublevels."""
@@ -1250,9 +1310,7 @@ class NAMD_SOC(NAMD):
         wtot = sum(wmap.values())
         g = np.zeros((self.natom, 3))
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
-            if is_tb_method(mol.config['input']['method']):
-                mol.config[tb_section_name(mol.config)]['target_multiplicity'] = int(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])     # set td vectors for this multiplicity
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1367,18 +1425,25 @@ class NAMD_SOC_MCH(NAMD_SOC):
         label = self.init_state
         if not label:
             return
-        mult = 1 if label[0].upper() == 'S' else 3
-        target = int(label[1:])
+        mult, target, public_label = _parse_soc_init_state(
+            label,
+            self.ns,
+            self.nt,
+            public_labels=bool(getattr(self.mol, 'oqp_public_state_labels', False)),
+        )
         if mult == 1:
             active = target + 1                         # S0 -> MCH basis 1
         else:
-            active = self.ns + (target - 1) * 3 + 1      # choose Ms=-1 member
-        if not (1 <= active <= self.nstate_soc):
-            raise ValueError(f"[md] init_state='{label}' is outside the SOC MCH basis")
+            active = self.ns + target * 3 + 1            # T0 -> first triplet Ms member
         self.active = active
         self.coef[:] = 0.0
         self.coef[self.active - 1] = 1.0 + 0.0j
-        dump_log(self.mol, title=f'SOC-MCH-NAMD: initial active set to MCH state {self._mch_active_label(self.active)}')
+        requested = str(label).strip().upper()
+        state_note = (public_label if requested == public_label else
+                      f'{public_label} (legacy {requested})')
+        dump_log(self.mol, title=(
+            f'SOC-MCH-NAMD: initial active set to MCH state '
+            f'{self._mch_active_label(self.active)} from {state_note}'))
 
     def _mch_active_label(self, active):
         k = active - 1
@@ -1391,9 +1456,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
     def _mch_exact_gradient(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
-        if is_tb_method(mol.config['input']['method']):
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = int(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()
@@ -1613,18 +1676,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
 
         is_dftb = is_tb_method(mol.config['input']['method'])
 
-        mol.data.set_tdhf_multiplicity(1)
-        if is_dftb:
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = 1
+        _select_response_manifold(mol, 1)
         sing = sp.excitation(ref)
         self.sing_energies = np.array(sing, dtype=float)
         self.sbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
         mol.data['OQP::td_singlet_energies'] = mol.data['OQP::td_energies'].copy()
         mol.data['OQP::td_bvec_mo_s'] = mol.data['OQP::td_bvec_mo'].copy()
 
-        mol.data.set_tdhf_multiplicity(3)
-        if is_dftb:
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = 3
+        _select_response_manifold(mol, 3)
         trip = sp.excitation(ref)
         self.trip_energies = np.array(trip, dtype=float)
         self.tbvec = np.array(mol.data['OQP::td_bvec_mo']).copy()
@@ -1660,9 +1719,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         g = np.zeros((self.natom, 3))
         pchg_dom = None
         for (mult, state), w in wmap.items():
-            mol.data.set_tdhf_multiplicity(mult)
-            if is_tb_method(mol.config['input']['method']):
-                mol.config[tb_section_name(mol.config)]['target_multiplicity'] = int(mult)
+            _select_response_manifold(mol, mult)
             SinglePoint(mol).excitation([self.e_ref])
             mol.config['properties']['grad'] = [state]
             Gradient(mol).gradient()
@@ -1850,9 +1907,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
     def _mch_exact_gradient_qmmm(self, active):
         mol = self.mol
         mult, state = self._mch_target(active - 1)
-        mol.data.set_tdhf_multiplicity(mult)
-        if is_tb_method(mol.config['input']['method']):
-            mol.config[tb_section_name(mol.config)]['target_multiplicity'] = int(mult)
+        _select_response_manifold(mol, mult)
         SinglePoint(mol).excitation([self.e_ref])
         mol.config['properties']['grad'] = [state]
         Gradient(mol).gradient()

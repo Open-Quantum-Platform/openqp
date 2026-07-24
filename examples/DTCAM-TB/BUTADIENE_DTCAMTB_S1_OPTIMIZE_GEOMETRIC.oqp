@@ -1,0 +1,4 @@
+mrsf-tddftb(nstate=3)
+opt(S1,lib=geometric,maxit=100)
+dftb(model=dtcam-tb)
+geom="../geometries/C4H6-e783f4d884c7.xyz"

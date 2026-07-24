@@ -1,0 +1,7 @@
+uks/bhhlyp/6-31g*
+mult=3
+grad
+guess(type=huckel)
+scf(stability=true)
+dftgrid(rad_type=becke)
+geom="../geometries/H2O-0381125c86f2.xyz"

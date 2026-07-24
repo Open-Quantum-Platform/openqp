@@ -1,0 +1,4 @@
+mrsf-tddftb(nstate=3)
+grad(S1)
+dftb(model=dtcam-tb)
+geom="../geometries/C4H6-e783f4d884c7.xyz"

@@ -1,0 +1,7 @@
+mrsf(nstate=2)/bhhlyp/cc-pvdz
+perf=2
+grad(S0)
+guess(type=huckel)
+scf(conv=1e-09,maxit=100,xc_c2f=off)
+tdhf(zvconv=1e-10,resp_cutoff=5e-11)
+geom="../geometries/H2O-95fa99c614ed.xyz"

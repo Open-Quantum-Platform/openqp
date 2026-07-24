@@ -23,14 +23,16 @@ nstate=5
 maxit=30
 
 [optimize]
-lib=scipy
-optimizer=bfgs
+lib=oqp
 maxit=2
-mep_maxit=2
 istate=2
 energy_shift=1e-3
-step_size=0.1
-step_tol=0.01
 rmsd_grad=3e-3
 max_grad=5e-3
 
+[oqp]
+coordsys=auto
+trust=0.15
+trust_max=0.5
+mep_step=0.1
+path_gtol=3e-3

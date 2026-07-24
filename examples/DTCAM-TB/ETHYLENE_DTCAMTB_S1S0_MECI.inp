@@ -1,0 +1,44 @@
+# DTCAM-TB S1/S0 minimum-energy conical intersection of ethylene
+# (the twisted-pyramidalized MECI of the Lee et al. benchmark set).
+# States are physical singlet response roots: istate=1 (S0), jstate=2 (S1).
+# meci_search=baeka is the BaekA penalty algorithm (Baek, Lee, Filatov,
+# Choi, J. Phys. Chem. A 2021, 125, 1994): mean-state energy plus
+# adjacent-gap penalties with an additive beta schedule (pen_delta /
+# pen_jump), which converges the seam far more reliably than the classic
+# multiplicative penalty walk.
+# The example is deliberately CAPPED (maxit=30, energy_gap=1e-4) so the
+# test suite stays fast; for a production seam search raise maxit (~500)
+# and tighten energy_gap back to the 1e-5 default. From this start the
+# gap falls 0.248 -> ~1e-3 hartree within 300 BaekA steps.
+# The starting structure is 90-degree twisted (D2d): the S1/S0 seam of
+# ethylene lies in the twisted-pyramidalized region, far from the planar
+# minimum, so a twisted start lets the penalty walk close the gap.
+[input]
+system=
+   6   0.000000   0.000000   0.669500
+   6   0.000000   0.000000  -0.669500
+   1   0.928900   0.000000   1.232100
+   1  -0.928900   0.000000   1.232100
+   1   0.000000   0.928900  -1.232100
+   1   0.000000  -0.928900  -1.232100
+charge=0
+runtype=meci
+method=dftb
+[scf]
+type=rohf
+multiplicity=3
+
+[dftb]
+model=dtcam-tb
+type=mrsf
+parameter_path=
+[tdhf]
+type=mrsf
+nstate=3
+[optimize]
+lib=oqp
+istate=1
+jstate=2
+meci_search=baeka
+energy_gap=1e-4
+maxit=30

@@ -23,11 +23,14 @@ class TestAdvancedGuessExamples(unittest.TestCase):
         self.assertIn("[guess]", sap_input)
         self.assertIn("type=sap", sap_input)
 
-    def test_cli_keeps_short_test_alias_for_example_runner(self):
+    def test_cli_advertises_test_input_format_selection(self):
         pyoqp_source = (ROOT / "pyoqp" / "oqp" / "pyoqp.py").read_text()
 
         self.assertIn("--test", pyoqp_source)
         self.assertIn("--run_tests", pyoqp_source)
+        self.assertIn("--run-tests", pyoqp_source)
+        self.assertIn("--input-format", pyoqp_source)
+        self.assertIn("--test-inputs", pyoqp_source)
 
 
 if __name__ == "__main__":

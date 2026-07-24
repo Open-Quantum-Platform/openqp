@@ -1,0 +1,5 @@
+rks/b3lypv5/6-31g*
+perf=1
+guess(type=huckel)
+scf(maxit=100,conv=1e-06)
+geom="../geometries/H2O-95fa99c614ed.xyz"

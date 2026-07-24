@@ -37,9 +37,36 @@ class OpenQPXTBAdapter(OpenQPDFTBAdapter):
     DISPLAY_NAME = "OpenQP-xTB"
     CACHE_ATTR = "_openqp_xtb_cache"
 
-    # C ABI v3 model codes ([xtb] model key; only gfn1 is exposed for now).
+    # C ABI model codes ([xtb] model key; only gfn1 is exposed for now).
     _MODEL_CODES = {"gfn1": 1}
     _LC_GAMMA_CODES = {"yukawa": 0, "erf": 1, "ok": 2}
+
+    # openqp-xtb C ABI. Its first released layout (openqp_xtb_abi_version == 4)
+    # already carries the model block, so an unversioned probe resolves to the
+    # current layout rather than the legacy DFTB v1. The state-gradient
+    # argument order is: the shared common block (with the five model scalars
+    # spliced after the zvector flag via _model_args), then the DTCAM-TB
+    # response knobs c_mrsf/response_global_hybrid/onsite_exchange_scale, then
+    # the shared output tail -- i.e. the same trailing block as DFTB ABI v1.
+    _SUPPORTED_ABI = (1, 2, 3, 4)
+    _UNVERSIONED_ABI_FALLBACK = 4
+
+    def _abi_version_symbol(self) -> str:
+        # openqp-xtb exports openqp_xtb_abi_version (no "capi" infix).
+        return "openqp_xtb_abi_version"
+
+    def _call_state_gradient_current(self, function, **values) -> None:
+        # openqp_xtb_state_gradient == common(+model block) + the three
+        # DTCAM-TB response knobs + output tail, which is exactly the DFTB
+        # ABI-v1 argument shape. Reuse it rather than the DFTB "current" layout
+        # (which appends preset/onsite/w_scale scalars openqp-xtb does not take).
+        self._call_state_gradient_abi1(function, **values)
+
+    def _install_state_gradient_argtypes(self, lib, abi_version) -> None:
+        # The xTB layout inserts the model block, so the DFTB argtypes table
+        # does not apply. Leave the symbol untyped -- the adapter always passes
+        # fully-typed ctypes objects -- and only pin the void return type.
+        getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient").restype = None
 
     def _lc_gamma_code(self) -> int:
         """lc_gamma_kind for the C ABI: 0=yukawa, 1=erf, 2=ok (default)."""
