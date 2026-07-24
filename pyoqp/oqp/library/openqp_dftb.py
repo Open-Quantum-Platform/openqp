@@ -196,12 +196,36 @@ class _StateResult:
 
 
 class OpenQPDFTBAdapter:
-    """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider."""
+    """Make OpenQP-DFTB look like a normal OpenQP energy/gradient provider.
+
+    The backend-identity knobs below are class attributes so the OpenQP-xTB
+    adapter (oqp.library.openqp_xtb) can subclass this adapter and only swap
+    the section name, C-symbol prefix, library basenames, and env vars. The
+    tag names published by the store/response helpers and the
+    mol.dftb_external_potential attribute are intentionally SHARED by both TB
+    backends (see oqp.utils.tb_backends).
+    """
+
+    SECTION = "dftb"
+    SYMBOL_PREFIX = "openqp_dftb"
+    LIB_BASENAMES = ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so")
+    ENV_LIBRARY = "OPENQP_DFTB_LIBRARY"
+    ENV_PARAMETER = "OPENQP_DFTB_PARAMETER_PATH"
+    PIP_LOCATOR = "openqp_dftb"
+    BACKEND_NAME = "openqp-dftb"      # pip package / diagnostics name
+    DISPLAY_NAME = "OpenQP-DFTB"      # human-readable diagnostics name
+    CACHE_ATTR = "_openqp_dftb_cache"
+    # ABI negotiation: DFTB accepts C ABI v1/2/3 and treats an unversioned
+    # library (no version symbol) as the stable v1 layout. OpenQP-xTB overrides
+    # these (its first released layout carries the model block, so an
+    # unversioned probe must resolve to the current layout, not legacy v1).
+    _SUPPORTED_ABI = (1, 2, 3)
+    _UNVERSIONED_ABI_FALLBACK = 1
 
     def __init__(self, mol):
         self.mol = mol
         self.config = mol.config
-        self.dftb = self.config.get("dftb", {})
+        self.dftb = self.config.get(self.SECTION, {})
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
         # Named operator preset ([dftb] model=...). The published parameter
@@ -213,8 +237,8 @@ class OpenQPDFTBAdapter:
         if preset.lower() == "none":
             preset = ""
         self._preset_bytes = preset.encode("ascii")
-        if not hasattr(mol, "_openqp_dftb_cache"):
-            mol._openqp_dftb_cache = {}
+        if not hasattr(mol, self.CACHE_ATTR):
+            setattr(mol, self.CACHE_ATTR, {})
         # SF/MRSF-TDDFTB uses a high-spin ROKS reference: mark scf.type
         # accordingly so generic bookkeeping (get_data tag selection for the
         # NAMD back_door carry, beta-set handling) treats both spin sets.
@@ -361,7 +385,7 @@ class OpenQPDFTBAdapter:
             return
         lib = self._native_library()  # noqa: F841 -- caches the ABI version
         self.mol._dftb_model_default_resolved = True
-        if int(self.mol._openqp_dftb_cache["__native_abi_version__"]) == 1:
+        if int(getattr(self.mol, self.CACHE_ATTR)["__native_abi_version__"]) == 1:
             return
         from oqp.utils.input_checker import apply_dftb_model_default  # noqa: PLC0415
         model = apply_dftb_model_default(self.config)
@@ -371,7 +395,7 @@ class OpenQPDFTBAdapter:
     def _run_state(self, method: str, state: int, *, need_grad: bool) -> _StateResult:
         self._resolve_model_default()
         key = self._cache_key(method, state, need_grad=need_grad)
-        cache = self.mol._openqp_dftb_cache
+        cache = getattr(self.mol, self.CACHE_ATTR)
         if key in cache:
             return cache[key]
         # One geometry (+ embedding potential) per cache generation: an MD
@@ -479,9 +503,9 @@ class OpenQPDFTBAdapter:
         state gradient back. No OpenQP build coupling, no Fortran module seam.
         """
         lib = self._native_library()
-        abi_version = int(self.mol._openqp_dftb_cache["__native_abi_version__"])
+        abi_version = int(getattr(self.mol, self.CACHE_ATTR)["__native_abi_version__"])
         capabilities = int(
-            self.mol._openqp_dftb_cache.get("__native_capabilities__", 0)
+            getattr(self.mol, self.CACHE_ATTR).get("__native_capabilities__", 0)
         )
         parameter_path = self._parameter_path()
         self._log_settings_once(
@@ -571,11 +595,11 @@ class OpenQPDFTBAdapter:
         def native_call():
             if abi_version == 1:
                 self._call_state_gradient_abi1(
-                    lib.openqp_dftb_state_gradient, **call_kwargs
+                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
                 )
             else:
                 self._call_state_gradient_current(
-                    lib.openqp_dftb_state_gradient, **call_kwargs
+                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
                 )
 
         if abi_version == 1:
@@ -1146,8 +1170,12 @@ class OpenQPDFTBAdapter:
             ctypes.c_int64(int(self.dftb.get("target_multiplicity", 1))),
             ctypes.c_int64(int(bool(self.dftb.get("spin_complete", True)))),
             ctypes.c_int64(int(bool(self.dftb.get("lc_ground_state", False)))),
-            ctypes.c_int64(int(self._lc_gamma_is_erf())),
+            ctypes.c_int64(self._lc_gamma_code()),
             ctypes.c_int64(int(bool(self.dftb.get("zvector", True)))),
+            # C ABI model block: empty for DFTB (no-op splice), the five
+            # GFN1 model scalars for OpenQP-xTB. Sits between the zvector
+            # flag and scc_tolerance, matching openqp_xtb_state_gradient.
+            *self._model_args(),
             ctypes.c_double(float(self.dftb.get("scc_tolerance", 1.0e-8))),
             ctypes.c_double(float(self.dftb.get("scc_mixing", 0.35))),
             ctypes.c_double(float(self.dftb.get("scc_max_step", 0.5))),
@@ -1275,7 +1303,7 @@ class OpenQPDFTBAdapter:
         )
 
     def _native_library(self):
-        cache = self.mol._openqp_dftb_cache
+        cache = getattr(self.mol, self.CACHE_ATTR)
         lib = cache.get("__native_library__")
         if lib is not None:
             if "__native_capabilities__" not in cache:
@@ -1287,14 +1315,14 @@ class OpenQPDFTBAdapter:
             lib = ctypes.CDLL(str(path))
         except OSError as exc:
             raise RuntimeError(f"Could not load the openqp-dftb library {path}: {exc}") from exc
-        if not hasattr(lib, "openqp_dftb_state_gradient"):
+        if not hasattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"):
             raise RuntimeError(
-                f"{path} does not export openqp_dftb_state_gradient; "
+                f"{path} does not export {self.SYMBOL_PREFIX}_state_gradient; "
                 "rebuild openqp-dftb with OPENQP_DFTB_BUILD_SHARED=ON."
             )
         # Detect the ABI before the first call and install its exact fixed
         # ctypes signature. The released v1 predates the version symbol.
-        abi_probe = getattr(lib, "openqp_dftb_capi_abi_version", None)
+        abi_probe = getattr(lib, self._abi_version_symbol(), None)
         if abi_probe is not None:
             abi_probe.restype = ctypes.c_int64
             abi_version = int(abi_probe())
@@ -1303,8 +1331,8 @@ class OpenQPDFTBAdapter:
             # unversioned development snapshots used other argument layouts
             # and cannot be distinguished by inspecting state_gradient itself.
             abi1_markers = (
-                "openqp_dftb_states_overlap",
-                "openqp_dftb_soc_matrix",
+                f"{self.SYMBOL_PREFIX}_states_overlap",
+                f"{self.SYMBOL_PREFIX}_soc_matrix",
             )
             missing_markers = [
                 symbol for symbol in abi1_markers if not hasattr(lib, symbol)
@@ -1317,25 +1345,33 @@ class OpenQPDFTBAdapter:
                     "state-gradient argument layout cannot be identified "
                     "safely; install openqp-dftb >= 0.2.0."
                 )
-            abi_version = 1
-        if abi_version not in (1, 2, 3):
+            abi_version = self._UNVERSIONED_ABI_FALLBACK
+        if abi_version not in self._SUPPORTED_ABI:
             raise RuntimeError(
-                f"{path} exports openqp-dftb C ABI version {abi_version}, but this "
-                "OpenQP adapter supports only versions 1, 2, and 3."
+                f"{path} exports {self.BACKEND_NAME} C ABI version {abi_version}, "
+                f"but this OpenQP adapter supports only versions {self._SUPPORTED_ABI}."
             )
-        lib.openqp_dftb_state_gradient.argtypes = _state_gradient_argtypes(
-            abi_version
-        )
-        lib.openqp_dftb_state_gradient.restype = None
+        self._install_state_gradient_argtypes(lib, abi_version)
         cache["__native_library__"] = lib
         cache["__native_abi_version__"] = abi_version
         cache["__native_capabilities__"] = self._native_capabilities(lib)
         return lib
 
-    @staticmethod
-    def _native_capabilities(lib) -> int:
+    def _install_state_gradient_argtypes(self, lib, abi_version) -> None:
+        """Pin the exact ctypes signature of the state-gradient entry point.
+
+        DFTB uses the fixed per-ABI argtypes table. OpenQP-xTB overrides this:
+        its layout inserts the model block, so it leaves the symbol untyped
+        (the adapter always passes fully-typed ctypes objects) rather than
+        install the DFTB signature.
+        """
+        fn = getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient")
+        fn.argtypes = _state_gradient_argtypes(abi_version)
+        fn.restype = None
+
+    def _native_capabilities(self, lib) -> int:
         """Return additive native capabilities; a missing symbol means none."""
-        probe = getattr(lib, "openqp_dftb_capi_capabilities", None)
+        probe = getattr(lib, f"{self.SYMBOL_PREFIX}_capi_capabilities", None)
         if probe is None:
             return 0
         probe.restype = ctypes.c_int64
@@ -1348,7 +1384,7 @@ class OpenQPDFTBAdapter:
         return capabilities
 
     def _native_library_path(self) -> Path:
-        raw = self.dftb.get("library_path") or os.environ.get("OPENQP_DFTB_LIBRARY")
+        raw = self.dftb.get("library_path") or os.environ.get(self.ENV_LIBRARY)
         if raw:
             path = self._resolve_user_path(raw)
             if Path(path).exists():
@@ -1373,7 +1409,7 @@ class OpenQPDFTBAdapter:
         oqp_root = os.environ.get("OPENQP_ROOT", "")
         if oqp_root:
             lib_dirs.append(Path(oqp_root) / "lib")
-        for name in ("libopenqp_dftb_c.dylib", "libopenqp_dftb_c.so"):
+        for name in self.LIB_BASENAMES:
             for lib_dir in lib_dirs:
                 staged = lib_dir / name
                 if staged.exists():
@@ -1574,7 +1610,7 @@ class OpenQPDFTBAdapter:
         mo_old = as_c(mo_old); mo_new = as_c(mo_new)
         x_old = as_c(x_old); x_new = as_c(x_new)
         dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lib.openqp_dftb_states_overlap(
+        getattr(lib, f"{self.SYMBOL_PREFIX}_states_overlap")(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             dptr(xyz_old), dptr(xyz_new),
@@ -1620,7 +1656,7 @@ class OpenQPDFTBAdapter:
         as_c = lambda a: np.ascontiguousarray(np.asarray(a, dtype=np.float64).reshape(-1))
         mo = as_c(mo); x_singlet = as_c(x_singlet); x_triplet = as_c(x_triplet)
         dptr = lambda a: a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        lib.openqp_dftb_soc_matrix(
+        getattr(lib, f"{self.SYMBOL_PREFIX}_soc_matrix")(
             ctypes.c_int64(natom),
             atoms.ctypes.data_as(ctypes.POINTER(ctypes.c_int64)),
             dptr(coords_bohr),
@@ -1850,6 +1886,29 @@ class OpenQPDFTBAdapter:
             raise ValueError(f"[dftb] lc_gamma must be yukawa or erf, got {kernel!r}")
         return kernel == "erf"
 
+    # --- TB-backend hooks (overridden by the OpenQP-xTB adapter) ----------
+    def _abi_version_symbol(self) -> str:
+        """C symbol that reports the native ABI version for this backend."""
+        return f"{self.SYMBOL_PREFIX}_capi_abi_version"
+
+    def _lc_gamma_code(self) -> int:
+        """Long-range gamma kernel as an integer for the C ABI.
+
+        DFTB exposes only yukawa/erf, so this is exactly the historical
+        ``lc_gamma_erf`` 0/1 flag (yukawa=0, erf=1); the OpenQP-xTB adapter
+        overrides it to add the Ohno-Klopman ``ok`` kernel (=2).
+        """
+        return 1 if self._lc_gamma_is_erf() else 0
+
+    def _model_args(self) -> list:
+        """C ABI model-block scalars spliced in right after the zvector flag.
+
+        Empty for DFTB (the DFTB C ABI has no model block); the OpenQP-xTB
+        adapter overrides it to insert model/dispersion/halogen_bond/
+        third_order/spin_scale.
+        """
+        return []
+
     def _reference_multiplicity(self, method: str) -> int:
         explicit = int(self.dftb.get("reference_multiplicity", 0))
         if canonical_dftb_type(method) in {"sf", "mrsf"}:
@@ -1885,18 +1944,20 @@ HA_TO_WAVENUMBER = 219474.6313708
 FINE_STRUCTURE = 7.2973525693e-3
 
 
-def dftb_soc(mol):
-    """Standalone SOC driver for method=dftb (mirror of the native compute_soc).
+def _tb_soc(mol, adapter_cls):
+    """Shared SOC driver for the tight-binding backends (dftb/xtb).
 
     Runs the MRSF response for both target multiplicities from the same ROKS
     reference, builds the one-center SOC matrix, diagonalizes
     diag((E - e0) * ha2wn) + hsoc * (alpha^2/2 * ha2wn) in numpy, and fills the
     same OQP:: tags the native soc_mrsf produces (soc_eval in cm^-1 relative to
     the lowest MCH excitation; soc_hsoc_* raw, without the alpha^2/2 prefactor).
+    The backend (its section name and native library) is selected by
+    ``adapter_cls`` -- OpenQPDFTBAdapter for dftb, OpenQPXTBAdapter for xtb.
     """
-    adapter = OpenQPDFTBAdapter(mol)
+    adapter = adapter_cls(mol)
     data = mol.data
-    dftb = mol.config['dftb']
+    dftb = mol.config[adapter_cls.SECTION]
     tdhf = mol.config['tdhf']
     saved = dftb.get('target_multiplicity', 1)
     saved_mult = int(tdhf.get('multiplicity', 1))
@@ -1913,7 +1974,7 @@ def dftb_soc(mol):
 
     try:
         select_manifold(1, ns)
-        singlet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        singlet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_singlet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_s = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_s'] = x_s.copy()
@@ -1921,7 +1982,7 @@ def dftb_soc(mol):
         dims = np.asarray(data['OQP::dftb_wf_dims']).ravel()
 
         select_manifold(3, nt)
-        triplet_energies = np.array(OpenQPDFTBAdapter(mol).energy(), dtype=float)
+        triplet_energies = np.array(adapter_cls(mol).energy(), dtype=float)
         data['OQP::td_triplet_energies'] = np.asarray(data['OQP::td_energies']).copy()
         x_t = np.asarray(data['OQP::td_bvec_mo']).copy()
         data['OQP::td_bvec_mo_t'] = x_t.copy()
@@ -1949,7 +2010,7 @@ def dftb_soc(mol):
     h_total = np.diag(diag).astype(complex) + (hsoc_re + 1j * hsoc_im) * dfac
     eigenvalues, eigenvectors = np.linalg.eigh(h_total)
 
-    fortran_tag = OpenQPDFTBAdapter._fortran_tag
+    fortran_tag = adapter_cls._fortran_tag
     data['OQP::soc_eval'] = np.ascontiguousarray(eigenvalues.real)
     data['OQP::soc_evec_re'] = fortran_tag(np.ascontiguousarray(eigenvectors.real))
     data['OQP::soc_evec_im'] = fortran_tag(np.ascontiguousarray(eigenvectors.imag))
@@ -1957,3 +2018,8 @@ def dftb_soc(mol):
     data['OQP::soc_hsoc_im'] = fortran_tag(np.ascontiguousarray(hsoc_im))
     mol.soc = eigenvalues.real
     return eigenvalues.real
+
+
+def dftb_soc(mol):
+    """Standalone SOC driver for method=dftb (see _tb_soc)."""
+    return _tb_soc(mol, OpenQPDFTBAdapter)
