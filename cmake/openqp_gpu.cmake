@@ -25,8 +25,7 @@
 
 option(OPENQP_WITH_GPU "Link the separately built openqp-gpu CUDA library" OFF)
 set(OPENQP_GPU_SOURCE_DIR "" CACHE PATH
-    "Path to a local openqp-gpu source checkout to build in-tree (optional; "
-    "otherwise find_package(openqp_gpu) locates an installed package)")
+    "Path to a local openqp-gpu source checkout to build in-tree (optional; otherwise find_package(openqp_gpu) locates an installed package)")
 
 if(OPENQP_WITH_GPU)
   # Select the target GPU architecture BEFORE enabling CUDA, so CMake
@@ -60,7 +59,10 @@ endif()
 # No-op when OPENQP_WITH_GPU is OFF, so it is always safe to call.
 function(openqp_gpu_attach target)
   if(OPENQP_WITH_GPU)
-    target_link_libraries(${target} PRIVATE openqp_gpu::openqp_gpu)
+    # OpenQP links `oqp` with the plain target_link_libraries() signature
+    # (source/CMakeLists.txt); CMake forbids mixing plain and keyword
+    # signatures on one target, so use the plain form here too.
+    target_link_libraries(${target} openqp_gpu::openqp_gpu)
     target_compile_definitions(${target} PRIVATE OQP_GPU_LINKED)
     message(STATUS "openqp-gpu: linked into '${target}' (-DOQP_GPU_LINKED)")
   endif()
