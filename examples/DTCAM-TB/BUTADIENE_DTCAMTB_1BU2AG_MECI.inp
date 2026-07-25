@@ -1,0 +1,62 @@
+# DTCAM-TB butadiene 1^1B_u^+ / 2^1A_g^- minimum-energy conical intersection.
+# These are the physical singlet response roots S1 and S2 (roots 2 and 3);
+# root 1 is the physical S0.
+#
+# The start structure is frame 18 of the bond-length-alternation path, the
+# frame where the bright ionic 1^1B_u^+ and the dark covalent 2^1A_g^- cross:
+# along that path S1 is bright and S2 dark up to frame 18, and the characters
+# swap from frame 19 on, so the dark 2^1A_g^- becomes the adiabatic S1 past the
+# seam.
+#
+# pen_sigma=10 IS REQUIRED and is the whole point of this example. BaekA
+# minimises the mean state energy subject to the gap closing
+# (objective = mean(E) + sigma * penalty(gaps)), i.e. it is a MINIMUM-energy CI
+# search. With the default sigma=1 the gap criterion is already satisfied at
+# step 1 here, but the seam-tangential component of the mean-energy gradient is
+# ~500x its threshold, so the walk slides ~1.1 eV downhill ALONG the seam and
+# converges instead on a lower, genuinely different conical intersection (a
+# twisted-terminal-methylene diradicaloid where BOTH states are dark).
+# Stiffening the penalty to 10 holds the search on the nearby 1Bu/2Ag seam.
+# Values >= 5 work; 2 is not enough.
+#
+# Converges in ~32 steps to a true S1/S2 gap of ~1e-4 eV at a planar C2h
+# structure 0.035 A from the start, with S1 dark (f = 0.000, 2^1A_g^-) and
+# S2 bright (f = 0.92, 1^1B_u^+). The same point is reached from start frames
+# 09 and 14-19. Run single-threaded for a deterministic walk.
+#
+# NOTE: maxit does not hard-cap the run -- on non-convergence the driver
+# restarts from its best geometry. Set [oqp] auto_recovery=false if a genuine
+# cap is wanted.
+[input]
+system=
+   6   1.916995   0.065369   0.000000
+   6   0.554563   -0.434396   0.000000
+   6   -1.916995   -0.065369   0.000000
+   6   -0.554563   0.434396   0.000000
+   1   2.760515   -0.606516   0.000000
+   1   2.101350   1.130009   0.000000
+   1   -2.760515   0.606516   0.000000
+   1   0.382205   -1.502220   0.000000
+   1   -2.101350   -1.130009   0.000000
+   1   -0.382205   1.502220   0.000000
+charge=0
+runtype=meci
+method=dftb
+[scf]
+type=rohf
+multiplicity=3
+
+[dftb]
+model=dtcam-tb
+type=mrsf
+parameter_path=
+[tdhf]
+type=mrsf
+nstate=3
+[optimize]
+lib=oqp
+states=2,3
+meci_search=baeka
+energy_gap=1e-5
+maxit=50
+pen_sigma=10
