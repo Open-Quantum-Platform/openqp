@@ -19,18 +19,18 @@ def _config(dftb=None, tdhf_type="mrsf", runtype="energy"):
     return config
 
 
-def test_mrsf_defaults_to_dftb_plus():
-    # MRSF-TDDFTB defaults to the conventional dftb+ protocol; DTCAM-TB is
-    # opt-in only (request it with model=dtcam-tb).
+def test_mrsf_defaults_to_dtcam_tb():
+    # MRSF-TDDFTB defaults to the tuned DTCAM-TB operator; the conventional
+    # dftb+ protocol is opt-in (request it with model=dftb+).
     config = _config(dftb={"type": "mrsf"})
-    assert apply_dftb_model_default(config) == "dftb+"
-    assert config["dftb"]["model"] == "dftb+"
-
-
-def test_mrsf_dtcam_tb_is_opt_in():
-    config = _config(dftb={"type": "mrsf", "model": "dtcam-tb"})
     assert apply_dftb_model_default(config) == "dtcam-tb"
     assert config["dftb"]["model"] == "dtcam-tb"
+
+
+def test_mrsf_dftb_plus_is_opt_in():
+    config = _config(dftb={"type": "mrsf", "model": "dftb+"})
+    assert apply_dftb_model_default(config) == "dftb+"
+    assert config["dftb"]["model"] == "dftb+"
 
 
 def test_sf_defaults_to_dftb_plus():
@@ -130,11 +130,11 @@ def test_non_alias_method_is_left_alone():
     assert "type" not in config["dftb"]
 
 
-def test_alias_expansion_then_model_default_is_dftb_plus():
+def test_alias_expansion_then_model_default_is_dtcam_tb():
     # method=mrsf-tddftb -> method=dftb + type=mrsf, then the model default
-    # materializes the conventional dftb+ preset.
+    # materializes the tuned DTCAM-TB preset.
     config = _bare("mrsf-tddftb")
     config["input"]["runtype"] = "energy"
     config["dftb"]["model"] = ""
     expand_dftb_method_alias(config)
-    assert apply_dftb_model_default(config) == "dftb+"
+    assert apply_dftb_model_default(config) == "dtcam-tb"
