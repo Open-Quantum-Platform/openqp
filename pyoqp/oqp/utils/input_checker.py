@@ -40,6 +40,8 @@ DFTB_TYPES = {
 DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "trust", "trah"}
 
 DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
+               "dtcam-tb2", "dtcam_tb2", "dtcamtb2",
+               "dtcam-tb-erf", "dtcam_tb_erf", "dtcamtberf",
                "dftb+", "dftbplus", "dftb_plus"}
 # Production defaults when no model= is named and no preset-locked key is
 # tuned: MRSF-TDDFTB runs the tuned DTCAM-TB operator by default (it restores
