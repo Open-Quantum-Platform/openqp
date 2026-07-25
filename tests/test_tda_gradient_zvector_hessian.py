@@ -18,7 +18,7 @@ dominant component) even though the TDA *excitation energy* stayed correct.
 
 Validation at the time of the fix (H2O/6-31G*, central FD step 0.005 bohr):
 analytic-vs-FD ``max|diff|`` dropped from ~1.2e-1 to <1e-5 for TDA, and the
-fixed TDA gradient matched the GAMESS reference for B3LYP/root-3.  Full RPA
+fixed TDA gradient matched the external reference for B3LYP/root-3.  Full RPA
 gradients were unaffected.
 """
 

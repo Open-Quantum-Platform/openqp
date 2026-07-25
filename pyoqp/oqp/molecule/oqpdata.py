@@ -53,7 +53,7 @@ def ispher_mode(strng):
     'auto'  - per-shell AO convention from the basis-set metadata
               (Pople 6-31G* stays Cartesian 6d, cc-pVDZ/def2 use 5d/7f);
     'true'  - force pure spherical for every l>=2 shell regardless of how
-              the basis was published (GAMESS ISPHER=1 semantics);
+              the basis was published (pure-shell semantics);
     'false' - force Cartesian for every shell.
     Booleans (from saved/dict configs) map to 'true'/'false'."""
     if isinstance(strng, bool):
@@ -232,6 +232,49 @@ OQP_CONFIG_SCHEMA = {
         'onsite_ss': {'type': float, 'default': '0.0'},
         'onsite_sp': {'type': float, 'default': '0.0'},
         'onsite_pp': {'type': float, 'default': '0.0'},
+        'timeout': {'type': int, 'default': '300'},
+    },
+    # OpenQP-xTB (LC-GFN1-xTB) backend: same option family as [dftb] (shared
+    # adapter base class) minus the DFTB-only probe executable, plus the GFN1
+    # model options of the C ABI v3 (model/dispersion/halogen_bond/third_order/
+    # spin_scale) and the 'ok' lc_gamma kind (the xtb default).
+    'xtb': {
+        'backend': {'type': string, 'default': 'native'},
+        'type': {'type': string, 'default': 'auto'},
+        'parameter_path': {'type': str, 'default': ''},
+        'library_path': {'type': str, 'default': ''},
+        'model': {'type': string, 'default': 'gfn1'},
+        'dispersion': {'type': bool, 'default': 'True'},
+        'halogen_bond': {'type': bool, 'default': 'True'},
+        'third_order': {'type': bool, 'default': 'True'},
+        'spin_scale': {'type': float, 'default': '1.0'},
+        'scc_tolerance': {'type': float, 'default': '1.0e-8'},
+        'scc_mixer': {'type': string, 'default': 'auto'},
+        'scc_mixing': {'type': float, 'default': '0.35'},
+        'scc_history': {'type': int, 'default': '12'},
+        'scc_max_step': {'type': float, 'default': '0.5'},
+        'max_scc_iterations': {'type': int, 'default': '1200'},
+        'response_tolerance': {'type': float, 'default': '1.0e-6'},
+        'response_max_iterations': {'type': int, 'default': '50'},
+        'response_max_subspace': {'type': int, 'default': '100'},
+        'response_solver': {'type': string, 'default': 'auto'},
+        'spc': {'type': float, 'default': '0.5'},
+        'spc_coco': {'type': float, 'default': '-999.0'},
+        'spc_ovov': {'type': float, 'default': '-999.0'},
+        'spc_coov': {'type': float, 'default': '-999.0'},
+        'omega': {'type': float, 'default': '0.3'},
+        'cam_alpha': {'type': float, 'default': '0.0'},
+        'cam_beta': {'type': float, 'default': '1.0'},
+        'lc_gamma': {'type': string, 'default': 'ok'},
+        'lc_ground_state': {'type': bool, 'default': 'False'},
+        'zvector': {'type': bool, 'default': 'True'},
+        'spin_complete': {'type': bool, 'default': 'True'},
+        'reference_multiplicity': {'type': int, 'default': '0'},
+        'target_multiplicity': {'type': int, 'default': '1'},
+        'mrsf_shift_oo': {'type': float, 'default': '0.0'},
+        'mrsf_shift_co': {'type': float, 'default': '0.0'},
+        'mrsf_shift_ov': {'type': float, 'default': '0.0'},
+        'mrsf_shift_cv': {'type': float, 'default': '0.0'},
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {

@@ -32,7 +32,7 @@ contains
 !>    5. Assemble the SOC Hamiltonian in the (singlet + 3*triplet) basis
 !>    6. Diagonalize to obtain SOC-corrected adiabatic energies and eigenvectors
 !>
-!>  State ordering in the SOC basis follows the GAMESS convention:
+!>  State ordering in the OpenQP SOC basis is:
 !>    indices 1..ns        -> singlet states S0..S(ns-1)
 !>    indices ns+1..ns+3nt -> triplet Ms sublevels T0(Ms=-1,0,+1), T1(...), ...
 !>
@@ -432,18 +432,17 @@ subroutine compute_soc_ao(infos, lx_ao, ly_ao, lz_ao)
 
 end subroutine compute_soc_ao
 
-!> @brief Print a packed SOC AO integral matrix in GAMESS-compatible format
+!> @brief Print a packed SOC AO integral matrix in a compact block format
 !> @details
 !>  Writes the lower-triangular AO integral matrix to unit iw in blocks of
-!>  NCOLS=5 columns, with basis function labels and row indices, matching
-!>  the layout used in GAMESS for direct comparison.
+!>  NCOLS=5 columns, with basis function labels and row indices.
 !>
 !> @param[in]  iw     Log file unit
 !> @param[in]  comp   Component label ('LX', 'LY', or 'LZ')
 !> @param[in]  mat    Packed lower-triangular AO matrix (nbf*(nbf+1)/2)
 !> @param[in]  nbf    Number of basis functions
 !> @param[in]  basis  Basis set descriptor (used for bf_label)
-subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
+subroutine print_soc_ao(iw, comp, mat, nbf, basis)
   use basis_tools, only: basis_set
   use precision,   only: dp
   implicit none
@@ -485,7 +484,7 @@ subroutine print_soc_ao_gamess(iw, comp, mat, nbf, basis)
   end do
   write(iw, *)
 
-end subroutine print_soc_ao_gamess
+end subroutine print_soc_ao
 
 !> @brief Transform a packed antisymmetric SOC AO matrix to the MO basis
 !> @details
@@ -546,7 +545,7 @@ end subroutine ao2mo_soc
 !>    t11ab(I,J,t,u)  -- triplet I / triplet J, Ms=+1/-1 component (alpha-beta)
 !>
 !>  The Davidson eigenvectors are first reordered to the Ms-resolved form required
-!>  by the GAMESS SOC convention (see compute_soc_matrix for the state ordering).
+!>  by the OpenQP SOC convention (see compute_soc_matrix for the state ordering).
 !>  The open-shell ROHF reference determines the active MO indices (iO1, iO2, iC).
 !>
 !> @param[in]  bvec_s   Singlet Davidson vectors (xvec_dim x ns)
@@ -832,7 +831,7 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   !
   ! Assemble the full SOC Hamiltonian in the basis of MRSF spin-states.
   !
-  ! Basis ordering (GAMESS convention):
+  ! OpenQP basis ordering:
   !   rows/cols 1..ns              : singlets S_I
   !   rows/cols ns+1..ns+3*nt      : triplets, grouped as
   !                                  (T_0,Ms=-1),(T_0,Ms=0),(T_0,Ms=+1),
@@ -856,13 +855,13 @@ subroutine compute_soc_matrix(t00aa, t110aa, t11ab, lx_mo, ly_mo, lz_mo, &
   !   <T_I,Ms=0 | h_soc |T_J,Ms=0 > = sum_tu (celm_aa*T110aa + celm_bb*T110bb)
   !   <T_I,Ms=-1| h_soc |T_J,Ms=-1> = sum_tu (celm_aa*Tm11m1aa + celm_bb*Tm11m1bb)
   !
-  ! Spin matrix elements (spnfac absorbed, GAMESS convention):
+  ! Spin matrix elements (spnfac absorbed):
   !   celm_aa = (0, -Lz(t,u)/2)
   !   celm_bb = -celm_aa = (0, +Lz(t,u)/2)
   !   celm_ba = (Ly(t,u)/4, -Lx(t,u)/4)   [S- component; spnfac=0.5 already absorbed]
   !   celm_ab = (Ly(t,u)/4,  Lx(t,u)/4)   [S+ component]
   !
-  ! Note: celm_ba here = sqrt(0.5)*0.5*(Ly-iLx) per GAMESS lines 1108-1110.
+  ! Note: celm_ba here = sqrt(0.5)*0.5*(Ly-iLx).
   !       The extra sqrt(0.5) from the spin ladder operator S- is the spnfac.
   !
   ! Output: hsoc(nstate, nstate), nstate = ns + 3*nt, in Hartree.

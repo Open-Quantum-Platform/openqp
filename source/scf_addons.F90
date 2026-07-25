@@ -1068,6 +1068,7 @@ contains
     use types, only: information
     use int2_compute, only: int2_compute_t, int2_fock_data_t, &
                             int2_rhf_data_t, int2_urohf_data_t
+    use routec_bridge, only: routec_try_fock_jk
 
     implicit none
 
@@ -1098,6 +1099,15 @@ contains
     if (present(scale_coul)) scale_c = scale_coul
     is_dft = (infos%control%hamilton == 20)
 
+    ! Route-C external DF-JK (inert unless $OQP_ROUTEC_LIB is set).
+    ! Not taken for CAM (needs short-range K) or incremental builds
+    ! (difference densities; run with scf incremental=False).
+    if (.not. (is_dft .and. infos%dft%cam_flag) .and. .not. present(f_old)) then
+      if (routec_try_fock_jk(d, f, basis%nbf, ubound(f,2), scale_e, scale_c)) then
+        if (present(nschwz)) nschwz = 0
+        return
+      end if
+    end if
 
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
@@ -1641,6 +1651,7 @@ contains
     use mathlib,          only : traceprod_sym_packed
     use solvent_pcm,      only : add_pcm_reaction_field
     use mod_dft_incdft,  only : g_xc_ref, incdft_store
+    use routec_bridge,   only : routec_try_vxc
     implicit none
 
     type(basis_set),   intent(in)    :: basis
@@ -1667,6 +1678,7 @@ contains
     real(dp), allocatable :: pfxc(:,:)
     logical :: is_dft = .false., use_density_xc
     logical :: xc_reused
+    logical :: xc_diverted
     ! Env-gated (OQP_XC_TIMING) per-iteration wall split: J/K vs XC build.
     logical :: do_t
     character(len=8) :: tenv
@@ -1760,10 +1772,21 @@ contains
       g_xc_ref%reuse_run = g_xc_ref%reuse_run + 1
       g_xc_ref%n_reuse   = g_xc_ref%n_reuse + 1
     else
-      if (use_density_xc) then
-        call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
-      else
-        call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+      ! Route-C external GPU Vxc (inert unless $OQP_ROUTEC_XC_LIB is set).
+      ! RHF/UKS (nfocks 1 or 2); falls back to the native grid code when the
+      ! external supplier declines (info /= 0). E%totkin is a grid diagnostic
+      ! only and is left at 0 on the external path; E%totele comes from the dylib.
+      xc_diverted = .false.
+      if (nfocks == 1 .or. nfocks == 2) then
+        xc_diverted = routec_try_vxc(d, pfxc, nbf, nfocks, E%eexc, E%totele)
+        if (xc_diverted) E%totkin = 0.0_dp
+      end if
+      if (.not. xc_diverted) then
+        if (use_density_xc) then
+          call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+        else
+          call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
+        end if
       end if
       ! Refresh the IncDFT reference from this full build (only when IncDFT is on).
       if (infos%control%xc_incdft /= 0) call incdft_store(pfxc, E%eexc, E%totele, E%totkin)

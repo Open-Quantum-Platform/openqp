@@ -2,23 +2,21 @@
 !>         surface hopping (FSSH) core kernels for MRSF-TDDFT.
 !>
 !> @details
-!>   Faithful port of the surface-hopping numerics from the GAMESS `namd.src`
-!>   module (S. Lee), restructured into clean, argument-based modern Fortran so
-!>   the kernels are unit-testable and free of COMMON-block / dynamic-memory
-!>   coupling.  The physics mirrors the original exactly:
+!>   Native OpenQP implementation of surface-hopping numerics, structured as
+!>   clean, argument-based modern Fortran so the kernels are unit-testable and
+!>   free of COMMON-block / dynamic-memory coupling.  The implementation covers:
 !>
 !>     - time-derivative couplings (TDC) from wavefunction overlaps
-!>       between consecutive nuclear steps        [GAMESS NACVFD]
+!>       between consecutive nuclear steps
 !>     - RK4 propagation of the electronic amplitudes
-!>       i*hbar*\dot{c} = (E - i*sigma) c          [GAMESS PPTDECOE/NDDTCR/NDDTCC]
-!>     - cumulative Tully hopping probabilities    [GAMESS FSSHPRST/FSSHPR]
+!>       i*hbar*\dot{c} = (E - i*sigma) c
+!>     - cumulative Tully hopping probabilities
 !>     - fewest-switches hop decision + isotropic
-!>       velocity rescaling (energy conservation)  [GAMESS FSSH/FSSHT/RESCALV]
-!>     - kinetic energy                            [GAMESS MDQKIN]
+!>       velocity rescaling (energy conservation)
+!>     - kinetic energy
 !>
 !>   Internal-conversion accuracy upgrades, added per a verified literature
-!>   survey (see session RESEARCH_ic_isc_methods.md) and absent from the GAMESS
-!>   reference:
+!>   survey (see session RESEARCH_ic_isc_methods.md):
 !>     - energy-based decoherence correction (EDC) — Granucci & Persico,
 !>       J. Chem. Phys. 126, 134114 (2007); the SHARC default decoherence scheme
 !>     - trivial / unavoided-crossing detection with diabatic state following,
@@ -35,17 +33,16 @@
 !>       c_diag = U' . P_MCH . U . c_diag.  Requires MRSF Breit-Pauli SOC
 !>       matrix elements as input.
 !>
-!>   Deliberate, documented deviations from the original ("the GAMESS code may
-!>   not be perfect"):
+!>   Deliberate implementation choices:
 !>     * Everything is in consistent atomic units (energies in Hartree,
 !>       velocities in bohr/atomic-time, masses in electron masses).  The
-!>       original mixed Hartree (FSSH) and kcal/mol (FSSHT, QM/MM) paths; here a
-!>       single code path is used and the caller converts units once.
+!>       FSSH and QM/MM paths use a single code path and the caller converts
+!>       units once.
 !>     * The O(nstate^2 * nsub) per-substep probability buffer of FSSHPR is
 !>       dropped: probabilities are accumulated on the fly, then clamped and
-!>       row-normalised once — numerically identical to the original sum.
+!>       row-normalised once.
 !>
-!> @author  Port: OpenQP NAMD; original algorithm: Seunghoon Lee (GAMESS)
+!> @author  OpenQP development team
 !> @date    2026-06
 module namd_mod
 
@@ -75,7 +72,7 @@ module namd_mod
 contains
 
 !> @brief Time-derivative (nonadiabatic) coupling from state overlaps.
-!>        sigma(i,j) = ( S(i,j) - S(j,i) ) / (2 dt)          [GAMESS NACVFD]
+!>        sigma(i,j) = ( S(i,j) - S(j,i) ) / (2 dt)
 !>
 !> @param[in]  stas   nstate x nstate overlap <Phi_i(t-dt)|Phi_j(t)> between
 !>                     the previous and current nuclear geometries
@@ -98,10 +95,10 @@ contains
 !>        basis (amplitudes c = cr + i*ci):
 !>           \dot{cr}_k = - sum_i sigma(k,i) cr_i + E_k ci_k
 !>           \dot{ci}_k = - sum_i sigma(k,i) ci_i - E_k cr_k
-!>        i.e. \dot{c} = -(i E + sigma) c.        [GAMESS NDDTCR/NDDTCC]
+!>        i.e. \dot{c} = -(i E + sigma) c.
 !>
 !>   The returned increments are pre-multiplied by the integration step `h`
-!>   (matching the original convention where k1..k4 are h*f).
+!>   so that k1..k4 are h*f.
   subroutine namd_coeff_deriv(cr, ci, tdc, eig, h, dcr, dci)
     real(kind=dp), intent(in)  :: cr(:), ci(:)
     real(kind=dp), intent(in)  :: tdc(:,:)
@@ -124,7 +121,7 @@ contains
   end subroutine namd_coeff_deriv
 
 !> @brief One RK4 sub-step of the electronic amplitudes, followed by
-!>        renormalisation.                         [GAMESS PPTDECOE]
+!>        renormalisation.
 !>
 !> @param[in,out] cr,ci  real/imaginary amplitudes (nstate)
 !> @param[in]     tdc    time-derivative coupling (nstate x nstate, constant
@@ -169,7 +166,7 @@ contains
   end subroutine namd_propagate_coeff
 
 !> @brief Accumulate the Tully transition probability over one electronic
-!>        sub-step into the running cumulative matrix.   [GAMESS FSSHPRST]
+!>        sub-step into the running cumulative matrix.
 !>
 !>        g(i,j) += 2 sigma(i,j) Re(c_i^* c_j) h / |c_i|^2
 !>
@@ -194,7 +191,7 @@ contains
   end subroutine namd_accumulate_hop_prob
 
 !> @brief Finalise cumulative hopping probabilities: clamp negatives to zero
-!>        and renormalise any row whose total exceeds one.   [GAMESS FSSHPR]
+!>        and renormalise any row whose total exceeds one.
   subroutine namd_finalize_hop_prob(cmhp)
     real(kind=dp), intent(inout) :: cmhp(:,:)
     integer :: i, j, n
@@ -210,7 +207,6 @@ contains
   end subroutine namd_finalize_hop_prob
 
 !> @brief Classical kinetic energy  KE = 1/2 sum_a m_a |v_a|^2  (atomic units).
-!>                                                          [GAMESS MDQKIN]
 !> @param[in] vel   3 x natom velocities (bohr / atomic-time)
 !> @param[in] mass  natom atomic masses (electron masses)
   pure function namd_kinetic_energy(vel, mass) result(ke)
@@ -227,7 +223,7 @@ contains
   end function namd_kinetic_energy
 
 !> @brief Isotropic velocity rescaling after a hop to conserve total energy.
-!>        v <- v * sqrt(1 + dE/KE),  dE = E_old - E_new.    [GAMESS RESCALV]
+!>        v <- v * sqrt(1 + dE/KE),  dE = E_old - E_new.
 !>
 !>   Caller must already have verified the hop is energetically allowed
 !>   (KE >= |dE| when dE < 0); otherwise the argument of sqrt is negative.
@@ -242,7 +238,7 @@ contains
   end subroutine namd_rescale_velocities
 
 !> @brief Fewest-switches hop decision and (on accept) isotropic velocity
-!>        rescaling.                                  [GAMESS FSSH/FSSHT]
+!>        rescaling.
 !>
 !>   All energies in Hartree, velocities/masses in atomic units.
 !>
