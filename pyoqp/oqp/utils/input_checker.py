@@ -42,14 +42,15 @@ DFTB_SCC_MIXERS = {"linear", "anderson", "pulay", "broyden", "auto", "diis", "tr
 DFTB_MODELS = {"dtcam-tb", "dtcam_tb", "dtcamtb",
                "dftb+", "dftbplus", "dftb_plus"}
 # Production defaults when no model= is named and no preset-locked key is
-# tuned: MRSF-TDDFTB runs the published DTCAM-TB operator; the other
-# OPEN-SHELL SCC routes (MRSF, SF, open-shell ground) run the DFTB+
-# compatibility protocol (conventional LC-DFTB2, SPC=0.5) by default.  DTCAM-TB
-# is the tuned, published operator and is opt-in only: request it explicitly
-# with [dftb] model=dtcam-tb.  Closed-shell routes (singlet ground, TD-DFTB)
-# and DFTB0 stay preset-free: LC-DFTB2 is not implemented for the restricted
-# reference, and the native library rejects lc_ground_state there.
-DFTB_MODEL_DEFAULT_MRSF = "dftb+"
+# tuned: MRSF-TDDFTB runs the tuned DTCAM-TB operator by default (it restores
+# the ionic-bright / covalent-dark crossing the plain protocol misses); the
+# other OPEN-SHELL SCC routes (SF, open-shell ground) run the DFTB+
+# compatibility protocol (conventional LC-DFTB2, SPC=0.5) by default.  Either
+# operator can be requested explicitly with [dftb] model=dtcam-tb or
+# model=dftb+.  Closed-shell routes (singlet ground, TD-DFTB) and DFTB0 stay
+# preset-free: LC-DFTB2 is not implemented for the restricted reference, and
+# the native library rejects lc_ground_state there.
+DFTB_MODEL_DEFAULT_MRSF = "dtcam-tb"
 DFTB_MODEL_DEFAULT_OPEN_SHELL = "dftb+"
 # Keys a [dftb] model preset fixes; the checker refuses to combine them with
 # model= (the preset overrides them inside openqp-dftb, so a user-tuned value
@@ -939,10 +940,11 @@ def _dftb_key_customized(config: dict[str, Any], key: str) -> bool:
 def apply_dftb_model_default(config: dict[str, Any]) -> str:
     """Materialize the production default [dftb] model preset.
 
-    All open-shell SCC routes (MRSF-TDDFTB, SF-TDDFTB, open-shell ground)
-    default to the DFTB+ compatibility protocol (conventional LC-DFTB2,
-    SPC=0.5).  The tuned DTCAM-TB operator is opt-in: request it with
-    [dftb] model=dtcam-tb.  Closed-shell routes (singlet ground, TD-DFTB)
+    MRSF-TDDFTB defaults to the tuned DTCAM-TB operator; the other open-shell
+    SCC routes (SF-TDDFTB, open-shell ground) default to the DFTB+
+    compatibility protocol (conventional LC-DFTB2, SPC=0.5).  The DFTB+
+    protocol can be requested for MRSF with [dftb] model=dftb+.  Closed-shell
+    routes (singlet ground, TD-DFTB)
     and DFTB0 stay preset-free because the restricted reference has no
     long-range exchange yet.  ``model=none`` keeps the explicit-keys route,
     and any tuned preset-locked key implies manual operator control (legacy
