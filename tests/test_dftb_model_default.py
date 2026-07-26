@@ -1,6 +1,9 @@
 """Policy tests for the production [dftb] model default resolution."""
 
-from oqp.utils.input_checker import apply_dftb_model_default
+from oqp.utils.input_checker import (
+    apply_dftb_model_default,
+    expand_dftb_method_alias,
+)
 
 
 def _config(dftb=None, tdhf_type="mrsf", runtype="energy"):
@@ -16,15 +19,34 @@ def _config(dftb=None, tdhf_type="mrsf", runtype="energy"):
     return config
 
 
-def test_mrsf_defaults_to_dtcam_tb():
+def test_mrsf_defaults_to_dtcam():
+    # MRSF-TDDFTB defaults to the tuned DTCAM-TB operator; the conventional
+    # OB2 protocol is opt-in (request it with model=ob2).
     config = _config(dftb={"type": "mrsf"})
-    assert apply_dftb_model_default(config) == "dtcam-tb"
-    assert config["dftb"]["model"] == "dtcam-tb"
+    assert apply_dftb_model_default(config) == "dtcam"
+    assert config["dftb"]["model"] == "dtcam"
 
 
-def test_sf_defaults_to_dftb_plus():
+def test_mrsf_ob2_is_opt_in():
+    config = _config(dftb={"type": "mrsf", "model": "ob2"})
+    assert apply_dftb_model_default(config) == "ob2"
+    assert config["dftb"]["model"] == "ob2"
+
+
+def test_legacy_model_aliases_still_parse():
+    # The old spellings stay accepted so committed inputs keep working; they
+    # are passed through verbatim and resolved to the same preset natively.
+    for alias in ("dtcam-tb", "dtcam_tb", "dtcamtb",
+                  "dftb+", "dftbplus", "dftb_plus",
+                  "dtcam-tb2", "dtcam-tb-erf"):
+        config = _config(dftb={"type": "mrsf", "model": alias})
+        assert apply_dftb_model_default(config) == alias
+        assert config["dftb"]["model"] == alias
+
+
+def test_sf_defaults_to_ob2():
     config = _config(dftb={"type": "sf"}, tdhf_type="sf")
-    assert apply_dftb_model_default(config) == "dftb+"
+    assert apply_dftb_model_default(config) == "ob2"
 
 
 def test_closed_shell_routes_stay_preset_free():
@@ -38,10 +60,10 @@ def test_closed_shell_routes_stay_preset_free():
         assert config["dftb"]["model"] == ""
 
 
-def test_open_shell_ground_defaults_to_dftb_plus():
+def test_open_shell_ground_defaults_to_ob2():
     config = _config(dftb={"type": "ground", "reference_multiplicity": 3},
                      tdhf_type="rpa")
-    assert apply_dftb_model_default(config) == "dftb+"
+    assert apply_dftb_model_default(config) == "ob2"
 
 
 def test_model_none_is_an_explicit_opt_out():
@@ -51,9 +73,9 @@ def test_model_none_is_an_explicit_opt_out():
 
 
 def test_explicit_model_wins():
-    config = _config(dftb={"type": "mrsf", "model": "dftb+"})
-    assert apply_dftb_model_default(config) == "dftb+"
-    assert config["dftb"]["model"] == "dftb+"
+    config = _config(dftb={"type": "mrsf", "model": "ob2"})
+    assert apply_dftb_model_default(config) == "ob2"
+    assert config["dftb"]["model"] == "ob2"
 
 
 def test_tuned_locked_key_keeps_the_explicit_keys_route():
@@ -73,3 +95,57 @@ def test_non_dftb_methods_are_untouched():
     config["input"]["method"] = "tdhf"
     assert apply_dftb_model_default(config) == ""
     assert config["dftb"]["model"] == ""
+
+
+# --- Top-level [input] method DFTB shortcuts (expand_dftb_method_alias) ---
+
+def _bare(method):
+    return {"input": {"method": method}, "dftb": {}, "tdhf": {}, "scf": {}}
+
+
+def test_mrsf_tddftb_alias_expands_to_dftb_with_roks_triplet():
+    config = _bare("mrsf-tddftb")
+    assert expand_dftb_method_alias(config) == "mrsf"
+    assert config["input"]["method"] == "dftb"
+    assert config["dftb"]["type"] == "mrsf"
+    assert config["dftb"]["backend"] == "native"
+    assert config["tdhf"]["type"] == "mrsf"
+    assert config["scf"]["type"] == "rohf"
+    assert config["scf"]["multiplicity"] == 3
+
+
+def test_sf_tddftb_alias_expands_to_sf_roks_triplet():
+    config = _bare("sf-tddftb")
+    assert expand_dftb_method_alias(config) == "sf"
+    assert config["input"]["method"] == "dftb"
+    assert config["dftb"]["type"] == "sf"
+    assert config["tdhf"]["type"] == "sf"
+    assert config["scf"]["type"] == "rohf"
+    assert config["scf"]["multiplicity"] == 3
+
+
+def test_tddftb_alias_expands_to_closed_shell():
+    config = _bare("tddftb")
+    assert expand_dftb_method_alias(config) == "tddftb"
+    assert config["input"]["method"] == "dftb"
+    assert config["dftb"]["type"] == "tddftb"
+    assert config["scf"]["type"] == "rhf"
+    assert config["scf"]["multiplicity"] == 1
+
+
+def test_non_alias_method_is_left_alone():
+    config = _bare("dftb")
+    assert expand_dftb_method_alias(config) == ""
+    assert config["input"]["method"] == "dftb"
+    # no type forced onto a plain method=dftb input
+    assert "type" not in config["dftb"]
+
+
+def test_alias_expansion_then_model_default_is_dtcam():
+    # method=mrsf-tddftb -> method=dftb + type=mrsf, then the model default
+    # materializes the tuned DTCAM-TB preset.
+    config = _bare("mrsf-tddftb")
+    config["input"]["runtype"] = "energy"
+    config["dftb"]["model"] = ""
+    expand_dftb_method_alias(config)
+    assert apply_dftb_model_default(config) == "dtcam"

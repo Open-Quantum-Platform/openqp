@@ -42,6 +42,11 @@ _NATIVE_DIAGNOSTIC_ENV = (
 )
 
 
+# Warm-start seed paths whose stale files have already been cleared once in
+# this process (see OpenQPDFTBAdapter._maybe_enable_optimization_solution_following).
+_OPT_SOLUTION_FOLLOW_SEEDS = set()
+
+
 def _call_with_native_diagnostics(
         callback, *, print_level, state_spectrum, structured_trace=True):
     """Run one native call while capturing flushed Fortran stdout.
@@ -232,7 +237,7 @@ class OpenQPDFTBAdapter:
         # vector lives in openqp-dftb (single source of truth) and is applied
         # by the native library; the input checker forbids mixing a model
         # with individual operator keys.  'none' is the explicit opt-out of
-        # the SF/MRSF dtcam-tb default (materialized in Molecule.get_config).
+        # the SF/MRSF dtcam default (materialized in Molecule.get_config).
         preset = str(self.dftb.get("model", "")).strip()
         if preset.lower() == "none":
             preset = ""
@@ -245,6 +250,46 @@ class OpenQPDFTBAdapter:
         if self._probe_method_name(self._resolved_method()) in {"sf", "mrsf"} and \
                 str(self.config.get("scf", {}).get("type", "rhf")).lower() == "rhf":
             self.config.setdefault("scf", {})["type"] = "rohf"
+        self._maybe_enable_optimization_solution_following()
+
+    def _maybe_enable_optimization_solution_following(self):
+        """Steer the bistable LC-ROKS reference SCF onto a consistent branch
+        during geometry optimizations and seam searches.
+
+        The long-range-corrected restricted-open-shell reference SCF has
+        multiple self-consistent solutions in near-degenerate regions (bond
+        alternated interiors, near-CI geometries).  A geometry optimizer that
+        solves every step from a cold guess lands on different branches at
+        neighboring points, producing SCC non-convergence and spurious jumps in
+        MECI / S1-min searches.  Because the optimizer runs every SCC in this
+        Python process, a guess-only warm-start file -- dumped after each SCC
+        and loaded before the next -- carries the converged reference orbitals
+        from one geometry step to the next, following a single solution branch.
+        No-op for single points; skipped if the user configured the warm-start
+        env explicitly or set OPENQP_DFTB_OPT_SOLUTION_FOLLOW=0.
+        """
+        runtype = str(self.config.get("input", {}).get("runtype", "energy")).lower()
+        if runtype not in {"optimize", "meci", "mecp", "mep", "ts"}:
+            return
+        if os.environ.get("OPENQP_DFTB_OPT_SOLUTION_FOLLOW", "1") == "0":
+            return
+        if os.environ.get("OPENQP_DFTB_WARMSTART_MO") or \
+                os.environ.get("OPENQP_DFTB_DUMP_MO"):
+            return  # respect an explicit user-supplied warm-start configuration
+        seed = os.path.join(
+            self.mol.log_path or ".",
+            ".{0}_{1}_dftb_scc_seed.mo".format(self.mol.project_name, os.getpid()),
+        )
+        # Start each optimization from a cold first step: drop any stale seed
+        # left by an earlier same-PID run the first time this path is used.
+        if seed not in _OPT_SOLUTION_FOLLOW_SEEDS:
+            _OPT_SOLUTION_FOLLOW_SEEDS.add(seed)
+            try:
+                os.remove(seed)
+            except OSError:
+                pass
+        os.environ["OPENQP_DFTB_DUMP_MO"] = seed
+        os.environ["OPENQP_DFTB_WARMSTART_MO"] = seed
 
     def energy(self):
         """Return an OpenQP-style state-energy array and update molecule data."""

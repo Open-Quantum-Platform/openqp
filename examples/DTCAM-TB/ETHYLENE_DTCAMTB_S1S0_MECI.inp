@@ -29,7 +29,7 @@ type=rohf
 multiplicity=3
 
 [dftb]
-model=dtcam-tb
+model=dtcam
 type=mrsf
 parameter_path=
 [tdhf]

@@ -5,7 +5,7 @@ written:
 
 ```text
 mrsf-tddftb(nstate=3)
-dftb(model=dtcam-tb)
+dftb(model=dtcam)
 geom="molecule.xyz"
 ```
 
@@ -15,7 +15,7 @@ different backend is explicit. `lib=geometric` remains available:
 ```text
 mrsf-tddftb(nstate=3)
 opt(S1,lib=geometric,maxit=100)
-dftb(model=dtcam-tb)
+dftb(model=dtcam)
 geom="molecule.xyz"
 ```
 
