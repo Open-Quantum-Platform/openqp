@@ -1,5 +1,5 @@
 # DTCAM-TB (MRSF-TDDFTB) vertical energies of s-trans butadiene.
-# model=dtcam-tb resolves the complete published operator and the fast
+# model=dtcam resolves the complete published operator and the fast
 # numerical protocol inside openqp-dftb; the bundled OB2W0PT3 set (official
 # spinw.txt included) is resolved automatically when parameter_path is empty --
 # set parameter_path or OPENQP_DFTB_PARAMETER_PATH only to override it.
@@ -24,7 +24,7 @@ type=rohf
 multiplicity=3
 
 [dftb]
-model=dtcam-tb
+model=dtcam
 type=mrsf
 parameter_path=
 [tdhf]

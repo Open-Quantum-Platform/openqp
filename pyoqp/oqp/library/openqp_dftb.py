@@ -237,7 +237,7 @@ class OpenQPDFTBAdapter:
         # vector lives in openqp-dftb (single source of truth) and is applied
         # by the native library; the input checker forbids mixing a model
         # with individual operator keys.  'none' is the explicit opt-out of
-        # the SF/MRSF dtcam-tb default (materialized in Molecule.get_config).
+        # the SF/MRSF dtcam default (materialized in Molecule.get_config).
         preset = str(self.dftb.get("model", "")).strip()
         if preset.lower() == "none":
             preset = ""

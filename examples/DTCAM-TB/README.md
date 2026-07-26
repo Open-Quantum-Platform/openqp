@@ -1,8 +1,10 @@
 # DTCAM-TB (MRSF-TDDFTB) examples
 
-`[dftb] model=dtcam-tb` selects the complete published DTCAM-TB operator and
-its fast numerical protocol. The vector is resolved inside openqp-dftb
-(single source of truth), so these inputs cannot drift from the paper:
+`[dftb] model=dtcam` selects the complete published DTCAM-TB operator and
+its fast numerical protocol. (The older spelling `model=dtcam-tb` is still
+accepted as an alias, so previously written inputs keep working.) The vector
+is resolved inside openqp-dftb (single source of truth), so these inputs
+cannot drift from the paper:
 
 - reference (ROKS): PLAIN DFTB2 -- (alpha_R, beta_R) = (0, 0), i.e. the
   long-range term is switched off and the ground state carries no range

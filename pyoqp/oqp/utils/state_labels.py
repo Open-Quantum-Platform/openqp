@@ -80,7 +80,9 @@ DFTB_CAP_SCC_FINAL_TRUST = 4
 # parameter vectors themselves live in openqp-dftb (src/openqp_dftb_presets.F90,
 # the single source of truth) and are reported back through the
 # openqp_dftb_resolved_options record; this tuple only feeds the settings log.
-DFTB_KNOWN_PRESETS = ("dtcam-tb", "dtcam-tb2", "dtcam-tb-erf", "dftb+")
+# Canonical spellings only -- the legacy aliases ("dtcam-tb", "dtcam-tb2",
+# "dtcam-tb-erf", "dftb+") still parse but are no longer advertised.
+DFTB_KNOWN_PRESETS = ("dtcam", "dtcam2", "dtcam-erf", "ob2")
 
 
 def _section(config, name):

@@ -1,5 +1,5 @@
 # The DTCAM-TB operator written out as explicit [dftb] keys, WITHOUT
-# model=dtcam-tb. This must reproduce BUTADIENE_DTCAMTB_ENERGY.inp digit for
+# model=dtcam. This must reproduce BUTADIENE_DTCAMTB_ENERGY.inp digit for
 # digit: the preset is resolved inside openqp-dftb from the same published
 # vector these keys spell out (reference: plain DFTB2, no long-range term;
 # a PLAIN DFTB2 reference (cam_alpha = cam_beta = 0, no long-range term);
