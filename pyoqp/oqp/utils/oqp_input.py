@@ -150,6 +150,22 @@ class OQPResolution:
 def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
     """Remove concise section options whose runtime defaults say the same thing."""
 
+    if call.name == "afqmc":
+        aliases = {
+            "output": "output_dir",
+            "walkers": "nwalkers",
+            "steps": "nsteps",
+            "dt": "timestep",
+            "threads": "omp_threads",
+            "chol": "chol_tol",
+        }
+        kwargs = {}
+        for key, value in call.kwargs.items():
+            canonical = aliases.get(key, key)
+            if canonical in kwargs:
+                raise OQPInputError("Duplicate AFQMC option: %s" % canonical)
+            kwargs[canonical] = value
+        return CallSpec(call.name, call.args, kwargs, call.explicit)
     if call.name != "dftb":
         return call
     kwargs = dict(call.kwargs)
@@ -231,7 +247,7 @@ PRIMARY_ALIASES = {
 BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 
 SECTION_NAMES = {
-    "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
+    "input", "afqmc", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
     "oqp", "neb", "hess", "nac", "md", "qmmm", "json", "tests",
 }
@@ -249,6 +265,11 @@ def _keys(words: str) -> frozenset[str]:
 # compares this manifest with the authoritative schema via AST and fails when a
 # schema keyword is added without an explicit owner here.
 GENERIC_SCHEMA_KEYS = {
+    "afqmc": _keys("""
+        output_dir chol_tol trial trial_file nwalkers nsteps timestep seed
+        omp_threads stabilize_every population_control_every estimate_every
+        accumulate_after force_bias_bound
+    """),
     "qmmm": _keys("""
         forcefield nonbondedmethod constraints rigidwater nsteps n_steps
         timestep pdb_file forcefield_files qm_atoms cutoff embedding

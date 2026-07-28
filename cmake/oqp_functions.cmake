@@ -206,9 +206,10 @@ set(OQP_ACCELERATE_ILP64_SYMS
     ssyr2k ssyrk ssytrf ssytri ssytrs stbmv stbsv stpmv stpsv strmm strmv
     strsm strsv
     xerbla
-    zaxpy zcopy zdotc zdotu zdrot zdscal zgbmv zgemm zgemv zgerc zgeru zhbmv
-    zheev zhemm zhemv zher zher2 zher2k zherk zhpmv zhpr zhpr2 zscal zswap
-    zsymm zsyr2k zsyrk ztbmv ztbsv ztpmv ztpsv ztrmm ztrmv ztrsm ztrsv
+    zaxpy zcopy zdotc zdotu zdrot zdscal zgbmv zgemm zgemv zgeqrf zgerc zgeru
+    zgetrf zgetri zhbmv zheev zhemm zhemv zher zher2 zher2k zherk zhpmv zhpr
+    zhpr2 zscal zswap zsymm zsyr2k zsyrk ztbmv ztbsv ztpmv ztpsv ztrmm ztrmv
+    ztrsm ztrsv zungqr
     CACHE INTERNAL "BLAS/LAPACK routines interposed onto Accelerate ILP64")
 
 function(oqp_accelerate_alias_file out_path)

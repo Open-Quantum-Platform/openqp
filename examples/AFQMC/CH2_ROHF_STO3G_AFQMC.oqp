@@ -1,0 +1,2 @@
+rohf/sto-3g geom="ch2.xyz" charge=0 mult=3 energy guess(type=huckel)
+afqmc(output=ch2_rohf_sto3g_afqmc,trial=mean_field,walkers=16,steps=6,dt=0.005,seed=161803,threads=2,chol=1e-10,stabilize_every=2,population_control_every=2,estimate_every=2,accumulate_after=2)

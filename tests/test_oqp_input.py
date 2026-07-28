@@ -26,6 +26,22 @@ def _parse(text, source_dir=None):
     return spec, oqp_input.lower_to_legacy(spec, source_dir=source_dir)
 
 
+def test_afqmc_section_call_and_concise_aliases_lower_to_legacy():
+    spec, legacy = _parse(
+        'rohf/sto-3g geom="ch2.xyz" mult=3 energy '
+        'afqmc(output=prepared,trial=mean_field,walkers=32,steps=20,'
+        'dt=0.01,threads=2,chol=1e-9,accumulate_after=4)'
+    )
+    assert legacy["afqmc"]["output_dir"] == "prepared"
+    assert legacy["afqmc"]["nwalkers"] == "32"
+    assert legacy["afqmc"]["nsteps"] == "20"
+    assert legacy["afqmc"]["timestep"] == "0.01"
+    assert legacy["afqmc"]["omp_threads"] == "2"
+    assert legacy["afqmc"]["chol_tol"] == "1e-09"
+    canonical = oqp_input.render_canonical_oqp(spec)
+    assert "afqmc(output_dir=prepared" in canonical
+
+
 def test_mrsf_s1_opt_hides_reference_and_root_bookkeeping(tmp_path):
     spec, legacy = _parse(
         'mrsf(nstate=5)/bhhlyp/6-31g* geom="h2o.xyz" charge=0 '

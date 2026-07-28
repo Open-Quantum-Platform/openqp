@@ -90,6 +90,22 @@ def _perf_parse_float(v):
 
 
 OQP_CONFIG_SCHEMA = {
+    'afqmc': {
+        'output_dir': {'type': str, 'default': ''},
+        'chol_tol': {'type': float, 'default': '1.0e-10'},
+        'trial': {'type': string, 'default': 'mean_field'},
+        'trial_file': {'type': str, 'default': ''},
+        'nwalkers': {'type': int, 'default': '640'},
+        'nsteps': {'type': int, 'default': '1000'},
+        'timestep': {'type': float, 'default': '0.005'},
+        'seed': {'type': int, 'default': '1'},
+        'omp_threads': {'type': int, 'default': '1'},
+        'stabilize_every': {'type': int, 'default': '5'},
+        'population_control_every': {'type': int, 'default': '5'},
+        'estimate_every': {'type': int, 'default': '25'},
+        'accumulate_after': {'type': int, 'default': '100'},
+        'force_bias_bound': {'type': float, 'default': '1.0'},
+    },
     'qmmm': {
         'forcefield': {'type': sarray, 'default': 'amber14-all.xml,amber14/tip3p.xml'},
         'nonbondedmethod': {'type': str, 'default': 'NoCutoff'},

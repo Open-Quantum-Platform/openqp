@@ -13,6 +13,22 @@ def _string(value):
 
 
 SCHEMA = {
+    "afqmc": {
+        "output_dir": {"type": str, "default": ""},
+        "chol_tol": {"type": float, "default": "1.0e-10"},
+        "trial": {"type": _string, "default": "mean_field"},
+        "trial_file": {"type": str, "default": ""},
+        "nwalkers": {"type": int, "default": "640"},
+        "nsteps": {"type": int, "default": "1000"},
+        "timestep": {"type": float, "default": "0.005"},
+        "seed": {"type": int, "default": "1"},
+        "omp_threads": {"type": int, "default": "1"},
+        "stabilize_every": {"type": int, "default": "5"},
+        "population_control_every": {"type": int, "default": "5"},
+        "estimate_every": {"type": int, "default": "25"},
+        "accumulate_after": {"type": int, "default": "100"},
+        "force_bias_bound": {"type": float, "default": "1.0"},
+    },
     "input": {
         "charge": {"type": int, "default": "0"},
         "basis": {"type": _string, "default": "6-31g*"},
@@ -958,6 +974,25 @@ $$$$
         self.assertEqual(config["tdhf"]["type"], "sf")
         self.assertEqual(config["tdhf"]["nstate"], "5")
         self.assertEqual(job.settings.tdhf.nstate, 5)
+
+    def test_settings_proxy_exposes_afqmc_section(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP().molecule("H 0 0 0; H 0 0 0.74")
+
+        job.settings.afqmc(
+            output_dir="h2_afqmc",
+            trial="mean_field",
+            nwalkers=32,
+            nsteps=20,
+            omp_threads=2,
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["afqmc"]["output_dir"], "h2_afqmc")
+        self.assertEqual(config["afqmc"]["trial"], "mean_field")
+        self.assertEqual(config["afqmc"]["nwalkers"], "32")
+        self.assertEqual(config["afqmc"]["nsteps"], "20")
+        self.assertEqual(config["afqmc"]["omp_threads"], "2")
 
     def test_settings_basis_sets_atom_wise_basis_assignments(self):
         openqp = load_openqp_module()
