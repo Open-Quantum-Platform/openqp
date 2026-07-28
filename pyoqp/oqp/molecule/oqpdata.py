@@ -822,7 +822,11 @@ class OQPData:
         if isinstance(value, np.ndarray):
             _value = value
         elif isinstance(value, str):
-            _value = np.frombuffer(np.bytes_(value), dtype=np.dtype('S1'))
+            # Store paths and other text as their UTF-8 byte sequence.  The
+            # previous np.bytes_(value) conversion implicitly required ASCII
+            # and made otherwise valid OpenQP runs fail when the checkout or
+            # output directory contained non-ASCII characters.
+            _value = np.frombuffer(value.encode('utf-8'), dtype=np.dtype('S1'))
         elif isinstance(value, ffi.CData):
             try:
                 _value = np.frombuffer(ffi.buffer(value), dtype=np.int32)

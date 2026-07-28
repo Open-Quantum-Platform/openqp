@@ -660,6 +660,10 @@ contains
     !
     ! Step 1: Intermediate vector tmp = sum_a C^beta_(mu,a) X_(HOMO,a)
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    ! The OV block is empty when the two open-shell orbitals span the whole
+    ! one-particle space (for example H2/STO-3G).  BLAS does not accept the
+    ! zero leading dimension implied by the empty slice, so skip the block.
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
                        bvec(lr2:lr2,nocca+1), nbf, &
@@ -696,6 +700,7 @@ contains
                1.0_dp, va(:,lr1:lr1), nbf, &
                        tmp(:,1:1), nbf, &
                1.0_dp, bo1v, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Component 3: bco1 - C(alpha) -> O1(HOMO-1, beta) excitations (CO block)
@@ -774,6 +779,7 @@ contains
     !
     ! Step 1: Intermediate vector from HOMO -> virt_beta amplitudes
     !   tmp_mu = sum_{a in virt_beta} C^beta_(mu,a) * X_(HOMO,a)
+    if (nbf > nocca) then
     call dgemm('n', 't', nbf, 1, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
                        bvec(lr2:lr2,nocca+1), nbf, &
@@ -798,6 +804,7 @@ contains
               -1.0_dp, tmp(:,1:1), nbf, &
                        va(:,lr2:lr2), nbf, &
                1.0_dp, o21v, nbf)
+    end if
 
     !-----------------------------------------------------------------------
     ! Component 6: co12 - C(alpha) x Mixed (O1<->O2)(beta) (CO block)
@@ -865,7 +872,7 @@ contains
     ! Transformation: P^ball_(mu,nu) += sum_ia C^alpha_(mu,i) * X_(i,a) * C^beta_(nu,a)
     ! where i in doubly-occupied (1:noccb), a in virtual_beta (nocca+1:nbf)
     !
-    if (noccb > 0) then
+    if (noccb > 0 .and. nbf > nocca) then
     ! Step 1: Intermediate tmp_(mu,i) = sum_a C^beta_(mu,a) * X_(i,a)
     call dgemm('n', 't', nbf, noccb, nbf-nocca, &
                1.0_dp, vb(:,nocca+1), nbf, &
@@ -1305,10 +1312,12 @@ contains
                one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO-1,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
+    if (nbf > noca) then
     call dgemm('t','n',nbf-noca,1,nbf, &
                one, vb(:,noca+1), nbf, &
                     tmp, nbf, &
                one, wrk(lr1:lr1,noca+1:nbf), nbf-noca)
+    end if
     !-----------------------------------------------------------------------
     ! Section 6: Corrections for O2(HOMO, alpha) -> V(beta) response element
     !-----------------------------------------------------------------------
@@ -1339,10 +1348,12 @@ contains
               -one, tmp, nbf)
     ! Step 3: Project onto virtual beta-orbitals
     !   F^MO_(HOMO,a) += sum_mu C^beta_(mu,a) * tmp_mu  (a=noca+1:nbf)
+    if (nbf > noca) then
     call dgemm('t','n',nbf-noca,1,nbf, &
                one, vb(:,noca+1), nbf, &
                     tmp, nbf, &
                one, wrk(lr2:lr2,noca+1:nbf), nbf-noca)
+    end if
 
     !-----------------------------------------------------------------------
     ! Spin-dependent corrections for (O1,O1) diagonal element (OO block)
@@ -3312,4 +3323,3 @@ contains
   end subroutine umrsfdmat
 
 end module tdhf_mrsf_lib
-

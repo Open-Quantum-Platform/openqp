@@ -353,6 +353,9 @@ if(ENABLE_AFQMC)
       "${OPENQP_AFQMC_SOURCE_DIR}/interfaces/openqp/openqp_to_afqmc.py"
       DESTINATION .
       RENAME afqmc.py)
+  install(FILES
+      "${OPENQP_AFQMC_SOURCE_DIR}/interfaces/openqp/mrsf_response_csf.py"
+      DESTINATION .)
 endif()
 
 if(BUILD_TESTING)

@@ -24,7 +24,6 @@ class MPIManager:
                 if cls._instance.rank != 0:
                     sys.stdout = open(os.devnull, 'w')
             else:
-                print(f"Failed to import mpi4py")
                 cls._instance = super(MPIManager, cls).__new__(cls)
                 cls._instance.rank = 0
                 cls._instance.size = 1
