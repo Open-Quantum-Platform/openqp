@@ -271,6 +271,7 @@ GENERIC_SCHEMA_KEYS = {
         model c_mrsf c_mrsf_oo response_global_hybrid onsite_exchange_scale
         w_scale response_w_scale response_omega response_cam_alpha
         response_cam_beta onsite_ss onsite_sp onsite_pp
+        reference unpaired
     """),
     "symmetry": _keys("""
         enabled point_group subgroup label_mo label_states label_modes

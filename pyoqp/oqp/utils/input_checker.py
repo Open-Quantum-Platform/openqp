@@ -977,6 +977,13 @@ def apply_dftb_model_default(config: dict[str, Any]) -> str:
         return ""
     if model:
         return model
+    # An explicit [dftb] reference= (open-shell ground SCC for cross-code
+    # comparison) follows the provided parameter set -- it must NOT inherit the
+    # LC open-shell preset, or a non-LC SK set (e.g. mio) picks up spurious
+    # long-range exchange.  Add model=... explicitly for an LC open-shell run.
+    if _get(config, "dftb", "reference", ""):
+        dftb["model"] = ""
+        return ""
     # Presets are resolved inside the native library; the probe backend
     # cannot carry them, so it keeps the explicit-keys route.
     if _as_lower(_get(config, "dftb", "backend", "native")) not in {
@@ -1152,7 +1159,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                 reference_multiplicity = int(reference_multiplicity)
             except (TypeError, ValueError):
                 reference_multiplicity = 0
-            if reference_multiplicity <= 1:
+            open_shell_reference = _as_lower(
+                _get(config, "dftb", "reference", "")) in {
+                    "uks", "uhf", "roks", "rohf", "cuks", "cuhf"}
+            if reference_multiplicity <= 1 and not open_shell_reference:
                 report.add(
                     "ERROR",
                     "dftb.model",

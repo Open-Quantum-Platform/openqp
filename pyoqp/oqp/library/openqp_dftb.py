@@ -231,6 +231,32 @@ class OpenQPDFTBAdapter:
         self.mol = mol
         self.config = mol.config
         self.dftb = self.config.get(self.SECTION, {})
+        # Open-shell ground-state reference selection ([dftb] reference=...).
+        # Lets a plain `dftb`/`dftb0` ground SCC run an open-shell reference
+        # (ROKS / CUKS / UKS) WITHOUT the MRSF response -- the reference energy
+        # decomposition (H0/gamma/repulsive/spin) is what one compares to DFTB+.
+        #   reference = rhf|rks   -> closed-shell (default)
+        #               roks|rohf -> restricted-open (plain Guest-Saunders)
+        #               cuks|cuhf -> constrained-UKS (default open-shell operator)
+        #               uks|uhf   -> genuine unrestricted (DFTB+ udftb analogue)
+        # `unpaired` (default 2) sets the number of unpaired electrons.
+        # NOTE: the native operator is selected via OPENQP_DFTB_UKS/CUHF, matching
+        # how openqp-dftb exposes its other experimental references.  The env is
+        # reset deterministically here so a driver that loops over molecules with
+        # different references cannot leak a previous setting.  A proper C-API
+        # argument (ABI bump) is the intended follow-up.
+        _ref = str(self.dftb.get("reference", "")).strip().lower()
+        if _ref:
+            _open = _ref in {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+            if _open and int(self.dftb.get("reference_multiplicity", 0)) <= 1:
+                self.dftb["reference_multiplicity"] = int(self.dftb.get("unpaired", 2)) + 1
+            os.environ.pop("OPENQP_DFTB_UKS", None)
+            os.environ.pop("OPENQP_DFTB_CUHF", None)
+            if _ref in {"uks", "uhf"}:
+                os.environ["OPENQP_DFTB_UKS"] = "1"
+            elif _ref in {"roks", "rohf"}:
+                os.environ["OPENQP_DFTB_CUHF"] = "0"
+            # cuks/cuhf: leave native defaults (CUHF on, UKS off)
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
         # Named operator preset ([dftb] model=...). The published parameter
