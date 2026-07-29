@@ -140,6 +140,9 @@ def _state_gradient_argtypes(abi_version: int) -> list[object]:
         controls.extend([
             *([f64] * 9), ctypes.c_char_p, i32,
         ])
+    if abi_version >= 4:
+        # ABI v4 appended the reference_selector (0 default / 1 UKS / 2 ROKS).
+        controls.append(i64)
     # n_ext_pot/ext_potential followed by the result/output tail.
     tail = [
         i64, p_f64,
@@ -224,7 +227,7 @@ class OpenQPDFTBAdapter:
     # library (no version symbol) as the stable v1 layout. OpenQP-xTB overrides
     # these (its first released layout carries the model block, so an
     # unversioned probe must resolve to the current layout, not legacy v1).
-    _SUPPORTED_ABI = (1, 2, 3)
+    _SUPPORTED_ABI = (1, 2, 3, 4)
     _UNVERSIONED_ABI_FALLBACK = 1
 
     def __init__(self, mol):
@@ -245,18 +248,25 @@ class OpenQPDFTBAdapter:
         # reset deterministically here so a driver that loops over molecules with
         # different references cannot leak a previous setting.  A proper C-API
         # argument (ABI bump) is the intended follow-up.
+        # reference_selector crosses the C-API as an ABI-4 argument (0 default /
+        # 1 UKS / 2 ROKS).  The OPENQP_DFTB_UKS/CUHF env vars are set only as a
+        # fallback for an older (ABI < 4) native library.
+        self._reference_selector = 0
         _ref = str(self.dftb.get("reference", "")).strip().lower()
         if _ref:
             _open = _ref in {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
             if _open and int(self.dftb.get("reference_multiplicity", 0)) <= 1:
                 self.dftb["reference_multiplicity"] = int(self.dftb.get("unpaired", 2)) + 1
+            if _ref in {"uks", "uhf"}:
+                self._reference_selector = 1
+            elif _ref in {"roks", "rohf"}:
+                self._reference_selector = 2
             os.environ.pop("OPENQP_DFTB_UKS", None)
             os.environ.pop("OPENQP_DFTB_CUHF", None)
-            if _ref in {"uks", "uhf"}:
+            if self._reference_selector == 1:
                 os.environ["OPENQP_DFTB_UKS"] = "1"
-            elif _ref in {"roks", "rohf"}:
+            elif self._reference_selector == 2:
                 os.environ["OPENQP_DFTB_CUHF"] = "0"
-            # cuks/cuhf: leave native defaults (CUHF on, UKS off)
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
         # Named operator preset ([dftb] model=...). The published parameter
@@ -1334,6 +1344,9 @@ class OpenQPDFTBAdapter:
             ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
             self._preset_bytes,
             ctypes.c_int32(len(self._preset_bytes)),
+            *([ctypes.c_int64(getattr(self, "_reference_selector", 0))]
+              if int(getattr(self.mol, self.CACHE_ATTR)[
+                  "__native_abi_version__"]) >= 4 else []),
             *self._state_gradient_output_arguments(values),
         )
 
