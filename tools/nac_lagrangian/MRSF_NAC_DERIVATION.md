@@ -660,3 +660,17 @@ fitted 0.5 factors patched exactly this migration. Our v4 pairing is the
 internally-consistent one (proven to 0.1% with zero fitted constants).
 Production path stands as spec'd in 7.16; the transported-damp machinery
 remains a valid semi-numeric reference for the amplitude term.
+
+### 7.18 Ladder A6: THE INTERCHANGE PATH IS OPERATIONAL (session true end)
+The production-grade route -- polarized L^{IJ} pushed through the
+OQP::nac_orbgrad_L hook, ONE sfrolhs z-vector solve per pair, z.B^x
+extracted by the gZ-gS gradient seam -- reproduces the direct L.U^x
+contraction to ~1% (0.1503/0.1491, 0.1508/0.1507, 2.1876/2.1852) and
+aligns with the frozen residuals at cos +0.9998..+1.0000 (sign +zB).
+This verifies BOTH the Handy-Schaefer interchange through the actual
+Fortran machinery AND that the measured U^x satisfies the CPHF equation
+consistently. Coverage 13/28/71% as established; the sole remaining term
+is the same-space canonical response (magnitudes and blocks frozen in
+7.14/7.16). The analytic MRSF NAC is now: proven scaffold + verified
+skeleton engines + OPERATIONAL z-vector response + one spec'd remaining
+term -- assembly, not research.
