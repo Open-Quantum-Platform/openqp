@@ -748,3 +748,20 @@ NOT the missing ethylene content. Sharpened diagnostics:
  (1,3) at ~31% keeps a genuinely missing ~0.35 piece -- revisit after
      (b)/(c) are fixed, with the A10 npz (all L/U/zB data saved,
      no re-sweep needed).
+
+### 7.23 C2 FINAL VERDICTS (A11) -- the empirical program closes
+(c) Target ordering RULED OUT: zB(tgt=I) == zB(tgt=J) to all digits on
+both molecules. The A9/A10 "uniform ethylene s1=-1" was FIT DEGENERACY
+among comparable-size terms, not a real sign: standalone-zB best signs
+are mixed with weak cosines (0.72/0.90/0.97). The derived all-plus
+convention (proven on H2O: 95/93% scan-free) stands.
+(b) CONFIRMED SHARP: ethylene gap(2,3) = 10.2 mHa; the /gap
+amplification blows stacked-FD noise up to O(1) in the term SPLIT while
+the TOTAL d stays at 0.9% (v4). The split is ill-conditioned near
+degeneracy by construction.
+PRODUCTION PRESCRIPTION (the deep lesson): do not assemble the response
+term-by-term. Solve ONE z-vector with the COMBINED RHS
+Ltot = L + gap*gamma_a (derivation 4.2) and contract once -- the
+split-conditioning problem never arises, and every ingredient of Ltot is
+now individually verified. The term-split gates (A2-A11) exist to certify
+the ingredients, not to be the production path.
