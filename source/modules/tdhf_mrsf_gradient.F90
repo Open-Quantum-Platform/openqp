@@ -1507,6 +1507,26 @@ contains
     call dgemm('n','t', nbf, nbf, nvirb, &
                1.0_dp, scr, nbf, mo_b(1,noccb+1), nbf, 0.0_dp, pij_b, nbf)
 
+  ! optional export of the interstate AO Fock-channel densities for the
+  ! Python-side G[P]-channel assembly (env NAC_DUMP_PIJ)
+    block
+      character(len=16) :: ev_p
+      real(kind=dp), pointer :: pa_out(:), pb_out(:)
+      call get_environment_variable('NAC_DUMP_PIJ', ev_p)
+      if (len_trim(ev_p) > 0) then
+        call infos%dat%remove_records((/ character(len=80) :: &
+          'OQP::dbg_pij_a', 'OQP::dbg_pij_b' /))
+        call infos%dat%reserve_data('OQP::dbg_pij_a', ta_type_real64, &
+              nbf*nbf, (/ nbf*nbf /))
+        call infos%dat%reserve_data('OQP::dbg_pij_b', ta_type_real64, &
+              nbf*nbf, (/ nbf*nbf /))
+        call tagarray_get_data(infos%dat, 'OQP::dbg_pij_a', pa_out)
+        call tagarray_get_data(infos%dat, 'OQP::dbg_pij_b', pb_out)
+        pa_out = reshape(pij_a, (/ nbf*nbf /))
+        pb_out = reshape(pij_b, (/ nbf*nbf /))
+      end if
+    end block
+
   ! (3) explicit 1e: Tr[(P^IJ_a + P^IJ_b) . dh/dR]
   !     kinetic + nuclear attraction ONLY -- grad_ee_overlap is EXCLUDED on
   !     purpose (the W.dS^x term is part of d_ov, and including it was one of
