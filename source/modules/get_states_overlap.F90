@@ -896,9 +896,11 @@ contains
 !> @brief Compute derivative coupling vectors (DCV) using the finite difference method,
 !>        typically denoted as d_IJ between states I and J.
 !>
-!>        d_IJ = <I| d/dR |J> = h_IJ / (E_I - E_J),
-!>        where h_IJ is the nonadiabatic coupling, defined as
-!>        h_IJ = <I| dH/dR |J>.
+!>        d_IJ = <I| d/dR |J>,  with  h_IJ = (E_J - E_I) * d_IJ,
+!>        where h_IJ = <I| dH/dR |J> is the nonadiabatic coupling
+!>        (d antisymmetric, h symmetric). This routine returns only the
+!>        raw antisymmetrized numerator S_IJ - S_JI; the caller supplies
+!>        the displacement AND the energy-gap denominator/orientation.
 !>
 !>        Note that R is an entire vector, and so is d_IJ.
 !>

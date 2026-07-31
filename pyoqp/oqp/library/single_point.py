@@ -3699,9 +3699,13 @@ class NAC(Calculator):
                 d_ij = d_ov - damp
             else:
                 d_ij = d_ci + d_ov             # fallback BP#2 path (broken)
-            h_ij = d_ij * gap                  # report h = d * gap (NACV convention)
+            h_ij = d_ij * gap                  # h_ij = (E_j - E_i) d_ij
+            # h is SYMMETRIC (gap and d both flip sign under I<->J);
+            # d is antisymmetric. NOTE: mirroring (j,i) from (i,j) is an
+            # interim convenience -- the Lagrangian assembly must compute
+            # both orientations independently and CHECK these symmetries.
             nacv[i - 1, j - 1] = h_ij
-            nacv[j - 1, i - 1] = -h_ij
+            nacv[j - 1, i - 1] = h_ij
             dcv[i - 1, j - 1] = d_ij
             dcv[j - 1, i - 1] = -d_ij
 
