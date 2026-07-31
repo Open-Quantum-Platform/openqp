@@ -647,3 +647,16 @@ NEXT-SESSION SPEC (single, concrete):
 3. Assemble, close the amplitude term, then full d vs the v4 scaffold,
    then C1 (ethylene MECI) + sum rule.
 All referees frozen: v4 scaffold, per-pair residuals, A4 block anatomy.
+
+### 7.17 Ladder A5 (session end): the two decompositions reconciled
+Branch transported damp vs our raw scaffold amp (correct same-scale
+comparison, no extra /gap): (2,3) 0.520 vs 0.588 at cos +0.9947; S0 pairs:
+raw amp ~1e-4 (states follow orbitals rigidly) vs transported 0.028-0.119.
+CONCLUSION: two EQUIVALENT decompositions exist --
+  ours  : d = raw-amp + gamma^formula : T(full, incl. same-space)   [v4-proven]
+  branch: d = transported-amp + cross-only d_ov
+differing by where the same-space co-rotation content lives. The branch's
+fitted 0.5 factors patched exactly this migration. Our v4 pairing is the
+internally-consistent one (proven to 0.1% with zero fitted constants).
+Production path stands as spec'd in 7.16; the transported-damp machinery
+remains a valid semi-numeric reference for the amplitude term.
