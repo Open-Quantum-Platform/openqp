@@ -567,3 +567,20 @@ ANALYTIC REPLACEMENT LADDER (each step gated against this scaffold):
  D. Wire gamma^formula + Sk into mrsf_nac_overlap (tag interface ready);
     ship d_amp via one z-vector per pair. Benchmarks: H2O + C1 ethylene
     MECI + sum rule; freeze references with the exact-overlap oracle.
+
+### 7.13 Ladder A resolved in principle: why TRANSPORT is mandatory (final)
+Diagnostics (chc3): apply_A (mrsf_matvec_apply) is exactly linear (1e-15)
+and eigen-consistent (Rayleigh quotients match Omega to 8 digits); the
+reference and displaced amplitude bases overlap to |dot| ~ 0.9999. Yet the
+raw-frame PT numerator X0_I^T dA X0_J is numerically DESTROYED: the O(h)
+eigenvector mismatch delta (||delta||^2 ~ 1.7e-4) couples through the
+matvec's HUGE spectral radius (~300 Ha, core excitations) giving
+second-order Rayleigh contamination ~0.05 on diagonals and swamping the
+~1e-5 off-diagonal signal entirely. THIS is the first-principles,
+quantitative justification of the branch's Loewdin-transported matvec:
+transport removes the frame mismatch before the spectral radius can
+amplify it. Ladder A's analytic path is therefore the TRANSPORTED-frame
+PT -- whose skeleton pieces (esum 1e/2e/XC + bilinear 2e) the branch
+already FD-validated -- plus the transport-gauge term and L:U^x via the
+interstate z-vector. The v4 scaffold remains the exact referee for each
+replacement step.
