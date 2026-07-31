@@ -995,3 +995,31 @@ now-certified tools: MINRES ytil, slot-injection engines, staged
 directional matvec, in-process G[P] build, seam solves, F^x_skel from
 the FOCK-exporting skel workers, and judge each term against the
 in-process FD channel referees (v3g machinery).
+
+### 7.32 UNIT-L SEAM CALIBRATION + the calibrated bookkeeping (v7e/v7f)
+Gauge invariance (v7c probe): [Mt_a + 2 gamma_a]_same-space == 0
+numerically (socc pair: +1.418146 vs -1.418189, sum 4.3e-5) => T4 == 0
+IDENTICALLY. The same-space channel cancels between the amplitude
+response and gamma:U. (v7b's T4 explosion was a maxit-leak execution
+bug: the G-build's control.maxit=1 leaked into the displaced SCFs.)
+
+UNIT-L SEAM CALIBRATION (v7e_seamcal.py): inject L = e_pq into the
+orbgrad hook; the seam returns
+    seam(e_pq) = - U^x_FULL(p,q)      (r-fits -0.9994..-1.0000)
+i.e. MINUS the FULL orbital response entry (sym content included), and
+the hook antisymmetrizes L internally (e_qp -> -seam to 1e-9).
+
+The algebra then fixes the assembly uniquely. With X := Mt_full + gamma
+and U(lo,hi) = -U(hi,lo) - S^x eliminated:
+
+  sum_pq X_pq U_pq = -seam(X)                                [T2 = -seam]
+      - sum_cross-pairs X_(lo,hi) S^x                        \
+      - 1/2 sum_same-space X_sym S^x                          } = X : V
+  V[r,s] = -S^x[r,s] * (1/2 same-space; 1 if space(r)<space(s); else 0)
+
+THE V-MASK IS EXACTLY THE OV-ENGINE'S trden_ss WEIGHTING (1/2 same-
+space, 1 on isp<jsq) -- the Fortran comment said it all along; now it
+is derived AND calibrated. gamma's own V-contraction (the cross
+single-triangle -sum gamma_(lo,hi) S^x) is nonzero and included.
+v7f: d = T1 - seam(Lt+gamma) + [staged(V) + Tr[dD(V) G[P~]] + gamma:V]
+       + gamma:Sk,   with dD(V) = C(V D0 + D0 V^T)C^T for general V.
