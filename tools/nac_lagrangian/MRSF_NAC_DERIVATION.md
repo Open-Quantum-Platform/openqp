@@ -974,3 +974,24 @@ Toward replacing the FD ingredients (w_U, U^x channels) analytically:
 NOTE (session hygiene): a parallel session checked out another branch
 in the primary clone; nac-lagrangian work continues in the dedicated
 worktree repo_nac/. All refs intact; chc3 mirror unaffected.
+
+### 7.31 v7a: full-sym channel helps (1,3)/(2,3), regresses (1,2) -- OPEN
+v7a replaced wsx by T3 = [staged directional matvec along V_c = -1/2
+S^x_MO] + [G-channel via the in-process G[P] build: DM records <- D +
+eps*Pij (NAC_DUMP_PIJ export), oqp.hf_energy at control.maxit=1, G =
+(F_eps - F0)/eps -- includes the XC kernel response automatically; all
+records saved/restored]. Results (H2O, sign-resolved):
+    (1,2) 8.6e-2 (v5-wsx: 6.2e-3  <- REGRESSION)
+    (1,3) 3.7e-3 (v5-wsx: 6.0e-2  <- large improvement)
+    (2,3) 2.1e-1 (v5-wsx: 3.1e-1  <- improvement)
+T3 magnitudes: staged 0.40/0.20/0.85, G-ch 0.19/0.003/0.57 per pair.
+OPEN QUESTION: the precise decomposition boundary between T3, the seam
+(T2), and the same-space channel (T4, still unimplemented). The pair-
+dependent sign of the v7a-vs-v5 shift says the current T3 either
+double-counts part of the seam's internal W(z)S^x or mis-handles a
+block weighting. NEXT: implement the U-channel terms EXACTLY as listed
+in Sec 4 of this document (term-by-term, no shortcuts), reusing the
+now-certified tools: MINRES ytil, slot-injection engines, staged
+directional matvec, in-process G[P] build, seam solves, F^x_skel from
+the FOCK-exporting skel workers, and judge each term against the
+in-process FD channel referees (v3g machinery).
