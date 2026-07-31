@@ -42,7 +42,10 @@ contains
     use printing, only: print_module_info
     use messages, only: show_message, with_abort
     use int2_compute, only: int2_compute_t
-    use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length
+    use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length, &
+                        cc_build_full_mo
+    use cc_uhf_lib, only: cc_uhf_spinorb_build, cc_uhf_spinorb_gb, cc_uhf_ccsd_t
+    use mp2_lib, only: semicanonicalize
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
     use parallel, only: par_env_t
 !$  use omp_lib, only: omp_get_max_threads
@@ -66,18 +69,15 @@ contains
 
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
-    integer :: nthr
+    integer :: nthr, niter
+    logical :: open_shell
     logical :: converged, do_t
 
     open(unit=iw, file=infos%log_filename, position="append")
     call print_module_info('CCSD_T_Energy', 'Computing CCSD(T) ground-state correlation')
 
     ! ---- reference checks -------------------------------------------------
-    if (infos%control%scftype /= 1) then
-      close(iw)
-      call show_message('CCSD(T) requires a closed-shell RHF reference &
-                        &([input] scftype=rhf)', with_abort)
-    end if
+    open_shell = infos%control%scftype /= 1
     if (infos%control%hamilton /= 10) then
       close(iw)
       call show_message('CCSD(T) requires an HF reference; remove the DFT &
@@ -162,10 +162,6 @@ contains
              ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv), stat=ok)
     if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
 
-    call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
-                            oooo, ooov, oovv, ovov, ovvv, vvvv)
-    deallocate(gao)
-
     ! ---- coupled cluster ---------------------------------------------------
     do_t = infos%control%cc_triples /= 0
     opts%maxit      = int(infos%control%cc_maxit)
@@ -186,11 +182,20 @@ contains
     write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
                                ', OpenMP threads = ', nthr
 
+    if (open_shell) then
+      call run_open_shell()
+    else
+    call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
+                            oooo, ooov, oovv, ovov, ovvv, vvvv)
+    deallocate(gao)
+
     call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
                           pe, opts, e_ccsd, e_t, converged, &
                           time_ccsd=t_ccsd, time_triples=t_trip)
 
-    deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv, cmo, eo, ev)
+    deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv)
+    end if
+    deallocate(cmo, eo, ev)
 
     ! ---- report ------------------------------------------------------------
     write(iw,'(/,2X,60("="))')
@@ -222,6 +227,118 @@ contains
     infos%mol_energy%etot   = e_ref + e_ccsd + e_t
 
     close(iw)
+
+  contains
+
+    !> Open-shell (UHF/ROHF) CCSD(T) via the spin-orbital solver.
+    !>
+    !> Both spins are semicanonicalised first: a ROHF Fock matrix is not
+    !> diagonal in its occ-occ and vir-vir blocks and the coupled-cluster
+    !> denominators are undefined until it is.  For UHF it is a no-op.
+    subroutine run_open_shell()
+
+      use oqp_tagarray_driver, only: OQP_VEC_MO_B, OQP_FOCK_A, OQP_FOCK_B
+
+      real(kind=dp), contiguous, pointer :: mo_b(:,:), fock_a(:), fock_b(:)
+      real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
+      real(kind=dp), allocatable :: eri_aa(:,:,:,:), eri_bb(:,:,:,:), eri_ab(:,:,:,:)
+      real(kind=dp), allocatable :: gso(:,:,:,:), eso(:), etmp(:)
+      integer, allocatable :: ord(:)
+      integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
+      real(kind=dp) :: so_gb, tw0, tw1
+
+      noa = int(infos%mol_prop%nelec_a) - nfzc
+      nob = int(infos%mol_prop%nelec_b) - nfzc
+      nocc_so = noa + nob
+      nso = 2*nmo
+      so_gb = cc_uhf_spinorb_gb(nmo)
+
+      write(iw,'(2X,A,I0,A,I0,A,I0)') 'CCSD(T): open shell, alpha occ = ', noa, &
+          ', beta occ = ', nob, ', spin orbitals = ', nso
+      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital storage ~', so_gb, ' GB'
+
+      if (nob < 0 .or. nocc_so <= 0 .or. nso-nocc_so <= 0) then
+        close(iw)
+        call show_message('CCSD(T): no correlated occupied or virtual spin orbitals', &
+                          with_abort)
+      end if
+      ! The open-shell path stores the full spin-orbital tensor, sixteen times
+      ! the spatial one.  Refuse early rather than die in the allocator.
+      if (so_gb > 32.0_dp) then
+        close(iw)
+        call show_message('CCSD(T): open-shell integral storage exceeds 32 GB; &
+            &freeze more core orbitals or use a smaller basis', with_abort)
+      end if
+
+      call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+      call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+      call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
+
+      allocate(ca_sc(nbf,nbf), cb_sc(nbf,nbf), ea_sc(nbf), eb_sc(nbf), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell MO alloc failed', with_abort)
+
+      ! Semicanonicalise over the FULL orbital space before dropping frozen
+      ! core: the rotation mixes within the occupied block, so it has to see
+      ! every orbital it is allowed to mix with.
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_a), mo_a, fock_a, ca_sc, ea_sc)
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_b), mo_b, fock_b, cb_sc, eb_sc)
+
+      allocate(eri_aa(nmo,nmo,nmo,nmo), eri_bb(nmo,nmo,nmo,nmo), &
+               eri_ab(nmo,nmo,nmo,nmo), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell MO integral alloc failed', &
+                                      with_abort)
+      call cc_build_full_mo(nbf, nmo, ca_sc(:,nfzc+1:nbf), ca_sc(:,nfzc+1:nbf), gao, eri_aa)
+      call cc_build_full_mo(nbf, nmo, cb_sc(:,nfzc+1:nbf), cb_sc(:,nfzc+1:nbf), gao, eri_bb)
+      call cc_build_full_mo(nbf, nmo, ca_sc(:,nfzc+1:nbf), cb_sc(:,nfzc+1:nbf), gao, eri_ab)
+      deallocate(gao)
+
+      allocate(gso(nso,nso,nso,nso), eso(nso), etmp(nso), ord(nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital tensor alloc failed', &
+                                      with_abort)
+      call cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, gso)
+      deallocate(eri_aa, eri_bb, eri_ab)
+
+      ! Interleaved spin-orbital energies, then permuted so the occupied ones
+      ! come first in ascending energy -- the ordering the solver assumes.
+      do p = 1, nmo
+        eso(2*p-1) = ea_sc(nfzc+p)
+        eso(2*p)   = eb_sc(nfzc+p)
+      end do
+      do p = 1, nso
+        ord(p) = p
+      end do
+      do i = 1, nso-1
+        do j = i+1, nso
+          if (eso(ord(j)) < eso(ord(i))) then
+            q = ord(i); ord(i) = ord(j); ord(j) = q
+          end if
+        end do
+      end do
+      do p = 1, nso
+        etmp(p) = eso(ord(p))
+      end do
+      eso = etmp
+      gso = gso(ord,ord,ord,ord)
+
+      call system_clock_seconds(tw0)
+      call cc_uhf_ccsd_t(nso, nocc_so, eso, gso, int(infos%control%cc_maxit), &
+                         infos%control%cc_conv, do_t, e_ccsd, e_t, converged, niter)
+      call system_clock_seconds(tw1)
+      t_ccsd = tw1 - tw0
+      t_trip = 0.0_dp
+
+      write(iw,'(2X,A,I0)') 'CCSD(T): open-shell iterations = ', niter
+
+      deallocate(gso, eso, etmp, ord, ca_sc, cb_sc, ea_sc, eb_sc)
+
+    end subroutine run_open_shell
+
+    subroutine system_clock_seconds(t)
+      real(kind=dp), intent(out) :: t
+      integer(8) :: c, r
+      call system_clock(c, r)
+      t = real(c, kind=dp)/real(r, kind=dp)
+    end subroutine system_clock_seconds
 
   end subroutine ccsd_t_energy
 

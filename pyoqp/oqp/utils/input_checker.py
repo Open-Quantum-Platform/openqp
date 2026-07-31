@@ -1890,14 +1890,29 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
-    if scf_type != "rhf":
+    if scf_type not in ("rhf", "uhf", "rohf"):
         report.add(
             "ERROR",
             "scf.type",
-            "The coupled-cluster module implements a closed-shell RHF reference only.",
+            "Coupled cluster needs an RHF, UHF or ROHF reference.",
             value=scf_type,
-            expected="rhf",
-            action="Set [scf] type=rhf, or use a different method for open-shell systems.",
+            expected="rhf, uhf or rohf",
+            action="Set [scf] type to rhf, uhf or rohf.",
+            wiki=WIKI_HELP["input.method"],
+        )
+    elif scf_type in ("uhf", "rohf"):
+        # The open-shell path goes through the spin-orbital solver, which
+        # stores the full (2*nmo)^4 tensor -- sixteen times the closed-shell
+        # one.  Warn rather than block: the Fortran side refuses on size.
+        report.add(
+            "INFO",
+            "scf.type",
+            "Open-shell coupled cluster uses the spin-orbital solver, which is "
+            "much slower and stores sixteen times the integrals of the "
+            "closed-shell path.",
+            value=scf_type,
+            expected=scf_type,
+            action="Prefer a closed-shell RHF reference where the chemistry allows.",
             wiki=WIKI_HELP["input.method"],
         )
 

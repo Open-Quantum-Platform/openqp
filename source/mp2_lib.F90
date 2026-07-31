@@ -16,6 +16,9 @@ module mp2_lib
 
   private
   public :: mp2_correlation
+  !> Reused by the open-shell coupled-cluster path, which needs the same
+  !> semicanonical basis before its denominators are defined.
+  public :: semicanonicalize
 
   !> Default guard on the number of per-MO-pair Coulomb builds the correlation
   !> assembly performs (nocc*nvir over both spins); overridable at run time via

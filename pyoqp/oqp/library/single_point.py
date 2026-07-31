@@ -247,10 +247,10 @@ class SinglePoint(Calculator):
             raise ValueError(
                 f'method={self.method} requires an HF reference; '
                 'remove [input] functional.')
-        if self.mol.config['scf']['type'] != 'rhf':
+        if self.mol.config['scf']['type'] not in ('rhf', 'uhf', 'rohf'):
             raise ValueError(
-                f'method={self.method} requires a closed-shell RHF reference '
-                '([scf] type=rhf).')
+                f'method={self.method} needs an RHF, UHF or ROHF reference '
+                f"(got [scf] type={self.mol.config['scf']['type']}).")
         self.mol.data.set_cc_triples(self.method == 'ccsd(t)')
 
     def _configure_mp2(self):

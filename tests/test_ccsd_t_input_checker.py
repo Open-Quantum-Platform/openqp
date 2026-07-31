@@ -58,9 +58,21 @@ class TestCCSDTInputChecker(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("input.functional", report.to_text())
 
-    def test_cc_rejects_open_shell_reference(self):
+    def test_cc_accepts_open_shell_reference_with_a_note(self):
+        """UHF/ROHF go through the spin-orbital solver: allowed, but costly
+        enough that the user is told so rather than left to wonder."""
+        for scf_type in ("uhf", "rohf"):
+            config = {"input": {"method": "ccsd", "functional": ""},
+                      "scf": {"type": scf_type}}
+            report = self._report()
+            self.checker._check_cc(config, report)
+
+            self.assertTrue(report.ok, f"{scf_type} should be accepted")
+            self.assertIn("spin-orbital", report.to_text())
+
+    def test_cc_rejects_unknown_reference(self):
         config = {"input": {"method": "ccsd", "functional": ""},
-                  "scf": {"type": "uhf"}}
+                  "scf": {"type": "gvb"}}
         report = self._report()
         self.checker._check_cc(config, report)
 

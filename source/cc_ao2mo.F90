@@ -37,6 +37,7 @@ module cc_ao2mo
   public :: cc_eri_collect_t
   public :: cc_build_mo_blocks
   public :: cc_packed_length
+  public :: cc_build_full_mo
 
   !> Integral consumer that materialises the AO integrals in packed form.
   !>
@@ -127,6 +128,95 @@ contains
     res = xints(i,j)*xints(k,l)
     UNUSED_DUMMY(this)
   end function cc_eri_screen_ijkl
+
+!###############################################################################
+
+!> Transform the packed AO integrals into a FULL spatial MO tensor,
+!>   eri(p,q,r,s) = (pq|rs),
+!> with the bra pair (pq) over @p cmo_bra and the ket pair (rs) over
+!> @p cmo_ket.  Passing the same coefficients twice gives a same-spin tensor;
+!> passing alpha then beta gives the mixed-spin one.
+!>
+!> Same two half transformations as cc_build_mo_blocks -- only the second half
+!> writes a full tensor instead of scattering into the six coupled-cluster
+!> blocks, because the spin-orbital assembly needs every (pq|rs).
+subroutine cc_build_full_mo(nbf, nmo, cmo_bra, cmo_ket, g, eri)
+
+  integer, intent(in) :: nbf, nmo
+  real(dp), intent(in) :: cmo_bra(nbf,nmo), cmo_ket(nbf,nmo)
+  real(dp), intent(in) :: g(*)
+  real(dp), intent(out) :: eri(nmo,nmo,nmo,nmo)
+
+  real(dp), allocatable :: half(:,:)
+  integer, allocatable :: prow(:), pcol(:), qrow(:), qcol(:)
+  integer :: npair, nmopair, pq, p, q, ip
+
+  npair   = nbf*(nbf+1)/2
+  nmopair = nmo*(nmo+1)/2
+
+  allocate(prow(npair), pcol(npair), qrow(nmopair), qcol(nmopair))
+  do p = 1, nbf
+    do q = 1, p
+      ip = p*(p-1)/2 + q
+      prow(ip) = p; pcol(ip) = q
+    end do
+  end do
+  do p = 1, nmo
+    do q = 1, p
+      ip = p*(p-1)/2 + q
+      qrow(ip) = p; qcol(ip) = q
+    end do
+  end do
+
+  allocate(half(nmopair, npair))
+
+  !$omp parallel default(shared) private(pq, p, q, ip)
+  block
+    real(dp), allocatable :: d(:,:), scr(:,:), m(:,:)
+    allocate(d(nbf,nbf), scr(nbf,nmo), m(nmo,nmo))
+    !$omp do schedule(static)
+    do pq = 1, npair
+      do ip = 1, npair
+        p = prow(ip); q = pcol(ip)
+        d(p,q) = g(packed_index(ip, pq))
+        d(q,p) = d(p,q)
+      end do
+      call dgemm('n','n', nbf, nmo, nbf, 1.0_dp, d, nbf, cmo_bra, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nmo, nmo, nbf, 1.0_dp, cmo_bra, nbf, scr, nbf, 0.0_dp, m, nmo)
+      do ip = 1, nmopair
+        half(ip, pq) = m(qrow(ip), qcol(ip))
+      end do
+    end do
+    !$omp end do
+    deallocate(d, scr, m)
+  end block
+  !$omp end parallel
+
+  !$omp parallel default(shared) private(pq, p, q, ip)
+  block
+    real(dp), allocatable :: e(:,:), scr(:,:), n(:,:)
+    allocate(e(nbf,nbf), scr(nbf,nmo), n(nmo,nmo))
+    !$omp do schedule(static)
+    do pq = 1, nmopair
+      do ip = 1, npair
+        p = prow(ip); q = pcol(ip)
+        e(p,q) = half(pq, ip)
+        e(q,p) = e(p,q)
+      end do
+      call dgemm('n','n', nbf, nmo, nbf, 1.0_dp, e, nbf, cmo_ket, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nmo, nmo, nbf, 1.0_dp, cmo_ket, nbf, scr, nbf, 0.0_dp, n, nmo)
+      p = qrow(pq); q = qcol(pq)
+      eri(p,q,:,:) = n
+      if (p /= q) eri(q,p,:,:) = n
+    end do
+    !$omp end do
+    deallocate(e, scr, n)
+  end block
+  !$omp end parallel
+
+  deallocate(half, prow, pcol, qrow, qcol)
+
+end subroutine cc_build_full_mo
 
 !###############################################################################
 
