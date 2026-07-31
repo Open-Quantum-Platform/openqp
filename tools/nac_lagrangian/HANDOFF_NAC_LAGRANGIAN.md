@@ -48,11 +48,15 @@ by git bundles; pushed nowhere). 25+ commits, every claim numeric-gated.
 
 ## Remaining work (assembly only; every step has a frozen referee)
 
-1. **C2 finish** — ethylene response-closure bookkeeping. In flight:
-   the unrestricted L sweep (`ladderA10_eth.py`, chc3 background). Open:
-   (a) vv/dd blocks in the amp-dominant regime, (b) near-degenerate-pair
-   conditioning in the seam ((2,3), gap-amplified), (c) zB per-pair sign
-   bookkeeping in the gradient seam.
+1. **C2 finish** — ethylene response-closure bookkeeping. Item (a) is
+   RESOLVED-NEGATIVE (the unrestricted sweep, `ladderA10.out` +
+   `ladderA10_eth_full.npz`, changes nothing: vv/dd are not the missing
+   content). Open, sharpened: (b) near-degenerate conditioning — (2,3)'s
+   zB is 2.2x the residual regardless of sign; (c) a MOLECULE-LEVEL zB
+   sign in the seam chain — ethylene wants s1=-1 on ALL pairs (93.4% for
+   (1,2)) while H2O wants +1 on all; inspect the polarized-RHS push/pack
+   orientation vs the seam gradient sign and the set_mrsf_nac_cphf
+   target ordering. All sweep data saved in the npz — no re-sweep needed.
 2. **Full analytic d assembly** — combine: skeleton (`mrsf_nac_amp` +
    `mrsf_nac_esum`, both FD-validated) + zB (operational) + same-space L
    (from `mrsf_matvec_apply`, restricted generators; Fortran-resident

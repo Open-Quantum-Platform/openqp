@@ -732,3 +732,19 @@ C2 -- ethylene amplitude closure (restricted sweep): PARTIAL.
 Referees: v4-ethylene scaffold (7.20, 0.02-1.2%) stands regardless --
 the DECOMPOSITION is C1-proven; only the response-term SPLIT needs the
 remaining bookkeeping.
+
+### 7.22 C2 item (a) RESOLVED-NEGATIVE; (b)/(c) sharpened (A10, session end)
+The UNRESTRICTED ethylene L sweep changes nothing material vs the
+restricted one (76.7/22.4/-301% vs 78.8/22.1/-298%): vv/dd blocks are
+NOT the missing ethylene content. Sharpened diagnostics:
+ (c) the diagnostic best signs want s1 = -1 for ALL ethylene pairs while
+     H2O wanted +1 for all -- a MOLECULE-LEVEL sign in the zB seam chain
+     (suspects: the polarized-RHS push/pack orientation vs the seam's
+     gradient sign, state/target ordering in set_mrsf_nac_cphf). With
+     s1=-1: (1,2) closes 93.4%.
+ (b) (2,3) zB magnitude 2.2x the residual regardless of sign --
+     near-degenerate conditioning (small gap, /gap amplification) needs
+     regularized treatment.
+ (1,3) at ~31% keeps a genuinely missing ~0.35 piece -- revisit after
+     (b)/(c) are fixed, with the A10 npz (all L/U/zB data saved,
+     no re-sweep needed).
