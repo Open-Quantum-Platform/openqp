@@ -1135,3 +1135,28 @@ Mt matrices harvested in that process (the v7h+v7i union script);
 (2) if the few-% gap persists, compute the T3-channel exactly via
 in-process FD (staged V-directions vs actual U-sym channel) to decide
 referee-vs-physics; (3) ethylene; (4) rewire analytical_nac().
+
+### 7.37 v7j UNIFIED GATE: the production form is CERTIFIED SELF-CONSISTENT;
+the residual is a REAL small Mt channel
+One process, one frame, no cross pairings (v7j_h2o.py):
+  J4 seam identity: -seam(X) == pack(X).U at 2.7e-5..7.8e-4 (machine).
+  J2 PRODUCTION FORM == J3 FD-U TOTAL to 3 digits:
+     production: 1.896e-2 / 8.68e-3 / 2.06e-1  (sign-resolved maxdiff)
+     FD-U total: 1.936e-2 / 8.71e-3 / 2.05e-1
+  => the no-FD production assembly [T1 - seam(X) + elim(X) + ss_sym(Mt)
+     + gamma:Sk] faithfully implements the current best decomposition.
+  J1 Mt-completeness deficit REPRODUCES EXACTLY across processes:
+     -2.9% / -3.3% / +12.8%  =>  a REAL missing channel in
+     Mt = staged-frozen + G[P_Fock], not referee noise.
+CANDIDATES for the missing Mt channel (next forensic layer):
+  (a) the matvec may read MO energies (E_MO records) for its diagonal
+      instead of C^T F C -- staged C-rotations would then miss the
+      eps-diagonal response channel; check mrsf_matvec_apply's fa/fb/
+      diagonal construction;
+  (b) G-build fidelity for the response Fock (SCF hfscale vs response
+      hfscale channels in the matvec's Fock usage);
+  (c) w_ref referee frame content under near-degeneracy ((2,3) is an
+      OVERSHOOT while normal pairs UNDERSHOOT -- two sources).
+Everything else in the production chain is now certified. Final d gap
+vs theory (machine): 1.9e-2 / 8.7e-3 / 2.1e-1 -- entirely attributable
+to the J1 channel.
