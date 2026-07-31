@@ -771,7 +771,9 @@ class SinglePoint(Calculator):
         if symmetry_on:
             self.mol.stage_integral_symmetry_maps()
 
+        scf_start = time.perf_counter()
         scf_flag = self._run_scf()
+        self.mol.scf_elapsed_s = time.perf_counter() - scf_start
 
         if not scf_flag:
             dump_log(self.mol, title='PyOQP: SCF energy is not converged', section='end')
@@ -1118,12 +1120,18 @@ class SinglePoint(Calculator):
         already run in reference(); here we just dispatch and report.
         """
         dump_log(self.mol, title='PyOQP: QMRSF pathway (%s)' % self.td, section='tdhf')
+        response_start = time.perf_counter()
         fn = self.energy_func.get(self.td)
         if fn is None:
             raise RuntimeError(
                 'liboqp lacks %s — rebuild liboqp with the QMRSF modules '
                 '(source/modules/qmrsf_*.F90, tdhf_qmrsf_*.F90).' % self.td)
+        if self.td == 'qmrsf_dk':
+            gauge = self.mol.canonicalize_qmrsf_active_orbitals()
+            dump_log(self.mol, title='PyOQP: QMRSF active-orbital gauge',
+                     section='', info=gauge)
         fn(self.mol)
+        response_elapsed = time.perf_counter() - response_start
 
         qmrsf_energies = None
         # Post-process the icPT2 validation dump into a clean JSON + log table.
@@ -1184,6 +1192,10 @@ class SinglePoint(Calculator):
                     dump = parse_qmrsf_dk_dump(dump_path)
                     ref_scalar = ref_energy[0] if isinstance(ref_energy, (list, tuple)) else ref_energy
                     results = build_qmrsf_dk_results(dump, ref_scalar)
+                    results['timing'] = {
+                        'reference_scf_s': float(getattr(self.mol, 'scf_elapsed_s', 0.0)),
+                        'qmrsf_response_s': float(response_elapsed),
+                    }
                     log_path = self.mol.log
                     base, ext = os.path.splitext(log_path)
                     json_path = (base if ext else log_path) + '.qmrsf_dk.json'

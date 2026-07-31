@@ -29,6 +29,7 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use qmrsf_ao2mo_mod, only: qmrsf_active_integrals
     use eigen, only: diag_symm_full
+    use oqp_linalg, only: dgemm
 
     type(information), target, intent(inout) :: infos
 
@@ -40,6 +41,7 @@ contains
     real(dp) :: h1(NSO,NSO), g(NSO,NSO,NSO,NSO)
     real(dp) :: h1k(NSO,NSO), gk(NSO,NSO,NSO,NSO)
     real(dp) :: hdet(NDET,NDET), hkdet(NDET,NDET), ucsf(NDET,NDET), hcsf(NDET,NDET)
+    real(dp) :: work36(NDET,NDET)
     real(dp) :: asing(NSING,NSING), atrip(NTRIP,NTRIP), aquint(1,1)
     real(dp) :: esing(NSING), etrip(NTRIP), equint(1)
     real(dp) :: ecore, c_h, c_ref, orth_err, cross_err, vxc_max
@@ -102,7 +104,10 @@ contains
     hdet = hdet - (1.0_dp-c_h)*hkdet
     call native_add_vxc_diag(dets,va_act,vb_act,hdet)
     call native_build_ucsf(dets,ucsf,orth_err)
-    hcsf = matmul(ucsf,matmul(hdet,transpose(ucsf)))
+    call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
+               0.0_dp,work36,NDET)
+    call dgemm('N','N',NDET,NDET,NDET,1.0_dp,ucsf,NDET,work36,NDET, &
+               0.0_dp,hcsf,NDET)
 
     cross_err = 0.0_dp
     do i = 1, NDET
@@ -171,6 +176,7 @@ contains
     use dft, only: dft_initialize, dftclean, dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use mathlib, only: unpack_matrix
+    use oqp_linalg, only: dgemm
     type(information), target, intent(inout) :: infos
     real(dp), intent(in) :: mo(:,:), cact(:,:)
     real(dp), intent(out) :: va(NACT,NACT), vb(NACT,NACT)
@@ -189,11 +195,15 @@ contains
     call dftexcor(infos%basis,molgrid,isc,fap,fbp,ca,cb,nbf,ntri, &
                   eexc,tele,tkin,infos)
     call unpack_matrix(fap,fsq,nbf,'U')
-    tmp = matmul(fsq,cact)
-    va = matmul(transpose(cact),tmp)
+    call dgemm('N','N',nbf,NACT,nbf,1.0_dp,fsq,nbf,cact,nbf, &
+               0.0_dp,tmp,nbf)
+    call dgemm('T','N',NACT,NACT,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+               0.0_dp,va,NACT)
     call unpack_matrix(fbp,fsq,nbf,'U')
-    tmp = matmul(fsq,cact)
-    vb = matmul(transpose(cact),tmp)
+    call dgemm('N','N',nbf,NACT,nbf,1.0_dp,fsq,nbf,cact,nbf, &
+               0.0_dp,tmp,nbf)
+    call dgemm('T','N',NACT,NACT,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+               0.0_dp,vb,NACT)
     call dftclean(infos)
     deallocate(fap,fbp,fsq,tmp,ca,cb)
   end subroutine native_active_vxc
@@ -452,7 +462,8 @@ contains
 
     if (rs/=NSING .or. rt/=NSING+NTRIP) &
       error stop 'QMRSF-DK native: incorrect spin-adapted block dimensions'
-    gram=matmul(u,transpose(u))
+    call dgemm('N','T',NDET,NDET,NDET,1.0_dp,u,NDET,u,NDET, &
+               0.0_dp,gram,NDET)
     do i=1,NDET; gram(i,i)=gram(i,i)-1.0_dp; end do
     orth_err=maxval(abs(gram))
   end subroutine native_build_ucsf

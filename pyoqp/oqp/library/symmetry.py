@@ -598,6 +598,72 @@ def _ao_operator_matrix(
     return t
 
 
+def canonicalize_degenerate_orbitals(
+    coefficients: Any,
+    overlap: Any,
+    shells: Iterable[Any],
+    operations: Iterable[Mapping[str, Any]],
+    groups: Iterable[Iterable[int]],
+    tolerance: float = 1.0e-7,
+) -> tuple[np.ndarray, list[dict[str, Any]]]:
+    """Fix a deterministic real gauge inside degenerate MO subspaces.
+
+    The dressed exchange-value approximation is not invariant to arbitrary
+    rotations among exactly degenerate active orbitals.  For each requested
+    group, diagonalize a metric-preserving order-two symmetry operation.  When
+    several operations split the group equally well, prefer the one fixing the
+    largest number of nuclear centres; this selects the diagonal D2h subgroup
+    of a square D4h geometry and matches the conventional PySCF/CAS gauge.
+    """
+    c = _to_float_array(coefficients).copy()
+    s = _to_float_array(overlap)
+    shell_list = _normalize_shells(shells)
+    op_list = list(operations)
+    records: list[dict[str, Any]] = []
+
+    for raw_group in groups:
+        group = [int(i) for i in raw_group]
+        if len(group) < 2:
+            continue
+        sub = c[:, group]
+        candidates = []
+        for iop, op in enumerate(op_list):
+            transform = _ao_operator_matrix(shell_list, op)
+            if np.max(np.abs(transform.T @ s @ transform - s)) > tolerance:
+                continue
+            projected = sub.T @ s @ transform @ sub
+            if np.max(np.abs(projected - projected.T)) > tolerance:
+                continue
+            projected = 0.5 * (projected + projected.T)
+            values, vectors = np.linalg.eigh(projected)
+            spread = float(np.ptp(values))
+            if spread <= tolerance:
+                continue
+            permutation = [int(i) for i in op.get('permutation', [])]
+            fixed_atoms = sum(i == target for i, target in enumerate(permutation))
+            candidates.append((-fixed_atoms, -spread, iop, values, vectors))
+
+        if not candidates:
+            continue
+        neg_fixed, neg_spread, iop, values, vectors = min(candidates)
+        rotated = sub @ vectors
+        # Remove the remaining eigenvector sign ambiguity reproducibly.
+        for column in range(rotated.shape[1]):
+            pivot = int(np.argmax(np.abs(rotated[:, column])))
+            if rotated[pivot, column] < 0.0:
+                rotated[:, column] *= -1.0
+        c[:, group] = rotated
+        records.append({
+            'orbitals': [i + 1 for i in group],
+            'operation_index': int(iop),
+            'fixed_atoms': int(-neg_fixed),
+            'eigenvalue_spread': float(-neg_spread),
+            'operator_eigenvalues': values.tolist(),
+        })
+
+    return c, records
+
+
 def assign_mo_irreps(
     mo_coefficients: Any,
     overlap: Any,

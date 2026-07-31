@@ -183,6 +183,28 @@ class TestSphericalSALCsAndLabels(unittest.TestCase):
         for sign_row in maps["ao_sign"]:
             self.assertTrue(all(s in (-1, 1) for s in sign_row))
 
+    def test_degenerate_square_gauge_is_rotation_invariant(self):
+        coords = np.array([
+            [1.0, 1.0, 0.0], [-1.0, 1.0, 0.0],
+            [-1.0, -1.0, 0.0], [1.0, -1.0, 0.0],
+        ])
+        operations = self.detect.enumerate_full_group(
+            np.ones(4), coords, tolerance=1.0e-8)
+        shells = [(i, 0, False) for i in range(4)]
+        base = np.column_stack((coords[:, 0], coords[:, 1])) / 2.0
+        angle = 0.371
+        rotation = np.array([
+            [np.cos(angle), -np.sin(angle)],
+            [np.sin(angle), np.cos(angle)],
+        ])
+        ref, ref_records = self.symmetry.canonicalize_degenerate_orbitals(
+            base, np.eye(4), shells, operations, [[0, 1]])
+        trial, trial_records = self.symmetry.canonicalize_degenerate_orbitals(
+            base @ rotation, np.eye(4), shells, operations, [[0, 1]])
+        self.assertTrue(np.allclose(trial, ref, atol=1.0e-12))
+        self.assertEqual(ref_records[0]["fixed_atoms"], 2)
+        self.assertEqual(trial_records[0]["fixed_atoms"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

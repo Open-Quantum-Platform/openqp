@@ -4030,30 +4030,38 @@ contains
       call pack_matrix(dm,dm_tri(:,1))
 
       ! beta
-      call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
-                 1.0_dp, fvv_b,  nvir_b, &
-                         xmat_b, nvir_b, &
-                 0.0_dp, x2mat_b, nvir_b)
-      call dgemm('N','N', nvir_b, nocc_b, nocc_b, &
-                -1.0_dp, xmat_b, nvir_b, &
-                          foo_b, nocc_b, &
-                 1.0_dp, x2mat_b, nvir_b)
-
       dm = 0.0_dp
       work2 = 0
-      call dgemm('N','N', nbf, nocc_b, nvir_b, &
-                 1.0_dp, mo_b(:, nocc_b+1:nbf), nbf, &
-                         xmat_b,             nvir_b, &
-                0.0_dp, work2,          nbf)
-      call dgemm('N','T', nbf, nbf, nocc_b, &
-                 1.0_dp, work2,          nbf, &
-                         mo_b(:, 1:nocc_b),   nbf, &
-                 0.0_dp, work3,          nbf)
-      do i = 1, nbf
-        do a = 1, nbf
-          dm(i,a) = work3(i,a) + work3(a,i)
+      work3 = 0
+      x2mat_b = 0.0_dp
+      ! A fully spin-polarized ROHF reference (for example quintet H4) has
+      ! no doubly occupied/beta orbitals.  Zero-sized beta matrices are valid
+      ! Fortran objects but BLAS requires leading dimensions >= 1, even when
+      ! M or N is zero.  The beta density response is identically zero here.
+      if (nocc_b > 0) then
+        call dgemm('N','N', nvir_b, nocc_b, nvir_b, &
+                   1.0_dp, fvv_b,  nvir_b, &
+                           xmat_b, nvir_b, &
+                   0.0_dp, x2mat_b, nvir_b)
+        call dgemm('N','N', nvir_b, nocc_b, nocc_b, &
+                  -1.0_dp, xmat_b, nvir_b, &
+                            foo_b, nocc_b, &
+                   1.0_dp, x2mat_b, nvir_b)
+
+        call dgemm('N','N', nbf, nocc_b, nvir_b, &
+                   1.0_dp, mo_b(:, nocc_b+1:nbf), nbf, &
+                           xmat_b,             nvir_b, &
+                  0.0_dp, work2,          nbf)
+        call dgemm('N','T', nbf, nbf, nocc_b, &
+                   1.0_dp, work2,          nbf, &
+                           mo_b(:, 1:nocc_b),   nbf, &
+                   0.0_dp, work3,          nbf)
+        do i = 1, nbf
+          do a = 1, nbf
+            dm(i,a) = work3(i,a) + work3(a,i)
+          end do
         end do
-      end do
+      end if
 
       call pack_matrix(dm,dm_tri(:,2))
       ! end of dm calculation
@@ -4073,18 +4081,20 @@ contains
       x2mat = x2mat + work3(nocc_a+1:,1:nocc_a)
 
       ! beta x2mat
-      call unpack_matrix(pfock(:,2), v)
-      work2 = 0
-      call dgemm('T','N', nbf, nbf, nbf, &
-                 1.0_dp, mo_b, nbf, &
-                         v ,             nbf, &
-                 0.0_dp, work2,          nbf)
-      work3 = 0
-      call dgemm('N','N', nbf, nbf, nbf, &
-                 1.0_dp, work2, nbf, &
-                         mo_b, nbf, &
-                 0.0_dp, work3,  nbf)
-      x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      if (nocc_b > 0) then
+        call unpack_matrix(pfock(:,2), v)
+        work2 = 0
+        call dgemm('T','N', nbf, nbf, nbf, &
+                   1.0_dp, mo_b, nbf, &
+                           v ,             nbf, &
+                   0.0_dp, work2,          nbf)
+        work3 = 0
+        call dgemm('N','N', nbf, nbf, nbf, &
+                   1.0_dp, work2, nbf, &
+                           mo_b, nbf, &
+                   0.0_dp, work3,  nbf)
+        x2mat_b = x2mat_b + work3(nocc_b+1:,1:nocc_b)
+      end if
       call pack_rohf_trial(x2,x2mat,x2mat_b, nbf, nocc_a, nocc_b)
     end select
     end associate

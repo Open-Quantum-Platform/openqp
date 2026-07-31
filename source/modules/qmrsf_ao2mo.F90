@@ -54,6 +54,7 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_Hcore
     use int2_compute, only: int2_compute_t, int2_rhf_data_t
     use mathlib, only: unpack_matrix
+    use oqp_linalg, only: dgemm, ddot
 
     type(information), target, intent(inout) :: infos
     integer, intent(in)  :: nact, ncore
@@ -95,8 +96,10 @@ contains
 
     ! ----------------------------- 1-electron -------------------------------
     allocate(tmp(nbf,nact))
-    tmp   = matmul(hcore_sq, cact)
-    h_act = matmul(transpose(cact), tmp)
+    call dgemm('N','N',nbf,nact,nbf,1.0_dp,hcore_sq,nbf,cact,nbf, &
+               0.0_dp,tmp,nbf)
+    call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+               0.0_dp,h_act,nact)
     deallocate(tmp)
 
     ! ----------------------- 2-electron (probe Coulomb) ---------------------
@@ -130,8 +133,10 @@ contains
       r = pidx(pr); s = qidx(pr)
       ! raw consumer -> true J[P] via fock_jk's post-scaling (halve all, double diagonal)
       call fock_postscale(int2_data%f(:,pr,1), nbf, ntri, gsq)
-      tmp = matmul(gsq, cact)
-      gmo = matmul(transpose(cact), tmp)
+      call dgemm('N','N',nbf,nact,nbf,1.0_dp,gsq,nbf,cact,nbf, &
+                 0.0_dp,tmp,nbf)
+      call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+                 0.0_dp,gmo,nact)
       eri_act(:,:,r,s) = gmo
       eri_act(:,:,s,r) = gmo
     end do
@@ -171,22 +176,20 @@ contains
 
       ! dress active one-electron integrals: h_eff += C_act^T v_core C_act
       allocate(tmp(nbf,nact))
-      tmp   = matmul(vcore_sq, cact)
-      h_act = h_act + matmul(transpose(cact), tmp)
+      call dgemm('N','N',nbf,nact,nbf,1.0_dp,vcore_sq,nbf,cact,nbf, &
+                 0.0_dp,tmp,nbf)
+      call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+                 1.0_dp,h_act,nact)
       deallocate(tmp)
 
       ! E_core = E_nuc + 2 Tr[Dc.Hcore] + Tr[Dc.v_core] , with Dc = sum_i C_i C_i^T (square)
       block
         real(dp) :: dc_sq(nbf,nbf), e2h, evc
         integer  :: a, b
-        dc_sq = matmul(ccore, transpose(ccore))
-        e2h = 0.0_dp; evc = 0.0_dp
-        do a = 1, nbf
-          do b = 1, nbf
-            e2h = e2h + dc_sq(a,b)*hcore_sq(a,b)
-            evc = evc + dc_sq(a,b)*vcore_sq(a,b)
-          end do
-        end do
+        call dgemm('N','T',nbf,nbf,ncore,1.0_dp,ccore,nbf,ccore,nbf, &
+                   0.0_dp,dc_sq,nbf)
+        e2h = ddot(nbf*nbf,dc_sq,1,hcore_sq,1)
+        evc = ddot(nbf*nbf,dc_sq,1,vcore_sq,1)
         ecore = ecore + 2.0_dp*e2h + evc
       end block
 
@@ -203,8 +206,10 @@ contains
         allocate(kcore_sq(nbf,nbf),tmp(nbf,nact))
         call fock_postscale(int2_data%f(:,1,1), nbf, ntri, kcore_sq)
         call int2_driver%clean()
-        tmp = matmul(kcore_sq,cact)
-        kcore_act = matmul(transpose(cact),tmp)
+        call dgemm('N','N',nbf,nact,nbf,1.0_dp,kcore_sq,nbf,cact,nbf, &
+                   0.0_dp,tmp,nbf)
+        call dgemm('T','N',nact,nact,nbf,1.0_dp,cact,nbf,tmp,nbf, &
+                   0.0_dp,kcore_act,nact)
         deallocate(kcore_sq,tmp)
       end if
       deallocate(ccore, dcore, vcore_sq)

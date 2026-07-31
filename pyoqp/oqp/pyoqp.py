@@ -378,6 +378,17 @@ def main():
                              'before the OpenMP runtime loads)')
     args = parser.parse_args()
 
+    # The console-script launcher imports ``oqp`` before this module's early
+    # environment hook can run.  libgomp may therefore have cached its default
+    # already.  Apply the CLI request to the live native runtime as well as the
+    # environment so ``--omp N`` is effective and is reported correctly.
+    if args.omp is not None:
+        if args.omp < 1:
+            parser.error('--omp must be a positive integer')
+        os.environ['OMP_NUM_THREADS'] = str(args.omp)
+        if oqp.lib.oqp_have_openmp():
+            oqp.lib.oqp_omp_set_num_threads(args.omp)
+
     if args.run_tests:
         report, status = run_tests(args.run_tests)
         print(report)

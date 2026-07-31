@@ -284,6 +284,7 @@ class Molecule:
         meta = self.symmetry_metadata
         if not meta or meta.get('status', 'disabled') == 'disabled':
             return None
+
         if not meta.get('label_mo', True):
             return None
         detection = meta.get('detection')
@@ -332,6 +333,85 @@ class Molecule:
             # Labeling must never break the run in the metadata-only phase.
             meta['mo_labels'] = {'status': 'error', 'error': str(exc)}
             return None
+
+    def canonicalize_qmrsf_active_orbitals(self, energy_tolerance=1.0e-8):
+        """Stabilize exactly degenerate QMRSF SOMOs before matrix assembly.
+
+        This changes only the representation inside a degenerate, equally
+        occupied subspace, so the converged reference density and energy are
+        unchanged. It makes the orbital-dependent dressed exchange seam
+        reproducible across XC grids, BLAS libraries, and OpenMP reductions.
+        """
+        try:
+            from oqp.library.symmetry import canonicalize_degenerate_orbitals
+            from oqp.library.symmetry_detect import enumerate_full_group
+
+            shells, smat, nbf, skip_reason = self._symmetry_labeling_inputs()
+            if shells is None:
+                result = {'status': skip_reason}
+                self.qmrsf_orbital_gauge = result
+                return result
+
+            energies = np.asarray(self.data['OQP::E_MO_A'], dtype=float).ravel()
+            ncore = int(np.asarray(self.data['nelec_B']).ravel()[0])
+            active = list(range(ncore, ncore + 4))
+            if active[-1] >= energies.size:
+                result = {'status': 'skipped_active_orbitals_out_of_range'}
+                self.qmrsf_orbital_gauge = result
+                return result
+
+            groups = []
+            pending = [active[0]]
+            for orbital in active[1:]:
+                if abs(energies[orbital] - energies[pending[-1]]) <= energy_tolerance:
+                    pending.append(orbital)
+                else:
+                    if len(pending) > 1:
+                        groups.append(pending)
+                    pending = [orbital]
+            if len(pending) > 1:
+                groups.append(pending)
+            if not groups:
+                result = {'status': 'not_needed',
+                          'active_orbitals': [i + 1 for i in active]}
+                self.qmrsf_orbital_gauge = result
+                return result
+
+            atoms = np.asarray(self.get_atoms(), dtype=float).ravel()
+            coords = np.asarray(self.get_system(), dtype=float).reshape(-1, 3)
+            operations = enumerate_full_group(
+                atoms, coords,
+                tolerance=float(self.config.get('symmetry', {})
+                                .get('tolerance', 1.0e-5)),
+            )
+            coefficients = self._mo_coefficients('OQP::VEC_MO_A', nbf)
+            rotated, records = canonicalize_degenerate_orbitals(
+                coefficients, smat, shells, operations, groups)
+            if not records:
+                result = {'status': 'skipped_no_resolving_symmetry',
+                          'degenerate_groups': [[i + 1 for i in g] for g in groups]}
+                self.qmrsf_orbital_gauge = result
+                return result
+
+            packed = np.asarray(rotated.T, dtype=float).copy()
+            self.data['OQP::VEC_MO_A'] = packed
+            # A quintet ROHF/ROKS reference shares the spatial alpha/beta set.
+            try:
+                self.data['OQP::VEC_MO_B'] = packed.copy()
+            except Exception:
+                pass
+            result = {
+                'status': 'canonicalized',
+                'energy_tolerance': float(energy_tolerance),
+                'degenerate_groups': [[i + 1 for i in g] for g in groups],
+                'operations': records,
+            }
+            self.qmrsf_orbital_gauge = result
+            return result
+        except Exception as exc:
+            result = {'status': 'error', 'error': str(exc)}
+            self.qmrsf_orbital_gauge = result
+            return result
 
     def _label_scf_state(self, mo_label_result):
         """Total-symmetry label of the SCF determinant (metadata only).
