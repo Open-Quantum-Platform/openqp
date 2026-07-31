@@ -523,22 +523,36 @@ contains
   !> divided by their denominator.
   subroutine triples(et)
     real(dp), intent(out) :: et
-    integer  :: i, j, k, a, b, c
-    real(dp) :: dd, tc, td
+    integer  :: i, j, k, a, b, c, e, m
+    real(dp) :: dd, tc, td, num
+    real(dp), allocatable :: Q(:,:,:,:)
 
     et = 0.0_dp
-    !$omp parallel do collapse(3) default(shared) &
-    !$omp   private(i,j,k,a,b,c,dd,tc,td) reduction(+:et) schedule(dynamic) &
-    !$omp   if(real(no,dp)**3*real(nv,dp)**3 > PAR_WORK)
+    !$omp parallel default(shared) private(i,j,k,a,b,c,e,m,dd,tc,td,num,Q) &
+    !$omp   reduction(+:et)
+    allocate(Q(nv,nv,nv,3))
+    !$omp do collapse(3) schedule(dynamic)
     do i = 1, no
       do j = 1, no
         do k = 1, no
+          ! q2 depends on the occupied triple only through three orderings,
+          ! and the connected numerator asks for each of them three times over
+          ! permuted virtuals.  Building the three nv^3 panels once per (i,j,k)
+          ! replaces nine recomputations per element -- each of which had its
+          ! own loop over e and m -- with nine array reads.
+          call build_q(i,j,k, Q(:,:,:,1))
+          call build_q(j,i,k, Q(:,:,:,2))
+          call build_q(k,j,i, Q(:,:,:,3))
+
           do a = 1, nv
             do b = 1, nv
               do c = 1, nv
                 dd = eso(i)+eso(j)+eso(k)-eso(no+a)-eso(no+b)-eso(no+c)
                 if (abs(dd) < 1.0e-12_dp) cycle
-                tc = conn(i,j,k,a,b,c) / dd
+                num =  (Q(a,b,c,1) - Q(b,a,c,1) - Q(c,b,a,1)) &
+                     - (Q(a,b,c,2) - Q(b,a,c,2) - Q(c,b,a,2)) &
+                     - (Q(a,b,c,3) - Q(b,a,c,3) - Q(c,b,a,3))
+                tc = num / dd
                 td = disc(i,j,k,a,b,c) / dd
                 et = et + tc*dd*(tc+td) / 36.0_dp
               end do
@@ -547,62 +561,48 @@ contains
         end do
       end do
     end do
-    !$omp end parallel do
+    !$omp end do
+    deallocate(Q)
+    !$omp end parallel
   end subroutine triples
 
-  !> Disconnected triple numerator: P(i/jk) P(a/bc) t1_ia <jk||bc>.
+  !> q2 over the whole virtual cube for one occupied ordering:
+  !>   Q(a,b,c) = sum_e t2(j,k,a,e) <ei||bc> - sum_m t2(i,m,b,c) <ma||jk>
+  subroutine build_q(i, j, k, Q)
+    integer, intent(in) :: i, j, k
+    real(dp), intent(out) :: Q(nv,nv,nv)
+    integer :: a, b, c, e, m
+    real(dp) :: s1, s2
+    do c = 1, nv
+      do b = 1, nv
+        do a = 1, nv
+          s1 = 0.0_dp
+          do e = 1, nv
+            s1 = s1 + t2(j,k,a,e)*g(no+e,i,no+b,no+c)
+          end do
+          s2 = 0.0_dp
+          do m = 1, no
+            s2 = s2 + t2(i,m,b,c)*g(m,no+a,j,k)
+          end do
+          Q(a,b,c) = s1 - s2
+        end do
+      end do
+    end do
+  end subroutine build_q
+
+  !> Disconnected triple numerator: P(i/jk) P(a/bc) [ t1_ia <jk||bc>
+  !> + f_ia t2_jkbc ], the second term non-zero only for a non-HF reference.
   pure real(dp) function disc(i,j,k,a,b,c) result(v)
     integer, intent(in) :: i,j,k,a,b,c
     v =   p1(i,j,k,a,b,c) - p1(j,i,k,a,b,c) - p1(k,j,i,a,b,c)
   end function disc
 
-  !> P(a/bc) t1_ia <jk||bc> for a fixed occupied ordering.
   pure real(dp) function p1(i,j,k,a,b,c) result(v)
     integer, intent(in) :: i,j,k,a,b,c
-    ! t1 <jk||bc> is the canonical disconnected triple; the f_ov t2 term is
-    ! what a non-canonical (ROHF) reference adds and is zero for UHF.
-    v =   t1s(i,a)*gs(j,k,b,c) - t1s(i,b)*gs(j,k,a,c) - t1s(i,c)*gs(j,k,b,a) &
-        + f_ov(i,a)*t2s(j,k,b,c) - f_ov(i,b)*t2s(j,k,a,c) - f_ov(i,c)*t2s(j,k,b,a)
+    v =   t1(i,a)*g(j,k,no+b,no+c) - t1(i,b)*g(j,k,no+a,no+c) &
+        - t1(i,c)*g(j,k,no+b,no+a) &
+        + f_ov(i,a)*t2(j,k,b,c) - f_ov(i,b)*t2(j,k,a,c) - f_ov(i,c)*t2(j,k,b,a)
   end function p1
-
-  !> Connected triple numerator:
-  !>   P(i/jk) P(a/bc) [ sum_e t2_jkae <ei||bc> - sum_m t2_imbc <ma||jk> ]
-  pure real(dp) function conn(i,j,k,a,b,c) result(v)
-    integer, intent(in) :: i,j,k,a,b,c
-    v =   p2(i,j,k,a,b,c) - p2(j,i,k,a,b,c) - p2(k,j,i,a,b,c)
-  end function conn
-
-  pure real(dp) function p2(i,j,k,a,b,c) result(v)
-    integer, intent(in) :: i,j,k,a,b,c
-    v =   q2(i,j,k,a,b,c) - q2(i,j,k,b,a,c) - q2(i,j,k,c,b,a)
-  end function p2
-
-  pure real(dp) function q2(i,j,k,a,b,c) result(v)
-    integer, intent(in) :: i,j,k,a,b,c
-    integer :: e, m
-    v = 0.0_dp
-    do e = 1, nv
-      v = v + t2s(j,k,a,e)*g(no+e,i,no+b,no+c)
-    end do
-    do m = 1, no
-      v = v - t2s(i,m,b,c)*g(m,no+a,j,k)
-    end do
-  end function q2
-
-  pure real(dp) function t1s(i,a) result(v)
-    integer, intent(in) :: i,a
-    v = t1(i,a)
-  end function t1s
-
-  pure real(dp) function t2s(i,j,a,b) result(v)
-    integer, intent(in) :: i,j,a,b
-    v = t2(i,j,a,b)
-  end function t2s
-
-  pure real(dp) function gs(j,k,b,c) result(v)
-    integer, intent(in) :: j,k,b,c
-    v = g(j,k,no+b,no+c)
-  end function gs
 
 end subroutine cc_uhf_ccsd_t
 
