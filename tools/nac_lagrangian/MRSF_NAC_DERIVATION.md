@@ -509,3 +509,31 @@ NEXT SESSION ENTRY POINT (the remaining Lagrangian assembly):
 4. Assemble d_IJ; gate vs the frozen exact-overlap references with SIGNED
    cos, emergent antisymmetry (compute (I,J),(J,I) independently), C1
    molecule (ethylene MECI), translational sum rule.
+
+### 7.11 Assembly gate v1/v2 (2026-07-31 night): direction PROVEN, bookkeeping open
+d_pred = Xt_I.dXt_J + gamma^formula:T vs production d_num, in-process:
+- SIGNED cos = +0.984 / |1.0000| / |0.999| on all pairs -- the decomposition
+  DIRECTION and the storage-boundary sign fix are confirmed end to end.
+- Magnitudes off per pair (0.9x / 1.6-2.7x / 3.2x). Diagnostics:
+  * The formula's amplitude metric is trivial along the actual dX directions
+    (exact directional derivative == plain dot; metric correction changed
+    nothing) -- the excess sits in the gamma:T term.
+  * For (2,3), d_num ~= the amplitude term ALONE (0.51 vs 0.59): the
+    gamma^formula:T contraction largely double-counts response already
+    carried by the ALIGNED displaced amplitudes (the amplitude derivative
+    includes transport/co-rotation content). The clean split needs the
+    amplitude derivative taken at FROZEN orbital gauge (transported dX)
+    with gamma:T carrying all orbital response -- i.e., the transport
+    convention must be fixed ONE way in both terms (branch Phase-10 lesson,
+    now precisely quantifiable with exact tools).
+  * Harness hygiene: run d_num FIRST on the pristine state (assembly runs
+    showed (1,3) |d| instability 0.037<->0.065 caused by mol-state mutation
+    before numerical_nac; the three pristine freeze runs agreed to 1e-10).
+NEXT-SESSION plan (precise):
+1. Reorder assembly_gate: d_num first, then sweeps; keep ONE gauge.
+2. Transported amplitude derivative: dXt_J^transported = Q^T Xt_J(x) Q-style
+   per-block Loewdin transport (branch _compute_amp_damp machinery,
+   validated) -> amp term = formula-metric derivative of TRANSPORTED
+   amplitudes; gamma:T keeps the FULL T. Gate again -- expect magnitudes
+   to close; any residual = the same-space canonical U^x sector.
+3. Then term-by-term analytic replacement (z-vector, esum, W.S^x).

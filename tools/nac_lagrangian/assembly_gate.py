@@ -226,6 +226,24 @@ def main():
                 Xd[s] = -Xd[s]
         return M_f, Xd
 
+    # reference minors once (amplitude directional derivatives live on them)
+    I_mo = np.eye(nbf)
+    sij0, sab0, sia0 = s_ij_of(I_mo), s_ab_of(I_mo), s_ia_of(I_mo)
+
+    def amp_directional(J, dXJ, eps=1e-5):
+        """Exact formula amplitude term: directional derivative of the
+        normalized contraction w.r.t. the ket amplitudes of state J along
+        dXJ, at the reference minors. NOT the plain dot product X_I . dX_J:
+        the sqrt2 terms and the socc baseline of s_ia make the formula's
+        amplitude metric nontrivial."""
+        Xp_ = [x.copy() for x in Xt0]
+        Xm_ = [x.copy() for x in Xt0]
+        Xp_[J] = Xt0[J] + eps * dXJ
+        Xm_[J] = Xt0[J] - eps * dXJ
+        Sp_ = contraction(sij0, sab0, sia0, Xt0, Xp_)
+        Sm_ = contraction(sij0, sab0, sia0, Xt0, Xm_)
+        return (Sp_[:, J] - Sm_[:, J]) / (2 * eps)
+
     d_amp = np.zeros((ncoord, nstate, nstate))
     d_orb = np.zeros((ncoord, nstate, nstate))
     for k in range(ncoord):
@@ -236,12 +254,13 @@ def main():
         cm[k] -= h
         Mm, Xm = displaced(cm)
         T = (Mp - Mm) / (2 * h)
-        for I in range(nstate):
-            for J in range(nstate):
+        for J in range(nstate):
+            dXJ = (Xp[J] - Xm[J]) / (2 * h)
+            damp_col = amp_directional(J, dXJ)     # d_amp[:, J] for all bra I
+            for I in range(nstate):
                 if I == J:
                     continue
-                dXJ = (Xp[J] - Xm[J]) / (2 * h)
-                d_amp[k, I, J] = float(np.sum(Xt0[I] * dXJ))
+                d_amp[k, I, J] = damp_col[I]
                 d_orb[k, I, J] = float(np.sum(gam[I, J] * T))
         print(f'  coord {k+1}/{ncoord} done', flush=True)
 
