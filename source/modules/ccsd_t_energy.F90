@@ -238,11 +238,13 @@ contains
     subroutine run_open_shell()
 
       use oqp_tagarray_driver, only: OQP_VEC_MO_B, OQP_FOCK_A, OQP_FOCK_B
+      use mathlib, only: unpack_matrix
 
       real(kind=dp), contiguous, pointer :: mo_b(:,:), fock_a(:), fock_b(:)
       real(kind=dp), allocatable :: ca_sc(:,:), cb_sc(:,:), ea_sc(:), eb_sc(:)
       real(kind=dp), allocatable :: eri_aa(:,:,:,:), eri_bb(:,:,:,:), eri_ab(:,:,:,:)
       real(kind=dp), allocatable :: gso(:,:,:,:), eso(:), etmp(:)
+      real(kind=dp), allocatable :: fso(:,:), fov(:,:), fao(:,:), fmo_a(:,:), fmo_b(:,:), scr(:,:)
       integer, allocatable :: ord(:)
       integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
       real(kind=dp) :: so_gb, tw0, tw1
@@ -268,18 +270,6 @@ contains
         close(iw)
         call show_message('CCSD(T): open-shell integral storage exceeds 32 GB; &
             &freeze more core orbitals or use a smaller basis', with_abort)
-      end if
-
-      ! ROHF is not supported yet.  Semicanonicalisation makes the occ-occ and
-      ! vir-vir Fock blocks diagonal, but for ROHF the occupied-virtual block
-      ! survives -- and these spin-orbital equations drop exactly those f_ov
-      ! terms.  Measured 5e-3 Hartree out on CH2 triplet, which is wrong
-      ! quietly; refuse instead until the f_ov terms are carried.
-      if (infos%control%scftype == 3) then
-        close(iw)
-        call show_message('CCSD(T): ROHF reference is not supported yet &
-            &(the f_ov terms are missing); use [scf] type=uhf for open-shell &
-            &coupled cluster', with_abort)
       end if
 
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
@@ -332,16 +322,46 @@ contains
       eso = etmp
       gso = gso(ord,ord,ord,ord)
 
+      ! Occupied-virtual Fock block in the same spin-orbital basis.  It is zero
+      ! for UHF but not for ROHF: semicanonicalisation only diagonalises the
+      ! occ-occ and vir-vir blocks, and the solver needs what is left over --
+      ! both in the amplitude equations and in the correlation energy, where
+      ! Brillouin no longer holds.
+      allocate(fao(nbf,nbf), fmo_a(nbf,nbf), fmo_b(nbf,nbf), scr(nbf,nbf), &
+               fso(nso,nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): open-shell Fock alloc failed', with_abort)
+      call unpack_matrix(fock_a, fao, 'U')
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, ca_sc, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, ca_sc, nbf, scr, nbf, 0.0_dp, fmo_a, nbf)
+      call unpack_matrix(fock_b, fao, 'U')
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, cb_sc, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, cb_sc, nbf, scr, nbf, 0.0_dp, fmo_b, nbf)
+
+      fso = 0.0_dp
+      do p = 1, nmo
+        do q = 1, nmo
+          fso(2*p-1, 2*q-1) = fmo_a(nfzc+p, nfzc+q)
+          fso(2*p,   2*q  ) = fmo_b(nfzc+p, nfzc+q)
+        end do
+      end do
+      fso = fso(ord,ord)
+
+      allocate(fov(nocc_so, nso-nocc_so), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): fov alloc failed', with_abort)
+      fov = fso(1:nocc_so, nocc_so+1:nso)
+      deallocate(fao, fmo_a, fmo_b, scr, fso)
+
       call system_clock_seconds(tw0)
       call cc_uhf_ccsd_t(nso, nocc_so, eso, gso, int(infos%control%cc_maxit), &
-                         infos%control%cc_conv, do_t, e_ccsd, e_t, converged, niter)
+                         infos%control%cc_conv, do_t, e_ccsd, e_t, converged, niter, &
+                         fov=fov)
       call system_clock_seconds(tw1)
       t_ccsd = tw1 - tw0
       t_trip = 0.0_dp
 
       write(iw,'(2X,A,I0)') 'CCSD(T): open-shell iterations = ', niter
 
-      deallocate(gso, eso, etmp, ord, ca_sc, cb_sc, ea_sc, eb_sc)
+      deallocate(gso, eso, etmp, ord, ca_sc, cb_sc, ea_sc, eb_sc, fov)
 
     end subroutine run_open_shell
 

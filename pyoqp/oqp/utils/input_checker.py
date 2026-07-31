@@ -1890,19 +1890,7 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
-    if scf_type == "rohf":
-        report.add(
-            "ERROR",
-            "scf.type",
-            "Coupled cluster does not support an ROHF reference yet: the "
-            "spin-orbital equations drop the f_ov terms that survive "
-            "semicanonicalisation for ROHF.",
-            value=scf_type,
-            expected="rhf or uhf",
-            action="Use [scf] type=uhf for open-shell coupled cluster.",
-            wiki=WIKI_HELP["input.method"],
-        )
-    elif scf_type not in ("rhf", "uhf"):
+    if scf_type not in ("rhf", "uhf", "rohf"):
         report.add(
             "ERROR",
             "scf.type",
@@ -1912,7 +1900,7 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
             action="Set [scf] type to rhf, uhf or rohf.",
             wiki=WIKI_HELP["input.method"],
         )
-    elif scf_type == "uhf":
+    elif scf_type in ("uhf", "rohf"):
         # The open-shell path goes through the spin-orbital solver, which
         # stores the full (2*nmo)^4 tensor -- sixteen times the closed-shell
         # one.  Warn rather than block: the Fortran side refuses on size.

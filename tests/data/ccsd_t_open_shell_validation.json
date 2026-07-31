@@ -1,18 +1,22 @@
 {
   "_comment": [
     "Open-shell CCSD(T) reference energies for the native OpenQP path.",
-    "Generated with PySCF UHF + UCCSD/uccsd_t on the same geometry and basis,",
-    "then reproduced end to end through OpenQP's own integral engine and the",
-    "spin-orbital solver in source/cc_uhf_lib.F90.",
+    "Generated with PySCF on the same geometry and basis, then reproduced end to",
+    "end through OpenQP's own integral engine and the spin-orbital solver.",
     "",
-    "UHF only.  ROHF is rejected by the solver: after semicanonicalisation its",
-    "occupied-virtual Fock block is still non-zero, and the spin-orbital",
-    "equations here drop exactly those f_ov terms.  Running it anyway gave a",
-    "5e-3 Hartree error on CH2 triplet -- wrong quietly, which is why it is",
-    "gated rather than left available.",
+    "scf_type selects the reference. UHF is canonical, so its f_ov vanishes.",
+    "ROHF is not: semicanonicalisation leaves the occupied-virtual Fock block,",
+    "and both the amplitude equations and the correlation energy need it.",
+    "",
+    "triples_tolerance is per case and deliberately loose for ROHF. (T) is not",
+    "invariant to occ-occ and vir-vir rotations, so it depends on the orbital",
+    "basis in a way CCSD does not; this code evaluates it semicanonically and",
+    "PySCF does not. The residual tracks open-shell character (6e-12 on a",
+    "closed-shell ROHF case, 4e-7 on a triplet). That is a convention",
+    "difference, not agreement, so the tolerance says so instead of hiding it.",
     "",
     "cartesian=true throughout: OpenQP uses 6d Cartesian shells, so PySCF needs",
-    "gto.M(..., cart=True) or the two codes are not running the same basis."
+    "gto.M(..., cart=True) or the two codes run different basis sets."
   ],
   "tolerance": {
     "scf": 1e-06,
@@ -44,7 +48,8 @@
       "nbf": 6,
       "scf_reference": -74.3626691948,
       "e_ccsd": -0.0245150129,
-      "e_triples": -2.3e-07
+      "e_triples": -2.3e-07,
+      "triples_tolerance": 1e-08
     },
     {
       "name": "CH2 triplet/STO-3G UHF",
@@ -76,7 +81,8 @@
       "nbf": 7,
       "scf_reference": -38.4285658724,
       "e_ccsd": -0.0354785802,
-      "e_triples": -8.38845e-05
+      "e_triples": -8.38845e-05,
+      "triples_tolerance": 1e-08
     },
     {
       "name": "NH2 doublet/STO-3G UHF",
@@ -108,7 +114,8 @@
       "nbf": 7,
       "scf_reference": -54.826106582,
       "e_ccsd": -0.0410051852,
-      "e_triples": -5.3563e-05
+      "e_triples": -5.3563e-05,
+      "triples_tolerance": 1e-08
     },
     {
       "name": "OH doublet/STO-3G fzc1",
@@ -134,7 +141,128 @@
       "nbf": 6,
       "scf_reference": -74.3626691948,
       "e_ccsd": -0.0244845803,
-      "e_triples": -2.126e-07
+      "e_triples": -2.126e-07,
+      "triples_tolerance": 1e-08
+    },
+    {
+      "name": "CH2 triplet/STO-3G ROHF",
+      "atoms": [
+        [
+          6,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.99,
+          0.33
+        ],
+        [
+          1,
+          0.0,
+          -0.99,
+          0.33
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 2,
+      "scf_type": "rohf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 7,
+      "scf_reference": -38.4214590621,
+      "e_ccsd": -0.0425907174,
+      "e_triples": -8.76825e-05,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "OH doublet/STO-3G ROHF",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.97
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "rohf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 6,
+      "scf_reference": -74.3615619579,
+      "e_ccsd": -0.0256223842,
+      "e_triples": -1.654e-07,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "NH2 doublet/STO-3G ROHF",
+      "atoms": [
+        [
+          7,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.8,
+          0.57
+        ],
+        [
+          1,
+          0.0,
+          -0.8,
+          0.57
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "rohf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 7,
+      "scf_reference": -54.8236990594,
+      "e_ccsd": -0.0434208822,
+      "e_triples": -5.04464e-05,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "O2 triplet/STO-3G ROHF",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          8,
+          0.0,
+          0.0,
+          1.21
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 2,
+      "scf_type": "rohf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 10,
+      "scf_reference": -147.6322746613,
+      "e_ccsd": -0.1103618047,
+      "e_triples": -0.0007164361,
+      "triples_tolerance": 1e-06
     }
   ]
 }

@@ -69,17 +69,16 @@ class TestCCSDTInputChecker(unittest.TestCase):
         self.assertTrue(report.ok)
         self.assertIn("spin-orbital", report.to_text())
 
-    def test_cc_rejects_rohf(self):
-        """ROHF must be refused, not merely discouraged: the spin-orbital
-        equations drop the f_ov terms that survive semicanonicalisation for an
-        ROHF reference, which is worth 5e-3 Ha on CH2 triplet."""
+    def test_cc_accepts_rohf(self):
+        """ROHF is supported once f_ov is carried through the equations and the
+        correlation energy; it goes through the same spin-orbital solver."""
         config = {"input": {"method": "ccsd(t)", "functional": ""},
                   "scf": {"type": "rohf"}}
         report = self._report()
         self.checker._check_cc(config, report)
 
-        self.assertFalse(report.ok)
-        self.assertIn("f_ov", report.to_text())
+        self.assertTrue(report.ok)
+        self.assertIn("spin-orbital", report.to_text())
 
     def test_cc_rejects_unknown_reference(self):
         config = {"input": {"method": "ccsd", "functional": ""},
