@@ -1081,3 +1081,28 @@ small missing Mt channel. Next: tighten the referee (smaller h,
 Richardson) or cross-check Mt:U against ytil.(w_ref - w_skel) with
 w_skel from the FOCK-exporting workers, then inject Lmat = Mt+gamma
 into the hook (v7i, 6 solves) for the production seam form.
+
+### 7.35 v7i: the DIRECT-INJECTION seam is certified; precision layer open
+(1) PRODUCTION T2 CONFIRMED: injecting X = Mt + Mt_G + gamma directly
+    into the orbgrad hook gives -seam(X) == sum_pairs pack(X).U(hi,lo)
+    at 1.5e-5..1.2e-2 abs (vs |pack| up to 2.8) on ALL pairs. Together
+    with 7.32/7.34 this certifies the complete production mechanism for
+    the cross-space channel: ONE z-solve per pair on the X matrix.
+(2) The h=5e-4 sweep of v7i is internally anomalous (Mt:U collapses to
+    ~40-60% of the h=1e-3 value; Richardson made things worse, while
+    the w_ref side stayed h-consistent). Sweep-2 state contamination or
+    a degenerate-sector sg issue -- diagnose offline from
+    H2O_energy_tlf0_v7i.npz (Ux1/Ux2/w1/w2 saved).
+(3) Best current closures (h=1e-3 referees): offline assembly
+    T1 + X:Ux + gamma:Sk = 1.9e-2 / 8.7e-3 / 2.1e-1 (sign-resolved).
+    The remaining discrepancy is the Mt-channel deficit (-3%/-3%/+13%
+    against [ytil.w_ref - T1]) whose origin (referee precision vs a
+    small missing channel) is the LAST open question.
+
+STATUS SUMMARY of the production program:
+  CERTIFIED: T1 slot-injection engines; gamma:Sk; the seam transfer
+  function (unit-L, -U_full) and the direct-injection T2; the V-mask
+  weights; ss-antisym auto-cancellation; G[P] in-process build; MINRES
+  ytil; the full-Mt harvest method; the decomposition identity (1e-8).
+  OPEN: the few-percent Mt-channel deficit; the near-degenerate pair's
+  FD-referee quality; then ethylene + rewiring.
