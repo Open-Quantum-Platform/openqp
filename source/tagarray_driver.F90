@@ -228,7 +228,10 @@ contains
     res = record_info%count
     if (present(type_id)) type_id = record_info%type_id
     if (present(ndims  )) ndims   = int(record_info%ndims, c_int32_t)
-    if (present(dims   )) dims(1:record_info%ndims) = record_info%dims
+    ! subscript the right-hand side too: for scalar records (ndims = 0)
+    ! record_info%dims still holds one element, and a 0-size = 1-size
+    ! assignment is nonconforming (caught by -fcheck=bounds)
+    if (present(dims   )) dims(1:record_info%ndims) = record_info%dims(1:record_info%ndims)
     if (present(data_size   )) data_size = record_info%count
 
   end function tagarray_get_cptr
