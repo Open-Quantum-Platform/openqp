@@ -847,3 +847,48 @@ v3d/v3e (v3d_h2o.py, v3e_h2o.py) triangulated the v3b/v3c failures:
     (physical U^x is h-independent; arbitrary degenerate-sector
     rotations are not) and re-judges the continuous-gauge assembly with
     a cleaned U.
+
+### 7.27 v3f/v3g: THE ANALYTIC ASSEMBLY CLOSES ON H2O (machine level)
+v3f killed the degenerate-gauge hypothesis: Ux is h-CONSISTENT
+(|Ux(1e-3)-Ux(5e-4)| at FD-truncation level, cleaning mask empty), and
+J3 proved gamma:(Sk_an + Ux) == gamma:T_FD at machine level inside the
+total. The only wrong object was my w = dA X_J composition.
+
+v3g found and fixed it:
+(W3) SUM RULE: X_J^T w must equal d(omega_J)/dx. The exact referee
+     w_ref (FULL displaced-SCF matvec on sg-transported reference
+     amplitudes, transported back) satisfies it to 5e-7; my
+     w_skel + w_rot violates it by up to 0.39. The missing channel is
+     the Fock DENSITY-RESPONSE G[dD]: mrsf_matvec_apply is frozen-Fock
+     (rotating C never rebuilds F_AO[D(C)]), so neither w_skel (frozen
+     D) nor w_rot (rotated MO transform of the stored F_AO) contains
+     G[dD]. Its signature: the w_ref - w_mine difference peaks on the
+     core-Fock eigenvectors (w ~ 19-20 Ha).
+(W4) PT FORMULA CERTIFIED: dX = sum_{k != J} V_k (V_k^T w_ref)/
+     (om_J - w_k) reproduces the actual FD amplitude derivative to
+     cos +0.999999..+0.99999, maxdiff 1.7e-4..1.5e-3 (FD truncation).
+(W5) FULL ANALYTIC-STRUCTURE ASSEMBLY vs d_num (H2O):
+       (1,3) cos +1.00000000 maxdiff 4.2e-9   (MACHINE EXACT)
+       (1,2) |pred| == |d_num| all digits     (phase gauge phi1=-1)
+       (2,3) 0.12%                            (phi2*phi3=-1; product +1)
+
+THE CERTIFIED FORMULA (all ingredients defined, each with a referee):
+
+  d_IJ = antisym_IJ[ ampdir_J(dX_J) + gamma^IJ : (Sk + U^x) ]
+  dX_J = (om_J - A)^{-1}|_{perp J} (dA X_J)
+  dA X_J = [AO-derivative skeleton, frozen C,D]
+         + [MO-rotation response along U^x, frozen Fock]
+         + [Fock density response G[dD(U^x)]]        <- the 7.27 term
+  U^x = CPHF orbital response; Sk = C^T dSket_AO C (export, benign
+        on-site omission); gamma = closed form; ampdir = the formula-
+        metric directional derivative (linear in dX).
+
+PRODUCTION ADJOINT FORM (per pair, no per-coordinate solves):
+  ampdir_J(dX)[I] = G_met[I,J] . dX  (G_met analytic from the kernel)
+  => amp term^c = ytil . (dA X_J)^c,  ytil = (om_J - A)^{-1} G_met|perp
+     ONE amplitude-space solve per pair (MINRES on the matvec), then
+     ytil.(dA X_J)^c decomposes into gradient-type contractions:
+     skeleton -> esum/amp-engine pattern on the (ytil, X_J) pair;
+     U^x-linear parts (rot + G[dD] + gamma:U^x) -> ONE z-vector with
+     the combined RHS (the 7.23 prescription, now with every term
+     derived and referee'd). This is the final production math.
