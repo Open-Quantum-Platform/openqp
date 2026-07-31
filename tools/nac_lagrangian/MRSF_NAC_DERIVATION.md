@@ -1160,3 +1160,29 @@ CANDIDATES for the missing Mt channel (next forensic layer):
 Everything else in the production chain is now certified. Final d gap
 vs theory (machine): 1.9e-2 / 8.7e-3 / 2.1e-1 -- entirely attributable
 to the J1 channel.
+
+### 7.38 Candidate eliminations (v7k/v7l/v7m) -- the J1 channel search
+narrows to the referee's displaced-Fock fidelity
+- (a) eps/get_jacobi channel: RULED OUT -- eps-consistent staging
+  (push E_MO = diag(C'^T F C') per staged matvec) leaves every J1..J4
+  number identical to all printed digits.
+- DM/SM direct dependence of the sigma: RULED OUT -- record
+  perturbation probes give |dAx|/eps ~ 6e-12 (machine zero).
+- (b') G-build contamination: RULED OUT at machine level -- the
+  in-process hf_energy(maxit=1) G[P] passes eps-linearity 1.3e-10,
+  self-adjointness 2.9e-11, G[0] = 7e-11. The G[P] tool is certified.
+- Diagonal channel: M~ diagonals are EXACTLY zero in the harvest
+  (frozen AND G) -- empirically no diagonal-scaling response of the
+  bilinear; note MTG diag zero warrants one code-glance (GM diag).
+REMAINING HYPOTHESES for the reproducible -3%/-3%/+13% J1 deficit:
+  (i) the w_skel REFEREE side: the skel workers' 1-iteration SCF at
+      DISPLACED geometries runs the full SinglePoint pipeline --
+      possible vshift/DIIS handling of the stored FOCK at x' (the
+      reference-geometry hf_energy G-build is clean, but the worker
+      path was never given the same fidelity probe);
+  (ii) finite-h second-order content in w_ref - w_skel;
+  (iii) a genuinely quadratic-in-U cross term (h*U) not representable
+      as M~:U at first order.
+NEXT: probe (i) by rebuilding one displaced F(x')[D_ref] via the CLEAN
+hf_energy route inside a worker and diffing the FOCK records; then (ii)
+by an h-refined skel worker pair. All tools exist.
