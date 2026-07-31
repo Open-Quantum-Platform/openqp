@@ -914,3 +914,26 @@ IMPLEMENTATION ONLY (production adjoint form, end of 7.27): G_met
 extraction, one MINRES amplitude solve per pair, the (ytil, X_J)
 skeleton contraction engines, and ONE combined-RHS z-vector for all
 U^x-linear content; then rewire analytical_nac() and refreeze the suite.
+
+### 7.29 THE PER-PAIR ADJOINT FORM IS CERTIFIED ON BOTH MOLECULES
+v4a (adjoint gate) + v3h (in-process merge; v4a's cross-process pairing
+tripped the 7.26 phase landmine on H2O -- gate construction, not math):
+
+  ADJOINT IDENTITY  ytil.w == G_met.PT(w):  1.7e-16 (H2O), 2.0e-15 (ETH)
+  ADJOINT-FORM d vs d_num (signed, in-process phases):
+      H2O: (1,2) 1.2e-6   (1,3) 4.2e-9   (2,3) 3.4e-4
+      ETH: (1,2) 9.6e-5   (1,3) 1.2e-5   (2,3) 4.6e-4
+  == the per-coordinate numbers exactly. ONE amplitude-space adjoint
+  solve per pair (ytil = (om_J - A)^{-1}|perp G_met) replaces all
+  per-coordinate amplitude work. G_met extracted by unit sweep passes a
+  random-direction linearity check to FD precision.
+
+STATUS: the derivation + validation program of this campaign is
+COMPLETE. d = antisym[ ytil.(dA X_J)^c + gamma:(Sk + U^x)^c ] with every
+object certified. Remaining work is ENGINEERING ONLY:
+  (i)   MINRES the ytil solve on the matvec (no full A);
+  (ii)  analytic (dA X_J): skeleton vector engine on the (ytil, X_J)
+        pair (amp/esum generalization), U^x-linear content (rotation +
+        G[dD] + gamma:U^x) via ONE combined-RHS z-vector per pair;
+  (iii) closed-form G_met from the kernel (replace the unit sweep);
+  (iv)  rewire analytical_nac(), refreeze references, extend the suite.
