@@ -513,7 +513,8 @@ contains
       call get_environment_variable('NAC_DUMP_MINORS', ev)
       if (len_trim(ev) > 0) then
         call infos%dat%remove_records((/ character(len=80) :: &
-             'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia' /))
+             'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia', &
+             'OQP::dbg_s_mo' /))
         call infos%dat%reserve_data('OQP::dbg_s_ij', ta_type_real64, &
              noca*noca, (/ noca*noca /))
         call infos%dat%reserve_data('OQP::dbg_s_ab', ta_type_real64, &
@@ -526,6 +527,13 @@ contains
         d1 = reshape(s_ij, (/ noca*noca /))
         d2 = reshape(s_ab, (/ nvirb*nvirb /))
         d3 = reshape(s_ia, (/ noca*nvirb /))
+        block
+          real(kind=dp), pointer :: d4(:)
+          call infos%dat%reserve_data('OQP::dbg_s_mo', ta_type_real64, &
+               nbf*nbf, (/ nbf*nbf /))
+          call tagarray_get_data(infos%dat, 'OQP::dbg_s_mo', d4)
+          d4 = reshape(s_mo(1:nbf,1:nbf), (/ nbf*nbf /))
+        end block
       end if
     end block
 
