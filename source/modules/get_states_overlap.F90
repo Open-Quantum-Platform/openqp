@@ -503,6 +503,31 @@ contains
        end do
     end do
 
+    ! Debug export (read-only, no physics change): dump the minor matrices
+    ! for external convention gates. Enabled by env NAC_DUMP_MINORS.
+    block
+      use oqp_tagarray_driver
+      character(len=16) :: ev
+      real(kind=dp), pointer :: d1(:), d2(:), d3(:)
+      call get_environment_variable('NAC_DUMP_MINORS', ev)
+      if (len_trim(ev) > 0) then
+        call infos%dat%remove_records((/ character(len=80) :: &
+             'OQP::dbg_s_ij', 'OQP::dbg_s_ab', 'OQP::dbg_s_ia' /))
+        call infos%dat%reserve_data('OQP::dbg_s_ij', ta_type_real64, &
+             noca*noca, (/ noca*noca /))
+        call infos%dat%reserve_data('OQP::dbg_s_ab', ta_type_real64, &
+             nvirb*nvirb, (/ nvirb*nvirb /))
+        call infos%dat%reserve_data('OQP::dbg_s_ia', ta_type_real64, &
+             noca*nvirb, (/ noca*nvirb /))
+        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ij', d1)
+        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ab', d2)
+        call tagarray_get_data(infos%dat, 'OQP::dbg_s_ia', d3)
+        d1 = reshape(s_ij, (/ noca*noca /))
+        d2 = reshape(s_ab, (/ nvirb*nvirb /))
+        d3 = reshape(s_ia, (/ noca*nvirb /))
+      end if
+    end block
+
   end subroutine mrsf_tlf
 
   subroutine ov_exact(temp1, i1, i2, ia1, ia2, s_mo, ilow, noc, itype)
