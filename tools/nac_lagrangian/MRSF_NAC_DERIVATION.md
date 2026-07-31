@@ -606,3 +606,19 @@ then C1 validation (ethylene MECI) where cosines are meaningful.
 
 Frozen per-pair z-vector targets (this run's gauge):
   (1,2) |resid| = 1.157*gap;  (1,3) 0.529*gap;  (2,3) 3.097*gap.
+
+### 7.15 Ladder A3: response direction PROVEN, same-space L is the last piece
+Polarized production-RHS L (exact for the bilinear RHS; NAC_DUMP_RHS hook,
+no code changes) contracted with U^x = T - Sk over the THREE rotation
+blocks, vs the frozen residuals:
+  -L.U^x/gap: cos +1.000000 / +1.000000 / +0.998317 (sign = MINUS, matching
+  sfrorhs's global -(...)); magnitude coverage 13% / 28% / 71%.
+The shortfall is structural, not a factor: the production RHS lives ONLY
+in the 86-dim inter-space rotation space, so polarization cannot deliver
+L's SAME-SPACE blocks -- and the S0 pairs are ss-dominated (the same
+structure gamma^formula showed). THE remaining derivation, now uniquely
+identified: assemble L's same-space blocks directly from the verified
+matvec exports (G_MO / gchan / fa/fb, unfolded representation), contract
+with U^x_same-space (canonical-orbital response), and the amplitude term
+closes. Then wire the z-vector for the inter-space part (interchange) and
+ship. All targets frozen; every step has an exact referee.
