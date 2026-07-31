@@ -1051,3 +1051,33 @@ referees (rerun v7g with np.savez of all pieces for offline algebra).
 All tools certified and in place: MINRES ytil, slot-injection engines,
 staged directional matvec, in-process G[P] build (hf_energy maxit=1),
 double seams, FD referees, gauge-invariance probes.
+
+### 7.34 v7h + offline algebra: the discrete identity is MAPPED
+v7h harvested the FULL Mt matrices (single-element staging, 361 dirs x
+6 pairs) + closed-form G-channel Mt_G[p,q] = 2 sum_s occ^s_q [C^T G_s
+C]_pq + w_ref/Ux/double seams, all saved (H2O_energy_tlf0_v7h.npz).
+Offline algebra on the npz established, at machine level:
+
+(1) Ux_FD structure: OFF-DIAGONALS satisfy orthonormality U+U^T=-S^x
+    exactly; DIAGONAL is zeroed by the sg-alignment gauge (the whole
+    v3f "C1 failure" mystery resolved). Decomposition identity checks
+    to 1e-8.
+(2) gamma-side seam identity MACHINE-VERIFIED:
+    -seam(gamma) == sum_pairs pack(gamma).U(hi,lo)  (2e-7..7e-4).
+(3) ss-antisym channel of X = Mt+gamma auto-cancels (|ss_asym| ~ 1e-5;
+    the gauge invariance Mt_a,ss = -gamma_a,ss inside the matrices).
+(4) THE SEAM MISMATCH DIAGNOSED: the polarized-RHS L != pack(Mt)|rot --
+    sfrorhs ADDS the "2*F*T orbital-relaxation terms that the Davidson
+    matvec does NOT have" (its own comment/env NAC_ZERO_2FT). The
+    production T2 must inject Lmat = Mt + gamma DIRECTLY into the hook
+    (or use NAC_ZERO_2FT + reconcile), not the polarized RHS.
+(5) Primary gate Mt-completeness: (Mt+Mt_G):Ux vs [ytil.w_ref - T1]:
+    cos +1.000000 all pairs; magnitudes -2.9%/-3.3%/+12.7%. The full-d
+    offline assembly T1 + X:Ux + gamma:Sk closes to 1.9e-2/8.7e-3/
+    2.1e-1 (sign-resolved). Diag channel contributes zero.
+OPEN (last layer): the 3%/13% Mt-channel deficit -- candidates: FD
+referee precision (Ux ~0.3-1.5% rel; near-degenerate (8,9) worse) vs a
+small missing Mt channel. Next: tighten the referee (smaller h,
+Richardson) or cross-check Mt:U against ytil.(w_ref - w_skel) with
+w_skel from the FOCK-exporting workers, then inject Lmat = Mt+gamma
+into the hook (v7i, 6 solves) for the production seam form.
