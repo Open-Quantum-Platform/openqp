@@ -263,6 +263,12 @@ class _TheoryProxy:
     def mp2(self, **kwargs):
         return self._owner.mp2(**kwargs)
 
+    def ccsd(self, **kwargs):
+        return self._owner.ccsd(**kwargs)
+
+    def ccsd_t(self, **kwargs):
+        return self._owner.ccsd_t(**kwargs)
+
     def tdhf(self, **kwargs):
         return self._owner._theory("tdhf", **kwargs)
 
@@ -827,6 +833,54 @@ class OpenQP:
         if updates:
             self.scf(**updates)
         return self
+
+    def ccsd(self, reference="rhf", runtype=None, multiplicity=None,
+             basis=None, nfzc=None, conv=None, maxit=None, ndiis=None,
+             triples=False, **scf_keywords):
+        """Compact coupled-cluster setup for energy-only post-SCF jobs.
+
+        reference may be rhf, uhf or rohf.  Open-shell references go through
+        the spin-orbital solver, which stores sixteen times the integrals of
+        the closed-shell path -- see docs/ccsd_t_open_shell_plan.md.
+        """
+        if runtype is None:
+            runtype = "energy"
+        elif str(runtype).lower() != "energy":
+            raise ValueError("Coupled cluster currently supports runtype='energy' only.")
+        if "functional" in scf_keywords:
+            functional = scf_keywords.pop("functional")
+            if functional:
+                raise ValueError(
+                    "Coupled cluster requires an HF reference; do not pass functional.")
+
+        input_updates = {"method": "ccsd(t)" if triples else "ccsd",
+                         "functional": "", "runtype": runtype}
+        if basis is not None:
+            input_updates["basis"] = basis
+        self.input(**input_updates)
+
+        scf_updates = {}
+        if reference is not None:
+            scf_updates["type"] = reference
+        if multiplicity is not None:
+            scf_updates["multiplicity"] = multiplicity
+        scf_updates.update(scf_keywords)
+        if scf_updates:
+            self.scf(**scf_updates)
+
+        cc_updates = {}
+        for key, value in (("nfzc", nfzc), ("conv", conv),
+                           ("maxit", maxit), ("ndiis", ndiis)):
+            if value is not None:
+                cc_updates[key] = value
+        if cc_updates:
+            self.section("cc", **cc_updates)
+        return self
+
+    def ccsd_t(self, **kwargs):
+        """CCSD with the perturbative triples correction."""
+        kwargs["triples"] = True
+        return self.ccsd(**kwargs)
 
     def mp2(self, reference="rhf", runtype=None, multiplicity=None,
             basis=None, variant=None, same_spin_scale=None,

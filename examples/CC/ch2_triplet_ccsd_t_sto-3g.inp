@@ -1,0 +1,27 @@
+# CCSD(T) on triplet CH2 with a UHF reference.
+#
+# Open-shell coupled cluster runs through the spin-orbital solver, which
+# stores the full (2*nmo)^4 integral tensor -- sixteen times the closed-shell
+# one -- so it is meant for small systems.  The module refuses above 32 GB and
+# reports the figure it would need before allocating.
+[input]
+system=
+   6   0.0000   0.0000   0.0000
+   1   0.0000   0.9900   0.3300
+   1   0.0000  -0.9900   0.3300
+charge=0
+runtype=energy
+basis=sto-3g
+method=ccsd(t)
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=uhf
+conv=1.0e-10
+
+[cc]
+nfzc=0
+conv=1.0e-8
