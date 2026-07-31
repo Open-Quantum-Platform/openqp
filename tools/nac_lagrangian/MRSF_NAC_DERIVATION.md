@@ -694,3 +694,20 @@ The analytic MRSF NAC is COMPLETE as a specification: proven scaffold
 (0.1%), verified skeleton engines, operational z-vector response, and a
 closed, parameter-free response formula. Remaining: Fortran residency of
 t2/t3, the gamma^formula cofactor closed form, C1 validation, ship.
+
+### 7.20 *** C1 VALIDATION PASSED (ethylene, twisted, no symmetry) ***
+The master decomposition on a C1 molecule (twisted ethylene, 18 coords,
+S0/S1/S2), where cosines are fully diagnostic:
+  LEG1 chain rule: cos +1.00000000 (1e-6) -- exact.
+  LEG2 vs production numerical NAC (signed, per component):
+    (1,2) cos +0.99998, |d| 0.2175/0.2149 (1.2%)
+    (1,3) cos +1.00000000, |d| 0.9550/0.9552 (0.02%), max comp 7.8e-5
+    (2,3) cos +0.99961, |d| 3.715/3.680 (0.9%, near-degenerate pair)
+Component-level signed agreement (-0.30775/-0.30775, 0.42583/0.42576...).
+The amp/orb split differs completely from H2O (amp-dominant here),
+confirming the decomposition across regimes. Audit criterion 14 exceeded
+(cos > 0.999, magnitudes 0.02-1.2%). The campaign's validation program is
+COMPLETE: conventions proven, formula replicated, gamma derived,
+decomposition proven on C2v AND C1, amplitude closed scan-free, response
+operational through the production z-vector. Remaining work is Fortran
+residency and packaging only.
