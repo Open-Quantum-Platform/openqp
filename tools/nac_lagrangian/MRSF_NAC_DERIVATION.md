@@ -537,3 +537,33 @@ NEXT-SESSION plan (precise):
    amplitudes; gamma:T keeps the FULL T. Gate again -- expect magnitudes
    to close; any residual = the same-space canonical U^x sector.
 3. Then term-by-term analytic replacement (z-vector, esum, W.S^x).
+
+### 7.12 *** THE MASTER DECOMPOSITION IS PROVEN (2026-07-31, late) ***
+Assembly gate v4 (three-way, antisymmetrized), H2O all pairs:
+  LEG1 replica==chain: cos +1.00000000 (1e-6..1e-7)  -- chain rule exact
+  LEG2 replica==num:   cos +0.999994..+0.9999998, max|diff| 3.6e-5..5.8e-4
+  |d_chain| vs |d_num|: 0.126614/0.126363, 0.036848/0.036786,
+                        0.528997/0.528614  (~0.1%, h^2-limited)
+
+  d_num[I,J] = antisym_IJ[ dS/dXt . dXt_J/dx + gamma^formula_IJ : T ],
+  T = dM/dx (M = column-normalized C0^T S_AO C(x))
+
+Keys that closed it:
+- the production pipeline's (S - S^T) numerator means all comparisons are
+  on the ANTISYMMETRIZED combination (the formula's raw dS carries a real
+  symmetric part; antisymmetry of d is EMERGENT in this assembly);
+- run d_num on the pristine state (harness order);
+- the formula amplitude metric is trivial along actual dX directions.
+
+ANALYTIC REPLACEMENT LADDER (each step gated against this scaffold):
+ A. dXt_J/dx -> first-order PT on the matvec: (At-Om_J)dXt_J = -(dAt-dOm)Xt_J
+    projected: Xt_I.dXt_J = [Xt_I (dAt) Xt_J]/(Om_J-Om_I) -- h_skel already
+    validated (esum + bilinear 2e engines); the L:U^x part shares the same
+    T machinery below.
+ B. T -> Sk (der_overlap_matrix_ket, exists) + U^x (interstate z-vector via
+    OQP::nac_orbgrad_L + same-space canonical terms; W^IJ.S^x partner).
+ C. gamma^formula -> closed form by Jacobi cofactors of the exact minors
+    (mechanical; the replica defines every term).
+ D. Wire gamma^formula + Sk into mrsf_nac_overlap (tag interface ready);
+    ship d_amp via one z-vector per pair. Benchmarks: H2O + C1 ethylene
+    MECI + sum rule; freeze references with the exact-overlap oracle.

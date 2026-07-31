@@ -46,6 +46,13 @@ def main():
     e0b = np.array(mol.data['OQP::E_MO_B'], copy=True)
     xyz0 = np.array(mol.get_system(), copy=True)
 
+    # ---- d_num FIRST, on the pristine state (harness-order hygiene) --------
+    nac = NAC(mol)
+    nacv, dcv, flags = nac.numerical_nac()
+    print('numerical flags:', set(flags), flush=True)
+    # restore the R0 anchor data untouched
+    mol.data['OQP::td_bvec_mo'] = X0_raw
+
     def unfold_m(bv, st):
         ijlr1 = (noca - 1 - nocb - 1) * noca + noca - 1
         ijlr2 = (noca - nocb - 1) * noca + noca
@@ -246,6 +253,7 @@ def main():
 
     d_amp = np.zeros((ncoord, nstate, nstate))
     d_orb = np.zeros((ncoord, nstate, nstate))
+    d_repl = np.zeros((ncoord, nstate, nstate))
     for k in range(ncoord):
         cp = xyz0.copy()
         cp[k] += h
@@ -254,6 +262,10 @@ def main():
         cm[k] -= h
         Mm, Xm = displaced(cm)
         T = (Mp - Mm) / (2 * h)
+        # TOTAL formula derivative from the exact replica (bypasses production)
+        Srp = contraction(s_ij_of(Mp), s_ab_of(Mp), s_ia_of(Mp), Xt0, Xp)
+        Srm = contraction(s_ij_of(Mm), s_ab_of(Mm), s_ia_of(Mm), Xt0, Xm)
+        d_repl[k] = (Srp - Srm) / (2 * h)
         for J in range(nstate):
             dXJ = (Xp[J] - Xm[J]) / (2 * h)
             damp_col = amp_directional(J, dXJ)     # d_amp[:, J] for all bra I
@@ -266,34 +278,40 @@ def main():
 
     d_pred = d_amp + d_orb
 
-    # restore R0 and run the production numerical NAC (same process/phases)
-    mol.update_system(xyz0)
-    oqp.library.ints_1e(mol)
-    oqp.library.guess(mol)
-    SinglePoint(mol).energy()
-    mol.data['OQP::td_bvec_mo'] = X0_raw
-    nac = NAC(mol)
-    nacv, dcv, flags = nac.numerical_nac()
-    print('numerical flags:', set(flags))
+    # PRODUCTION COMPARABILITY: the pipeline antisymmetrizes the overlap
+    # numerator ((S - S^T)/2dt), i.e. d_num[i,j] = (dS_ij - dS_ji)/2. The
+    # formula's dS itself carries a SYMMETRIC part (not an exact-eigenstate
+    # overlap), so all three legs must be compared on the antisymmetrized
+    # combination -- which also makes d antisymmetry EMERGENT, not stamped.
+    d_repl = 0.5 * (d_repl - d_repl.transpose(0, 2, 1))
+    d_amp = 0.5 * (d_amp - d_amp.transpose(0, 2, 1))
+    d_orb = 0.5 * (d_orb - d_orb.transpose(0, 2, 1))
+    d_pred = d_amp + d_orb
 
-    print('\n================= ASSEMBLY GATE =================')
+    print('\n================= ASSEMBLY GATE (three-way, antisymmetrized) =====')
     for I in range(nstate):
         for J in range(nstate):
             if I >= J:
                 continue
             dn = dcv[I, J].reshape(-1)
+            dr = d_repl[:, I, J]
             dp = d_pred[:, I, J]
             da = d_amp[:, I, J]
             do = d_orb[:, I, J]
-            num = float(np.dot(dn, dp))
-            den = np.linalg.norm(dn) * np.linalg.norm(dp) + 1e-300
+
+            def cs(u, v):
+                return float(np.dot(u, v)) / (np.linalg.norm(u)
+                                              * np.linalg.norm(v) + 1e-300)
             print(f'pair ({I+1},{J+1}):')
-            print(f'  |d_num|={np.linalg.norm(dn):.6f}  |d_pred|={np.linalg.norm(dp):.6f}  '
-                  f'|amp part|={np.linalg.norm(da):.6f}  |orb part|={np.linalg.norm(do):.6f}')
-            print(f'  SIGNED cos={num/den:+.8f}  '
-                  f'max|pred-num|={np.abs(dp-dn).max():.2e}')
-            print(f'  pred: {np.round(dp, 5)}')
+            print(f'  |d_num|={np.linalg.norm(dn):.6f}  |d_repl|={np.linalg.norm(dr):.6f}  '
+                  f'|d_chain|={np.linalg.norm(dp):.6f}  '
+                  f'(|amp|={np.linalg.norm(da):.6f} |orb|={np.linalg.norm(do):.6f})')
+            print(f'  LEG1 replica==chain : cos={cs(dr, dp):+.8f} max|diff|={np.abs(dr-dp).max():.2e}')
+            print(f'  LEG2 replica==num   : cos={cs(dr, dn):+.8f} max|diff|={np.abs(dr-dn).max():.2e}')
+            print(f'  LEG3 chain==num     : cos={cs(dp, dn):+.8f} max|diff|={np.abs(dp-dn).max():.2e}')
             print(f'  num : {np.round(dn, 5)}')
+            print(f'  repl: {np.round(dr, 5)}')
+            print(f'  chn : {np.round(dp, 5)}')
 
 
 if __name__ == '__main__':
