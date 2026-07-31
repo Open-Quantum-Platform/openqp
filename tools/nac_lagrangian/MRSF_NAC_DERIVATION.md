@@ -892,3 +892,25 @@ PRODUCTION ADJOINT FORM (per pair, no per-coordinate solves):
      U^x-linear parts (rot + G[dD] + gamma:U^x) -> ONE z-vector with
      the combined RHS (the 7.23 prescription, now with every term
      derived and referee'd). This is the final production math.
+
+### 7.28 ETHYLENE (C1) CLOSES -- the analytic assembly is PROVEN on both systems
+v3g on ethylene (same script, ETH inputs), SIGNED, no phase flips this run:
+
+  pair (1,2): cos +0.99999979  maxdiff 9.6e-5   (|d| 0.2148/0.2149)
+  pair (1,3): cos +1.00000000  maxdiff 1.2e-5   (|d| 0.9552)
+  pair (2,3): cos +0.99999997  maxdiff 4.6e-4   (|d| 3.6799/3.6805)
+
+The (2,3) pair -- gap 10.2 mHa, the near-degeneracy that poisoned every
+term-split approach (7.22-7.23) -- closes at 0.012% relative with the
+exact resolvent denominators: the stacked-FD amplification problem is
+GONE in the analytic structure. W4: PT == FD-dX to 3e-3 even across the
+10 mHa gap. W3: w_ref sum rule 5e-6..1.5e-5 (exact); the G[dD] channel
+on ethylene is a 1-2% correction (vs up to 60% on H2O) -- system-
+dependent, never optional.
+
+This exceeds the original audit criterion 14 (C1 cos > 0.999) by ~5
+orders of magnitude. The formula of 7.27 is final. Remaining work is
+IMPLEMENTATION ONLY (production adjoint form, end of 7.27): G_met
+extraction, one MINRES amplitude solve per pair, the (ytil, X_J)
+skeleton contraction engines, and ONE combined-RHS z-vector for all
+U^x-linear content; then rewire analytical_nac() and refreeze the suite.

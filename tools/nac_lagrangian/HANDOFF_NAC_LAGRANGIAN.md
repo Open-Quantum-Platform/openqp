@@ -21,16 +21,19 @@ by git bundles; pushed nowhere). 25+ commits, every claim numeric-gated.
 | Amplitude response closes scan-free on H2O | zB + same-space L + inter-sym term: 95/64/93%, all signs +1 as derived |
 | Same-space rotations need NO Fock rebuild | D invariant under same-space rotations (derived + used) |
 
-## Benchmark table (v4 assembly-gate, signed, no alignment)
+## Benchmark table (v3g ANALYTIC-STRUCTURE assembly, 7.27-7.28, signed)
 
-| system | pair | cos(pred,num) | \|d_pred\| / \|d_num\| |
+| system | pair | cos(pred,num) | maxdiff |
 |---|---|---|---|
-| H2O (C2v) | (1,2) | +0.99999 | 0.12661 / 0.12636 |
-| H2O | (1,3) | +1.00000 | 0.03685 / 0.03679 |
-| H2O | (2,3) | +0.99999 | 0.52900 / 0.52861 |
-| ethylene (C1) | (1,2) | +0.99998 | 0.21751 / 0.21489 |
-| ethylene | (1,3) | **+1.00000000** | 0.95505 / 0.95519 |
-| ethylene | (2,3) | +0.99961 | 3.71479 / 3.68050 |
+| H2O (C2v) | (1,2) | phase-gauge exact | \|pred\|==\|num\| all digits |
+| H2O | (1,3) | **+1.00000000** | **4.2e-9 (machine)** |
+| H2O | (2,3) | -0.99999999 (phase) | 0.12% |
+| ethylene (C1) | (1,2) | +0.99999979 | 9.6e-5 |
+| ethylene | (1,3) | **+1.00000000** | 1.2e-5 |
+| ethylene | (2,3) gap=10.2mHa | +0.99999997 | 4.6e-4 (0.012%) |
+
+(previous v4 all-FD gate: 0.02-1.2%; the analytic structure is BETTER
+because the resolvent removes the stacked-FD near-degeneracy noise)
 
 ## Deliverables in this directory
 
