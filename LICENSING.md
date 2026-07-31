@@ -1,50 +1,42 @@
-# OpenQP dual licensing
+# OpenQP licensing guide
 
-OpenQP is offered under a dual-licensing model. For versions and materials
-covered by this notice, users may choose either:
+OpenQP uses a source-available dual-licensing model for versions distributed
+with the current [`LICENSE`](LICENSE):
 
-1. **GNU GPLv3.** Use OpenQP under the GNU General Public License, version 3.0
-   (`GPL-3.0-only`). The complete license text is in [`LICENSE`](LICENSE).
-2. **Commercial license.** Obtain separate written commercial terms from Open
-   Quantum Inc. for versions and materials that the Company has authority to
-   license.
+1. **Free research license.** Qualifying academic and nonprofit users may use
+   OpenQP solely for independent, non-commercial research and classroom
+   teaching under the OpenQP Research License 1.0.
+2. **Commercial license.** Every use by, for, or on behalf of a for-profit
+   company requires a separate written commercial license from Open Quantum
+   Inc. This includes internal R&D, evaluation, benchmarking, sponsored or
+   contract research, consulting, products, services, and production use.
 
-The two options are alternatives. A user who accepts and complies with GPLv3
-does not also need a commercial license. A user who needs rights or services
-outside the GPLv3 option should obtain a commercial license.
+The current Research License is not GPL and is not an open-source license. A
+company cannot rely on access to the public source repository as permission to
+use the current version without a commercial license.
 
-## What the current GPL release permits
+## Commercial terms
 
-GPLv3 permits use for any purpose, including commercial and industrial use. In
-particular, a company may install, run, and modify OpenQP solely within its own
-organization without a commercial license. If a recipient conveys OpenQP or a
-work based on it outside the organization, the applicable GPLv3 source-code,
-notice, and licensing conditions must be satisfied.
+Commercial scope, fees, support, warranties, indemnities, and other negotiated
+terms are provided privately in a written agreement or quote. Prices are not
+published in this repository.
 
-Earlier wording that described the GPL offering as limited to academic or
-noncommercial use was inaccurate. That wording does not add a field-of-use
-restriction to GPLv3.
+For inquiries, contact Cheol Ho Choi at <cheolho.choi@gmail.com>.
 
-## Commercial-license option
+## Earlier GPL versions
 
-Open Quantum Inc. may offer separate written commercial terms for particular
-OpenQP versions or materials that it has authority to license. Such terms can
-permit proprietary distribution or integration without relying on GPLv3 and
-may include negotiated support, warranties, indemnities, or other rights and
-services not provided by GPLv3. Scope, fees, and other commercial terms are
-provided only in a separate written agreement or quote and are not published
-in this repository.
+Copies of earlier OpenQP versions that recipients validly obtained under GPLv3
+remain governed by GPLv3. Those historical rights cannot be retroactively
+withdrawn. They do not provide a right to receive or use later OpenQP versions,
+updates, services, or separately licensed material.
 
-A commercial license is not required merely for internal company use of an
-OpenQP version used under GPLv3. If a company wants to avoid GPLv3 conditions
-for proprietary distribution, integration, or other uses, it must obtain
-applicable commercial rights.
+## Ownership and third-party code
 
-For commercial licensing inquiries, contact Cheol Ho Choi at
-<cheolho.choi@gmail.com>.
+The Research License covers only material that Open Quantum Inc. owns or has
+authority to license. Third-party libraries, data, and other materials remain
+under their own terms.
 
-## Third-party material
-
-Third-party libraries, data, and optional dependencies remain governed by
-their own license terms and notices. This document does not relicense those
-materials or restrict rights granted directly by their licensors.
+External code must not be incorporated into OpenQP unless its provenance is
+recorded and a separate contributor agreement or other written permission
+gives Open Quantum Inc. the rights needed for the intended licensing model.
+Code with unclear or incompatible terms must be kept separate or replaced.
