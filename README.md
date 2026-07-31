@@ -195,4 +195,10 @@ Recent MRSF-TDDFT accounts and overview papers:
 
 ### Legal Notice
 
-See the separate LICENSE file.
+Current OpenQP versions are source-available under a dual-licensing model:
+qualifying academic and nonprofit users may use OpenQP under the free OpenQP
+Research License 1.0, while every use by or for a commercial entity requires a
+separate written commercial license from Open Quantum Inc. Earlier copies
+validly released under GPLv3 retain their historical GPLv3 terms, but those
+terms do not extend to current or future versions distributed under the new
+license. See the complete [license](LICENSE) and [licensing guide](LICENSING.md).
