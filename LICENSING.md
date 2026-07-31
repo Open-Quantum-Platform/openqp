@@ -1,8 +1,17 @@
-# OpenQP licensing
+# OpenQP dual licensing
 
-OpenQP versions carrying this notice are distributed under the GNU General
-Public License, version 3.0 (`GPL-3.0-only`). The complete license text is in
-[`LICENSE`](LICENSE).
+OpenQP is offered under a dual-licensing model. For versions and materials
+covered by this notice, users may choose either:
+
+1. **GNU GPLv3.** Use OpenQP under the GNU General Public License, version 3.0
+   (`GPL-3.0-only`). The complete license text is in [`LICENSE`](LICENSE).
+2. **Commercial license.** Obtain separate written commercial terms from Open
+   Quantum Inc. for versions and materials that the Company has authority to
+   license.
+
+The two options are alternatives. A user who accepts and complies with GPLv3
+does not also need a commercial license. A user who needs rights or services
+outside the GPLv3 option should obtain a commercial license.
 
 ## What the current GPL release permits
 
@@ -16,14 +25,20 @@ Earlier wording that described the GPL offering as limited to academic or
 noncommercial use was inaccurate. That wording does not add a field-of-use
 restriction to GPLv3.
 
-## Separate commercial terms
+## Commercial-license option
 
 Open Quantum Inc. may offer separate written commercial terms for particular
 OpenQP versions or materials that it has authority to license. Such terms can
-be useful for proprietary distribution, negotiated support, warranties, or
-other rights and services not provided by GPLv3. A commercial license is not
-required merely for internal company use of an OpenQP version released under
-GPLv3.
+permit proprietary distribution or integration without relying on GPLv3 and
+may include negotiated support, warranties, indemnities, or other rights and
+services not provided by GPLv3. Scope, fees, and other commercial terms are
+provided only in a separate written agreement or quote and are not published
+in this repository.
+
+A commercial license is not required merely for internal company use of an
+OpenQP version used under GPLv3. If a company wants to avoid GPLv3 conditions
+for proprietary distribution, integration, or other uses, it must obtain
+applicable commercial rights.
 
 For commercial licensing inquiries, contact Cheol Ho Choi at
 <cheolho.choi@gmail.com>.

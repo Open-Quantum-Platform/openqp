@@ -195,5 +195,6 @@ Recent MRSF-TDDFT accounts and overview papers:
 
 ### Legal Notice
 
-OpenQP versions carrying the current notice are licensed under GNU GPLv3. See
-the [licensing explanation](LICENSING.md) and the complete [GPLv3 text](LICENSE).
+OpenQP is offered under a dual-licensing model: GNU GPLv3 or separate written
+commercial terms from Open Quantum Inc. See the [licensing
+explanation](LICENSING.md) and the complete [GPLv3 text](LICENSE).
