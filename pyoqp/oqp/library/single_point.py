@@ -221,6 +221,7 @@ class SinglePoint(Calculator):
         self.td = mol.config['tdhf']['type']
         self.nstate = mol.config['tdhf']['nstate']
         self._configure_mp2()
+        self._configure_cc()
         self.energy_func = {
             'hf': oqp.hf_energy,
             'rpa': oqp.tdhf_energy,
@@ -231,10 +232,26 @@ class SinglePoint(Calculator):
             'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
             'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
             'mp2': oqp.mp2_energy,
+            'ccsd': oqp.ccsd_t_energy,
+            'ccsd(t)': oqp.ccsd_t_energy,
         }
 
         # initialize state sign
         self.mol.data["OQP::state_sign"] = np.ones(self.nstate)
+
+    def _configure_cc(self):
+        """Validate the reference and select whether (T) is evaluated."""
+        if self.method not in ('ccsd', 'ccsd(t)'):
+            return
+        if self.functional:
+            raise ValueError(
+                f'method={self.method} requires an HF reference; '
+                'remove [input] functional.')
+        if self.mol.config['scf']['type'] != 'rhf':
+            raise ValueError(
+                f'method={self.method} requires a closed-shell RHF reference '
+                '([scf] type=rhf).')
+        self.mol.data.set_cc_triples(self.method == 'ccsd(t)')
 
     def _configure_mp2(self):
         if self.method != 'mp2':
@@ -409,7 +426,7 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2']:
+        if self.method not in ['hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)']:
             raise ValueError(f'Unknown method type {self.method}')
 
         target_converger = self.mol.config['scf']['converger_type']
@@ -423,7 +440,7 @@ class SinglePoint(Calculator):
             # compute excitations
             if self.method == 'tdhf':
                 energies = self.excitation(ref_energy)
-            elif self.method == 'mp2':
+            elif self.method in ('mp2', 'ccsd', 'ccsd(t)'):
                 energies = self.correlation(ref_energy)
             else:
                 energies = ref_energy
@@ -434,10 +451,11 @@ class SinglePoint(Calculator):
         return energies
 
     def correlation(self, ref_energy):
-        # ground-state post-SCF correlation (MP2): the Fortran driver updates
-        # mol_energy.energy in place to the correlated total.
-        dump_log(self.mol, title='PyOQP: MP2 correlation steps', section='')
-        self.energy_func['mp2'](self.mol)
+        # Ground-state post-SCF correlation (MP2 / CCSD / CCSD(T)): the Fortran
+        # driver updates mol_energy.energy in place to the correlated total.
+        label = self.method.upper()
+        dump_log(self.mol, title=f'PyOQP: {label} correlation steps', section='')
+        self.energy_func[self.method](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
 

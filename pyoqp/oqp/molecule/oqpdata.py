@@ -159,6 +159,12 @@ OQP_CONFIG_SCHEMA = {
         'same_spin_scale': {'type': float, 'default': '1.0'},
         'opposite_spin_scale': {'type': float, 'default': '1.0'},
     },
+    'cc': {
+        'maxit': {'type': int, 'default': '50'},
+        'conv': {'type': float, 'default': '1e-7'},
+        'ndiis': {'type': int, 'default': '8'},
+        'nfzc': {'type': int, 'default': '0'},
+    },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
         'file': {'type': str, 'default': ''},
@@ -584,7 +590,7 @@ class OQPData:
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
-    _methods = ('hf', 'tdhf', 'mp2')
+    _methods = ('hf', 'tdhf', 'mp2', 'ccsd', 'ccsd(t)')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
@@ -608,6 +614,12 @@ class OQPData:
         "mp2": {
             "same_spin_scale": "set_mp2_same_spin_scale",
             "opposite_spin_scale": "set_mp2_opposite_spin_scale",
+        },
+        "cc": {
+            "maxit": "set_cc_maxit",
+            "conv": "set_cc_conv",
+            "ndiis": "set_cc_ndiis",
+            "nfzc": "set_cc_nfzc",
         },
         "scf": {
             "type": "set_scf_type",
@@ -1277,6 +1289,26 @@ class OQPData:
     def set_mp2_opposite_spin_scale(self, scale):
         """Set standalone MP2 opposite-spin scale."""
         self._data.dft.MP2OS_Scale = scale
+
+    def set_cc_maxit(self, maxit):
+        """Set the maximum number of CCSD iterations."""
+        self._data.control.cc_maxit = int(maxit)
+
+    def set_cc_conv(self, conv):
+        """Set the CCSD amplitude/energy convergence threshold."""
+        self._data.control.cc_conv = float(conv)
+
+    def set_cc_ndiis(self, ndiis):
+        """Set the CCSD DIIS subspace size (0 disables DIIS)."""
+        self._data.control.cc_ndiis = int(ndiis)
+
+    def set_cc_nfzc(self, nfzc):
+        """Set the number of frozen core orbitals excluded from CC."""
+        self._data.control.cc_nfzc = int(nfzc)
+
+    def set_cc_triples(self, triples):
+        """Enable/disable the perturbative (T) correction."""
+        self._data.control.cc_triples = 1 if triples else 0
 
     def set_dftgrid_rad_type(self, radtype):
         """Set radial grid type in DFT"""

@@ -19,7 +19,8 @@ SUPPORTED_RUNTYPES = {
 }
 NOT_AVAILABLE_RUNTYPES = {"md"}
 ALL_RUNTYPES = SUPPORTED_RUNTYPES | NOT_AVAILABLE_RUNTYPES
-METHODS = {"hf", "tdhf", "mp2", "dftb", "xtb"}
+METHODS = {"hf", "tdhf", "mp2", "ccsd", "ccsd(t)", "dftb", "xtb"}
+CC_METHODS = {"ccsd", "ccsd(t)"}
 SCF_TYPES = {"rhf", "rohf", "uhf"}
 TDHF_TYPES = {"rpa", "tda", "sf", "mrsf", "umrsf", "mrsf_ekt_ip", "mrsf_ekt_ea"}
 MP2_VARIANTS = {
@@ -161,7 +162,7 @@ INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
 
 WIKI_HELP = {
     "input.runtype": "Use energy, ekt, grad, hess, nac, nacme, optimize, meci, mecp, mep, ts, irc, neb, soc, prop, or data. md is recognized but not yet implemented.",
-    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=dftb for the optional OpenQP-DFTB backend, or method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend.",
+    "input.method": "Use method=hf for HF/DFT, method=tdhf for TDHF/TDDFT/SF/MRSF, method=mp2 for ground-state MP2, method=ccsd or ccsd(t) for closed-shell coupled cluster, method=dftb for the optional OpenQP-DFTB backend, or method=xtb for the optional OpenQP-xTB (LC-GFN1-xTB) backend.",
     "mp2.variant": "Use mp2, scs-mp2, sos-mp2, os-mp2, ss-mp2, scs-mi-mp2, or custom with explicit OS/SS scales.",
     "input.system": "Set system to an XYZ file path or inline coordinates with one atom per indented line.",
     "input.basis": "Set basis to a basis name, a comma-separated per-atom list, or library with tagged atoms and [input] library mappings.",
@@ -1867,6 +1868,68 @@ def _check_mp2(config: dict[str, Any], report: CheckReport) -> None:
             )
 
 
+def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
+    """Validate the reference and [cc] block for coupled-cluster runs."""
+    method = _as_lower(_get(config, "input", "method", "hf"))
+    if method not in CC_METHODS:
+        return
+
+    functional = _get(config, "input", "functional", "")
+    scf_type = _as_lower(_get(config, "scf", "type", "rhf"))
+    nfzc = _get(config, "cc", "nfzc", 0)
+    maxit = _get(config, "cc", "maxit", 50)
+
+    if functional:
+        report.add(
+            "ERROR",
+            "input.functional",
+            "Coupled cluster requires an HF reference, not a DFT functional.",
+            value=functional,
+            expected="empty functional",
+            action=f"Remove [input] functional for method={method}.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    if scf_type != "rhf":
+        report.add(
+            "ERROR",
+            "scf.type",
+            "The coupled-cluster module implements a closed-shell RHF reference only.",
+            value=scf_type,
+            expected="rhf",
+            action="Set [scf] type=rhf, or use a different method for open-shell systems.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    try:
+        bad_nfzc = int(nfzc) < 0
+    except (TypeError, ValueError):
+        bad_nfzc = True
+    if bad_nfzc:
+        report.add(
+            "ERROR",
+            "cc.nfzc",
+            "The frozen-core count must be a non-negative integer.",
+            value=str(nfzc),
+            action="Set [cc] nfzc to 0 or the number of core orbitals to freeze.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+    try:
+        bad_maxit = int(maxit) < 1
+    except (TypeError, ValueError):
+        bad_maxit = True
+    if bad_maxit:
+        report.add(
+            "ERROR",
+            "cc.maxit",
+            "The CCSD iteration limit must be a positive integer.",
+            value=str(maxit),
+            action="Set [cc] maxit to a positive number of iterations.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
+
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
@@ -2039,6 +2102,18 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             value=runtype,
             action="Choose another runtype or implement the missing workflow first.",
             wiki=WIKI_HELP["input.runtype"],
+        )
+        return
+
+    if method in CC_METHODS and runtype != "energy":
+        report.add(
+            "ERROR",
+            "input.runtype",
+            "Coupled cluster currently supports energy-only calculations.",
+            value=runtype,
+            expected="energy",
+            action="Use runtype=energy until CC gradients and derivative workflows are implemented.",
+            wiki=WIKI_HELP["input.method"],
         )
         return
 
@@ -3225,6 +3300,7 @@ def check_input_values(
     _check_symmetry(config, report)
     _check_tdhf(config, report)
     _check_mp2(config, report)
+    _check_cc(config, report)
     _check_properties(config, report)
     _check_requested_states(config, report)
     _check_runtype(config, report, input_dir)

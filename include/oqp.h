@@ -169,6 +169,12 @@ struct control_parameters {
     int64_t   mrsf_fp32;
     int64_t   mrsf_zv_warmstart;
     bool      qmmm_flag;
+    /* Coupled cluster -- keep in sync with control_parameters in source/types.F90 */
+    int64_t   cc_maxit;
+    double    cc_conv;
+    int64_t   cc_ndiis;
+    int64_t   cc_nfzc;
+    int64_t   cc_triples;
 };
 
 struct mpi_communicator {
@@ -265,6 +271,7 @@ void tdhf_mrsf_z_vector(struct oqp_handle_t *inf);
 void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
+void ccsd_t_energy(struct oqp_handle_t *inf);
 
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
