@@ -247,7 +247,9 @@ end subroutine get_ab_initio_density
 !   corresponds to Huckel/old MO i in order
     unused(:nmo) = .true.
     do i = 1, nmo
-      j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused)
+      ! mask must conform to the (:nmo) section being searched; passing the
+      ! full-length `unused` is nonconforming Fortran (caught by -fcheck=bounds)
+      j = maxloc(abs(tmp(:nmo,i)), dim=1, mask=unused(:nmo))
       iwrk(i) = j
       unused(j) = .false.
     end do
