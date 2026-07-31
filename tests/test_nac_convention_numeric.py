@@ -116,13 +116,28 @@ class NACConventionNumericTests(unittest.TestCase):
                 self.assertGreater(num / den, 0.999999,
                                    msg=f"gap orientation wrong for ({i+1},{j+1})")
 
-    def test_frozen_reference_vectors_signed(self):
-        # Component-by-component INCLUDING SIGN -- no alignment allowed.
+    def test_frozen_reference_vectors_gauge_resolved(self):
+        # Davidson state phases are random per run (observed on chc3:
+        # magnitudes reproduce to 1e-10, pair signs flip as s_i s_j with
+        # s in {+-1}^3). Resolve the STATE gauge from the pair signs,
+        # REQUIRE gauge consistency (product of the three pair signs must
+        # be +1 -- a non-gauge sign error cannot satisfy this), then
+        # compare component-by-component including sign.
+        pair_sign = {}
         for (i, j), ref in REF_D.items():
-            got = self.dcv[i - 1, j - 1]
-            np.testing.assert_allclose(
-                got, np.array(ref), atol=2e-4,
-                err_msg=f"d({i},{j}) deviates from frozen reference")
+            got = self.dcv[i - 1, j - 1].ravel()
+            s = float(np.sign(np.dot(got, np.array(ref).ravel())))
+            self.assertNotEqual(s, 0.0)
+            pair_sign[(i, j)] = s
+        self.assertEqual(
+            pair_sign[(1, 2)] * pair_sign[(1, 3)] * pair_sign[(2, 3)], 1.0,
+            msg="pair signs are NOT a state gauge -- genuine sign defect")
+        for (i, j), ref in REF_D.items():
+            with self.subTest(pair=(i, j)):
+                got = self.dcv[i - 1, j - 1]
+                np.testing.assert_allclose(
+                    pair_sign[(i, j)] * got, np.array(ref), atol=2e-4,
+                    err_msg=f"d({i},{j}) deviates from frozen reference")
 
 
 if __name__ == "__main__":
