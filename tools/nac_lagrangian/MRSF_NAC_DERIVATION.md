@@ -1023,3 +1023,31 @@ is derived AND calibrated. gamma's own V-contraction (the cross
 single-triangle -sum gamma_(lo,hi) S^x) is nonzero and included.
 v7f: d = T1 - seam(Lt+gamma) + [staged(V) + Tr[dD(V) G[P~]] + gamma:V]
        + gamma:Sk,   with dD(V) = C(V D0 + D0 V^T)C^T for general V.
+
+### 7.33 v7g U-channel forensics: gamma-side bookkeeping VERIFIED; the
+remaining open item is the Mt-side discrete identity
+v7g (v7g_h2o.py) compared, per pair per coordinate, the EXACT U-channel
+referee  exact_U = ytil.w_ref - T1 + gamma:Ux_FD  against the
+production candidate  prod_U = -seam(Lt+gamma) + T3''.
+
+VERIFIED: the gamma-side bookkeeping closes where the same-space
+channel is small: pair (1,3): [-seam(gamma) + gamma:V] = -0.19385 vs
+exact gamma:U = -0.19027 (2%). The calibrated seam semantics
+(seam(e_pq) = -U_full) and the ov-weight V-mask are CORRECT for the
+gamma side.
+
+OPEN: (a) pairs with a large same-space channel ((1,2): gamma_a(socc)
+= -0.709, gamma:U_ss ~ -0.31) rely on the exact cancellation
+[Mt + 2gamma]_a,ss = 0 (proven at generator level, 4.3e-5) carrying
+over to the OMITTED-channel assembly -- but the assembled totals still
+miss: (1,2) prod_U = +0.1767 vs exact +0.3555 (a clean 1/2 signature),
+(1,3) prod_U = -0.0760 vs exact +0.0745 (clean -1), (2,3) wild. The
+Mt-side pieces (staged directional matvec + G[P]-channel) carry a
+remaining bookkeeping error with half/sign signatures.
+(b) NEXT (fresh session): derive on paper the exact DISCRETE identity
+sum_pq X_pq U_pq = -seam(X) + X:V + [ss-channel] with the CALIBRATED
+seam semantics, then verify EACH equality against the v7g-style
+referees (rerun v7g with np.savez of all pieces for offline algebra).
+All tools certified and in place: MINRES ytil, slot-injection engines,
+staged directional matvec, in-process G[P] build (hf_energy maxit=1),
+double seams, FD referees, gauge-invariance probes.
