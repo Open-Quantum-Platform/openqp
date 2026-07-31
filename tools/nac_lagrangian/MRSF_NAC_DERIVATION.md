@@ -1106,3 +1106,32 @@ STATUS SUMMARY of the production program:
   ytil; the full-Mt harvest method; the decomposition identity (1e-8).
   OPEN: the few-percent Mt-channel deficit; the near-degenerate pair's
   FD-referee quality; then ethylene + rewiring.
+
+### 7.36 THE DISPLACED-FRAME LANDMINE (session close-out)
+Direct comparison of two same-build processes' displaced sweeps:
+|Ux(v7h) - Ux(v7i)| up to 1.94 (entries in near-degenerate virtual /
+space-boundary clusters); |w_ref| norms identical but entries differ
+by 0.085 (frame rotations). THE DISPLACED-GEOMETRY ORBITAL GAUGE IS
+RUN-NONDETERMINISTIC: within near-degenerate clusters the SCF mixing
+at x +- h varies run to run; sign-alignment (sg) cannot fix continuous
+mixing. Consequences, all consistent with every observation of this
+campaign:
+  - FD sweep data (Ux, w_ref, dX) is valid ONLY in-process. Cross-
+    process pairings are invalid even at fixed phases (this, not the
+    rebuild, also explains part of 7.26).
+  - The certified machine-level closures (v3g/v3h, and the offline
+    v7h total) work because the TOTAL is frame-gauge invariant: the
+    amplitude channel and gamma:U carry the frame content coherently.
+  - The seam identity survived cross-frame (1e-3) because rot-block U
+    entries are frame-stable.
+  - The v7h in-process Mt-completeness deficit (-3%/-3%/+13%) is the
+    one standing quantitative open item; part of it may be frame/FD
+    precision of the SPLIT (not missing physics), since the production
+    seam-based form needs no FD-U at all.
+NEXT SESSION RECIPE: (1) run ONE in-process gate combining: engines T1,
+direct-injection seam T2, S^x-contraction terms (elim + ss-sym from the
+X matrices), gamma:Sk, and judge vs d_num IN THE SAME PROCESS with the
+Mt matrices harvested in that process (the v7h+v7i union script);
+(2) if the few-% gap persists, compute the T3-channel exactly via
+in-process FD (staged V-directions vs actual U-sym channel) to decide
+referee-vs-physics; (3) ethylene; (4) rewire analytical_nac().
