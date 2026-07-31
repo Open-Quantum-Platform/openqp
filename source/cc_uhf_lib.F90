@@ -448,7 +448,14 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
     t1 = t1n; t2 = t2n
 
+    ! E = sum_ia f_ia t1_ia + 1/4 <ij||ab> t2 + 1/2 <ij||ab> t1 t1.
+    ! The singles term is zero for a canonical reference -- Brillouin -- but
+    ! not for ROHF, where it is the same size as the terms f_ov adds to the
+    ! amplitude equations.
     e_ccsd = 0.0_dp
+    do a = 1, nv; do i = 1, no
+      e_ccsd = e_ccsd + f_ov(i,a)*t1(i,a)
+    end do; end do
     do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
       e_ccsd = e_ccsd + 0.25_dp*g(i,j,no+a,no+b)*t2(i,j,a,b) &
                       + 0.5_dp *g(i,j,no+a,no+b)*t1(i,a)*t1(j,b)
