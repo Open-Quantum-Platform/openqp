@@ -84,3 +84,24 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
   C1 ethylene is the real test.
 - Davidson phases are random per run — gauge-resolve, enforce the
   pair-sign product rule.
+
+## Related-session map (2026-08-01 sweep of all chats; nothing to import)
+
+A full-text sweep of all other chat sessions found NO NAC-theory content
+outside this campaign. Key clarification: the "Phase 11/12" results the
+derivation cites (fcac55a, 90943f8, the engine FD-validations) are
+ALIREZA'S `nac` BRANCH COMMITS -- already in this repo's history -- not
+another chat. This document + MRSF_NAC_DERIVATION.md + the campaign
+memory ARE the complete record.
+
+Adjacent sessions (pointers only, no import needed):
+- "Fix dft_molgrid.F90 bounds violation" + "Port dftlib and guess bounds
+  fixes to upstream main": spin-offs of THIS campaign's bounds fixes
+  (upstreaming; independent).
+- "Hessian and MRSF-TDDFT status" (2026-07-01): OpenQP analytic-Hessian
+  status. NOTE for the U^x production chain: the Hessian work implies
+  working CPHF infrastructure (cphf_* selftests, hf_hessian in the
+  bind(C) surface) -- a candidate to reuse for per-coordinate U^x if the
+  seam route ever needs cross-checking.
+- QMRSF chats match "mrsf_nac*" only via QMRSF_NACT (active-orbital
+  count) -- unrelated.
