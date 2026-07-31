@@ -75,13 +75,15 @@ def main():
                 gam[I, J].T.reshape(-1)
     mol.data['OQP::nac_gamma_tlf'] = flatF.reshape((nbf * nbf, nstate, nstate))
     oqp.mrsf_nac_overlap(mol)
-    dsk_raw = np.array(mol.data['OQP::dbg_dsket'], copy=True)   # (3N, nbf^2)
-    dsf_raw = np.array(mol.data['OQP::dbg_dsfull'], copy=True)
+    # raw buffer = Fortran flat of (nbf^2, 3N): contiguous nbf^2 blocks/coord
+    dsk_raw = np.array(mol.data['OQP::dbg_dsket'], copy=True).reshape(-1)
+    dsf_raw = np.array(mol.data['OQP::dbg_dsfull'], copy=True).reshape(-1)
+    nbf2 = nbf * nbf
     Sk_MO = np.zeros((ncoord, nbf, nbf))
     Sx_MO = np.zeros((ncoord, nbf, nbf))
     for c in range(ncoord):
-        dsk = dsk_raw[c].reshape(nbf, nbf).T    # F-order -> matrix [mu,nu]
-        dsf = dsf_raw[c].reshape(nbf, nbf).T
+        dsk = dsk_raw[c * nbf2:(c + 1) * nbf2].reshape(nbf, nbf).T
+        dsf = dsf_raw[c * nbf2:(c + 1) * nbf2].reshape(nbf, nbf).T
         Sk_MO[c] = C.T @ dsk @ C
         Sx_MO[c] = C.T @ dsf @ C
 

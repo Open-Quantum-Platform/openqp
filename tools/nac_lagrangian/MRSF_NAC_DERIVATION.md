@@ -817,3 +817,33 @@ via the certified ov engine + gamma_a z-RHS. New export NAC_DUMP_DS
 (OQP::dbg_dsket/dbg_dsfull, bfnrm applied) supplies Sk/S^x matrices.
 Gate = assembly_v3.py: C1 sym(U^x)==-1/2 S^x_MO; C2 amplitude part vs
 frozen d_amp; C3 full d vs d_num, SIGNED.
+
+### 7.26 v3d/v3e: the assembly WIRING is machine-certified; gauges identified
+v3d/v3e (v3d_h2o.py, v3e_h2o.py) triangulated the v3b/v3c failures:
+
+(1) T3: my ampdir == A8's amp_directional to 1e-11 (metric replication).
+(2) CROSS-SESSION GAUGE LANDMINE: the frozen A8/A10 npz objects (La, Ls,
+    Ux, d_amp) live in THAT session's orbital-sign and state-phase gauge.
+    After a rebuild, pairing them singly with current-session objects
+    (gamma:Ux, w_rot along Ux, C1 tests) is INVALID -- max|Ux_npz -
+    Ux_now| = 2.99. Only gauge-invariant PAIRINGS (M:Ux both from one
+    session) survive across sessions.
+(3) T4a (v3e): the v4 identity REPRODUCED in-session at machine level:
+    antisym[ampdir(dX_FD) + gamma:T_FD] vs d_num =
+    (2,3): cos +1.00000000, maxdiff 1.1e-7 (EXACT);
+    (1,2),(1,3): |pred| == |d_num| to all printed digits, cos -1 = the
+    known inter-run Davidson phase (phi_1 = -1), pair-sign product +1.
+    THE ASSEMBLY WIRING IS PROVEN. The missing step in v3c/v3d was the
+    v4 ANTISYMMETRIZATION d = (dS_IJ - dS_JI)/2 (the formula dS carries
+    a symmetric part).
+(4) T4c == T4b to 1e-7: gamma:(Sk_analytic + Ux) == gamma:T_FD exactly.
+    The dSket export's same-center omission (T1' forensics: on-site AO
+    blocks exported as 0, FD nonzero) is BENIGN for the gamma
+    contraction: C gamma C^T is antisymmetric while the on-site dSket
+    content is symmetric -> contracts to zero. Convention documented.
+(5) Open: dX_PT != dX_FD (T2'), traced to non-physical gauge content in
+    the FD orbital response Ux entering through same-space blocks of
+    the response bilinears. v3f probes it by an h-consistency map
+    (physical U^x is h-independent; arbitrary degenerate-sector
+    rotations are not) and re-judges the continuous-gauge assembly with
+    a cleaned U.

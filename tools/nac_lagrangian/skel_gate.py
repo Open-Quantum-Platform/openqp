@@ -42,15 +42,17 @@ def worker(inp, ref_npz, out_npz):
         pass
     Xf = X0_raw.reshape(-1).reshape((nstate, nij)).T.copy()
     E = np.zeros((nstate, nstate))
+    Ax_all = np.zeros((nstate, nij))
     for s in range(nstate):
         rr = X0_raw.copy().reshape(-1)
         rr[0:nij] = Xf[:, s]
         mol.data['OQP::td_bvec_mo'] = rr.reshape(X0_raw.shape)
         oqp.mrsf_matvec_apply(mol)
         Ax = np.array(mol.data['OQP::nac_mvax'], copy=True).ravel()
+        Ax_all[s] = Ax[:nij]
         for I in range(nstate):
             E[I, s] = float(np.dot(Xf[:, I], Ax))
-    np.savez(out_npz, E=E)
+    np.savez(out_npz, E=E, Ax=Ax_all)
 
 
 def main():
