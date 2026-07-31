@@ -84,7 +84,8 @@ contains
     use tdhf_mrsf_lib, only: &
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
-      get_mrsf_transition_density, get_jacobi, umrsfssqu, mrsf_set_fp32
+      get_mrsf_transition_density, get_umrsf_transition_dipole, &
+      get_jacobi, umrsfssqu, mrsf_set_fp32
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use routec_sig, only: routec_sig_available, routec_sig_begin, &
@@ -821,16 +822,21 @@ contains
         error stop "Unknown mrst value"
     end select
 
-    call get_transition_dipole(basis, dip, mo_a, trden, nstates)
+    if (umrsf .and. (mrst==1 .or. mrst==3)) then
+      call get_umrsf_transition_dipole(basis, dip, mo_a, mo_b, bvec_mo, &
+                                       nstates, nocca, noccb, mrst)
+    else
+      call get_transition_dipole(basis, dip, mo_a, trden, nstates)
+    end if
 
     ! --- misc-excited-analysis: expose the MRSF state-interaction transition /
     !     state-difference densities (alpha-MO basis), the transition dipoles,
     !     and the AO electric-dipole integrals for downstream Python analysis.
     !     Pure write-out; no physics above is altered (ported to the alloc_or_die
     !     tagarray API of current main).
-    !     Skipped for UMRSF: there trden is set identically to zero above, so no
-    !     genuine state-interaction densities exist and exposing them would
-    !     publish misleading all-zero tags.
+    !     Skipped for UMRSF: its printed dipoles are computed by a spin-resolved
+    !     alpha/beta contraction above while trden remains an unpopulated
+    !     placeholder. Exposing trden would publish misleading all-zero tags.
     if (.not. umrsf) then
       ! get_mrsf_transition_density / get_transition_dipole only populate the
       ! upper triangle (ist<=jst). Mirror it into the stored copies so reverse

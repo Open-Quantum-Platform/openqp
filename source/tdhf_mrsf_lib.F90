@@ -2871,6 +2871,183 @@ contains
 
 !###############################################################################
 
+!> Compute UMRSF state-to-state transition dipoles from spin-resolved transition
+!> density blocks.
+!>
+!> The existing MRSF transition-density path assumes a common ROHF MO basis.
+!> UMRSF uses separate alpha and beta UHF orbitals.  Match the GAMESS
+!> MRSF/UMRSF transition-moment path: build T in the alpha-row/beta-column
+!> MO product basis and transform it as C_alpha * T * C_beta^T before
+!> contraction with AO dipole integrals.  The spin-adaptation factors match
+!> get_mrsf_transition_density.
+  subroutine get_umrsf_transition_dipole(basis, dip, mo_a, mo_b, bvec_mo, &
+                                         nstates, noca, nocb, mrst)
+    use precision, only: dp
+    use int1, only: multipole_integrals
+    use basis_tools, only: basis_set
+    use mathlib, only: pack_matrix, symmetrize_matrix, traceprod_sym_packed
+    use messages, only: show_message, with_abort
+
+    implicit none
+
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(out), dimension(:,:,:) :: dip
+    real(kind=dp), intent(in), dimension(:,:) :: mo_a, mo_b, bvec_mo
+    integer, intent(in) :: nstates, noca, nocb, mrst
+
+    real(kind=dp), allocatable :: mints(:,:), rho_ao(:,:), work(:,:)
+    real(kind=dp), allocatable :: rho_a(:,:), rho_b(:,:), packed(:)
+    real(kind=dp), allocatable :: xv12i(:,:), xv12j(:,:)
+    real(kind=dp) :: center_of_mass(3), tmp, scal
+    real(kind=dp), parameter :: rsqrt = 1.0_dp/sqrt(2.0_dp)
+    real(kind=dp), parameter :: sqrt2 = sqrt(2.0_dp)
+    integer :: nbf, nbf2, nvirb, ok
+    integer :: ist, jst, i, j, k, ij, ijd, ijg, ijlr1, ijlr2
+    logical :: ioo, joo
+
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    nvirb = nbf-nocb
+
+    allocate(mints(nbf2,3), &
+             rho_ao(nbf,nbf), &
+             work(nbf,nbf), &
+             rho_a(noca,noca), &
+             rho_b(nvirb,nvirb), &
+             packed(nbf2), &
+             xv12i(noca,nvirb), &
+             xv12j(noca,nvirb), &
+             source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+
+    dip = 0.0_dp
+
+    if (mrst /= 1 .and. mrst /= 3) then
+      deallocate(mints, rho_ao, work, rho_a, rho_b, packed, xv12i, xv12j)
+      return
+    end if
+
+    center_of_mass = basis%atoms%center(weight='mass')
+    call multipole_integrals(basis, mints, center_of_mass, 1)
+
+    ijlr1 = (noca-1-nocb-1)*noca+noca-1
+    ijg   = (noca-1-nocb-1)*noca+noca
+    ijd   = (noca-nocb-1)*noca+noca-1
+    ijlr2 = (noca-nocb-1)*noca+noca
+
+    do ist = 1, nstates
+      do jst = 1, nstates
+        if (ist == jst) cycle
+
+        xv12i = 0.0_dp
+        xv12j = 0.0_dp
+        rho_a = 0.0_dp
+        rho_b = 0.0_dp
+        rho_ao = 0.0_dp
+
+        if (mrst == 1) then
+          do i = 1, noca
+            do j = nocb+1, nbf
+              ij = (j-nocb-1)*noca+i
+              if (ij == ijlr1) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijlr2) then
+                xv12j(i,j-nocb) = -bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = -bvec_mo(ijlr1,ist)*rsqrt
+              else
+                xv12j(i,j-nocb) = bvec_mo(ij,jst)
+                xv12i(i,j-nocb) = bvec_mo(ij,ist)
+              end if
+            end do
+          end do
+        else if (mrst == 3) then
+          do i = 1, noca
+            do j = nocb+1, nbf
+              ij = (j-nocb-1)*noca+i
+              if (ij == ijlr1) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijlr2) then
+                xv12j(i,j-nocb) = bvec_mo(ijlr1,jst)*rsqrt
+                xv12i(i,j-nocb) = bvec_mo(ijlr1,ist)*rsqrt
+              else if (ij == ijg .or. ij == ijd) then
+                xv12j(i,j-nocb) = 0.0_dp
+                xv12i(i,j-nocb) = 0.0_dp
+              else
+                xv12j(i,j-nocb) = bvec_mo(ij,jst)
+                xv12i(i,j-nocb) = bvec_mo(ij,ist)
+              end if
+            end do
+          end do
+        end if
+
+        ! Virtual-virtual block of T in the alpha-row/beta-column MRSF MO basis.
+        do i = 1, nvirb
+          do j = 1, nvirb
+            tmp = 0.0_dp
+            do k = 1, noca
+              ioo = (i==1 .or. i==2) .and. (k==noca-1 .or. k==noca)
+              joo = (j==1 .or. j==2) .and. (k==noca-1 .or. k==noca)
+              scal = 1.0_dp
+              if (ioo .and. .not. joo) scal = sqrt2
+              if (.not. ioo .and. joo) scal = sqrt2
+              tmp = tmp + scal*xv12j(k,i)*xv12i(k,j)
+            end do
+            rho_b(i,j) = rho_b(i,j) + tmp
+          end do
+        end do
+
+        ! Occupied-occupied block of T in the alpha-row/beta-column MRSF MO basis.
+        do i = 1, noca
+          do j = 1, noca
+            tmp = 0.0_dp
+            do k = 1, nvirb
+              ioo = (i==noca-1 .or. i==noca) .and. (k==1 .or. k==2)
+              joo = (j==noca-1 .or. j==noca) .and. (k==1 .or. k==2)
+              scal = 1.0_dp
+              if (ioo .and. .not. joo) scal = sqrt2
+              if (.not. ioo .and. joo) scal = sqrt2
+              tmp = tmp + scal*xv12j(j,k)*xv12i(i,k)
+            end do
+            rho_a(i,j) = rho_a(i,j) - tmp
+          end do
+        end do
+
+        ! AO transition density = C_alpha * T * C_beta^T.
+        call dgemm('n','n', nbf, noca, noca, &
+                   1.0_dp, mo_a, nbf, &
+                           rho_a, noca, &
+                   0.0_dp, work, nbf)
+        call dgemm('n','t', nbf, nbf, noca, &
+                   1.0_dp, work, nbf, &
+                           mo_b, nbf, &
+                   0.0_dp, rho_ao, nbf)
+
+        call dgemm('n','n', nbf, nvirb, nvirb, &
+                   1.0_dp, mo_a(:,nocb+1:), nbf, &
+                           rho_b, nvirb, &
+                           0.0_dp, work, nbf)
+        call dgemm('n','t', nbf, nbf, nvirb, &
+                   1.0_dp, work, nbf, &
+                           mo_b(:,nocb+1:), nbf, &
+                   1.0_dp, rho_ao, nbf)
+
+        call symmetrize_matrix(rho_ao, nbf)
+        call pack_matrix(rho_ao, packed)
+
+        dip(1,ist,jst) = -traceprod_sym_packed(packed, mints(:,1), nbf)*0.5_dp
+        dip(2,ist,jst) = -traceprod_sym_packed(packed, mints(:,2), nbf)*0.5_dp
+        dip(3,ist,jst) = -traceprod_sym_packed(packed, mints(:,3), nbf)*0.5_dp
+      end do
+    end do
+
+    deallocate(mints, rho_ao, work, rho_a, rho_b, packed, xv12i, xv12j)
+
+  end subroutine get_umrsf_transition_dipole
+
+!###############################################################################
+
 !> @brief Jacobi pair-rotations of MOs based on off-diagonal elements
 !>        of the alpha/beta MO overlap matrix s_mo
 !> @author Vladimir Yu. Makhnev
@@ -3312,4 +3489,3 @@ contains
   end subroutine umrsfdmat
 
 end module tdhf_mrsf_lib
-

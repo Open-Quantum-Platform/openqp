@@ -158,6 +158,15 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("else", source)
         self.assertIn("callget_mrsf_transition_density", source)
 
+    def test_umrsf_energy_uses_spin_resolved_transition_dipoles(self):
+        source = compact(ENERGY.read_text())
+        lib = compact(LIB.read_text())
+        self.assertIn("callget_umrsf_transition_dipole", source)
+        self.assertIn("mo_a,mo_b,bvec_mo", source)
+        self.assertIn("subroutineget_umrsf_transition_dipole", lib)
+        self.assertIn("c_alpha*t*c_beta^t", lib)
+        self.assertIn("mo_a(:,nocb+1:)", lib)
+
     def test_spin_pair_scaling_avoids_hfscale_division_by_zero(self):
         source = compact(ENERGY.read_text())
         self.assertIn("if(abs(infos%tddft%hfscale)>epsilon(1.0_dp))then", source)
