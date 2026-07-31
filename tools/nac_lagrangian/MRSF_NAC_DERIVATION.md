@@ -622,3 +622,28 @@ matvec exports (G_MO / gchan / fa/fb, unfolded representation), contract
 with U^x_same-space (canonical-orbital response), and the amplitude term
 closes. Then wire the z-vector for the inter-space part (interchange) and
 ship. All targets frozen; every step has an exact referee.
+
+### 7.16 Ladder A4 (session close): the bookkeeping theorem, empirically
+Full-block L (matvec rotation-FD, frozen-Fock, antisym 171 + sym 190
+generators) contracted with the measured full U^x does NOT close the
+amplitude residual (coverage 15-45%; per-pair best signs disagree).
+Anatomy frozen: (2,3) sv-dominated (1.404/gap), (1,2) ss (0.256) + sv
+(0.151), dd/vv negligible. CONCLUSION (= derivation Sec. 4.2's warning,
+now measured): the FOCK-REBUILD response dominates the remainder, and
+frozen-L x U^x is an INCONSISTENT pairing -- the response enters
+consistently only through the interchange triple (frozen-L RHS,
+sfrolhs LHS with the Fock response, B^x contraction), i.e. the
+interstate z-vector, plus the same-space canonical F^x term.
+
+NEXT-SESSION SPEC (single, concrete):
+1. Inter-space: solve sfrolhs z with RHS = polarized frozen-L
+   (A3 machinery, exact) restricted to the rotation space; response
+   contribution = z . B^x per coordinate (B^x via the existing gradient
+   seam gZ-gS). Gate vs the frozen residuals.
+2. Same-space: canonical response U^ss_pq = F^x_pq/(eps_q - eps_p)
+   (F^x from the CPHF-consistent Fock derivative; start with the
+   skeleton F^x from esum's machinery) x L^ss (measured here; analytic
+   assembly from G_MO/gchan/fa/fb after gating).
+3. Assemble, close the amplitude term, then full d vs the v4 scaffold,
+   then C1 (ethylene MECI) + sum rule.
+All referees frozen: v4 scaffold, per-pair residuals, A4 block anatomy.
