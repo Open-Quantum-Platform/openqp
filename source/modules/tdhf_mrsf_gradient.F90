@@ -387,6 +387,38 @@ contains
     ! full AO overlap derivative dS_uv/dR (constraint term)
     call der_overlap_matrix(basis, dSfull)
 
+    ! optional export of the raw AO derivative-overlap matrices for the
+    ! Python-side Lagrangian assembly gates (env NAC_DUMP_DS).
+    ! NOTE: dSket/dSfull are in the UNNORMALIZED basis convention; the
+    ! consumer must apply bfnrm(mu)*bfnrm(nu) exactly as done below.
+    block
+      character(len=16) :: ev_ds
+      real(kind=dp), pointer :: dsk_out(:,:), dsf_out(:,:)
+      call get_environment_variable('NAC_DUMP_DS', ev_ds)
+      if (len_trim(ev_ds) > 0) then
+        call infos%dat%remove_records((/ character(len=80) :: &
+          'OQP::dbg_dsket', 'OQP::dbg_dsfull' /))
+        call infos%dat%reserve_data('OQP::dbg_dsket', ta_type_real64, &
+              nbf*nbf*3*natom, (/ nbf*nbf, 3*natom /))
+        call infos%dat%reserve_data('OQP::dbg_dsfull', ta_type_real64, &
+              nbf*nbf*3*natom, (/ nbf*nbf, 3*natom /))
+        call tagarray_get_data(infos%dat, 'OQP::dbg_dsket', dsk_out)
+        call tagarray_get_data(infos%dat, 'OQP::dbg_dsfull', dsf_out)
+        do a = 1, natom
+          do c = 1, 3
+            do nu = 1, nbf
+              do mu = 1, nbf
+                dsk_out(mu+(nu-1)*nbf, (a-1)*3+c) = &
+                  dSket(mu,nu,c,a)*basis%bfnrm(mu)*basis%bfnrm(nu)
+                dsf_out(mu+(nu-1)*nbf, (a-1)*3+c) = &
+                  dSfull(mu,nu,c,a)*basis%bfnrm(mu)*basis%bfnrm(nu)
+              end do
+            end do
+          end do
+        end do
+      end if
+    end block
+
     do ist = 1, nstate
       do jst = 1, nstate
         if (ist == jst) cycle
