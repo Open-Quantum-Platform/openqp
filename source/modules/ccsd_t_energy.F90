@@ -42,7 +42,7 @@ contains
     use printing, only: print_module_info
     use messages, only: show_message, with_abort
     use int2_compute, only: int2_compute_t
-    use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks
+    use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
     use parallel, only: par_env_t
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
@@ -58,7 +58,7 @@ contains
     type(par_env_t) :: pe
 
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_energy_a(:)
-    real(kind=dp), allocatable, target :: ao(:,:,:,:)
+    real(kind=dp), allocatable, target :: gao(:)
     real(kind=dp), allocatable :: cmo(:,:), eo(:), ev(:)
     real(kind=dp), allocatable :: oooo(:,:,:,:), ooov(:,:,:,:), oovv(:,:,:,:)
     real(kind=dp), allocatable :: ovov(:,:,:,:), ovvv(:,:,:,:), vvvv(:,:,:,:)
@@ -104,10 +104,12 @@ contains
     end if
 
     ! ---- memory guard ------------------------------------------------------
-    ! The dominant allocations are the AO tensor (nbf^4), the full MO tensor
-    ! built inside the transformation (nmo^4) and the ladder integrals (nv^4).
-    mem_gb = ( real(nbf,dp)**4 + 2.0_dp*real(nmo,dp)**4 + real(nv,dp)**4 ) &
-             * 8.0_dp / 1.073741824e9_dp
+    ! The dominant allocations are the packed AO integrals (nbf^4/8), the
+    ! half-transformed intermediate that lives alongside them (nbf^4/4 at
+    ! nmo ~ nbf) and the ladder integrals (nv^4).
+    mem_gb = ( real(cc_packed_length(nbf),dp) &
+               + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2 &
+               + real(nv,dp)**4 ) * 8.0_dp / 1.073741824e9_dp
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
         ', correlated occ = ', no, ', virt = ', nv
     if (nfzc > 0) write(iw,'(2X,A,I0)') 'CCSD(T): frozen core orbitals = ', nfzc
@@ -138,16 +140,17 @@ contains
     end do
 
     ! ---- AO integrals ------------------------------------------------------
-    allocate(ao(nbf,nbf,nbf,nbf), stat=ok)
+    allocate(gao(cc_packed_length(nbf)), stat=ok)
     if (ok /= 0) call show_message('CCSD(T): cannot allocate the AO integral &
-                                   &tensor -- system too large for in-core CC', with_abort)
-    ao = 0.0_dp
+                                   &store -- system too large for in-core CC', with_abort)
+    gao = 0.0_dp
 
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
-    eri_data%ao => ao
+    eri_data%g => gao
     eri_data%nbf = nbf
+    eri_data%npair = nbf*(nbf+1)/2
     call int2_driver%run(eri_data)
     call eri_data%clean()
     call int2_driver%clean()
@@ -157,9 +160,9 @@ contains
              ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv), stat=ok)
     if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
 
-    call cc_build_mo_blocks(nbf, nmo, no, cmo, ao, &
+    call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
                             oooo, ooov, oovv, ovov, ovvv, vvvv)
-    deallocate(ao)
+    deallocate(gao)
 
     ! ---- coupled cluster ---------------------------------------------------
     do_t = infos%control%cc_triples /= 0
