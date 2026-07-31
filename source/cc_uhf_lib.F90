@@ -162,7 +162,7 @@ end function cc_uhf_mp2
 !> against the closed-shell code's DGEMMs, and the spin-orbital tensors are
 !> sixteen times the spatial ones.  See docs/ccsd_t_open_shell_plan.md.
 subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
-                         e_ccsd, e_t, converged, niter)
+                         e_ccsd, e_t, converged, niter, fov)
 
   integer,  intent(in)  :: nso            !< total spin orbitals
   integer,  intent(in)  :: nocc           !< occupied spin orbitals
@@ -174,12 +174,16 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), intent(out) :: e_ccsd, e_t
   logical,  intent(out) :: converged
   integer,  intent(out) :: niter
+  !> Occupied-virtual Fock block in the same spin-orbital basis.  Zero for a
+  !> canonical UHF reference; for ROHF it survives semicanonicalisation and
+  !> dropping it costs ~5e-3 Hartree.  Absent means zero.
+  real(dp), optional, intent(in) :: fov(nocc, nso-nocc)
 
   real(dp), allocatable :: t1(:,:), t2(:,:,:,:), t1n(:,:), t2n(:,:,:,:)
   real(dp), allocatable :: tau(:,:,:,:), taut(:,:,:,:)
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
   real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
-  real(dp), allocatable :: gmnef(:,:,:,:)
+  real(dp), allocatable :: gmnef(:,:,:,:), f_ov(:,:)
   ! DIIS history over the concatenated (t1,t2) vector and its residual.
   real(dp), allocatable :: dv(:,:), de(:,:), bmat(:,:), rhs(:)
   integer, allocatable :: ipiv(:)
@@ -198,6 +202,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   allocate(tau(no,no,nv,nv), taut(no,no,nv,nv))
   allocate(Fae(nv,nv), Fmi(no,no), Fme(no,nv))
   allocate(Wmnij(no,no,no,no), Wabef(nv,nv,nv,nv), Wmbej(no,nv,nv,no))
+  allocate(f_ov(no,nv))
+  f_ov = 0.0_dp
+  if (present(fov)) f_ov = fov
 
   ! <mn||ef> over the correlated blocks.  It is constant, it is what every
   ! O(n^6) contraction below multiplies, and slicing it out of g once turns
@@ -243,6 +250,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       do f_ = 1, nv; do n = 1, no; do m = 1, no
         s_ = s_ - 0.5_dp*taut(m,n,a,f_)*g(m,n,no+e,no+f_)
       end do; end do; end do
+      do m = 1, no
+        s_ = s_ - 0.5_dp*f_ov(m,e)*t1(m,a)
+      end do
       Fae(a,e) = s_
     end do; end do
 
@@ -254,11 +264,14 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       do f_ = 1, nv; do e = 1, nv; do n = 1, no
         s_ = s_ + 0.5_dp*taut(i,n,e,f_)*g(m,n,no+e,no+f_)
       end do; end do; end do
+      do e = 1, nv
+        s_ = s_ + 0.5_dp*t1(i,e)*f_ov(m,e)
+      end do
       Fmi(m,i) = s_
     end do; end do
 
     do e = 1, nv; do m = 1, no
-      s_ = 0.0_dp
+      s_ = f_ov(m,e)
       do f_ = 1, nv; do n = 1, no
         s_ = s_ + t1(n,f_)*g(m,n,no+e,no+f_)
       end do; end do
@@ -304,7 +317,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
     ! --- T1 ------------------------------------------------------------------
     do a = 1, nv; do i = 1, no
-      s_ = 0.0_dp
+      s_ = f_ov(i,a)
       do e = 1, nv
         s_ = s_ + t1(i,e)*Fae(a,e)
       end do
@@ -451,7 +464,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   ! --- (T) -----------------------------------------------------------------
   if (do_triples) call triples(e_t)
 
-  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef)
+  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef, f_ov)
   if (allocated(dv)) deallocate(dv, de)
 
 contains
@@ -497,7 +510,10 @@ contains
   !> P(a/bc) t1_ia <jk||bc> for a fixed occupied ordering.
   pure real(dp) function p1(i,j,k,a,b,c) result(v)
     integer, intent(in) :: i,j,k,a,b,c
-    v =   t1s(i,a)*gs(j,k,b,c) - t1s(i,b)*gs(j,k,a,c) - t1s(i,c)*gs(j,k,b,a)
+    ! t1 <jk||bc> is the canonical disconnected triple; the f_ov t2 term is
+    ! what a non-canonical (ROHF) reference adds and is zero for UHF.
+    v =   t1s(i,a)*gs(j,k,b,c) - t1s(i,b)*gs(j,k,a,c) - t1s(i,c)*gs(j,k,b,a) &
+        + f_ov(i,a)*t2s(j,k,b,c) - f_ov(i,b)*t2s(j,k,a,c) - f_ov(i,c)*t2s(j,k,b,a)
   end function p1
 
   !> Connected triple numerator:
