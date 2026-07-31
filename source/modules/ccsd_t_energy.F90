@@ -270,6 +270,18 @@ contains
             &freeze more core orbitals or use a smaller basis', with_abort)
       end if
 
+      ! ROHF is not supported yet.  Semicanonicalisation makes the occ-occ and
+      ! vir-vir Fock blocks diagonal, but for ROHF the occupied-virtual block
+      ! survives -- and these spin-orbital equations drop exactly those f_ov
+      ! terms.  Measured 5e-3 Hartree out on CH2 triplet, which is wrong
+      ! quietly; refuse instead until the f_ov terms are carried.
+      if (infos%control%scftype == 3) then
+        close(iw)
+        call show_message('CCSD(T): ROHF reference is not supported yet &
+            &(the f_ov terms are missing); use [scf] type=uhf for open-shell &
+            &coupled cluster', with_abort)
+      end if
+
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
       call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
       call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)

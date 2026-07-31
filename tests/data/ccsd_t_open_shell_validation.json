@@ -1,0 +1,140 @@
+{
+  "_comment": [
+    "Open-shell CCSD(T) reference energies for the native OpenQP path.",
+    "Generated with PySCF UHF + UCCSD/uccsd_t on the same geometry and basis,",
+    "then reproduced end to end through OpenQP's own integral engine and the",
+    "spin-orbital solver in source/cc_uhf_lib.F90.",
+    "",
+    "UHF only.  ROHF is rejected by the solver: after semicanonicalisation its",
+    "occupied-virtual Fock block is still non-zero, and the spin-orbital",
+    "equations here drop exactly those f_ov terms.  Running it anyway gave a",
+    "5e-3 Hartree error on CH2 triplet -- wrong quietly, which is why it is",
+    "gated rather than left available.",
+    "",
+    "cartesian=true throughout: OpenQP uses 6d Cartesian shells, so PySCF needs",
+    "gto.M(..., cart=True) or the two codes are not running the same basis."
+  ],
+  "tolerance": {
+    "scf": 1e-06,
+    "ccsd": 1e-07,
+    "triples": 1e-08
+  },
+  "cases": [
+    {
+      "name": "OH doublet/STO-3G UHF",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.97
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "uhf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 6,
+      "scf_reference": -74.3626691948,
+      "e_ccsd": -0.0245150129,
+      "e_triples": -2.3e-07
+    },
+    {
+      "name": "CH2 triplet/STO-3G UHF",
+      "atoms": [
+        [
+          6,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.99,
+          0.33
+        ],
+        [
+          1,
+          0.0,
+          -0.99,
+          0.33
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 2,
+      "scf_type": "uhf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 7,
+      "scf_reference": -38.4285658724,
+      "e_ccsd": -0.0354785802,
+      "e_triples": -8.38845e-05
+    },
+    {
+      "name": "NH2 doublet/STO-3G UHF",
+      "atoms": [
+        [
+          7,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.8,
+          0.57
+        ],
+        [
+          1,
+          0.0,
+          -0.8,
+          0.57
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "uhf",
+      "nfzc": 0,
+      "cartesian": true,
+      "nbf": 7,
+      "scf_reference": -54.826106582,
+      "e_ccsd": -0.0410051852,
+      "e_triples": -5.3563e-05
+    },
+    {
+      "name": "OH doublet/STO-3G fzc1",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.97
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "uhf",
+      "nfzc": 1,
+      "cartesian": true,
+      "nbf": 6,
+      "scf_reference": -74.3626691948,
+      "e_ccsd": -0.0244845803,
+      "e_triples": -2.126e-07
+    }
+  ]
+}

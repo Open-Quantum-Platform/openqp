@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 DATA = Path(__file__).parent / "data" / "ccsd_t_pyscf_validation.json"
+DATA_OS = Path(__file__).parent / "data" / "ccsd_t_open_shell_validation.json"
 
 
 def _have_native_oqp():
@@ -41,17 +42,25 @@ def _load():
     return doc["tolerance"], doc["cases"]
 
 
+def _load_os():
+    doc = json.loads(DATA_OS.read_text())
+    return doc["tolerance"], doc["cases"]
+
+
 def _write_input(path, case, triples=True):
     atoms = "\n".join(
         "   %d   %.10f   %.10f   %.10f" % (a[0], a[1], a[2], a[3])
         for a in case["atoms"]
     )
     method = "ccsd(t)" if triples else "ccsd"
+    mult = case.get("spin", 0) + 1
+    scf_type = case.get("scf_type", "rhf")
     path.write_text(
         "[input]\nsystem=\n%s\ncharge=0\nruntype=energy\nbasis=%s\nmethod=%s\n\n"
         "[guess]\ntype=huckel\n\n"
-        "[scf]\nmultiplicity=1\ntype=rhf\nconv=1.0e-11\n\n"
-        "[cc]\nnfzc=%d\nconv=1e-9\n" % (atoms, case["basis"], method, case["nfzc"])
+        "[scf]\nmultiplicity=%d\ntype=%s\nconv=1.0e-11\n\n"
+        "[cc]\nnfzc=%d\nconv=1e-9\n"
+        % (atoms, case["basis"], method, mult, scf_type, case["nfzc"])
     )
 
 
@@ -76,7 +85,7 @@ def _run(tmp_path, case, triples=True):
 
     return {
         "nbf": grab(r"nbf = (\d+)"),
-        "scf": grab(r"Final RHF energy is\s+(-?[\d.]+)"),
+        "scf": grab(r"Final \w+ energy is\s+(-?[\d.]+)"),
         "ccsd": grab(r"E\(CCSD, correlation\)\s*=\s*(-?[\d.]+)"),
         "triples": grab(r"E\(\(T\), correction\)\s*=\s*(-?[\d.]+)"),
     }
@@ -111,3 +120,37 @@ def test_ccsd_without_triples_matches_ccsd_part(tmp_path):
     got = _run(tmp_path, case, triples=False)
     assert abs(got["ccsd"] - case["e_ccsd"]) < tol["ccsd"]
     assert got["triples"] is None
+
+
+@pytest.mark.parametrize("case", _load_os()[1], ids=lambda c: c["name"])
+def test_open_shell_ccsd_t_matches_pyscf(tmp_path, case):
+    """UHF references go through the spin-orbital solver in cc_uhf_lib."""
+    tol, _ = _load_os()
+    got = _run(tmp_path, case)
+
+    assert abs(got["scf"] - case["scf_reference"]) < tol["scf"], (
+        "SCF reference differs; CC comparison would be meaningless"
+    )
+    assert abs(got["ccsd"] - case["e_ccsd"]) < tol["ccsd"]
+    assert abs(got["triples"] - case["e_triples"]) < tol["triples"]
+
+
+def test_rohf_is_refused(tmp_path):
+    """ROHF must fail loudly rather than return a quietly wrong energy: the
+    spin-orbital equations drop the f_ov terms that survive semicanonicalisation
+    for an ROHF reference (measured 5e-3 Ha out on CH2 triplet)."""
+    _, cases = _load_os()
+    case = dict(cases[0])
+    case["scf_type"] = "rohf"
+    inp = tmp_path / "rohf.inp"
+    _write_input(inp, case)
+    proc = subprocess.run(
+        [sys.executable, "-m", "oqp.pyoqp", str(inp)],
+        capture_output=True, cwd=str(tmp_path), timeout=600,
+    )
+    combined = (proc.stdout + proc.stderr).decode(errors="ignore")
+    log = inp.with_suffix(".log")
+    if log.exists():
+        combined += log.read_text(errors="ignore")
+    assert "rohf" in combined.lower() or "ROHF" in combined
+    assert "E(CCSD, correlation)" not in combined

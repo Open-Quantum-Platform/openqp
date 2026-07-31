@@ -58,17 +58,28 @@ class TestCCSDTInputChecker(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("input.functional", report.to_text())
 
-    def test_cc_accepts_open_shell_reference_with_a_note(self):
-        """UHF/ROHF go through the spin-orbital solver: allowed, but costly
-        enough that the user is told so rather than left to wonder."""
-        for scf_type in ("uhf", "rohf"):
-            config = {"input": {"method": "ccsd", "functional": ""},
-                      "scf": {"type": scf_type}}
-            report = self._report()
-            self.checker._check_cc(config, report)
+    def test_cc_accepts_uhf_with_a_note(self):
+        """UHF goes through the spin-orbital solver: allowed, but costly enough
+        that the user is told so rather than left to wonder."""
+        config = {"input": {"method": "ccsd", "functional": ""},
+                  "scf": {"type": "uhf"}}
+        report = self._report()
+        self.checker._check_cc(config, report)
 
-            self.assertTrue(report.ok, f"{scf_type} should be accepted")
-            self.assertIn("spin-orbital", report.to_text())
+        self.assertTrue(report.ok)
+        self.assertIn("spin-orbital", report.to_text())
+
+    def test_cc_rejects_rohf(self):
+        """ROHF must be refused, not merely discouraged: the spin-orbital
+        equations drop the f_ov terms that survive semicanonicalisation for an
+        ROHF reference, which is worth 5e-3 Ha on CH2 triplet."""
+        config = {"input": {"method": "ccsd(t)", "functional": ""},
+                  "scf": {"type": "rohf"}}
+        report = self._report()
+        self.checker._check_cc(config, report)
+
+        self.assertFalse(report.ok)
+        self.assertIn("f_ov", report.to_text())
 
     def test_cc_rejects_unknown_reference(self):
         config = {"input": {"method": "ccsd", "functional": ""},
