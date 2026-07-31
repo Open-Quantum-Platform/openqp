@@ -45,6 +45,7 @@ contains
     use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
     use parallel, only: par_env_t
+!$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
 
     implicit none
@@ -65,6 +66,7 @@ contains
 
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
+    integer :: nthr
     logical :: converged, do_t
 
     open(unit=iw, file=infos%log_filename, position="append")
@@ -176,6 +178,13 @@ contains
     e_ref = infos%mol_energy%energy
 
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    ! Report the decomposition actually in force.  A silent fallback to one
+    ! rank looks exactly like a slow run, so make the parallel width visible.
+    nthr = 1
+    !$ nthr = omp_get_max_threads()
+    write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
+                               ', OpenMP threads = ', nthr
 
     call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
                           pe, opts, e_ccsd, e_t, converged, &
