@@ -386,7 +386,8 @@ contains
 
     implicit none
 
-    type(information), intent(in) :: infos
+    ! intent(inout): the NAC_DUMP_MINORS debug export writes tagarray records
+    type(information), intent(inout) :: infos
     real(kind=dp), intent(in), dimension(:,:) :: s_mo
     real(kind=dp), intent(out), dimension(:,:) :: s_ij
     real(kind=dp), intent(out), dimension(:,:) :: s_ab
