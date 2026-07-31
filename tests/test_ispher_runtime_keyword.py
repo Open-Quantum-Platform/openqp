@@ -49,6 +49,17 @@ def test_ispher_cffi_binding_is_declared():
     assert "logical :: HARMONIC_ACTIVE = .true." in constants
 
 
+def test_basis_shell_metadata_uses_native_32_bit_integer_abi():
+    header = (ROOT / "include/oqp.h").read_text()
+    oqpdata = (ROOT / "pyoqp/oqp/molecule/oqpdata.py").read_text()
+
+    assert "int32_t **bt, int32_t **at, int32_t **cdeg" in header
+    assert "pdeg = ffi.new('int32_t **')" in oqpdata
+    assert "pat = ffi.new('int32_t **')" in oqpdata
+    assert "pam = ffi.new('int32_t **')" in oqpdata
+    assert "dtype=np.int32" in oqpdata
+
+
 def test_apply_basis_reports_runtime_cartesian_override():
     text = (ROOT / "source/modules/apply_basis.F90").read_text()
 

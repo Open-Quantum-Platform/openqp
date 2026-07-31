@@ -221,6 +221,9 @@ def parse_qmrsf_dk_dump(path):
     if not lines:
         raise ValueError('QMRSF-DK dump is empty: %s' % path)
 
+    if lines[0].split()[0] == 'QMRSF_DK_NATIVE_V1':
+        return _parse_qmrsf_dk_native(lines, path)
+
     header = lines[0].split()
     if len(header) < 4:
         raise ValueError(
@@ -320,6 +323,57 @@ def parse_qmrsf_dk_dump(path):
     }
 
 
+def _parse_qmrsf_dk_native(lines, path):
+    """Parse the compact dump written by the OpenQP-native paper builder."""
+    header = lines[0].split()
+    if len(header) != 5:
+        raise ValueError('Malformed native QMRSF-DK header in %s: %r' % (path, lines[0]))
+
+    try:
+        nact, nsinglet, ntriplet, nquintet = map(int, header[1:])
+    except ValueError as exc:
+        raise ValueError('Non-integer native QMRSF-DK dimensions in %s' % path) from exc
+
+    if (nact, nsinglet, ntriplet, nquintet) != (4, 20, 15, 1):
+        raise ValueError(
+            'Unsupported native QMRSF-DK dimensions in %s: %s'
+            % (path, (nact, nsinglet, ntriplet, nquintet)))
+    if len(lines) < 7:
+        raise ValueError('Native QMRSF-DK dump is truncated: %s' % path)
+
+    scales = _read_floats(lines[1])
+    singlet = _read_floats(lines[3])
+    triplet = _read_floats(lines[4])
+    quintet = _read_floats(lines[5])
+    diagnostics = _read_floats(lines[6])
+    if len(scales) != 2 or len(singlet) != nsinglet or len(triplet) != ntriplet:
+        raise ValueError('Native QMRSF-DK dump has inconsistent record lengths: %s' % path)
+    if len(quintet) != nquintet or len(diagnostics) != 2:
+        raise ValueError('Native QMRSF-DK dump has inconsistent diagnostics: %s' % path)
+
+    a_quintet = _read_floats(lines[2])[0]
+    if abs(quintet[0] - a_quintet) > 1.0e-10:
+        raise ValueError(
+            'Native QMRSF-DK quintet anchor is inconsistent in %s (%.16g vs %.16g)'
+            % (path, a_quintet, quintet[0]))
+
+    return {
+        'format': 'native_v1',
+        'nact': nact,
+        'nsinglet': nsinglet,
+        'ntriplet': ntriplet,
+        'nquintet': nquintet,
+        'c_h': scales[0],
+        'c_ref': scales[1],
+        'a_quintet': a_quintet,
+        'singlet': singlet,
+        'triplet': triplet,
+        'quintet': quintet,
+        'orthonormal_error': diagnostics[0],
+        'discarded_cross_spin_block_max': diagnostics[1],
+    }
+
+
 def build_qmrsf_dk_results(dump, ref_energy):
     """Assemble a clean DK results dict from a parsed dump and the reference energy.
 
@@ -340,6 +394,9 @@ def build_qmrsf_dk_results(dump, ref_energy):
         Results dict with per-state DK/CAS totals (Hartree), excitation energies
         (eV), the 0OS classification, and the validation-gate summary.
     """
+    if dump.get('format') == 'native_v1':
+        return _build_qmrsf_dk_native_results(dump, ref_energy)
+
     ecore = dump['ecore']
     ndet = dump['ndet']
     cas_ref = dump['cas_ref']
@@ -423,8 +480,63 @@ def build_qmrsf_dk_results(dump, ref_energy):
     }
 
 
+def _build_qmrsf_dk_native_results(dump, ref_energy):
+    """Apply the paper energy law to the native spin-adapted eigenvalues."""
+    anchor = dump['a_quintet']
+
+    def _states(eigenvalues, multiplicity):
+        total = [float(ref_energy) + (value - anchor) for value in eigenvalues]
+        base = total[0]
+        return [
+            {
+                'index': i,
+                'multiplicity': multiplicity,
+                'mult': multiplicity,
+                'matrix_eigenvalue': value,
+                'E_DK': energy,
+                'exc_DK_eV': (energy - base) * HARTREE_TO_EV,
+            }
+            for i, (value, energy) in enumerate(zip(eigenvalues, total))
+        ]
+
+    singlets = _states(dump['singlet'], 1)
+    triplets = _states(dump['triplet'], 3)
+    quintets = _states(dump['quintet'], 5)
+    orth_pass = dump['orthonormal_error'] < 1.0e-12
+
+    return {
+        'method': 'QMRSF-DK',
+        'implementation': 'OpenQP-native paper matrix',
+        'reference_energy': float(ref_energy),
+        'is_dft_dressed': True,
+        'c_H': dump['c_h'],
+        'c_ref': dump['c_ref'],
+        'a_quintet': anchor,
+        'n_states': dump['nsinglet'],
+        'n_singlets': dump['nsinglet'],
+        'n_triplets': dump['ntriplet'],
+        'n_quintets': dump['nquintet'],
+        # PyOQP's public excited-state result remains the target singlet block.
+        'states': singlets,
+        'triplet_states': triplets,
+        'quintet_states': quintets,
+        'diagnostics': {
+            'csf_orthonormal_error': dump['orthonormal_error'],
+            'discarded_cross_spin_block_max': dump['discarded_cross_spin_block_max'],
+            'csf_orthonormal_pass': orth_pass,
+            # Exchange scaling and the determinant-resolved v_xc lift are
+            # projected into separate spin-adapted blocks by construction;
+            # their discarded cross-block norm is informative, not a failure.
+            'pass': bool(orth_pass),
+        },
+    }
+
+
 def format_qmrsf_dk_log_table(results, max_states=10):
     """Render an aligned text table of the lowest DK states for the log."""
+    if results.get('implementation') == 'OpenQP-native paper matrix':
+        return _format_qmrsf_dk_native_log_table(results, max_states)
+
     states = results.get('states', [])
     n_show = min(max_states, len(states))
     g = results.get('gates', {})
@@ -481,6 +593,35 @@ def format_qmrsf_dk_log_table(results, max_states=10):
     ]
 
     return '\n'.join(header_lines + table + gate_lines)
+
+
+def _format_qmrsf_dk_native_log_table(results, max_states=10):
+    states = results.get('states', [])
+    n_show = min(max_states, len(states))
+    diag = results.get('diagnostics', {})
+    header = [
+        'QMRSF-DK results (OpenQP-native paper matrix)',
+        'reference quintet energy = %18.10f Hartree' % results['reference_energy'],
+        'active exchange c_H = %.6f   reference exchange c_ref = %.6f'
+        % (results['c_H'], results['c_ref']),
+        'spin-adapted roots: %d singlets, %d triplets, %d quintet'
+        % (results['n_singlets'], results['n_triplets'], results['n_quintets']),
+        '',
+    ]
+    col = '%5s %5s %18s %14s'
+    table = [col % ('state', '2S+1', 'E_DK(Eh)', 'exc-DK(eV)'), '-' * 48]
+    row = '%5d %5d %18.10f %14.4f'
+    for state in states[:n_show]:
+        table.append(row % (state['index'], state['mult'], state['E_DK'],
+                            state['exc_DK_eV']))
+    footer = [
+        '',
+        'CSF diagnostics: %s  (orthonormal %.2e, discarded cross-spin %.2e)'
+        % ('PASS' if diag.get('pass') else 'FAIL',
+           diag.get('csf_orthonormal_error', float('nan')),
+           diag.get('discarded_cross_spin_block_max', float('nan'))),
+    ]
+    return '\n'.join(header + table + footer)
 
 
 def format_qmrsf_log_table(results, max_states=10):

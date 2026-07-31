@@ -293,10 +293,11 @@ contains
   subroutine tdhf_qmrsf_dk_C(c_handle) bind(C, name="tdhf_qmrsf_dk")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
     use types, only: information
+    use qmrsf_dk_paper_native_mod, only: qmrsf_dk_paper_native
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call tdhf_qmrsf_dk(inf)
+    call qmrsf_dk_paper_native(inf)
   end subroutine tdhf_qmrsf_dk_C
 
   !> @brief Inner driver for the QMRSF dressed-kernel pathway (LIVE).

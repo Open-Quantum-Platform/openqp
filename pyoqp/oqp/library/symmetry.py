@@ -478,13 +478,13 @@ def _shell_block_spherical(l: int, op_matrix: np.ndarray) -> np.ndarray:
     """
 
     if l <= 1:
-        # s is trivial; spherical p == Cartesian p up to ordering (y,z,x).
+        # OpenQP does not transform s/p shells in cart2sph: p therefore keeps
+        # the native Cartesian component order (x,y,z).  Applying the CCA
+        # (y,z,x) permutation here breaks T^T S T = S for mixed s/p bases and
+        # makes otherwise symmetry-pure MOs appear mixed.
         if l == 0:
             return np.ones((1, 1))
-        cart = _shell_block(1, op_matrix)
-        # CCA spherical p order: m=-1,0,1 -> (y, z, x)
-        perm = [1, 2, 0]
-        return cart[np.ix_(perm, perm)]
+        return _shell_block(1, op_matrix)
     b, metric = _spherical_basis(l)
     t_cart = _shell_block(l, op_matrix)
     return b @ metric @ t_cart @ b.T

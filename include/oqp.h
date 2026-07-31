@@ -192,7 +192,7 @@ int64_t oqp_del(struct oqp_handle_t *c_handle, char *code);
 int64_t oqp_get_nbf(struct oqp_handle_t *c_handle);
 int64_t oqp_get_basis(struct oqp_handle_t *c_handle,
         int64_t *nsh, int64_t *nprim, int64_t *nbf,
-        int64_t **bt, int64_t **at, int64_t **cdeg, double **ex, double **cc);
+        int32_t **bt, int32_t **at, int32_t **cdeg, double **ex, double **cc);
 
 /* `mass` is optional, pass NULL if not needed */
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);

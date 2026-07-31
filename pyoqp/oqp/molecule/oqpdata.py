@@ -1063,9 +1063,12 @@ class OQPData:
         """Get basis set from a molecule"""
         pex = ffi.new('double **')
         pcc = ffi.new('double **')
-        pdeg = ffi.new('int64_t **')
-        pat = ffi.new('int64_t **')
-        pam = ffi.new('int64_t **')
+        # basis_set%am/%origin/%ncontr are default Fortran INTEGER arrays
+        # (32-bit in supported builds).  Treating their addresses as int64_t
+        # interleaves adjacent values and corrupts shell metadata.
+        pdeg = ffi.new('int32_t **')
+        pat = ffi.new('int32_t **')
+        pam = ffi.new('int32_t **')
         pnbf = ffi.new('int64_t *')
         pnsh = ffi.new('int64_t *')
         pnprim = ffi.new('int64_t *')
@@ -1080,9 +1083,9 @@ class OQPData:
             nsh = pnsh[0]
             nprim = pnprim[0]
 
-            centers = np.frombuffer(ffi.buffer(pat[0], ffi.sizeof('int64_t') * nsh), dtype=np.int64)
-            angs = np.frombuffer(ffi.buffer(pam[0], ffi.sizeof('int64_t') * nsh), dtype=np.int64)
-            ncontr = np.frombuffer(ffi.buffer(pdeg[0], ffi.sizeof('int64_t') * nsh), dtype=np.int64)
+            centers = np.frombuffer(ffi.buffer(pat[0], ffi.sizeof('int32_t') * nsh), dtype=np.int32)
+            angs = np.frombuffer(ffi.buffer(pam[0], ffi.sizeof('int32_t') * nsh), dtype=np.int32)
+            ncontr = np.frombuffer(ffi.buffer(pdeg[0], ffi.sizeof('int32_t') * nsh), dtype=np.int32)
 
             alpha = np.frombuffer(ffi.buffer(pex[0], ffi.sizeof('double') * nprim))
             coef = np.frombuffer(ffi.buffer(pcc[0], ffi.sizeof('double') * nprim))

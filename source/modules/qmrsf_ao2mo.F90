@@ -47,7 +47,8 @@ contains
   !> @param[out]   h_act    nact x nact effective one-electron integrals (incl. core MF)
   !> @param[out]   eri_act  nact^4 two-electron integrals (pq|rs), CHEMIST order
   !> @param[out]   ecore    E_nuc + frozen-core electronic constant
-  subroutine qmrsf_active_integrals(infos, nact, act, ncore, h_act, eri_act, ecore)
+  !> @param[out]   kcore_act optional active projection of K[D_core]
+  subroutine qmrsf_active_integrals(infos, nact, act, ncore, h_act, eri_act, ecore, kcore_act)
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_Hcore
@@ -60,6 +61,7 @@ contains
     real(dp), intent(out) :: h_act(nact,nact)
     real(dp), intent(out) :: eri_act(nact,nact,nact,nact)
     real(dp), intent(out) :: ecore
+    real(dp), intent(out), optional :: kcore_act(nact,nact)
 
     type(basis_set), pointer :: basis
     real(dp), contiguous, pointer :: mo_a(:,:), hcore_p(:)
@@ -67,7 +69,7 @@ contains
     real(dp), allocatable :: tmp(:,:), gsq(:,:), gmo(:,:)
     real(dp), allocatable, target :: dprobe(:,:)
     real(dp), allocatable, target :: dcore(:,:)
-    real(dp), allocatable :: vcore_sq(:,:)
+    real(dp), allocatable :: vcore_sq(:,:), kcore_sq(:,:)
     integer, allocatable  :: pidx(:), qidx(:)
     type(int2_compute_t)  :: int2_driver
     type(int2_rhf_data_t) :: int2_data
@@ -76,6 +78,7 @@ contains
     real(dp) :: psq
 
     basis => infos%basis
+    if (present(kcore_act)) kcore_act = 0.0_dp
     nbf  = basis%nbf
     ntri = nbf*(nbf+1)/2
 
@@ -186,6 +189,24 @@ contains
         end do
         ecore = ecore + 2.0_dp*e2h + evc
       end block
+
+      ! The F^(0) paper builder needs the reference-functional core exchange
+      ! separately: h_eff = h_act + (1-c_ref) K_core.  At the post-scaled
+      ! int2_rhf consumer level, scale_exchange=-2 and scale_coulomb=0 gives
+      ! +K[D_core].  Compute it only for callers that request the optional block.
+      if (present(kcore_act)) then
+        call int2_driver%init(basis, infos)
+        call int2_driver%set_screening()
+        int2_data = int2_rhf_data_t(nfocks=1, d=dcore, &
+                                    scale_exchange=-2.0_dp, scale_coulomb=0.0_dp)
+        call int2_driver%run(int2_data, cam=.false.)
+        allocate(kcore_sq(nbf,nbf),tmp(nbf,nact))
+        call fock_postscale(int2_data%f(:,1,1), nbf, ntri, kcore_sq)
+        call int2_driver%clean()
+        tmp = matmul(kcore_sq,cact)
+        kcore_act = matmul(transpose(cact),tmp)
+        deallocate(kcore_sq,tmp)
+      end if
       deallocate(ccore, dcore, vcore_sq)
     end if
 

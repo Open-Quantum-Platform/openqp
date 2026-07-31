@@ -102,6 +102,12 @@ class TestSolidHarmonics(unittest.TestCase):
             self.assertLess(float(np.max(np.abs(b1 @ b1.T - np.eye(n)))), 1.0e-12)
             self.assertLess(float(np.max(np.abs(b12 - b1 @ b2))), 1.0e-10)
 
+    def test_p_shell_keeps_openqp_cartesian_component_order(self):
+        rotation = random_rotation(17)
+        expected = self.symmetry._shell_block(1, rotation)
+        actual = self.symmetry._shell_block_spherical(1, rotation)
+        self.assertTrue(np.allclose(actual, expected, atol=1.0e-13))
+
     def test_sign_operations_are_diagonal(self):
         for l in (1, *SUPPORTED_PURE_L):
             for signs in [(-1, 1, 1), (1, -1, 1), (1, 1, -1), (-1, -1, -1)]:
