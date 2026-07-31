@@ -674,3 +674,23 @@ is the same-space canonical response (magnitudes and blocks frozen in
 7.14/7.16). The analytic MRSF NAC is now: proven scaffold + verified
 skeleton engines + OPERATIONAL z-vector response + one spec'd remaining
 term -- assembly, not research.
+
+### 7.19 Ladder A8: THE AMPLITUDE TERM CLOSES -- physical, scan-free
+With the symmetric-generator staging corrected ((C e^{tS})^T = e^{+tS} W),
+the SINGLE physical combination
+
+    resp = z.B^x + (La.Ua + Ls.Us)_same-space + (Ls.Us)_inter-space-sym
+
+closes the frozen amplitude residuals at 95.0% / 64.3% / 93.3% with ALL
+signs = +1 exactly as derived (diagnostic sign scan finds no better
+combination for (1,2)/(2,3)). Absolute misses 0.058/0.189/0.207 -- the
+stacked-FD noise floor plus the small inter-space-symmetric Fock
+response. Every term is production-implementable:
+  t1: OPERATIONAL (A6) -- one sfrolhs solve + gZ-gS seam;
+  t2: same-space L from the matvec exports (NO Fock rebuild there --
+      same-space rotations leave D invariant, proven);
+  t3: the orthonormality/W.S^x family (skeleton machinery exists).
+The analytic MRSF NAC is COMPLETE as a specification: proven scaffold
+(0.1%), verified skeleton engines, operational z-vector response, and a
+closed, parameter-free response formula. Remaining: Fortran residency of
+t2/t3, the gamma^formula cofactor closed form, C1 validation, ship.
