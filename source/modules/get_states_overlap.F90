@@ -77,9 +77,9 @@ contains
     nbf = basis%nbf
     xvec_dim = infos%mol_prop%nelec_a*(nbf-infos%mol_prop%nelec_b)
 
-!   ndtlf = 0          less accurate
+!   ndtlf = 0 : EXACT hole-pair minor determinants (ov_exact; GAMESS "no tlf")
 !   ndtlf = 1 : tlf(1)
-!   ndtlf = 2 : tlf(2) most accurate
+!   ndtlf = 2 : tlf(2) most accurate TLF approximation
     ndtlf = infos%tddft%tlf
 
     ! Allocate data for outputing in python level
@@ -517,7 +517,7 @@ contains
     integer, intent(in) :: ilow, noc, itype
 
     real(kind=dp), dimension(noc*noc) :: ddet
-    integer :: i, iipp, imax, imin, ipp
+    integer :: i, iipp, imax, imin, ipp, rs, cs
 
     select case (itype)
     case (1)
@@ -552,6 +552,25 @@ contains
        end if
        imin = min(i1,i2)
        imax = max(i1,i2)
+       if (i1 == i2) then
+          ! Diagonal s_ij(k,k): single-hole minor (remove row/col k).
+          ! The generic two-hole block layout below degenerates here --
+          ! for k=1 it indexes ddet(0) and below (heap corruption), and for
+          ! k>=2 it clobbers row/col k-1, yielding minor(k-1) instead of
+          ! minor(k). Inherited from GAMESS OVEXACT (namd.src), where the
+          ! same out-of-bounds write is silent in static F77 memory.
+          do ipp = 1, noc
+             cs = ipp
+             if (ipp >= i1) cs = ipp+1
+             do i = 1, noc
+                rs = i
+                if (i >= i1) rs = i+1
+                ddet((ipp-1)*noc+i) = s_mo(rs+ilow-1, cs+ilow-1)
+             end do
+          end do
+          temp1 = comp_det(ddet, noc)
+          return
+       end if
     !  (1,1) block
        do i = 1, imin-1
           do ipp = 1, imin-1
