@@ -23,7 +23,19 @@
 module cc_uhf_lib
 
   use precision, only: dp
+  use blas_thread, only: blas_thread_count, blas_thread_set
+  use, intrinsic :: iso_c_binding, only: c_int64_t
   implicit none
+
+  !> Collapsed trip count below which a parallel region costs more than the
+  !> loop it wraps.  Measured on the open-shell solver: without this guard the
+  !> small cases run several times slower on four threads than on one.
+  integer, parameter :: PAR_MIN = 4096
+
+  !> Same idea for the regions whose cost is a product of four or six extents
+  !> rather than a plain trip count: below this many elementary operations the
+  !> region is not worth opening.
+  real(dp), parameter :: PAR_WORK = 1.0e5_dp
 
   private
   public :: cc_uhf_spinorb_build
@@ -65,7 +77,8 @@ subroutine cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, g)
   real(dp) :: coul, exch
 
   !$omp parallel do collapse(4) default(shared) &
-  !$omp   private(p,q,r,s,ps,qs,rs_,ss,pp,qq,rr,ssp,coul,exch) schedule(static)
+  !$omp   private(p,q,r,s,ps,qs,rs_,ss,pp,qq,rr,ssp,coul,exch) schedule(static) &
+  !$omp   if(real(2*nmo,dp)**4 > PAR_WORK)
   do s = 1, 2*nmo
     do r = 1, 2*nmo
       do q = 1, 2*nmo
@@ -184,6 +197,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
   real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
   real(dp), allocatable :: gmnef(:,:,:,:), f_ov(:,:)
+  integer(c_int64_t) :: nblas_save
   ! DIIS history over the concatenated (t1,t2) vector and its residual.
   real(dp), allocatable :: dv(:,:), de(:,:), bmat(:,:), rhs(:)
   integer, allocatable :: ipiv(:)
@@ -195,6 +209,16 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   nv = nso - nocc
   no2 = no*no
   nv2 = nv*nv
+
+  ! This routine drives its own OpenMP regions and calls BLAS from between
+  ! them.  A threaded BLAS underneath opens a second pool that spin-waits
+  ! through the other's regions, and its per-call overhead swamps the small
+  ! GEMMs the open-shell equations make.  Measured on four threads: with
+  ! threaded BLAS the small cases run SLOWER than serial (O2 triplet 0.17 ->
+  ! 0.28 s) and the large one gains only 2.7x; pinned, O2 speeds up and
+  ! BH/cc-pVDZ reaches 3.6x.  Restored on exit.
+  nblas_save = blas_thread_count()
+  if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
   e_ccsd = 0.0_dp; e_t = 0.0_dp; converged = .false.; niter = 0
   if (no <= 0 .or. nv <= 0) return
 
@@ -242,6 +266,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     end do; end do; end do; end do
 
     ! --- one-particle intermediates (f is diagonal: no f_ae/f_mi/f_me) -------
+    !$omp parallel do collapse(2) default(shared) private(a,e,m,n,f_,s_) schedule(static) if(nv2 > PAR_MIN)
     do e = 1, nv; do a = 1, nv
       s_ = 0.0_dp
       do f_ = 1, nv; do m = 1, no
@@ -255,7 +280,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do
       Fae(a,e) = s_
     end do; end do
+    !$omp end parallel do
 
+    !$omp parallel do collapse(2) default(shared) private(i,m,e,n,f_,s_) schedule(static) if(no2 > PAR_MIN)
     do i = 1, no; do m = 1, no
       s_ = 0.0_dp
       do e = 1, nv; do n = 1, no
@@ -269,7 +296,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do
       Fmi(m,i) = s_
     end do; end do
+    !$omp end parallel do
 
+    !$omp parallel do collapse(2) default(shared) private(m,e,n,f_,s_) schedule(static) if(no*nv > PAR_MIN)
     do e = 1, nv; do m = 1, no
       s_ = f_ov(m,e)
       do f_ = 1, nv; do n = 1, no
@@ -277,8 +306,10 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do; end do
       Fme(m,e) = s_
     end do; end do
+    !$omp end parallel do
 
     ! --- two-particle intermediates -----------------------------------------
+    !$omp parallel do collapse(4) default(shared) private(i,j,m,n,e,s_) schedule(static) if(no2*no2 > PAR_MIN)
     do j = 1, no; do i = 1, no; do n = 1, no; do m = 1, no
       s_ = g(m,n,i,j)
       do e = 1, nv
@@ -286,10 +317,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do
       Wmnij(m,n,i,j) = s_
     end do; end do; end do; end do
+    !$omp end parallel do
     ! Wmnij(mn,ij) += 1/4 <mn||ef> tau(ij,ef)
     call dgemm('n','t', no2, no2, nv2, 0.25_dp, gmnef, no2, tau, no2, &
                1.0_dp, Wmnij, no2)
 
+    !$omp parallel do collapse(4) default(shared) private(a,b,e,f_,m,n,s_) schedule(static) if(nv2*nv2 > PAR_MIN)
     do f_ = 1, nv; do e = 1, nv; do b = 1, nv; do a = 1, nv
       s_ = g(no+a,no+b,no+e,no+f_)
       do m = 1, no
@@ -297,10 +330,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do
       Wabef(a,b,e,f_) = s_
     end do; end do; end do; end do
+    !$omp end parallel do
     ! Wabef(ab,ef) += 1/4 tau(mn,ab)^T <mn||ef>
     call dgemm('t','n', nv2, nv2, no2, 0.25_dp, tau, no2, gmnef, no2, &
                1.0_dp, Wabef, nv2)
 
+    !$omp parallel do collapse(4) default(shared) private(m,b,e,j,f_,n,s_) schedule(static) if(no2*nv2 > PAR_MIN)
     do j = 1, no; do e = 1, nv; do b = 1, nv; do m = 1, no
       s_ = g(m,no+b,no+e,j)
       do f_ = 1, nv
@@ -314,8 +349,10 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       end do; end do
       Wmbej(m,b,e,j) = s_
     end do; end do; end do; end do
+    !$omp end parallel do
 
     ! --- T1 ------------------------------------------------------------------
+    !$omp parallel do collapse(2) default(shared) private(i,a,e,m,n,f_,s_,dia) schedule(static) if(no*nv > PAR_MIN)
     do a = 1, nv; do i = 1, no
       s_ = f_ov(i,a)
       do e = 1, nv
@@ -339,8 +376,10 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       dia = eso(i) - eso(no+a)
       t1n(i,a) = s_ / dia
     end do; end do
+    !$omp end parallel do
 
     ! --- T2 ------------------------------------------------------------------
+    !$omp parallel do collapse(4) default(shared) private(i,j,a,b,e,m,n,f_,s_,d) schedule(static) if(no2*nv2 > PAR_MIN)
     do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
       s_ = g(i,j,no+a,no+b)
 
@@ -393,6 +432,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
       t2n(i,j,a,b) = s_
     end do; end do; end do; end do
+    !$omp end parallel do
 
     ! Ladder: t2n(ij,ab) += 1/2 tau(ij,ef) Wabef(ab,ef).  This is the
     ! O(o^2 v^4) bottleneck and the one term worth a DGEMM above all others.
@@ -473,6 +513,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
   deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef, f_ov)
   if (allocated(dv)) deallocate(dv, de)
+  if (nblas_save > 0) call blas_thread_set(nblas_save)
 
 contains
 
@@ -487,7 +528,8 @@ contains
 
     et = 0.0_dp
     !$omp parallel do collapse(3) default(shared) &
-    !$omp   private(i,j,k,a,b,c,dd,tc,td) reduction(+:et) schedule(dynamic)
+    !$omp   private(i,j,k,a,b,c,dd,tc,td) reduction(+:et) schedule(dynamic) &
+    !$omp   if(real(no,dp)**3*real(nv,dp)**3 > PAR_WORK)
     do i = 1, no
       do j = 1, no
         do k = 1, no
