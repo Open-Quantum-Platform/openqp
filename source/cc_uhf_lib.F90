@@ -180,7 +180,10 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
   real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
   real(dp), allocatable :: gmnef(:,:,:,:)
-  integer :: no2, nv2
+  ! DIIS history over the concatenated (t1,t2) vector and its residual.
+  real(dp), allocatable :: dv(:,:), de(:,:), bmat(:,:), rhs(:)
+  integer, allocatable :: ipiv(:)
+  integer :: no2, nv2, namp, ndiis, ndim, nvec, pos, ii, jj, info
   integer  :: no, nv, i, j, k, a, b, c, m, n, e, f_, it
   real(dp) :: s_, d, eold, rms, dia, dijab
 
@@ -210,6 +213,14 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     d = eso(i) + eso(j) - eso(no+a) - eso(no+b)
     t2(i,j,a,b) = g(i,j,no+a,no+b) / d
   end do; end do; end do; end do
+
+  ! DIIS.  Without it these equations take 40-50 iterations; the closed-shell
+  ! solver reaches the same tolerance in 15-20 with it.  Eight vectors is the
+  ! same subspace size cc_lib uses.
+  namp = no*nv + no*no*nv*nv
+  ndiis = 8
+  allocate(dv(namp,ndiis), de(namp,ndiis))
+  nvec = 0
 
   eold = 0.0_dp
 
@@ -381,6 +392,47 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     end do; end do; end do; end do
 
     rms = sqrt(sum((t1n-t1)**2) + sum((t2n-t2)**2))
+
+    ! Push (amplitude, residual) onto the DIIS subspace, oldest evicted.
+    if (ndiis > 0) then
+      if (nvec < ndiis) then
+        nvec = nvec + 1
+        pos = nvec
+      else
+        dv(:,1:ndiis-1) = dv(:,2:ndiis)
+        de(:,1:ndiis-1) = de(:,2:ndiis)
+        pos = ndiis
+      end if
+      dv(1:no*nv, pos) = reshape(t1n, [no*nv])
+      dv(no*nv+1:namp, pos) = reshape(t2n, [no*no*nv*nv])
+      de(1:no*nv, pos) = reshape(t1n-t1, [no*nv])
+      de(no*nv+1:namp, pos) = reshape(t2n-t2, [no*no*nv*nv])
+
+      if (nvec > 1) then
+        ndim = nvec + 1
+        allocate(bmat(ndim,ndim), rhs(ndim), ipiv(ndim))
+        bmat = 0.0_dp
+        do ii = 1, nvec
+          do jj = 1, nvec
+            bmat(ii,jj) = dot_product(de(:,ii), de(:,jj))
+          end do
+        end do
+        bmat(1:nvec, ndim) = -1.0_dp
+        bmat(ndim, 1:nvec) = -1.0_dp
+        rhs = 0.0_dp
+        rhs(ndim) = -1.0_dp
+        call dgesv(ndim, 1, bmat, ndim, ipiv, rhs, ndim, info)
+        if (info == 0) then
+          t1n = 0.0_dp; t2n = 0.0_dp
+          do ii = 1, nvec
+            t1n = t1n + rhs(ii)*reshape(dv(1:no*nv,ii), [no,nv])
+            t2n = t2n + rhs(ii)*reshape(dv(no*nv+1:namp,ii), [no,no,nv,nv])
+          end do
+        end if
+        deallocate(bmat, rhs, ipiv)
+      end if
+    end if
+
     t1 = t1n; t2 = t2n
 
     e_ccsd = 0.0_dp
@@ -400,6 +452,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   if (do_triples) call triples(e_t)
 
   deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef)
+  if (allocated(dv)) deallocate(dv, de)
 
 contains
 
