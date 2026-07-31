@@ -64,7 +64,7 @@ contains
     real(kind=dp), allocatable :: ovov(:,:,:,:), ovvv(:,:,:,:), vvvv(:,:,:,:)
 
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
-    real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb
+    real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
     logical :: converged, do_t
 
     open(unit=iw, file=infos%log_filename, position="append")
@@ -175,7 +175,8 @@ contains
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                          pe, opts, e_ccsd, e_t, converged)
+                          pe, opts, e_ccsd, e_t, converged, &
+                          time_ccsd=t_ccsd, time_triples=t_trip)
 
     deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv, cmo, eo, ev)
 
@@ -195,6 +196,9 @@ contains
       write(iw,'(2X,A,F20.10)') 'E(CCSD(T), correlation)= ', e_ccsd + e_t
       write(iw,'(2X,A,F20.10)') 'E(CCSD(T), total)      = ', e_ref + e_ccsd + e_t
     end if
+    write(iw,'(2X,A)') repeat('-', 60)
+    write(iw,'(2X,A,F14.2,A)') 'CCSD iterations        = ', t_ccsd, ' s'
+    if (do_t) write(iw,'(2X,A,F14.2,A)') '(T) correction         = ', t_trip, ' s'
     write(iw,'(2X,60("="),/)')
 
     if (.not. converged) then

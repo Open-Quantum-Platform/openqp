@@ -22,28 +22,41 @@
 !>     contracted indices is always the fastest-running pair of one operand and
 !>     the slowest of the other -- no transposes inside the hot loops.
 !>   * The particle-particle ladder (the O(o^2 v^4) CCSD bottleneck) is blocked
-!>     over the last virtual index.  Blocking serves two purposes at once: the
+!>     over the last virtual index.  Blocking serves three purposes at once: the
 !>     t1-dressed ladder integrals are built one block at a time, so the second
-!>     v^4 array never exists, and the blocks form the unit of MPI work.
+!>     v^4 array never exists, and the blocks are the unit of both MPI and
+!>     OpenMP work.  The block size is capped so there are several blocks per
+!>     rank and per thread -- the memory target alone would hand back a single
+!>     block for moderate v and leave every worker but one idle.
 !>   * The (T) correction is parallelised over a >= b >= c virtual triples.
 !>     That is ~v^3/6 independent tasks -- far more than the o^3/6 of an
 !>     occupied-triple decomposition -- so the dynamic schedule stays balanced
 !>     out to large rank counts.  MPI takes a round-robin stripe of triples and
-!>     OpenMP consumes each rank's stripe with a dynamic schedule; BLAS is
-!>     pinned to one thread inside the region so the small per-triple DGEMMs do
-!>     not oversubscribe the cores.
+!>     OpenMP consumes each rank's stripe with a dynamic schedule.
+!>   * BLAS is pinned to a single thread for the whole solver.  Every hot region
+!>     is already threaded here, and letting a threaded BLAS open a second pool
+!>     underneath makes the idle pool spin-wait through the other's region --
+!>     measured ~2x slower on four cores, and worse than serial at the largest
+!>     thread count tested.  One pool, restored to the caller's setting on exit.
 !>
 !> Validated against PySCF RCCSD/CCSD(T) to better than 1e-10 Hartree.
 module cc_lib
 
   use precision, only: dp
   use parallel, only: par_env_t
+  use blas_thread, only: blas_thread_count, blas_thread_set
+  use, intrinsic :: iso_c_binding, only: c_int64_t
 
   implicit none
 
   private
   public :: cc_ccsd_t_energy
   public :: cc_options_t
+
+  !> Ladder blocks handed to each MPI rank.  More than one so a rank that
+  !> stalls does not hold up the reduction; small enough that the per-block
+  !> DGEMM stays large.
+  integer, parameter :: BLOCKS_PER_RANK = 4
 
   !> Runtime controls for the coupled-cluster solver.
   type :: cc_options_t
@@ -68,7 +81,8 @@ contains
 !> occupied-virtual block, which would otherwise enter the singles equation and
 !> the disconnected triples, vanishes.
 subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                            pe, opts, e_ccsd, e_t, converged)
+                            pe, opts, e_ccsd, e_t, converged, &
+                            time_ccsd, time_triples)
 
   integer, intent(in) :: no            !< correlated occupied orbitals
   integer, intent(in) :: nv            !< virtual orbitals
@@ -84,27 +98,68 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   real(dp), intent(out) :: e_ccsd
   real(dp), intent(out) :: e_t
   logical, intent(out) :: converged
+  !> Wall-clock seconds spent in the CCSD iterations and in the (T) correction.
+  real(dp), optional, intent(out) :: time_ccsd, time_triples
 
   real(dp), allocatable :: t1(:,:), t2(:,:,:,:)
+  real(dp) :: t0, t1w
+  integer(c_int64_t) :: nblas_save
 
   e_ccsd = 0.0_dp
   e_t = 0.0_dp
   converged = .false.
+  if (present(time_ccsd)) time_ccsd = 0.0_dp
+  if (present(time_triples)) time_triples = 0.0_dp
 
   if (no <= 0 .or. nv <= 0) return
 
   allocate(t1(no,nv), t2(no,no,nv,nv))
 
+  ! Both the CCSD iterations and the (T) correction drive their own OpenMP
+  ! regions and call BLAS from inside them.  Leaving BLAS threaded would run two
+  ! pools against each other -- whichever is idle spin-waits through the other's
+  ! region and burns the cores (measured ~2x slowdown on four cores).  Pin BLAS
+  ! to one thread for the whole solver and restore the caller's setting after.
+  nblas_save = blas_thread_count()
+  if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
+
+  call cc_wall_time(t0)
   call ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
                     pe, opts, t1, t2, e_ccsd, converged)
+  call cc_wall_time(t1w)
+  if (present(time_ccsd)) time_ccsd = t1w - t0
 
   if (opts%do_triples) then
+    call cc_wall_time(t0)
     call triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts, e_t)
+    call cc_wall_time(t1w)
+    if (present(time_triples)) time_triples = t1w - t0
   end if
+
+  if (nblas_save > 0) call blas_thread_set(nblas_save)
 
   deallocate(t1, t2)
 
 end subroutine cc_ccsd_t_energy
+
+!###############################################################################
+
+!> @brief OpenMP threads available to this region (1 without OpenMP).
+integer function nthreads_now() result(n)
+!$ use omp_lib, only: omp_get_max_threads
+  n = 1
+!$ n = omp_get_max_threads()
+end function nthreads_now
+
+!###############################################################################
+
+!> @brief Wall-clock seconds from the system clock.
+subroutine cc_wall_time(t)
+  real(dp), intent(out) :: t
+  integer(8) :: c, r
+  call system_clock(c, r)
+  t = real(c, dp) / real(r, dp)
+end subroutine cc_wall_time
 
 !###############################################################################
 
@@ -644,10 +699,9 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
   type(par_env_t), intent(inout) :: pe
   real(dp), intent(inout) :: t2n(no,no,nv,nv)
 
-  real(dp), allocatable :: Wblk(:,:,:,:), acc(:,:,:,:)
-  integer :: a, b, c, d, dd, k, d0, d1, nbd, nblk, iblk, bsize
+  real(dp), allocatable :: acc(:,:,:,:)
+  integer :: nblk, bsize
   integer :: no2, nv2
-  real(dp) :: s
 
   no2 = no*no
   nv2 = nv*nv
@@ -655,6 +709,16 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
   ! Target ~64 MB per dressed-integral block, at least one and at most all
   ! virtuals.  OQP_CC_LADDER_BLOCK overrides it (tuning and regression tests).
   bsize = max(1, min(nv, int(8.0e6_dp / real(max(1,nv2*nv),dp))))
+
+  ! The memory target alone says nothing about work granularity: for moderate
+  ! nv it yields a SINGLE block, which would leave every rank but one idle.
+  ! Under MPI, cap the block so there are several blocks per rank -- enough
+  ! chunks to spread and to absorb jitter.  Serial runs keep the large blocks,
+  ! where fewer, bigger DGEMMs are the faster choice.
+  if (pe%size > 1) then
+    bsize = max(1, min(bsize, nv / max(1, int(pe%size)*BLOCKS_PER_RANK)))
+  end if
+
   block
     character(len=32) :: sval
     integer :: ln, bs_env
@@ -664,46 +728,74 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
       if (ln == 0 .and. bs_env > 0) bsize = min(nv, bs_env)
     end if
   end block
+  ! Enough blocks that the OpenMP schedule below has something to balance, even
+  ! when memory alone would have asked for one big block.
+  if (nthreads_now() > 1) then
+    bsize = max(1, min(bsize, nv / max(1, nthreads_now()*BLOCKS_PER_RANK)))
+  end if
   nblk = (nv + bsize - 1) / bsize
 
-  allocate(Wblk(nv,nv,nv,bsize))
   allocate(acc(no,no,nv,nv), source=0.0_dp)
 
-  do iblk = 1, nblk
-    if (pe%size > 1) then
-      if (mod(iblk-1, int(pe%size)) /= int(pe%rank)) cycle
-    end if
-    d0 = (iblk-1)*bsize + 1
-    d1 = min(nv, d0 + bsize - 1)
-    nbd = d1 - d0 + 1
+  ! Parallelise over blocks rather than inside them.  Threading the block build
+  ! and then calling a threaded DGEMM alternates two thread pools, and the idle
+  ! one spin-waits through the other's region -- measured ~2x slowdown at four
+  ! cores.  One pool owning whole blocks, with BLAS pinned to a single thread
+  ! (restored by the caller), keeps every core on useful work.  Each thread
+  ! accumulates privately and the partial sums are combined once at the end.
+  !$omp parallel default(shared)
+  block
+    ! Declared inside the construct, so each thread gets its own instance --
+    ! an allocatable in a private() clause would arrive unallocated instead.
+    real(dp), allocatable :: Wblk(:,:,:,:), accloc(:,:,:,:)
+    integer :: a, b, c, d, dd, k, d0, d1, nbd, iblk
+    real(dp) :: s
+    allocate(Wblk(nv,nv,nv,bsize))
+    allocate(accloc(no,no,nv,nv), source=0.0_dp)
 
-    !$omp parallel do collapse(3) private(a,b,c,d,dd,k,s) schedule(static)
-    do dd = 1, nbd
-      do c = 1, nv
-        do b = 1, nv
-          do a = 1, nv
-            d = d0 + dd - 1
-            s = vvvv(a,c,b,d)
-            do k = 1, no
-              s = s - ovvv(k,d,a,c)*t1(k,b) - ovvv(k,c,b,d)*t1(k,a)
+    !$omp do schedule(dynamic,1)
+    do iblk = 1, nblk
+      if (pe%size > 1) then
+        if (mod(iblk-1, int(pe%size)) /= int(pe%rank)) cycle
+      end if
+      d0 = (iblk-1)*bsize + 1
+      d1 = min(nv, d0 + bsize - 1)
+      nbd = d1 - d0 + 1
+
+      do dd = 1, nbd
+        do c = 1, nv
+          do b = 1, nv
+            do a = 1, nv
+              d = d0 + dd - 1
+              s = vvvv(a,c,b,d)
+              do k = 1, no
+                s = s - ovvv(k,d,a,c)*t1(k,b) - ovvv(k,c,b,d)*t1(k,a)
+              end do
+              Wblk(a,b,c,dd) = s
             end do
-            Wblk(a,b,c,dd) = s
           end do
         end do
       end do
-    end do
-    !$omp end parallel do
 
-    ! acc(ij,ab) += sum_(c,dd) tau(ij,(c,d0+dd-1)) * Wblk((a,b),(c,dd))
-    call dgemm('n','t', no2, nv2, nv*nbd, 1.0_dp, tau(1,1,1,d0), no2, &
-               Wblk, nv2, 1.0_dp, acc, no2)
-  end do
+      ! accloc(ij,ab) += sum_(c,dd) tau(ij,(c,d0+dd-1)) * Wblk((a,b),(c,dd))
+      call dgemm('n','t', no2, nv2, nv*nbd, 1.0_dp, tau(1,1,1,d0), no2, &
+                 Wblk, nv2, 1.0_dp, accloc, no2)
+    end do
+    !$omp end do
+
+    !$omp critical
+    acc = acc + accloc
+    !$omp end critical
+
+    deallocate(Wblk, accloc)
+  end block
+  !$omp end parallel
 
   if (pe%size > 1) call pe%allreduce(acc, size(acc))
 
   t2n = t2n + acc
 
-  deallocate(Wblk, acc)
+  deallocate(acc)
 
 end subroutine ladder_contraction
 
@@ -813,8 +905,6 @@ end subroutine diis_extrapolate
 !> inside the parallel region so the per-triple DGEMMs do not oversubscribe.
 subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts, e_t)
 
-  use blas_thread, only: blas_thread_count, blas_thread_set
-  use, intrinsic :: iso_c_binding, only: c_int64_t
 !$ use omp_lib
 
   integer, intent(in) :: no, nv
@@ -834,7 +924,6 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
 
   integer :: i, j, k, a, b, c, f, m, no3
   integer :: ntask, itask
-  integer(c_int64_t) :: nblas
   integer, allocatable :: ta(:), tb(:), tc(:)
   real(dp) :: et_local
 
@@ -936,9 +1025,6 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
     flush(opts%iw)
   end if
 
-  nblas = blas_thread_count()
-  if (nblas > 0) call blas_thread_set(1_c_int64_t)
-
   et_local = 0.0_dp
 
   !$omp parallel default(shared) reduction(+:et_local)
@@ -1027,8 +1113,6 @@ subroutine triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts
     deallocate(w, v, z, d3)
   end block
   !$omp end parallel
-
-  if (nblas > 0) call blas_thread_set(nblas)
 
   e_t = 2.0_dp * et_local
   if (pe%size > 1) call pe%allreduce(e_t, 1)
