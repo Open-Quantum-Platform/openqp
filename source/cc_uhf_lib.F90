@@ -179,11 +179,15 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), allocatable :: tau(:,:,:,:), taut(:,:,:,:)
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
   real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
+  real(dp), allocatable :: gmnef(:,:,:,:)
+  integer :: no2, nv2
   integer  :: no, nv, i, j, k, a, b, c, m, n, e, f_, it
   real(dp) :: s_, d, eold, rms, dia, dijab
 
   no = nocc
   nv = nso - nocc
+  no2 = no*no
+  nv2 = nv*nv
   e_ccsd = 0.0_dp; e_t = 0.0_dp; converged = .false.; niter = 0
   if (no <= 0 .or. nv <= 0) return
 
@@ -191,6 +195,14 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   allocate(tau(no,no,nv,nv), taut(no,no,nv,nv))
   allocate(Fae(nv,nv), Fmi(no,no), Fme(no,nv))
   allocate(Wmnij(no,no,no,no), Wabef(nv,nv,nv,nv), Wmbej(no,nv,nv,no))
+
+  ! <mn||ef> over the correlated blocks.  It is constant, it is what every
+  ! O(n^6) contraction below multiplies, and slicing it out of g once turns
+  ! those contractions into single DGEMMs on contiguous memory.
+  allocate(gmnef(no,no,nv,nv))
+  do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
+    gmnef(i,j,a,b) = g(i,j,no+a,no+b)
+  end do; end do; end do; end do
 
   ! MP1 amplitudes: t1 vanishes for a semicanonical reference.
   t1 = 0.0_dp
@@ -248,22 +260,22 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       do e = 1, nv
         s_ = s_ + t1(j,e)*g(m,n,i,no+e) - t1(i,e)*g(m,n,j,no+e)
       end do
-      do f_ = 1, nv; do e = 1, nv
-        s_ = s_ + 0.25_dp*tau(i,j,e,f_)*g(m,n,no+e,no+f_)
-      end do; end do
       Wmnij(m,n,i,j) = s_
     end do; end do; end do; end do
+    ! Wmnij(mn,ij) += 1/4 <mn||ef> tau(ij,ef)
+    call dgemm('n','t', no2, no2, nv2, 0.25_dp, gmnef, no2, tau, no2, &
+               1.0_dp, Wmnij, no2)
 
     do f_ = 1, nv; do e = 1, nv; do b = 1, nv; do a = 1, nv
       s_ = g(no+a,no+b,no+e,no+f_)
       do m = 1, no
         s_ = s_ - t1(m,b)*g(no+a,m,no+e,no+f_) + t1(m,a)*g(no+b,m,no+e,no+f_)
       end do
-      do n = 1, no; do m = 1, no
-        s_ = s_ + 0.25_dp*tau(m,n,a,b)*g(m,n,no+e,no+f_)
-      end do; end do
       Wabef(a,b,e,f_) = s_
     end do; end do; end do; end do
+    ! Wabef(ab,ef) += 1/4 tau(mn,ab)^T <mn||ef>
+    call dgemm('t','n', nv2, nv2, no2, 0.25_dp, tau, no2, gmnef, no2, &
+               1.0_dp, Wabef, nv2)
 
     do j = 1, no; do e = 1, nv; do b = 1, nv; do m = 1, no
       s_ = g(m,no+b,no+e,j)
@@ -339,9 +351,6 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       do n = 1, no; do m = 1, no
         s_ = s_ + 0.5_dp*tau(m,n,a,b)*Wmnij(m,n,i,j)
       end do; end do
-      do f_ = 1, nv; do e = 1, nv
-        s_ = s_ + 0.5_dp*tau(i,j,e,f_)*Wabef(a,b,e,f_)
-      end do; end do
 
       ! P(ij)P(ab) [ t2_imae Wmbej - t1_ie t1_ma <mb||ej> ]
       do e = 1, nv; do m = 1, no
@@ -358,8 +367,17 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
         s_ = s_ - t1(m,a)*g(m,no+b,i,j) + t1(m,b)*g(m,no+a,i,j)
       end do
 
+      t2n(i,j,a,b) = s_
+    end do; end do; end do; end do
+
+    ! Ladder: t2n(ij,ab) += 1/2 tau(ij,ef) Wabef(ab,ef).  This is the
+    ! O(o^2 v^4) bottleneck and the one term worth a DGEMM above all others.
+    call dgemm('n','t', no2, nv2, nv2, 0.5_dp, tau, no2, Wabef, nv2, &
+               1.0_dp, t2n, no2)
+
+    do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
       dijab = eso(i) + eso(j) - eso(no+a) - eso(no+b)
-      t2n(i,j,a,b) = s_ / dijab
+      t2n(i,j,a,b) = t2n(i,j,a,b) / dijab
     end do; end do; end do; end do
 
     rms = sqrt(sum((t1n-t1)**2) + sum((t2n-t2)**2))
@@ -381,7 +399,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   ! --- (T) -----------------------------------------------------------------
   if (do_triples) call triples(e_t)
 
-  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej)
+  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef)
 
 contains
 
