@@ -16,7 +16,7 @@ description = "Python bindings for the Open Quantum Platform (Fortran core + Pyt
 authors = [{ name = "Mohsen Mazaherifar", email = "moh.mazaheri@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "GPLv3" }
+license = { file = "LICENSE" }
 
 dependencies = [
   "numpy>=1.20.0",

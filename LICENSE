@@ -1,43 +1,182 @@
-# Licensing Terms for Open Quantum Platform (OpenQP)
+# OpenQP Research License 1.0
 
-## Overview
+Copyright (c) Open Quantum Inc. and contributors. All rights reserved.
 
-The Open Quantum Platform (OpenQP) is distributed under an open-source license for academic and non-commercial use. To sustain its development, a dual licensing model has been adopted, allowing users to choose between a free open-source license or a commercial license for proprietary use. Revenue from commercial licenses directly supports the ongoing development of OpenQP.
+This OpenQP Research License (the "Research License") is one of two licensing
+options for the Open Quantum Platform software and accompanying materials
+(collectively, "OpenQP"). OpenQP is source-available, but it is not offered as
+open-source software under this Research License.
 
-OpenQP is offered under two distinct licensing options:
+## 1. Licensor and Licensed Software
 
-1. **Open Source License**: GNU General Public License v3 (GPLv3)
-2. **Commercial License**: For proprietary use of OpenQP
+"Licensor" means Open Quantum Inc., but only for the portions of OpenQP for
+which Open Quantum Inc. owns the copyright or otherwise has sufficient legal
+authority to grant this Research License.
 
-Please review the sections below to determine which license applies to your use of OpenQP.
+"Licensed Software" means the version of OpenQP distributed with this Research
+License, excluding Third-Party Materials under Section 10.
 
----
+## 2. Dual-licensing options
 
-## 1. Open Source License
+The Licensed Software is available under either:
 
-Open Quantum Platform (OpenQP) is licensed under the GNU General Public License v3.0 (GPLv3). This license allows you to freely use, modify, and distribute the software, provided that any derivative works are also licensed under the GPLv3. 
+1. this Research License, solely for Qualified Non-Commercial Research Use; or
+2. a separate commercial license executed in writing by Licensor.
 
-For the full terms of the GNU General Public License v3, please visit: <https://www.gnu.org/licenses/gpl-3.0.html>.
+No GNU General Public License or other open-source license is offered for the
+Licensed Software distributed with this Research License. Section 11 addresses
+copies of earlier OpenQP versions that were previously released under GPLv3.
 
----
+## 3. Qualified users and permitted purpose
 
-## 2. Commercial License
+A "Qualified User" is:
 
-A commercial license allows for proprietary use of OpenQP without the obligation to distribute derivative works under the GPLv3. This is ideal for companies or individuals who wish to incorporate OpenQP into proprietary software.
+- an individual acting solely in an independent academic or educational
+  capacity; or
+- a public or nonprofit educational or research institution acting solely
+  through its employees, faculty members, researchers, or enrolled students.
 
-If you intend to use OpenQP in a proprietary product or service and prefer not to distribute your derivative works under the GPLv3, you must obtain a commercial license.  
-To inquire about a commercial license, please contact Cheol Ho Choi at [cheolho.choi@gmail.com](mailto:cheolho.choi@gmail.com).
+"Qualified Non-Commercial Research Use" means internal use solely for
+independent academic research, scholarly publication, or classroom teaching,
+where the use is not undertaken for, on behalf of, at the direction of, or for
+the material benefit of a Commercial Entity.
 
----
+A "Commercial Entity" means any for-profit entity and its affiliates, and any
+person or organization acting as its employee, contractor, consultant, agent,
+service provider, or research partner for the relevant activity.
 
-## 3. Disclaimer of Warranty
+Research is not Qualified Non-Commercial Research Use if a Commercial Entity
+funds, commissions, directs, controls, receives preferential access to, or
+holds commercial rights in the work or its results. General charitable gifts
+that create no such rights or control do not, by themselves, disqualify the
+research.
 
-OpenQP is provided "as is," without any express or implied warranties, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, and non-infringement. The authors or copyright holders shall not be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
+## 4. Research license grant
 
----
+Subject to continuous compliance with this Research License, Licensor grants a
+Qualified User a limited, worldwide, royalty-free, non-exclusive,
+non-transferable, and non-sublicensable license to reproduce, install, run, and
+modify the Licensed Software solely for Qualified Non-Commercial Research Use.
 
-## 4. Contact Information
+A qualifying institution may allow its personnel who are Qualified Users to
+exercise these rights on systems under that institution's control, provided
+that the institution is responsible for their compliance.
 
-For any questions regarding licensing, please contact Cheol Ho Choi at [cheolho.choi@gmail.com](mailto:cheolho.choi@gmail.com).
+Qualified Users may publish scientific results, papers, and data produced by
+using the Licensed Software, provided those materials do not contain or
+distribute the Licensed Software or a substantial portion of it.
 
----
+## 5. Uses requiring a commercial license
+
+Unless Licensor has first executed a separate written commercial license, no
+person or entity may use the Licensed Software:
+
+- by, for, on behalf of, or for the benefit of a Commercial Entity, including
+  internal research, evaluation, benchmarking, proof-of-concept work, or R&D;
+- in connection with consulting, contract research, sponsored research,
+  fee-for-service work, or any revenue-generating or commercially advantageous
+  activity;
+- to develop, test, validate, support, operate, or provide a commercial product,
+  process, patent, service, or production decision;
+- as a hosted, cloud, bureau, platform, or remote-access service;
+- in safety-critical or production operations; or
+- for any purpose outside Qualified Non-Commercial Research Use.
+
+Commercial scope, fees, support, warranties, and other negotiated terms are
+provided only in a separate written agreement or quote. Publication of source
+code or possession of a copy does not waive the commercial-license requirement.
+
+## 6. Restrictions
+
+Except as expressly allowed in Section 4 or in a separate written agreement,
+you may not:
+
+- distribute, sell, rent, lease, lend, sublicense, transfer, assign, or make the
+  Licensed Software or modifications available to any third party;
+- remove or alter copyright, attribution, trademark, license, or provenance
+  notices;
+- use OpenQP or Open Quantum Inc. names or marks to state or imply endorsement;
+  or
+- circumvent technical measures used to control access to or use of OpenQP.
+
+All rights not expressly granted are reserved. No patent, trademark, trade
+secret, or other intellectual-property license is granted by implication,
+estoppel, exhaustion, or otherwise.
+
+## 7. Modifications and contributions
+
+A Qualified User may create modifications only for the permitted internal use
+in Section 4. This Research License does not permit distribution of those
+modifications.
+
+Do not submit code, patches, or other material for inclusion in OpenQP unless
+the contribution is covered by a separate contributor agreement accepted by
+Licensor. A submission by itself does not transfer ownership to Licensor and
+does not expand this Research License. Licensor may reject, quarantine, or
+remove material whose ownership or licensing is unclear.
+
+## 8. Compliance and termination
+
+On Licensor's reasonable written request, a user must promptly certify whether
+its use qualifies under this Research License and provide information
+reasonably sufficient to verify that certification.
+
+This Research License terminates automatically upon breach. If the breach is
+capable of cure, Licensor may, in its sole discretion, reinstate the license in
+writing after complete cure. Upon termination, the user must immediately stop
+using the Licensed Software and delete all copies and modifications, except for
+archival copies required by law and inaccessible for further use.
+
+Unauthorized use may cause irreparable harm for which monetary damages are
+inadequate. Licensor may seek injunctive or other equitable relief in addition
+to any other available remedy.
+
+## 9. Disclaimer and limitation of liability
+
+THE LICENSED SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY
+OF ANY KIND, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING WARRANTIES OF TITLE,
+NON-INFRINGEMENT, MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY,
+SECURITY, OR RESULTS.
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, LICENSOR AND CONTRIBUTORS WILL NOT BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, CONSEQUENTIAL,
+OR PUNITIVE DAMAGES, OR FOR LOSS OF DATA, PROFITS, REVENUE, BUSINESS, OR
+GOODWILL, ARISING FROM OR RELATED TO OPENQP, EVEN IF ADVISED OF THE POSSIBILITY
+OF SUCH DAMAGES.
+
+## 10. Third-Party Materials
+
+OpenQP may include or depend on libraries, data, models, or other materials
+owned by third parties ("Third-Party Materials"). Those materials are governed
+solely by their respective license terms and notices. This Research License
+does not relicense them or restrict rights granted directly by their owners.
+Users are responsible for identifying and complying with applicable third-party
+terms.
+
+## 11. Earlier GPL-licensed copies
+
+This Research License applies prospectively to a copy of OpenQP distributed
+with it. It does not revoke, narrow, or replace rights validly granted for a
+copy of an earlier OpenQP version that a recipient obtained under GNU GPLv3.
+That earlier copy remains governed by the license that accompanied it.
+
+No right to updates, upgrades, new releases, support, trademarks, or separately
+licensed materials arises from possession of an earlier GPL-licensed copy.
+
+## 12. General terms
+
+This Research License is governed by the laws of the Republic of Korea,
+without regard to conflict-of-laws rules. To the extent permitted by applicable
+law, the courts located in Daegu, Republic of Korea have exclusive jurisdiction
+over disputes arising from this Research License.
+
+If any provision is held unenforceable, it will be enforced to the maximum
+permitted extent and the remaining provisions will remain effective. Failure
+to enforce a provision is not a waiver. This Research License is the entire
+agreement governing the rights it grants and may be amended only in a writing
+signed by Licensor. Headings are for convenience only.
+
+## 13. Commercial licensing contact
+
+For commercial licensing, written evaluation permission, or other permissions,
+contact Cheol Ho Choi at <cheolho.choi@gmail.com>.
