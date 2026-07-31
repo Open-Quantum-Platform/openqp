@@ -584,3 +584,25 @@ PT -- whose skeleton pieces (esum 1e/2e/XC + bilinear 2e) the branch
 already FD-validated -- plus the transport-gauge term and L:U^x via the
 interstate z-vector. The v4 scaffold remains the exact referee for each
 replacement step.
+
+### 7.14 Ladder A2: the response target quantified (2026-07-31, closing)
+Scaffold amplitude term vs the ANALYTIC Fortran skeletons (mrsf_nac_amp
+bilinear 2e + mrsf_nac_esum 1e/2e/XC), H2O:
+- (2,3): amp2e/gap anti-parallel at cos -0.9986, 4.4x -- the giant
+  cancellation structure; esum small here.
+- S0 pairs (1,2)/(1,3): skeleton/gap is 100-2000x the scaffold amp -- the
+  response term must cancel it almost exactly (matches branch Sec.6
+  quantitatively, now in the proven convention frame).
+- Residual-vs-wsx cos = +-1.000000 is SYMMETRY-FORCED (C2v irrep blocks
+  are 1-D; branch landmine #4) -- only ratios are diagnostic: 2.84 / 72.9
+  / 1.79. wsx alone does not close the residual; the antisymmetric part
+  requires the interstate z-vector, as the Lagrangian derivation says.
+Structural conclusion: the amplitude residual = L:U^x/gap with the SAME
+U^x entering gamma:T. One z-vector infrastructure closes both. THE single
+remaining derivation: the interstate orbital gradient L of the matvec
+(assemble from the Phase-11-verified ingredients G_MO/fa/fb in the
+unfolded representation), then per-pair z-vector via the existing hook,
+then C1 validation (ethylene MECI) where cosines are meaningful.
+
+Frozen per-pair z-vector targets (this run's gauge):
+  (1,2) |resid| = 1.157*gap;  (1,3) 0.529*gap;  (2,3) 3.097*gap.
