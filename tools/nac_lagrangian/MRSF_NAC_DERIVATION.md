@@ -765,3 +765,55 @@ Ltot = L + gap*gamma_a (derivation 4.2) and contract once -- the
 split-conditioning problem never arises, and every ingredient of Ltot is
 now individually verified. The term-split gates (A2-A11) exist to certify
 the ingredients, not to be the production path.
+
+### 7.24 The production-candidate gates: skeleton CERTIFIED, six-term scatter localized
+First production-candidate assembly (analytic_nac_gate.py: skel/gap + zL
++ zG + ov) gave right DIRECTIONS but wrong magnitudes (H2O 5-14x, ETH
+0.5-1.5x). Term diagnostics (analytic_nac_diag/diag2.py) then localized
+everything:
+
+(1) gamma push/read conventions CERTIFIED PERFECT: the engine's own
+    OQP::nac_trden_mo echo == pushed gamma^closed blockwise to 0.0e0 on
+    both molecules. Python-created 3-D tagarrays keep their dims verbatim
+    on the Fortran side (numpy (nbf^2,ns,ns) -> Fortran (nbf^2,ns,ns);
+    the reversal happens only for FORTRAN-created records read into
+    numpy). New landmine entry.
+(2) OQP::nac_wsx = -Tr[W^IJ S^x] exists (exported by mrsf_nac_esum,
+    Fock-weighted, the large-esum canceller) and was MISSING from the
+    first assembly.
+(3) Six-term unit sums [amp,esum,wsx,zL,zG,ov] still do NOT close
+    (12-66%), but the LSQ fit residual on C1 ethylene is 0.2-1.9% =>
+    the six engines SPAN d_num almost completely; the term DEFINITIONS
+    mix content (coefficients scatter per pair).
+
+FROZEN-MO SKELETON GATE (skel_gate.py) -- the decisive split. Freeze C,
+X, D at the reference; displace geometry; 1-iter SCF from the reference
+json guess (=> FOCK = F(x')[D_ref]); push frozen C; matvec the bilinear
+E_IJ(x') = X_I^T A(x') X_J. Sanity: E_ref == diag(omega) to 8 digits.
+VERDICT (H2O): FD_skel == amp2e + esum, cos +1.000000 ALL pairs,
+maxdiff ~1e-5 = FD truncation. amp2e+esum is EXACTLY the skeleton
+derivative, Gamma conventions included; wsx does NOT belong to the
+skeleton (adding it breaks the match). ALL remaining error lives in the
+response/CSF bookkeeping.
+
+### 7.25 Exact-term assembly v3 (no fitted constants, no unknown objects)
+The interstate Hellmann-Feynman identity fixes every term:
+
+  d_IJ = [skel_IJ + M^IJ : U^x]/gap_IJ + gamma^IJ : (Sk_MO + U^x)
+
+with M^IJ the FULL unrestricted orbital derivative of E_IJ, available
+from the frozen A8/A10 generator sweeps: M = La + Ls (La antisym part,
+Ls symmetric part incl diagonal; conventions verified against the sweep
+staging line by line). PT identity: <X_I|dX_J> = X_I^T dA X_J/gap
+EXACTLY (project the first-order PT sum onto X_I: only K=I survives).
+Same-space antisym responses need no special handling here because the
+exact FD U^x carries them; production replaces U^x contractions with
+(i) ONE z-vector, combined antisym RHS [M + gap*gamma]_a via the
+orbgrad hook (the hook antisymmetrizes internally), (ii) the symmetric
+part -1/2 Tr[(M_sym)S^x_MO] via dSfull, (iii) same-space antisym via
+the canonical chain U_ss = (eps S^x - Phi)/(deps) with Phi = F^x_skel +
+G[dD] interchanged into one extra z-solve, (iv) gamma-side bookkeeping
+via the certified ov engine + gamma_a z-RHS. New export NAC_DUMP_DS
+(OQP::dbg_dsket/dbg_dsfull, bfnrm applied) supplies Sk/S^x matrices.
+Gate = assembly_v3.py: C1 sym(U^x)==-1/2 S^x_MO; C2 amplitude part vs
+frozen d_amp; C3 full d vs d_num, SIGNED.
