@@ -937,3 +937,40 @@ object certified. Remaining work is ENGINEERING ONLY:
         G[dD] + gamma:U^x) via ONE combined-RHS z-vector per pair;
   (iii) closed-form G_met from the kernel (replace the unit sweep);
   (iv)  rewire analytical_nac(), refreeze references, extend the suite.
+
+### 7.30 Production engineering: chain-polarization RULED OUT; the v7 plan
+Toward replacing the FD ingredients (w_U, U^x channels) analytically:
+
+(a) v5 (v5_prod_h2o.py): MINRES ytil == eigen to 2.6e-9 (production
+    solve path OK). SLOT INJECTION works: pushing ytil into a bvec slot
+    makes the existing bilinear engines (amp2e/esum/wsx) compute the
+    (ytil, X_J) pair objects with NO new Fortran -- certified against
+    ytil.w_skel at 1e-5 (gate G-A). The v5 piecewise assembly
+    [engines + combined-RHS seam + gamma:Sk] reaches (1,2) 5% but
+    misses the 2e-W-sym and same-space channels elsewhere.
+(b) v5b/v5c/v6/v6b: polarizing the WHOLE production gradient chain
+    (4-term bilinear extraction; +1/2 g(0) constant is REQUIRED -- the
+    3-term form leaves -g0/2) REPRODUCES the exact bilinear for the
+    (2,3) pair (2.4%) but FAILS for S0 pairs: the channel split shows
+    a spurious net from imperfect cancellation between the z/P channel
+    (+0.59) and the W channel (-0.44). The chain's internal elimination
+    bookkeeping is STATE-SPECIFIC (normalization/eigen assumptions),
+    not bilinear-safe. W build (mrsfrowcal) itself has no omega terms.
+    VERDICT: do not polarize the chain; assemble the interstate terms
+    explicitly (the v5 route) and complete the two missing channels.
+(c) The missing analytic tool is G[P] for an arbitrary symmetric
+    density. NO new Fortran needed for the gate: OQP_SCF_GUESS_D
+    (the #154 native density guess) + 1-iteration SCF gives
+    F[D + eps P] and hence G[P] by FD in eps. Production later adds a
+    clean bind(C) wrapper around fock_jk.
+(d) v7 plan: (i) sym channel -1/2 Mt_sym:S^x per coordinate via TWO
+    frozen-Fock matvec directional derivatives along V_c = -1/2 S^x_MO
+    PLUS the G-channel Tr[dD(V_c) G[P_F(ytil,X)]] (one G build/pair);
+    (ii) same-space antisym canonical chain: Q_ss = [Mt+gamma]_a/deps;
+    direct (eps S^x - F^x_skel) contraction (F^x_skel from the skel
+    workers' FOCK export) + one extra seam solve with RHS = G[Q_ss];
+    (iii) judge on H2O, then ethylene.
+
+NOTE (session hygiene): a parallel session checked out another branch
+in the primary clone; nac-lagrangian work continues in the dedicated
+worktree repo_nac/. All refs intact; chc3 mirror unaffected.
