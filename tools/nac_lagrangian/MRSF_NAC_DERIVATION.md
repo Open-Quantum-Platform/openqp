@@ -1186,3 +1186,32 @@ REMAINING HYPOTHESES for the reproducible -3%/-3%/+13% J1 deficit:
 NEXT: probe (i) by rebuilding one displaced F(x')[D_ref] via the CLEAN
 hf_energy route inside a worker and diffing the FOCK records; then (ii)
 by an h-refined skel worker pair. All tools exist.
+
+### 7.39 h-SCALING VERDICT: the J1 deficit is a REAL first-order channel
+v7o (one process, dual-h sweeps): the deficit is h-INDEPENDENT
+  (1,2): 0.03355 -> 0.03341 (h -> h/2);  (2,3): 0.3968 -> 0.3952.
+NOT central-FD truncation. Combined with 7.38's eliminations and the
+machine-level identity d_num == ytil.w_ref + gamma:(Sk+Ux) (v3g W5 +
+the adjoint identity), the FULL COHERENCE CHAIN is:
+  v3g total(machine) - J3 total == J1 deficit exactly
+  => the deficit is the AMP-CHANNEL LINEARIZATION GAP:
+     ytil.(w_ref - w_skel)  is NOT fully representable as  Mt : Ux
+     with Mt = [C-rotation staging + G[dD]-channel], even though every
+     record dependence of the matvec (VEC_MO, FOCK, E_MO, DM, SM) is
+     accounted for. The missing content is h-independent, reproducible,
+     and lives disproportionately on the near-degenerate pair.
+Working hypothesis for its origin: frame/cluster mixing content in the
+displaced-frame objects that cancels in the gauge-invariant TOTAL but
+not in the (Mt, Ux) split; alternatively a genuine cross term outside
+the (theta at x=0) linearization. Either way, PRODUCTION IMPLICATION:
+do not build the amp channel from Mt:U. The two clean production
+routes for the amp channel are
+  (A) the derivative-sigma VECTOR engine: assemble w = (dA/dx) X
+      directly in Fortran (derivative-ERI/Fock sigma build; the
+      existing amp/esum engines are its TRACES) and contract with ytil
+      -- exact by construction, no U-decomposition at all; or
+  (B) keep the certified FD w_ref for validation and derive (A)
+      against it.
+The gamma channel is fully production-certified (seam + V-mask + Sk).
+Data for the Delta-structure hunt: H2O_energy_tlf0_v7o.npz (Ux1/Ux2/
+w1/w2 + all matrices, one frame).
