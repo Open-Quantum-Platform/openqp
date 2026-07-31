@@ -711,3 +711,24 @@ COMPLETE: conventions proven, formula replicated, gamma derived,
 decomposition proven on C2v AND C1, amplitude closed scan-free, response
 operational through the production z-vector. Remaining work is Fortran
 residency and packaging only.
+
+### 7.21 Section C1 DONE + C2 partial (ethylene response closure)
+C1 -- gamma^formula CLOSED FORM: cofactor-sensitivity assembly (adjugate
+of the reference minors x multilinear contraction partials) matches the
+generator sweep at MACHINE PRECISION (1.7e-13/5.2e-13/6.3e-14) after
+fixing the s_ia sensitivity index map to the LITERAL overwrite layout
+(clean-list rows were 6-long for socc-row minors -- the same trap as
+7.9). The O(nbf^2)-sweep is replaced by one linear-algebra pass;
+production-scalable.
+
+C2 -- ethylene amplitude closure (restricted sweep): PARTIAL.
+(1,2) 78.8% physical (93.6% with s1=-1), (1,3) 22-31%, (2,3) fails
+(near-degenerate; zB overshoots 2x with wrong sign). Open items, precise:
+ (a) unrestricted same-space sweep (vv/dd may matter in the amp-dominant
+     regime, unlike H2O);
+ (b) near-degenerate pair handling in the seam (CPHF conditioning +
+     /gap amplification);
+ (c) zB sign bookkeeping per pair/target ordering in the gradient seam.
+Referees: v4-ethylene scaffold (7.20, 0.02-1.2%) stands regardless --
+the DECOMPOSITION is C1-proven; only the response-term SPLIT needs the
+remaining bookkeeping.
