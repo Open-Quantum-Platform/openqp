@@ -12,7 +12,7 @@ class MRSFNACSymmetricUTests(unittest.TestCase):
             ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
         ).read_text()
         body = source.split(
-            "subroutine mrsf_nac_rohf_pair_overlap(infos)", 1
+            "subroutine mrsf_nac_rohf_pair_overlap(infos, metric_only)", 1
         )[1].split("end subroutine mrsf_nac_rohf_pair_overlap", 1)[0]
         self.assertIn("overlap_weight(p,p) = -0.5_dp*xmat(p,p)", body)
         self.assertIn(

@@ -10,6 +10,7 @@ GRADIENT = ROOT / "source" / "modules" / "tdhf_mrsf_gradient.F90"
 ENERGY = ROOT / "source" / "modules" / "tdhf_mrsf_energy.F90"
 INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
 SCF_ADDONS = ROOT / "source" / "scf_addons.F90"
+DRIVER = ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
 
 
 def _body(source, name):
@@ -115,4 +116,49 @@ def test_pair_overlap_reverse_transforms_weights_once_per_pair():
     )
     np.testing.assert_allclose(
         np.sum(gamma_ao * dsket), original_gsk, rtol=0.0, atol=5.0e-14
+    )
+
+
+def test_metric_only_reverse_reproduces_ordered_pair_antisymmetry():
+    overlap = _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_pair_overlap")
+    driver = _body(DRIVER.read_text(), "mrsf_nac_lagrangian")
+    assert "if (.not. only_metric) then" in overlap
+    assert "xmat = gamma" in overlap
+    direct_record_reads = overlap.split("if (.not. only_metric) then", 1)[1]
+    assert "tag_mt_frozen" in direct_record_reads
+    assert "tag_mt_response" in direct_record_reads
+    assert "metric_only=.true." in driver
+    assert "gamma_pair = pair_sign*gamma_column(:,istate)" in driver
+
+    # Let R and O stand for arbitrary linear RHS and coordinate projections.
+    # The identity therefore proves the production folding independently of
+    # the particular ROHF tangent and overlap contraction implementations.
+    rng = np.random.default_rng(91)
+    nmat, nrhs, ncoord = 13, 7, 9
+    direct = rng.standard_normal(nmat)
+    gamma_ij = rng.standard_normal(nmat)
+    gamma_ji = rng.standard_normal(nmat)
+    rhs_projection = rng.standard_normal((nrhs, nmat))
+    overlap_projection = rng.standard_normal((ncoord, nmat))
+    direct_coordinates = rng.standard_normal(ncoord)
+
+    ordered_ij = direct + gamma_ij
+    ordered_ji = -direct + gamma_ji
+    old_rhs = 0.5 * rhs_projection @ (ordered_ij - ordered_ji)
+    new_rhs = (
+        rhs_projection @ (direct + 0.5 * gamma_ij)
+        + rhs_projection @ (-0.5 * gamma_ji)
+    )
+    old_coordinates = 0.5 * (
+        (direct_coordinates + overlap_projection @ ordered_ij)
+        - (-direct_coordinates + overlap_projection @ ordered_ji)
+    )
+    new_coordinates = (
+        direct_coordinates
+        + overlap_projection @ (direct + 0.5 * gamma_ij)
+        + overlap_projection @ (-0.5 * gamma_ji)
+    )
+    np.testing.assert_allclose(new_rhs, old_rhs, rtol=0.0, atol=2.0e-14)
+    np.testing.assert_allclose(
+        new_coordinates, old_coordinates, rtol=0.0, atol=2.0e-14
     )

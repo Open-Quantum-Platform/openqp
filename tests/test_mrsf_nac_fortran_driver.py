@@ -67,8 +67,22 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     assert positions == sorted(positions)
     assert "npair = nstate*(nstate - 1)/2" in body
     assert "pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)" in body
-    assert "rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in" in body
+    assert "gamma_pair = pair_sign*gamma_column(:,istate)" in body
+    assert "rhs_batch(:,ipair) = rhs_batch(:,ipair) + rhs_in" in body
+    assert "pair_sign*rhs_in" not in body
     assert "nonz_batch(coord,ipair) = nonz_batch(coord,ipair) +" in body
+    assert body.count("call mrsf_nac_wpair_impl(infos, istate, jstate)") == 1
+    assert body.count("call mrsf_nac_amp(infos, istate, jstate)") == 1
+    assert body.count("call mrsf_nac_esum(infos, istate, jstate)") == 1
+    assert body.count("call mrsf_nac_response(infos)") == 1
+    assert body.count("call mrsf_nac_rohf_pair_overlap(infos)") == 1
+    assert body.count(
+        "call mrsf_nac_rohf_pair_overlap(infos, metric_only=.true.)"
+    ) == 1
+    direct_guard = body.index("if (istate < jstate) then")
+    direct_call = body.index("call mrsf_nac_wpair_impl(infos, istate, jstate)")
+    metric_publish = body.index("gamma_tag = gamma_pair", direct_call)
+    assert direct_guard < direct_call < metric_publish
     assert body.count(
         "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)"
     ) == 1

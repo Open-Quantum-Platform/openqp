@@ -53,9 +53,14 @@ class MRSFNACZVectorAPITests(unittest.TestCase):
     def test_production_batches_antisymmetric_unordered_pairs(self):
         self.assertIn("npair = nstate*(nstate - 1)/2", self.driver)
         self.assertIn(
-            "rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in",
+            "gamma_pair = pair_sign*gamma_column(:,istate)",
             self.driver,
         )
+        self.assertIn(
+            "rhs_batch(:,ipair) = rhs_batch(:,ipair) + rhs_in",
+            self.driver,
+        )
+        self.assertIn("metric_only=.true.", self.driver)
         self.assertIn(
             "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)",
             self.driver,

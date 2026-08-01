@@ -284,7 +284,11 @@ contains
 !> V^R is the dependent MO response fixed by orthonormality.  This routine is
 !> the resident-Fortran counterpart of the former Python
 !> _symmetric_u_contraction plus gamma:Sk coordinate loop.
-  subroutine mrsf_nac_rohf_pair_overlap(infos)
+!> When metric_only is true, the two direct MRSF source records are neither
+!> required nor read and xmat=gamma.  The production driver uses that path for
+!> the reverse orientation after scaling gamma by -1/2; the forward orientation
+!> supplies the direct source once and gamma scaled by +1/2.
+  subroutine mrsf_nac_rohf_pair_overlap(infos, metric_only)
     use types, only: information
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, &
@@ -303,6 +307,7 @@ contains
     character(len=*), parameter :: tag_vmask = "OQP::nac_pair_vmask"
     character(len=*), parameter :: tag_gsk = "OQP::nac_pair_gsk"
     type(information), target, intent(inout) :: infos
+    logical, intent(in), optional :: metric_only
     type(basis_set), pointer :: basis
     real(kind=dp), contiguous, pointer :: mo(:,:), mt_frozen_flat(:), &
       mt_response_flat(:), gflat(:)
@@ -314,6 +319,7 @@ contains
     real(kind=dp) :: value, gsk, coefficient, norm_product
     integer :: nbf, natom, nocca, noccb, nvira, offset, ltot
     integer :: atom, cart, mu, nu, p, q, hi, lo, k
+    logical :: only_metric
 
     if (infos%control%scftype /= 3) then
       call show_message('mrsf_nac_rohf_pair_overlap requires an ROHF/ROKS reference.', &
@@ -330,15 +336,22 @@ contains
     offset = nocca - noccb
     ltot = noccb*(offset + nvira) + offset*nvira
 
+    only_metric = .false.
+    if (present(metric_only)) only_metric = metric_only
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
-    call tagarray_get_data(infos%dat, tag_mt_frozen, mt_frozen_flat)
-    call tagarray_get_data(infos%dat, tag_mt_response, mt_response_flat)
     call tagarray_get_data(infos%dat, tag_gamma, gflat)
-    if (size(mt_frozen_flat) /= nbf*nbf .or. &
-        size(mt_response_flat) /= nbf*nbf .or. &
-        size(gflat) /= nbf*nbf) then
+    if (size(gflat) /= nbf*nbf) then
       call show_message('MRSF NAC pair matrices have the wrong dimension.', &
                         WITH_ABORT)
+    end if
+    if (.not. only_metric) then
+      call tagarray_get_data(infos%dat, tag_mt_frozen, mt_frozen_flat)
+      call tagarray_get_data(infos%dat, tag_mt_response, mt_response_flat)
+      if (size(mt_frozen_flat) /= nbf*nbf .or. &
+          size(mt_response_flat) /= nbf*nbf) then
+        call show_message('MRSF NAC pair matrices have the wrong dimension.', &
+                          WITH_ABORT)
+      end if
     end if
 
     allocate(xmat(nbf,nbf), gamma(nbf,nbf), &
@@ -346,8 +359,12 @@ contains
              overlap_weight(nbf,nbf), overlap_weight_ao(nbf,nbf), &
              gamma_ao(nbf,nbf), half(nbf,nbf))
     gamma = reshape(gflat, (/ nbf, nbf /))
-    xmat = reshape(mt_frozen_flat, (/ nbf, nbf /)) &
-         + reshape(mt_response_flat, (/ nbf, nbf /)) + gamma
+    if (only_metric) then
+      xmat = gamma
+    else
+      xmat = reshape(mt_frozen_flat, (/ nbf, nbf /)) &
+           + reshape(mt_response_flat, (/ nbf, nbf /)) + gamma
+    end if
 
     call infos%dat%remove_records((/ character(len=80) :: tag_xmat, tag_rhs, &
                                                         tag_out, tag_vmask, &

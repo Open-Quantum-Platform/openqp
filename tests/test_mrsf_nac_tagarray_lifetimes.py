@@ -16,7 +16,10 @@ def _body(source, name):
 
 
 def test_pair_overlap_reacquires_mos_after_output_reservations():
-    body = _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_pair_overlap(infos)")
+    body = _body(
+        INTERCHANGE.read_text(),
+        "mrsf_nac_rohf_pair_overlap(infos, metric_only)",
+    )
     last_reserve = body.index("reserve_data(tag_gsk")
     reacquire = body.index("tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)", last_reserve)
     first_transform = body.index("call der_overlap_matrix_ket")

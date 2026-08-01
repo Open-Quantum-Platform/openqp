@@ -292,82 +292,110 @@ contains
 
       do istate = 1, nstate
         if (istate == jstate) cycle
-        gap = energies_saved(jstate)-energies_saved(istate)
-        energy_scale = max(1.0_dp, abs(energies_saved(istate)), &
-                           abs(energies_saved(jstate)))
-        gap_floor = 128.0_dp*epsilon(1.0_dp)*energy_scale
-        if (.not. ieee_is_finite(gap) .or. abs(gap) <= gap_floor) then
-          call show_message( &
-            'MRSF NAC state-response gap is zero or numerically unresolved.', &
-            WITH_ABORT)
+        ipair = unordered_pair_index(istate, jstate)
+        pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)
+        gamma_pair = pair_sign*gamma_column(:,istate)
+
+        ! Every direct pair kernel is a symmetric bilinear form in its left
+        ! and right MRSF amplitudes.  Reversing the ordered pair also reverses
+        ! the energy gap, so its direct source is exactly the negative of this
+        ! canonical I<J source.  Evaluate that expensive source only once.
+        if (istate < jstate) then
+          gap = energies_saved(jstate)-energies_saved(istate)
+          energy_scale = max(1.0_dp, abs(energies_saved(istate)), &
+                             abs(energies_saved(jstate)))
+          gap_floor = 128.0_dp*epsilon(1.0_dp)*energy_scale
+          if (.not. ieee_is_finite(gap) .or. abs(gap) <= gap_floor) then
+            call show_message( &
+              'MRSF NAC state-response gap is zero or numerically unresolved.', &
+              WITH_ABORT)
+          end if
+          ytil = bvec_saved(:,istate)/gap
+          ytil(redundant_index) = 0.0_dp
+          if (.not. all(ieee_is_finite(ytil))) then
+            call show_message('Non-finite MRSF ordered-pair response.', &
+                              WITH_ABORT)
+          end if
+
+          call tagarray_get_data(infos%dat, tag_ytil, ytil_tag)
+          call tagarray_get_data(infos%dat, tag_xstate, xstate_tag)
+          ytil_tag = ytil
+          xstate_tag = bvec_saved(:,jstate)
+          if (profile_enabled) call system_clock(profile_stop)
+          call mrsf_nac_wpair_impl(infos, istate, jstate)
+          if (profile_enabled) call profile_add(profile_wpair, profile_stop)
+
+          ! The pair amplitude engine reads the selected left response from its
+          ! normal TD slot. Reacquire the TagArray pointer before injection and
+          ! again after kernels that reserve/remove other records.
+          call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+          bvec_mo = bvec_saved
+          bvec_mo(:,istate) = ytil
+          if (profile_enabled) call system_clock(profile_stop)
+          call mrsf_nac_amp(infos, istate, jstate)
+          if (profile_enabled) call profile_add(profile_amp, profile_stop)
+          if (profile_enabled) call system_clock(profile_stop)
+          call mrsf_nac_esum(infos, istate, jstate)
+          if (profile_enabled) call profile_add(profile_esum, profile_stop)
+          call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+          bvec_mo = bvec_saved
+
+          if (profile_enabled) call system_clock(profile_stop)
+          call mrsf_nac_response(infos)
+          if (profile_enabled) call profile_add(profile_response, profile_stop)
         end if
-        ytil = bvec_saved(:,istate)/gap
-        ytil(redundant_index) = 0.0_dp
-        if (.not. all(ieee_is_finite(ytil))) then
-          call show_message('Non-finite MRSF ordered-pair response.', &
-                            WITH_ABORT)
-        end if
 
-        call tagarray_get_data(infos%dat, tag_ytil, ytil_tag)
-        call tagarray_get_data(infos%dat, tag_xstate, xstate_tag)
-        ytil_tag = ytil
-        xstate_tag = bvec_saved(:,jstate)
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_wpair_impl(infos, istate, jstate)
-        if (profile_enabled) call profile_add(profile_wpair, profile_stop)
-
-        ! The pair amplitude engine reads the selected left response from its
-        ! normal TD slot.  Reacquire the TagArray pointer before injection and
-        ! again after kernels that reserve/remove other records.
-        call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
-        bvec_mo = bvec_saved
-        bvec_mo(:,istate) = ytil
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_amp(infos, istate, jstate)
-        if (profile_enabled) call profile_add(profile_amp, profile_stop)
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_esum(infos, istate, jstate)
-        if (profile_enabled) call profile_add(profile_esum, profile_stop)
-        call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
-        bvec_mo = bvec_saved
-
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_response(infos)
-        if (profile_enabled) call profile_add(profile_response, profile_stop)
-        gamma_pair = gamma_column(:,istate)
         call tagarray_get_data(infos%dat, tag_gamma, gamma_tag)
         gamma_tag = gamma_pair
         if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_rohf_pair_overlap(infos)
+        if (istate < jstate) then
+          ! D + gamma_IJ/2, where D is the canonical direct source.
+          call mrsf_nac_rohf_pair_overlap(infos)
+        else
+          ! The reverse direct source is -D and has already been folded into
+          ! the canonical contribution. Add only -gamma_JI/2 here.
+          call mrsf_nac_rohf_pair_overlap(infos, metric_only=.true.)
+        end if
         if (profile_enabled) call profile_add(profile_overlap, profile_stop)
 
-        ! Collect 1/2(ordered IJ - ordered JI) while the pair-local TagArray
-        ! records are live.  This retains metric-column streaming and avoids
-        ! storing a second full ordered tensor for the pre-Z components.
-        ipair = unordered_pair_index(istate, jstate)
-        pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)
+        ! The scaled metric contributions are folded as each target column is
+        ! streamed.  No nbf**2 unordered-pair tensor is materialized.
         call tagarray_get_data(infos%dat, tag_rhs, rhs_in)
-        call tagarray_get_data(infos%dat, tag_amp, amp)
-        call tagarray_get_data(infos%dat, tag_esum, esum)
         call tagarray_get_data(infos%dat, tag_overlap, pair_overlap)
-        if (size(rhs_in) /= ltot .or. size(amp,1) /= ncoord .or. &
-            size(amp,2) /= nstate .or. size(amp,3) /= nstate .or. &
-            size(esum,1) /= 3 .or. size(esum,2) /= natom .or. &
-            size(pair_overlap,1) /= 3 .or. &
+        if (size(rhs_in) /= ltot .or. size(pair_overlap,1) /= 3 .or. &
             size(pair_overlap,2) /= natom) then
           call show_message( &
             'Ordered MRSF NAC sources have inconsistent dimensions.', &
             WITH_ABORT)
         end if
-        rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in
-        do atom = 1, natom
-          do cart = 1, 3
-            coord = (atom - 1)*3 + cart
-            nonz_batch(coord,ipair) = nonz_batch(coord,ipair) + &
-              pair_sign*(amp(coord,istate,jstate) + esum(cart,atom) + &
-                         pair_overlap(cart,atom))
+        rhs_batch(:,ipair) = rhs_batch(:,ipair) + rhs_in
+        if (istate < jstate) then
+          call tagarray_get_data(infos%dat, tag_amp, amp)
+          call tagarray_get_data(infos%dat, tag_esum, esum)
+          if (size(amp,1) /= ncoord .or. size(amp,2) /= nstate .or. &
+              size(amp,3) /= nstate .or. size(esum,1) /= 3 .or. &
+              size(esum,2) /= natom) then
+            call show_message( &
+              'Direct MRSF NAC sources have inconsistent dimensions.', &
+              WITH_ABORT)
+          end if
+          do atom = 1, natom
+            do cart = 1, 3
+              coord = (atom - 1)*3 + cart
+              nonz_batch(coord,ipair) = nonz_batch(coord,ipair) + &
+                amp(coord,istate,jstate) + esum(cart,atom) + &
+                pair_overlap(cart,atom)
+            end do
           end do
-        end do
+        else
+          do atom = 1, natom
+            do cart = 1, 3
+              coord = (atom - 1)*3 + cart
+              nonz_batch(coord,ipair) = nonz_batch(coord,ipair) + &
+                pair_overlap(cart,atom)
+            end do
+          end do
+        end if
       end do
     end do
 
