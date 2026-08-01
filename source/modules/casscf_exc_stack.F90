@@ -101,6 +101,7 @@ contains
     integer :: na, t, u, off, ioff, phase_u, phase_t
     integer :: offs(2)
     integer(i8) :: col, row, spos, det, det_u, det_tu, ubit, tbit, n2
+    integer(i8) :: nstack, chunk_hi
     integer(i8), allocatable :: skeys(:), sperm(:)
 
     na = int(nact)
@@ -114,9 +115,23 @@ contains
     offs(1) = 0
     offs(2) = na
     n2 = ndet * ndet
-    do col = 0_i8, int(na, i8)*int(na, i8)*n2 - 1_i8
-      stack(col) = 0.0_dp
+    nstack = int(na, i8) * int(na, i8) * n2
+
+    ! Clearing nact^2 * ndet^2 doubles IS this kernel -- the excitation stack is
+    ! extremely sparse (about 2 * nact^2 entries per column against ndet * nact^2
+    ! elements), so the fill dominates everything the enumeration below does, and
+    ! at nact=7 the array is tens of megabytes.  A chunked parallel clear turns
+    ! that from one core's store bandwidth into the machine's.  Split by hand
+    ! rather than with `workshare`, which gfortran lowers to a single-threaded
+    ! region.  The caller passes np.empty for the same reason the spin-orbital
+    ! expansion does: zeroing in C first only paid for the same bytes twice.
+    !$omp parallel do default(shared) private(col, chunk_hi) &
+    !$omp   schedule(static) if(nstack >= 262144_i8)
+    do col = 0_i8, nstack - 1_i8, 65536_i8
+      chunk_hi = min(nstack - 1_i8, col + 65535_i8)
+      stack(col:chunk_hi) = 0.0_dp
     end do
+    !$omp end parallel do
 
     ! The CI ordering is not key ordering, so sort a copy and keep the map back.
     allocate(skeys(0:ndet-1), sperm(0:ndet-1))
@@ -126,6 +141,14 @@ contains
     end do
     call sort_keys_perm(ndet, skeys, sperm)
 
+    ! Every determinant column is independent: `col` is the fastest-varying
+    ! index of the output, so two iterations never write the same element and
+    ! there is nothing to reduce.  A static schedule gives each thread one
+    ! contiguous run of columns, which keeps the false sharing on the shared
+    ! cache lines at the run boundaries instead of on every store.
+    !$omp parallel do default(shared) schedule(static) if(ndet >= 64_i8) &
+    !$omp   private(col, det, ioff, off, u, ubit, phase_u, det_u, t, tbit, &
+    !$omp           phase_t, det_tu, spos, row)
     do col = 0_i8, ndet - 1_i8
       det = dets(col)
       do ioff = 1, 2                ! alpha block, then beta block
@@ -152,6 +175,7 @@ contains
         end do
       end do
     end do
+    !$omp end parallel do
 
     deallocate(skeys, sperm)
   end function casscf_excitation_stack

@@ -40,6 +40,7 @@
 !> repacking is needed anywhere below.
 module pt2_kernel_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+!$ use omp_lib
   implicit none
   private
 
@@ -96,7 +97,16 @@ contains
 
     ! K(q,p) = sum_(r,s) D(s,r) eri(q,s,r,p).  Innermost loop over q runs along
     ! the fastest Fortran axis of both eri(:,s,r,p) and kmat(:,p).
+    !
+    ! This nest is the only O(nbf^4) work in the routine and each `p` owns its
+    ! own column of `kmat`, so the columns are independent and nothing has to be
+    ! reduced across threads.  Splitting on `p` also keeps each thread on its own
+    ! contiguous nbf^3 slab of `eri`.  Every kmat(:,p) still accumulates over
+    ! (r,s) in the same ascending order as the serial nest, so the result does
+    ! not depend on the thread count.
     kmat = 0.0_dp
+    !$omp parallel do default(shared) schedule(static) if(int(n, i8)**3 >= 32768_i8) &
+    !$omp   private(p, r, s, q, drs, base_pr)
     do p = 0, n - 1
       do r = 0, n - 1
         do s = 0, n - 1
@@ -113,6 +123,7 @@ contains
         end do
       end do
     end do
+    !$omp end parallel do
 
     do p = 0, n - 1
       do q = 0, n - 1
@@ -235,29 +246,45 @@ contains
     real(dp), intent(inout) :: diag(0:*)
 
     integer :: no, p
-    integer(i8) :: k, det, bit, abit
+    integer(i8) :: k, kb, khi, det, bit, abit
     real(dp) :: e
+
+    ! Determinants per thread chunk.  Large enough that the inner orbital sweep
+    ! still vectorises over a long run, small enough that a chunk's slice of
+    ! `diag` stays in L1 across all `no` passes over it.
+    integer(i8), parameter :: dblock = 4096_i8
 
     no = int(norb)
 
-    do k = 0_i8, ndet - 1_i8
-      diag(k) = 0.0_dp
-    end do
-
     ! Orbital-major, determinant-minor: the same loop order NumPy uses, so each
     ! diag(k) still accumulates over p in ascending order and the result is
-    ! bit-identical -- but the inner loop is now a long unit-stride pass the
+    ! bit-identical -- but the inner loop is a long unit-stride pass the
     ! compiler can vectorise, instead of a short branchy one per determinant.
-    do p = 0, no - 1
-      bit = ishft(1_i8, p)
-      abit = ishft(bit, no)
-      e = eps(p)
-      do k = 0_i8, ndet - 1_i8
-        det = dets(k)
-        if (iand(det, bit) /= 0_i8) diag(k) = diag(k) + e
-        if (iand(det, abit) /= 0_i8) diag(k) = diag(k) + e
+    !
+    ! Blocking the determinant axis and handing the blocks to OpenMP keeps that
+    ! order exactly (within a block the orbital loop is still the outer one and
+    ! still ascends), while making the sweep parallel: no diag(k) is ever
+    ! touched by two threads, so there is no reduction and no dependence of the
+    ! answer on the thread count.
+    !$omp parallel do default(shared) schedule(static) if(ndet >= 8192_i8) &
+    !$omp   private(kb, khi, p, k, det, bit, abit, e)
+    do kb = 0_i8, ndet - 1_i8, dblock
+      khi = min(ndet - 1_i8, kb + dblock - 1_i8)
+      do k = kb, khi
+        diag(k) = 0.0_dp
+      end do
+      do p = 0, no - 1
+        bit = ishft(1_i8, p)
+        abit = ishft(bit, no)
+        e = eps(p)
+        do k = kb, khi
+          det = dets(k)
+          if (iand(det, bit) /= 0_i8) diag(k) = diag(k) + e
+          if (iand(det, abit) /= 0_i8) diag(k) = diag(k) + e
+        end do
       end do
     end do
+    !$omp end parallel do
   end subroutine pt2_diagonal_h0
 
   !> Partition the external determinants into the core+virtual occupation blocks
@@ -445,8 +472,19 @@ contains
     end if
 
     sfmin = tiny(1.0_dp)                 ! dlamch('S')
-    allocate(a(0:ne - 1, 0:ne - 1), rows(0:ne - 1, 0:no - 1))
 
+    ! nstr^2 independent minors, and `t` selects a disjoint row band of `tmat`
+    ! (tmat(t*nstr : t*nstr + nstr - 1)), so the string pairs parallelise with
+    ! no sharing at all -- the factorisation of one minor never reads another's.
+    ! The elimination scratch has to be per-thread, so it is allocated INSIDE
+    ! the region: `private` on an allocatable hands each thread its own
+    ! unallocated copy, which is exactly what is wanted here, and allocating
+    ! once per thread rather than once per minor keeps it off the inner path.
+    !$omp parallel default(shared) if(nstr * nstr >= 4096_i8) &
+    !$omp   private(a, rows, t, s, tb, sb, ob, x, y, k, ipiv, ib, amax, piv, &
+    !$omp           det, sgn, v)
+    allocate(a(0:ne - 1, 0:ne - 1), rows(0:ne - 1, 0:no - 1))
+    !$omp do schedule(static)
     do t = 0_i8, nstr - 1_i8
       tb = t * int(ne, i8)
       do x = 0, ne - 1
@@ -509,8 +547,9 @@ contains
         tmat(ob + s) = sgn * det
       end do
     end do
-
+    !$omp end do
     deallocate(a, rows)
+    !$omp end parallel
   end subroutine pt2_minor_transform
 
   !> One stable LSD counting pass: distribute (key, val) into `dst` by the

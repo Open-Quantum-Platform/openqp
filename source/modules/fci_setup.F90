@@ -130,6 +130,9 @@ contains
   !> @param[in]  norb   spatial orbitals in the active space
   !> @param[in]  h1e    spatial one-electron integrals, C-order [norb,norb]
   !> @param[in]  eri    spatial (pq|rs), C-order [norb,norb,norb,norb]
+  !> Both outputs are written in FULL -- every element, the structural zeros
+  !> included -- so the caller passes uninitialized buffers (np.empty).
+  !>
   !> @param[out] hspin  C-order [2*norb, 2*norb]
   !> @param[out] gspin  C-order [2*norb, 2*norb, 2*norb, 2*norb]
   !> @param[in]  nthreads  OpenMP threads for the block fill (0 = leave as is)
@@ -162,12 +165,30 @@ contains
       end do
     end do
 
+    ! One bulk clear, then the four populated spin blocks scattered into it.
+    !
+    ! The clear looks like the wasteful half -- it writes 16*norb^4 doubles for
+    ! 4*norb^4 doubles of payload -- but it is a single memset and runs at better
+    ! than 100 GB/s, so at norb=8 it costs about 4 us of the kernel's 7.  The
+    ! alternative, folding the zeros into the copy so the tensor is written
+    ! exactly once, was MEASURED AND IS 2.5x SLOWER (16.7 us against 6.7 us at
+    ! norb=8): the structural zeros come in runs of `norb`, so a single pass
+    ! issues thousands of 64-byte memsets instead of one large one, and the
+    ! per-call overhead swamps the bytes it saves.  Do not "optimise" this back
+    ! into one pass without re-measuring.
+    !
+    ! What DID cost this kernel its deficit against numpy was doing the clear
+    ! TWICE: the caller allocated with np.zeros, so the buffer was memset in C
+    ! and then memset again here, while the numpy fallback it is racing writes
+    ! the array only once.  The caller now passes np.empty and this is the only
+    ! clear -- so every element of both outputs has to be written here.  Do not
+    ! add an early return inside this nest without re-establishing that.
+    !
+    ! Layout is unchanged and no arithmetic happens in either version, so the
+    ! result stays bit-identical to _spin_orbital_integrals_reference:
+    ! gspin[p,q,r,s] = (p r | q s) when spin(p)==spin(r) and spin(q)==spin(s).
     gspin(0:ns4 - 1_i8) = 0.0_dp
 
-    ! Only four of the sixteen spin blocks are written, so the useful work is
-    ! 4*norb^4 contiguous copies -- tens of microseconds for the active-space
-    ! sizes a determinant CI reaches.  Below the threshold the OpenMP region
-    ! costs more than the copy, so the `if` clause keeps small calls serial.
 !$  if (nthreads > 0) call omp_set_num_threads(int(nthreads))
     !$omp parallel do collapse(2) default(shared) if(ns4 >= 1048576_i8) &
     !$omp   private(p, q, r, s, ps, qs, base_p, base_pq, base_pqr, esrc)
@@ -177,13 +198,14 @@ contains
         qs = q / n
         base_p = int(p, i8) * ns3
         base_pq = base_p + int(q, i8) * ns2
-        ! spin(r) must equal spin(p), spin(s) must equal spin(q)
+        ! spin(r) must equal spin(p), spin(s) must equal spin(q); both the
+        ! destination run and the eri run are unit-stride in s
         do r = ps * n, ps * n + n - 1
-          base_pqr = base_pq + int(r, i8) * int(ns, i8)
+          base_pqr = base_pq + int(r, i8) * int(ns, i8) + int(qs * n, i8)
           esrc = int(mod(p, n), i8) * n3 + int(mod(r, n), i8) * n2 &
                  + int(mod(q, n), i8) * int(n, i8)
-          do s = qs * n, qs * n + n - 1
-            gspin(base_pqr + int(s, i8)) = eri(esrc + int(mod(s, n), i8))
+          do s = 0, n - 1
+            gspin(base_pqr + int(s, i8)) = eri(esrc + int(s, i8))
           end do
         end do
       end do

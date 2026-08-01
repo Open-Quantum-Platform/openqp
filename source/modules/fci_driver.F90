@@ -297,7 +297,7 @@ contains
 
     real(dp), allocatable :: hmat(:), work(:)
     integer :: ierr, k, limit, nact
-    logical :: have_roots
+    logical :: have_roots, hsym
     real(dp) :: worst
 
     nact = nspin / 2
@@ -308,6 +308,11 @@ contains
     end if
     call fci_dense_build(nspin, ndet, dets, skeys, sperm, hspin, gspin, &
                          cutoff, hmat, nthreads)
+    ! fci_dense_build writes one symmetrized value into both triangles, so this
+    ! holds by construction -- but the matvec below applies H^T in its place and
+    ! would be silently wrong, not crash, if it ever stopped holding.  One
+    ! streaming pass, against the build that just ran.
+    hsym = is_symmetric(ndet, hmat)
 
     have_roots = .false.
     if (mult == 0) then
@@ -320,13 +325,14 @@ contains
           status = FCI_ERR_ALLOC
           return
         end if
-        call ci_davidson(1, hmat, nspin, ndet, dets, skeys, sperm, hspin, &
-                         gspin, cutoff, nroot, 0.1_dp * eig_tol, maxiter, 0, &
-                         nthreads, evals, evecs, ierr)
+        call ci_davidson(1, hmat, hsym, nspin, ndet, dets, skeys, sperm, &
+                         hspin, gspin, cutoff, nroot, 0.1_dp * eig_tol, &
+                         maxiter, 0, nthreads, evals, evecs, ierr)
         if (ierr == 0) then
           ! _davidson can also bail out early, so re-check rather than let the
           ! residual assertion below turn a solvable case into a hard failure
-          worst = worst_residual(ndet, hmat, nroot, evals, evecs)
+          worst = worst_residual(ndet, hmat, hsym, nthreads, nroot, evals, &
+                                 evecs)
           have_roots = worst <= eig_tol
         end if
         if (.not. have_roots) deallocate(evals, evecs)
@@ -380,7 +386,8 @@ contains
     ! as the Python driver does before handing roots back.
     worst = 0.0_dp
     do k = 1, nsel
-      worst = max(worst, worst_residual(ndet, hmat, 1, evals(keep(k):keep(k)), &
+      worst = max(worst, worst_residual(ndet, hmat, hsym, nthreads, 1, &
+                                        evals(keep(k):keep(k)), &
                                         evecs((keep(k) - 1) * ndet + 1:)))
     end do
     if (worst > eig_tol) status = FCI_ERR_EIGEN
@@ -426,7 +433,8 @@ contains
         status = FCI_ERR_ALLOC
         return
       end if
-      call ci_davidson(2, dummy, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
+      call ci_davidson(2, dummy, .false., nspin, ndet, dets, skeys, sperm, &
+                       hspin, gspin, &
                        cutoff, solve_nroot, eig_tol, maxiter, eff_sub, &
                        nthreads, evals, evecs, ierr)
       if (ierr /= 0) then
@@ -483,10 +491,11 @@ contains
   !> first and the test applied to what is left.
   !>
   !> ierr: 0 ok, 1 not converged, 2 allocation failure, 3 eigensolver failure.
-  subroutine ci_davidson(mode, hmat, nspin, ndet, dets, skeys, sperm, hspin, &
-                         gspin, cutoff, nroot, tol, max_iter, max_subspace_in, &
-                         nthreads, theta_out, ritz_out, ierr)
+  subroutine ci_davidson(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, &
+                         hspin, gspin, cutoff, nroot, tol, max_iter, &
+                         max_subspace_in, nthreads, theta_out, ritz_out, ierr)
     integer, intent(in) :: mode, nspin, nroot, max_iter, max_subspace_in, nthreads
+    logical, intent(in) :: hsym
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: hmat(*)
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
@@ -552,9 +561,9 @@ contains
       basis(order(i), i) = 1.0_dp
     end do
     nbas = nroot
-    call apply_h(mode, hmat, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
-                 cutoff, nthreads, nbas, basis(:, 1:nbas), sigma(:, 1:nbas), &
-                 scratch)
+    call apply_h(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, hspin, &
+                 gspin, cutoff, nthreads, nbas, basis(:, 1:nbas), &
+                 sigma(:, 1:nbas), scratch)
 
     do iter = 1, max_iter
       ! subspace matrix, symmetrized
@@ -606,8 +615,8 @@ contains
         call orthonormalize(ndet, nroot, ritz)
         basis(:, 1:nroot) = ritz(:, 1:nroot)
         nbas = nroot
-        call apply_h(mode, hmat, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
-                     cutoff, nthreads, nbas, basis(:, 1:nbas), &
+        call apply_h(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, hspin, &
+                     gspin, cutoff, nthreads, nbas, basis(:, 1:nbas), &
                      sigma(:, 1:nbas), scratch)
         cycle
       end if
@@ -640,8 +649,8 @@ contains
         call pack_columns(ndet, nroot, ritz, ritz_out)
         return
       end if
-      call apply_h(mode, hmat, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
-                   cutoff, nthreads, nnew, basis(:, nbas + 1:ncur), &
+      call apply_h(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, hspin, &
+                   gspin, cutoff, nthreads, nnew, basis(:, nbas + 1:ncur), &
                    sigma(:, nbas + 1:ncur), scratch)
       nbas = ncur
     end do
@@ -650,9 +659,13 @@ contains
   end subroutine ci_davidson
 
   !> Y = 0.5(H + H^T) X for a block of `m` column-major vectors.
-  subroutine apply_h(mode, hmat, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
-                     cutoff, nthreads, m, x, y, scratch)
+  !>
+  !> `hsym` says the caller has VERIFIED (not assumed) that `hmat` is exactly
+  !> symmetric; see is_symmetric and sym_matvec.
+  subroutine apply_h(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, hspin, &
+                     gspin, cutoff, nthreads, m, x, y, scratch)
     integer, intent(in) :: mode, nspin, nthreads, m
+    logical, intent(in) :: hsym
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: hmat(*)
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
@@ -664,12 +677,18 @@ contains
     integer :: k
 
     if (mode == 1) then
-      if (m == 1) then
+      ! Up to two columns the transposed DGEMV (see sym_matvec) is the cheapest
+      ! form: 2.26 ms per 4900^2 column against 6.10 ms for the DGEMM of the
+      ! same shape, which reads `hmat` once no matter how many columns it is
+      ! given and so only pays off from three columns on.
+      if (hsym .and. m <= 2) then
+        do k = 1, m
+          call sym_matvec(ndet, hmat, nthreads, x(1, k), y(1, k))
+        end do
+      else if (m == 1) then
         ! A single-column DGEMM is a matrix-vector product spelled badly:
-        ! Accelerate takes a much worse path for N=1 than DGEMV does, and this
-        ! is the dominant cost of the dense Davidson (numpy's `A @ x` reaches
-        ! DGEMV for the same shape, which is what the Python driver was
-        ! getting).  Pass the element reference, not a rank-1 slice.
+        ! Accelerate takes a much worse path for N=1 than DGEMV does.  Pass the
+        ! element reference, not a rank-1 slice.
         call dgemv('N', int(ndet), int(ndet), 1.0_dp, hmat, int(ndet), &
                    x(1, 1), 1, 0.0_dp, y(1, 1), 1)
       else
@@ -696,6 +715,103 @@ contains
       end do
     end do
   end subroutine apply_h
+
+  !> y = H x for a dense SYMMETRIC H held column-major, `nblk`-way threaded.
+  !>
+  !> The transposed DGEMV, not the plain one.  H = H^T so the two compute the
+  !> same product, but not at the same speed: DGEMV('N') is the axpy form, which
+  !> sweeps the whole of `y` once per column of H, while DGEMV('T') is the dot
+  !> form, which streams each column into a single accumulator.  On a 4900^2
+  !> matrix (192 MB) that is 7.46 ms against 3.25 ms -- 26 GB/s against 59 GB/s,
+  !> i.e. the transposed form runs at the machine's single-core read ceiling and
+  !> the plain one at less than half of it.  This is the whole of the dense
+  !> Davidson's cost, and it is exactly where the Python driver's advantage came
+  !> from: numpy's `A @ x` on a C-order matrix IS the transposed call.
+  !>
+  !> Splitting the COLUMNS across threads then buys the rest: each thread owns a
+  !> disjoint slice of `y`, every y(j) stays one uninterrupted dot product over
+  !> the full row range, and the read is spread over the cores instead of
+  !> saturating one -- 2.26 ms, 85 GB/s at eight blocks.  Because no y(j) is ever
+  !> split, the result is bit-identical to the serial call for every block count
+  !> (verified 2..8 on a 1997^2 case: zero elements differ), so the thread count
+  !> cannot move a printed energy.
+  !>
+  !> Accelerate does not thread DGEMV itself here -- the serial 59 GB/s is the
+  !> same rate a single-threaded `sum()` reaches -- so this does not oversubscribe
+  !> a BLAS that is already parallel.
+  subroutine sym_matvec(ndet, hmat, nthreads, x, y)
+    integer(i8), intent(in) :: ndet
+    real(dp), intent(in) :: hmat(*)
+    integer, intent(in) :: nthreads
+    real(dp), intent(in) :: x(*)
+    real(dp), intent(out) :: y(*)
+
+    integer :: nblk, ib
+    integer(i8) :: lo, hi, chunk
+
+    nblk = 1
+    ! Below ~64k columns per block the OpenMP region costs more than the sweep
+    ! it splits, so small matrices stay on the single call.
+!$  nblk = max(1, min(max(1, nthreads), int(ndet / 512_i8)))
+
+    if (nblk <= 1) then
+      call dgemv('T', int(ndet), int(ndet), 1.0_dp, hmat, int(ndet), &
+                 x, 1, 0.0_dp, y, 1)
+      return
+    end if
+
+    chunk = (ndet + int(nblk, i8) - 1_i8) / int(nblk, i8)
+    !$omp parallel do num_threads(nblk) schedule(static, 1) default(shared) &
+    !$omp   private(ib, lo, hi)
+    do ib = 0, nblk - 1
+      lo = int(ib, i8) * chunk + 1_i8
+      hi = min(ndet, lo + chunk - 1_i8)
+      if (lo > hi) cycle
+      ! element reference, never a rank-1 slice: the columns after `lo` have to
+      ! stay contiguous for DGEMV to walk them
+      call dgemv('T', int(ndet), int(hi - lo + 1_i8), 1.0_dp, &
+                 hmat((lo - 1_i8) * ndet + 1_i8), int(ndet), &
+                 x, 1, 0.0_dp, y(lo), 1)
+    end do
+    !$omp end parallel do
+  end subroutine sym_matvec
+
+  !> .true. when the dense Hamiltonian is symmetric to the last bit.
+  !>
+  !> `sym_matvec` applies H^T where the algorithm asks for H, which is the same
+  !> operator only if H = H^T exactly.  `fci_dense_build` guarantees that -- it
+  !> assigns one symmetrized expression into BOTH triangles -- but the failure
+  !> mode if that ever stops holding is a wrong energy with no crash and no
+  !> bounds violation, because every shape involved is square (the same trap
+  !> that a transposed eigenvector operand set elsewhere on this branch).  So it
+  !> is checked rather than inferred, once per dense solve.
+  !>
+  !> The scan is tiled because the naive nest reads one operand down a column
+  !> and the other across a row; at 64 x 64 both stay in cache and the whole
+  !> check is one streaming pass -- ~3 ms at ndet=4900, against the seconds the
+  !> build it follows already spent.
+  logical function is_symmetric(n, a) result(sym)
+    integer(i8), intent(in) :: n
+    real(dp), intent(in) :: a(*)
+    integer(i8), parameter :: tile = 64_i8
+    integer(i8) :: jb, ib, j, i, jhi, ihi
+
+    sym = .true.
+    do jb = 1_i8, n, tile
+      jhi = min(n, jb + tile - 1_i8)
+      do ib = jb, n, tile
+        ihi = min(n, ib + tile - 1_i8)
+        do j = jb, jhi
+          do i = max(ib, j + 1_i8), ihi
+            if (a((j - 1_i8) * n + i) /= a((i - 1_i8) * n + j)) then
+              sym = .false.
+              return
+            end if
+          end do
+        end do
+      end do
+    end do
+  end function is_symmetric
 
   ! ================================================================== helpers
 
@@ -861,9 +977,10 @@ contains
   end subroutine orthonormalize
 
   !> max_k || A v_k - w_k v_k || over `m` column-major eigenpairs.
-  function worst_residual(n, a, m, w, v) result(worst)
+  function worst_residual(n, a, asym, nthreads, m, w, v) result(worst)
     integer(i8), intent(in) :: n
-    integer, intent(in) :: m
+    integer, intent(in) :: m, nthreads
+    logical, intent(in) :: asym
     real(dp), intent(in) :: a(*), w(*), v(*)
     real(dp) :: worst
     real(dp), allocatable :: r(:)
@@ -875,8 +992,12 @@ contains
     do k = 1, m
       ! rank-1 slices must never be handed to BLAS as matrices; pass the
       ! element reference so the following columns stay contiguous
-      call dgemv('N', int(n), int(n), 1.0_dp, a, int(n), &
-                 v((int(k, i8) - 1_i8) * n + 1_i8), 1, 0.0_dp, r, 1)
+      if (asym) then
+        call sym_matvec(n, a, nthreads, v((int(k, i8) - 1_i8) * n + 1_i8), r)
+      else
+        call dgemv('N', int(n), int(n), 1.0_dp, a, int(n), &
+                   v((int(k, i8) - 1_i8) * n + 1_i8), 1, 0.0_dp, r, 1)
+      end if
       do j = 1_i8, n
         r(j) = r(j) - w(k) * v((int(k, i8) - 1_i8) * n + j)
       end do

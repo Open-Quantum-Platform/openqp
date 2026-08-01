@@ -243,7 +243,12 @@ def _lib_excitation_stack(nact, dets):
         return None
     det_arr = _as_i64c(dets)
     ndet = int(det_arr.size)
-    stack = np.zeros((int(nact), int(nact), ndet, ndet), dtype=np.float64)
+    # np.empty, not np.zeros: casscf_excitation_stack clears the whole array
+    # itself, in parallel.  This buffer is nact**2 * ndet**2 doubles and the
+    # clear is the dominant cost of the kernel, so paying for it twice -- once
+    # single-threaded in C here, once in Fortran -- was most of its runtime.
+    # A nonzero `info` means nothing was written; the caller discards it.
+    stack = np.empty((int(nact), int(nact), ndet, ndet), dtype=np.float64)
     info = lib.casscf_excitation_stack(
         int(nact), ndet,
         ffi.cast("int64_t *", det_arr.ctypes.data),

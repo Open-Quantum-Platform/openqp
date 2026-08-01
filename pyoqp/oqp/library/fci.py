@@ -713,14 +713,17 @@ def _spin_orbital_integrals(
     if not hasattr(lib, "fci_spin_orbital_integrals"):
         return _spin_orbital_integrals_numpy(h1e, eri)
     nspin = 2 * norb
-    hspin = np.zeros((nspin, nspin), dtype=np.float64)
-    gspin = np.zeros((nspin,) * 4, dtype=np.float64)
+    # np.empty, not np.zeros: fci_spin_orbital_integrals writes every element of
+    # both buffers, the zeros of the twelve unpopulated spin blocks included.
+    # Zeroing here as well made the native path memset (2*norb)**4 doubles twice
+    # -- once in C, once in Fortran -- for an expansion that only writes the
+    # array once, which was the whole of its deficit against the numpy fallback.
+    hspin = np.empty((nspin, nspin), dtype=np.float64)
+    gspin = np.empty((nspin,) * 4, dtype=np.float64)
     lib.fci_spin_orbital_integrals(
         norb,
-        ffi.cast("double *", h1e.ctypes.data),
-        ffi.cast("double *", eri.ctypes.data),
-        ffi.cast("double *", hspin.ctypes.data),
-        ffi.cast("double *", gspin.ctypes.data),
+        _dblp(ffi, h1e), _dblp(ffi, eri),
+        _dblp(ffi, hspin), _dblp(ffi, gspin),
         _fci_lib_threads())
     return hspin, gspin
 
@@ -1045,6 +1048,29 @@ def _as_f64c(a):
     if type(a) is np.ndarray and a.dtype is _F64 and a.flags.c_contiguous:
         return a
     return np.ascontiguousarray(a, dtype=np.float64)
+
+
+_CT_DOUBLE_P = None
+
+
+def _dblp(ffi, a):
+    """``a``'s buffer as a ``double *``, the cheap way.
+
+    ``ffi.cast("double *", a.ctypes.data)`` costs ~1.08 us per array: most of it
+    is ``a.ctypes``, which builds a fresh ctypes proxy object every time, and the
+    rest is re-parsing the type string.  Going through ``ffi.from_buffer`` with a
+    cached ctype is ~0.42 us.  That is not noise at this granularity -- the
+    spin-orbital expansion casts four arrays around a 7 us kernel, so the casts
+    alone were a third of what the native path cost.
+
+    The returned pointer does not own a reference to ``a``, exactly like the
+    integer ``a.ctypes.data`` it replaces, so ``a`` must stay alive across the
+    native call.  Every caller here holds it in a local for that reason.
+    """
+    global _CT_DOUBLE_P
+    if _CT_DOUBLE_P is None:
+        _CT_DOUBLE_P = ffi.typeof("double *")
+    return ffi.cast(_CT_DOUBLE_P, ffi.from_buffer(a))
 
 
 def _as_i64c(a):
