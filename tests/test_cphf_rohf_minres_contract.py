@@ -93,6 +93,26 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
             self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
         )
 
+    def test_rohf_operator_reuses_solver_owned_workspace(self):
+        """Krylov Hessian actions must not allocate their eleven work arrays."""
+        self.assertNotIn("allocate(", self.apbx)
+        for name in (
+            "xa_work",
+            "xb_work",
+            "x2a_work",
+            "x2b_work",
+            "dm_work",
+            "v_work",
+            "kmat_work",
+            "dm_tri_work",
+            "pfock_work",
+        ):
+            self.assertIn(f"cgdata%{name} =>", self.solve)
+            self.assertIn(f"p%{name}", self.apbx)
+        # Persistent packed Fock storage must retain the zero initialization
+        # previously supplied by ALLOCATE(..., SOURCE=0).
+        self.assertIn("pfock = 0.0_dp", self.apbx)
+
     def test_implicit_zero_guess_skips_the_initial_operator_action(self):
         residual_setup = self.minres_init.split("! r1 = b - a x", 1)[1].split(
             "! y = m^-1 r1", 1

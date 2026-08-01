@@ -93,6 +93,21 @@ module cphf_mod
     real(kind=dp), pointer :: famo(:,:) => null()    ! alpha Fock (full, MO basis)
     real(kind=dp), pointer :: fbmo(:,:) => null()    ! beta  Fock (full, MO basis)
     real(kind=dp), pointer :: xminv(:) => null()     ! diagonal preconditioner
+    ! Solver-owned callback workspace.  Keeping these targets in
+    ! cphf_solve_rohf removes eleven heap allocations from every Hessian
+    ! action without introducing module/global state.  The pointers remain
+    ! valid until every Krylov solve and certified-residual action is done.
+    real(kind=dp), contiguous, pointer :: xa_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: xb_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2a_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: x2b_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: work2(:,:) => null()
+    real(kind=dp), contiguous, pointer :: work3(:,:) => null()
+    real(kind=dp), contiguous, pointer :: dm_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: v_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: kmat_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: dm_tri_work(:,:) => null()
+    real(kind=dp), contiguous, pointer :: pfock_work(:,:) => null()
     integer :: nbf = 0
     integer :: nocca = 0, noccb = 0, nvira = 0, nvirb = 0, offset = 0, ltot = 0
     real(kind=dp) :: scale_exch = 1.0_dp
@@ -916,8 +931,11 @@ contains
     real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
     real(kind=dp), allocatable, target :: famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable, target :: xminv(:)
-    real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:), ax(:)
-    integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
+    real(kind=dp), allocatable, target :: fao(:,:), w2(:,:), w3(:,:), ax(:)
+    real(kind=dp), allocatable, target :: xa_work(:,:), xb_work(:,:), &
+      x2a_work(:,:), x2b_work(:,:), v_work(:,:), kmat_work(:,:), &
+      dm_tri_work(:,:), pfock_work(:,:)
+    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: i, a, k, irhs, iter, mxit
     integer :: iter_min, iter_max, nconv
     logical :: dft, use_minres, solved
@@ -926,6 +944,7 @@ contains
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
     nocca = infos%mol_prop%nelec_A
     noccb = infos%mol_prop%nelec_B
     nvira = nbf - nocca
@@ -961,6 +980,10 @@ contains
     ! needs the off-diagonal vir-occ blocks for the non-canonical commutator)
     allocate(famo(nbf,nbf), fbmo(nbf,nbf))
     allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf), ax(ltot))
+    allocate(xa_work(nvira,nocca), xb_work(nvirb,noccb), &
+             x2a_work(nvira,nocca), x2b_work(nvirb,noccb), &
+             v_work(nbf,nbf), kmat_work(nbf,nbf), &
+             dm_tri_work(nbf2,2), pfock_work(nbf2,2))
     call unpack_matrix(focka, fao)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
     call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, famo, nbf)
@@ -1004,6 +1027,15 @@ contains
     cgdata%mo => mo
     cgdata%famo => famo; cgdata%fbmo => fbmo
     cgdata%xminv => xminv
+    cgdata%xa_work => xa_work; cgdata%xb_work => xb_work
+    cgdata%x2a_work => x2a_work; cgdata%x2b_work => x2b_work
+    ! fao/w2/w3 are dead after the two converged-Fock transforms above, so
+    ! recycle them as callback matrices instead of retaining three idle nbf^2
+    ! buffers alongside a second set of equally-sized scratch arrays.
+    cgdata%dm_work => fao
+    cgdata%work2 => w2; cgdata%work3 => w3
+    cgdata%v_work => v_work; cgdata%kmat_work => kmat_work
+    cgdata%dm_tri_work => dm_tri_work; cgdata%pfock_work => pfock_work
     cgdata%nbf = nbf
     cgdata%nocca = nocca; cgdata%noccb = noccb
     cgdata%nvira = nvira; cgdata%nvirb = nvirb
@@ -1090,6 +1122,8 @@ contains
     if (dft) call dftclean(infos)
 
     deallocate(famo, fbmo, xminv, fao, w2, w3, ax)
+    deallocate(xa_work, xb_work, x2a_work, x2b_work, v_work, kmat_work, &
+               dm_tri_work, pfock_work)
   end subroutine cphf_solve_rohf
 
 !###############################################################################
@@ -1103,20 +1137,25 @@ contains
     type(c_ptr) :: dat
     type(cphf_cg_data_rohf), pointer :: p
 
-    real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
-    real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
-    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:), kmat(:,:)
-    integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, i, j, a, s
+    real(kind=dp), contiguous, pointer :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
+    real(kind=dp), contiguous, pointer :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
+    real(kind=dp), contiguous, pointer :: dm_tri(:,:), pfock(:,:), kmat(:,:)
+    integer :: nbf, nocca, noccb, nvira, nvirb, offset, i, j, a, s
 
     call c_f_pointer(dat, p)
-    nbf = p%nbf; nbf2 = nbf*(nbf+1)/2
+    nbf = p%nbf
     nocca = p%nocca; noccb = p%noccb; nvira = p%nvira; nvirb = p%nvirb
     offset = p%offset
 
-    allocate(xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb))
-    allocate(work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), v(nbf,nbf))
-    allocate(kmat(nbf,nbf))
-    allocate(dm_tri(nbf2,2), pfock(nbf2,2), source=0.0_dp)
+    xa => p%xa_work; xb => p%xb_work
+    x2a => p%x2a_work; x2b => p%x2b_work
+    work2 => p%work2; work3 => p%work3
+    dm => p%dm_work; v => p%v_work; kmat => p%kmat_work
+    dm_tri => p%dm_tri_work; pfock => p%pfock_work
+    ! get_response_packed accumulates into its packed output.  Allocation used
+    ! to provide this zero implicitly on every callback; make it explicit now
+    ! that the storage is persistent.
+    pfock = 0.0_dp
 
     call rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
 
@@ -1191,7 +1230,6 @@ contains
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
-    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat)
   end subroutine cphf_apbx_rohf
 
 !###############################################################################
