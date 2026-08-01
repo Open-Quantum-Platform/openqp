@@ -54,9 +54,109 @@ module casscf_kernel_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  public :: casscf_gfock_grad
+  public :: casscf_gfock_grad, casscf_effective_fock
 
 contains
+
+  !> Closed+active mean-field matrix  W = h + J - K/2  for a spin-summed 1-RDM.
+  !>
+  !>     J[j,q] = sum_rs (j q|rs) D[r,s],   K[j,s] = sum_qr (j q|rs) D[r,q]
+  !>
+  !> Shared by the generalized-Fock build below (where W is the inner factor of
+  !> the separable part) and by the canonicalization Fock `casscf_effective_fock`
+  !> -- they are the same matrix, so this is written once.
+  !>
+  !> `dmat` is the Fortran (n,n) density, `wmat` is returned as wmat(i,j) = W[i,j];
+  !> `jmat`/`kmat` are caller-supplied scratch of the same shape.  `h1e` and
+  !> `eri` are the caller's C-order buffers (D, J, K and h are symmetric, so
+  !> their C-order buffers coincide with the column-major views).
+  subroutine build_jkw(n, dmat, h1e, eri, jmat, kmat, wmat)
+    integer, intent(in) :: n
+    real(dp), intent(in) :: dmat(0:n-1, 0:n-1)
+    real(dp), intent(in) :: h1e(0:*), eri(0:*)
+    real(dp), intent(out) :: jmat(0:n-1, 0:n-1), kmat(0:n-1, 0:n-1)
+    real(dp), intent(out) :: wmat(0:n-1, 0:n-1)
+
+    integer :: i, j, n2
+    integer(i8) :: off, n3
+
+    n2 = n * n
+    n3 = int(n, i8) * int(n, i8) * int(n, i8)
+
+    ! The ERI buffer viewed column-major is M((r,s),(j,q)) with the pair (r,s)
+    ! contiguous, so J is one DGEMV against the flattened D.  Vector arguments
+    ! are passed by element reference so no rank-mismatch temporary is made.
+    call dgemv('T', n2, n2, 1.0_dp, eri, n2, dmat(0, 0), 1, 0.0_dp, jmat(0, 0), 1)
+
+    ! For fixed j the block is contiguous as (s,(q,r)) with s fastest, so each
+    ! column of K is a DGEMV against the same flattened D.  The ERI block is
+    ! passed by element reference so the following columns stay contiguous
+    ! through sequence association.
+    do j = 0, n - 1
+      off = int(j, i8) * n3
+      call dgemv('N', n, n2, 1.0_dp, eri(off), n, dmat(0, 0), 1, &
+                 0.0_dp, kmat(0, j), 1)
+    end do
+
+    ! The DGEMV outputs land transposed relative to W (jmat(q,j) = J[j,q],
+    ! kmat(s,j) = K[j,s]), so they are read back transposed here.
+    do i = 0, n - 1
+      do j = 0, n - 1
+        wmat(i, j) = h1e(int(i, i8)*int(n, i8) + int(j, i8)) &
+                   + jmat(j, i) - 0.5_dp * kmat(j, i)
+      end do
+    end do
+  end subroutine build_jkw
+
+  !> Closed+active mean-field Fock used to canonicalize the CASSCF orbitals.
+  !>
+  !> Replaces casscf.py `_effective_fock`, whose two O(nbf^5)-shaped einsums
+  !>
+  !>     J = einsum("rs,pqrs->pq", D, eri),  K = einsum("rs,prsq->pq", D, eri)
+  !>
+  !> build the very same J and K the generalized-Fock engine already forms (the
+  !> K contractions differ by a transpose of D, which is symmetric here), so
+  !> this entry is a thin bind(C) wrapper over the shared `build_jkw`.
+  !>
+  !> @param[in]  nbf   number of orbitals
+  !> @param[in]  dmat  spin-summed 1-RDM, C-order [nbf,nbf]
+  !> @param[in]  h1e   MO core Hamiltonian, C-order [nbf,nbf]
+  !> @param[in]  eri   MO ERIs (chemist (pq|rs)), C-order [nbf,nbf,nbf,nbf]
+  !> @param[out] fout  h + J - K/2, C-order [nbf,nbf]
+  subroutine casscf_effective_fock(nbf, dmat, h1e, eri, fout) &
+      bind(C, name="casscf_effective_fock")
+    integer(c_int32_t), value :: nbf
+    ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
+    real(dp), intent(in) :: dmat(0:*), h1e(0:*), eri(0:*)
+    real(dp), intent(inout) :: fout(0:*)
+
+    real(dp), allocatable :: dwork(:,:), jmat(:,:), kmat(:,:), wmat(:,:)
+    integer :: n, i, j
+
+    n = int(nbf)
+    if (n <= 0) return
+
+    allocate(dwork(0:n-1, 0:n-1), jmat(0:n-1, 0:n-1), kmat(0:n-1, 0:n-1))
+    allocate(wmat(0:n-1, 0:n-1))
+
+    ! D is symmetric, so its C-order buffer is already the column-major view;
+    ! the gather is written out anyway so the engine does not depend on it.
+    do i = 0, n - 1
+      do j = 0, n - 1
+        dwork(i, j) = dmat(int(i, i8)*int(n, i8) + int(j, i8))
+      end do
+    end do
+
+    call build_jkw(n, dwork, h1e, eri, jmat, kmat, wmat)
+
+    do i = 0, n - 1
+      do j = 0, n - 1
+        fout(int(i, i8)*int(n, i8) + int(j, i8)) = wmat(i, j)
+      end do
+    end do
+
+    deallocate(dwork, jmat, kmat, wmat)
+  end subroutine casscf_effective_fock
 
   !> Weighted generalized Fock F[p,q] and orbital gradient g.
   !>
@@ -140,37 +240,11 @@ contains
         end do
       end do
 
-      ! ---- J[j,q] = sum_rs (j q|rs) D[r,s]
-      ! The ERI buffer viewed column-major is M((r,s),(j,q)) with the pair
-      ! (r,s) contiguous, so this is one DGEMV against the flattened D.  D is
-      ! symmetric by construction (symmetric gamma on a constant diagonal), so
-      ! its column-major buffer doubles as the C-order (r,s) vector this
-      ! contraction wants.  Vector arguments are passed by element reference so
-      ! no rank-mismatch temporary is materialised.
-      call dgemv('T', n2, n2, 1.0_dp, eri, n2, dmat(0, 0), 1, 0.0_dp, jmat(0, 0), 1)
-
-      ! ---- K[j,s] = sum_qr (j q|rs) D[r,q]
-      ! For fixed j the block is contiguous as (s,(q,r)) with s fastest, so
-      ! each column of K is a DGEMV against the same flattened D.  The ERI
-      ! block is passed by element reference so the following columns stay
-      ! contiguous through sequence association.
-      do j = 0, n - 1
-        off = int(j, i8) * n3
-        call dgemv('N', n, n2, 1.0_dp, eri(off), n, dmat(0, 0), 1, &
-                   0.0_dp, kmat(0, j), 1)
-      end do
-
-      ! ---- W = h + J - K/2
-      ! The DGEMV outputs land transposed relative to W (jmat(q,j) = J[j,q],
-      ! kmat(s,j) = K[j,s]), so they are read back transposed here.  W is in
-      ! fact symmetric for a physically valid ERI, but nothing below relies on
-      ! that: wmat(i,j) is W[i,j] as written.
-      do i = 0, n - 1
-        do j = 0, n - 1
-          wmat(i, j) = h1e(int(i, i8)*int(n, i8) + int(j, i8)) &
-                     + jmat(j, i) - 0.5_dp * kmat(j, i)
-        end do
-      end do
+      ! ---- W = h + J - K/2 (the same mean-field matrix casscf_effective_fock
+      !      returns; the shared builder keeps the two from drifting apart).
+      !      W is in fact symmetric for a physically valid ERI, but nothing
+      !      below relies on that: wmat(i,j) is W[i,j] as written.
+      call build_jkw(n, dmat, h1e, eri, jmat, kmat, wmat)
 
       ! ---- F_sep[m,j] = sum_q D[m,q] W[j,q]
       ! Computed as W D so that the column-major result (j,m) lands exactly on

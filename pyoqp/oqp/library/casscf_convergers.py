@@ -73,8 +73,24 @@ small/medium active spaces (a guard raises beyond); very large systems still
 need an iterative Hessian-vector product before ``ah`` scales.  With the key
 absent the FD path runs unchanged.
 
-Why this module has no Fortran engine (measured)
-------------------------------------------------
+What this module's Fortran engine is worth (measured)
+-----------------------------------------------------
+This module now has one (``casscf_ah.F90``: the AH model step, the lowest-mode
+step and the DIIS coefficients), but the measurement below is what sets
+expectations for it, so it is kept verbatim.  It was taken when the module was
+still pure NumPy, to decide whether to write an engine at all; the answer on
+performance grounds was no, and that answer was correct and still is.  The
+engine exists because pyoqp is to be a driver and liboqp is to compute, as it
+already does for HF/DFT/TDDFT -- not because the profile asked for it.  What
+the port actually bought, interleaved against this same module's NumPy
+reference (which remains in place as the numerical pin and the fallback):
+``_ah_model_step`` x1.04-1.40, ``_diis_coefficients`` x1.9-2.5, and
+``_lowest_mode_step`` 4.2x SLOWER -- the last because it is ~3 us of NumPy on
+one eigenvector column against ~13 us of fixed cffi marshalling, on a function
+called at most once per run.  End to end the difference is below what a shared
+machine can resolve.  The numbers below explain why all of that was the
+predictable outcome.
+
 The two kernels the CASSCF optimizer leans on were moved to Fortran
 (``casscf_kernel.F90``, ``casscf_hess_kernel.F90``); this module was profiled
 afterwards and deliberately left in NumPy.  Everything here is control flow
@@ -127,6 +143,14 @@ an optimizer whose macroiteration count is already accumulation-order
 sensitive.  So the dense solve stays: it is the correct, better-tested code,
 and it is not what this optimizer is waiting on.
 
+That conclusion survived the port: ``casscf_ah.F90`` solves the bordered
+eigenproblem densely with LAPACK ``DSYEVD``, which is what the NumPy path was
+already doing through ``fci._symmetric_eigh`` -> ``oqp_dsyevd``.  Moving it to
+Fortran therefore saves the per-microiteration matrix assembly and the Python
+round-trip, not the eigensolve -- which is exactly why the measured gain is
+x1.04-1.40 and shrinks as ``n_par`` grows.  Anyone tempted to reach for the
+arrowhead shortcut inside the engine should read the paragraph above first.
+
 OpenTrustRegion note: the compiled core ships an OTR bridge
 (``source/otr_interface.F90``), but its callbacks are hard-wired to the SCF
 Fock/density machinery (``trah_converger``) and it is not linked in builds
@@ -164,14 +188,13 @@ from dataclasses import dataclass
 import numpy as np
 
 from oqp.library.fci import _symmetric_eigh
-from scipy.linalg import expm
 
 from oqp.library.casscf import (
     _escape_saddles,
     _fd_orbital_hessian,
     _floored_newton_loop,
-    _kappa_matrix,
     _newton_step,
+    _orbital_rotate,
     _powell_step,
 )
 
@@ -324,8 +347,71 @@ def _ah_params(cfg, options) -> _AHParams:
     )
 
 
+def _ah_backend(symbol):
+    """liboqp (lib, ffi) exporting ``symbol``, or None."""
+    from oqp.library.fci import _lib_backend
+
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, symbol):
+        return None
+    return lib, ffi
+
+
+def _lib_ah_model_step(grad, w, U, trust, max_micro):
+    """AH model step through the Fortran engine.
+
+    Returns the same ``(step, shift, pred, nmic)`` tuple as the NumPy
+    reference (``step`` None for the no-reference-component case), or ``None``
+    when the engine is unavailable or LAPACK failed -- the caller then runs
+    the reference."""
+    backend = _ah_backend("casscf_ah_model_step")
+    if backend is None:
+        return None
+    lib, ffi = backend
+    npar = int(np.asarray(grad).size)
+    g = np.ascontiguousarray(grad, dtype=np.float64)
+    ww = np.ascontiguousarray(w, dtype=np.float64)
+    uu = np.ascontiguousarray(U, dtype=np.float64)
+    step = np.zeros(npar, dtype=np.float64)
+    shift = np.zeros(1, dtype=np.float64)
+    pred = np.zeros(1, dtype=np.float64)
+    nmic = np.zeros(1, dtype=np.int32)
+    status = int(lib.casscf_ah_model_step(
+        npar,
+        ffi.cast("double *", g.ctypes.data),
+        ffi.cast("double *", ww.ctypes.data),
+        ffi.cast("double *", uu.ctypes.data),
+        float(trust), int(max_micro), float(_V0_TOL),
+        ffi.cast("double *", step.ctypes.data),
+        ffi.cast("double *", shift.ctypes.data),
+        ffi.cast("double *", pred.ctypes.data),
+        ffi.cast("int32_t *", nmic.ctypes.data)))
+    if status == 1:
+        return None, float(shift[0]), 0.0, int(nmic[0])
+    if status != 0:
+        return None                       # LAPACK failure -> Python reference
+    return step, float(shift[0]), float(pred[0]), int(nmic[0])
+
+
 def _ah_model_step(grad, w, U, trust, max_micro):
     """Level-shifted augmented-Hessian step, constrained to the trust region.
+
+    Dispatches to the Fortran engine in ``casscf_ah.F90``; the NumPy
+    implementation below is the numerical pin and the fallback.  The engine is
+    a one-for-one transcription, including the microiteration budget and the
+    fall-through cases, and is pinned to the reference over randomized cases
+    (see ``tests/test_casscf_convergers.py``)."""
+    built = _lib_ah_model_step(grad, w, U, trust, max_micro)
+    if built is not None:
+        return built
+    return _ah_model_step_reference(grad, w, U, trust, max_micro)
+
+
+def _ah_model_step_reference(grad, w, U, trust, max_micro):
+    """NumPy reference for :func:`_ah_model_step` (the numerical pin).
 
     Works in the Hessian eigenbasis (H = U diag(w) U^T).  For a scale ``a`` the
     lowest eigenpair (lambda, v) of ``[[0, a g^T], [a g, diag(w)]]`` yields
@@ -395,7 +481,31 @@ def _ah_model_step(grad, w, U, trust, max_micro):
 
 
 def _lowest_mode_step(grad, w, U, trust):
-    """Saddle-escape trial step along the lowest Hessian mode (downhill sign)."""
+    """Saddle-escape trial step along the lowest Hessian mode (downhill sign).
+
+    Fortran engine first; the NumPy expression below is the numerical pin."""
+    backend = _ah_backend("casscf_lowest_mode_step")
+    if backend is not None:
+        lib, ffi = backend
+        npar = int(np.asarray(grad).size)
+        g = np.ascontiguousarray(grad, dtype=np.float64)
+        ww = np.ascontiguousarray(w, dtype=np.float64)
+        uu = np.ascontiguousarray(U, dtype=np.float64)
+        step = np.zeros(npar, dtype=np.float64)
+        pred = np.zeros(1, dtype=np.float64)
+        lib.casscf_lowest_mode_step(
+            npar,
+            ffi.cast("double *", g.ctypes.data),
+            ffi.cast("double *", ww.ctypes.data),
+            ffi.cast("double *", uu.ctypes.data), float(trust),
+            ffi.cast("double *", step.ctypes.data),
+            ffi.cast("double *", pred.ctypes.data))
+        return step, float(pred[0])
+    return _lowest_mode_step_reference(grad, w, U, trust)
+
+
+def _lowest_mode_step_reference(grad, w, U, trust):
+    """NumPy reference for :func:`_lowest_mode_step` (the numerical pin)."""
     u = U[:, 0]
     overlap = float(grad @ u)
     sgn = -1.0 if overlap > 0.0 else 1.0
@@ -448,7 +558,7 @@ def _ah_inner(C, evaluate, pairs, nbf, options, params, stagnation_break=0,
             step, _shift, pred, _nmic = _ah_model_step(grad, w, U, trust, params.max_micro)
             if step is None:
                 step, pred = _lowest_mode_step(grad, w, U, trust)
-            Cn = C @ expm(_kappa_matrix(step, pairs, nbf))
+            Cn = _orbital_rotate(C, step, pairs, nbf)
             obj_new, grad_new, en_new, co_new = evaluate(Cn)
             de = obj_new - obj_old
             if de <= _ACCEPT_TOL:
@@ -507,7 +617,7 @@ def _curvature_escape(C, energies, coeffs, curv, evaluate, pairs, nbf,
         vneg = U[:, int(np.argmin(w))]
         best_obj, best_C = None, None
         for amp in _ESCAPE_AMPS:
-            Cn = C @ expm(_kappa_matrix(amp * vneg, pairs, nbf))
+            Cn = _orbital_rotate(C, amp * vneg, pairs, nbf)
             on = evaluate(Cn)[0]
             if best_obj is None or on < best_obj:
                 best_obj, best_C = on, Cn
@@ -547,12 +657,40 @@ def _ah_converge(C, evaluate, pairs, nbf, options, params, trace, stagnation_bre
 
 
 # --------------------------------------------------------------------------- DIIS
+_DIIS_CONDMAX = 1.0e14         # bordered-B conditioning ceiling
+
+
 def _diis_coefficients(gradients):
     """Pulay coefficients minimizing |sum_i c_i g_i| with sum c_i = 1.
 
     Drops the oldest vectors while the bordered B matrix is ill-conditioned.
     Returns the coefficient vector for the *last* ``len(coef)`` stored entries,
-    or None when no stable extrapolation exists."""
+    or None when no stable extrapolation exists.
+
+    Fortran engine first; the NumPy implementation below is the numerical pin
+    and the fallback.  The engine forms the Gram matrix once and slices a
+    trailing sub-block per retry, rather than rebuilding B from scratch each
+    time the oldest vector is dropped."""
+    backend = _ah_backend("casscf_diis_coeffs")
+    if backend is not None:
+        lib, ffi = backend
+        gm = np.ascontiguousarray(np.asarray(gradients, dtype=np.float64))
+        if gm.ndim == 2 and gm.shape[0] >= 2 and gm.shape[1] > 0:
+            nvec, npar = gm.shape
+            coef = np.zeros(nvec, dtype=np.float64)
+            nused = np.zeros(1, dtype=np.int32)
+            lib.casscf_diis_coeffs(
+                int(nvec), int(npar),
+                ffi.cast("double *", gm.ctypes.data), float(_DIIS_CONDMAX),
+                ffi.cast("double *", coef.ctypes.data),
+                ffi.cast("int32_t *", nused.ctypes.data))
+            n = int(nused[0])
+            return coef[:n] if n > 0 else None
+    return _diis_coefficients_reference(gradients)
+
+
+def _diis_coefficients_reference(gradients):
+    """NumPy reference for :func:`_diis_coefficients` (the numerical pin)."""
     gs = list(gradients)
     while len(gs) >= 2:
         n = len(gs)
@@ -566,7 +704,7 @@ def _diis_coefficients(gradients):
         rhs = np.zeros(n + 1)
         rhs[n] = 1.0
         try:
-            if not np.all(np.isfinite(B)) or np.linalg.cond(B) > 1.0e14:
+            if not np.all(np.isfinite(B)) or np.linalg.cond(B) > _DIIS_CONDMAX:
                 raise np.linalg.LinAlgError("ill-conditioned DIIS matrix")
             coef = np.linalg.solve(B, rhs)[:n]
         except np.linalg.LinAlgError:
@@ -618,7 +756,7 @@ def _diis_optimize(C, evaluate, pairs, nbf, options, cfg, obj_weights, obj_roots
         obj_old = objective
         accepted_step = step
         for _bt in range(12):
-            Cn = C @ expm(_kappa_matrix(accepted_step, pairs, nbf))
+            Cn = _orbital_rotate(C, accepted_step, pairs, nbf)
             obj_new, grad_new, en_new, co_new = evaluate(Cn)
             if obj_new <= obj_old + _ACCEPT_TOL:
                 break
@@ -635,7 +773,7 @@ def _diis_optimize(C, evaluate, pairs, nbf, options, cfg, obj_weights, obj_roots
                 T_x = np.zeros_like(T_new)
                 for c, (t_i, _g_i) in zip(coef, sub):
                     T_x += c * t_i
-                C_x = C0 @ expm(_kappa_matrix(T_x, pairs, nbf))
+                C_x = _orbital_rotate(C0, T_x, pairs, nbf)
                 obj_x, grad_x, en_x, co_x = evaluate(C_x)
                 n_extrap += 1
                 if obj_x < obj_new - _ACCEPT_TOL:

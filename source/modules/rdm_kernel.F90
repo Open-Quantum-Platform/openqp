@@ -37,6 +37,7 @@ module rdm_kernel_mod
   integer, parameter :: dp = c_double
 
   public :: rdm1_spinorb, rdm2_spinorb, nevpt2_make_rdms
+  public :: rdm1_spatial, rdm2_spatial
 
 contains
 
@@ -224,24 +225,28 @@ contains
     deallocate(skeys, sperm)
   end subroutine rdm1_spinorb
 
-  !> D2[p,q,r,s] = <a+_p a+_q a_s a_r>, C-order [nspin,nspin,nspin,nspin].
+  !> Gram matrix of the doubly-annihilated intermediates,
+  !> gram(p*nspin+q, r*nspin+s) = D2[p,q,r,s] = <a+_p a+_q a_s a_r>.
+  !>
+  !> This is the whole of the 2-RDM build; the spin-orbital and spin-summed
+  !> spatial entry points below differ only in how they unpack it, so it is
+  !> written once here.  `gram` is allocated on return when info == 0.
   !>
   !> Returns 0 on success, or -1 if the caller's `cap` on the number of
   !> reachable intermediates was too small (the Python fallback then runs).
-  function rdm2_spinorb(nspin, ndet, dets, civec, cap, d2, nthreads) result(info) &
-      bind(C, name="rdm2_spinorb")
-    integer(c_int32_t), value :: nspin, nthreads
-    integer(i8), value :: ndet, cap
-    integer(i8), intent(in) :: dets(0:ndet-1)
-    real(dp), intent(in) :: civec(0:ndet-1)
-    real(dp), intent(inout) :: d2(0:nspin*nspin*nspin*nspin-1)
-    integer(i8) :: info
+  subroutine rdm2_gram(nspin, ndet, dets, civec, cap, gram, info)
+    integer(c_int32_t), intent(in) :: nspin
+    integer(i8), intent(in) :: ndet, cap
+    integer(i8), intent(in) :: dets(0:)
+    real(dp), intent(in) :: civec(0:)
+    real(dp), allocatable, intent(out) :: gram(:,:)
+    integer(i8), intent(out) :: info
 
     integer(i8), allocatable :: keys(:)
-    real(dp), allocatable :: x(:,:), gram(:,:)
+    real(dp), allocatable :: x(:,:)
     integer(i8) :: col, det, det_a, det_ab, nkey, t, idx
     integer(i8) :: abit, bbit
-    integer :: a, b, npair, pq, rs, p, q, r, s, phase
+    integer :: a, b, npair, phase
     real(dp) :: c
 
     info = 0_i8
@@ -273,7 +278,8 @@ contains
     end do
 
     if (nkey == 0_i8) then
-      d2 = 0.0_dp
+      allocate(gram(0:npair-1, 0:npair-1))
+      gram = 0.0_dp
       deallocate(keys)
       return
     end if
@@ -323,6 +329,26 @@ contains
     call dgemm('T', 'N', npair, npair, int(nkey), 1.0_dp, x, int(nkey), &
                x, int(nkey), 0.0_dp, gram, npair)
     deallocate(x)
+  end subroutine rdm2_gram
+
+  !> D2[p,q,r,s] = <a+_p a+_q a_s a_r>, C-order [nspin,nspin,nspin,nspin].
+  !>
+  !> Returns 0 on success, or -1 if the caller's `cap` on the number of
+  !> reachable intermediates was too small (the Python fallback then runs).
+  function rdm2_spinorb(nspin, ndet, dets, civec, cap, d2, nthreads) result(info) &
+      bind(C, name="rdm2_spinorb")
+    integer(c_int32_t), value :: nspin, nthreads
+    integer(i8), value :: ndet, cap
+    integer(i8), intent(in) :: dets(0:ndet-1)
+    real(dp), intent(in) :: civec(0:ndet-1)
+    real(dp), intent(inout) :: d2(0:nspin*nspin*nspin*nspin-1)
+    integer(i8) :: info
+
+    real(dp), allocatable :: gram(:,:)
+    integer :: p, q, r, s, pq, rs
+
+    call rdm2_gram(nspin, ndet, dets, civec, cap, gram, info)
+    if (info /= 0_i8) return
 
     ! gram(pq, rs) with pq = p*nspin+q is exactly D2[p,q,r,s]; write it out in
     ! the caller's C order (last index fastest).
@@ -339,6 +365,149 @@ contains
     end do
     deallocate(gram)
   end function rdm2_spinorb
+
+  !> Spin-summed spatial 1-RDM, C-order [norb,norb].
+  !>
+  !> Replaces rdm.py `make_rdm1_spatial`, which builds the [2n,2n] spin-orbital
+  !> D1 and then adds its two diagonal spin blocks in NumPy.  Only same-spin
+  !> (p,q) pairs survive that sum, so the creation loop is restricted to the
+  !> spin block of the annihilated orbital and the [2n,2n] intermediate is
+  !> never formed -- only the two n x n diagonal blocks are.
+  !>
+  !> Those two blocks are accumulated SEPARATELY and added at the very end,
+  !> rather than into one shared accumulator.  That is deliberate: it visits
+  !> each block's terms in exactly the order `rdm1_spinorb` does and then
+  !> performs the same single elementwise add the NumPy pin performs, so the
+  !> result is bit-identical to the pinned path.  Interleaving the two spin
+  !> channels into one accumulator is mathematically identical but reassociates
+  !> the sum, and the resulting ~1e-15 wobble in the RDM was observed to move
+  !> a near-degenerate H4 MCQDPT2 excited state in its 8th decimal.
+  subroutine rdm1_spatial(norb, ndet, dets, civec, d1) &
+      bind(C, name="rdm1_spatial")
+    integer(c_int32_t), value :: norb
+    integer(i8), value :: ndet
+    integer(i8), intent(in) :: dets(0:ndet-1)
+    real(dp), intent(in) :: civec(0:ndet-1)
+    real(dp), intent(inout) :: d1(0:norb*norb-1)
+
+    integer(i8) :: col, det, det_q, det_pq, row, qbit, pbit
+    integer(i8), allocatable :: skeys(:), sperm(:)
+    real(dp), allocatable :: dblk(:,:)
+    integer :: p, q, nspin, base, ps, qs, phase, blk
+    real(dp) :: c
+
+    if (norb <= 0) return
+    nspin = 2 * norb
+    allocate(skeys(0:ndet-1), sperm(0:ndet-1))
+    do col = 0_i8, ndet - 1_i8
+      skeys(col) = dets(col)
+      sperm(col) = col
+    end do
+    call sort_keys_perm(ndet, skeys, sperm)
+
+    ! dblk(:, 0) is the alpha-alpha block, dblk(:, 1) the beta-beta block.
+    allocate(dblk(0:norb*norb-1, 0:1))
+    dblk = 0.0_dp
+    do col = 0_i8, ndet - 1_i8
+      c = civec(col)
+      if (c == 0.0_dp) cycle
+      det = dets(col)
+      do qs = 0, nspin - 1
+        qbit = ishft(1_i8, qs)
+        if (iand(det, qbit) == 0_i8) cycle
+        phase = 1
+        if (mod(popcnt_below(det, qbit), 2) /= 0) phase = -1
+        det_q = ieor(det, qbit)
+        ! same-spin block only: the opposite-spin (p,q) elements are dropped
+        ! by the spin sum, so they are never computed.
+        base = 0
+        blk = 0
+        if (qs >= norb) then
+          base = norb
+          blk = 1
+        end if
+        q = qs - base
+        do p = 0, norb - 1
+          ps = p + base
+          pbit = ishft(1_i8, ps)
+          if (iand(det_q, pbit) /= 0_i8) cycle
+          det_pq = ior(det_q, pbit)
+          row = bsearch(ndet, skeys, det_pq)
+          if (row < 0_i8) cycle
+          row = sperm(row)
+          if (mod(popcnt_below(det_q, pbit), 2) /= 0) then
+            dblk(p*norb + q, blk) = dblk(p*norb + q, blk) - phase * civec(row) * c
+          else
+            dblk(p*norb + q, blk) = dblk(p*norb + q, blk) + phase * civec(row) * c
+          end if
+        end do
+      end do
+    end do
+
+    ! the single elementwise add the NumPy pin performs
+    do p = 0, norb*norb - 1
+      d1(p) = dblk(p, 0) + dblk(p, 1)
+    end do
+    deallocate(skeys, sperm, dblk)
+  end subroutine rdm1_spatial
+
+  !> Spin-summed spatial 2-RDM in chemists' order, C-order [norb,norb,norb,norb]:
+  !>
+  !>     D[p,q,r,s] = sum_{sigma,tau} <a+_{p sigma} a+_{r tau} a_{s tau} a_{q sigma}>
+  !>
+  !> which contracts with spatial integrals as 0.5 * sum (pq|rs) D[p,q,r,s].
+  !>
+  !> Replaces rdm.py `make_rdm2_spatial`.  The Python builds the [2n,2n,2n,2n]
+  !> spin-orbital D2 -- sixteen times the spatial size -- and then sums four
+  !> transposed spin blocks out of it.  In terms of the Gram matrix the whole
+  !> reduction is
+  !>
+  !>     D[p,q,r,s] = sum_{so,to} gram[(p+so)*2n + (r+to), (q+so)*2n + (s+to)]
+  !>
+  !> so the spin-orbital tensor is never materialised: the four spin blocks are
+  !> read straight off the Gram matrix that the build already produces.
+  !>
+  !> Returns 0 on success, or -1 if `cap` was too small (Python fallback).
+  function rdm2_spatial(norb, ndet, dets, civec, cap, d2, nthreads) result(info) &
+      bind(C, name="rdm2_spatial")
+    integer(c_int32_t), value :: norb, nthreads
+    integer(i8), value :: ndet, cap
+    integer(i8), intent(in) :: dets(0:ndet-1)
+    real(dp), intent(in) :: civec(0:ndet-1)
+    real(dp), intent(inout) :: d2(0:norb*norb*norb*norb-1)
+    integer(i8) :: info
+
+    real(dp), allocatable :: gram(:,:)
+    integer(c_int32_t) :: nspin
+    integer :: p, q, r, s, so, to
+    real(dp) :: acc
+
+    info = 0_i8
+    if (norb <= 0) return
+    nspin = 2 * norb
+    call rdm2_gram(nspin, ndet, dets, civec, cap, gram, info)
+    if (info /= 0_i8) return
+
+    do p = 0, norb - 1
+      do q = 0, norb - 1
+        do r = 0, norb - 1
+          do s = 0, norb - 1
+            acc = 0.0_dp
+            do so = 0, norb, norb
+              if (so /= 0 .and. so /= norb) cycle
+              do to = 0, norb, norb
+                if (to /= 0 .and. to /= norb) cycle
+                acc = acc + gram((p + so)*nspin + (r + to), &
+                                 (q + so)*nspin + (s + to))
+              end do
+            end do
+            d2(((p*norb + q)*norb + r)*norb + s) = acc
+          end do
+        end do
+      end do
+    end do
+    deallocate(gram)
+  end function rdm2_spatial
 
 
   !> Spin-free dm1..dm4 in the PySCF make_dm1234 convention
