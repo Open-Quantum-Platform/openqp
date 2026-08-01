@@ -752,18 +752,22 @@ contains
     !$omp parallel default(shared) &
     !$omp   private(i,j,k,a,b,c,e,m,dd,tc,td,num,Q,jk,ik,ji,eijk,eab) &
     !$omp   reduction(+:et)
-    allocate(Q(nv,nv,nv,3))
+    allocate(Q(nv,nv,nv,1))
     !$omp do collapse(3) schedule(dynamic)
     do i = 1, no
       do j = 1, no
         do k = 1, no
-          ! q2 depends on the occupied triple only through three orderings,
-          ! and the connected numerator asks for each of them three times over
-          ! permuted virtuals.  Building the three nv^3 panels once per (i,j,k)
-          ! replaces nine recomputations per element with nine array reads.
-          call build_q(i,j,k, Q(:,:,:,1))
-          call build_q(j,i,k, Q(:,:,:,2))
-          call build_q(k,j,i, Q(:,:,:,3))
+          ! The three occupied orderings enter the numerator with fixed signs,
+          !   num = P(a,b,c) - P(b,a,c) - P(c,b,a),   P = Q(ijk) - Q(jik) - Q(kji),
+          ! so accumulate them into ONE panel through the DGEMM scale factors
+          ! rather than keeping three and combining per element.  Identical
+          ! algebra, a third of the panel memory, and -- what matters at scale
+          ! -- a third of the traffic: the panels are far past cache (27 MB per
+          ! triple at cc-pVTZ on O2) so the energy loop streams them from DRAM,
+          ! and it walks each one in three different index orders.
+          call accum_q(i,j,k,  1.0_dp, 0.0_dp, Q(:,:,:,1))
+          call accum_q(j,i,k, -1.0_dp, 1.0_dp, Q(:,:,:,1))
+          call accum_q(k,j,i, -1.0_dp, 1.0_dp, Q(:,:,:,1))
 
           ! The three occupied pairs the disconnected term needs, matching
           ! disc = p1(i,j,k) - p1(j,i,k) - p1(k,j,i): each p1 reads the pair
@@ -779,9 +783,7 @@ contains
               do c = 1, nv
                 dd = eab - eso(no+c)
                 if (abs(dd) < 1.0e-12_dp) cycle
-                num =  (Q(a,b,c,1) - Q(b,a,c,1) - Q(c,b,a,1)) &
-                     - (Q(a,b,c,2) - Q(b,a,c,2) - Q(c,b,a,2)) &
-                     - (Q(a,b,c,3) - Q(b,a,c,3) - Q(c,b,a,3))
+                num = Q(a,b,c,1) - Q(b,a,c,1) - Q(c,b,a,1)
                 tc = num / dd
                 ! disc(i,j,k,a,b,c), inlined against the packed (b,c) planes.
                 td = ( t1(i,a)*gvvp(b,c,jk) - t1(i,b)*gvvp(a,c,jk)      &
@@ -812,22 +814,25 @@ contains
 
   end subroutine triples
 
-  !> q2 over the whole virtual cube for one occupied ordering:
-  !>   Q(a,b,c) = sum_e t2(j,k,a,e) <ei||bc> - sum_m t2(i,m,b,c) <ma||jk>
+  !> Accumulate @p sgn times q2 for one occupied ordering into @p Q:
+  !>   q2(a,b,c) = sum_e t2(j,k,a,e) <ei||bc> - sum_m t2(i,m,b,c) <ma||jk>
   !>
   !> Two DGEMMs on the panels triples() packed, in place of the loop nest this
   !> used to be.  Same flops; the strided reads of g and t2 now happen once per
-  !> panel instead of once per element.
-  subroutine build_q(i, j, k, Q)
+  !> panel instead of once per element.  @p beta is the usual DGEMM meaning --
+  !> 0 to start a fresh panel, 1 to add to the one already there -- which is
+  !> how the three orderings fold into a single panel for free.
+  subroutine accum_q(i, j, k, sgn, beta, Q)
     integer, intent(in) :: i, j, k
-    real(dp), intent(out) :: Q(nv,nv,nv)
+    real(dp), intent(in) :: sgn, beta
+    real(dp), intent(inout) :: Q(nv,nv,nv)
     integer :: jk
     jk = (k-1)*no + j
-    call dgemm('n','n', nv, nv*nv, nv, 1.0_dp, t2v(1,1,jk), nv, &
-               gvv(1,1,i), nv, 0.0_dp, Q, nv)
-    call dgemm('t','n', nv, nv*nv, no, -1.0_dp, gov(1,1,jk), no, &
+    call dgemm('n','n', nv, nv*nv, nv, sgn, t2v(1,1,jk), nv, &
+               gvv(1,1,i), nv, beta, Q, nv)
+    call dgemm('t','n', nv, nv*nv, no, -sgn, gov(1,1,jk), no, &
                t2o(1,1,i), no, 1.0_dp, Q, nv)
-  end subroutine build_q
+  end subroutine accum_q
 
 
 end subroutine cc_uhf_ccsd_t
