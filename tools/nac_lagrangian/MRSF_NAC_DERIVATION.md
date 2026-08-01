@@ -1472,3 +1472,22 @@ w_skel(F[D_ref]); [w_ref - w_skel - stagedC] = the true F-channel;
 diff against gvec(dD(Ux)) names the dD-model error (candidates: the
 ROHF occupation model, the XC response in gbuild vs the sigma's Fock
 usage, spin-resolution of dD).
+
+### 7.52 v19: the F-channel is 89% closed; the LAST OBJECT is the
+fold-sector Fock response beyond the linear FOCK-record channel
+Separate-process 1-iter workers (this process's phases) + fixed-Sk Ux:
+  |w_ref|=0.066, |w_skel|=0.669, |stagedC|=0.651
+  trueF = w_ref - w_skel - stagedC: |trueF|=0.0871
+  gvec(dD_model): |gvec|=0.0914;  |trueF - gvec| = 0.0102 (11%)
+  The residual concentrates ONCE MORE on LR1 (+0.0072) and the socc2
+  rows -- the fold sector.
+ACCOUNTING NOW COMPLETE TO ~1%: U-channel = stagedC (closed, 4e-4)
++ F-channel (dD-model + measured-G, 89%) + [0.010 fold-sector
+residual]. The last named object: the sigma's SOCC/fold-sector Fock
+usage responds to the density beyond the linear FOCK_A/FOCK_B-record
+channel (candidates: the open-shell spc coupling's fa/fb combinations,
+XC response pieces reaching the socc rows differently than gbuild's
+record perturbation represents). This is a ~1%-of-channel effect
+(~2e-2 on d for the worst pair), fold-sector-local, and is THE
+remaining derivation item for theory-level closure. Everything else
+in the U-channel is closed at FD-truncation level.
