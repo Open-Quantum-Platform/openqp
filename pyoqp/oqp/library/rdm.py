@@ -6,6 +6,8 @@ from itertools import combinations
 
 import numpy as np
 
+from oqp.library.fci import _as_f64c, _as_i64c
+
 
 try:  # Python >= 3.10
     _POPCOUNT = int.bit_count
@@ -31,8 +33,8 @@ def _lib_rdm1(coeff, dets, n_spinorb):
     lib, ffi = backend
     if not hasattr(lib, "rdm1_spinorb"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeff)
     out = np.zeros((n_spinorb, n_spinorb), dtype=np.float64)
     lib.rdm1_spinorb(
         int(n_spinorb), int(det_arr.size),
@@ -50,8 +52,8 @@ def _lib_rdm2(coeff, dets, n_spinorb):
     lib, ffi = backend
     if not hasattr(lib, "rdm2_spinorb"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeff)
     out = np.zeros((n_spinorb,) * 4, dtype=np.float64)
     # Every determinant contributes at most n_spinorb^2 double annihilations.
     cap = int(det_arr.size) * int(n_spinorb) * int(n_spinorb) + 1
@@ -77,8 +79,8 @@ def _lib_rdm1_spatial(coeff, dets, norb):
     lib, ffi = backend
     if not hasattr(lib, "rdm1_spatial"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeff)
     out = np.zeros((norb, norb), dtype=np.float64)
     lib.rdm1_spatial(
         int(norb), int(det_arr.size),
@@ -100,8 +102,8 @@ def _lib_rdm2_spatial(coeff, dets, norb):
     lib, ffi = backend
     if not hasattr(lib, "rdm2_spatial"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeff)
     out = np.zeros((norb,) * 4, dtype=np.float64)
     # Every determinant contributes at most (2*norb)^2 double annihilations.
     cap = int(det_arr.size) * (2 * int(norb)) ** 2 + 1
@@ -397,7 +399,7 @@ def _real_square_matrix(values: np.ndarray, label: str) -> np.ndarray:
         raise ValueError(f"{label} must contain finite real values") from exc
     if raw.dtype.kind not in {"i", "u", "f"}:
         raise ValueError(f"{label} must contain finite real values")
-    matrix = np.ascontiguousarray(raw, dtype=np.float64)
+    matrix = _as_f64c(raw)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1] or matrix.shape[0] < 1:
         raise ValueError(f"{label} must be a non-empty square matrix")
     if not np.all(np.isfinite(matrix)):

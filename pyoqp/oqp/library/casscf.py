@@ -60,6 +60,7 @@ from oqp.library.fci import (
     solve_fci,
     _symmetric_eigh,
     _lib_backend,
+    _as_f64c,
 )
 from oqp.library.rdm import (
     make_rdm1_spatial,
@@ -180,11 +181,11 @@ def _lib_gfock_grad(nbf, ncore, nact, weights, gammas, Gammas, h1e, eri, npair):
     if backend is None:
         return None
     lib, ffi = backend
-    w = np.ascontiguousarray(weights, dtype=np.float64)
-    g1 = np.ascontiguousarray(gammas, dtype=np.float64)
-    g2 = np.ascontiguousarray(Gammas, dtype=np.float64)
-    hh = np.ascontiguousarray(h1e, dtype=np.float64)
-    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    w = _as_f64c(weights)
+    g1 = _as_f64c(gammas)
+    g2 = _as_f64c(Gammas)
+    hh = _as_f64c(h1e)
+    vv = _as_f64c(eri)
     fock = np.zeros((nbf, nbf), dtype=np.float64)
     grad = np.zeros(npair, dtype=np.float64)
     lib.casscf_gfock_grad(
@@ -269,8 +270,8 @@ def _orbital_rotate(C, vec, pairs, nbf):
     if backend is not None:
         lib, ffi = backend
         pr = _pairs_array(pairs)
-        v = np.ascontiguousarray(vec, dtype=np.float64)
-        cin = np.ascontiguousarray(C, dtype=np.float64)
+        v = _as_f64c(vec)
+        cin = _as_f64c(C)
         out = np.zeros((nbf, nbf), dtype=np.float64)
         info = lib.casscf_orbital_rotate(
             int(nbf), int(pr.shape[0]),
@@ -304,9 +305,9 @@ def _lib_effective_fock(h1e, eri, D):
         return None
     lib, ffi = backend
     nbf = int(h1e.shape[0])
-    d = np.ascontiguousarray(D, dtype=np.float64)
-    hh = np.ascontiguousarray(h1e, dtype=np.float64)
-    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    d = _as_f64c(D)
+    hh = _as_f64c(h1e)
+    vv = _as_f64c(eri)
     out = np.zeros((nbf, nbf), dtype=np.float64)
     lib.casscf_effective_fock(
         nbf,
@@ -668,7 +669,7 @@ class CASSCF:
             report_energies = [float(energies[r]) for r in roots]
         mol.energies = report_energies
         mol.mol_energy.energy = float(report_energies[0])
-        mol.data["OQP::CASSCF_ENERGIES"] = np.ascontiguousarray(report_energies, dtype=np.float64)
+        mol.data["OQP::CASSCF_ENERGIES"] = _as_f64c(report_energies)
 
         self._write_log(ref_energy, ncore, nact, active_nelec, settings, options,
                         history, converged, niter, energies, s2, mult,

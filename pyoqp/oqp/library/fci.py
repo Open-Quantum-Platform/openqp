@@ -221,7 +221,7 @@ def _real_array(values, label: str) -> np.ndarray:
         raise ValueError(f"{label} must contain finite real values") from exc
     if raw.dtype.kind not in {"i", "u", "f"}:
         raise ValueError(f"{label} must contain finite real values")
-    array = np.ascontiguousarray(raw, dtype=np.float64)
+    array = _as_f64c(raw)
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{label} must be finite")
     return array
@@ -396,8 +396,8 @@ def _lib_spin_square(coeffs, dets, norb, nelec):
     # the engine quietly report the ms-only value.
     if not np.all(np.linalg.norm(coeffs, axis=0) > 0.0):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-    civec = np.ascontiguousarray(coeffs, dtype=np.float64)
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeffs)
     s2 = np.zeros(nvec, dtype=np.float64)
     status = int(lib.fci_spin_square(
         int(norb), ndet, nvec,
@@ -442,7 +442,7 @@ def fci_spin_diagnostics(
         )
     multiplicity = np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * s2))).astype(np.int64)
     multiplicity = np.maximum(multiplicity, 1)
-    return np.ascontiguousarray(s2, dtype=np.float64), np.ascontiguousarray(
+    return _as_f64c(s2), np.ascontiguousarray(
         multiplicity,
         dtype=np.int64,
     )
@@ -537,7 +537,7 @@ def _state_average_payload(
 
     return {
         "energy": state_average_energy,
-        "weights": np.ascontiguousarray(weights, dtype=np.float64),
+        "weights": _as_f64c(weights),
         "roots": np.ascontiguousarray(roots, dtype=np.int64),
         "root_indices": np.ascontiguousarray(selected_root_indices, dtype=np.int64),
     }
@@ -547,7 +547,7 @@ def _state_average_real_vector(values, label: str) -> np.ndarray:
     array = _real_array(values, label)
     if array.ndim != 1:
         raise ValueError(f"{label} must be a one-dimensional array")
-    return np.ascontiguousarray(array, dtype=np.float64)
+    return _as_f64c(array)
 
 
 def _state_average_integer_vector(values, label: str) -> np.ndarray:
@@ -703,8 +703,8 @@ def _spin_orbital_integrals(
     numerical pin.  All three are bit-identical -- the expansion is a permuted
     copy with no arithmetic in it.
     """
-    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
-    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    h1e = _as_f64c(h1e)
+    eri = _as_f64c(eri)
     norb = int(h1e.shape[0])
     backend = _lib_backend()
     if backend is None or norb <= 0:
@@ -796,11 +796,11 @@ def _lib_dense_hamiltonian(dets, hspin, gspin, nspin, cutoff):
     lib, ffi = backend
     if not hasattr(lib, "fci_dense_hamiltonian"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    det_arr = _as_i64c(dets)
     ndet = int(det_arr.size)
     h = np.zeros((ndet, ndet), dtype=np.float64)
-    hs = np.ascontiguousarray(hspin, dtype=np.float64)
-    gs = np.ascontiguousarray(gspin, dtype=np.float64)
+    hs = _as_f64c(hspin)
+    gs = _as_f64c(gspin)
     lib.fci_dense_hamiltonian(
         int(nspin), ndet, ffi.cast("int64_t *", det_arr.ctypes.data),
         ffi.cast("double *", hs.ctypes.data), ffi.cast("double *", gs.ctypes.data),
@@ -817,9 +817,9 @@ class _LibHamiltonianOperator:
     symmetrization."""
 
     def __init__(self, dets, hspin, gspin, nspin, cutoff):
-        self._dets = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
-        self._hs = np.ascontiguousarray(hspin, dtype=np.float64)
-        self._gs = np.ascontiguousarray(gspin, dtype=np.float64)
+        self._dets = _as_i64c(dets)
+        self._hs = _as_f64c(hspin)
+        self._gs = _as_f64c(gspin)
         self._nspin = int(nspin)
         self._cutoff = float(cutoff)
         ndet = int(self._dets.size)
@@ -1012,7 +1012,7 @@ def _symmetric_eigh_jacobi(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     eigvals = np.diag(a).copy()
     order = np.argsort(eigvals, kind="mergesort")
     return (
-        np.ascontiguousarray(eigvals[order], dtype=np.float64),
+        _as_f64c(eigvals[order]),
         np.ascontiguousarray(eigvecs[:, order], dtype=np.float64),
     )
 
@@ -1030,13 +1030,50 @@ def _eigen_residual_norm(
     return float(np.linalg.norm(residual))
 
 
+_F64 = np.dtype(np.float64)
+_I64 = np.dtype(np.int64)
+_BACKEND_CACHE = None
+
+
+def _as_f64c(a):
+    """A C-contiguous float64 array, without paying for a no-op conversion.
+
+    ``np.ascontiguousarray`` costs ~4.5 us even when it has nothing to do, and
+    the native wrappers call it on every crossing -- the eigensolver path alone
+    ran it ~2300 times per CASSCF run on arrays that were already contiguous
+    float64.  Checking first is several times cheaper than calling it."""
+    if type(a) is np.ndarray and a.dtype is _F64 and a.flags.c_contiguous:
+        return a
+    return np.ascontiguousarray(a, dtype=np.float64)
+
+
+def _as_i64c(a):
+    """A C-contiguous int64 array, without paying for a no-op conversion.
+
+    The int64 twin of :func:`_as_f64c`; determinant lists cross the boundary on
+    every native call and were being run through ``asarray`` plus
+    ``ascontiguousarray`` each time."""
+    if type(a) is np.ndarray and a.dtype is _I64 and a.flags.c_contiguous:
+        return a
+    return np.ascontiguousarray(np.asarray(a, dtype=np.int64))
+
+
 def _lib_backend():
-    """(lib, ffi) of the loaded native core, or None when unavailable."""
+    """(lib, ffi) of the loaded native core, or None when unavailable.
+
+    Cached after the first success: this is called on every native crossing
+    (877 times in a single CASSCF run) and the import machinery is not free.
+    A failure is not cached, so a backend that appears later is still picked
+    up."""
+    global _BACKEND_CACHE
+    if _BACKEND_CACHE is not None:
+        return _BACKEND_CACHE
     try:
         from oqp import lib, ffi
     except Exception:
         return None
-    return lib, ffi
+    _BACKEND_CACHE = (lib, ffi)
+    return _BACKEND_CACHE
 
 
 def _lib_dsyevd(sym: np.ndarray):
@@ -1062,7 +1099,7 @@ def _lib_dsyevd(sym: np.ndarray):
                     np.zeros((0, 0), dtype=np.float64))
         return (np.asarray(sym, dtype=np.float64).reshape(1).copy(),
                 np.ones((1, 1), dtype=np.float64))
-    a = np.ascontiguousarray(sym, dtype=np.float64).copy()
+    a = np.array(sym, dtype=np.float64, order="C", copy=True)
     w = np.zeros(n, dtype=np.float64)
     info = int(lib.oqp_dsyevd(n, ffi.cast("double *", a.ctypes.data),
                               ffi.cast("double *", w.ctypes.data)))
@@ -1076,7 +1113,7 @@ def _symmetric_eigh(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     matrix = np.asarray(matrix, dtype=np.float64)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         raise ValueError("symmetric eigensolver requires a square matrix")
-    sym = np.ascontiguousarray(0.5 * (matrix + matrix.T), dtype=np.float64)
+    sym = _as_f64c(0.5 * (matrix + matrix.T))
     scale = max(float(np.max(np.abs(sym))), 1.0) if sym.size else 1.0
     residual_tol = max(1.0e-8 * scale, 100.0 * np.finfo(np.float64).eps * sym.shape[0] * scale)
     def _verified(eigvals, eigvecs):
@@ -1087,8 +1124,7 @@ def _symmetric_eigh(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             sym @ eigvecs - eigvecs * eigvals[None, :], axis=0))) if sym.size else 0.0
         if worst > residual_tol:
             return None
-        return (np.ascontiguousarray(eigvals, dtype=np.float64),
-                np.ascontiguousarray(eigvecs, dtype=np.float64))
+        return _as_f64c(eigvals), _as_f64c(eigvecs)
 
     # liboqp's own ILP64 LAPACK is the primary path: it is the same threaded
     # library the rest of the native code computes with, and it is ABI-proof by
@@ -1120,7 +1156,7 @@ class _DenseMatrixOperator:
     __slots__ = ("_h", "shape", "_diag")
 
     def __init__(self, matrix):
-        self._h = np.ascontiguousarray(matrix, dtype=np.float64)
+        self._h = _as_f64c(matrix)
         self.shape = self._h.shape
         self._diag = np.ascontiguousarray(np.diag(self._h))
 
@@ -1553,9 +1589,9 @@ def _transform_integrals(
     ``ascontiguousarray`` rolls between steps cost more than the einsum's own
     bookkeeping; avoiding those copies is what the Fortran formulation is for.
     """
-    hcore_ao = np.ascontiguousarray(hcore_ao, dtype=np.float64)
-    eri_ao = np.ascontiguousarray(eri_ao, dtype=np.float64)
-    coeff = np.ascontiguousarray(coeff, dtype=np.float64)
+    hcore_ao = _as_f64c(hcore_ao)
+    eri_ao = _as_f64c(eri_ao)
+    coeff = _as_f64c(coeff)
     nbf = int(coeff.shape[0])
     backend = _lib_backend()
     if (backend is None or nbf <= 0
@@ -1933,8 +1969,8 @@ def _fold_core(h1e, eri, active_list, core_list, ecore=0.0):
     are explicit so the sequential and the explicitly selected CAS paths share
     one implementation.
     """
-    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
-    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    h1e = _as_f64c(h1e)
+    eri = _as_f64c(eri)
     norb = int(h1e.shape[0])
     nact = len(active_list)
     backend = _lib_backend()
@@ -2131,9 +2167,9 @@ class FCI:
                     solve_nroot = min(determinant_count, max(solve_nroot + 1, 2 * solve_nroot))
 
         self.mol.energies = energies.tolist()
-        self.mol.data[f"OQP::{self.data_prefix}_ENERGIES"] = np.ascontiguousarray(energies, dtype=np.float64)
-        self.mol.data[f"OQP::{self.data_prefix}_CI_VECTORS"] = np.ascontiguousarray(coeffs, dtype=np.float64)
-        self.mol.data[f"OQP::{self.data_prefix}_S2"] = np.ascontiguousarray(s2, dtype=np.float64)
+        self.mol.data[f"OQP::{self.data_prefix}_ENERGIES"] = _as_f64c(energies)
+        self.mol.data[f"OQP::{self.data_prefix}_CI_VECTORS"] = _as_f64c(coeffs)
+        self.mol.data[f"OQP::{self.data_prefix}_S2"] = _as_f64c(s2)
         self.mol.data[f"OQP::{self.data_prefix}_MULTIPLICITY"] = np.ascontiguousarray(
             multiplicity,
             dtype=np.int64,
@@ -2162,9 +2198,9 @@ class FCI:
             active_alpha_electrons = int(metadata.get("active_alpha_electrons", nelec[0]))
             active_beta_electrons = int(metadata.get("active_beta_electrons", nelec[1]))
             artifact_arrays = {
-                "energies": np.ascontiguousarray(energies, dtype=np.float64),
-                "ci_vectors": np.ascontiguousarray(coeffs, dtype=np.float64),
-                "s2": np.ascontiguousarray(s2, dtype=np.float64),
+                "energies": _as_f64c(energies),
+                "ci_vectors": _as_f64c(coeffs),
+                "s2": _as_f64c(s2),
                 "multiplicity": np.ascontiguousarray(multiplicity, dtype=np.int64),
                 "root_indices": np.ascontiguousarray(root_indices, dtype=np.int64),
                 "determinant_count": np.asarray([metadata["determinants"]], dtype=np.int64),
@@ -2323,10 +2359,10 @@ class FCI:
         _save_npz_artifact(
             self.mol,
             f"{self.method_label}_rdm",
-            rdm1=np.ascontiguousarray(rdm1_roots[0], dtype=np.float64),
-            rdm2=np.ascontiguousarray(rdm2_roots[0], dtype=np.float64),
-            rdm1_roots=np.ascontiguousarray(rdm1_roots, dtype=np.float64),
-            rdm2_roots=np.ascontiguousarray(rdm2_roots, dtype=np.float64),
+            rdm1=_as_f64c(rdm1_roots[0]),
+            rdm2=_as_f64c(rdm2_roots[0]),
+            rdm1_roots=_as_f64c(rdm1_roots),
+            rdm2_roots=_as_f64c(rdm2_roots),
             natural_occupations=np.ascontiguousarray(
                 natural_occupation_roots[0],
                 dtype=np.float64,
@@ -2335,7 +2371,7 @@ class FCI:
                 natural_occupation_roots,
                 dtype=np.float64,
             ),
-            energies=np.ascontiguousarray(energies, dtype=np.float64),
+            energies=_as_f64c(energies),
             root_indices=np.ascontiguousarray(root_indices, dtype=np.int64),
             active_electrons=np.asarray(
                 [

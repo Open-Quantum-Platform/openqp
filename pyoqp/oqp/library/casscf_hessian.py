@@ -126,6 +126,8 @@ from math import comb
 
 import numpy as np
 
+from oqp.library.fci import _as_f64c, _as_i64c
+
 from oqp.library.fci import _determinants, _symmetric_eigh, _transform_integrals
 from oqp.library.rdm import annihilate, create, make_rdm1_spatial, make_rdm2_spatial
 
@@ -239,7 +241,7 @@ def _lib_excitation_stack(nact, dets):
     lib, ffi = backend
     if not hasattr(lib, "casscf_excitation_stack"):
         return None
-    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    det_arr = _as_i64c(dets)
     ndet = int(det_arr.size)
     stack = np.zeros((int(nact), int(nact), ndet, ndet), dtype=np.float64)
     info = lib.casscf_excitation_stack(
@@ -377,10 +379,10 @@ def _lib_hess_bmat(nbf, ncore, nact, pairs, D, G, h1e, eri):
     lib, ffi = backend
     npar = len(pairs)
     pr = np.ascontiguousarray(np.asarray(pairs, dtype=np.int32).reshape(npar, 2))
-    dd = np.ascontiguousarray(D, dtype=np.float64)
-    gg = np.ascontiguousarray(G, dtype=np.float64)
-    hh = np.ascontiguousarray(h1e, dtype=np.float64)
-    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    dd = _as_f64c(D)
+    gg = _as_f64c(G)
+    hh = _as_f64c(h1e)
+    vv = _as_f64c(eri)
     B = np.zeros((npar, npar), dtype=np.float64)
     f_der = np.zeros((npar, nact, nact), dtype=np.float64)
     g_der = np.zeros((npar,) + (nact,) * 4, dtype=np.float64)
@@ -423,10 +425,10 @@ def _lib_hess_relax(npar, ndet, iavg, ovl, weights, eps, e_i, amp, hess,
     lib, ffi = backend
     if not hasattr(lib, "casscf_hess_relax"):
         return False
-    ov = np.ascontiguousarray(ovl, dtype=np.float64)
-    wt = np.ascontiguousarray(weights, dtype=np.float64)
-    ep = np.ascontiguousarray(eps, dtype=np.float64)
-    am = np.ascontiguousarray(amp, dtype=np.float64)
+    ov = _as_f64c(ovl)
+    wt = _as_f64c(weights)
+    ep = _as_f64c(eps)
+    am = _as_f64c(amp)
     info = int(lib.casscf_hess_relax(
         int(npar), int(ndet), int(ov.shape[0]), int(iavg),
         ffi.cast("double *", ov.ctypes.data),
@@ -459,8 +461,8 @@ def _lib_hess_wmat(stack, civec):
         return None
     nact = int(stack.shape[0])
     ndet = int(stack.shape[2])
-    st = np.ascontiguousarray(stack, dtype=np.float64)
-    cv = np.ascontiguousarray(civec, dtype=np.float64)
+    st = _as_f64c(stack)
+    cv = _as_f64c(civec)
     wmat = np.zeros((nact, nact, ndet), dtype=np.float64)
     lib.casscf_hess_wmat(
         nact, ndet,
@@ -484,11 +486,11 @@ def _lib_hess_amp(stack, f_der, g_der, wmat, vecs):
     nact = int(stack.shape[0])
     ndet = int(stack.shape[2])
     npar = int(f_der.shape[0])
-    st = np.ascontiguousarray(stack, dtype=np.float64)
-    fd = np.ascontiguousarray(f_der, dtype=np.float64)
-    gd = np.ascontiguousarray(g_der, dtype=np.float64)
-    wm = np.ascontiguousarray(wmat, dtype=np.float64)
-    vc = np.ascontiguousarray(vecs, dtype=np.float64)
+    st = _as_f64c(stack)
+    fd = _as_f64c(f_der)
+    gd = _as_f64c(g_der)
+    wm = _as_f64c(wmat)
+    vc = _as_f64c(vecs)
     amp = np.zeros((npar, ndet), dtype=np.float64)
     lib.casscf_hess_amp(
         nact, ndet, npar,
