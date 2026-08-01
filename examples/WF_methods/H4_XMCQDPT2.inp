@@ -22,6 +22,11 @@ type=hcore
 [scf]
 multiplicity=1
 type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
 maxit=80
 forced_attempt=3
 save_molden=false

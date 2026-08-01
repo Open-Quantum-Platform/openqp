@@ -3,9 +3,15 @@
 # contraction=strong).  The RDM-based strong contraction reproduces PySCF/ORCA
 # SC-NEVPT2 to nano-hartree and closes the CAS(4,4) "contraction-flavour" gap of
 # the uncontracted path (H4_NEVPT2.inp):
-#   E(CASCI)     = -2.1594801208
-#   E(2)         = -0.0275992533   (PySCF SC-NEVPT2 -0.0275992508; diff 2.5 nEh)
-#   E(SC-NEVPT2) = -2.1870793741
+#   E(CASCI)     = -2.1594801164
+#   E(2)         = -0.0275992535   (PySCF SC-NEVPT2 -0.0275992508; diff 2.7 nEh)
+#   E(SC-NEVPT2) = -2.1870793700
+# Measured with the [scf] conv=1.0e-10 set below, which is what makes these
+# digits reproducible: at the default conv=1e-6 the SCF stops on an unconverged
+# orbital set and the last two digits of E(CASCI) move with the build (that
+# endpoint gives E(CASCI) = -2.1594801216, E(2) = -0.0275992530).  The spread is
+# ~5e-9 Eh in E(CASCI) and ~5e-10 Eh in E(2), so the nano-hartree agreement with
+# PySCF is only meaningful to about 1 nEh.
 # Requires h0=dyall (the strong contraction is defined for Dyall's H0 only).
 [input]
 system=
@@ -24,6 +30,11 @@ type=hcore
 [scf]
 multiplicity=1
 type=rhf
+# Tight SCF: the default conv=1e-6 stops on a chaotically oscillating C-DIIS
+# trajectory, so ULP-level run-to-run noise from the threaded Fock build
+# (dynamic shell-pair schedule) leaves the RHF orbitals differing by ~1e-6
+# between runs and moves the printed PT2 digits.  conv=1e-10 pins them.
+conv=1.0e-10
 maxit=80
 forced_attempt=3
 
