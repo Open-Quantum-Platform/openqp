@@ -182,14 +182,21 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
     assert driver.count("!$omp parallel") == 1
     assert "reduction(+:skip1, skip2, numint)" in driver
     assert "reduction(+:skip1, skip2, numint, de)" not in driver
-    assert "private(gdat, dab, dabmax, fd_batch, de_thread" in driver
-    assert "de_thread = 0.0_dp" in driver
-    assert "de_thread(:,gdat%at,iprobe)" in driver
-    assert "!$omp critical(grd2_batch_de_merge)" in driver
-    assert "de = de + de_thread" in driver
-    assert "dab(maxnbf**4,nprobe)" in driver
-    assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in driver
-    assert "dab(1:product(gdat%nbf),iprobe) = 0.0_dp" in driver
+    parallel_clause = driver.split("!$omp parallel &", 1)[1].split(
+        "reduction(+:skip1, skip2, numint)", 1
+    )[0]
+    assert "allocatable" not in parallel_clause
+    assert "private(gdat," in parallel_clause
+    assert "nthreads = omp_get_max_threads()" in driver
+    assert "ithread = omp_get_thread_num()+1" in driver
+    assert "dab_work(maxnbf**4,nprobe,nthreads)" in driver
+    assert "de_work(3,size(de,2),nprobe,nthreads)" in driver
+    assert "active_work(probe_stride,nthreads)" in driver
+    assert "de_work(:,gdat%at,iprobe,ithread)" in driver
+    assert "de = de + de_work(:,:,:,ithread)" in driver
+    assert "critical(grd2_batch_de_merge)" not in driver
+    assert "active_work(1:nprobe,ithread) =" in driver
+    assert "dab_work(1:product(gdat%nbf),iprobe,ithread) = 0.0_dp" in driver
     assert driver.count("call grd2_rys_compute_batch(") == 2
     assert "do iprobe = 2, nprobe" in driver
     assert "gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated" in driver
