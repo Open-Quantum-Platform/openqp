@@ -66,18 +66,25 @@ end function cc_uhf_spinorb_gb
 !>     alive while the spin-orbital tensor (nso^4) is being filled;
 !>   * solution -- the spin-orbital tensor stays, and the solver adds the
 !>     ladder intermediate Wabef (nv^4), Wmbej (no^2 nv^2), Wmnij (no^4),
-!>     gmnef and the six amplitude arrays (~7 no^2 nv^2), and a DIIS history
-!>     of 2*ndiis vectors of no*nv + no^2 nv^2 each.
+!>     gmnef and the six amplitude arrays (~7 no^2 nv^2), the ten (ov)^2
+!>     panels the ring and Wmbej contractions are grouped into, and a DIIS
+!>     history of 2*ndiis vectors of no*nv + no^2 nv^2 each;
+!>   * triples -- the tensor plus the four reordered panels build_q reads,
+!>     the largest being nv^3 no.
 !>
 !> Reporting only nso^4 understated the real requirement by roughly a factor
 !> of three, which is worse than useless in a guard: it waves through jobs
 !> that then die in the allocator.
+!>
+!> Not counted: the (T) loop's per-thread Q(nv,nv,nv,3).  That is 3 nv^3 per
+!> thread and can rival the tensor itself at high thread counts on a large
+!> case -- worth remembering before running this wide.
 pure function cc_uhf_peak_gb(nmo, nocc, ndiis) result(gb)
   integer, intent(in) :: nmo    !< correlated spatial MOs
   integer, intent(in) :: nocc   !< occupied spin orbitals
   integer, intent(in) :: ndiis  !< DIIS subspace size (0 = no DIIS)
   real(dp) :: gb
-  real(dp) :: nso, no, nv, assembly, solve, amp
+  real(dp) :: nso, no, nv, assembly, solve, trip, amp
 
   nso = 2.0_dp*real(nmo,dp)
   no  = real(nocc,dp)
@@ -87,9 +94,12 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis) result(gb)
 
   amp   = no*nv + no**2*nv**2
   solve = nso**4 + nv**4 + no**4 + 2.0_dp*no**2*nv**2 &
-        + 7.0_dp*no**2*nv**2 + 2.0_dp*real(max(ndiis,0),dp)*amp
+        + 7.0_dp*no**2*nv**2 + 10.0_dp*no**2*nv**2 &
+        + 2.0_dp*real(max(ndiis,0),dp)*amp
 
-  gb = max(assembly, solve) * 8.0_dp / 1.073741824e9_dp
+  trip = nso**4 + nv**3*no + no**2*nv**2 + no**2*nv**2 + no**3*nv
+
+  gb = max(assembly, max(solve, trip)) * 8.0_dp / 1.073741824e9_dp
 end function cc_uhf_peak_gb
 
 !###############################################################################
@@ -260,8 +270,20 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), allocatable :: t1(:,:), t2(:,:,:,:), t1n(:,:), t2n(:,:,:,:)
   real(dp), allocatable :: tau(:,:,:,:), taut(:,:,:,:)
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
+  ! Fock intermediates with the t1-dependent inner sums folded in (see T2).
+  real(dp), allocatable :: FaeT(:,:), FmiT(:,:)
   real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
   real(dp), allocatable :: gmnef(:,:,:,:), f_ov(:,:)
+  ! Reordered panels for the (T) correction, packed once by triples() and read
+  ! by build_q().  Declared here so both see them by host association:
+  !   gvv(e,bc,i) = <ei||bc>       t2o(m,bc,i) = t2(i,m,b,c)
+  !   t2v(a,e,jk) = t2(j,k,a,e)    gov(m,a,jk) = <ma||jk>
+  real(dp), allocatable :: gvv(:,:,:), t2o(:,:,:), t2v(:,:,:), gov(:,:,:)
+  ! Ring-term panels, rebuilt each iteration (see the T2 section).
+  real(dp), allocatable :: t2ring(:,:), wring(:,:), zring(:,:)
+  real(dp), allocatable :: wjbnf(:,:), gnfme(:,:), wjbme(:,:)
+  real(dp), allocatable :: gring(:,:,:,:), hring(:,:,:,:), hringp(:,:,:,:)
+  real(dp), allocatable :: yring(:,:,:,:)
   integer(c_int64_t) :: nblas_save
   ! DIIS history over the concatenated (t1,t2) vector and its residual.
   real(dp), allocatable :: dv(:,:), de(:,:), bmat(:,:), rhs(:)
@@ -294,8 +316,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
   allocate(t1(no,nv), t2(no,no,nv,nv), t1n(no,nv), t2n(no,no,nv,nv))
   allocate(tau(no,no,nv,nv), taut(no,no,nv,nv))
-  allocate(Fae(nv,nv), Fmi(no,no), Fme(no,nv))
+  allocate(Fae(nv,nv), Fmi(no,no), Fme(no,nv), FaeT(nv,nv), FmiT(no,no))
   allocate(Wmnij(no,no,no,no), Wabef(nv,nv,nv,nv), Wmbej(no,nv,nv,no))
+  allocate(t2ring(no*nv, no*nv), wring(no*nv, no*nv), zring(no*nv, no*nv))
+  allocate(wjbnf(no*nv, no*nv), gnfme(no*nv, no*nv), wjbme(no*nv, no*nv))
+  allocate(gring(nv,no,nv,no), hring(no,no,nv,no), hringp(no,no,nv,no), &
+           yring(nv,no,nv,no))
   allocate(f_ov(no,nv))
   f_ov = 0.0_dp
   if (present(fov)) f_ov = fov
@@ -416,10 +442,36 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       do n = 1, no
         s_ = s_ - t1(n,b)*g(m,n,no+e,j)
       end do
-      do f_ = 1, nv; do n = 1, no
-        s_ = s_ - (0.5_dp*t2(j,n,f_,b) + t1(j,f_)*t1(n,b))*g(m,n,no+e,no+f_)
-      end do; end do
       Wmbej(m,b,e,j) = s_
+    end do; end do; end do; end do
+    !$omp end parallel do
+
+    ! The remaining Wmbej term, -sum_nf (1/2 t2_jnfb + t1_jf t1_nb) <mn||ef>,
+    ! is an (o v)^3 contraction and was the second-largest scalar cost of the
+    ! iteration.  Grouped as (jb,nf) x (nf,me) it is a single DGEMM.
+    !$omp parallel do collapse(2) default(shared) private(j,b,n,f_,m,e) schedule(static)
+    do f_ = 1, nv
+      do n = 1, no
+        do b = 1, nv
+          do j = 1, no
+            wjbnf((b-1)*no+j, (f_-1)*no+n) = 0.5_dp*t2(j,n,f_,b) + t1(j,f_)*t1(n,b)
+          end do
+        end do
+        do e = 1, nv
+          do m = 1, no
+            gnfme((f_-1)*no+n, (e-1)*no+m) = gmnef(m,n,e,f_)
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
+    call dgemm('n','n', no*nv, no*nv, no*nv, -1.0_dp, wjbnf, no*nv, &
+               gnfme, no*nv, 0.0_dp, wjbme, no*nv)
+
+    !$omp parallel do collapse(4) default(shared) private(j,e,b,m) schedule(static)
+    do j = 1, no; do e = 1, nv; do b = 1, nv; do m = 1, no
+      Wmbej(m,b,e,j) = Wmbej(m,b,e,j) + wjbme((b-1)*no+j, (e-1)*no+m)
     end do; end do; end do; end do
     !$omp end parallel do
 
@@ -451,49 +503,89 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     !$omp end parallel do
 
     ! --- T2 ------------------------------------------------------------------
+    ! The two Fock-dressed terms carry an inner sum that does not depend on the
+    ! amplitude indices being looped over -- sum_m t1(m,b) Fme(m,e) is a
+    ! function of (b,e) alone, and sum_e t1(j,e) Fme(m,e) of (j,m) alone.
+    ! Evaluated in place they were recomputed no^2 nv^2 times each; dressing
+    ! Fae and Fmi once per iteration costs a single small DGEMM.
+    FaeT = Fae
+    call dgemm('t','n', nv, nv, no, -0.5_dp, t1, no, Fme, no, 1.0_dp, FaeT, nv)
+    FmiT = Fmi
+    call dgemm('n','t', no, no, nv, 0.5_dp, Fme, no, t1, no, 1.0_dp, FmiT, no)
+
+    ! The ring term, P(ij)P(ab)[ t2_imae Wmbej - t1_ie t1_ma <mb||ej> ], is the
+    ! dominant cost of the iteration: four permutations of an (o v)^3
+    ! contraction.  Evaluated element by element inside the loop below it is
+    ! ~80% of the CCSD time, so both halves are precomputed here instead.
+    !
+    !   Zring(ia,jb) = sum_me t2(i,m,a,e) Wmbej(m,b,e,j)   -- one DGEMM
+    !   Yring(a,i,b,j) = sum_m t1(m,a) sum_e t1(i,e) <mb||ej>
+    !
+    ! Yring factorises into two thin DGEMMs rather than one (ov)^3, because the
+    ! t1 t1 product separates: contract e first, then m.
+    !$omp parallel do collapse(2) default(shared) private(i,j,a,b,e,m) schedule(static)
+    do e = 1, nv
+      do m = 1, no
+        do a = 1, nv
+          do i = 1, no
+            t2ring((a-1)*no+i, (e-1)*no+m) = t2(i,m,a,e)
+          end do
+        end do
+        do b = 1, nv
+          do j = 1, no
+            wring((e-1)*no+m, (b-1)*no+j) = Wmbej(m,b,e,j)
+            gring(e, m, b, j) = g(m, no+b, no+e, j)
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
+    call dgemm('n','n', no*nv, no*nv, no*nv, 1.0_dp, t2ring, no*nv, &
+               wring, no*nv, 0.0_dp, zring, no*nv)
+
+    ! hring(i, m,b,j) = sum_e t1(i,e) <mb||ej>
+    call dgemm('n','n', no, no*nv*no, nv, 1.0_dp, t1, no, &
+               gring, nv, 0.0_dp, hring, no)
+    !$omp parallel do collapse(3) default(shared) private(i,j,b,m) schedule(static)
+    do j = 1, no
+      do b = 1, nv
+        do m = 1, no
+          do i = 1, no
+            hringp(m, i, b, j) = hring(i, m, b, j)
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+    ! yring(a, i,b,j) = sum_m t1(m,a) hringp(m, i,b,j)
+    call dgemm('t','n', nv, no*nv*no, no, 1.0_dp, t1, no, &
+               hringp, no, 0.0_dp, yring, nv)
+
     !$omp parallel do collapse(4) default(shared) private(i,j,a,b,e,m,n,f_,s_,d) schedule(static) if(no2*nv2 > PAR_MIN)
     do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
       s_ = g(i,j,no+a,no+b)
 
-      ! P(ab) sum_e t2_ijae (Fbe - 1/2 sum_m t1_mb Fme)
+      ! P(ab) sum_e t2_ijae FaeT(b,e),  FaeT = Fae - 1/2 t1^T Fme
       do e = 1, nv
-        d = 0.0_dp
-        do m = 1, no
-          d = d + t1(m,b)*Fme(m,e)
-        end do
-        s_ = s_ + t2(i,j,a,e)*(Fae(b,e) - 0.5_dp*d)
-        d = 0.0_dp
-        do m = 1, no
-          d = d + t1(m,a)*Fme(m,e)
-        end do
-        s_ = s_ - t2(i,j,b,e)*(Fae(a,e) - 0.5_dp*d)
+        s_ = s_ + t2(i,j,a,e)*FaeT(b,e) - t2(i,j,b,e)*FaeT(a,e)
       end do
 
-      ! -P(ij) sum_m t2_imab (Fmj + 1/2 sum_e t1_je Fme)
+      ! -P(ij) sum_m t2_imab FmiT(m,j),  FmiT = Fmi + 1/2 Fme t1^T
       do m = 1, no
-        d = 0.0_dp
-        do e = 1, nv
-          d = d + t1(j,e)*Fme(m,e)
-        end do
-        s_ = s_ - t2(i,m,a,b)*(Fmi(m,j) + 0.5_dp*d)
-        d = 0.0_dp
-        do e = 1, nv
-          d = d + t1(i,e)*Fme(m,e)
-        end do
-        s_ = s_ + t2(j,m,a,b)*(Fmi(m,i) + 0.5_dp*d)
+        s_ = s_ - t2(i,m,a,b)*FmiT(m,j) + t2(j,m,a,b)*FmiT(m,i)
       end do
 
       do n = 1, no; do m = 1, no
         s_ = s_ + 0.5_dp*tau(m,n,a,b)*Wmnij(m,n,i,j)
       end do; end do
 
-      ! P(ij)P(ab) [ t2_imae Wmbej - t1_ie t1_ma <mb||ej> ]
-      do e = 1, nv; do m = 1, no
-        s_ = s_ + t2(i,m,a,e)*Wmbej(m,b,e,j) - t1(i,e)*t1(m,a)*g(m,no+b,no+e,j)
-        s_ = s_ - t2(j,m,a,e)*Wmbej(m,b,e,i) + t1(j,e)*t1(m,a)*g(m,no+b,no+e,i)
-        s_ = s_ - t2(i,m,b,e)*Wmbej(m,a,e,j) + t1(i,e)*t1(m,b)*g(m,no+a,no+e,j)
-        s_ = s_ + t2(j,m,b,e)*Wmbej(m,a,e,i) - t1(j,e)*t1(m,b)*g(m,no+a,no+e,i)
-      end do; end do
+      ! P(ij)P(ab) [ t2_imae Wmbej - t1_ie t1_ma <mb||ej> ], from the panels
+      ! built above.  Zring is indexed (ia,jb), Yring as (a,i,b,j).
+      s_ = s_ + zring((a-1)*no+i, (b-1)*no+j) - zring((a-1)*no+j, (b-1)*no+i) &
+              - zring((b-1)*no+i, (a-1)*no+j) + zring((b-1)*no+j, (a-1)*no+i)
+      s_ = s_ - yring(a,i,b,j) + yring(a,j,b,i) &
+              + yring(b,i,a,j) - yring(b,j,a,i)
 
       do e = 1, nv
         s_ = s_ + t1(i,e)*g(no+a,no+b,no+e,j) - t1(j,e)*g(no+a,no+b,no+e,i)
@@ -592,6 +684,8 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   end if
 
   deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef, f_ov)
+  deallocate(t2ring, wring, zring, gring, hring, hringp, yring, FaeT, FmiT)
+  deallocate(wjbnf, gnfme, wjbme)
   if (allocated(dv)) deallocate(dv, de)
   if (nblas_save > 0) call blas_thread_set(nblas_save)
 
@@ -608,6 +702,42 @@ contains
     real(dp), allocatable :: Q(:,:,:,:)
 
     et = 0.0_dp
+
+    allocate(gvv(nv, nv*nv, no), t2o(no, nv*nv, no), &
+             t2v(nv, nv, no*no), gov(no, nv, no*no))
+
+    !$omp parallel do collapse(2) default(shared) private(i,b,c,e,m) schedule(static)
+    do i = 1, no
+      do c = 1, nv
+        do b = 1, nv
+          do e = 1, nv
+            gvv(e, (c-1)*nv+b, i) = g(no+e, i, no+b, no+c)
+          end do
+          do m = 1, no
+            t2o(m, (c-1)*nv+b, i) = t2(i, m, b, c)
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
+    !$omp parallel do collapse(2) default(shared) private(j,k,a,e,m) schedule(static)
+    do k = 1, no
+      do j = 1, no
+        do e = 1, nv
+          do a = 1, nv
+            t2v(a, e, (k-1)*no+j) = t2(j, k, a, e)
+          end do
+        end do
+        do a = 1, nv
+          do m = 1, no
+            gov(m, a, (k-1)*no+j) = g(m, no+a, j, k)
+          end do
+        end do
+      end do
+    end do
+    !$omp end parallel do
+
     !$omp parallel default(shared) private(i,j,k,a,b,c,e,m,dd,tc,td,num,Q) &
     !$omp   reduction(+:et)
     allocate(Q(nv,nv,nv,3))
@@ -618,8 +748,7 @@ contains
           ! q2 depends on the occupied triple only through three orderings,
           ! and the connected numerator asks for each of them three times over
           ! permuted virtuals.  Building the three nv^3 panels once per (i,j,k)
-          ! replaces nine recomputations per element -- each of which had its
-          ! own loop over e and m -- with nine array reads.
+          ! replaces nine recomputations per element with nine array reads.
           call build_q(i,j,k, Q(:,:,:,1))
           call build_q(j,i,k, Q(:,:,:,2))
           call build_q(k,j,i, Q(:,:,:,3))
@@ -644,30 +773,26 @@ contains
     !$omp end do
     deallocate(Q)
     !$omp end parallel
+
+    deallocate(gvv, t2o, t2v, gov)
+
   end subroutine triples
 
   !> q2 over the whole virtual cube for one occupied ordering:
   !>   Q(a,b,c) = sum_e t2(j,k,a,e) <ei||bc> - sum_m t2(i,m,b,c) <ma||jk>
+  !>
+  !> Two DGEMMs on the panels triples() packed, in place of the loop nest this
+  !> used to be.  Same flops; the strided reads of g and t2 now happen once per
+  !> panel instead of once per element.
   subroutine build_q(i, j, k, Q)
     integer, intent(in) :: i, j, k
     real(dp), intent(out) :: Q(nv,nv,nv)
-    integer :: a, b, c, e, m
-    real(dp) :: s1, s2
-    do c = 1, nv
-      do b = 1, nv
-        do a = 1, nv
-          s1 = 0.0_dp
-          do e = 1, nv
-            s1 = s1 + t2(j,k,a,e)*g(no+e,i,no+b,no+c)
-          end do
-          s2 = 0.0_dp
-          do m = 1, no
-            s2 = s2 + t2(i,m,b,c)*g(m,no+a,j,k)
-          end do
-          Q(a,b,c) = s1 - s2
-        end do
-      end do
-    end do
+    integer :: jk
+    jk = (k-1)*no + j
+    call dgemm('n','n', nv, nv*nv, nv, 1.0_dp, t2v(1,1,jk), nv, &
+               gvv(1,1,i), nv, 0.0_dp, Q, nv)
+    call dgemm('t','n', nv, nv*nv, no, -1.0_dp, gov(1,1,jk), no, &
+               t2o(1,1,i), no, 1.0_dp, Q, nv)
   end subroutine build_q
 
   !> Disconnected triple numerator: P(i/jk) P(a/bc) [ t1_ia <jk||bc>
