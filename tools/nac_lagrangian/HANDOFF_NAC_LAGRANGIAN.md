@@ -1,18 +1,40 @@
 # MRSF-TDDFT Analytic NAC — the nac-lagrangian rebuild — HANDOFF
 
-**Branch:** `nac-lagrangian` (from Alireza's `nac` tip b71b864; local clone
-`sessions/20260731_nac_audit/repo`, chc3 mirror `~/nac_audit/repo`, synced
-by git bundles; pushed nowhere). 25+ commits, every claim numeric-gated.
-**Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6, campaign 7.1–7.21).
+**Branch:** `nac-lagrangian` (from Alireza's `nac` tip b71b864; local
+worktree `sessions/20260731_nac_audit/repo_nac` — NB the plain `repo`
+clone was taken over by a parallel session, do not touch it; chc3 mirror
+`~/nac_audit/repo`, synced by git bundles; **PUSHED to
+`karmachoi/openqp-dev-private` branch `nac-lagrangian`** — NOT pushed to
+origin/Alireza). 64 commits on top of the `nac` tip, every claim
+numeric-gated.
+**Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6, campaign 7.1–7.53).
 
 
-## CAMPAIGN STATE AT 2026-08-01 SESSION CLOSE (read 7.44-7.52 first)
+## CAMPAIGN STATE AT 2026-08-01 SESSION CLOSE (read 7.44-7.53 first)
 
 THE SINGLE REMAINING ITEM for theory-level closure: the fold-sector
 (~1%-of-channel; ~2e-2 on d for the worst pair) Fock-response term --
 7.52. Derive it ON PAPER from the sigma source's SOCC/spc usage
 (tdhf_mrsf_energy.F90 fa/fb socc combinations, mrsfmntoia/mrsfcbc spc
-channels), then gate with v19_fchan.py (slot-resolved, LR1/socc rows).
+channels, the `trans(xvec_dim,2)` U-matrix pairing of JCP 158, 194105,
+and the lr1/lr2 fold application), then gate with v19_fchan.py
+(slot-resolved; targets: the 0.0102 residual on slot 4 = LR1 (i=5,a=5)
+and the i=6 socc2 rows).
+
+7.53 (the last act of this session) DERIVED AND FALSIFIED the one
+shortcut candidate: the antisym-dD hypothesis (dD = C[U_a,D°]C^T from a
+Loewdin-guess premise). Offline test on the frozen v7h matrices: (1,3)
+improved 8.7e-3->7.0e-3 and assembly-(2,3) 0.205->0.120, BUT (1,2)
+worsened 1.9e-2->1.3e-1 and J1-(2,3)->0.54; the premise is independently
+contradicted by the G-A gate bound (engines == worker-w_skel at
+1e-5..3e-4, so no O(h) orthonormalization shift exists in the workers).
+CONCLUSION: the symmetric-dD channel is REAL under the frozen referee
+protocol; there is no shortcut around reading the sigma source. That
+reading is a focused fresh-context task — start the next session with:
+"Read MRSF_NAC_DERIVATION.md 7.52-7.53, then read the socc/spc sigma
+assembly in tdhf_mrsf_energy.F90 + tdhf_mrsf_lib.F90 (mrsfmntoia,
+mrsfcbc, spc scaling, trans pairing, the fold) and derive the
+fold-sector response term; gate with v19_fchan.py."
 
 THE COMPLETE CERTIFIED ACCOUNTING (all referees frozen):
   d = ampdir(dX) + gamma:(Sk+U)          [machine, both molecules]
@@ -57,41 +79,75 @@ second-call output for Sk -- rebuild from overlap_ao. One-line fix,
 (previous v4 all-FD gate: 0.02-1.2%; the analytic structure is BETTER
 because the resolvent removes the stacked-FD near-degeneracy noise)
 
-## Deliverables in this directory
+## Deliverables
 
-- `nac_formula_kernel.py` — the production kernel library (replica,
-  staged Fortran driver, one-pass γ^formula). Imported by the tests.
-- Gate harnesses: `assembly_gate.py` (the master referee), `gamma_gate.py`,
-  `formula_gamma.py`, `orientation_gate.py`, `ladderA*_gate.py` (A2–A10),
-  `gamma_closed.py`, `diagA.py`, `conv_check.py`, `freeze_ref.py`.
+**PRODUCTION (rewired, v1):**
+- `pyoqp/oqp/library/nac_analytic.py` — `analytic_nac(mol)`: closed-form
+  γ + Sk export (rebuilt from overlap_ao per 7.49!), full-A-free MINRES
+  ỹ (certified 2.6e-9), slot-injection T1 engines (certified 1e-5),
+  polarized-combined seam T2 (seam(e_pq) = −U_full), V-mask S^x
+  eliminations, γ:Sk, antisymmetrize. Returns (nacv, dcv).
+- `pyoqp/oqp/library/nac_kernel.py` — copy of `nac_formula_kernel.py`.
+- `pyoqp/oqp/library/single_point.py` — `analytical_nac()` REPLACED
+  (old pseudo-state polarization removed) with a wrapper calling
+  `nac_analytic.analytic_nac`. Known v1 accuracy (H2O, vs numerical):
+  (1,3) 8.7e-3, (1,2) 1.9e-2, (2,3) 0.21 — limited ONLY by the
+  fold-sector term; propagate the derived term here after closure.
+- `source/modules/tdhf_mrsf_gradient.F90` — NAC_DUMP_DS (dbg_dsket/
+  dbg_dsfull, bfnrm applied), NAC_DUMP_PIJ (dbg_pij_a/b), and the
+  `mrsf_nac_wpair` scaffold (aborts by design until the fold term is
+  derived; term checklist in comments).
+
+**Kernel + gates (this directory):**
+- `nac_formula_kernel.py` — replica, staged Fortran driver, one-pass
+  γ^formula. Imported by the tests.
+- `ROUTE_A_SPEC.md` — the derivative-sigma amp-channel blueprint,
+  rewiring plan, validation ladder, landmine checklist.
+- Gate harnesses: `assembly_gate.py` (master referee), `assembly_v3*.py`
+  (v3–v3h incl. `v3g` = the analytic-structure benchmark), `v4a_adjoint`,
+  `v5*`–`v18*` (the forensic chain; `v7j` = unified one-process gate,
+  `v17_fix` = the Sk-fix closure test, `v19_fchan.py` = THE live referee
+  for the fold term), `skel_gate.py` (subprocess worker), plus the
+  ladder/γ/orientation gates from the first half.
 - `ETH_energy.inp` — the C1 validation input.
-- Frozen references (chc3 `~/nac_audit/`): `h2o_nac_reference.npz`,
-  `h2o_nac_ref_tlf0.npz`, `ladderA8_data.npz` (H2O La/Ls/Ux/residuals),
-  `gamma_formula_h2o.npz`.
+- Frozen data (session dir + chc3 `~/nac_audit/probe/`):
+  `H2O_energy_tlf0_{v7h,v7i,v7o}.npz`, `ETH_energy_{v7o,ctx,dnum}.npz`,
+  `H2O_energy_tlf0_dnum.npz`; worker dirs `H2O_energy_tlf0_skel/`,
+  `ETH_energy_skel/` (displaced p{idx}.inp reusable; regenerate ref.npz
+  per process for phase consistency). Plus the first-half references
+  (`h2o_nac_reference.npz`, `h2o_nac_ref_tlf0.npz`, `ladderA8_data.npz`,
+  `gamma_formula_h2o.npz`).
 - Repo tests: `tests/test_nac_convention_numeric.py`,
-  `tests/test_nac_gamma_exact.py`, `tests/test_nac_formula_kernel.py`.
+  `tests/test_nac_gamma_exact.py`, `tests/test_nac_formula_kernel.py`
+  (suite: 11 passed).
 
-## Remaining work (assembly only; every step has a frozen referee)
+## Remaining work (in order; every step has a frozen referee)
 
-1. **C2 is CLOSED as an empirical program** (7.22–7.23): (a) vv/dd ruled
-   out; (c) target-ordering ruled out (zB identical both ways) and the
-   "molecule-level sign" exposed as fit degeneracy — the derived all-plus
-   convention stands (H2O 95/93% scan-free); (b) near-degeneracy
-   confirmed sharp (ethylene gap(2,3)=10.2 mHa; the /gap amplification
-   poisons the term SPLIT while the total d stays at 0.9%).
-   **Production prescription:** solve ONE z-vector with the COMBINED RHS
-   Ltot = L + gap·γ_a (derivation 4.2) — never assemble the response
-   term-by-term. The split gates (A2–A11) certify the ingredients.
-2. **Full analytic d assembly** — combine: skeleton (`mrsf_nac_amp` +
-   `mrsf_nac_esum`, both FD-validated) + zB (operational) + same-space L
-   (from `mrsf_matvec_apply`, restricted generators; Fortran-resident
-   version = assemble from the G_MO/gchan/fa/fb exports) + inter-sym term
-   + γ^closed:Sk (push γ as `OQP::nac_gamma_tlf` → `mrsf_nac_overlap`'s
-   dSket contraction). Gate every sub-swap against `assembly_gate`.
-3. **Rewire `analytical_nac()`** once (2) closes on BOTH H2O and ethylene.
-   Do NOT rewire before — shipping a partially-closed response was the
-   original branch's central mistake.
-4. Sum-rule + translational checks; refreeze references; extend the suite.
+1. **THE fold-sector term (theory closure — the only derivation left).**
+   Read the sigma source (tdhf_mrsf_energy.F90 socc/fa/fb assembly,
+   tdhf_mrsf_lib.F90 mrsfmntoia/mrsfcbc/spc, the trans pairing, the
+   lr1/lr2 fold), derive the Fock-response term the dD-model misses
+   (7.52: F-channel 89% closed, 0.0102 vector residual on LR1 + socc2
+   rows), gate slot-resolved with `v19_fchan.py`. 7.53's antisym-dD
+   shortcut is FALSIFIED — do not retry it.
+2. **Propagate into `nac_analytic.py`** (production), re-judge H2O AND
+   ethylene against d_num, refreeze references, extend the suite.
+   (The v1 rewiring is already in place with documented accuracy; this
+   step upgrades it to closure. The original branch's mistake — rewiring
+   BEFORE closure — is avoided because v1's accuracy is honestly
+   documented in-code and here.)
+3. **`mrsf_nac_wpair`**: fill the Fortran scaffold with the derived
+   term(s) for a resident implementation.
+4. Sum-rule + translational checks; Acrolein NAMD shakedown (ndtlf=2,
+   /bighome/jin/Projects/MRSF_SOC_NAMD/Acrolein/).
+5. Before upstreaming: diff our 2242bff tlf=0 fix against the duplicate
+   fixes in the 07-17/18 sessions (see the related-session map).
+
+Historical context for (1)-(2): C2's empirical program closed 7.22–7.23
+(vv/dd and target-ordering ruled out; near-degeneracy sharp; production
+prescription = ONE z-vector with the combined RHS Ltot = L + gap·γ_a,
+never term-by-term splitting — the split gates A2–A11 certify
+ingredients only).
 
 ## Landmines (all cost a wrong result once; all now understood)
 
@@ -106,6 +162,24 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
   C1 ethylene is the real test.
 - Davidson phases are random per run — gauge-resolve, enforce the
   pair-sign product rule.
+- **Sk record (7.49, a REAL bug):** `OQP::overlap_mo_non_orthogonal`
+  from a SECOND same-geometry call has a wrong DIAGONAL. Always rebuild
+  `Sk = C0^T · (OQP::overlap_ao_non_orthogonal) · C0`. One line; 50x.
+- Fortran-CREATED tagarray records reach numpy transposed; PYTHON-created
+  records keep their dims verbatim (certified via nac_trden_mo echo).
+  Know which side created the record before transposing.
+- FD sweep data (Ux, w_ref, dX) is valid ONLY in-process: displaced-
+  geometry orbital gauge is run-nondeterministic. Never mix npz sweeps
+  from different processes at the vector level.
+- In-process 1-iter SCF emulation is broken (trueG blowup) — G[P] and
+  F-channel measurements need SEPARATE-PROCESS workers (v19 pattern:
+  push DM_A/B ← D+εP, oqp.hf_energy at control.maxit=1 in a fresh
+  process, G=(F_eps−F0)/eps; certified linear/self-adjoint).
+- `sfrorhs` adds 2FT terms absent from the matvec — NAC_ZERO_2FT env.
+- `int2e_cutoff=1e-20` for matvec linearity; get_jacobi is umrsf-only;
+  the matvec depends ONLY on VEC_MO+FOCK records.
+- Do NOT polarize the gradient chain state-specifically (4-term
+  polarization needs +1/2·g(0); ruled out quantitatively in 7.30).
 
 ## Related-session map (2026-08-01, CORRECTED after a wider sweep)
 
