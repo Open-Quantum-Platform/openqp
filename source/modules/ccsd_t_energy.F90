@@ -49,6 +49,7 @@ contains
     use mp2_lib, only: semicanonicalize
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
     use parallel, only: par_env_t
+    use memory_info, only: oqp_memory_check
 !$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
 
@@ -119,12 +120,12 @@ contains
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
         ', correlated occ = ', no, ', virt = ', nv
     if (nfzc > 0) write(iw,'(2X,A,I0)') 'CCSD(T): frozen core orbitals = ', nfzc
-    write(iw,'(2X,A,F8.2,A)') 'CCSD(T): peak integral storage ~', mem_gb, ' GB'
-
-    if (mem_gb > 64.0_dp) then
-      close(iw)
-      call show_message('CCSD(T): in-core integral storage exceeds 64 GB; &
-                        &use a smaller basis or freeze more core orbitals', with_abort)
+    ! Refuse against what this machine can actually give, not a constant.
+    ! A fixed cap is wrong twice over: it lets a laptop start a job that dies
+    ! in the allocator, and it refuses a 500 GB node that had the memory.
+    if (.not. open_shell) then
+      call oqp_memory_check(mem_gb, 'CCSD(T)', &
+          'use a smaller basis or freeze more core orbitals', iw)
     end if
 
     ! ---- reference orbitals ------------------------------------------------
@@ -282,13 +283,8 @@ contains
       so_gb = cc_uhf_spinorb_gb(nmo)
       peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis))
       write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
-      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): open-shell peak      ~', peak_gb, ' GB'
-
-      if (peak_gb > 32.0_dp) then
-        close(iw)
-        call show_message('CCSD(T): open-shell peak memory exceeds 32 GB; &
-            &freeze more core orbitals or use a smaller basis', with_abort)
-      end if
+      call oqp_memory_check(peak_gb, 'CCSD(T) open shell', &
+          'freeze more core orbitals or use a smaller basis', iw)
 
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
       call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
