@@ -279,6 +279,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   !   gvv(e,bc,i) = <ei||bc>       t2o(m,bc,i) = t2(i,m,b,c)
   !   t2v(a,e,jk) = t2(j,k,a,e)    gov(m,a,jk) = <ma||jk>
   real(dp), allocatable :: gvv(:,:,:), t2o(:,:,:), t2v(:,:,:), gov(:,:,:)
+  real(dp), allocatable :: gvvp(:,:,:)
   ! Ring-term panels, rebuilt each iteration (see the T2 section).
   real(dp), allocatable :: t2ring(:,:), wring(:,:), zring(:,:)
   real(dp), allocatable :: wjbnf(:,:), gnfme(:,:), wjbme(:,:)
@@ -697,14 +698,14 @@ contains
   !> divided by their denominator.
   subroutine triples(et)
     real(dp), intent(out) :: et
-    integer  :: i, j, k, a, b, c, e, m
-    real(dp) :: dd, tc, td, num
+    integer  :: i, j, k, a, b, c, e, m, jk, ik, ji
+    real(dp) :: dd, tc, td, num, eijk, eab
     real(dp), allocatable :: Q(:,:,:,:)
 
     et = 0.0_dp
 
     allocate(gvv(nv, nv*nv, no), t2o(no, nv*nv, no), &
-             t2v(nv, nv, no*no), gov(no, nv, no*no))
+             t2v(nv, nv, no*no), gov(no, nv, no*no), gvvp(nv, nv, no*no))
 
     !$omp parallel do collapse(2) default(shared) private(i,b,c,e,m) schedule(static)
     do i = 1, no
@@ -721,7 +722,7 @@ contains
     end do
     !$omp end parallel do
 
-    !$omp parallel do collapse(2) default(shared) private(j,k,a,e,m) schedule(static)
+    !$omp parallel do collapse(2) default(shared) private(j,k,a,e,m,b,c) schedule(static)
     do k = 1, no
       do j = 1, no
         do e = 1, nv
@@ -734,11 +735,22 @@ contains
             gov(m, a, (k-1)*no+j) = g(m, no+a, j, k)
           end do
         end do
+        ! <jk||bc> as a contiguous (b,c) plane per occupied pair.  The
+        ! disconnected numerator reads this six times per element; straight
+        ! out of g those are strides of nso^2 and nso^3, which is what made
+        ! the energy loop -- not the contractions -- the cost of (T) once the
+        ! contractions became DGEMMs.
+        do c = 1, nv
+          do b = 1, nv
+            gvvp(b, c, (k-1)*no+j) = g(j, k, no+b, no+c)
+          end do
+        end do
       end do
     end do
     !$omp end parallel do
 
-    !$omp parallel default(shared) private(i,j,k,a,b,c,e,m,dd,tc,td,num,Q) &
+    !$omp parallel default(shared) &
+    !$omp   private(i,j,k,a,b,c,e,m,dd,tc,td,num,Q,jk,ik,ji,eijk,eab) &
     !$omp   reduction(+:et)
     allocate(Q(nv,nv,nv,3))
     !$omp do collapse(3) schedule(dynamic)
@@ -753,16 +765,38 @@ contains
           call build_q(j,i,k, Q(:,:,:,2))
           call build_q(k,j,i, Q(:,:,:,3))
 
+          ! The three occupied pairs the disconnected term needs, matching
+          ! disc = p1(i,j,k) - p1(j,i,k) - p1(k,j,i): each p1 reads the pair
+          ! formed by its last two occupied arguments.
+          jk = (k-1)*no + j
+          ik = (k-1)*no + i
+          ji = (i-1)*no + j
+          eijk = eso(i) + eso(j) + eso(k)
+
           do a = 1, nv
             do b = 1, nv
+              eab = eijk - eso(no+a) - eso(no+b)
               do c = 1, nv
-                dd = eso(i)+eso(j)+eso(k)-eso(no+a)-eso(no+b)-eso(no+c)
+                dd = eab - eso(no+c)
                 if (abs(dd) < 1.0e-12_dp) cycle
                 num =  (Q(a,b,c,1) - Q(b,a,c,1) - Q(c,b,a,1)) &
                      - (Q(a,b,c,2) - Q(b,a,c,2) - Q(c,b,a,2)) &
                      - (Q(a,b,c,3) - Q(b,a,c,3) - Q(c,b,a,3))
                 tc = num / dd
-                td = disc(i,j,k,a,b,c) / dd
+                ! disc(i,j,k,a,b,c), inlined against the packed (b,c) planes.
+                td = ( t1(i,a)*gvvp(b,c,jk) - t1(i,b)*gvvp(a,c,jk)      &
+                     - t1(i,c)*gvvp(b,a,jk)                             &
+                     + f_ov(i,a)*t2v(b,c,jk) - f_ov(i,b)*t2v(a,c,jk)    &
+                     - f_ov(i,c)*t2v(b,a,jk) )                          &
+                   - ( t1(j,a)*gvvp(b,c,ik) - t1(j,b)*gvvp(a,c,ik)      &
+                     - t1(j,c)*gvvp(b,a,ik)                             &
+                     + f_ov(j,a)*t2v(b,c,ik) - f_ov(j,b)*t2v(a,c,ik)    &
+                     - f_ov(j,c)*t2v(b,a,ik) )                          &
+                   - ( t1(k,a)*gvvp(b,c,ji) - t1(k,b)*gvvp(a,c,ji)      &
+                     - t1(k,c)*gvvp(b,a,ji)                             &
+                     + f_ov(k,a)*t2v(b,c,ji) - f_ov(k,b)*t2v(a,c,ji)    &
+                     - f_ov(k,c)*t2v(b,a,ji) )
+                td = td / dd
                 et = et + tc*dd*(tc+td) / 36.0_dp
               end do
             end do
@@ -774,7 +808,7 @@ contains
     deallocate(Q)
     !$omp end parallel
 
-    deallocate(gvv, t2o, t2v, gov)
+    deallocate(gvv, t2o, t2v, gov, gvvp)
 
   end subroutine triples
 
@@ -795,19 +829,6 @@ contains
                t2o(1,1,i), no, 1.0_dp, Q, nv)
   end subroutine build_q
 
-  !> Disconnected triple numerator: P(i/jk) P(a/bc) [ t1_ia <jk||bc>
-  !> + f_ia t2_jkbc ], the second term non-zero only for a non-HF reference.
-  pure real(dp) function disc(i,j,k,a,b,c) result(v)
-    integer, intent(in) :: i,j,k,a,b,c
-    v =   p1(i,j,k,a,b,c) - p1(j,i,k,a,b,c) - p1(k,j,i,a,b,c)
-  end function disc
-
-  pure real(dp) function p1(i,j,k,a,b,c) result(v)
-    integer, intent(in) :: i,j,k,a,b,c
-    v =   t1(i,a)*g(j,k,no+b,no+c) - t1(i,b)*g(j,k,no+a,no+c) &
-        - t1(i,c)*g(j,k,no+b,no+a) &
-        + f_ov(i,a)*t2(j,k,b,c) - f_ov(i,b)*t2(j,k,a,c) - f_ov(i,c)*t2(j,k,b,a)
-  end function p1
 
 end subroutine cc_uhf_ccsd_t
 
