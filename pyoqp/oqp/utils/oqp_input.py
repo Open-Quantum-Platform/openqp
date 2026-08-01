@@ -190,6 +190,11 @@ def _normalize_geometry_owned_section_call(
 DEFAULT_SINGLET_MODELS = {
     "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
     "tddft", "tda", "tdhf", "tda-hf",
+    # Multiconfigurational models keep a closed-shell RHF reference unless the
+    # user asks for another one; see WF_MODELS below.
+    "fci", "casci", "casscf", "sa-casscf",
+    "caspt2", "ms-caspt2", "xms-caspt2",
+    "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
 
@@ -234,6 +239,8 @@ SECTION_NAMES = {
     "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
     "oqp", "neb", "hess", "nac", "md", "qmmm", "json", "tests",
+    # Native multiconfigurational wavefunction stack.
+    "cas", "casscf", "ci", "fci", "pt2", "state_average",
 }
 
 
@@ -308,6 +315,52 @@ GENERIC_SCHEMA_KEYS = {
     "md": frozenset(),
     "json": _keys("scf_type basis library do_init"),
     "tests": _keys("exception"),
+    # The multiconfigurational stack owns no route/driver keyword: the active
+    # space, the CI solver, the orbital optimizer, the PT2 flavour and the
+    # state-average weights are all section-owned settings, so every keyword
+    # below reaches the runtime through the ordinary exact-section-call path
+    # (``cas(active_electrons=4)`` lowers to ``[cas] active_electrons=4``).
+    "cas": _keys("""
+        active_electrons active_orbitals frozen_core active_orbital_indices
+        core_orbital_indices orbital_source orbital_file localize
+        sort_orbitals max_det max_memory
+    """),
+    "casscf": _keys("""
+        max_macro_iterations root converger hessian ah_start_trust_radius
+        ah_max_trust_radius ah_min_trust_radius ah_max_micro ah_max_rejects
+        ah_saddle_curv_tol ah_saddle_egain_tol diis_space diis_start
+        auto_stagnation gradient_norm_tol energy_decrease_tol step_norm_tol
+        max_rotation_norm optimizer level_shift canonicalize
+        max_function_evaluations diagnostic_report diagnostic_report_file
+        diagnostic_root diagnostic_max_iterations diagnostic_gradient_norm_tol
+        diagnostic_max_rotation_norm diagnostic_benchmark_reference_file
+        diagnostic_benchmark_tolerance diagnostic_benchmark_required
+    """),
+    "ci": _keys("""
+        nroot solver eig_tol davidson_maxiter davidson_subspace
+        integral_backend integral_cutoff spin_adapted target_spin
+        root_tracking print_ci_vectors ci_print_threshold save_ci_vectors
+        save_rdm
+    """),
+    "fci": _keys("""
+        nroot active_electrons active_orbitals frozen_core max_det max_memory
+        eig_tol integral_backend integral_cutoff solver davidson_maxiter
+        davidson_subspace print_ci_vectors ci_print_threshold save_ci_vectors
+        save_rdm target_spin
+    """),
+    "pt2": _keys("""
+        variant reference h0 contraction frozen multistate xms ipea_shift
+        imaginary_shift level_shift edshft engine max_terms nproc grad_step
+        grad_guess grad_gap_warn denominator_cutoff intruder_threshold nroot
+        target_roots max_memory semi_canonical save_amplitudes
+        print_amplitudes amplitude_threshold reference_report
+        reference_report_file benchmark_reference_file benchmark_tolerance
+        benchmark_required
+    """),
+    "state_average": _keys("""
+        enabled weights nstate target_roots equal_weights spin_blocks
+        root_tracking
+    """),
 }
 
 ROUTE_DRIVER_SCHEMA_KEYS = {
@@ -422,6 +475,42 @@ MODEL_ALIASES = {
     "sftddftb": "sf-dftb",
     "mrsf-tddftb": "mrsf-dftb",
     "mrsf-dftb": "mrsf-dftb",
+    # Native multiconfigurational stack.  Every target below is a literal
+    # ``input.method`` value accepted by oqp.utils.input_checker.METHODS, so
+    # the route name and the lowered method never diverge.  NEVPT2 is
+    # deliberately absent: it is not an input.method but the Dyall zeroth-order
+    # Hamiltonian of the CASPT2 driver (``caspt2 ... pt2(h0=dyall)``).
+    "fci": "fci",
+    "full-ci": "fci",
+    "fullci": "fci",
+    "casci": "casci",
+    "cas-ci": "casci",
+    "casscf": "casscf",
+    "cas-scf": "casscf",
+    "sa-casscf": "sa-casscf",
+    "sacasscf": "sa-casscf",
+    "caspt2": "caspt2",
+    "cas-pt2": "caspt2",
+    "ms-caspt2": "ms-caspt2",
+    "mscaspt2": "ms-caspt2",
+    "xms-caspt2": "xms-caspt2",
+    "xmscaspt2": "xms-caspt2",
+    "mrmp2": "mrmp2",
+    "mr-mp2": "mrmp2",
+    "mcqdpt2": "mcqdpt2",
+    "mcqdpt": "mcqdpt2",
+    "xmcqdpt2": "xmcqdpt2",
+    "xmcqdpt": "xmcqdpt2",
+}
+
+# Multiconfigurational models are their own ``input.method``: unlike the
+# HF/DFT, MP2, DFTB and response families there is no grouping step, the route
+# name is lowered verbatim.  The route is always ``model/basis`` (no
+# functional component).
+WF_MODELS = {
+    "fci", "casci", "casscf", "sa-casscf",
+    "caspt2", "ms-caspt2", "xms-caspt2",
+    "mrmp2", "mcqdpt2", "xmcqdpt2",
 }
 
 TOP_OPTION_ALIASES = {
@@ -831,14 +920,14 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     if model in {
         "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
         "umrsf-hf", "sf-hf", "tda-hf",
-    } and len(parts) == 3:
+    } | WF_MODELS and len(parts) == 3:
         raise OQPInputError("%s route is model/basis; it does not take a functional" % alias)
     if len(parts) == 2:
         if model in {
             "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
             "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
-        }:
+        } | WF_MODELS:
             basis = parts[1]
         else:
             functional = parts[1]
@@ -2114,6 +2203,11 @@ def lower_to_legacy(
         "dftb", "dftb0", "tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"
     }:
         method = "dftb"
+    elif spec.model in WF_MODELS:
+        # Every multiconfigurational route is its own ``input.method``; the
+        # active space, CI solver and PT2 flavour come from the exact section
+        # calls rather than from a grouping rule.
+        method = spec.model
     else:
         method = "tdhf"
 
@@ -2245,6 +2339,8 @@ def lower_to_legacy(
                 ("neb", "product"), ("guess", "file"), ("guess", "file2"),
                 ("dftb", "parameter_path"), ("dftb", "library_path"),
                 ("geometric", "constraints_file"), ("oqp", "neb_output"),
+                # Externally supplied starting orbitals for the active space.
+                ("cas", "orbital_file"),
             }:
                 value = _resolve_path(value, source_dir)
             elif call.name == "qmmm" and key in {

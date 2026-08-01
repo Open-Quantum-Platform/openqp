@@ -1,0 +1,8 @@
+xmcqdpt2/cc-pvdz
+guess(type=hcore)
+scf(maxit=80,forced_attempt=3,save_molden=false)
+properties(scf_prop="")
+cas(active_electrons=2,active_orbitals=2,frozen_core=7,orbital_source=rhf,sort_orbitals=energy,max_det=5000,max_memory=512)
+ci(nroot=3,solver=dense,eig_tol=1e-10,integral_backend=native,target_spin=singlet)
+pt2(reference=casci,target_roots="0,1,2",nroot=3,ipea_shift=0.0,edshft=0.02,engine=auto,semi_canonical=true)
+geom="../geometries/C2H4-b495138ee65b.xyz"

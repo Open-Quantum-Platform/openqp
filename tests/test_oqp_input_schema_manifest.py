@@ -100,6 +100,14 @@ def _generic_input(section, key, value_text):
         route = 'dftb geom="h2o.xyz" energy'
     elif section == "tdhf":
         route = 'mrsf/bhhlyp/6-31g* geom="h2o.xyz" energy'
+    elif section in {"cas", "casscf", "ci", "state_average"}:
+        # The active space, CI solver, orbital optimizer and state-average
+        # weights are all owned by the multiconfigurational route.
+        route = 'casscf/sto-3g geom="h2o.xyz" energy'
+    elif section == "fci":
+        route = 'fci/sto-3g geom="h2o.xyz" energy'
+    elif section == "pt2":
+        route = 'caspt2/sto-3g geom="h2o.xyz" energy'
     else:
         route = 'dft/pbe0/def2-svp geom="h2o.xyz" energy'
     return "%s %s(%s=%s)" % (route, section, key, value_text)
@@ -119,7 +127,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 204,
+        "generic": 315,
         "route_driver": 108,
         "legacy_only": 20,
         "intentional_forbidden": 1,
@@ -127,6 +135,26 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
     assert oqp_input.INTENTIONALLY_FORBIDDEN_SCHEMA_KEYS == {
         "qmmm": frozenset({"istate"})
     }
+
+
+def test_every_schema_section_except_xtb_is_fully_owned():
+    """Enforce the ownership gate for everything xTB does not block.
+
+    ``test_every_schema_keyword_has_exactly_one_semantic_input_owner`` is
+    quarantined because ``[xtb]`` has no concise converter yet, and a whole-test
+    xfail also hides regressions in the sections that *are* wired.  This keeps
+    the rest of the schema enforced; delete it when the xTB entry is unblocked.
+    """
+
+    oqp_input = _load_oqp_input()
+    schema = _schema_keys_from_ast()
+    unowned = set(schema) - oqp_input.SECTION_NAMES
+
+    assert unowned == {"xtb"}, unowned
+    assert not oqp_input.SECTION_NAMES - set(schema)
+    for section in sorted(set(schema) & oqp_input.SECTION_NAMES):
+        assert schema[section] == oqp_input.OQP_SCHEMA_KEYS[section], section
+        assert set(oqp_input.SCHEMA_KEY_OWNERS[section]) == set(schema[section])
 
 
 def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
@@ -158,7 +186,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 204
+    assert len(checked) == 315
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():
