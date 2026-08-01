@@ -1215,3 +1215,18 @@ routes for the amp channel are
 The gamma channel is fully production-certified (seam + V-mask + Sk).
 Data for the Delta-structure hunt: H2O_energy_tlf0_v7o.npz (Ux1/Ux2/
 w1/w2 + all matrices, one frame).
+
+### 7.40 Delta-structure hunt: H2O fits are C2v ARTIFACTS; ethylene run launched
+Offline Delta characterization on H2O:
+- Delta is TRANSLATIONALLY CLEAN (sums ~2e-5) => genuine electronic
+  channel, well-defined.
+- The seductive exact fit Delta(1,3) = c*gamma:Sk (residual 3e-10,
+  c = -0.0624586 ~ -1/16) is a C2v ARTIFACT: that pair's irrep pattern
+  is ONE-dimensional, so ANY channel in it is "exactly proportional" to
+  any other. The old landmine holds: judge structure only on C1.
+- The amplitude frame-transport hypothesis (Delta = G_met.(Sk-action on
+  X)) FAILS: the transport vectors vanish identically for (1,3) while
+  Delta does not; (2,3) fits at only ~21-24%.
+=> the Delta-structure identification REQUIRES the ethylene dataset.
+Launched: v7o on ETH (full Mt harvest 1444 dirs x 6 pairs + dual-h
+sweeps + all matrices saved) -- the C1 fit basis for the channel hunt.
