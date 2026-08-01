@@ -85,23 +85,37 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
 - Davidson phases are random per run — gauge-resolve, enforce the
   pair-sign product rule.
 
-## Related-session map (2026-08-01 sweep of all chats; nothing to import)
+## Related-session map (2026-08-01, CORRECTED after a wider sweep)
 
-A full-text sweep of all other chat sessions found NO NAC-theory content
-outside this campaign. Key clarification: the "Phase 11/12" results the
+An extended sweep (keywords: nacme/tlf/analytic NAC/Alireza) DID find
+substantive related chats missed by the first pass:
+
+1. "Fix same ov_exact OOB bug in native OpenQP" (2026-07-17) and
+   "Fix states_overlap heap abort on gfortran-11/Linux" (2026-07-18):
+   THE SAME tlf=0 diagonal-minor bug this campaign re-discovered and
+   fixed (2242bff) was found and fixed there two weeks earlier (DFTB
+   worktrees / native OpenQP). ACTION ITEM: before upstreaming or
+   merging, diff our 2242bff against those fixes (possible duplicate/
+   conflicting patches in openqp-dftb worktrees or upstream PRs).
+2. "NAMD-QMMM" (2026-06-17, /Volumes/External_Storage/claude/NAMD-QMMM):
+   origin of the canonical NAC conventions used by this campaign's
+   audit brief (d_ij antisym, h_ij = gap*d_ij, (S-S^T)/2dt), plus real
+   NAMD trajectories: Acrolein ndtlf=2 runs (with/without alignment,
+   /bighome/jin/Projects/MRSF_SOC_NAMD/Acrolein/) -- a natural
+   REAL-WORLD VALIDATION TARGET for the analytic NAC once rewired.
+3. "Audit OpenQP NAMD/SOC/QMMM energy conservation" (2026-07-10):
+   NACME/state-overlap machinery audit (Python layer, md.soc flags).
+4. DFTB chats: NACME plumbing analysis (dc=(S-S^T)/dt, single_point
+   L1669-1711) -- the production numerical pipeline map.
+
+Clarification kept from the first pass: the "Phase 11/12" results the
+derivation cites are ALIREZA'S `nac` BRANCH COMMITS -- in-repo, not a
+chat. Key clarification: the "Phase 11/12" results the
 derivation cites (fcac55a, 90943f8, the engine FD-validations) are
-ALIREZA'S `nac` BRANCH COMMITS -- already in this repo's history -- not
-another chat. This document + MRSF_NAC_DERIVATION.md + the campaign
-memory ARE the complete record.
+ALIREZA'S `nac` BRANCH COMMITS -- already in this repo's history.
 
-Adjacent sessions (pointers only, no import needed):
-- "Fix dft_molgrid.F90 bounds violation" + "Port dftlib and guess bounds
-  fixes to upstream main": spin-offs of THIS campaign's bounds fixes
-  (upstreaming; independent).
-- "Hessian and MRSF-TDDFT status" (2026-07-01): OpenQP analytic-Hessian
-  status. NOTE for the U^x production chain: the Hessian work implies
-  working CPHF infrastructure (cphf_* selftests, hf_hessian in the
-  bind(C) surface) -- a candidate to reuse for per-coordinate U^x if the
-  seam route ever needs cross-checking.
-- QMRSF chats match "mrsf_nac*" only via QMRSF_NACT (active-orbital
-  count) -- unrelated.
+Also adjacent (pointers): the two bounds-fix spin-off sessions
+(upstreaming, independent); "Hessian and MRSF-TDDFT status"
+(2026-07-01: CPHF infrastructure exists -- cphf_* selftests,
+hf_hessian); QMRSF chats are unrelated (QMRSF_NACT is an orbital
+count).
