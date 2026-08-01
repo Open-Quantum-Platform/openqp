@@ -1584,3 +1584,25 @@ def test_input_checker_accepts_fci_target_spin_filter(target_spin):
 
     assert report.ok, report.to_text()
     assert not any(d.path == "fci.target_spin" for d in report.diagnostics), report.to_text()
+
+
+@pytest.mark.parametrize("norb", [1, 2, 3, 4, 6, 8])
+def test_spin_orbital_integrals_match_element_reference(norb):
+    """The strided spin-block build is a permuted copy of the same spatial
+    tensor, so it must reproduce the element-by-element reference bit for bit."""
+    _use_real_oqp_package()
+    from oqp.library.fci import (
+        _spin_orbital_integrals,
+        _spin_orbital_integrals_reference,
+    )
+
+    rng = np.random.default_rng(1234 + norb)
+    h1e = rng.standard_normal((norb, norb))
+    h1e = 0.5 * (h1e + h1e.T)
+    eri = rng.standard_normal((norb,) * 4)
+
+    h_ref, g_ref = _spin_orbital_integrals_reference(h1e, eri)
+    h_new, g_new = _spin_orbital_integrals(h1e, eri)
+
+    assert np.array_equal(h_new, h_ref)
+    assert np.array_equal(g_new, g_ref)
