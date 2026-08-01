@@ -14,6 +14,7 @@ module mrsf_nac_interchange_mod
   public :: mrsf_nac_pair_accumulate_antisym
   public :: mrsf_nac_pair_finalize
   public :: mrsf_nac_rohf_hf_adjoint
+  public :: mrsf_nac_rohf_hf_adjoint_batch
   public :: mrsf_nac_xc_adjoint
   public :: mrsf_nac_xc_adjoint_batch
 
@@ -954,6 +955,219 @@ contains
                  0.0_dp, transformed, nbf)
     end subroutine ao_to_mo
   end subroutine mrsf_nac_rohf_hf_adjoint
+
+!###############################################################################
+
+!> Contract several native ROHF Z vectors with the analytic HF/JK/Pulay
+!> stationarity derivative.  The ground densities, ground Fock transforms,
+!> one-electron derivative integrals and their AO->MO transforms are common to
+!> every right-hand side and are therefore evaluated once per batch.
+  subroutine mrsf_nac_rohf_hf_adjoint_batch(infos, z_vectors, ghf_vectors)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+      OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
+    use mathlib, only: unpack_matrix, pack_matrix
+    use cphf_mod, only: rohf_unpack_trial
+    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use ecp_tool, only: ecp_deriv_ints
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: z_vectors(:,:)
+    real(kind=dp), intent(out) :: ghf_vectors(:,:,:)
+
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), &
+      focka(:), fockb(:)
+    real(kind=dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
+    real(kind=dp), allocatable :: xa(:,:,:), xb(:,:,:)
+    real(kind=dp), allocatable :: pza(:,:,:), pzb(:,:,:)
+    real(kind=dp), allocatable :: work(:,:), half(:,:), probe(:,:)
+    real(kind=dp), allocatable :: fa(:,:), fb(:,:), famo(:,:), fbmo(:,:)
+    real(kind=dp), allocatable :: dmz(:,:), vjkz(:,:), vza(:,:), vzb(:,:)
+    real(kind=dp), allocatable :: vzamo(:,:,:), vzbmo(:,:,:)
+    real(kind=dp), allocatable :: dsa(:,:,:,:), dta(:,:,:,:), dva(:,:,:,:), &
+      dvecp(:,:,:,:)
+    real(kind=dp), allocatable :: gx(:,:), sxmo(:,:), hxmo(:,:)
+    real(kind=dp) :: hfscale, value
+    integer :: nbf, nbf2, natom, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: nrhs, irhs, atom, cart, i, j, a, mu, nu
+
+    if (infos%control%scftype /= 3) then
+      call show_message( &
+        'mrsf_nac_rohf_hf_adjoint_batch requires an ROHF/ROKS reference.', &
+        WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = infos%mol_prop%natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    nrhs = size(z_vectors,2)
+    if (nrhs < 1 .or. size(z_vectors,1) /= ltot .or. &
+        size(ghf_vectors,1) /= 3 .or. &
+        size(ghf_vectors,2) /= natom .or. &
+        size(ghf_vectors,3) /= nrhs) then
+      call show_message('Batched HF adjoint dimensions are inconsistent.', &
+                        WITH_ABORT)
+    end if
+    hfscale = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf))
+    allocate(xa(nvira,nocca,nrhs), xb(nvirb,noccb,nrhs), &
+             pza(nbf,nbf,nrhs), pzb(nbf,nbf,nrhs))
+    allocate(work(nbf,nbf), half(nbf,nbf), probe(nbf,nbf))
+    allocate(fa(nbf,nbf), fb(nbf,nbf), famo(nbf,nbf), fbmo(nbf,nbf))
+    allocate(dmz(nbf2,2*nrhs), vjkz(nbf2,2*nrhs), &
+             vza(nbf,nbf), vzb(nbf,nbf), &
+             vzamo(nbf,nbf,nrhs), vzbmo(nbf,nbf,nrhs))
+    allocate(dsa(nbf,nbf,3,natom), dta(nbf,nbf,3,natom), &
+             dva(nbf,nbf,3,natom), dvecp(nbf,nbf,3,natom))
+    allocate(gx(3,natom), sxmo(nbf,nbf), hxmo(nbf,nbf), source=0.0_dp)
+
+    call unpack_matrix(dma, pa)
+    call unpack_matrix(dmb, pb)
+    ptot = pa + pb
+    call unpack_matrix(focka, fa)
+    call unpack_matrix(fockb, fb)
+    call ao_to_mo(fa, famo)
+    call ao_to_mo(fb, fbmo)
+
+    do irhs = 1, nrhs
+      call rohf_unpack_trial(z_vectors(:,irhs), xa(:,:,irhs), xb(:,:,irhs), &
+                             nbf, nocca, noccb)
+
+      half = 0.0_dp
+      call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
+                 mo(:,nocca+1:nbf), nbf, xa(:,:,irhs), nvira, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, half, nbf, &
+                 mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
+      pza(:,:,irhs) = work + transpose(work)
+
+      half = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 mo(:,noccb+1:nbf), nbf, xb(:,:,irhs), nvirb, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+      pzb(:,:,irhs) = work + transpose(work)
+
+      ! The derivative-ERI consumer currently accepts one probe.  Keep these
+      ! exact contractions serial while sharing all probe-independent work.
+      probe = 0.5_dp*pza(:,:,irhs)
+      gx = 0.0_dp
+      call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
+      ghf_vectors(:,:,irhs) = -gx
+      probe = 0.5_dp*pzb(:,:,irhs)
+      gx = 0.0_dp
+      call fock_deriv_contract_os(infos, basis, ptot, pb, probe, hfscale, gx)
+      ghf_vectors(:,:,irhs) = ghf_vectors(:,:,irhs) - gx
+
+      call pack_matrix(pza(:,:,irhs), dmz(:,2*irhs-1))
+      call pack_matrix(pzb(:,:,irhs), dmz(:,2*irhs))
+    end do
+
+    ! fock_jk accepts adjacent alpha/beta response pairs.  A single integral
+    ! pass now forms the JK response for every state pair in this batch.
+    call fock_jk(basis, d=dmz, f=vjkz, scale_exch=hfscale, infos=infos)
+    do irhs = 1, nrhs
+      call unpack_matrix(vjkz(:,2*irhs-1), vza)
+      call unpack_matrix(vjkz(:,2*irhs), vzb)
+      call ao_to_mo(vza, vzamo(:,:,irhs))
+      call ao_to_mo(vzb, vzbmo(:,:,irhs))
+    end do
+
+    ! These integrals and their normalization are independent of the adjoint
+    ! vector.  The old scalar call regenerated them for every state pair.
+    call der_overlap_matrix(basis, dsa)
+    call der_kinetic_matrix(basis, dta)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, &
+                            basis%atoms%zn - basis%ecp_zn_num, dva)
+    call ecp_deriv_ints(basis, basis%atoms%xyz, dvecp)
+    do atom = 1, natom
+      do cart = 1, 3
+        do nu = 1, nbf
+          do mu = 1, nbf
+            dsa(mu,nu,cart,atom) = dsa(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+            dta(mu,nu,cart,atom) = dta(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+            dva(mu,nu,cart,atom) = dva(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+          end do
+        end do
+        dva(:,:,cart,atom) = dva(:,:,cart,atom) + dvecp(:,:,cart,atom)
+        call ao_to_mo(dsa(:,:,cart,atom), sxmo)
+        call ao_to_mo(dta(:,:,cart,atom)+dva(:,:,cart,atom), hxmo)
+
+        do irhs = 1, nrhs
+          value = 0.0_dp
+          do i = 1, nocca
+            do a = 1, nvira
+              value = value + xa(a,i,irhs) * ( &
+                -hxmo(i,nocca+a) &
+                +dot_product(sxmo(nocca+a,1:nocca), famo(1:nocca,i)) &
+                +dot_product(famo(nocca+a,1:nocca), sxmo(1:nocca,i)) )
+            end do
+          end do
+          do i = 1, noccb
+            do a = 1, nvirb
+              value = value + xb(a,i,irhs) * ( &
+                -hxmo(i,noccb+a) &
+                +dot_product(sxmo(noccb+a,1:noccb), fbmo(1:noccb,i)) &
+                +dot_product(fbmo(noccb+a,1:noccb), sxmo(1:noccb,i)) )
+            end do
+          end do
+          do j = 1, nocca
+            do i = 1, nocca
+              value = value + 0.5_dp*sxmo(i,j)*vzamo(j,i,irhs)
+            end do
+          end do
+          do j = 1, noccb
+            do i = 1, noccb
+              value = value + 0.5_dp*sxmo(i,j)*vzbmo(j,i,irhs)
+            end do
+          end do
+          ghf_vectors(cart,atom,irhs) = &
+            ghf_vectors(cart,atom,irhs) + value
+        end do
+      end do
+    end do
+
+    deallocate(pa, pb, ptot, xa, xb, pza, pzb, work, half, probe, &
+      fa, fb, famo, fbmo, dmz, vjkz, vza, vzb, vzamo, vzbmo, &
+      dsa, dta, dva, dvecp, gx, sxmo, hxmo)
+  contains
+    subroutine ao_to_mo(ao, transformed)
+      real(kind=dp), intent(in) :: ao(:,:)
+      real(kind=dp), intent(out) :: transformed(:,:)
+      half = 0.0_dp
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+                 0.0_dp, transformed, nbf)
+    end subroutine ao_to_mo
+  end subroutine mrsf_nac_rohf_hf_adjoint_batch
 
 !###############################################################################
 

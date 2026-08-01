@@ -10,6 +10,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 DRIVER = ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
 METRIC = ROOT / "source" / "modules" / "mrsf_nac_metric_data.F90"
+INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
+INT2 = ROOT / "source" / "integrals" / "int2.F90"
+SCF_ADDONS = ROOT / "source" / "scf_addons.F90"
 HEADER = ROOT / "include" / "oqp.h"
 PYTHON = ROOT / "pyoqp" / "oqp" / "library" / "nac_analytic.py"
 
@@ -87,11 +90,15 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
         "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)"
     ) == 1
     assert body.count("call mrsf_nac_xc_adjoint_batch(") == 1
+    assert body.count("call mrsf_nac_rohf_hf_adjoint_batch(") == 1
+    assert "integer, parameter :: hf_batch_width = 3" in body
     assert "integer, parameter :: xc_batch_width = 3" in body
     assert "do xc_first = 1, npair, xc_batch_width" in body
     assert "solution_batch(:,xc_first:xc_last)" in body
     assert "xc_batch(:,:,xc_first:xc_last)" in body
-    assert body.count("call mrsf_nac_rohf_hf_adjoint(infos)") == 1
+    assert "solution_batch(:,hf_first:hf_last)" in body
+    assert "hf_batch(:,:,hf_first:hf_last)" in body
+    assert "call mrsf_nac_rohf_hf_adjoint(infos)" not in body
     assert "call mrsf_nac_xc_adjoint(infos)" not in body
     assert body.count("call mrsf_nac_pair_accumulate_antisym(") == 1
 
@@ -99,18 +106,45 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     pair_skip = body.index("if (istate == jstate) cycle", pair_loop)
     pair_source = body.index("call mrsf_nac_rohf_pair_overlap(infos)")
     batch_call = body.index("call mrsf_nac_rohf_zvector_batch(")
+    hf_batch_call = body.index("call mrsf_nac_rohf_hf_adjoint_batch(")
     xc_batch_call = body.index("call mrsf_nac_xc_adjoint_batch(")
     adjoint_loop = body.index("do ipair = 1, npair", batch_call)
-    hf_call = body.index("call mrsf_nac_rohf_hf_adjoint(infos)")
+    hf_publish = body.index("hf_tag = hf_batch(:,:,ipair)")
     xc_publish = body.index("xc_tag = xc_batch(:,:,ipair)")
     accumulate_call = body.index("call mrsf_nac_pair_accumulate_antisym(")
     assert (
-        pair_loop < pair_skip < pair_source < batch_call < xc_batch_call
-        < adjoint_loop < hf_call < xc_publish < accumulate_call
+        pair_loop < pair_skip < pair_source < batch_call < hf_batch_call
+        < xc_batch_call < adjoint_loop < hf_publish < xc_publish
+        < accumulate_call
     )
     assert "call mrsf_nac_rohf_zvector(infos)" not in body
     assert "call cphf_solve_rohf" not in body
     assert "hf_hessian" not in body
+
+
+def test_hf_adjoint_batch_shares_pair_independent_work_and_jk_pass():
+    source = INTERCHANGE.read_text()
+    body = source.split(
+        "subroutine mrsf_nac_rohf_hf_adjoint_batch(infos, z_vectors, ghf_vectors)",
+        1,
+    )[1].split("end subroutine mrsf_nac_rohf_hf_adjoint_batch", 1)[0]
+    assert body.count("call der_overlap_matrix(basis, dsa)") == 1
+    assert body.count("call der_kinetic_matrix(basis, dta)") == 1
+    assert body.count("call der_nucattr_matrix(") == 1
+    assert body.count("call ecp_deriv_ints(") == 1
+    assert body.count("call fock_jk(") == 1
+    assert "allocate(dmz(nbf2,2*nrhs), vjkz(nbf2,2*nrhs)" in body
+    assert "do irhs = 1, nrhs" in body
+
+    int2 = INT2.read_text()
+    scf_addons = SCF_ADDONS.read_text()
+    update = int2.split(
+        "subroutine int2_urohf_data_t_update(this, buf)", 1
+    )[1].split("end subroutine int2_urohf_data_t_update", 1)[0]
+    assert "this%nfocks = size(this%d,2)" in int2
+    assert "do ifock = 1, this%nfocks, 2" in update
+    assert "sum(this%d(ij,ifock:ifock+1))" in update
+    assert scf_addons.count("int2_urohf_data_t(nfocks=size(d,2)") == 2
 
 
 def test_python_production_call_cannot_enable_forward_cphf(monkeypatch):

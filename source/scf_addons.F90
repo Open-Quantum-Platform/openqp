@@ -1158,10 +1158,10 @@ contains
       allocate(int2_data, source=int2_rhf_data_t(nfocks=1, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     case (2)
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
+      allocate(int2_data, source=int2_urohf_data_t(nfocks=size(d,2), d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     case (3)
       if (allocated(int2_data)) deallocate(int2_data)
-      allocate(int2_data, source=int2_urohf_data_t(nfocks=2, d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
+      allocate(int2_data, source=int2_urohf_data_t(nfocks=size(d,2), d=d, scale_exchange=scale_e, scale_coulomb=scale_c))
     end select
 
 

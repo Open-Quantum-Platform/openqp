@@ -59,7 +59,7 @@ contains
       mrsf_nac_pair_accumulator_init, &
       mrsf_nac_pair_accumulate_antisym, &
       mrsf_nac_pair_finalize, mrsf_nac_rohf_pair_overlap, &
-      mrsf_nac_rohf_zvector_batch, mrsf_nac_rohf_hf_adjoint, &
+      mrsf_nac_rohf_zvector_batch, mrsf_nac_rohf_hf_adjoint_batch, &
       mrsf_nac_xc_adjoint_batch
 
     implicit none
@@ -74,6 +74,7 @@ contains
 
     character(len=*), parameter :: subroutine_name = &
       "mrsf_nac_lagrangian"
+    integer, parameter :: hf_batch_width = 3
     integer, parameter :: xc_batch_width = 3
     character(len=*), parameter :: tag_ytil = "OQP::nac_ytil"
     character(len=*), parameter :: tag_xstate = "OQP::nac_xstate"
@@ -83,6 +84,7 @@ contains
     character(len=*), parameter :: tag_esum = "OQP::nac_esum"
     character(len=*), parameter :: tag_overlap = "OQP::nac_pair_overlap"
     character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
+    character(len=*), parameter :: tag_hf = "OQP::nac_rohf_hf_adjoint"
     character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
     character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
       OQP_td_bvec_mo, OQP_td_energies /)
@@ -92,11 +94,11 @@ contains
     real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
       pair_overlap(:,:)
     real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), &
-      z_tag(:), xc_tag(:,:)
+      z_tag(:), hf_tag(:,:), xc_tag(:,:)
     real(kind=dp), allocatable :: bvec_saved(:,:), energies_saved(:), ytil(:)
     real(kind=dp), allocatable :: gamma_column(:,:)
     real(kind=dp), allocatable :: gamma_pair(:), rhs_batch(:,:), &
-      solution_batch(:,:), nonz_batch(:,:), xc_batch(:,:,:)
+      solution_batch(:,:), nonz_batch(:,:), hf_batch(:,:,:), xc_batch(:,:,:)
     integer, allocatable :: pair_i(:), pair_j(:)
     real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign
     real(kind=dp) :: profile_total, profile_metric, profile_wpair
@@ -107,7 +109,8 @@ contains
     integer(c_int64_t) :: nvirb64, nij64, nbfsq64, ncoord64
     integer(c_int64_t) :: state_pair_size64, default_int_limit64
     integer :: nbf, noca, nocb, nij, nstate, natom, ncoord
-    integer :: nvira, offset, ltot, npair, ipair, xc_first, xc_last
+    integer :: nvira, offset, ltot, npair, ipair, hf_first, hf_last, &
+      xc_first, xc_last
     integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
@@ -247,7 +250,8 @@ contains
     allocate(bvec_saved(nij,nstate), energies_saved(nstate), ytil(nij), &
              gamma_column(nbf*nbf,nstate), gamma_pair(nbf*nbf), &
              rhs_batch(ltot,npair), solution_batch(ltot,npair), &
-             nonz_batch(ncoord,npair), xc_batch(3,natom,npair), &
+             nonz_batch(ncoord,npair), hf_batch(3,natom,npair), &
+             xc_batch(3,natom,npair), &
              pair_i(npair), pair_j(npair))
     bvec_saved = bvec_mo
     ! TagArray reserve/remove operations below may invalidate every cached
@@ -257,6 +261,7 @@ contains
     rhs_batch = 0.0_dp
     solution_batch = 0.0_dp
     nonz_batch = 0.0_dp
+    hf_batch = 0.0_dp
     xc_batch = 0.0_dp
     ipair = 0
     do jstate = 2, nstate
@@ -407,6 +412,18 @@ contains
     if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
     if (profile_enabled) call system_clock(profile_stop)
+    ! Bound the AO response-density workspace for unusually many states.  The
+    ! production three-state case shares all ground-density, one-electron
+    ! derivative and AO->MO work across its three physical pairs.
+    do hf_first = 1, npair, hf_batch_width
+      hf_last = min(npair, hf_first + hf_batch_width - 1)
+      call mrsf_nac_rohf_hf_adjoint_batch( &
+        infos, solution_batch(:,hf_first:hf_last), &
+        hf_batch(:,:,hf_first:hf_last))
+    end do
+    if (profile_enabled) call profile_add(profile_hf, profile_stop)
+
+    if (profile_enabled) call system_clock(profile_stop)
     ! Bound the grid-consumer workspace for callers requesting many states.
     ! The production three-state case still traverses the grid only once.
     do xc_first = 1, npair, xc_batch_width
@@ -417,9 +434,12 @@ contains
     end do
     if (profile_enabled) call profile_add(profile_xc, profile_stop)
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_z, tag_xc /))
+    call infos%dat%remove_records((/ character(len=80) :: tag_z, tag_hf, &
+                                                        tag_xc /))
     call infos%dat%reserve_data(tag_z, TA_TYPE_REAL64, ltot, (/ ltot /), &
       comment='current antisymmetric unordered-pair ROHF adjoint')
+    call infos%dat%reserve_data(tag_hf, TA_TYPE_REAL64, 3*natom, &
+      (/ 3, natom /), comment='batched native ROHF NAC analytic HF adjoint')
     call infos%dat%reserve_data(tag_xc, TA_TYPE_REAL64, 3*natom, &
       (/ 3, natom /), comment='batched native ROHF NAC analytic XC adjoint')
     do ipair = 1, npair
@@ -428,11 +448,8 @@ contains
       ! the two ordered adjoints, up to the solver's certified residual.
       call tagarray_get_data(infos%dat, tag_z, z_tag)
       z_tag = solution_batch(:,ipair)
-      if (profile_enabled) call system_clock(profile_stop)
-      call mrsf_nac_rohf_hf_adjoint(infos)
-      if (profile_enabled) call profile_add(profile_hf, profile_stop)
-      ! The HF routine may grow TagArray storage, so reacquire the pointer
-      ! before publishing this pair's matrix-resolved batched XC result.
+      call tagarray_get_data(infos%dat, tag_hf, hf_tag)
+      hf_tag = hf_batch(:,:,ipair)
       call tagarray_get_data(infos%dat, tag_xc, xc_tag)
       xc_tag = xc_batch(:,:,ipair)
       if (profile_enabled) call system_clock(profile_stop)
@@ -461,7 +478,8 @@ contains
     end if
 
     deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair, &
-               rhs_batch, solution_batch, nonz_batch, xc_batch, pair_i, pair_j)
+               rhs_batch, solution_batch, nonz_batch, hf_batch, xc_batch, &
+               pair_i, pair_j)
   contains
     pure integer function unordered_pair_index(left_state, right_state) &
         result(index)
