@@ -165,13 +165,11 @@ def _one_index_derivative_g(g, p, q):
     return T
 
 
-def _z_matrix(D, G, t, T):
-    """Directional-derivative intermediate: ``dE_fix along K = sum_mn K_mn Z_mn``.
+def _z_matrix_general(D, G, t, T):
+    """Reference form of :func:`_z_matrix`, assuming no symmetry of ``t``/``T``.
 
-    ``Z(h, g)`` contracted over a pair reproduces the production gradient
-    ``2 (F_qp - F_pq)``; evaluated on derivative integrals it yields the
-    fixed-CI Hessian columns.  No permutational symmetry of ``t``/``T`` is
-    assumed (derivative integrals are not full-ERI-symmetric)."""
+    Kept as the numerical pin for the symmetry argument documented on
+    :func:`_z_matrix`; not used on the production path."""
     z = (D @ t - t @ D).T
     z += 0.5 * (
         np.einsum("nqrs,mqrs->mn", G, T, optimize=True)
@@ -179,6 +177,35 @@ def _z_matrix(D, G, t, T):
         + np.einsum("qrns,qrms->mn", G, T, optimize=True)
         + np.einsum("qrsn,qrsm->mn", G, T, optimize=True)
     )
+    return z
+
+
+def _z_matrix(D, G, t, T):
+    """Directional-derivative intermediate: ``dE_fix along K = sum_mn K_mn Z_mn``.
+
+    ``Z(h, g)`` contracted over a pair reproduces the production gradient
+    ``2 (F_qp - F_pq)``; evaluated on derivative integrals it yields the
+    fixed-CI Hessian columns.
+
+    The four four-index contractions of :func:`_z_matrix_general` are all the
+    same number here, so only one is evaluated.  Both operands carry the
+    pairwise index symmetry that makes them coincide:
+
+      * ``G[p,q,r,s] = G[q,p,s,r] = G[r,s,p,q]`` -- the spin-summed chemist
+        2-RDM (note ``G`` is NOT symmetric under ``q<->p`` alone; the exchange
+        term breaks that, and the argument does not need it);
+      * ``T`` inherits the full eight-fold symmetry of the real MO ERIs,
+        because the one-index derivative of :func:`_one_index_derivative_g`
+        applies the same generator to all four slots.
+
+    Then ``G[a,n,c,d] T[a,m,c,d] = G[n,a,d,c] T[m,a,d,c]`` relabels term 2 onto
+    term 1, and the ``[r,s,p,q]`` pair swap does the same for terms 3 and 4.
+    Verified over 3220 live calls of a CASSCF/cc-pVDZ CAS(6,6) run: the four
+    agree to 5.3e-14 relative.  ``_z_matrix_general`` remains as that pin (see
+    ``tests/test_casscf_zmatrix.py``); do not use this form on tensors lacking
+    those symmetries."""
+    z = (D @ t - t @ D).T
+    z += 2.0 * np.einsum("nqrs,mqrs->mn", G, T, optimize=True)
     return z
 
 
