@@ -2210,11 +2210,11 @@ end module tdhf_mrsf_gradient_mod
       ! iatogen leaves v nonzero only in (1:nocc_a,nocc_b+1:n).
       ! Restrict both general-channel products to that rectangular block.
       call dgemm('n', 't', n, nocc_a, nvir, 2.0_dp, &
-                 g(1,nocc_b+1), n, v(1,nocc_b+1), n, &
+                 g(:,nocc_b+1:n), n, v(:,nocc_b+1:n), n, &
                  0.0_dp, ha, n)
       call dgemm('t', 'n', n, nvir, nocc_a, 2.0_dp, &
-                 g, n, v(1,nocc_b+1), n, &
-                 0.0_dp, hb(1,nocc_b+1), n)
+                 g, n, v(:,nocc_b+1:n), n, &
+                 0.0_dp, hb(:,nocc_b+1:n), n)
 
       ! mrsfsp accumulates the channel 1:6 adjoint into the general part.
       call mrsfsp(ha, hb, ca, cb, v, f, nocc_a, nocc_b)
