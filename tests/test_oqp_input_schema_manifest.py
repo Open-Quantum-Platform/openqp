@@ -96,6 +96,13 @@ def _generic_input(section, key, value_text):
             'mp2/cc-pvdz geom="h2o.xyz" energy '
             "mp2(%s=%s)" % (key, value_text)
         )
+    if section == "cc":
+        # The [cc] solver controls only mean anything on a coupled-cluster
+        # route, the same way [mp2] needs an mp2 route.
+        return (
+            'ccsd_t/cc-pvdz geom="h2o.xyz" energy '
+            "cc(%s=%s)" % (key, value_text)
+        )
     if section == "dftb":
         route = 'dftb geom="h2o.xyz" energy'
     elif section == "tdhf":
@@ -158,7 +165,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 204
+    assert len(checked) == 208
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

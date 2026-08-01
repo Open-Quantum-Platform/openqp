@@ -1584,3 +1584,59 @@ def test_common_input_mistakes_get_actionable_corrections():
         oqp_input.parse_canonical_oqp(
             'mrsf/bhhlyp/6-31g* geom="h2o.xyz" istate=1 opt(S0)'
         )
+
+
+def test_coupled_cluster_route_selects_method_and_lowers_cc_section(tmp_path):
+    """ccsd/ccsd_t are models in their own right, not tdhf variants."""
+    spec, legacy = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(nfzc=1,conv=1e-8)', tmp_path
+    )
+
+    assert spec.physical_method == "CCSD(T)"
+    assert legacy["input"]["method"] == "ccsd(t)"
+    assert legacy["input"]["runtype"] == "energy"
+    assert legacy["scf"]["type"] == "rhf"
+    assert legacy["cc"] == {"nfzc": "1", "conv": "1e-08"}
+
+    _, plain = _parse('ccsd/6-31g geom="h2o.xyz" energy()', tmp_path)
+    assert plain["input"]["method"] == "ccsd"
+    assert spec.physical_method == "CCSD(T)"
+
+
+def test_coupled_cluster_spellings_agree(tmp_path):
+    for alias in ("ccsd_t", "ccsd-t", "ccsdt"):
+        _, legacy = _parse('%s/6-31g geom="h2o.xyz" energy()' % alias, tmp_path)
+        assert legacy["input"]["method"] == "ccsd(t)", alias
+
+
+def test_coupled_cluster_reference_is_route_owned(tmp_path):
+    spec, uhf = _parse(
+        'ccsd_t(reference=uhf,nfzc=1)/sto-3g geom="ch2.xyz" mult=3 energy()',
+        tmp_path,
+    )
+    assert spec.reference_method == "UHF"
+    assert uhf["scf"] == {"type": "uhf", "multiplicity": "3"}
+    # reference selects the SCF; it is not a [cc] solver keyword
+    assert uhf["cc"] == {"nfzc": "1"}
+
+    _, rohf = _parse(
+        'ccsd_t(reference=rohf)/sto-3g geom="oh.xyz" mult=2 energy()', tmp_path
+    )
+    assert rohf["scf"]["type"] == "rohf"
+
+
+def test_coupled_cluster_rejects_what_it_cannot_do():
+    # No gradients yet.
+    with pytest.raises(OQPInputError, match="energy"):
+        oqp_input.parse_canonical_oqp('ccsd_t/6-31g geom="h2o.xyz" grad()')
+    # HF reference only, so the route has no functional slot.
+    with pytest.raises(OQPInputError, match="does not take a functional"):
+        oqp_input.parse_canonical_oqp('ccsd_t/pbe/6-31g geom="h2o.xyz" energy()')
+    # A DFT reference cannot be smuggled in through the reference option.
+    with pytest.raises(OQPInputError, match="reference must be"):
+        oqp_input.parse_canonical_oqp(
+            'ccsd_t(reference=rks)/6-31g geom="h2o.xyz" energy()'
+        )
+    # Ground state only.
+    with pytest.raises(OQPInputError, match="S0"):
+        oqp_input.parse_canonical_oqp('ccsd_t/6-31g geom="h2o.xyz" energy(S1)')
