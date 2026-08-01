@@ -108,6 +108,8 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
+
+from oqp.library.fci import _symmetric_eigh
 from scipy.linalg import expm
 
 from oqp.library.casscf import (
@@ -292,7 +294,7 @@ def _ah_model_step(grad, w, U, trust, max_micro):
         A[0, 1:] = alpha * ge
         A[1:, 0] = alpha * ge
         A[1:, 1:][np.diag_indices(n)] = w
-        vals, vecs = np.linalg.eigh(A)
+        vals, vecs = _symmetric_eigh(A)
         v = vecs[:, 0]
         if abs(v[0]) < _V0_TOL:
             return float(vals[0]), None
@@ -377,7 +379,7 @@ def _ah_inner(C, evaluate, pairs, nbf, options, params, stagnation_break=0,
             hess = hess_fn(C, coeffs)                         # zero CI solves
         else:
             hess = _fd_orbital_hessian(C, evaluate, pairs, nbf)   # 2*n_par CI solves
-        w, U = np.linalg.eigh(hess)
+        w, U = _symmetric_eigh(hess)
         curv = (w.copy(), U)
 
         # trial step + rejection loop (model re-solves are CI-free; each trial

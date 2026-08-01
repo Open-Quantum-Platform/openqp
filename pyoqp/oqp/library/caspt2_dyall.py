@@ -78,6 +78,7 @@ from oqp.library.fci import (
     _unpack_lower_triangle,
     fci_spin_diagnostics,
     settings_from_casci_config,
+    _symmetric_eigh,
 )
 from oqp.library.casscf import CASSCF, _solve_active
 from oqp.utils.file_utils import print_module_banner
@@ -293,7 +294,7 @@ def _semicanonicalize(hcore_ao, eri_ao, coeff, ncore, nact, active_nelec, enuc,
             sub = F[np.ix_(idx, idx)]
             if len(idx) > 1:
                 offdiag = max(offdiag, float(np.max(np.abs(sub - np.diag(np.diag(sub))))))
-            _w, vec = np.linalg.eigh(0.5 * (sub + sub.T))
+            _w, vec = _symmetric_eigh(0.5 * (sub + sub.T))
             U[np.ix_(idx, idx)] = vec
         C = C @ U
         if offdiag < 1.0e-10:
@@ -458,7 +459,7 @@ def _first_order(hfull, h0full, h0_ext, vec, external, options):
     e0 = float(vec @ h0full @ vec)
     V = (hfull @ vec)[external]
     denom = h0_ext - e0 * np.eye(len(external))
-    w, U = np.linalg.eigh(0.5 * (denom + denom.T))          # bare CASPT2 denominators
+    w, U = _symmetric_eigh(0.5 * (denom + denom.T))          # bare CASPT2 denominators
     Vt = U.T @ V
     d = w + options.level_shift                             # real level shift
     if options.edshft:                                     # GAMESS ISA: d -> d + edshft/d
@@ -612,7 +613,7 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
             if not idx:
                 continue
             sub = F[np.ix_(idx, idx)]
-            _w, vec = np.linalg.eigh(0.5 * (sub + sub.T))
+            _w, vec = _symmetric_eigh(0.5 * (sub + sub.T))
             U[np.ix_(idx, idx)] = vec
         coeff_I = coeff_ref @ U
         h1e_I, eri_I = _transform_integrals(hcore_ao, eri_ao, coeff_I)
@@ -643,7 +644,7 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
         e0 = float(vec_f @ H0_f @ vec_f)
         V = (Hf_f @ vec_f)[ext]
         denom = H0_f[np.ix_(ext, ext)] - e0 * np.eye(len(ext))
-        w, Uq = np.linalg.eigh(0.5 * (denom + denom.T))
+        w, Uq = _symmetric_eigh(0.5 * (denom + denom.T))
         Vt = Uq.T @ V
         d = w + options.level_shift
         if options.edshft:                                 # GAMESS ISA: d -> d + edshft/d
@@ -685,7 +686,7 @@ def _multistate_multiset(mol, hcore_ao, eri_ao, coeff_ref, settings, ncore, nact
             cji = float(per[j]["psi1_full"] @ (per[j]["Hf_full"] @ veci_in_j))
             heff[i, j] = 0.5 * (cij + cji)
     heff = 0.5 * (heff + heff.T)
-    ms_energies, mixing = np.linalg.eigh(heff)
+    ms_energies, mixing = _symmetric_eigh(heff)
     ss_energies = np.array([heff[i, i] for i in range(nstate)])
     return {
         "ms_energies": ms_energies,
@@ -760,7 +761,7 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
         for j in range(nstate):
             heff[i, j] += 0.5 * (Vs[i] @ Cs[j] + Vs[j] @ Cs[i])
     heff = 0.5 * (heff + heff.T)
-    ms_energies, mixing = np.linalg.eigh(heff)
+    ms_energies, mixing = _symmetric_eigh(heff)
 
     ss_energies = np.array([hmodel[i, i] + e2s[i] for i in range(nstate)])
     return {

@@ -44,6 +44,7 @@ from oqp.library.fci import (
     fci_spin_diagnostics,
     settings_from_casci_config,
     solve_fci,
+    _symmetric_eigh,
 )
 from oqp.library.rdm import (
     make_rdm1_spatial,
@@ -365,7 +366,7 @@ def _newton_step(C, grad, pairs, nbf, evaluate, options, return_curv=False,
                  hess=None):
     if hess is None:
         hess = _fd_orbital_hessian(C, evaluate, pairs, nbf)
-    w, U = np.linalg.eigh(hess)
+    w, U = _symmetric_eigh(hess)
     curv = (w.copy(), U)                       # raw (unfloored) curvature
     wf = np.where(w > options.level_shift, w, options.level_shift)
     step = -(U @ ((U.T @ grad) / wf))
@@ -499,7 +500,7 @@ class CASSCF:
             if len(idx) < 2:
                 continue
             sub = Feff[np.ix_(idx, idx)]
-            _w, vec = np.linalg.eigh(0.5 * (sub + sub.T))
+            _w, vec = _symmetric_eigh(0.5 * (sub + sub.T))
             Cnew[:, idx] = coeff[:, idx] @ vec
         return Cnew
 

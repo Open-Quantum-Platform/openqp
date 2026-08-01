@@ -924,6 +924,15 @@ def _lib_dsyevd(sym: np.ndarray):
     if not hasattr(lib, "oqp_dsyevd"):
         return None
     n = int(sym.shape[0])
+    # LAPACK requires LDA >= max(1, N); a 0x0 block (empty active/virtual
+    # space) would trip "parameter 5 had an illegal value" on stderr before
+    # returning nonzero. 1x1 is not worth a LAPACK call either.
+    if n < 2:
+        if n == 0:
+            return (np.zeros(0, dtype=np.float64),
+                    np.zeros((0, 0), dtype=np.float64))
+        return (np.asarray(sym, dtype=np.float64).reshape(1).copy(),
+                np.ones((1, 1), dtype=np.float64))
     a = np.ascontiguousarray(sym, dtype=np.float64).copy()
     w = np.zeros(n, dtype=np.float64)
     info = int(lib.oqp_dsyevd(n, ffi.cast("double *", a.ctypes.data),
@@ -952,19 +961,22 @@ def _symmetric_eigh(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return (np.ascontiguousarray(eigvals, dtype=np.float64),
                 np.ascontiguousarray(eigvecs, dtype=np.float64))
 
+    # liboqp's own ILP64 LAPACK is the primary path: it is the same threaded
+    # library the rest of the native code computes with, and it is ABI-proof by
+    # construction (numpy links its own, possibly LP64, LAPACK).
+    lib_result = _lib_dsyevd(sym)
+    if lib_result is not None:
+        result = _verified(*lib_result)
+        if result is not None:
+            return result
+    # Fall back to numpy's LAPACK when the native symbol is unavailable (e.g.
+    # a pure-Python test run with no built backend), then to Jacobi.
     try:
         result = _verified(*np.linalg.eigh(sym))
         if result is not None:
             return result
     except Exception:
         pass
-    # numpy's LAPACK failed the residual gate (e.g. an LP64/ILP64 ABI clash):
-    # retry through liboqp's own LAPACK before falling back to Jacobi.
-    lib_result = _lib_dsyevd(sym)
-    if lib_result is not None:
-        result = _verified(*lib_result)
-        if result is not None:
-            return result
     return _symmetric_eigh_jacobi(sym)
 
 

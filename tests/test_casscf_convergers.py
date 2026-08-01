@@ -50,12 +50,12 @@ _CAS22 = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1", "
 # reference it starts from is BLAS/build dependent.  A real convergence
 # regression moves the count by far more than one step.
 _DEFAULT_BASELINE = {
-    # The macroiteration count is accumulation-order sensitive: three
-    # mathematically equivalent 2-RDM implementations reached this identical
-    # energy in 20 (nested Python create/annihilate), 15 (NumPy Gram matrix)
-    # and 20 (the Fortran rdm_kernel DGEMM, which is the production path)
-    # steps.  The energy is the real invariant and is pinned to 1e-8 below;
-    # the count is kept only as a coarse change detector.
+    # The macroiteration count is accumulation-order sensitive.  Four
+    # mathematically equivalent kernel combinations reached this identical
+    # energy for h2o in 20 / 15 / 20 / 15 steps (nested-Python 2-RDM, NumPy
+    # Gram 2-RDM, Fortran rdm_kernel + numpy eigh, Fortran rdm_kernel +
+    # liboqp DSYEVD -- the last being the production path).  The energy is
+    # the invariant and is pinned to 1e-8; the count is only a budget.
     "h2o": (-75.0085688882, 20),
     "h4": (-2.1153228671, 3),
     "lih": (-7.7983384275, 7),
@@ -240,10 +240,14 @@ def test_default_path_regression(default_runs, system_key):
     e_ref, it_ref = _DEFAULT_BASELINE[system_key]
     e, iters, text = default_runs[system_key]
     assert e == pytest.approx(e_ref, abs=_AGREEMENT_TOL)
-    assert abs(iters - it_ref) <= 1, (
-        f"{system_key} default path took {iters} macroiterations "
-        f"(baseline {it_ref}); a swing this large is a convergence regression, "
-        f"not build-to-build threshold noise"
+    # Coarse budget, not an exact pin: see _DEFAULT_BASELINE. The last
+    # macroiteration is decided by a threshold crossing, so the count moves
+    # with the accumulation order of mathematically equivalent kernels while
+    # the energy above does not.
+    assert 0.5 * it_ref <= iters <= 1.5 * it_ref, (
+        f"{system_key} default path took {iters} macroiterations against a "
+        f"baseline of {it_ref}; a swing this large is a convergence "
+        f"regression, not accumulation-order noise"
     )
     # the default path must not carry any converger trace in the log
     assert "PyOQP converger:" not in text
