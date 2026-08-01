@@ -1324,3 +1324,27 @@ measured from the same runs... unless sign-fixing branch-cuts).
 NEXT SESSION: start exactly here, with v10_probe.py as the instrument
 (fix its worker branch by using SEPARATE PROCESSES for the 1-iter
 skel), and the derivation target of 7.43.
+
+### 7.45 v11/v12: branch and curvature ELIMINATED; two named measurements left
+- v11 B1: NO branch kink -- u+ vs u- agree to 6e-3 (vv worst), path
+  smooth. B2: the ONE-SIDED FD differs from the staged response along
+  its own direction by the same 0.0195 (== the central value).
+- v12 t-scan: the staged response is LINEAR in t to 2e-4 over
+  t = 1e-5..1e-3. No curvature.
+Combined with 7.44: smooth path + linear response + (u+ defines C+
+reconstruction) should force agreement -- so one of exactly TWO things
+remains: (a) the reconstruction C0(1 + h u+) != C+_signfixed beyond
+O(h^2) (measure |C0(1+h u+) - C+| directly), or (b) the MIXED second
+derivative d2A/dx dtheta: the lhs C-channel is measured AT DISPLACED
+INTEGRALS while the staging runs at reference integrals -- an O(h)
+term that would explain 0.0195 IFF the pure-C-channel h-scaling is
+NOT constant. The v10 h/2 "constancy" is untrustworthy (same-run
+maxit-hack contamination, trueG blowup); the ONLY clean h-test so far
+is v7o's J1 (which mixes channels). NEXT-SESSION MEASUREMENT #1:
+fresh-process pure-C-channel at h and h/2 (no maxit hacks) + the
+reconstruction check. If (b) confirms: the referee/staging mismatch is
+a benign O(h) cross term and the TRUE production closure should be
+judged only through h->0-extrapolated or integral-consistent referees
+-- potentially dissolving the entire "invariant residual" as a
+referee artifact at finite h, with d_num (production, its own FD) the
+final arbiter.
