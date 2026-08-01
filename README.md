@@ -18,6 +18,16 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | **MRSF-TDDFT** | [Mixed-Reference Spin-Flip](https://doi.org/10.1021/acs.jpclett.3c02296) + [DTCAM-series functionals](https://doi.org/10.1021/acs.jctc.4c00640) | Main production method; multireference accuracy with LR practicality |
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
+| Determinant CI | `method=fci`, `method=casci` | Full CI and fixed-orbital active-space CI on an RHF reference; dense or Davidson solver |
+| CASSCF | `method=casscf`, `method=sa-casscf` | Orbital + CI optimization; converger framework (`[casscf] converger = twophase \| ah \| diis \| auto`, trust-region augmented Hessian) and an exact analytic orbital Hessian (`[casscf] hessian=analytic`). State-averaged via `[state_average] enabled=true` |
+| CASPT2 | `method=caspt2`, `ms-caspt2`, `xms-caspt2` | Determinant-space PT2 on a CASCI/CASSCF reference; Fock or Dyall H0, IPEA/imaginary/level shifts. Multi-set MS-CASPT2 matches OpenMolcas to µEh |
+| NEVPT2 | `[pt2] h0=dyall` (uncontracted) and `contraction=strong` (SC-NEVPT2) | Strongly contracted NEVPT2 reproduces PySCF/ORCA to nEh |
+| QDPT2 (GAMESS convention) | `method=mrmp2`, `mcqdpt2`, `xmcqdpt2` | Single-state / multistate / Granovsky-extended QDPT with the ISA denominator shift (`[pt2] edshft`), on a matrix-free direct engine |
+
+The CAS-based methods above supply energies for every gradient-driven runtype
+through central-difference gradients (`grad`, `optimize`, `meci`, `mecp`,
+`ts`, `mep`, `neb`, `irc`). Scope is validation-grade: RHF singlet references
+and small active spaces; see `examples/WF_methods/README.md`.
 
 **Tutorials:** [Hartree–Fock & DFT](https://open-quantum-platform.github.io/openqp-tutorials/hf-and-dft/) · [MP2 & spin-scaled MP2](https://open-quantum-platform.github.io/openqp-tutorials/mp2/) · [TDDFT/TDHF](https://open-quantum-platform.github.io/openqp-tutorials/tddft-and-tdhf/) · [Spin-flip TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/sf-tddft/) · [MRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/mrsf-tddft/) · [UMRSF-TDDFT](https://open-quantum-platform.github.io/openqp-tutorials/umrsf-tddft/)
 
