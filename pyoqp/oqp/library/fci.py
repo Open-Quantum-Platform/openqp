@@ -1304,9 +1304,36 @@ def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspa
     )
 
 
-def solve_fci(
-    h1e: np.ndarray,
-    eri: np.ndarray,
+@dataclass(frozen=True)
+class CISolveSpec:
+    """Validated, resolved CI solver settings.
+
+    One place decides what the solver is actually asked to do, so the Python
+    driver and the native :func:`fci_solve` entry point cannot disagree about a
+    determinant count, a solver choice or a memory budget -- and every
+    user-facing message keeps being raised from here, in Python, whichever
+    executes the solve.
+    """
+
+    nalpha: int
+    nbeta: int
+    ndet: int
+    nroot: int
+    solver: str
+    ecore: float
+    eig_tol: float
+    integral_cutoff: float
+    max_det: int
+    max_memory: int
+    davidson_maxiter: int
+    davidson_subspace: int
+    target_spin: str
+    target_multiplicity: int | None
+    budget_bytes: int
+
+
+def resolve_ci_solve(
+    norb: int,
     nelec: int | tuple[int, int] | list[int],
     *,
     ecore: float = 0.0,
@@ -1321,34 +1348,8 @@ def solve_fci(
     target_spin: str = "any",
     active_section: str = "[fci]",
     ci_section: str = "[fci]",
-) -> tuple[np.ndarray, np.ndarray]:
-    """Solve the FCI eigenproblem in a determinant basis.
-
-    The two-electron tensor uses chemists' notation ``(pq|rs)`` over spatial
-    orbitals. Two solvers are available:
-
-    * ``"dense"`` builds the explicit ``ndet x ndet`` Hamiltonian and calls
-      :func:`numpy.linalg.eigh` (exact, but ``8*ndet**2`` bytes of storage);
-    * ``"davidson"`` builds a sparse Hamiltonian and runs a block Davidson
-      iteration for the lowest ``nroot`` states, avoiding the dense matrix.
-
-    ``"auto"`` (the default) uses the dense solver while its Hamiltonian fits the
-    ``max_memory`` budget and switches to Davidson once it would not. Both paths
-    share the same verified second-quantized matrix-element enumeration, so they
-    agree to numerical precision. When ``target_spin`` is not ``"any"``, the
-    solver expands the internal root window as needed and returns the lowest
-    roots matching the requested spin multiplicity. This is still meant for
-    small active spaces.
-    """
-
-    h1e = _real_array(h1e, "h1e")
-    eri = _real_array(eri, "eri")
-    if h1e.ndim != 2 or h1e.shape[0] != h1e.shape[1]:
-        raise ValueError("h1e must be a square matrix")
-    norb = h1e.shape[0]
-    if eri.shape != (norb, norb, norb, norb):
-        raise ValueError("eri must have shape (norb, norb, norb, norb)")
-
+) -> CISolveSpec:
+    """Validate CI options and resolve ``solver="auto"``."""
     nroot = _int_setting(nroot, "nroot", minimum=1)
     max_det = _int_setting(max_det, "max_det", minimum=1)
     max_memory = _int_setting(max_memory, "max_memory", minimum=1)
@@ -1405,6 +1406,98 @@ def solve_fci(
             f"of {max_memory} MiB. Reduce the active space, raise {active_section} max_memory, "
             f"or use the iterative solver ({ci_section} solver=davidson)."
         )
+
+    return CISolveSpec(
+        nalpha=nalpha,
+        nbeta=nbeta,
+        ndet=ndet,
+        nroot=nroot,
+        solver=solver,
+        ecore=ecore,
+        eig_tol=eig_tol,
+        integral_cutoff=integral_cutoff,
+        max_det=max_det,
+        max_memory=max_memory,
+        davidson_maxiter=davidson_maxiter,
+        davidson_subspace=davidson_subspace,
+        target_spin=target_spin,
+        target_multiplicity=target_multiplicity,
+        budget_bytes=budget_bytes,
+    )
+
+
+def solve_fci(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+    nelec: int | tuple[int, int] | list[int],
+    *,
+    ecore: float = 0.0,
+    nroot: int = 1,
+    max_det: int = 5000,
+    max_memory: int = 2048,
+    eig_tol: float = 1.0e-10,
+    integral_cutoff: float = 0.0,
+    solver: str = "auto",
+    davidson_maxiter: int = 100,
+    davidson_subspace: int = 0,
+    target_spin: str = "any",
+    active_section: str = "[fci]",
+    ci_section: str = "[fci]",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Solve the FCI eigenproblem in a determinant basis.
+
+    The two-electron tensor uses chemists' notation ``(pq|rs)`` over spatial
+    orbitals. Two solvers are available:
+
+    * ``"dense"`` builds the explicit ``ndet x ndet`` Hamiltonian and calls
+      :func:`numpy.linalg.eigh` (exact, but ``8*ndet**2`` bytes of storage);
+    * ``"davidson"`` builds a sparse Hamiltonian and runs a block Davidson
+      iteration for the lowest ``nroot`` states, avoiding the dense matrix.
+
+    ``"auto"`` (the default) uses the dense solver while its Hamiltonian fits the
+    ``max_memory`` budget and switches to Davidson once it would not. Both paths
+    share the same verified second-quantized matrix-element enumeration, so they
+    agree to numerical precision. When ``target_spin`` is not ``"any"``, the
+    solver expands the internal root window as needed and returns the lowest
+    roots matching the requested spin multiplicity. This is still meant for
+    small active spaces.
+    """
+
+    h1e = _real_array(h1e, "h1e")
+    eri = _real_array(eri, "eri")
+    if h1e.ndim != 2 or h1e.shape[0] != h1e.shape[1]:
+        raise ValueError("h1e must be a square matrix")
+    norb = h1e.shape[0]
+    if eri.shape != (norb, norb, norb, norb):
+        raise ValueError("eri must have shape (norb, norb, norb, norb)")
+
+    spec = resolve_ci_solve(
+        norb,
+        nelec,
+        ecore=ecore,
+        nroot=nroot,
+        max_det=max_det,
+        max_memory=max_memory,
+        eig_tol=eig_tol,
+        integral_cutoff=integral_cutoff,
+        solver=solver,
+        davidson_maxiter=davidson_maxiter,
+        davidson_subspace=davidson_subspace,
+        target_spin=target_spin,
+        active_section=active_section,
+        ci_section=ci_section,
+    )
+    nalpha, nbeta = spec.nalpha, spec.nbeta
+    ndet = spec.ndet
+    nroot = spec.nroot
+    solver = spec.solver
+    ecore = spec.ecore
+    eig_tol = spec.eig_tol
+    integral_cutoff = spec.integral_cutoff
+    davidson_maxiter = spec.davidson_maxiter
+    davidson_subspace = spec.davidson_subspace
+    target_multiplicity = spec.target_multiplicity
+    budget_bytes = spec.budget_bytes
 
     dets = _determinants(norb, (nalpha, nbeta))
     # The determinant -> row map is only consulted by the Python enumeration
@@ -1995,23 +2088,39 @@ def _fold_core(h1e, eri, active_list, core_list, ecore=0.0):
     return h_active, float(energy[0])
 
 
-def _active_space(
-    h1e: np.ndarray,
-    eri: np.ndarray,
-    nelec: tuple[int, int],
-    ecore: float,
-    settings: FCISettings,
-) -> tuple[np.ndarray, np.ndarray, tuple[int, int], float, dict[str, int | str]]:
-    h1e = _real_array(h1e, "h1e")
-    eri = _real_array(eri, "eri")
-    if h1e.ndim != 2 or h1e.shape[0] != h1e.shape[1]:
-        raise ValueError("h1e must be a square matrix")
-    norb = h1e.shape[0]
-    if eri.shape != (norb, norb, norb, norb):
-        raise ValueError("eri must have shape (norb, norb, norb, norb)")
+@dataclass(frozen=True)
+class ActiveSpacePlan:
+    """Which MOs are active, which are frozen core, and how many electrons.
 
+    Pure integer bookkeeping derived from the ``[cas]``/``[fci]`` settings, with
+    no dependence on the integrals, so it is computed once and reused across
+    every CI solve of a CASSCF run instead of being re-derived per
+    macroiteration.  It is also exactly what the native :func:`fci_solve` needs
+    to do the frozen-core fold and the active gather itself.
+    """
+
+    norb: int
+    active: tuple[int, ...]
+    core: tuple[int, ...]
+    nelec: tuple[int, int]
+    metadata: dict
+
+    @property
+    def nact(self) -> int:
+        return len(self.active)
+
+    @property
+    def ncore(self) -> int:
+        return len(self.core)
+
+
+def active_space_plan(
+    norb: int,
+    nelec: tuple[int, int],
+    settings: FCISettings,
+) -> ActiveSpacePlan:
+    """Resolve the active/core orbital selection from the settings."""
     nalpha, nbeta = _as_nelec_pair(nelec)
-    ecore = _float_setting(ecore, "ecore")
     explicit_active = tuple(settings.active_orbital_indices or ())
     explicit_core = tuple(settings.core_orbital_indices or ())
 
@@ -2039,10 +2148,6 @@ def _active_space(
         if active_norb < max(active_nelec):
             raise ValueError("active_orbital_indices selects too few orbitals for the active electron count")
 
-        active = np.array(active_list, dtype=int)
-        eri_active = eri[np.ix_(active, active, active, active)].copy()
-        h_active, ecore_active = _fold_core(
-            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "explicit"
     else:
         frozen_core = settings.frozen_core
@@ -2062,12 +2167,8 @@ def _active_space(
         if frozen_core + active_norb > norb:
             raise ValueError("active_orbitals extends beyond the available MO space")
 
-        active = slice(frozen_core, frozen_core + active_norb)
-        eri_active = eri[active, active, active, active].copy()
         active_list = list(range(frozen_core, frozen_core + active_norb))
         core_list = list(range(frozen_core))
-        h_active, ecore_active = _fold_core(
-            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "sequential"
 
     metadata = {
@@ -2083,7 +2184,227 @@ def _active_space(
         "orbital_selection": selection,
         "orbital_source": settings.orbital_source,
     }
-    return h_active, eri_active, active_nelec, ecore_active, metadata
+    return ActiveSpacePlan(
+        norb=int(norb),
+        active=tuple(int(i) for i in active_list),
+        core=tuple(int(i) for i in core_list),
+        nelec=(int(active_nelec[0]), int(active_nelec[1])),
+        metadata=metadata,
+    )
+
+
+def apply_active_space(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+    plan: ActiveSpacePlan,
+    ecore: float,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int], float]:
+    """Gather the active ERI block and fold the frozen core into ``h``."""
+    active = np.array(plan.active, dtype=int)
+    eri_active = eri[np.ix_(active, active, active, active)].copy()
+    h_active, ecore_active = _fold_core(
+        h1e, eri, list(plan.active), list(plan.core), ecore=float(ecore))
+    return h_active, eri_active, plan.nelec, ecore_active
+
+
+def _active_space(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+    nelec: tuple[int, int],
+    ecore: float,
+    settings: FCISettings,
+) -> tuple[np.ndarray, np.ndarray, tuple[int, int], float, dict[str, int | str]]:
+    h1e = _real_array(h1e, "h1e")
+    eri = _real_array(eri, "eri")
+    if h1e.ndim != 2 or h1e.shape[0] != h1e.shape[1]:
+        raise ValueError("h1e must be a square matrix")
+    norb = h1e.shape[0]
+    if eri.shape != (norb, norb, norb, norb):
+        raise ValueError("eri must have shape (norb, norb, norb, norb)")
+    ecore = _float_setting(ecore, "ecore")
+    plan = active_space_plan(norb, nelec, settings)
+    h_active, eri_active, active_nelec, ecore_active = apply_active_space(
+        h1e, eri, plan, ecore)
+    return h_active, eri_active, active_nelec, ecore_active, dict(plan.metadata)
+
+
+# ------------------------------------------------------- native CI entry point
+# Mirror of the option schema in source/modules/fci_driver.F90 (FCI_I_* /
+# FCI_D_* parameter block).  The Fortran file is authoritative; the names below
+# are matched against it by tests/test_fci_solve.py, so the two cannot drift.
+_FCI_IOPT = (
+    "norb", "nact", "ncore", "nalpha", "nbeta", "nroot", "solver", "maxiter",
+    "subspace", "mult", "maxmemory", "nthreads", "want_s2",
+)
+_FCI_DOPT = ("ecore", "eig_tol", "cutoff")
+_FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}
+_FCI_DOPT_INDEX = {name: i for i, name in enumerate(_FCI_DOPT)}
+_FCI_SOLVER_CODE = {"auto": 0, "dense": 1, "davidson": 2}
+# Determinants are packed into one 64-bit key, so the active space caps out at
+# 31 spatial orbitals (62 spin orbitals).
+_FCI_MAX_NSPIN = 62
+
+
+def _fci_solve_backend():
+    """liboqp ``(lib, ffi)`` for the one-call CI driver, or ``None``."""
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "fci_solve"):
+        return None
+    return lib, ffi
+
+
+def _lib_fci_solve(h1e, eri, plan, spec, *, nthreads, want_s2, use_target_spin):
+    """A complete CI solve inside liboqp, or ``None`` to use the Python driver.
+
+    One boundary crossing replaces the whole orchestration loop: the frozen-core
+    fold, the active ERI gather, the spin-orbital expansion, determinant
+    generation, the dense/Davidson dispatch, every Davidson application and
+    subspace diagonalization, the spin diagnostics and the root selection all
+    happen without returning here.
+
+    Returns ``(energies, civecs, s2 | None)``.  ``None`` means the engine
+    declined -- a missing symbol, an active space wider than a 64-bit
+    determinant key, an allocation failure, a non-converged Davidson, or a spin
+    filter that ran out of roots -- and the caller re-runs :func:`solve_fci`,
+    which raises the established message where there is one.
+    """
+    backend = _fci_solve_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    nact = plan.nact
+    if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
+        return None
+
+    iopt = np.zeros(len(_FCI_IOPT), dtype=np.int32)
+    iopt[_FCI_IOPT_INDEX["norb"]] = plan.norb
+    iopt[_FCI_IOPT_INDEX["nact"]] = nact
+    iopt[_FCI_IOPT_INDEX["ncore"]] = plan.ncore
+    iopt[_FCI_IOPT_INDEX["nalpha"]] = spec.nalpha
+    iopt[_FCI_IOPT_INDEX["nbeta"]] = spec.nbeta
+    iopt[_FCI_IOPT_INDEX["nroot"]] = spec.nroot
+    iopt[_FCI_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[spec.solver]
+    iopt[_FCI_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
+    iopt[_FCI_IOPT_INDEX["subspace"]] = spec.davidson_subspace
+    iopt[_FCI_IOPT_INDEX["mult"]] = (
+        spec.target_multiplicity or 0) if use_target_spin else 0
+    iopt[_FCI_IOPT_INDEX["maxmemory"]] = spec.max_memory
+    iopt[_FCI_IOPT_INDEX["nthreads"]] = nthreads
+    iopt[_FCI_IOPT_INDEX["want_s2"]] = 1 if want_s2 else 0
+
+    dopt = np.zeros(len(_FCI_DOPT), dtype=np.float64)
+    dopt[_FCI_DOPT_INDEX["ecore"]] = spec.ecore
+    dopt[_FCI_DOPT_INDEX["eig_tol"]] = spec.eig_tol
+    dopt[_FCI_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+
+    active = np.ascontiguousarray(plan.active, dtype=np.int32)
+    # cffi will not cast an empty buffer; the engine reads none of it anyway
+    core = (np.ascontiguousarray(plan.core, dtype=np.int32) if plan.core
+            else np.zeros(1, dtype=np.int32))
+    hh = _as_f64c(h1e)
+    vv = _as_f64c(eri)
+    ndet = comb(nact, spec.nalpha) * comb(nact, spec.nbeta)
+    energies = np.zeros(spec.nroot, dtype=np.float64)
+    civecs = np.zeros((ndet, spec.nroot), dtype=np.float64)
+    s2 = np.zeros(spec.nroot, dtype=np.float64)
+
+    status = int(lib.fci_solve(
+        ffi.cast("int32_t *", iopt.ctypes.data),
+        ffi.cast("double *", dopt.ctypes.data),
+        ffi.cast("int32_t *", active.ctypes.data),
+        ffi.cast("int32_t *", core.ctypes.data),
+        ffi.cast("double *", hh.ctypes.data),
+        ffi.cast("double *", vv.ctypes.data),
+        ffi.cast("double *", energies.ctypes.data),
+        ffi.cast("double *", civecs.ctypes.data),
+        ffi.cast("double *", s2.ctypes.data)))
+    if status < 0:
+        return None
+    return energies, civecs, (s2 if want_s2 else None)
+
+
+def solve_active_ci(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+    plan: ActiveSpacePlan,
+    ecore: float,
+    settings: FCISettings,
+    *,
+    nroot: int,
+    want_s2: bool = False,
+    use_target_spin: bool = False,
+    integral_cutoff: float = 0.0,
+    active_section: str = "[fci]",
+    ci_section: str = "[fci]",
+):
+    """One complete CI solve from the FULL MO integrals.
+
+    This is the seam the native driver replaces.  Options are validated here --
+    in Python, once, with the established messages -- and the compute path then
+    runs entirely inside liboqp.  :func:`solve_fci` stays as the numerical pin
+    and the fallback, exactly like ``_gfock_backend()`` in ``casscf.py``.
+
+    ``use_target_spin`` hands the spin filter to the engine (which has to
+    re-solve to widen its root window, so bouncing back here for it would defeat
+    the point).  ``FCI.energy`` leaves it off because it reports the root
+    indices *within the unfiltered window*, which is a reporting concern rather
+    than a compute one.
+
+    Returns ``(energies, civecs, s2 | None)``.
+    """
+    spec = resolve_ci_solve(
+        plan.nact,
+        plan.nelec,
+        ecore=ecore,
+        nroot=nroot,
+        max_det=settings.max_det,
+        max_memory=settings.max_memory,
+        eig_tol=settings.eig_tol,
+        integral_cutoff=integral_cutoff,
+        solver=settings.solver,
+        davidson_maxiter=settings.davidson_maxiter,
+        davidson_subspace=(
+            max(settings.davidson_subspace, int(nroot))
+            if settings.davidson_subspace else 0
+        ),
+        target_spin=settings.target_spin if use_target_spin else "any",
+        active_section=active_section,
+        ci_section=ci_section,
+    )
+
+    native = _lib_fci_solve(
+        h1e, eri, plan, spec,
+        nthreads=_fci_lib_threads(), want_s2=want_s2,
+        use_target_spin=use_target_spin,
+    )
+    if native is not None:
+        return native
+
+    h_act, eri_act, active_nelec, ecore_act = apply_active_space(
+        h1e, eri, plan, ecore)
+    energies, coeffs = solve_fci(
+        h_act, eri_act, active_nelec,
+        ecore=ecore_act,
+        nroot=spec.nroot,
+        max_det=spec.max_det,
+        max_memory=spec.max_memory,
+        eig_tol=spec.eig_tol,
+        integral_cutoff=spec.integral_cutoff,
+        solver=settings.solver,
+        davidson_maxiter=spec.davidson_maxiter,
+        davidson_subspace=spec.davidson_subspace,
+        target_spin=spec.target_spin,
+        active_section=active_section,
+        ci_section=ci_section,
+    )
+    s2 = None
+    if want_s2:
+        s2, _multiplicity = fci_spin_diagnostics(
+            coeffs, _determinants(plan.nact, active_nelec), plan.nact, active_nelec)
+    return energies, coeffs, s2
 
 
 class FCI:
@@ -2109,38 +2430,36 @@ class FCI:
         if self.mol.data["nelec_A"] != self.mol.data["nelec_B"]:
             raise ValueError(f"{self.data_prefix} MVP supports only closed-shell singlets")
 
-        h1e, eri, nelec, ecore, metadata = self._native_mo_integrals()
-        determinants = _determinants(h1e.shape[0], nelec)
+        h1e_mo, eri_mo, plan, ecore, metadata = self._native_mo_integrals()
+        nact = plan.nact
+        nelec = plan.nelec
+        determinants = _determinants(nact, nelec)
         target_multiplicity = _target_spin_multiplicity(self.settings.target_spin)
         determinant_count = int(metadata["determinants"])
 
         def solve_and_diagnose(window_nroot: int):
-            davidson_subspace = self.settings.davidson_subspace
-            if davidson_subspace:
-                davidson_subspace = max(davidson_subspace, int(window_nroot))
-            window_energies, window_coeffs = solve_fci(
-                h1e,
-                eri,
-                nelec,
-                ecore=ecore,
+            # The spin filter stays here rather than in the engine: the root
+            # indices reported below are positions in the UNFILTERED window, so
+            # this is a reporting concern, not part of the compute path.
+            window_energies, window_coeffs, window_s2 = solve_active_ci(
+                h1e_mo,
+                eri_mo,
+                plan,
+                ecore,
+                self.settings,
                 nroot=window_nroot,
-                max_det=self.settings.max_det,
-                max_memory=self.settings.max_memory,
-                eig_tol=self.settings.eig_tol,
+                want_s2=True,
+                use_target_spin=False,
                 integral_cutoff=self.settings.integral_cutoff,
-                solver=self.settings.solver,
-                davidson_maxiter=self.settings.davidson_maxiter,
-                davidson_subspace=davidson_subspace,
                 active_section=self.active_section,
                 ci_section=self.ci_section,
             )
-            window_s2, window_multiplicity = fci_spin_diagnostics(
-                window_coeffs,
-                determinants,
-                h1e.shape[0],
-                nelec,
+            window_multiplicity = np.maximum(
+                np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * window_s2))).astype(np.int64),
+                1,
             )
-            return window_energies, window_coeffs, window_s2, window_multiplicity
+            return (window_energies, window_coeffs, _as_f64c(window_s2),
+                    np.ascontiguousarray(window_multiplicity, dtype=np.int64))
 
         if target_multiplicity is None:
             energies, coeffs, s2, multiplicity = solve_and_diagnose(self.settings.nroot)
@@ -2232,7 +2551,7 @@ class FCI:
             rdm1_roots, rdm2_roots, natural_occupation_roots = self._store_native_rdm_tensors(
                 coeffs,
                 determinants,
-                h1e.shape[0],
+                nact,
             )
             self._save_native_rdm_artifact(
                 metadata,
@@ -2251,7 +2570,7 @@ class FCI:
             ci_vector_log = _ci_vector_log_entries(
                 coeffs,
                 determinants,
-                h1e.shape[0],
+                nact,
                 threshold=self.settings.ci_print_threshold,
                 active_orbital_indices=str(metadata.get("active_orbital_indices", "")),
                 root_indices=root_indices,
@@ -2411,6 +2730,10 @@ class FCI:
         h1e, eri = _transform_integrals(hcore, eri_ao, coeff)
         nelec = (int(self.mol.data["nelec_A"]), int(self.mol.data["nelec_B"]))
         ecore = float(self.mol.mol_energy.nenergy)
-        result = _active_space(h1e, eri, nelec, ecore, self.settings)
-        result[4]["orbital_source"] = "rhf"
-        return result
+        # The FULL MO integrals are returned: the active gather and the
+        # frozen-core fold now happen inside the native CI driver, so doing
+        # them here would only be work thrown away.
+        plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        metadata = dict(plan.metadata)
+        metadata["orbital_source"] = "rhf"
+        return h1e, eri, plan, ecore, metadata

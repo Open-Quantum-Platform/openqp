@@ -542,7 +542,9 @@ def test_fci_energy_saves_ci_vector_npz_artifact(tmp_path, monkeypatch):
         def _native_mo_integrals(self):
             h1e = np.zeros((2, 2), dtype=float)
             eri = np.zeros((2, 2, 2, 2), dtype=float)
-            return h1e, eri, (1, 1), 0.0, {
+            plan = fci_module.ActiveSpacePlan(
+                norb=2, active=(0, 1), core=(), nelec=(1, 1), metadata={})
+            return h1e, eri, plan, 0.0, {
                 "determinants": 4,
                 "active_electrons": 2,
                 "active_orbitals": 2,
@@ -588,7 +590,9 @@ def test_fci_energy_saves_rdm_npz_artifact(tmp_path, monkeypatch):
         def _native_mo_integrals(self):
             h1e = np.zeros((2, 2), dtype=float)
             eri = np.zeros((2, 2, 2, 2), dtype=float)
-            return h1e, eri, (1, 1), 0.0, {
+            plan = fci_module.ActiveSpacePlan(
+                norb=2, active=(0, 1), core=(), nelec=(1, 1), metadata={})
+            return h1e, eri, plan, 0.0, {
                 "determinants": 4,
                 "active_electrons": 2,
                 "active_alpha_electrons": 1,
@@ -682,25 +686,22 @@ def test_ci_energy_stores_fixed_orbital_state_average(monkeypatch):
         def _native_mo_integrals(self):
             h1e = np.zeros((2, 2), dtype=float)
             eri = np.zeros((2, 2, 2, 2), dtype=float)
-            return h1e, eri, (1, 1), 0.0, {"determinants": 4}
+            plan = fci_module.ActiveSpacePlan(
+                norb=2, active=(0, 1), core=(), nelec=(1, 1), metadata={})
+            return h1e, eri, plan, 0.0, {"determinants": 4}
 
+    # The CI solve is one call now (native or the Python driver behind it), so
+    # the fabricated roots are injected there rather than at solve_fci.
     monkeypatch.setattr(
         fci_module,
-        "solve_fci",
+        "solve_active_ci",
         lambda *args, **kwargs: (
             np.asarray([-1.0, -0.5, 0.25], dtype=float),
             np.eye(4, 3, dtype=float),
+            np.asarray([0.0, 0.0, 2.0], dtype=float),
         ),
     )
     monkeypatch.setattr(fci_module, "_determinants", lambda norb, nelec: [0, 1, 2, 3])
-    monkeypatch.setattr(
-        fci_module,
-        "fci_spin_diagnostics",
-        lambda ci_vectors, determinants, norb, nelec: (
-            np.asarray([0.0, 0.0, 2.0], dtype=float),
-            np.asarray([1, 1, 3], dtype=np.int64),
-        ),
-    )
     monkeypatch.setattr(fci_module, "dump_log", lambda *args, **kwargs: None)
 
     driver = FakeCI(FakeMol())
