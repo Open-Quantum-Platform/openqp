@@ -129,7 +129,11 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   call cc_wall_time(t1w)
   if (present(time_ccsd)) time_ccsd = t1w - t0
 
-  if (opts%do_triples) then
+  ! Only if the amplitudes are actually converged.  The driver aborts on a
+  ! failed iteration anyway, and (T) is the dominant O(N^7) cost, so running
+  ! it first would spend the largest part of the job producing a number that
+  ! is then thrown away.
+  if (opts%do_triples .and. converged) then
     call cc_wall_time(t0)
     call triples_correction(no, nv, eo, ev, ooov, ovov, ovvv, t1, t2, pe, opts, e_t)
     call cc_wall_time(t1w)

@@ -1640,3 +1640,28 @@ def test_coupled_cluster_rejects_what_it_cannot_do():
     # Ground state only.
     with pytest.raises(OQPInputError, match="S0"):
         oqp_input.parse_canonical_oqp('ccsd_t/6-31g geom="h2o.xyz" energy(S1)')
+
+
+def test_natural_requests_reach_the_cc_methods(tmp_path):
+    """The prose path knew only the older spellings, so a request like
+    'Run a CCSD(T)/cc-pVDZ energy' was rejected outright."""
+    for text, expected in (
+        ("Run a CCSD(T)/cc-pVDZ energy for h2o.xyz.", "ccsd(t)"),
+        ("Run a CCSD/6-31g energy for h2o.xyz.", "ccsd"),
+        ("Run a ccsd_t/6-31g energy for h2o.xyz.", "ccsd(t)"),
+    ):
+        res = oqp_input.resolve_oqp_text(
+            text, source_path=tmp_path / "probe.oqp"
+        )
+        assert res.legacy_config["input"]["method"] == expected, text
+
+
+def test_natural_cc_support_matches_the_established_mp2_spelling(tmp_path):
+    """CC should be understood exactly where MP2 already is -- no better, and
+    no worse. This pins the parity rather than any one phrasing."""
+    form = "Run a %s/cc-pVDZ energy for h2o.xyz."
+    for label, expected in (("MP2", "mp2"), ("CCSD", "ccsd"), ("CCSD(T)", "ccsd(t)")):
+        res = oqp_input.resolve_oqp_text(
+            form % label, source_path=tmp_path / "probe.oqp"
+        )
+        assert res.legacy_config["input"]["method"] == expected, label

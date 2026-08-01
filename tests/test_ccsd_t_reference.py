@@ -70,11 +70,19 @@ def _run(tmp_path, case, triples=True):
     log = inp.with_suffix(".log")
     if log.exists():
         log.unlink()
-    subprocess.run(
+    proc = subprocess.run(
         [sys.executable, "-m", "oqp.pyoqp", str(inp)],
         capture_output=True,
         cwd=str(tmp_path),
         timeout=1800,
+    )
+    # The driver prints its energy table before raising a non-convergence
+    # error, so a log that parses is not by itself evidence the run succeeded.
+    assert proc.returncode == 0, (
+        "run failed (exit %d)\nstdout:\n%s\nstderr:\n%s"
+        % (proc.returncode,
+           proc.stdout.decode(errors="replace")[-2000:],
+           proc.stderr.decode(errors="replace")[-2000:])
     )
     assert log.exists(), "no log produced -- the run did not reach the CC module"
     text = log.read_text()

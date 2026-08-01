@@ -2553,6 +2553,8 @@ def _natural_model(text: str) -> Optional[str]:
         (r"\btda\b", "tda"),
         (r"\btddft\b|\btd[- ]?dft\b", "tddft"),
         (r"\btdhf\b", "tdhf"),
+        (r"\bccsd\s*\(\s*t\s*\)|\bccsd[- _]t\b|\bccsdt\b", "ccsd_t"),
+        (r"\bccsd\b|\bcoupled[- ]cluster\b|결합\s*클러스터", "ccsd"),
         (r"\bmp2\b", "mp2"),
         (r"\bdft\b|밀도\s*범함수", "dft"),
         (r"\bhf\b|hartree[- ]?fock|하트리", "hf"),
@@ -2577,7 +2579,8 @@ def _natural_route_components(text: str, model: str) -> Tuple[str, str]:
     # Natural requests commonly retain the familiar method/functional/basis
     # slash triplet even when the rest is Korean or English prose.
     slash = re.search(
-        r"(?:umrsf(?:[- ]?tddft)?|mrsf(?:[- ]?tddftb?)?|sf[- ]?tddft|tddft|tdhf|tda|dft|hf|mp2)"
+        r"(?:umrsf(?:[- ]?tddft)?|mrsf(?:[- ]?tddftb?)?|sf[- ]?tddft|tddft|tdhf|tda|dft|hf"
+        r"|ccsd\s*\(\s*t\s*\)|ccsd[- _]t|ccsdt|ccsd|mp2)"
         r"\s*/\s*([A-Za-z0-9+*()._-]+)(?:\s*/\s*([A-Za-z0-9+*()._-]+))?",
         text, re.I,
     )
@@ -2586,7 +2589,8 @@ def _natural_route_components(text: str, model: str) -> Tuple[str, str]:
         if second:
             functional = first.lower()
             basis = second.lower().rstrip(".")
-        elif model in {"hf", "mp2", "tdhf", "dftb", "tddftb", "mrsf-dftb"}:
+        elif model in {"hf", "mp2", "ccsd", "ccsd_t", "tdhf", "dftb",
+                       "tddftb", "mrsf-dftb"}:
             basis = first.lower().rstrip(".")
         else:
             functional = first.lower()

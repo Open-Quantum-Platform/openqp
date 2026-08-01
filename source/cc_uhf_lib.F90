@@ -682,7 +682,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   if (present(time_ccsd)) time_ccsd = tw1 - tw0
 
   ! --- (T) -----------------------------------------------------------------
-  if (do_triples) then
+  ! Same reasoning as cc_lib: a non-converged CCSD is going to abort, so do
+  ! not spend the dominant cost of the job on triples built from it.
+  if (do_triples .and. converged) then
     call cc_uhf_wall_time(tw0)
     call triples(e_t)
     call cc_uhf_wall_time(tw1)

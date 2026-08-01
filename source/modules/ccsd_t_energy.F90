@@ -71,6 +71,7 @@ contains
 
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
+    real(kind=dp) :: mem_ao, mem_mo, mem_solver, rno, rnv
     integer :: nthr, niter
     logical :: open_shell
     logical :: converged, do_t
@@ -110,13 +111,36 @@ contains
     ! ---- memory guard ------------------------------------------------------
     ! Common to both paths: the packed AO integrals (nbf^4/8) and the
     ! half-transformed intermediate that lives alongside them (nbf^4/4 at
-    ! nmo ~ nbf).  The closed-shell path then adds the ladder integrals
-    ! (nv^4); the open-shell one has its own, larger accounting below, so
-    ! charging it nv^4 here would be charging it for arrays it never makes.
-    mem_gb = real(cc_packed_length(nbf),dp) &
+    ! nmo ~ nbf).  The open-shell path has its own, larger accounting below,
+    ! so it is charged only for what it actually builds here.
+    mem_ao = real(cc_packed_length(nbf),dp) &
              + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
-    if (.not. open_shell) mem_gb = mem_gb + real(nv,dp)**4
-    mem_gb = mem_gb * 8.0_dp / 1.073741824e9_dp
+
+    if (open_shell) then
+      mem_gb = mem_ao * 8.0_dp / 1.073741824e9_dp
+    else
+      ! Closed shell has two competing peaks and the larger one decides.
+      !
+      ! Transformation: the packed AO store and the half-transformed
+      ! intermediate are both live while all six MO blocks are being filled --
+      ! not just the ladder integrals.  When no and nv are comparable, oovv,
+      ! ovov and ovvv together rival vvvv, so counting nv^4 alone understates
+      ! the stage badly enough to admit a job that dies in the allocator.
+      !
+      ! Solution: the AO store is gone by then, but the six blocks stay and
+      ! ccsd_iterate adds roughly a dozen o^2v^2-shaped intermediates, four
+      ! o v^3 / v^3 o ones, plus a DIIS history of 2*ndiis amplitude pairs.
+      rno = real(no,dp)
+      rnv = real(nv,dp)
+      mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 &
+               + rno*rnv**3 + rnv**4
+      mem_solver = mem_mo &
+                 + 14.0_dp*rno**2*rnv**2 &
+                 + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
+                 + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
+                   * (rno*rnv + rno**2*rnv**2)
+      mem_gb = max(mem_ao + mem_mo, mem_solver) * 8.0_dp / 1.073741824e9_dp
+    end if
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
         ', correlated occ = ', no, ', virt = ', nv
     if (nfzc > 0) write(iw,'(2X,A,I0)') 'CCSD(T): frozen core orbitals = ', nfzc
