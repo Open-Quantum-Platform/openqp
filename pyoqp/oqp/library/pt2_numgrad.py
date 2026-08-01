@@ -65,6 +65,7 @@ recommended way to approach degeneracies with these gradients.
 import numpy as np
 
 from oqp.utils.file_utils import dump_log
+from oqp.utils.mpi_utils import MPIManager
 
 # Method labels dispatched to numerical PT2 gradients (normalized, lower-case;
 # mirrors the PT2 branch of SinglePoint.energy in single_point.py).
@@ -152,6 +153,25 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     e_minus = np.zeros((ncoord, nstate))
     swap_flags = []  # (coord index, sign, min adjacent gap, max state shift)
 
+    # The 2*ncoord displaced energies are independent, so they distribute over
+    # MPI ranks with no communication until the final assembly.  Each rank
+    # writes only its own (coord, sign) slots and leaves the rest zero; one
+    # Allreduce(SUM) then reassembles the full arrays on every rank.
+    mpi = MPIManager()
+    tasks = [(i, sign) for i in range(ncoord) for sign in (1.0, -1.0)]
+    my_tasks = [tasks[k] for k in mpi.split_indices(len(tasks))]
+
+    if mpi.use_mpi and guess_mode == 'warm':
+        # 'warm' seeds each displaced SCF from the previous geometry's MOs, so
+        # the result depends on the order the displacements are visited.  That
+        # order is rank-dependent, which would make the gradient vary with the
+        # process count; fall back to the order-independent cold guess.
+        dump_log(mol, title=(
+            'PyOQP: PT2 numerical gradient: [pt2] grad_guess=warm is '
+            'order-dependent and therefore not reproducible across MPI rank '
+            'counts; using grad_guess=cold for this run'))
+        guess_mode = 'cold'
+
     guess_type_saved = mol.config['guess']['type']
     try:
         if guess_mode == 'warm':
@@ -160,27 +180,31 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
             # start (see oqp.library.guess); no file is read.
             mol.config['guess']['type'] = 'json'
 
-        for i in range(ncoord):
-            for sign, store in ((1.0, e_plus), (-1.0, e_minus)):
-                x = x0.copy()
-                x[i] += sign * step
-                mol.update_system(x)
-                energies = sp.energy(do_init_scf=False)
-                if len(energies) != nstate:
-                    raise RuntimeError(
-                        'PT2 numerical gradient: displaced geometry '
-                        f'(coord {i}, {"+" if sign > 0 else "-"}{step:.1e} Bohr) '
-                        f'returned {len(energies)} PT2 states, expected {nstate}. '
-                        'The reference/active space changed across the '
-                        'displacement; the FD gradient is not well defined here.'
-                    )
-                arr = np.asarray([float(e) for e in energies], dtype=float)
-                store[i, :] = arr
-                if nstate > 1:
-                    min_gap = float(np.min(np.diff(arr)))
-                    max_shift = float(np.max(np.abs(arr - central)))
-                    if min_gap < max(gap_warn, 2.0 * max_shift):
-                        swap_flags.append((i, sign, min_gap, max_shift))
+        for i, sign in my_tasks:
+            store = e_plus if sign > 0 else e_minus
+            x = x0.copy()
+            x[i] += sign * step
+            mol.update_system(x)
+            energies = sp.energy(do_init_scf=False)
+            if len(energies) != nstate:
+                raise RuntimeError(
+                    'PT2 numerical gradient: displaced geometry '
+                    f'(coord {i}, {"+" if sign > 0 else "-"}{step:.1e} Bohr) '
+                    f'returned {len(energies)} PT2 states, expected {nstate}. '
+                    'The reference/active space changed across the '
+                    'displacement; the FD gradient is not well defined here.'
+                )
+            arr = np.asarray([float(e) for e in energies], dtype=float)
+            store[i, :] = arr
+            if nstate > 1:
+                min_gap = float(np.min(np.diff(arr)))
+                max_shift = float(np.max(np.abs(arr - central)))
+                if min_gap < max(gap_warn, 2.0 * max_shift):
+                    swap_flags.append((i, sign, min_gap, max_shift))
+
+        e_plus = mpi.allreduce_sum(e_plus)
+        e_minus = mpi.allreduce_sum(e_minus)
+        swap_flags = mpi.allgather_list(swap_flags)
     finally:
         # Restore the user guess and the central geometry, and re-converge the
         # pipeline at the expansion point so mol leaves this function holding

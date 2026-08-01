@@ -64,6 +64,35 @@ class MPIManager:
                 self.comm.Barrier()
         return data
 
+    def allreduce_sum(self, array):
+        """Sum a numpy array across all ranks, in place on a copy.
+
+        Used to collect work distributed by disjoint slot: every rank fills
+        only the entries it owns and leaves the rest zero, so a plain sum
+        reassembles the whole array without any explicit index bookkeeping.
+        """
+        if not self.use_mpi:
+            return array
+        import numpy as np
+
+        contiguous = np.ascontiguousarray(array)
+        total = np.zeros_like(contiguous)
+        self.comm.Allreduce(contiguous, total, op=MPI.SUM)
+        return total
+
+    def allgather_list(self, items):
+        """Concatenate per-rank lists into one list held by every rank."""
+        if not self.use_mpi:
+            return list(items)
+        gathered = self.comm.allgather(list(items))
+        return [item for chunk in gathered for item in chunk]
+
+    def split_indices(self, count):
+        """Round-robin the integers ``0..count-1`` over the ranks."""
+        if not self.use_mpi:
+            return range(count)
+        return range(self.rank, count, self.size)
+
 
 class MPIPool:
 
