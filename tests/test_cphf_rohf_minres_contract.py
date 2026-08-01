@@ -25,6 +25,7 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         cls.source = (ROOT / "source" / "modules" / "cphf.F90").read_text()
         cls.solve = _subroutine(cls.source, "cphf_solve_rohf")
         cls.apbx = _subroutine(cls.source, "cphf_apbx_rohf")
+        cls.apbx_batch = _subroutine(cls.source, "cphf_apbx_rohf_batch")
         minres_source = (ROOT / "source" / "minres.F90").read_text()
         minres_init = re.search(
             r"subroutine\s+minres_init\b.*?end\s+subroutine",
@@ -36,10 +37,9 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         cls.minres_init = minres_init.group(0).lower()
 
     def test_pair_adjoint_minres_uses_an_spd_preconditioner(self):
-        solve_loop = self.solve.split("do irhs = 1, nrhs", 1)[1]
-        minres_branch = solve_loop.split("if (use_minres) then", 1)[1].split(
-            "else", 1
-        )[0]
+        minres_branch = self.solve.split(
+            "! keep one scalar paige-saunders recurrence", 1
+        )[1].split("\n    else", 1)[0]
         self.assertIn("precond=cphf_precond_rohf_minres", minres_branch)
         self.assertNotIn("precond=cphf_precond_rohf,", minres_branch)
 
@@ -48,10 +48,9 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         self.assertIn("symmetric positive definite", self.source.lower())
 
     def test_historical_pcg_path_retains_the_signed_preconditioner(self):
-        solve_loop = self.solve.split("do irhs = 1, nrhs", 1)[1]
-        pcg_branch = solve_loop.split("if (use_minres) then", 1)[1].split(
-            "else", 1
-        )[1]
+        pcg_branch = self.solve.split(
+            "! keep one scalar paige-saunders recurrence", 1
+        )[1].split("\n    else", 1)[1]
         self.assertIn("precond=cphf_precond_rohf,", pcg_branch)
         signed = _subroutine(self.source, "cphf_precond_rohf")
         self.assertIn("y = p%xminv*x", signed)
@@ -60,8 +59,8 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
     def test_convergence_is_certified_with_the_true_unpreconditioned_residual(self):
         self.assertRegex(
             self.solve,
-            r"(?s)call\s+cphf_apbx_rohf\(ax,\s*uvec\(:,irhs\),\s*c_loc\(cgdata\)\)"
-            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*ax\)",
+            r"(?s)call\s+cphf_apbx_rohf_batch\(ax_batch\(:,1:nrhs\),\s*uvec,\s*cgdata\)"
+            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*ax_batch\(:,irhs\)\)",
         )
         solved = self.solve.split("solved =", 1)[1].split("write(iw", 1)[0]
         self.assertIn("residual_norm <= sqrt(abs(cnv))", solved)
@@ -83,15 +82,54 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
         report = report.split("call flush(iw)", 1)[0]
         self.assertIn('" stopped after"', report)
         self.assertIn("status=", report)
-        self.assertIn("int(minres%errcode)", report)
+        self.assertIn("int(minres_batch(irhs)%errcode)", report)
 
     def test_callback_data_lifetime_covers_solver_and_true_residual(self):
         self.assertIn("type(cphf_cg_data_rohf), target :: cgdata", self.solve)
         self.assertIn("precond=cphf_precond_rohf_minres, dat=cgdata", self.solve)
         self.assertLess(
-            self.solve.index("call minres%clean()"),
+            self.solve.index("call minres_batch(irhs)%clean()"),
             self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
         )
+
+    def test_independent_minres_recursions_share_batched_physics_kernels(self):
+        self.assertIn("call minres_batch(irhs)%prepare_step(ready)", self.solve)
+        self.assertIn("call minres_batch(irhs)%finish_step()", self.solve)
+        self.assertIn(
+            "call cphf_apbx_rohf_batch(ax_batch(:,1:nactive)", self.solve
+        )
+        self.assertIn("call p%int2_driver%run(", self.apbx_batch)
+        self.assertIn("call int2_driver_batch%set_screening()", self.solve)
+        self.assertIn("nmtx=nvec", self.apbx_batch)
+        self.assertIn("call utddft_fxc(", self.apbx_batch)
+        self.assertIn("batching is conservative", self.apbx_batch)
+        self.assertIn("active width may safely shrink from 3 to 2 to 1", self.apbx_batch)
+        self.assertNotIn("allocate(", self.apbx_batch)
+
+    def test_unrestricted_eri_consumer_accepts_adjacent_spin_batches(self):
+        int2 = (ROOT / "source" / "integrals" / "int2.F90").read_text().lower()
+        start = int2.split("subroutine int2_urohf_data_t_parallel_start", 1)[1]
+        start = start.split("end subroutine", 1)[0]
+        update = _subroutine(int2, "int2_urohf_data_t_update")
+        self.assertIn("this%nfocks = size(this%d,2)", start)
+        self.assertIn("mod(this%nfocks,2)", start)
+        self.assertIn("show_message", start)
+        self.assertIn("do ifock = 1, this%nfocks, 2", update)
+        self.assertIn("ifock:ifock+1", update)
+
+    def test_xc_consumer_reallocates_for_each_active_width(self):
+        fxc = (
+            ROOT / "source" / "dftlib" / "dft_gridint_fxc.F90"
+        ).read_text().lower()
+        parallel = fxc.split("subroutine parallel_start(self, xce, nthreads)", 1)[1]
+        parallel = parallel.split("end subroutine", 1)[0]
+        utd = fxc.split("subroutine utddft_fxc(", 1)[1]
+        utd = utd.split("end subroutine", 1)[0]
+        self.assertIn("call self%clean()", parallel)
+        self.assertIn("self%nmtx", parallel)
+        self.assertIn("type(xc_consumer_tde_t) :: dat", utd)
+        self.assertIn("dat%nmtx = nmtx", utd)
+        self.assertIn("call dat%clean()", utd)
 
     def test_rohf_operator_reuses_solver_owned_workspace(self):
         """Krylov Hessian actions must not allocate their eleven work arrays."""

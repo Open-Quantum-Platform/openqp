@@ -74,6 +74,7 @@ contains
 
     character(len=*), parameter :: subroutine_name = &
       "mrsf_nac_lagrangian"
+    integer, parameter :: z_batch_width = 3
     integer, parameter :: hf_batch_width = 3
     integer, parameter :: xc_batch_width = 3
     character(len=*), parameter :: tag_ytil = "OQP::nac_ytil"
@@ -109,8 +110,8 @@ contains
     integer(c_int64_t) :: nvirb64, nij64, nbfsq64, ncoord64
     integer(c_int64_t) :: state_pair_size64, default_int_limit64
     integer :: nbf, noca, nocb, nij, nstate, natom, ncoord
-    integer :: nvira, offset, ltot, npair, ipair, hf_first, hf_last, &
-      xc_first, xc_last
+    integer :: nvira, offset, ltot, npair, ipair, z_first, z_last, &
+      hf_first, hf_last, xc_first, xc_last
     integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
@@ -404,11 +405,16 @@ contains
       end do
     end do
 
-    ! One shared Hessian/preconditioner/XC context handles every unordered
-    ! pair.  For the production three-state case this is one nrhs=3 call in
-    ! place of six independent nrhs=1 calls.
+    ! Bound the solver-owned nbf**2 multi-vector/Fock workspace for callers
+    ! requesting many states.  The production three-state case remains one
+    ! nrhs=3 solve, in place of six independent ordered-pair solves.
     if (profile_enabled) call system_clock(profile_stop)
-    call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)
+    do z_first = 1, npair, z_batch_width
+      z_last = min(npair, z_first + z_batch_width - 1)
+      call mrsf_nac_rohf_zvector_batch( &
+        infos, rhs_batch(:,z_first:z_last), &
+        solution_batch(:,z_first:z_last))
+    end do
     if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
     if (profile_enabled) call system_clock(profile_stop)

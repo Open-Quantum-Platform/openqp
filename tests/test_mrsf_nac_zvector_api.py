@@ -61,10 +61,11 @@ class MRSFNACZVectorAPITests(unittest.TestCase):
             self.driver,
         )
         self.assertIn("metric_only=.true.", self.driver)
-        self.assertIn(
-            "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)",
-            self.driver,
-        )
+        self.assertIn("integer, parameter :: z_batch_width = 3", self.driver)
+        self.assertIn("do z_first = 1, npair, z_batch_width", self.driver)
+        self.assertIn("call mrsf_nac_rohf_zvector_batch(", self.driver)
+        self.assertIn("rhs_batch(:,z_first:z_last)", self.driver)
+        self.assertIn("solution_batch(:,z_first:z_last)", self.driver)
 
     def test_pair_adjoint_requests_an_actual_1e_minus_10_residual_norm(self):
         body = self.source.split(
