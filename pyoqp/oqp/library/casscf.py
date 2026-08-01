@@ -35,6 +35,26 @@ generalized-Fock kernel's own J/K builder rather than duplicating it.
 For SA-CASSCF the same machinery is used with the weight-averaged RDMs, so the
 state-averaged energy ``sum_I w_I E_I`` is stationary.
 
+One call per run
+----------------
+On the default ``[casscf] converger = twophase`` / ``hessian = fd`` path the
+whole optimizer now runs inside liboqp behind a single ``casscf_energy(inf)``
+entry point (``source/modules/casscf_driver.F90``), the shape every other
+OpenQP method already has (``hf_energy(inf)``, ``mp2_energy(inf)``).  What used
+to be a Python loop calling ~20 fine-grained kernels -- six crossings per
+energy/gradient evaluation, 2*n_par of those per macroiteration for the
+finite-difference Hessian -- is one crossing: measured 43,317 -> 1 for
+H2O/cc-pVDZ CAS(6,6) and 3,188 -> 1 for the H2O/STO-3G CAS(4,4) example, at an
+identical converged energy.
+
+Everything below stays: the option parsing and validation that produces the
+user-facing messages, the state-average plan, the log (the driver returns the
+macroiteration table and ``_write_log`` formats it unchanged), and the
+``ah``/``diis``/``auto`` convergers and analytic Hessian, which the driver does
+not claim.  The whole Python optimizer also remains as the numerical pin and as
+the fallback whenever the driver declines -- the established
+``_gfock_backend()`` pattern.
+
 This module intentionally keeps a small, readable surface and reuses the
 first-class ``[cas]`` / ``[ci]`` / ``[state_average]`` options plus a ``[casscf]``
 optimizer block.
@@ -54,6 +74,7 @@ from oqp.library.fci import (
     _determinants,
     active_space_plan,
     solve_active_ci,
+    resolve_ci_solve,
     _transform_integrals,
     _unpack_lower_triangle,
     fci_spin_diagnostics,
@@ -62,6 +83,9 @@ from oqp.library.fci import (
     _symmetric_eigh,
     _lib_backend,
     _as_f64c,
+    _fci_lib_threads,
+    _FCI_MAX_NSPIN,
+    _FCI_SOLVER_CODE,
 )
 from oqp.library.rdm import (
     make_rdm1_spatial,
@@ -317,6 +341,199 @@ def _lib_effective_fock(h1e, eri, D):
         ffi.cast("double *", vv.ctypes.data),
         ffi.cast("double *", out.ctypes.data))
     return out
+
+
+# ------------------------------------------------------- native CASSCF driver
+# Mirror of the option schema in source/modules/casscf_driver.F90 (CAS_I_* /
+# CAS_D_* parameter block).  The Fortran file is authoritative; the names below
+# are matched against it by tests/test_casscf_energy.py, so the two cannot
+# drift.  The CI half of the run is configured with fci_solve's own schema,
+# which the Fortran imports rather than re-declares.
+_CAS_IOPT = (
+    "ncore", "nact", "nalpha", "nbeta", "nstate", "nroot", "solver", "maxiter",
+    "subspace", "mult", "maxmemory", "nthreads", "maxmacro", "optimizer",
+    "canonical", "maxescape", "maxhist",
+)
+_CAS_DOPT = (
+    "enuc", "eig_tol", "cutoff", "grad_tol", "ener_tol", "step_tol", "maxrot",
+    "shift", "fd_step", "saddle_c", "saddle_e",
+)
+_CAS_IOPT_INDEX = {name: i for i, name in enumerate(_CAS_IOPT)}
+_CAS_DOPT_INDEX = {name: i for i, name in enumerate(_CAS_DOPT)}
+_CAS_OPTIMIZER_CODE = {"newton": 0, "powell": 1}
+
+# Fixed algorithmic constants of the two-phase path.  They are hard-coded in
+# the Python functions below (not config keys), so they are passed as the
+# fixed values the Python uses rather than becoming new options.
+_CAS_FD_STEP = 1.0e-4              # _fd_orbital_hessian hh
+_CAS_MAX_ESCAPES = 8               # _escape_saddles max_escapes
+_CAS_SADDLE_CURV_TOL = 2.5e-2      # _escape_saddles saddle_curv_tol
+_CAS_SADDLE_EGAIN_TOL = 1.0e-3     # _escape_saddles saddle_egain_tol
+
+
+def _casscf_energy_backend():
+    """liboqp ``(lib, ffi)`` for the one-call CASSCF driver, or ``None``."""
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_energy"):
+        return None
+    return lib, ffi
+
+
+def _native_converger_ok(cfg) -> bool:
+    """True when ``[casscf]`` selects the default two-phase / FD-Hessian path.
+
+    The ``ah`` / ``diis`` / ``auto`` convergers and ``hessian = analytic`` stay
+    in Python: they are control flow around the same kernels, their NumPy
+    implementations are the validated pins, and no shipped default input
+    selects them.  Read with ``dict.get`` defaults, exactly as the optimizer
+    reads them, so an input without the keys takes the native path."""
+    converger = str(cfg.get("converger", "twophase")).strip().lower()
+    hessian = str(cfg.get("hessian", "fd")).strip().lower()
+    return (converger in ("", "twophase", "two-phase", "default")
+            and hessian in ("", "fd", "finite-difference", "finite_difference",
+                            "numerical", "default"))
+
+
+def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
+                       enuc, weights, roots):
+    """A complete CASSCF run inside liboqp, or ``None`` to use the Python path.
+
+    One boundary crossing replaces the entire orchestration loop: the
+    macroiteration loop, its backtracking line search, the 2*n_par
+    finite-difference orbital Hessian (the dominant cost -- 2*n_par CI solves
+    per macroiteration, each of which was itself six crossings), the
+    level-shifted Newton step, the curvature-gated saddle escape,
+    canonicalization, the commit of the optimized orbitals and the final CI
+    with its spin diagnostics all happen without returning here.
+
+    Everything that is not on the compute path stays here: option parsing, the
+    validation that produces the user-facing messages (``resolve_ci_solve`` is
+    still called, and still raises them), the state-average plan and the log.
+    The driver returns the macroiteration table so ``_write_log`` formats it
+    unchanged.
+
+    Returns ``(energies, s2, multiplicity, history, converged, niter, nevals)``
+    or ``None`` -- a missing symbol, an unsupported option combination, or any
+    negative driver status -- in which case the caller runs the Python
+    optimizer, which remains the numerical pin."""
+    backend = _casscf_energy_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if options.optimizer not in _CAS_OPTIMIZER_CODE:
+        return None
+    if nact <= 0 or 2 * nact > _FCI_MAX_NSPIN:
+        return None
+    if nbf - ncore - nact < 0:
+        return None
+
+    # The optimizer is written around contiguous inactive/active/virtual
+    # blocks (`_nonredundant_pairs`, `_full_rdm1`), so an explicit
+    # `[cas] active_orbital_indices` selection is not something the driver can
+    # represent; decline and let the Python path deal with it.
+    plan = active_space_plan(
+        nbf, (ncore + active_nelec[0], ncore + active_nelec[1]), settings)
+    if (tuple(plan.active) != tuple(range(ncore, ncore + nact))
+            or tuple(plan.core) != tuple(range(ncore))
+            or tuple(plan.nelec) != tuple(active_nelec)
+            or int(plan.norb) != nbf):
+        return None
+
+    nroot_ci = max(1, int(max(roots)) + 1)
+    # Same call `solve_active_ci` makes, so the CI options the driver runs with
+    # are the ones the Python path would have used -- and so the established
+    # error messages (max_det, max_memory, nroot vs ndet) still come from here.
+    spec = resolve_ci_solve(
+        plan.nact, plan.nelec,
+        ecore=enuc, nroot=nroot_ci,
+        max_det=settings.max_det, max_memory=settings.max_memory,
+        eig_tol=settings.eig_tol, integral_cutoff=0.0,
+        solver=settings.solver, davidson_maxiter=settings.davidson_maxiter,
+        davidson_subspace=(max(settings.davidson_subspace, nroot_ci)
+                           if settings.davidson_subspace else 0),
+        target_spin=settings.target_spin,
+        active_section="[cas]", ci_section="[ci]",
+    )
+    # Canonicalization re-solves the CI for one root only; the driver carries a
+    # single Davidson subspace cap, so an explicit cap would apply the
+    # nroot-widened value to that solve too.  Only reachable with an explicit
+    # `[ci] davidson_subspace` on an iterative multi-root solve.
+    if (spec.solver == "davidson" and settings.davidson_subspace
+            and nroot_ci > 1):
+        return None
+
+    npar = nact * ncore + (nbf - ncore - nact) * (ncore + nact)
+    if npar <= 0:
+        return None
+
+    maxmacro = max(0, int(options.max_macro_iterations))
+    # Upper bound on the rows the two phases can append: one seed row plus one
+    # per macroiteration, and one full re-convergence per accepted escape.
+    maxhist = maxmacro * (1 + _CAS_MAX_ESCAPES) + _CAS_MAX_ESCAPES + 2
+
+    iopt = np.zeros(len(_CAS_IOPT), dtype=np.int32)
+    iopt[_CAS_IOPT_INDEX["ncore"]] = ncore
+    iopt[_CAS_IOPT_INDEX["nact"]] = nact
+    iopt[_CAS_IOPT_INDEX["nalpha"]] = spec.nalpha
+    iopt[_CAS_IOPT_INDEX["nbeta"]] = spec.nbeta
+    iopt[_CAS_IOPT_INDEX["nstate"]] = len(roots)
+    iopt[_CAS_IOPT_INDEX["nroot"]] = spec.nroot
+    iopt[_CAS_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[spec.solver]
+    iopt[_CAS_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
+    iopt[_CAS_IOPT_INDEX["subspace"]] = spec.davidson_subspace
+    iopt[_CAS_IOPT_INDEX["mult"]] = spec.target_multiplicity or 0
+    iopt[_CAS_IOPT_INDEX["maxmemory"]] = spec.max_memory
+    iopt[_CAS_IOPT_INDEX["nthreads"]] = _fci_lib_threads()
+    iopt[_CAS_IOPT_INDEX["maxmacro"]] = maxmacro
+    iopt[_CAS_IOPT_INDEX["optimizer"]] = _CAS_OPTIMIZER_CODE[options.optimizer]
+    iopt[_CAS_IOPT_INDEX["canonical"]] = 1 if options.canonicalize else 0
+    iopt[_CAS_IOPT_INDEX["maxescape"]] = _CAS_MAX_ESCAPES
+    iopt[_CAS_IOPT_INDEX["maxhist"]] = maxhist
+
+    dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
+    dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
+    dopt[_CAS_DOPT_INDEX["eig_tol"]] = spec.eig_tol
+    dopt[_CAS_DOPT_INDEX["cutoff"]] = spec.integral_cutoff
+    dopt[_CAS_DOPT_INDEX["grad_tol"]] = options.gradient_norm_tol
+    dopt[_CAS_DOPT_INDEX["ener_tol"]] = options.energy_decrease_tol
+    dopt[_CAS_DOPT_INDEX["step_tol"]] = options.step_norm_tol
+    dopt[_CAS_DOPT_INDEX["maxrot"]] = options.max_rotation_norm
+    dopt[_CAS_DOPT_INDEX["shift"]] = options.level_shift
+    dopt[_CAS_DOPT_INDEX["fd_step"]] = _CAS_FD_STEP
+    dopt[_CAS_DOPT_INDEX["saddle_c"]] = _CAS_SADDLE_CURV_TOL
+    dopt[_CAS_DOPT_INDEX["saddle_e"]] = _CAS_SADDLE_EGAIN_TOL
+
+    w = _as_f64c(np.asarray(weights, dtype=np.float64))
+    r = np.ascontiguousarray(np.asarray(roots, dtype=np.int32))
+    energies = np.zeros(spec.nroot, dtype=np.float64)
+    s2 = np.zeros(spec.nroot, dtype=np.float64)
+    history = np.zeros((maxhist, 5), dtype=np.float64)
+    stats = np.zeros(4, dtype=np.int32)
+
+    status = int(lib.casscf_energy(
+        mol.data._data,
+        ffi.cast("int32_t *", iopt.ctypes.data),
+        ffi.cast("double *", dopt.ctypes.data),
+        ffi.cast("double *", w.ctypes.data),
+        ffi.cast("int32_t *", r.ctypes.data),
+        ffi.cast("double *", energies.ctypes.data),
+        ffi.cast("double *", s2.ctypes.data),
+        ffi.cast("double *", history.ctypes.data),
+        ffi.cast("int32_t *", stats.ctypes.data)))
+    if status < 0:
+        return None
+
+    nrows = int(stats[0])
+    rows = [(int(round(history[i, 0])), float(history[i, 1]),
+             float(history[i, 2]), float(history[i, 3]), float(history[i, 4]))
+            for i in range(nrows)]
+    multiplicity = np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * s2))).astype(np.int64)
+    multiplicity = np.maximum(multiplicity, 1)
+    return (energies, _as_f64c(s2), multiplicity, rows,
+            bool(stats[2]), int(stats[1]), int(stats[3]))
 
 
 # --------------------------------------------------------------------------- CASCI inside CASSCF
@@ -628,11 +845,6 @@ class CASSCF:
 
         nbf = int(mol.data.get_basis()["nbf"])
         oqp.fci_ao_integrals(mol)
-        hcore_ao = _unpack_lower_triangle(np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
-        coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
-        eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
-            (nbf, nbf, nbf, nbf), order="F"
-        )
         enuc = float(mol.mol_energy.nenergy)
 
         ncore = int(settings.frozen_core)
@@ -647,23 +859,48 @@ class CASSCF:
         weights, roots, sa_enabled = self._state_average_plan(settings, options)
 
         t0 = time.time()
-        coeff_opt, energies, coeffs, history, converged, niter = _optimize(
-            mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
-            settings, weights, roots, options,
-        )
-        if options.canonicalize:
-            coeff_opt = self._canonicalize(coeff_opt, hcore_ao, eri_ao, enuc,
-                                           ncore, nact, active_nelec, settings)
-        # commit optimized orbitals in place (Fortran core reads this buffer)
-        target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
-        mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(coeff_opt.T.reshape(target.shape))
+        # One call for the whole run when the default two-phase / FD-Hessian
+        # path is selected (casscf_driver.F90).  It reads Hcore / AO_ERI /
+        # VEC_MO_A off the handle itself, runs the optimizer, canonicalizes,
+        # commits the orbitals and solves the final CI, so nothing below the
+        # option parsing crosses the boundary.  `None` means the driver
+        # declined and the Python optimizer below runs, unchanged.
+        native = None
+        if _native_converger_ok(mol.config.get("casscf", {}) or {}):
+            native = _lib_casscf_energy(
+                mol, settings, options, nbf, ncore, nact, active_nelec, enuc,
+                weights, roots)
+        if native is not None:
+            if hasattr(mol, "_casscf_converger_trace"):
+                del mol._casscf_converger_trace   # stale trace from a previous run
+            energies, s2, mult, history, converged, niter, _nev = native
+        else:
+            # Only the Python optimizer needs these NumPy views of the handle's
+            # records; the driver reads the records itself, and unpacking the
+            # Hcore triangle here is an O(nbf^2) Python loop.
+            hcore_ao = _unpack_lower_triangle(
+                np.asarray(mol.data["OQP::Hcore"], dtype=float), nbf)
+            coeff = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float).reshape((nbf, nbf)).T
+            eri_ao = np.asarray(mol.data["OQP::AO_ERI"], dtype=float).reshape(
+                (nbf, nbf, nbf, nbf), order="F"
+            )
+            coeff_opt, energies, coeffs, history, converged, niter = _optimize(
+                mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
+                settings, weights, roots, options,
+            )
+            if options.canonicalize:
+                coeff_opt = self._canonicalize(coeff_opt, hcore_ao, eri_ao, enuc,
+                                               ncore, nact, active_nelec, settings)
+            # commit optimized orbitals in place (Fortran core reads this buffer)
+            target = np.asarray(mol.data["OQP::VEC_MO_A"], dtype=float)
+            mol.data["OQP::VEC_MO_A"][...] = np.ascontiguousarray(coeff_opt.T.reshape(target.shape))
 
-        # final CI on the optimized orbitals (all requested roots)
-        h1e, eri = _transform_integrals(hcore_ao, eri_ao, coeff_opt)
-        energies, coeffs, dets, _D, _G = _solve_active(
-            h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots
-        )
-        s2, mult = fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
+            # final CI on the optimized orbitals (all requested roots)
+            h1e, eri = _transform_integrals(hcore_ao, eri_ao, coeff_opt)
+            energies, coeffs, dets, _D, _G = _solve_active(
+                h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots
+            )
+            s2, mult = fci_spin_diagnostics(coeffs, dets, nact, active_nelec)
 
         nroot_report = max(1, int(settings.nroot))
         report_energies = [float(energies[r]) for r in range(min(nroot_report, len(energies)))]

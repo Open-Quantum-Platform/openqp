@@ -1,0 +1,1052 @@
+!> @brief One bind(C) entry point for a complete CASSCF / SA-CASSCF run.
+!>
+!> Every other method in OpenQP exposes a single C entry point per method --
+!> `hf_energy(inf)`, `mp2_energy(inf)` -- with everything inside it Fortran and
+!> Python only parsing options and reading results.  The wavefunction stack
+!> instead exposed ~20 fine-grained kernels that a Python loop orchestrated:
+!> for one CASSCF macroiteration the boundary was crossed once per AO->MO
+!> transform, once per CI solve, twice per state-average root for the RDMs,
+!> once per generalized-Fock build and once per orbital rotation -- and the
+!> default finite-difference orbital Hessian runs 2*n_par of those per
+!> macroiteration, so a 20-macroiteration CAS(6,6)/cc-pVDZ run crossed the
+!> boundary ~2.4e5 times.  Considerable effort went into making that crossing
+!> cheap (cached backend lookups, no-op array conversions removed); this
+!> removes the seam instead.  `casscf_energy` crosses it ONCE per run.
+!>
+!> What runs inside
+!> ----------------
+!> The whole default (`converger = twophase`) optimizer:
+!>
+!>   * the macroiteration loop `casscf.py::_floored_newton_loop` -- level-
+!>     shifted (eigenvalue-floored) Newton with the 12-step halving backtrack;
+!>   * the symmetrized finite-difference orbital Hessian, i.e. the 2*n_par
+!>     gradient evaluations that dominate the run;
+!>   * the curvature-gated saddle-escape phase `_escape_saddles`, including its
+!>     six-amplitude kick line search and its strict-energy-gain acceptance;
+!>   * canonicalization (`_canonicalize` + `_effective_fock`);
+!>   * the final CI on the optimized orbitals and its spin diagnostics;
+!>   * the commit of the optimized orbitals into `OQP::VEC_MO_A`.
+!>
+!> Each of these is built out of the kernels that already existed and are still
+!> individually callable and individually pinned: `fci_solve` (fci_driver.F90),
+!> `mo_transform_h1e`/`mo_transform_eri`, `rdm1_spatial`/`rdm2_spatial`,
+!> `casscf_gfock_grad`, `casscf_effective_fock`, `casscf_orbital_rotate`,
+!> `oqp_dsyevd_f`.  Calling exactly those, in exactly the order the Python
+!> driver called them, is what makes the native path reproduce the Python one
+!> to the last bit everywhere the two use the same LAPACK.
+!>
+!> This is precisely the in-process Fortran caller `fci_solve` was shaped
+!> handle-free for: the microiteration's MO integrals are a line-search trial
+!> point held in local arrays here, never in `infos%dat`, so routing them
+!> through the handle would have cost an nbf^4 copy per evaluation.
+!>
+!> What stays in Python, and why
+!> -----------------------------
+!>   * option parsing and validation -- integer bookkeeping executed once per
+!>     run, and the source of every user-facing error message;
+!>   * the state-average plan, resolved to explicit `weights`/`roots` arrays;
+!>   * the log, including the macroiteration table: the driver returns the
+!>     history rows and lets `_write_log` format them, so the printed output is
+!>     byte-identical to the Python path's;
+!>   * the `ah` / `diis` / `auto` convergers and `hessian = analytic`.  Those
+!>     are selected by keys absent from every shipped default input, and Python
+!>     does not call the driver for them at all -- it is the same
+!>     `_gfock_backend()` pattern, and it keeps the NumPy implementations as
+!>     the numerical pins they already are.
+!>
+!> Any negative status means "could not do it here" and the caller re-runs the
+!> Python optimizer, which is still the numerical pin (see
+!> tests/test_casscf_energy.py, which compares the two arms in the same
+!> process so both use identical integrals and identical CI solves).
+!>
+!> Option schema
+!> -------------
+!> `[cas]`/`[casscf]`/`[ci]`/`[state_average]` have no representation in
+!> `source/types.F90` and carry 111 keys between them; putting a method's
+!> private options on the shared `control_parameters` struct would put them in
+!> every method's namespace.  `fci_driver.F90` already answered this: pack only
+!> what the compute path reads into small fixed-layout `iopt`/`dopt` arrays
+!> whose authoritative schema is the parameter block below.  `include/oqp.h`
+!> documents it, `pyoqp/oqp/library/casscf.py` mirrors it, and
+!> `tests/test_casscf_energy.py::test_option_schema_matches_fortran` parses
+!> THIS FILE to assert the mirror rather than trust it.
+!>
+!> The CI half of the run is configured with the *same* `iopt`/`dopt` layout
+!> `fci_solve` already defines; the constants are imported from
+!> `fci_driver_mod` rather than re-declared, so that schema cannot drift here.
+!>
+!> Array conventions follow the rest of the stack: everything crosses in the
+!> caller's C order.  Note the one place that matters -- `OQP::VEC_MO_A` is
+!> stored AO-fastest, i.e. the Fortran view `mo(ao, mo)`, while every kernel
+!> here wants the *C-order* coefficient buffer `coeff[ao][mo]` (MO fastest).
+!> The two are transposes and the matrix is not symmetric, so the driver
+!> transposes explicitly on the way in and on the way out rather than
+!> reinterpreting the buffer.
+module casscf_driver_mod
+  use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+  use fci_driver_mod, only: fci_solve, build_determinants, &
+                            FCI_I_NORB, FCI_I_NACT, FCI_I_NCORE, &
+                            FCI_I_NALPHA, FCI_I_NBETA, FCI_I_NROOT, &
+                            FCI_I_SOLVER, FCI_I_MAXITER, FCI_I_SUBSPACE, &
+                            FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, &
+                            FCI_I_WANT_S2, FCI_NIOPT, FCI_D_ECORE, &
+                            FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT, &
+                            FCI_MAX_NSPIN
+  use fci_hamiltonian_mod, only: oqp_dsyevd_f
+  use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri
+  use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock
+  use casscf_orbrot_mod, only: casscf_orbital_rotate
+  use rdm_kernel_mod, only: rdm1_spatial, rdm2_spatial
+  ! DGEMM/DGEMV through the ILP64 wrapper layer (AGENTS.md rule 1); see the
+  ! same note in fci_driver.F90 for why `only:` cannot be used here.
+  use oqp_linalg
+  implicit none
+  private
+
+  integer, parameter :: i8 = c_int64_t
+  integer, parameter :: dp = c_double
+
+  public :: casscf_energy
+
+  ! ------------------------------------------------------------------ schema
+  ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
+  ! pyoqp/oqp/library/casscf.py (_CAS_IOPT / _CAS_DOPT), and checked by
+  ! tests/test_casscf_energy.py.  Indices are 0-based, as seen from C.
+  !
+  ! nbf, the AO ERIs, Hcore, the MO coefficients and the nuclear repulsion all
+  ! come from the handle, so none of them appears here.
+  !
+  ! iopt (int32):
+  integer, parameter :: CAS_I_NCORE     = 0   ! inactive doubly-occupied orbitals
+  integer, parameter :: CAS_I_NACT      = 1   ! active orbitals
+  integer, parameter :: CAS_I_NALPHA    = 2   ! active alpha electrons
+  integer, parameter :: CAS_I_NBETA     = 3   ! active beta electrons
+  integer, parameter :: CAS_I_NSTATE    = 4   ! averaged roots in weights/roots
+  integer, parameter :: CAS_I_NROOT     = 5   ! CI roots solved and returned
+  integer, parameter :: CAS_I_SOLVER    = 6   ! 0 auto, 1 dense, 2 davidson
+  integer, parameter :: CAS_I_MAXITER   = 7   ! Davidson iteration cap
+  integer, parameter :: CAS_I_SUBSPACE  = 8   ! Davidson subspace cap, 0 = auto
+  integer, parameter :: CAS_I_MULT      = 9   ! target multiplicity, 0 = any
+  integer, parameter :: CAS_I_MAXMEMORY = 10  ! CI working-set budget, MiB
+  integer, parameter :: CAS_I_NTHREADS  = 11  ! OpenMP threads for the kernels
+  integer, parameter :: CAS_I_MAXMACRO  = 12  ! macroiteration cap
+  integer, parameter :: CAS_I_OPTIMIZER = 13  ! 0 newton, 1 powell
+  integer, parameter :: CAS_I_CANONICAL = 14  ! 1 = canonicalize the orbitals
+  integer, parameter :: CAS_I_MAXESCAPE = 15  ! saddle escapes, 0 disables phase 2
+  integer, parameter :: CAS_I_MAXHIST   = 16  ! rows the history buffer holds
+  integer, parameter :: CAS_NIOPT       = 17
+  !
+  ! dopt (double):
+  integer, parameter :: CAS_D_ENUC      = 0   ! nuclear repulsion, added to every root
+  integer, parameter :: CAS_D_EIG_TOL   = 1   ! CI eigenpair residual tolerance
+  integer, parameter :: CAS_D_CUTOFF    = 2   ! CI integral screening cutoff
+  integer, parameter :: CAS_D_GRAD_TOL  = 3   ! |g_orb| convergence threshold
+  integer, parameter :: CAS_D_ENER_TOL  = 4   ! macroiteration energy-decrease threshold
+  integer, parameter :: CAS_D_STEP_TOL  = 5   ! macroiteration step-norm threshold
+  integer, parameter :: CAS_D_MAXROT    = 6   ! trust cap on |step|
+  integer, parameter :: CAS_D_SHIFT     = 7   ! Hessian eigenvalue floor (level shift)
+  integer, parameter :: CAS_D_FD_STEP   = 8   ! finite-difference Hessian displacement
+  integer, parameter :: CAS_D_SADDLE_C  = 9   ! deep-negative-curvature threshold
+  integer, parameter :: CAS_D_SADDLE_E  = 10  ! strict energy gain to accept an escape
+  integer, parameter :: CAS_NDOPT       = 11
+
+  ! Status codes.  Success is 0; every negative value means "the caller should
+  ! run the Python optimizer", which owns the user-facing messages.
+  integer(i8), parameter :: CAS_ERR_INPUT       = -1_i8  ! unsupported/invalid sizes
+  integer(i8), parameter :: CAS_ERR_ALLOC       = -2_i8  ! out of memory
+  integer(i8), parameter :: CAS_ERR_TAGS        = -3_i8  ! handle is missing a record
+  integer(i8), parameter :: CAS_ERR_CI          = -4_i8  ! fci_solve declined
+  integer(i8), parameter :: CAS_ERR_EIGEN       = -5_i8  ! LAPACK failure
+  integer(i8), parameter :: CAS_ERR_TRANSFORM   = -6_i8  ! AO->MO buffer allocation
+  integer(i8), parameter :: CAS_ERR_ROTATE      = -7_i8  ! expm/Pade failure
+
+  ! Backtracking budget and acceptance tolerance of `_floored_newton_loop`,
+  ! and the escape kick amplitudes of `_escape_saddles`.  Fixed constants in
+  ! the Python too (not config keys), so they are fixed here.
+  integer, parameter :: CAS_MAX_BACKTRACK = 12
+  real(dp), parameter :: CAS_ACCEPT_TOL = 1.0e-12_dp
+  real(dp), parameter :: CAS_ESCAPE_AMPS(6) = &
+      [0.3_dp, 0.2_dp, 0.1_dp, -0.1_dp, -0.2_dp, -0.3_dp]
+
+  !> Everything one energy/gradient evaluation needs, so `cas_evaluate` can be
+  !> the plain procedure Fortran gives us in place of the Python closure.
+  type :: cas_ctx_t
+    integer :: n = 0            !< orbitals (== nbf)
+    integer :: nc = 0           !< inactive
+    integer :: na = 0           !< active
+    integer :: nstate = 0       !< state-average roots
+    integer :: nroot = 0        !< CI roots solved per evaluation
+    integer :: npar = 0         !< non-redundant rotation pairs
+    integer :: nthreads = 1
+    integer(i8) :: ndet = 0
+    integer :: ncall = 0        !< energy/gradient evaluations, for the trace
+    integer(c_int32_t) :: iopt_ci(0:FCI_NIOPT-1) = 0_c_int32_t
+    real(dp) :: dopt_ci(0:FCI_NDOPT-1) = 0.0_dp
+    integer(c_int32_t), allocatable :: active(:), core(:), pairs(:)
+    real(dp), allocatable :: hcore(:)          !< C-order [n,n], symmetric
+    real(dp), pointer :: eri_ao(:) => null()   !< handle record, nbf^4
+    real(dp), allocatable :: weights(:)
+    integer, allocatable :: roots(:)           !< 0-based CI root indices
+    integer(i8), allocatable :: dets(:)        !< CI ordering, not key ordering
+    ! reusable work buffers -- one allocation per run, not per evaluation
+    real(dp), allocatable :: h1e(:), eri(:), civ(:), enci(:), s2w(:)
+    real(dp), allocatable :: g1(:), g2(:), fock(:), cvec(:)
+  end type cas_ctx_t
+
+contains
+
+  !> C-bound entry point: one call per CASSCF run.
+  !>
+  !> @param[in]     c_handle  the OQP handle (`OQP::Hcore`, `OQP::AO_ERI` and
+  !>                          `OQP::VEC_MO_A` are read; `OQP::VEC_MO_A` is
+  !>                          overwritten with the optimized orbitals)
+  !> @param[in]     iopt      integer options, CAS_NIOPT entries (schema above)
+  !> @param[in]     dopt      real options, CAS_NDOPT entries (schema above)
+  !> @param[in]     weights   state-average weights, [NSTATE]
+  !> @param[in]     roots     0-based CI root indices averaged over, [NSTATE]
+  !> @param[out]    energies  the NROOT final CI energies
+  !> @param[out]    s2        <S^2> per final root, [NROOT]
+  !> @param[out]    history   macroiteration table, C-order [MAXHIST, 5] as
+  !>                          (it, E, dE, |g_orb|, |step|)
+  !> @param[out]    stats     [rows written, macroiterations, converged,
+  !>                           energy/gradient evaluations]
+  !> @return        0, or a negative status meaning "run the Python optimizer"
+  function casscf_energy_C(c_handle, iopt, dopt, weights, roots, energies, &
+                           s2, history, stats) result(status) &
+      bind(C, name="casscf_energy")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    real(dp), intent(in) :: weights(0:*)
+    integer(c_int32_t), intent(in) :: roots(0:*)
+    real(dp), intent(inout) :: energies(0:*), s2(0:*), history(0:*)
+    integer(c_int32_t), intent(inout) :: stats(0:*)
+    integer(i8) :: status
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    status = casscf_energy(inf, iopt, dopt, weights, roots, energies, s2, &
+                           history, stats)
+  end function casscf_energy_C
+
+  !> The run itself.  Kept separate from the bind(C) shell so an in-process
+  !> Fortran caller (a future geometry optimizer, say) can reach it too.
+  function casscf_energy(infos, iopt, dopt, weights, roots, energies, s2, &
+                         history, stats) result(status)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_Hcore, OQP_AO_ERI, &
+                                   OQP_VEC_MO_A
+    type(information), target, intent(inout) :: infos
+    integer(c_int32_t), intent(in) :: iopt(0:*)
+    real(dp), intent(in) :: dopt(0:*)
+    real(dp), intent(in) :: weights(0:*)
+    integer(c_int32_t), intent(in) :: roots(0:*)
+    real(dp), intent(inout) :: energies(0:*), s2(0:*), history(0:*)
+    integer(c_int32_t), intent(inout) :: stats(0:*)
+    integer(i8) :: status
+
+    type(cas_ctx_t) :: ctx
+    real(dp), contiguous, pointer :: hcore_p(:) => null()
+    real(dp), contiguous, pointer :: eri_p(:) => null()
+    real(dp), contiguous, pointer :: mo_p(:,:) => null()
+    real(dp), allocatable :: cbuf(:,:), curv_w(:), curv_u(:,:)
+    integer :: n, nc, na, nstate, nroot, maxmacro, optimizer, canonical
+    integer :: maxescape, maxhist, ierr, k, i, j, nhist, niter, nvirt
+    integer :: idx, p, q, ndet_ok
+    logical :: converged, have_curv
+    real(dp) :: gradtol, enertol, steptol, maxrot, shift, fdstep
+    real(dp) :: saddle_c, saddle_e, objective
+
+    status = 0_i8
+    stats(0) = 0_c_int32_t
+    stats(1) = 0_c_int32_t
+    stats(2) = 0_c_int32_t
+    stats(3) = 0_c_int32_t
+
+    n  = infos%basis%nbf
+    nc = int(iopt(CAS_I_NCORE))
+    na = int(iopt(CAS_I_NACT))
+    nstate    = int(iopt(CAS_I_NSTATE))
+    nroot     = int(iopt(CAS_I_NROOT))
+    maxmacro  = int(iopt(CAS_I_MAXMACRO))
+    optimizer = int(iopt(CAS_I_OPTIMIZER))
+    canonical = int(iopt(CAS_I_CANONICAL))
+    maxescape = int(iopt(CAS_I_MAXESCAPE))
+    maxhist   = int(iopt(CAS_I_MAXHIST))
+
+    gradtol  = dopt(CAS_D_GRAD_TOL)
+    enertol  = dopt(CAS_D_ENER_TOL)
+    steptol  = dopt(CAS_D_STEP_TOL)
+    maxrot   = dopt(CAS_D_MAXROT)
+    shift    = dopt(CAS_D_SHIFT)
+    fdstep   = dopt(CAS_D_FD_STEP)
+    saddle_c = dopt(CAS_D_SADDLE_C)
+    saddle_e = dopt(CAS_D_SADDLE_E)
+
+    if (n <= 0 .or. na <= 0 .or. nc < 0 .or. nc + na > n) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    if (2 * na > FCI_MAX_NSPIN) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    if (nstate < 1 .or. nroot < 1 .or. maxhist < 2 .or. fdstep <= 0.0_dp) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    do k = 0, nstate - 1
+      if (roots(k) < 0 .or. int(roots(k)) >= nroot) then
+        status = CAS_ERR_INPUT
+        return
+      end if
+    end do
+
+    ! ---- handle records
+    call tagarray_get_data(infos%dat, OQP_Hcore, hcore_p)
+    call tagarray_get_data(infos%dat, OQP_AO_ERI, eri_p)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_p)
+    if (.not. associated(hcore_p) .or. .not. associated(eri_p) .or. &
+        .not. associated(mo_p)) then
+      status = CAS_ERR_TAGS
+      return
+    end if
+    if (size(hcore_p) < n * (n + 1) / 2 .or. &
+        size(eri_p) < int(n, i8)**4 .or. size(mo_p) < n * n) then
+      status = CAS_ERR_TAGS
+      return
+    end if
+
+    ! ---- context
+    ctx%n = n
+    ctx%nc = nc
+    ctx%na = na
+    ctx%nstate = nstate
+    ctx%nroot = nroot
+    ctx%nthreads = max(1, int(iopt(CAS_I_NTHREADS)))
+    nvirt = n - nc - na
+    ctx%npar = na * nc + nvirt * nc + nvirt * na
+    if (ctx%npar <= 0) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    ctx%eri_ao => eri_p
+
+    ! `[cas]` may in principle select a non-sequential active space, but the
+    ! CASSCF optimizer itself is written around contiguous
+    ! inactive/active/virtual blocks (`_nonredundant_pairs`, `_full_rdm1`), so
+    ! the driver only ever sees the sequential plan; Python declines otherwise.
+    allocate(ctx%active(0:na-1), ctx%core(0:max(nc, 1)-1), &
+             ctx%pairs(0:2*ctx%npar-1), ctx%weights(0:nstate-1), &
+             ctx%roots(0:nstate-1), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    do k = 0, na - 1
+      ctx%active(k) = int(nc + k, c_int32_t)
+    end do
+    ctx%core = 0_c_int32_t
+    do k = 0, nc - 1
+      ctx%core(k) = int(k, c_int32_t)
+    end do
+    do k = 0, nstate - 1
+      ctx%weights(k) = weights(k)
+      ctx%roots(k) = int(roots(k))
+    end do
+
+    ! `_nonredundant_pairs`: (active, inactive), (virtual, inactive),
+    ! (virtual, active), each with the first index outermost.
+    idx = 0
+    do p = nc, nc + na - 1
+      do q = 0, nc - 1
+        ctx%pairs(2*idx) = int(p, c_int32_t)
+        ctx%pairs(2*idx + 1) = int(q, c_int32_t)
+        idx = idx + 1
+      end do
+    end do
+    do p = nc + na, n - 1
+      do q = 0, nc - 1
+        ctx%pairs(2*idx) = int(p, c_int32_t)
+        ctx%pairs(2*idx + 1) = int(q, c_int32_t)
+        idx = idx + 1
+      end do
+    end do
+    do p = nc + na, n - 1
+      do q = nc, nc + na - 1
+        ctx%pairs(2*idx) = int(p, c_int32_t)
+        ctx%pairs(2*idx + 1) = int(q, c_int32_t)
+        idx = idx + 1
+      end do
+    end do
+
+    ! ---- CI option block, in fci_solve's own schema
+    ctx%iopt_ci = 0_c_int32_t
+    ctx%iopt_ci(FCI_I_NORB)      = int(n, c_int32_t)
+    ctx%iopt_ci(FCI_I_NACT)      = int(na, c_int32_t)
+    ctx%iopt_ci(FCI_I_NCORE)     = int(nc, c_int32_t)
+    ctx%iopt_ci(FCI_I_NALPHA)    = iopt(CAS_I_NALPHA)
+    ctx%iopt_ci(FCI_I_NBETA)     = iopt(CAS_I_NBETA)
+    ctx%iopt_ci(FCI_I_NROOT)     = int(nroot, c_int32_t)
+    ctx%iopt_ci(FCI_I_SOLVER)    = iopt(CAS_I_SOLVER)
+    ctx%iopt_ci(FCI_I_MAXITER)   = iopt(CAS_I_MAXITER)
+    ctx%iopt_ci(FCI_I_SUBSPACE)  = iopt(CAS_I_SUBSPACE)
+    ctx%iopt_ci(FCI_I_MULT)      = iopt(CAS_I_MULT)
+    ctx%iopt_ci(FCI_I_MAXMEMORY) = iopt(CAS_I_MAXMEMORY)
+    ctx%iopt_ci(FCI_I_NTHREADS)  = int(ctx%nthreads, c_int32_t)
+    ctx%iopt_ci(FCI_I_WANT_S2)   = 0_c_int32_t
+    ctx%dopt_ci(FCI_D_ECORE)   = dopt(CAS_D_ENUC)
+    ctx%dopt_ci(FCI_D_EIG_TOL) = dopt(CAS_D_EIG_TOL)
+    ctx%dopt_ci(FCI_D_CUTOFF)  = dopt(CAS_D_CUTOFF)
+
+    ctx%ndet = binom(na, int(iopt(CAS_I_NALPHA))) * &
+               binom(na, int(iopt(CAS_I_NBETA)))
+    if (ctx%ndet < 1_i8 .or. int(nroot, i8) > ctx%ndet) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+
+    call cas_alloc(ctx, ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    call build_determinants(na, int(iopt(CAS_I_NALPHA)), &
+                            int(iopt(CAS_I_NBETA)), ctx%ndet, ctx%dets)
+
+    ! ---- Hcore: the handle stores the lower triangle row-wise, as
+    ! `_unpack_lower_triangle` reads it.  The unpacked matrix is symmetric, so
+    ! its C-order buffer and its column-major view coincide.
+    idx = 0
+    do i = 0, n - 1
+      do j = 0, i
+        ctx%hcore(int(i, i8)*int(n, i8) + int(j, i8)) = hcore_p(idx + 1)
+        ctx%hcore(int(j, i8)*int(n, i8) + int(i, i8)) = hcore_p(idx + 1)
+        idx = idx + 1
+      end do
+    end do
+
+    ! ---- MO coefficients.  `mo_p(u, p)` is AO-fastest; the kernels want the
+    ! C-order buffer coeff[u][p], i.e. the transpose.  Not symmetric: this is a
+    ! real transpose, never a reinterpretation.
+    allocate(cbuf(0:n-1, 0:n-1), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    do i = 0, n - 1
+      do j = 0, n - 1
+        cbuf(j, i) = mo_p(i + 1, j + 1)
+      end do
+    end do
+
+    ! ================================================== phase 1: damped Newton
+    nhist = 0
+    call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                     steptol, maxrot, shift, fdstep, history, maxhist, &
+                     nhist, .true., converged, niter, curv_w, curv_u, &
+                     have_curv, objective, status)
+    if (status < 0_i8) return
+
+    ! ============================== phase 2: curvature-gated saddle escape
+    if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
+      call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                          steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                          maxescape, history, maxhist, nhist, niter, &
+                          curv_w, curv_u, objective, status)
+      if (status < 0_i8) return
+      converged = .true.
+    end if
+
+    ! ==================================================== canonicalization
+    if (canonical /= 0) then
+      call canonicalize(ctx, cbuf, status)
+      if (status < 0_i8) return
+    end if
+
+    ! ---- commit the optimized orbitals (the Fortran core reads this buffer)
+    do i = 0, n - 1
+      do j = 0, n - 1
+        mo_p(i + 1, j + 1) = cbuf(j, i)
+      end do
+    end do
+
+    ! ================================ final CI on the optimized orbitals
+    call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
+    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
+      status = CAS_ERR_TRANSFORM
+      return
+    end if
+    ctx%iopt_ci(FCI_I_NROOT) = int(nroot, c_int32_t)
+    ctx%iopt_ci(FCI_I_WANT_S2) = 1_c_int32_t
+    ndet_ok = int(fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, &
+                            ctx%h1e, ctx%eri, ctx%enci, ctx%civ, ctx%s2w))
+    ctx%iopt_ci(FCI_I_WANT_S2) = 0_c_int32_t
+    if (ndet_ok < 0) then
+      status = CAS_ERR_CI
+      return
+    end if
+    do k = 0, nroot - 1
+      energies(k) = ctx%enci(k)
+      s2(k) = ctx%s2w(k)
+    end do
+
+    stats(0) = int(nhist, c_int32_t)
+    stats(1) = int(niter, c_int32_t)
+    stats(2) = merge(1_c_int32_t, 0_c_int32_t, converged)
+    stats(3) = int(ctx%ncall, c_int32_t)
+  end function casscf_energy
+
+  ! =================================================================== work
+  subroutine cas_alloc(ctx, ierr)
+    type(cas_ctx_t), intent(inout) :: ctx
+    integer, intent(out) :: ierr
+    integer(i8) :: n2, n4, na2, na4
+
+    n2 = int(ctx%n, i8)**2
+    n4 = int(ctx%n, i8)**4
+    na2 = int(ctx%na, i8)**2
+    na4 = int(ctx%na, i8)**4
+    allocate(ctx%hcore(0:n2-1), ctx%h1e(0:n2-1), ctx%eri(0:n4-1), &
+             ctx%civ(0:ctx%ndet*int(ctx%nroot, i8)-1), &
+             ctx%enci(0:ctx%nroot-1), ctx%s2w(0:ctx%nroot-1), &
+             ctx%g1(0:int(ctx%nstate, i8)*na2-1), &
+             ctx%g2(0:int(ctx%nstate, i8)*na4-1), &
+             ctx%fock(0:n2-1), ctx%cvec(0:ctx%ndet-1), &
+             ctx%dets(ctx%ndet), stat=ierr)
+  end subroutine cas_alloc
+
+  !> One energy/gradient evaluation at the orbitals `cbuf`.
+  !>
+  !> Reproduces `casscf.py::_optimize`'s `evaluate` closure step for step: the
+  !> AO->MO transform, one `fci_solve`, the per-root spatial RDMs, then the
+  !> weighted generalized Fock and orbital gradient.  `with_g=False` was the
+  !> Python's way of skipping the nbf^4 2-RDM when the Fortran Fock engine is
+  !> present; here it never exists at all.
+  subroutine cas_evaluate(ctx, cbuf, objective, grad, ierr)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(in) :: cbuf(0:,0:)
+    real(dp), intent(out) :: objective
+    real(dp), contiguous, intent(out) :: grad(0:)
+    integer(i8), intent(out) :: ierr
+
+    integer :: k, r, na
+    integer(i8) :: j, cap, rc, off1, off2
+
+    ierr = 0_i8
+    ctx%ncall = ctx%ncall + 1
+    na = ctx%na
+
+    call mo_transform_h1e(int(ctx%n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
+    if (mo_transform_eri(int(ctx%n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
+      ierr = CAS_ERR_TRANSFORM
+      return
+    end if
+
+    ctx%iopt_ci(FCI_I_NROOT) = int(ctx%nroot, c_int32_t)
+    if (fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, ctx%h1e, &
+                  ctx%eri, ctx%enci, ctx%civ, ctx%s2w) < 0_i8) then
+      ierr = CAS_ERR_CI
+      return
+    end if
+
+    cap = ctx%ndet * int(2 * na, i8)**2 + 1_i8
+    do k = 0, ctx%nstate - 1
+      r = ctx%roots(k)
+      ! `civ` is C-order [ndet, nroot]; root r is the strided column r.
+      do j = 0_i8, ctx%ndet - 1_i8
+        ctx%cvec(j) = ctx%civ(j * int(ctx%nroot, i8) + int(r, i8))
+      end do
+      off1 = int(k, i8) * int(na, i8)**2
+      off2 = int(k, i8) * int(na, i8)**4
+      call rdm1_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
+                        ctx%g1(off1))
+      rc = rdm2_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
+                        cap, ctx%g2(off2), 0_c_int32_t)
+      if (rc /= 0_i8) then
+        ierr = CAS_ERR_ALLOC
+        return
+      end if
+    end do
+
+    call casscf_gfock_grad(int(ctx%n, c_int32_t), int(ctx%nc, c_int32_t), &
+                           int(na, c_int32_t), int(ctx%nstate, c_int32_t), &
+                           ctx%weights, ctx%g1, ctx%g2, ctx%h1e, ctx%eri, &
+                           ctx%fock, grad)
+
+    objective = 0.0_dp
+    do k = 0, ctx%nstate - 1
+      objective = objective + ctx%weights(k) * ctx%enci(ctx%roots(k))
+    end do
+  end subroutine cas_evaluate
+
+  !> C <- C exp(K(vec)) over the non-redundant pairs.
+  subroutine cas_rotate(ctx, cin, vec, cout, ierr)
+    type(cas_ctx_t), intent(in) :: ctx
+    real(dp), contiguous, intent(in) :: cin(0:,0:), vec(0:)
+    real(dp), contiguous, intent(inout) :: cout(0:,0:)
+    integer(i8), intent(out) :: ierr
+    integer(c_int32_t) :: info
+
+    info = casscf_orbital_rotate(int(ctx%n, c_int32_t), &
+                                 int(ctx%npar, c_int32_t), ctx%pairs, vec, &
+                                 cin, cout)
+    ierr = merge(0_i8, CAS_ERR_ROTATE, info == 0_c_int32_t)
+  end subroutine cas_rotate
+
+  ! ============================================================ Newton loop
+  !> `casscf.py::_floored_newton_loop`, including the finite-difference
+  !> Hessian, the level-shifted Newton step and the halving backtrack.
+  !>
+  !> `curv_w`/`curv_u` come back as the RAW (unfloored) eigendecomposition of
+  !> the Hessian built by the FINAL step, so the saddle-escape phase costs zero
+  !> extra CI solves -- the same contract the Python has.
+  subroutine newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                         steptol, maxrot, shift, fdstep, history, maxhist, &
+                         nhist, seed_history, converged, niter, curv_w, &
+                         curv_u, have_curv, objective, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, optimizer, maxhist
+    real(dp), intent(in) :: gradtol, enertol, steptol, maxrot, shift, fdstep
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(in) :: seed_history
+    logical, intent(out) :: converged, have_curv
+    integer, intent(out) :: niter
+    real(dp), allocatable, intent(inout) :: curv_w(:), curv_u(:,:)
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: grad(:), grad_new(:), step(:), ctry(:,:)
+    integer :: npar, it, bt, ierr
+    integer(i8) :: rc
+    real(dp) :: obj_old, obj_new, gnorm, step_norm
+    logical :: first_row
+
+    npar = ctx%npar
+    converged = .false.
+    have_curv = .false.
+    niter = 0
+    allocate(grad(0:npar-1), grad_new(0:npar-1), step(0:npar-1), &
+             ctry(0:ctx%n-1, 0:ctx%n-1), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    call cas_evaluate(ctx, cbuf, objective, grad, rc)
+    if (rc < 0_i8) then
+      status = rc
+      return
+    end if
+    first_row = seed_history
+    if (first_row) call push_history(history, maxhist, nhist, 0, objective, &
+                                     0.0_dp, vnorm(grad), 0.0_dp)
+
+    do it = 1, maxmacro
+      niter = it
+      gnorm = vnorm(grad)
+      if (gnorm < gradtol) then
+        converged = .true.
+        exit
+      end if
+
+      if (optimizer == 0) then
+        call newton_step(ctx, cbuf, grad, fdstep, shift, maxrot, step, &
+                         curv_w, curv_u, status)
+        if (status < 0_i8) return
+        have_curv = .true.
+      else
+        ! `_powell_step`: scaled steepest descent, no curvature.
+        step = -grad
+        step_norm = vnorm(step)
+        if (step_norm > maxrot) step = step * (maxrot / step_norm)
+      end if
+
+      obj_old = objective
+      do bt = 1, CAS_MAX_BACKTRACK
+        call cas_rotate(ctx, cbuf, step, ctry, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        call cas_evaluate(ctx, ctry, obj_new, grad_new, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        if (obj_new <= obj_old + CAS_ACCEPT_TOL) exit
+        step = 0.5_dp * step
+      end do
+
+      cbuf = ctry
+      objective = obj_new
+      grad = grad_new
+      step_norm = vnorm(step)
+      call push_history(history, maxhist, nhist, it, objective, &
+                        objective - obj_old, vnorm(grad), step_norm)
+      if (abs(objective - obj_old) < enertol .and. step_norm < steptol) then
+        converged = vnorm(grad) < gradtol
+        exit
+      end if
+    end do
+  end subroutine newton_loop
+
+  !> `casscf.py::_newton_step` with the finite-difference Hessian.
+  subroutine newton_step(ctx, cbuf, grad, fdstep, shift, maxrot, step, &
+                         curv_w, curv_u, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(in) :: cbuf(0:,0:), grad(0:)
+    real(dp), intent(in) :: fdstep, shift, maxrot
+    real(dp), contiguous, intent(out) :: step(0:)
+    real(dp), allocatable, intent(inout) :: curv_w(:), curv_u(:,:)
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: hess(:,:), ge(:), wf(:)
+    integer :: npar, k, i, ierr
+    real(dp) :: nrm
+
+    npar = ctx%npar
+    if (allocated(curv_w)) deallocate(curv_w)
+    if (allocated(curv_u)) deallocate(curv_u)
+    allocate(hess(npar, npar), curv_w(npar), curv_u(npar, npar), &
+             ge(npar), wf(npar), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    call fd_orbital_hessian(ctx, cbuf, fdstep, hess, status)
+    if (status < 0_i8) return
+
+    ! The Hessian is symmetric by construction, so its C-order buffer and its
+    ! column-major view coincide and DSYEVD may read it in place.  The columns
+    ! of `curv_u` are the eigenvectors, ascending in `curv_w`.
+    curv_u = hess
+    call oqp_dsyevd_f(npar, curv_u, curv_w, ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_EIGEN
+      return
+    end if
+
+    do i = 1, npar
+      wf(i) = merge(curv_w(i), shift, curv_w(i) > shift)
+    end do
+    ! ge = U^T g, then step = -U (ge / wf).  U is NOT symmetric, so the two
+    ! products need opposite DGEMV trans flags; swapping them is the silent
+    ! wrong-step failure documented in the porting notes.
+    call dgemv('T', npar, npar, 1.0_dp, curv_u, npar, grad, 1, 0.0_dp, ge, 1)
+    do i = 1, npar
+      ge(i) = ge(i) / wf(i)
+    end do
+    call dgemv('N', npar, npar, -1.0_dp, curv_u, npar, ge, 1, 0.0_dp, step, 1)
+
+    nrm = vnorm(step)
+    if (nrm > maxrot) then
+      do k = 0, npar - 1
+        step(k) = step(k) * (maxrot / nrm)
+      end do
+    end if
+    deallocate(hess, ge, wf)
+  end subroutine newton_step
+
+  !> `casscf.py::_fd_orbital_hessian`: 2*n_par gradient evaluations, then the
+  !> explicit symmetrization.  This is where a CASSCF run spends its time.
+  subroutine fd_orbital_hessian(ctx, cbuf, hh, hess, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(in) :: cbuf(0:,0:)
+    real(dp), intent(in) :: hh
+    real(dp), contiguous, intent(out) :: hess(:,:)
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: e(:), gp(:), gm(:), ctry(:,:)
+    integer :: npar, k, i, j, ierr
+    integer(i8) :: rc
+    real(dp) :: obj, tmp
+
+    npar = ctx%npar
+    allocate(e(0:npar-1), gp(0:npar-1), gm(0:npar-1), &
+             ctry(0:ctx%n-1, 0:ctx%n-1), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    e = 0.0_dp
+    do k = 0, npar - 1
+      e(k) = hh
+      call cas_rotate(ctx, cbuf, e, ctry, rc)
+      if (rc < 0_i8) then
+        status = rc
+        return
+      end if
+      call cas_evaluate(ctx, ctry, obj, gp, rc)
+      if (rc < 0_i8) then
+        status = rc
+        return
+      end if
+      e(k) = -hh
+      call cas_rotate(ctx, cbuf, e, ctry, rc)
+      if (rc < 0_i8) then
+        status = rc
+        return
+      end if
+      call cas_evaluate(ctx, ctry, obj, gm, rc)
+      if (rc < 0_i8) then
+        status = rc
+        return
+      end if
+      e(k) = 0.0_dp
+      do i = 0, npar - 1
+        hess(i + 1, k + 1) = (gp(i) - gm(i)) / (2.0_dp * hh)
+      end do
+    end do
+
+    ! 0.5 * (H + H^T), element for element as the NumPy expression forms it
+    do j = 1, npar
+      do i = j, npar
+        tmp = 0.5_dp * (hess(i, j) + hess(j, i))
+        hess(i, j) = tmp
+        hess(j, i) = tmp
+      end do
+    end do
+    deallocate(e, gp, gm, ctry)
+  end subroutine fd_orbital_hessian
+
+  ! ========================================================= saddle escape
+  !> `casscf.py::_escape_saddles`.  Only a DEEP negative curvature triggers a
+  !> step, and the escaped point is kept only when it strictly lowers the
+  !> energy, so the phase is a guaranteed no-op wherever phase 1 already found
+  !> a minimum.
+  subroutine escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                            steptol, maxrot, shift, fdstep, curv_tol, &
+                            egain_tol, maxescape, history, maxhist, nhist, &
+                            total_it, curv_w, curv_u, objective, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, optimizer, maxescape, maxhist
+    real(dp), intent(in) :: gradtol, enertol, steptol, maxrot, shift, fdstep
+    real(dp), intent(in) :: curv_tol, egain_tol
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist, total_it
+    real(dp), allocatable, intent(inout) :: curv_w(:), curv_u(:,:)
+    real(dp), intent(inout) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: kick(:), grad(:), cbest(:,:), ctry(:,:)
+    real(dp), allocatable :: c2(:,:), w2(:), u2(:,:), hrow(:,:)
+    integer :: npar, escapes, amp, kmin, ierr, it2, nrow2, r
+    integer(i8) :: rc
+    real(dp) :: best_obj, on, obj2
+    logical :: conv2, have2
+
+    npar = ctx%npar
+    allocate(kick(0:npar-1), grad(0:npar-1), cbest(0:ctx%n-1, 0:ctx%n-1), &
+             ctry(0:ctx%n-1, 0:ctx%n-1), c2(0:ctx%n-1, 0:ctx%n-1), &
+             hrow(5, maxhist), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    escapes = 0
+    do while (escapes < maxescape)
+      kmin = minloc(curv_w, 1)
+      if (curv_w(kmin) >= -curv_tol) exit
+
+      best_obj = 0.0_dp
+      do amp = 1, size(CAS_ESCAPE_AMPS)
+        kick = CAS_ESCAPE_AMPS(amp) * curv_u(1:npar, kmin)
+        call cas_rotate(ctx, cbuf, kick, ctry, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        call cas_evaluate(ctx, ctry, on, grad, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        if (amp == 1 .or. on < best_obj) then
+          best_obj = on
+          cbest = ctry
+        end if
+      end do
+
+      ! re-converge from the kicked point into a PRIVATE history buffer: the
+      ! rows are only committed once, and (as in the Python) every row of a
+      ! rerun is stamped with the running total, not with its own index
+      c2 = cbest
+      nrow2 = 0
+      call newton_loop(ctx, c2, maxmacro, optimizer, gradtol, enertol, &
+                       steptol, maxrot, shift, fdstep, hrow, maxhist, nrow2, &
+                       .true., conv2, it2, w2, u2, have2, obj2, status)
+      if (status < 0_i8) return
+      total_it = total_it + it2
+      do r = 2, nrow2
+        call push_history(history, maxhist, nhist, total_it, hrow(2, r), &
+                          hrow(3, r), hrow(4, r), hrow(5, r))
+      end do
+      if (.not. conv2 .or. obj2 >= objective - egain_tol .or. .not. have2) exit
+
+      cbuf = c2
+      objective = obj2
+      if (allocated(curv_w)) deallocate(curv_w)
+      if (allocated(curv_u)) deallocate(curv_u)
+      call move_alloc(w2, curv_w)
+      call move_alloc(u2, curv_u)
+      escapes = escapes + 1
+    end do
+  end subroutine escape_saddles
+
+  ! ======================================================= canonicalization
+  !> `casscf.py::_canonicalize`: diagonalize the inactive / active / virtual
+  !> blocks of the closed+active mean-field Fock so the inactive and virtual
+  !> orbitals carry orbital energies.
+  !>
+  !> Note the density: the Python uses the ROOT-0 CI density with weight 1.0
+  !> even for SA-CASSCF (`_solve_active(..., [1.0], [0])`), so this does too.
+  subroutine canonicalize(ctx, cbuf, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: dmat(:), feff(:), sub(:,:), evals(:), blk(:,:)
+    integer :: n, nc, na, i, j, ierr, lo, hi, m, b
+    integer(i8) :: rc, jd
+    real(dp) :: sym
+
+    n = ctx%n
+    nc = ctx%nc
+    na = ctx%na
+
+    call mo_transform_h1e(int(n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
+    if (mo_transform_eri(int(n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
+      status = CAS_ERR_TRANSFORM
+      return
+    end if
+    ctx%iopt_ci(FCI_I_NROOT) = 1_c_int32_t
+    rc = fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, ctx%h1e, &
+                   ctx%eri, ctx%enci, ctx%civ, ctx%s2w)
+    ctx%iopt_ci(FCI_I_NROOT) = int(ctx%nroot, c_int32_t)
+    if (rc < 0_i8) then
+      status = CAS_ERR_CI
+      return
+    end if
+
+    allocate(dmat(0:int(n, i8)**2 - 1_i8), feff(0:int(n, i8)**2 - 1_i8), &
+             stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    ! nroot == 1 here, so the CI vector is already contiguous
+    do jd = 0_i8, ctx%ndet - 1_i8
+      ctx%cvec(jd) = ctx%civ(jd)
+    end do
+    call rdm1_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, ctx%g1)
+
+    ! `_full_rdm1`: 2 on the inactive diagonal, the active 1-RDM on the active
+    ! block, zero everywhere else.
+    dmat = 0.0_dp
+    do i = 0, nc - 1
+      dmat(int(i, i8)*int(n, i8) + int(i, i8)) = 2.0_dp
+    end do
+    do i = 0, na - 1
+      do j = 0, na - 1
+        dmat(int(nc + i, i8)*int(n, i8) + int(nc + j, i8)) = &
+            ctx%g1(int(i, i8)*int(na, i8) + int(j, i8))
+      end do
+    end do
+
+    call casscf_effective_fock(int(n, c_int32_t), dmat, ctx%h1e, ctx%eri, feff)
+
+    do b = 1, 3
+      select case (b)
+      case (1)
+        lo = 0
+        hi = nc - 1
+      case (2)
+        lo = nc
+        hi = nc + na - 1
+      case default
+        lo = nc + na
+        hi = n - 1
+      end select
+      m = hi - lo + 1
+      if (m < 2) cycle
+      allocate(sub(m, m), evals(m), blk(m, n), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_ALLOC
+        return
+      end if
+      ! Feff is symmetric here, but the Python still forms 0.5*(sub + sub^T)
+      ! before diagonalizing, so the same expression is written out.
+      do i = 1, m
+        do j = 1, m
+          sym = 0.5_dp * (feff(int(lo + i - 1, i8)*int(n, i8) + int(lo + j - 1, i8)) &
+                        + feff(int(lo + j - 1, i8)*int(n, i8) + int(lo + i - 1, i8)))
+          sub(i, j) = sym
+        end do
+      end do
+      call oqp_dsyevd_f(m, sub, evals, ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_EIGEN
+        return
+      end if
+      ! Cnew[:, idx] = C[:, idx] @ V, i.e. in the C-order buffer (MO index
+      ! first) blk = V^T * cbuf(lo:hi, :).
+      call dgemm('T', 'N', m, n, m, 1.0_dp, sub, m, cbuf(lo, 0), n, &
+                 0.0_dp, blk, m)
+      do i = 1, m
+        do j = 0, n - 1
+          cbuf(lo + i - 1, j) = blk(i, j + 1)
+        end do
+      end do
+      deallocate(sub, evals, blk)
+    end do
+    deallocate(dmat, feff)
+  end subroutine canonicalize
+
+  ! ================================================================ helpers
+  !> Append one macroiteration row to the caller's C-order [maxhist, 5] table.
+  subroutine push_history(history, maxhist, nhist, it, e, de, gnorm, snorm)
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(in) :: maxhist, it
+    integer, intent(inout) :: nhist
+    real(dp), intent(in) :: e, de, gnorm, snorm
+    integer(i8) :: base
+
+    if (nhist >= maxhist) return
+    base = int(nhist, i8) * 5_i8
+    history(base)     = real(it, dp)
+    history(base + 1) = e
+    history(base + 2) = de
+    history(base + 3) = gnorm
+    history(base + 4) = snorm
+    nhist = nhist + 1
+  end subroutine push_history
+
+  pure function vnorm(v) result(nrm)
+    real(dp), intent(in) :: v(0:)
+    real(dp) :: nrm
+    nrm = sqrt(sum(v * v))
+  end function vnorm
+
+  pure function binom(n, k) result(c)
+    integer, intent(in) :: n, k
+    integer(i8) :: c
+    integer :: i
+    c = 0_i8
+    if (k < 0 .or. k > n) return
+    c = 1_i8
+    do i = 1, min(k, n - k)
+      c = c * int(n - min(k, n - k) + i, i8) / int(i, i8)
+    end do
+  end function binom
+
+end module casscf_driver_mod
