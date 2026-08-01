@@ -2047,10 +2047,11 @@ end module tdhf_mrsf_gradient_mod
                                   gamma_a(:,:), gamma_b(:,:), mt(:,:), &
                                   ha_yx(:,:), hb_yx(:,:), &
                                   ha_xy(:,:), hb_xy(:,:), &
-                                  xuvec(:), yuvec(:)
+                                  xuvec(:), yuvec(:), &
+                                  hx_tmp(:,:), hx_g(:,:), hx_f7(:,:)
     integer(c_int), pointer :: ixcore_ptr(:)
     real(kind=dp) :: scale_exch, hfs
-    integer :: nbf, nbf2, noca, nocb, xdim, mrst, k, ok
+    integer :: nbf, nbf2, noca, nocb, nvirb, xdim, mrst, k, ok
     logical :: dft
 
     if (istate == jstate) return
@@ -2067,7 +2068,8 @@ end module tdhf_mrsf_gradient_mod
     nbf2 = nbf*(nbf+1)/2
     noca = infos%mol_prop%nelec_a
     nocb = infos%mol_prop%nelec_b
-    xdim = noca*(nbf-nocb)
+    nvirb = nbf - nocb
+    xdim = noca*nvirb
     dft = infos%control%hamilton == 20
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%tddft%hfscale
@@ -2093,6 +2095,7 @@ end module tdhf_mrsf_gradient_mod
              gamma_a(nbf,nbf), gamma_b(nbf,nbf), mt(nbf,nbf), &
              ha_yx(nbf,nbf), hb_yx(nbf,nbf), &
              ha_xy(nbf,nbf), hb_xy(nbf,nbf), &
+             hx_tmp(nbf,nbf), hx_g(nbf,nbf), hx_f7(nbf,nbf), &
              source=0.0_dp, stat=ok)
     if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
@@ -2145,9 +2148,11 @@ end module tdhf_mrsf_gradient_mod
     ! H(y,Kx) + H(x,Ky), including all six spin-pair channels.  The half
     ! factor is the adjoint symmetrisation of B(C)^T K B(C).
     call mrsf_nac_hx_side(mo_a, mo_b, yu, fmrst2(1,:,:,:), &
-                          noca, nocb, ha_yx, hb_yx)
+                          noca, nocb, ha_yx, hb_yx, &
+                          hx_tmp, hx_g, hx_f7)
     call mrsf_nac_hx_side(mo_a, mo_b, xu, fmrst2(2,:,:,:), &
-                          noca, nocb, ha_xy, hb_xy)
+                          noca, nocb, ha_xy, hb_xy, &
+                          hx_tmp, hx_g, hx_f7)
     mt = 0.5_dp*(ha_yx + hb_yx + ha_xy + hb_xy)
 
     ! Frozen-Fock part: d Tr[Gamma C^T F_AO C]/d theta.
@@ -2157,7 +2162,14 @@ end module tdhf_mrsf_gradient_mod
     gamma_b(nocb+1:nbf,nocb+1:nbf) = 0.5_dp*( &
       matmul(transpose(yu(1:noca,nocb+1:nbf)), xu(1:noca,nocb+1:nbf)) + &
       matmul(transpose(xu(1:noca,nocb+1:nbf)), yu(1:noca,nocb+1:nbf)))
-    mt = mt + 2.0_dp*(matmul(fa, gamma_a) + matmul(fb, gamma_b))
+    ! gamma_a and gamma_b are confined to the alpha-occupied and
+    ! beta-virtual blocks, respectively.  Restrict the contractions to those
+    ! nonzero blocks instead of forming two full nbf-by-nbf MATMUL temporaries.
+    call dgemm('n', 'n', nbf, noca, noca, 2.0_dp, &
+               fa, nbf, gamma_a, nbf, 1.0_dp, mt, nbf)
+    call dgemm('n', 'n', nbf, nvirb, nvirb, 2.0_dp, &
+               fb(1,nocb+1), nbf, gamma_b(nocb+1,nocb+1), nbf, &
+               1.0_dp, mt(1,nocb+1), nbf)
 
     if (infos%tddft%ixcore_len > 0) then
       call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
@@ -2175,17 +2187,19 @@ end module tdhf_mrsf_gradient_mod
 
   contains
 
-    subroutine mrsf_nac_hx_side(ca, cb, v, f, nocc_a, nocc_b, ha, hb)
+    subroutine mrsf_nac_hx_side(ca, cb, v, f, nocc_a, nocc_b, ha, hb, &
+                                tmp, g, f7)
       real(kind=dp), intent(in) :: ca(:,:), cb(:,:), v(:,:)
       real(kind=dp), intent(in), target :: f(:,:,:)
       integer, intent(in) :: nocc_a, nocc_b
       real(kind=dp), intent(out) :: ha(:,:), hb(:,:)
-      real(kind=dp), allocatable :: tmp(:,:), g(:,:), f7(:,:)
-      integer :: n, ierr
+      real(kind=dp), intent(inout) :: tmp(:,:), g(:,:), f7(:,:)
+      integer :: n, nvir
 
       n = size(ca,1)
-      allocate(tmp(n,n), g(n,n), f7(n,n), source=0.0_dp, stat=ierr)
-      if (ierr /= 0) call show_message('Cannot allocate memory', with_abort)
+      nvir = n - nocc_b
+      ha = 0.0_dp
+      hb = 0.0_dp
 
       ! General channel: g = C_alpha^T F_7 C_beta.
       f7 = f(7,:,:)
@@ -2193,10 +2207,14 @@ end module tdhf_mrsf_gradient_mod
                  0.0_dp, tmp, n)
       call dgemm('n', 'n', n, n, n, 1.0_dp, tmp, n, cb, n, &
                  0.0_dp, g, n)
-      call dgemm('n', 't', n, nocc_a, n, 2.0_dp, g, n, v, n, &
+      ! iatogen leaves v nonzero only in (1:nocc_a,nocc_b+1:n).
+      ! Restrict both general-channel products to that rectangular block.
+      call dgemm('n', 't', n, nocc_a, nvir, 2.0_dp, &
+                 g(1,nocc_b+1), n, v(1,nocc_b+1), n, &
                  0.0_dp, ha, n)
-      call dgemm('t', 'n', n, n, nocc_a, 2.0_dp, g, n, v, n, &
-                 0.0_dp, hb, n)
+      call dgemm('t', 'n', n, nvir, nocc_a, 2.0_dp, &
+                 g, n, v(1,nocc_b+1), n, &
+                 0.0_dp, hb(1,nocc_b+1), n)
 
       ! mrsfsp accumulates the channel 1:6 adjoint into the general part.
       call mrsfsp(ha, hb, ca, cb, v, f, nocc_a, nocc_b)
