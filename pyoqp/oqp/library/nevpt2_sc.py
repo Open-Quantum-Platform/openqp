@@ -144,7 +144,24 @@ def make_rdms(ci, norb, active_nelec, upto=4):
     if upto == 3:
         return dm1, dm2, dm3
 
-    dm4 = np.zeros((norb,) * 8)
+    # dm4[p,q,r,s,t,u,v,w] = E1[(q,p)] . (E_rs E2[(t,u,v,w)]) is norb^8 inner
+    # products over vectors of length ndet.  Written one at a time that is
+    # ~1.7e7 separate dots; stacking the norb^2 bras into one matrix and the
+    # norb^2 kets into another turns each (t,u,v,w) block into a single
+    # (norb^2 x ndet) @ (ndet x norb^2) GEMM -- same flops, but through the
+    # threaded BLAS instead of the Python interpreter.
+    npair = norb * norb
+    ndet = len(det_list)
+
+    # bras[a, :] = E1[(q, p)] with a = p*norb + q, so the GEMM result is
+    # already indexed [p*norb+q, r*norb+s].
+    bras = np.empty((npair, ndet))
+    for p in range(norb):
+        for q in range(norb):
+            bras[p * norb + q, :] = E1[(q, p)]
+
+    dm4 = np.empty((norb,) * 8)
+    kets = np.empty((ndet, npair))
     for t in range(norb):
         for u in range(norb):
             for v in range(norb):
@@ -152,10 +169,10 @@ def make_rdms(ci, norb, active_nelec, upto=4):
                     base2 = E2[(t, u, v, w)]
                     for r in range(norb):
                         for s in range(norb):
-                            e3 = Eop[(r, s)] @ base2
-                            for p in range(norb):
-                                for q in range(norb):
-                                    dm4[p, q, r, s, t, u, v, w] = E1[(q, p)] @ e3
+                            kets[:, r * norb + s] = Eop[(r, s)] @ base2
+                    block = bras @ kets
+                    dm4[:, :, :, :, t, u, v, w] = block.reshape(
+                        norb, norb, norb, norb)
     return dm1, dm2, dm3, dm4
 
 
