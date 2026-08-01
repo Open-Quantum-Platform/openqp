@@ -462,6 +462,70 @@ void casscf_lowest_mode_step(int32_t npar, const double *grad, const double *w,
     const double *umat, double trust, double *step, double *pred);
 void casscf_diis_coeffs(int32_t nvec, int32_t npar, const double *gmat,
     double condmax, double *coef, int32_t *nused);
+/* ------------------------------------------------------------------------
+ * One entry point for a complete CASSCF / SA-CASSCF run (casscf_driver.F90).
+ *
+ * The wavefunction stack's counterpart to hf_energy(inf) / mp2_energy(inf):
+ * the whole default two-phase orbital optimizer runs inside liboqp -- the
+ * macroiteration loop with its backtracking line search, the 2*n_par
+ * finite-difference orbital Hessian, the level-shifted Newton step, the
+ * curvature-gated saddle escape, canonicalization, the final CI and its spin
+ * diagnostics -- built out of fci_solve and the CASSCF kernels above.
+ * `OQP::Hcore`, `OQP::AO_ERI` and `OQP::VEC_MO_A` are read from the handle and
+ * `OQP::VEC_MO_A` is overwritten with the optimized orbitals.
+ *
+ * `weights`/`roots` carry the resolved state-average plan (NSTATE entries;
+ * `roots` are 0-based CI root indices).  `energies` and `s2` receive NROOT
+ * entries.  `history` is the macroiteration table, C-order [MAXHIST, 5] as
+ * (it, E, dE, |g_orb|, |step|), so Python formats the log unchanged; `stats`
+ * receives (rows written, macroiterations, converged, evaluations).
+ *
+ * Returns 0, or a negative status meaning "could not do it here" -- the caller
+ * then runs the Python optimizer, which remains the numerical pin and owns
+ * every user-facing message.  The `ah`/`diis`/`auto` convergers and
+ * `[casscf] hessian = analytic` are declined in Python before the call.
+ *
+ * OPTION SCHEMA -- authoritative copy is the parameter block in
+ * source/modules/casscf_driver.F90; pyoqp/oqp/library/casscf.py mirrors it and
+ * tests/test_casscf_energy.py checks that the mirror is exact.  The CI half of
+ * the run reuses the FCI_I_* / FCI_D_* layout above verbatim. */
+enum {
+  CAS_I_NCORE     = 0,  /* inactive doubly-occupied orbitals               */
+  CAS_I_NACT      = 1,  /* active orbitals                                 */
+  CAS_I_NALPHA    = 2,  /* active alpha electrons                          */
+  CAS_I_NBETA     = 3,  /* active beta electrons                           */
+  CAS_I_NSTATE    = 4,  /* averaged roots in weights/roots                 */
+  CAS_I_NROOT     = 5,  /* CI roots solved and returned                    */
+  CAS_I_SOLVER    = 6,  /* 0 auto, 1 dense, 2 davidson                     */
+  CAS_I_MAXITER   = 7,  /* Davidson iteration cap                          */
+  CAS_I_SUBSPACE  = 8,  /* Davidson subspace cap, 0 = auto                 */
+  CAS_I_MULT      = 9,  /* target spin multiplicity, 0 = any               */
+  CAS_I_MAXMEMORY = 10, /* CI working-set budget, MiB                      */
+  CAS_I_NTHREADS  = 11, /* OpenMP threads for the kernels                  */
+  CAS_I_MAXMACRO  = 12, /* macroiteration cap                              */
+  CAS_I_OPTIMIZER = 13, /* 0 newton, 1 powell                              */
+  CAS_I_CANONICAL = 14, /* 1 = canonicalize the converged orbitals         */
+  CAS_I_MAXESCAPE = 15, /* saddle escapes, 0 disables phase 2              */
+  CAS_I_MAXHIST   = 16, /* rows the caller's history buffer holds          */
+  CAS_NIOPT       = 17
+};
+enum {
+  CAS_D_ENUC      = 0,  /* nuclear repulsion, added to every root          */
+  CAS_D_EIG_TOL   = 1,  /* CI eigenpair residual tolerance                 */
+  CAS_D_CUTOFF    = 2,  /* CI integral screening cutoff                    */
+  CAS_D_GRAD_TOL  = 3,  /* |g_orb| convergence threshold                   */
+  CAS_D_ENER_TOL  = 4,  /* macroiteration energy-decrease threshold        */
+  CAS_D_STEP_TOL  = 5,  /* macroiteration step-norm threshold              */
+  CAS_D_MAXROT    = 6,  /* trust cap on |step|                             */
+  CAS_D_SHIFT     = 7,  /* Hessian eigenvalue floor (level shift)          */
+  CAS_D_FD_STEP   = 8,  /* finite-difference Hessian displacement          */
+  CAS_D_SADDLE_C  = 9,  /* deep-negative-curvature threshold, phase 2      */
+  CAS_D_SADDLE_E  = 10, /* strict energy gain to accept an escape          */
+  CAS_NDOPT       = 11
+};
+int64_t casscf_energy(struct oqp_handle_t *inf, const int32_t *iopt,
+    const double *dopt, const double *weights, const int32_t *roots,
+    double *energies, double *s2, double *history, int32_t *stats);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

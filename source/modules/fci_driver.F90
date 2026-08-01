@@ -73,6 +73,17 @@ module fci_driver_mod
   integer, parameter :: dp = c_double
 
   public :: fci_solve
+  ! Reused by the CASSCF driver (casscf_driver.F90), which holds `h1e`/`eri`
+  ! in local arrays and calls `fci_solve` directly -- exactly the in-process
+  ! Fortran caller this entry point was shaped handle-free for.  It packs the
+  ! same `iopt`/`dopt`, so it takes the schema from here rather than
+  ! re-declaring index constants that could drift.
+  public :: build_determinants
+  public :: FCI_I_NORB, FCI_I_NACT, FCI_I_NCORE, FCI_I_NALPHA, FCI_I_NBETA
+  public :: FCI_I_NROOT, FCI_I_SOLVER, FCI_I_MAXITER, FCI_I_SUBSPACE
+  public :: FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, FCI_I_WANT_S2
+  public :: FCI_NIOPT, FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT
+  public :: FCI_MAX_NSPIN
 
   ! ------------------------------------------------------------------ schema
   ! AUTHORITATIVE OPTION SCHEMA -- mirrored in include/oqp.h and in
