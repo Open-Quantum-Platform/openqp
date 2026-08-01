@@ -1,0 +1,135 @@
+"""Regressions for global MO/root assignment and transported phase metadata."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+
+oqp = pytest.importorskip("oqp")
+
+from oqp.library.state_tracking import maximum_overlap_assignment
+from oqp.library import single_point
+
+
+def test_global_assignment_beats_row_greedy_counterexample():
+    overlap = np.array([[0.90, 0.80], [0.85, 0.10]])
+
+    order, signs, matched, margins = maximum_overlap_assignment(overlap)
+
+    # Row-greedy chooses [0, 1] with total 1.00.  The globally optimal
+    # one-to-one state map is [1, 0] with total 1.65.
+    assert order.tolist() == [1, 0]
+    assert signs.tolist() == [1.0, 1.0]
+    assert np.sum(matched) == pytest.approx(1.65)
+    assert margins.tolist() == pytest.approx([-0.10, 0.75])
+
+
+def test_assignment_tracks_multi_root_exchange_and_phase():
+    overlap = np.array([
+        [0.02, -0.97, 0.01],
+        [0.03, 0.01, 0.96],
+        [-0.95, 0.02, 0.04],
+    ])
+
+    order, signs, matched, margins = maximum_overlap_assignment(overlap)
+
+    assert order.tolist() == [1, 2, 0]
+    assert signs.tolist() == [-1.0, 1.0, -1.0]
+    assert matched.tolist() == pytest.approx([0.97, 0.96, 0.95])
+    assert np.all(margins > 0.90)
+
+
+def test_zero_selected_overlap_has_deterministic_positive_phase():
+    order, signs, matched, _ = maximum_overlap_assignment(np.zeros((2, 2)))
+
+    assert order.tolist() == [0, 1]
+    assert signs.tolist() == [1.0, 1.0]
+    assert matched.tolist() == [0.0, 0.0]
+
+
+def test_align_x_preserves_lineage_and_records_initial_gauge(monkeypatch):
+    class DummyMol:
+        def __init__(self):
+            self.data = {
+                "OQP::td_bvec_mo_old": np.eye(3),
+                "OQP::td_bvec_mo": np.array([
+                    [0.0, -1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                    [1.0, 0.0, 0.0],
+                ]),
+                "OQP::state_tracking_lineage": np.array([10, 11, 12]),
+                "OQP::state_tracking_phase_initial": np.array([1.0, -1.0, 1.0]),
+            }
+
+    monkeypatch.setattr(single_point, "dump_log", lambda *_args, **_kwargs: None)
+    tracker = single_point.NACME.__new__(single_point.NACME)
+    tracker.mol = DummyMol()
+
+    tracker.align_x()
+
+    data = tracker.mol.data
+    assert data["OQP::state_tracking_order"].tolist() == [1, 2, 0]
+    assert data["OQP::state_tracking_lineage"].tolist() == [11, 12, 10]
+    assert data["OQP::state_tracking_phase_step"].tolist() == [-1.0, 1.0, 1.0]
+    assert data["OQP::state_tracking_phase_initial"].tolist() == [-1.0, 1.0, 1.0]
+    assert data["OQP::state_tracking_previous_phase_initial"].tolist() == [-1.0, 1.0, 1.0]
+    assert np.allclose(data["OQP::td_bvec_mo"], np.array([
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 0.0, 0.0],
+    ]))
+
+
+def test_numerical_worker_reorders_exchanged_roots_to_central_order(monkeypatch):
+    class DummyMol:
+        def __init__(self):
+            self.data = {
+                "OQP::td_bvec_mo_old": np.eye(3),
+                "OQP::td_bvec_mo": np.array([
+                    [0.0, -1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                    [1.0, 0.0, 0.0],
+                ]),
+                "OQP::state_tracking_lineage": np.array([10, 11, 12]),
+                "OQP::state_tracking_phase_initial": np.ones(3),
+            }
+
+    monkeypatch.setattr(single_point, "dump_log", lambda *_args, **_kwargs: None)
+    tracker = single_point.NACME.__new__(single_point.NACME)
+    tracker.mol = DummyMol()
+
+    tracker.align_x(reorder=True)
+
+    data = tracker.mol.data
+    assert data["OQP::state_tracking_raw_order"].tolist() == [1, 2, 0]
+    assert data["OQP::state_tracking_order"].tolist() == [0, 1, 2]
+    assert data["OQP::state_tracking_lineage"].tolist() == [10, 11, 12]
+    assert data["OQP::state_tracking_output_reordered"].tolist() == [1]
+    assert np.allclose(data["OQP::td_bvec_mo"], np.eye(3))
+
+
+def test_initial_gauge_sign_is_not_double_counted_across_json_restart(monkeypatch):
+    class DummyMol:
+        def __init__(self):
+            self.data = {
+                # The previous JSON stores already transported response vectors.
+                "OQP::td_bvec_mo_old": np.eye(3),
+                "OQP::td_bvec_mo": np.diag([1.0, -1.0, 1.0]),
+                "OQP::state_tracking_lineage_old": np.arange(3),
+                "OQP::state_tracking_phase_initial_old": np.array([-1.0, 1.0, -1.0]),
+            }
+
+    monkeypatch.setattr(single_point, "dump_log", lambda *_args, **_kwargs: None)
+    tracker = single_point.NACME.__new__(single_point.NACME)
+    tracker.mol = DummyMol()
+
+    tracker.align_x()
+
+    data = tracker.mol.data
+    # The current raw-to-initial correction is measured directly against the
+    # corrected previous vectors.  Multiplying by the recorded previous sign
+    # would double count its gauge operation.
+    assert data["OQP::state_tracking_phase_initial"].tolist() == [1.0, -1.0, 1.0]
+    assert data["OQP::state_tracking_previous_phase_initial"].tolist() == [-1.0, 1.0, -1.0]
+    assert np.allclose(data["OQP::td_bvec_mo"], np.eye(3))

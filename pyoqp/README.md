@@ -281,6 +281,20 @@ guess section handle the guess orbitals
 
 - save_mol // save complete data to a json file
 
+For overlap-aligned excited-state calculations, the saved JSON also contains
+a public `state_tracking` record.  `order` maps each saved current-root index
+to its previous-step index (zero-based), while `lineage` carries the initial
+physical-state identity through root exchanges.  `phase_step` is the sign
+applied to each raw current response vector and `phase_initial` is that raw
+vector's correction to the transported initial gauge.  External dynamics
+drivers should consume this joint state gauge instead of independently fitting
+the sign of every pairwise NAC vector.  `matched_overlap` and `margin` expose
+weak or ambiguous correspondences.
+`raw_order` preserves the pre-alignment solver-root map; `output_reordered` is
+true only for internal numerical-NAC displacement workers, whose response
+vectors are restored to the central structure's physical-root order before
+the +dx/-dx finite difference.
+
       True       save complete calculation data to json file
       False      do not save data (default)
     

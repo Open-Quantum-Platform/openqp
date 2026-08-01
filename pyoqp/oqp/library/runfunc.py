@@ -1,4 +1,5 @@
 """OQP run type functions"""
+import os
 
 import numpy as np
 
@@ -152,7 +153,11 @@ def compute_nacme(mol):
     LastStep(mol).compute(mol)
 
     # compute nacme
-    NACME(mol).nacme()
+    # Numerical-NAC displacement workers must compare the same physical root
+    # on the +dx and -dx sides even if the adiabatic solver exchanges their
+    # energy order.  Ordinary NACME/MD steps retain energy-root order.
+    reorder_x = os.environ.get('OQP_NUM_NAC_WORKER', '') == '1'
+    NACME(mol).nacme(reorder_x=reorder_x)
 
 
 def compute_nac(mol):
@@ -248,6 +253,13 @@ def compute_properties(mol):
     # compute excitation energy
     sp.excitation(ref_energy)
 
+    # Transport the central-geometry response-vector gauge before gradients,
+    # numerical-NAC workers, and the checkpoint JSON are produced.  PyRAI2MD
+    # feeds that JSON into the next MD step; aligning only inside displaced
+    # workers leaves the time-series phase undefined.
+    nacme = NACME(mol)
+    nacme.align_x()
+
     # compute gradient
     Gradient(mol).gradient()
 
@@ -259,7 +271,7 @@ def compute_properties(mol):
     if nac_type == 'nac':
         NAC(mol).nac()
     elif nac_type == 'nacme':
-        NACME(mol).nacme()
+        nacme.nacme(align=False)
     else:
         pass
 

@@ -47,6 +47,7 @@
 module namd_mod
 
   use precision, only: dp
+  use state_tracking_mod, only: maximum_overlap_assignment
 
   implicit none
 
@@ -386,25 +387,22 @@ contains
     real(kind=dp), intent(in)    :: thresh
     integer,       intent(inout) :: active
     logical,       intent(out)   :: swapped
-    integer :: j, n, jmax
-    real(kind=dp) :: amax
+    integer, allocatable :: assignment(:)
+    real(kind=dp), allocatable :: signs(:), matched(:), margins(:)
+    integer :: info, n
 
     n = size(stas, 1)
     swapped = .false.
     if (abs(stas(active, active)) >= thresh) return   ! no trivial crossing
 
-    ! Partner = state with the largest |overlap| to the (old) active state.
-    jmax = active
-    amax = abs(stas(active, active))
-    do j = 1, n
-      if (j == active) cycle
-      if (abs(stas(active, j)) > amax) then
-        amax = abs(stas(active, j))
-        jmax = j
-      end if
-    end do
-    if (jmax /= active .and. amax >= thresh) then
-      active = jmax
+    ! Use the same global one-to-one state map as MO/X tracking.  Independent
+    ! row maxima can assign several old states to one new state and lose the
+    ! physical lineage at simultaneous or near-degenerate exchanges.
+    allocate(assignment(n), signs(n), matched(n), margins(n))
+    call maximum_overlap_assignment(stas, assignment, signs, matched, margins, info)
+    if (info == 0 .and. assignment(active) /= active .and. &
+        matched(active) >= thresh) then
+      active = assignment(active)
       swapped = .true.
     end if
   end subroutine namd_trivial_crossing
