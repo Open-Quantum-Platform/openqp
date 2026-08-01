@@ -273,6 +273,13 @@ int64_t nevpt2_make_rdms(int32_t norb, int64_t ndet, const int64_t *dets,
 void casscf_gfock_grad(int32_t nbf, int32_t ncore, int32_t nact, int32_t nroot,
     const double *weights, const double *gamma, const double *gamma2,
     const double *h1e, const double *eri, double *fock, double *grad);
+/* CI-relaxation amplitudes of the analytic CASSCF orbital Hessian
+ * (casscf_hess_kernel.F90): the per-pair derivative operator applied to the
+ * reference CI vector and projected on the active eigenbasis, batched over
+ * the rotation pairs. */
+void casscf_hess_amp(int32_t nact, int64_t ndet, int32_t npar,
+    const double *stack, const double *fder, const double *gder,
+    const double *wmat, const double *vecs, double *amp);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

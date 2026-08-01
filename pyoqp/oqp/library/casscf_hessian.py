@@ -253,6 +253,50 @@ def _apply_active_operator(f, g, stack, wmat):
     return sigma
 
 
+def _hess_amp_backend():
+    """liboqp (lib, ffi) for the Fortran CI-relaxation amplitude engine, or None."""
+    from oqp.library.fci import _lib_backend
+
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_hess_amp"):
+        return None
+    return lib, ffi
+
+
+def _lib_hess_amp(stack, f_der, g_der, wmat, vecs):
+    """Projected derivative-operator amplitudes through the Fortran engine.
+
+    Reproduces ``[_apply_active_operator(f_der[k], g_der[k], stack, wmat) @ vecs
+    for k in range(npar)]``, but batches the pair index into the GEMMs instead
+    of running one einsum per pair.  Returns the ``(npar, ndet)`` array, or
+    ``None`` when the engine is unavailable."""
+    backend = _hess_amp_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    nact = int(stack.shape[0])
+    ndet = int(stack.shape[2])
+    npar = int(f_der.shape[0])
+    st = np.ascontiguousarray(stack, dtype=np.float64)
+    fd = np.ascontiguousarray(f_der, dtype=np.float64)
+    gd = np.ascontiguousarray(g_der, dtype=np.float64)
+    wm = np.ascontiguousarray(wmat, dtype=np.float64)
+    vc = np.ascontiguousarray(vecs, dtype=np.float64)
+    amp = np.zeros((npar, ndet), dtype=np.float64)
+    lib.casscf_hess_amp(
+        nact, ndet, npar,
+        ffi.cast("double *", st.ctypes.data),
+        ffi.cast("double *", fd.ctypes.data),
+        ffi.cast("double *", gd.ctypes.data),
+        ffi.cast("double *", wm.ctypes.data),
+        ffi.cast("double *", vc.ctypes.data),
+        ffi.cast("double *", amp.ctypes.data))
+    return amp
+
+
 # ----------------------------------------------------------------- main assembly
 def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
                              weights, roots, ci_coeffs, *,
@@ -336,9 +380,11 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
         c /= nrm
         e_i = float(c @ (hact @ c))
         wmat = np.tensordot(stack, c, axes=([3], [0]))  # (nact, nact, ndet)
-        amp = np.empty((npar, ndet))
-        for k in range(npar):
-            amp[k] = _apply_active_operator(f_der[k], g_der[k], stack, wmat) @ vecs
+        amp = _lib_hess_amp(stack, f_der, g_der, wmat, vecs)
+        if amp is None:
+            amp = np.empty((npar, ndet))
+            for k in range(npar):
+                amp[k] = _apply_active_operator(f_der[k], g_der[k], stack, wmat) @ vecs
 
         factors = np.zeros(ndet)
         for j in range(ndet):
