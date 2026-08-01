@@ -14,6 +14,57 @@ except AttributeError:  # pragma: no cover - Python 3.9 fallback
         return bin(value).count("1")
 
 
+def _rdm_backend():
+    """liboqp cffi (lib, ffi) for the Fortran RDM engine, or None."""
+    try:
+        from oqp.library.fci import _lib_backend
+    except Exception:
+        return None
+    return _lib_backend()
+
+
+def _lib_rdm1(coeff, dets, n_spinorb):
+    """D1 through the Fortran engine, or None when unavailable."""
+    backend = _rdm_backend()
+    if backend is None or n_spinorb > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "rdm1_spinorb"):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    out = np.zeros((n_spinorb, n_spinorb), dtype=np.float64)
+    lib.rdm1_spinorb(
+        int(n_spinorb), int(det_arr.size),
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        ffi.cast("double *", out.ctypes.data))
+    return out
+
+
+def _lib_rdm2(coeff, dets, n_spinorb):
+    """D2 through the Fortran engine, or None when unavailable."""
+    backend = _rdm_backend()
+    if backend is None or n_spinorb > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "rdm2_spinorb"):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    out = np.zeros((n_spinorb,) * 4, dtype=np.float64)
+    # Every determinant contributes at most n_spinorb^2 double annihilations.
+    cap = int(det_arr.size) * int(n_spinorb) * int(n_spinorb) + 1
+    info = lib.rdm2_spinorb(
+        int(n_spinorb), int(det_arr.size),
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        cap, ffi.cast("double *", out.ctypes.data), 0)
+    if int(info) != 0:
+        return None
+    return out
+
+
 def _bit_count(value: int) -> int:
     # Hot path: this is called hundreds of millions of times when building the
     # 3- and 4-particle RDMs, so it goes through int.bit_count where available
@@ -60,6 +111,14 @@ def make_rdm1_spinorb(
 ) -> np.ndarray:
     """Return the spin-orbital 1-RDM ``D[p,q] = <a_p^+ a_q>``."""
     coeff, dets, n_spinorb = _validate_ci_inputs(ci_vec, determinants, n_spinorb)
+
+    # Fortran engine first; the Python enumeration below stays as the
+    # numerical pin and as the fallback for complex CI vectors / no backend.
+    if not np.iscomplexobj(coeff):
+        lib_result = _lib_rdm1(coeff, dets, n_spinorb)
+        if lib_result is not None:
+            return _finalize(lib_result)
+
     det_index = _determinant_index(dets)
     dtype = np.result_type(coeff.dtype, np.float64)
     rdm1 = np.zeros((n_spinorb, n_spinorb), dtype=dtype)
@@ -106,6 +165,14 @@ def make_rdm2_spinorb(
     ndet * nelec^2 cheap insertions here.
     """
     coeff, dets, n_spinorb = _validate_ci_inputs(ci_vec, determinants, n_spinorb)
+
+    # Fortran engine first; the NumPy factorisation below is the same algorithm
+    # and stays as the numerical pin / complex-CI fallback.
+    if not np.iscomplexobj(coeff):
+        lib_result = _lib_rdm2(coeff, dets, n_spinorb)
+        if lib_result is not None:
+            return _finalize(lib_result)
+
     dtype = np.result_type(coeff.dtype, np.float64)
     npair = n_spinorb * n_spinorb
 

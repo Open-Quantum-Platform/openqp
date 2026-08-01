@@ -253,6 +253,13 @@ void fci_hamiltonian_diag(int32_t nspin, int64_t ndet, const int64_t *dets,
 int64_t fci_hamiltonian_matvec(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *hspin, const double *gspin, double cutoff, int32_t nvec,
     const double *x, double *y, int32_t nthreads);
+/* Spin-orbital determinant RDMs (rdm_kernel.F90). rdm2_spinorb returns 0 on
+ * success and -1 when `cap` was too small for the reachable intermediates,
+ * in which case the caller falls back to the Python enumeration. */
+void rdm1_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
+    const double *civec, double *d1);
+int64_t rdm2_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
+    const double *civec, int64_t cap, double *d2, int32_t nthreads);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

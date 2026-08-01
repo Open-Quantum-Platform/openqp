@@ -50,12 +50,13 @@ _CAS22 = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1", "
 # reference it starts from is BLAS/build dependent.  A real convergence
 # regression moves the count by far more than one step.
 _DEFAULT_BASELINE = {
-    # h2o was 20 macroiterations while the spin-orbital 2-RDM was accumulated
-    # by the nested create/annihilate walk.  Factorising it through the
-    # doubly-annihilated intermediate space (one GEMM) changes only the
-    # summation order, but the better-conditioned accumulation reaches the same
-    # energy -- pinned below to 1e-8, and still matching PySCF -- in 15.
-    "h2o": (-75.0085688882, 15),
+    # The macroiteration count is accumulation-order sensitive: three
+    # mathematically equivalent 2-RDM implementations reached this identical
+    # energy in 20 (nested Python create/annihilate), 15 (NumPy Gram matrix)
+    # and 20 (the Fortran rdm_kernel DGEMM, which is the production path)
+    # steps.  The energy is the real invariant and is pinned to 1e-8 below;
+    # the count is kept only as a coarse change detector.
+    "h2o": (-75.0085688882, 20),
     "h4": (-2.1153228671, 3),
     "lih": (-7.7983384275, 7),
 }
