@@ -22,8 +22,9 @@ def test_wpair_restricts_products_to_the_nonzero_iatogen_blocks():
     body = _body(GRADIENT.read_text(), "mrsf_nac_wpair_impl")
     assert "fb(1,nocb+1)" in body
     assert "gamma_b(nocb+1,nocb+1)" in body
-    assert "g(1,nocc_b+1)" in body
-    assert "v(1,nocc_b+1)" in body
+    assert "g(:,nocc_b+1:n)" in body
+    assert "v(:,nocc_b+1:n)" in body
+    assert "hb(:,nocc_b+1:n)" in body
     assert "hx_tmp(nbf,nbf), hx_g(nbf,nbf), hx_f7(nbf,nbf)" in body
     assert "allocate(tmp(n,n)" not in body
 
