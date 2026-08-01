@@ -33,17 +33,54 @@ module fci_hamiltonian_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
+  !> Sort-once reuse for an in-process driver (fci_driver.F90).  The bind(C)
+  !> entry points below re-sort the determinant keys on every call, which is
+  !> correct for a Python caller that hands over a fresh list each time but is
+  !> pure waste inside a Davidson loop that applies H twenty times to the same
+  !> determinant space.  These expose the same kernels with the sort hoisted
+  !> out; the bind(C) wrappers are thin shells over them, so both callers run
+  !> byte-for-byte the same enumeration.
+  public :: fci_sort_dets, fci_dense_build, fci_diag_build, fci_matvec_apply
+  public :: oqp_dsyevd_f
+
 contains
 
-  function oqp_dsyevd(n, a, w) result(info) bind(C, name="oqp_dsyevd")
+  !> Dense symmetric eigensolve for an in-process Fortran caller (the bind(C)
+  !> `oqp_dsyevd` is a shell over this).
+  subroutine oqp_dsyevd_f(n, a, w, info)
     use eigen, only: diag_symm_full
+    integer, intent(in) :: n
+    real(dp), intent(inout) :: a(*)
+    real(dp), intent(out) :: w(*)
+    integer, intent(out) :: info
+    info = 0
+    call diag_symm_full(1, n, a, n, w, info)
+  end subroutine oqp_dsyevd_f
+
+  !> Sort the CI-ordered determinant list into ascending keys, carrying a
+  !> permutation back to the CI position.  `skeys(k)` is the k-th smallest key
+  !> and `sperm(k)` its CI row.
+  subroutine fci_sort_dets(ndet, dets, skeys, sperm)
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(ndet)
+    integer(i8), intent(out) :: skeys(ndet), sperm(ndet)
+    integer(i8) :: col
+    do col = 1, ndet
+      sperm(col) = col
+    end do
+    call sort_keys(ndet, dets, sperm)
+    do col = 1, ndet
+      skeys(col) = dets(sperm(col))
+    end do
+  end subroutine fci_sort_dets
+
+  function oqp_dsyevd(n, a, w) result(info) bind(C, name="oqp_dsyevd")
     integer(c_int32_t), value :: n
     real(dp), intent(inout) :: a(*)
     real(dp), intent(out) :: w(*)
     integer(i8) :: info
     integer :: ierr
-    ierr = 0
-    call diag_symm_full(1, int(n), a, int(n), w, ierr)
+    call oqp_dsyevd_f(int(n), a, w, ierr)
     info = int(ierr, i8)
   end function oqp_dsyevd
 
@@ -243,26 +280,37 @@ contains
     real(dp), intent(inout) :: hmat(*)
 
     integer(i8), allocatable :: skeys(:), sperm(:)
+
+    allocate(skeys(ndet), sperm(ndet))
+    call fci_sort_dets(ndet, dets(1:ndet), skeys, sperm)
+    call fci_dense_build(int(nspin), ndet, dets, skeys, sperm, hspin, gspin, &
+                         cutoff, hmat, int(nthreads))
+    deallocate(skeys, sperm)
+  end subroutine fci_dense_hamiltonian
+
+  !> Dense determinant Hamiltonian from a determinant list already sorted by
+  !> `fci_sort_dets`.  `hmat` is [ndet,ndet]; the result is symmetric so its
+  !> C-order and column-major views coincide.
+  subroutine fci_dense_build(nspin, ndet, dets, skeys, sperm, hspin, gspin, &
+                             cutoff, hmat, nthreads)
+    integer, intent(in) :: nspin, nthreads
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*), skeys(ndet), sperm(ndet)
+    real(dp), intent(in) :: hspin(*), gspin(*)
+    real(dp), intent(in) :: cutoff
+    real(dp), intent(inout) :: hmat(*)
+
     integer(i8) :: col, i, j
-    integer :: nthr, ns
+    integer :: nthr
     real(dp) :: dummy(1)
 
-    ns = int(nspin)
-    allocate(skeys(ndet), sperm(ndet))
-    do col = 1, ndet
-      sperm(col) = col
-    end do
-    call sort_keys(ndet, dets(1:ndet), sperm)
-    do col = 1, ndet
-      skeys(col) = dets(sperm(col))
-    end do
-
-    nthr = max(1, int(nthreads))   ! explicit request wins over the ambient
+    hmat(1:ndet * ndet) = 0.0_dp
+    nthr = max(1, nthreads)        ! explicit request wins over the ambient
                                    ! (BLAS-clamped) OMP default
 
     !$omp parallel do num_threads(nthr) schedule(dynamic, 16) default(shared) private(col)
     do col = 1, ndet
-      call walk_column(col, ns, ndet, dets, skeys, sperm, hspin, gspin, &
+      call walk_column(col, nspin, ndet, dets, skeys, sperm, hspin, gspin, &
                        cutoff, hmat((col - 1) * ndet + 1), .true., &
                        dummy, dummy, 0, dummy, 0_i8)
     end do
@@ -276,8 +324,7 @@ contains
         hmat((i - 1) * ndet + j) = hmat((j - 1) * ndet + i)
       end do
     end do
-    deallocate(skeys, sperm)
-  end subroutine fci_dense_hamiltonian
+  end subroutine fci_dense_build
 
   !----------------------------------------------------------- diagonal
   subroutine fci_hamiltonian_diag(nspin, ndet, dets, hspin, gspin, diag) &
@@ -287,11 +334,21 @@ contains
     integer(i8), intent(in) :: dets(*)
     real(dp), intent(in) :: hspin(*), gspin(*)
     real(dp), intent(out) :: diag(*)
+    call fci_diag_build(int(nspin), ndet, dets, hspin, gspin, diag)
+  end subroutine fci_hamiltonian_diag
+
+  !> <D|H|D> over the determinant list -- the Davidson preconditioner.
+  subroutine fci_diag_build(nspin, ndet, dets, hspin, gspin, diag)
+    integer, intent(in) :: nspin
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*)
+    real(dp), intent(in) :: hspin(*), gspin(*)
+    real(dp), intent(out) :: diag(*)
     integer(i8) :: col
-    integer :: occ(int(nspin)), nocc, p, io, jo, ns
+    integer :: occ(nspin), nocc, p, io, jo, ns
     integer(i8) :: det
     real(dp) :: e
-    ns = int(nspin)
+    ns = nspin
     do col = 1, ndet
       det = dets(col)
       nocc = 0
@@ -316,7 +373,7 @@ contains
       end do
       diag(col) = e
     end do
-  end subroutine fci_hamiltonian_diag
+  end subroutine fci_diag_build
 
   !----------------------------------------------------------- matvec block
   function fci_hamiltonian_matvec(nspin, ndet, dets, hspin, gspin, cutoff, &
@@ -332,24 +389,36 @@ contains
     integer(i8) :: status
 
     integer(i8), allocatable :: skeys(:), sperm(:)
+
+    allocate(skeys(ndet), sperm(ndet))
+    call fci_sort_dets(ndet, dets(1:ndet), skeys, sperm)
+    call fci_matvec_apply(int(nspin), ndet, dets, skeys, sperm, hspin, gspin, &
+                          cutoff, int(nvec), x, y, int(nthreads))
+    deallocate(skeys, sperm)
+    status = 0_i8
+  end function fci_hamiltonian_matvec
+
+  !> Matrix-free block application Y = 0.5(H+H^T) X from a pre-sorted
+  !> determinant list.  X and Y are C-order [ndet, nvec].
+  subroutine fci_matvec_apply(nspin, ndet, dets, skeys, sperm, hspin, gspin, &
+                              cutoff, nvec, x, y, nthreads)
+    integer, intent(in) :: nspin, nvec, nthreads
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*), skeys(ndet), sperm(ndet)
+    real(dp), intent(in) :: hspin(*), gspin(*)
+    real(dp), intent(in) :: cutoff
+    real(dp), intent(in) :: x(*)
+    real(dp), intent(inout) :: y(*)
+
     real(dp), allocatable :: yloc(:)
-    real(dp) :: xrow(int(nvec))
+    real(dp) :: xrow(nvec)
     integer(i8) :: col, i
     integer :: nthr, ns, k
     real(dp) :: dummy(1)
 
-    ns = int(nspin)
-    allocate(skeys(ndet), sperm(ndet))
-    do col = 1, ndet
-      sperm(col) = col
-    end do
-    call sort_keys(ndet, dets(1:ndet), sperm)
-    do col = 1, ndet
-      skeys(col) = dets(sperm(col))
-    end do
-
+    ns = nspin
     y(1:ndet * nvec) = 0.0_dp
-    nthr = max(1, int(nthreads))   ! explicit request wins over the ambient
+    nthr = max(1, nthreads)        ! explicit request wins over the ambient
                                    ! (BLAS-clamped) OMP default
 
     !$omp parallel num_threads(nthr) default(shared) private(yloc, xrow, col, i, k)
@@ -372,9 +441,6 @@ contains
     !$omp end critical (fci_matvec_merge)
     deallocate(yloc)
     !$omp end parallel
-
-    deallocate(skeys, sperm)
-    status = 0_i8
-  end function fci_hamiltonian_matvec
+  end subroutine fci_matvec_apply
 
 end module fci_hamiltonian_mod

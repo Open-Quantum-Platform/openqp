@@ -277,6 +277,63 @@ void fci_hamiltonian_diag(int32_t nspin, int64_t ndet, const int64_t *dets,
 int64_t fci_hamiltonian_matvec(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *hspin, const double *gspin, double cutoff, int32_t nvec,
     const double *x, double *y, int32_t nthreads);
+/* ------------------------------------------------------------------------
+ * One entry point for a complete CI solve (fci_driver.F90).
+ *
+ * Runs active-space setup, the frozen-core fold, the spin-orbital expansion,
+ * determinant generation, the dense/Davidson dispatch, the Davidson iteration,
+ * the spin diagnostics and root selection without returning to the caller --
+ * the kernels above are what it is built from, and remain callable on their
+ * own for the tests that pin them.
+ *
+ * Handle-free by design (like qdpt2_stream_kernel): the dominant caller is the
+ * CASSCF microiteration, whose MO integrals are a line-search trial point that
+ * does not live in the handle, and the eventual casscf_energy(inf) is itself
+ * Fortran holding h1e/eri in local arrays.
+ *
+ * `h1e`/`eri` are the FULL MO-basis integrals over iopt[FCI_I_NORB] orbitals,
+ * C-order; `active`/`core` are 0-based MO indices (pass a one-element dummy for
+ * `core` when ncore == 0).  `energies` and `s2` hold nroot entries, `civecs` is
+ * C-order [ndet, nroot] so root k is civecs[:, k].  `s2` is written only when
+ * iopt[FCI_I_WANT_S2] is set.
+ *
+ * Returns the number of roots written (== nroot), or a negative status.  Every
+ * negative value means "could not do it here"; the caller falls back to the
+ * Python solve_fci, which remains the numerical pin and owns all user-facing
+ * validation and error messages.
+ *
+ * OPTION SCHEMA -- authoritative copy is the parameter block in
+ * source/modules/fci_driver.F90; pyoqp/oqp/library/fci.py mirrors it and
+ * tests/test_fci_solve.py checks that the mirror is exact.  Only what the
+ * compute path reads is packed here: the ~111 [cas]/[ci]/[casscf] keys are
+ * Python-side sections with no representation in source/types.F90, and they do
+ * not belong on the shared control_parameters struct. */
+enum {
+  FCI_I_NORB      = 0,  /* MOs spanned by h1e/eri                         */
+  FCI_I_NACT      = 1,  /* active orbitals                                */
+  FCI_I_NCORE     = 2,  /* frozen doubly-occupied orbitals                */
+  FCI_I_NALPHA    = 3,  /* active alpha electrons                         */
+  FCI_I_NBETA     = 4,  /* active beta electrons                          */
+  FCI_I_NROOT     = 5,  /* roots requested and returned                   */
+  FCI_I_SOLVER    = 6,  /* 0 auto, 1 dense, 2 davidson                    */
+  FCI_I_MAXITER   = 7,  /* Davidson iteration cap                         */
+  FCI_I_SUBSPACE  = 8,  /* Davidson subspace cap, 0 = auto                */
+  FCI_I_MULT      = 9,  /* target spin multiplicity, 0 = any              */
+  FCI_I_MAXMEMORY = 10, /* working-set budget, MiB                        */
+  FCI_I_NTHREADS  = 11, /* OpenMP threads for the kernels                 */
+  FCI_I_WANT_S2   = 12, /* 1 = also return <S^2> per returned root        */
+  FCI_NIOPT       = 13
+};
+enum {
+  FCI_D_ECORE     = 0,  /* scalar added to every returned root            */
+  FCI_D_EIG_TOL   = 1,  /* eigenpair residual tolerance                   */
+  FCI_D_CUTOFF    = 2,  /* integral screening cutoff                      */
+  FCI_NDOPT       = 3
+};
+int64_t fci_solve(const int32_t *iopt, const double *dopt,
+    const int32_t *active, const int32_t *core,
+    const double *h1e, const double *eri,
+    double *energies, double *civecs, double *s2);
 /* Spin-orbital determinant RDMs (rdm_kernel.F90). rdm2_spinorb returns 0 on
  * success and -1 when `cap` was too small for the reachable intermediates,
  * in which case the caller falls back to the Python enumeration. */

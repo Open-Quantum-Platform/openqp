@@ -51,8 +51,9 @@ from oqp.utils.file_utils import print_module_banner
 
 import oqp
 from oqp.library.fci import (
-    _active_space,
     _determinants,
+    active_space_plan,
+    solve_active_ci,
     _transform_integrals,
     _unpack_lower_triangle,
     fci_spin_diagnostics,
@@ -329,16 +330,18 @@ def _solve_active_rdms(h1e, eri, ncore, nact, active_nelec, enuc, settings,
     nbf^4 ``G`` entirely (it returns ``None``), which is what the Fortran
     Fock/gradient engine wants -- it rebuilds the separable part of G on the
     fly from the active RDMs instead of being handed it."""
-    h_act, eri_act, _nelec, ecore, _meta = _active_space(
-        h1e, eri, (ncore + active_nelec[0], ncore + active_nelec[1]), enuc, settings
+    plan = active_space_plan(
+        h1e.shape[0], (ncore + active_nelec[0], ncore + active_nelec[1]), settings
     )
     nroot = max(1, int(max(roots)) + 1)
-    energies, coeffs = solve_fci(
-        h_act, eri_act, active_nelec,
-        ecore=ecore, nroot=nroot, max_det=settings.max_det,
-        max_memory=settings.max_memory, eig_tol=settings.eig_tol,
-        solver=settings.solver, davidson_maxiter=settings.davidson_maxiter,
-        davidson_subspace=settings.davidson_subspace, target_spin=settings.target_spin,
+    # One crossing for the whole CI solve.  The Python driver used to run the
+    # frozen-core fold, the active gather, the spin-orbital expansion, every
+    # Davidson application and the root selection as separate calls -- hundreds
+    # of crossings per macroiteration, and this is the innermost thing CASSCF
+    # does.  solve_active_ci falls back to that driver when the engine declines.
+    energies, coeffs, _s2 = solve_active_ci(
+        h1e, eri, plan, enuc, settings,
+        nroot=nroot, want_s2=False, use_target_spin=True,
         active_section="[cas]", ci_section="[ci]",
     )
     dets = _determinants(nact, active_nelec)

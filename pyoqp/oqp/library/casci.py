@@ -17,7 +17,8 @@ import oqp
 from oqp.library.cas_orbitals import load_cas_mo_coeff
 from oqp.library.fci import (
     FCI,
-    _active_space,
+    active_space_plan,
+    apply_active_space,
     _integer_vector,
     _real_array,
     _save_npz_artifact,
@@ -99,19 +100,15 @@ class CASCI(FCI):
         h1e, eri = _transform_integrals(hcore, eri_ao, coeff)
         nelec = (int(self.mol.data["nelec_A"]), int(self.mol.data["nelec_B"]))
         ecore = float(self.mol.mol_energy.nenergy)
-        h_active, eri_active, active_nelec, ecore_active, metadata = _active_space(
-            h1e,
-            eri,
-            nelec,
-            ecore,
-            self.settings,
-        )
+        plan = active_space_plan(h1e.shape[0], nelec, self.settings)
+        metadata = dict(plan.metadata)
         metadata["orbital_source"] = source_label
-        active_indices = tuple(
-            int(token) - 1
-            for token in str(metadata["active_orbital_indices"]).split(",")
-            if token
-        )
+        # The CI solve itself takes the FULL MO integrals and does its own
+        # gather/fold natively; the active tensors are still built here, once,
+        # for the dependent-state trial payload below.
+        h_active, eri_active, active_nelec, ecore_active = apply_active_space(
+            h1e, eri, plan, ecore)
+        active_indices = plan.active
         if len(active_indices) != h_active.shape[0]:
             raise ValueError("active orbital metadata is inconsistent with active integral shape")
         bare_active_h1e = h1e[np.ix_(active_indices, active_indices)]
@@ -125,7 +122,7 @@ class CASCI(FCI):
             "metadata": dict(metadata),
             "mo_coeff": _casscf_real_contiguous_copy(coeff),
         }
-        return h_active, eri_active, active_nelec, ecore_active, metadata
+        return h1e, eri, plan, ecore, metadata
 
     def _store_native_dependent_state_trial_tensors(self):
         state = self._native_dependent_state_trial
