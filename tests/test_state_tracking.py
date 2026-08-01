@@ -10,6 +10,7 @@ oqp = pytest.importorskip("oqp")
 
 from oqp.library.state_tracking import maximum_overlap_assignment
 from oqp.library import single_point
+from oqp.molecule.molecule import Molecule
 
 
 def test_global_assignment_beats_row_greedy_counterexample():
@@ -133,3 +134,35 @@ def test_initial_gauge_sign_is_not_double_counted_across_json_restart(monkeypatc
     assert data["OQP::state_tracking_phase_initial"].tolist() == [1.0, -1.0, 1.0]
     assert data["OQP::state_tracking_previous_phase_initial"].tolist() == [-1.0, 1.0, -1.0]
     assert np.allclose(data["OQP::td_bvec_mo"], np.eye(3))
+
+
+def test_public_tracking_contract_is_available_to_memory_drivers():
+    class DummyMol:
+        data = {
+            "OQP::state_tracking_order": np.array([1, 0]),
+            "OQP::state_tracking_raw_order": np.array([1, 0]),
+            "OQP::state_tracking_output_reordered": np.array([0]),
+            "OQP::state_tracking_lineage": np.array([7, 4]),
+            "OQP::state_tracking_phase_step": np.array([-1.0, 1.0]),
+            "OQP::state_tracking_phase_initial": np.array([-1.0, -1.0]),
+            "OQP::state_tracking_previous_phase_initial": np.array([1.0, -1.0]),
+            "OQP::state_tracking_overlap": np.array([0.98, 0.97]),
+            "OQP::state_tracking_margin": np.array([0.90, 0.88]),
+        }
+
+    tracking = Molecule.get_state_tracking(DummyMol())
+
+    assert tracking == {
+        "schema_version": 1,
+        "index_base": 0,
+        "order_semantics": "current_root_to_previous_root",
+        "order": [1, 0],
+        "raw_order": [1, 0],
+        "output_reordered": False,
+        "lineage": [7, 4],
+        "phase_step": [-1.0, 1.0],
+        "phase_initial": [-1.0, -1.0],
+        "previous_phase_initial": [1.0, -1.0],
+        "matched_overlap": [0.98, 0.97],
+        "margin": [0.90, 0.88],
+    }

@@ -1399,6 +1399,14 @@ class Molecule:
         data['hess'] = np.array(self.get_hess()).tolist()
         data.update(self.get_mrsf_ekt_results())
 
+        # Keep the programmatic API and the on-disk JSON on the same public
+        # state-tracking contract.  External dynamics drivers (notably
+        # PyRAI2MD) must be able to tell that root/phase transport has already
+        # been applied without depending on the chosen I/O mode.
+        state_tracking = self.get_state_tracking()
+        if state_tracking is not None:
+            data['state_tracking'] = state_tracking
+
         # OpenQP-DFTB backend results.  The DFTB adapter is pure Python, so
         # liboqp's mol_energy struct (the 'energy' scalar above) is never
         # populated on this path; surface the adapter results explicitly:
@@ -1420,6 +1428,44 @@ class Molecule:
                     data[key] = value
 
         return data
+
+    def get_state_tracking(self):
+        """Return the JSON-safe public root/phase transport record, if any."""
+        try:
+            return {
+                'schema_version': 1,
+                'index_base': 0,
+                'order_semantics': 'current_root_to_previous_root',
+                'order': np.asarray(
+                    self.data['OQP::state_tracking_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'raw_order': np.asarray(
+                    self.data['OQP::state_tracking_raw_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'output_reordered': bool(np.asarray(
+                    self.data['OQP::state_tracking_output_reordered'], dtype=int
+                ).reshape(-1)[0]),
+                'lineage': np.asarray(
+                    self.data['OQP::state_tracking_lineage'], dtype=int
+                ).reshape(-1).tolist(),
+                'phase_step': np.asarray(
+                    self.data['OQP::state_tracking_phase_step'], dtype=float
+                ).reshape(-1).tolist(),
+                'phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'previous_phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_previous_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'matched_overlap': np.asarray(
+                    self.data['OQP::state_tracking_overlap'], dtype=float
+                ).reshape(-1).tolist(),
+                'margin': np.asarray(
+                    self.data['OQP::state_tracking_margin'], dtype=float
+                ).reshape(-1).tolist(),
+            }
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+            return None
 
     @mpi_get_attr
     def get_coord(self, coordinates):
@@ -1628,45 +1674,6 @@ class Molecule:
         data = {key: json_array(key, value) for key, value in data.items()}
         data.update(self.get_results())
         data.update(self.set_config_json())
-
-        # Stable, public JSON contract for external dynamics drivers such as
-        # PyRAI2MD.  The OQP:: arrays above remain the restart source of truth;
-        # this summary makes index and phase semantics explicit to consumers.
-        try:
-            data['state_tracking'] = {
-                'schema_version': 1,
-                'index_base': 0,
-                'order_semantics': 'current_root_to_previous_root',
-                'order': np.asarray(
-                    self.data['OQP::state_tracking_order'], dtype=int
-                ).reshape(-1).tolist(),
-                'raw_order': np.asarray(
-                    self.data['OQP::state_tracking_raw_order'], dtype=int
-                ).reshape(-1).tolist(),
-                'output_reordered': bool(np.asarray(
-                    self.data['OQP::state_tracking_output_reordered'], dtype=int
-                ).reshape(-1)[0]),
-                'lineage': np.asarray(
-                    self.data['OQP::state_tracking_lineage'], dtype=int
-                ).reshape(-1).tolist(),
-                'phase_step': np.asarray(
-                    self.data['OQP::state_tracking_phase_step'], dtype=float
-                ).reshape(-1).tolist(),
-                'phase_initial': np.asarray(
-                    self.data['OQP::state_tracking_phase_initial'], dtype=float
-                ).reshape(-1).tolist(),
-                'previous_phase_initial': np.asarray(
-                    self.data['OQP::state_tracking_previous_phase_initial'], dtype=float
-                ).reshape(-1).tolist(),
-                'matched_overlap': np.asarray(
-                    self.data['OQP::state_tracking_overlap'], dtype=float
-                ).reshape(-1).tolist(),
-                'margin': np.asarray(
-                    self.data['OQP::state_tracking_margin'], dtype=float
-                ).reshape(-1).tolist(),
-            }
-        except (AttributeError, KeyError, TypeError, ValueError):
-            pass
 
         if lean is None:
             lean = _env_wants_lean_json()
