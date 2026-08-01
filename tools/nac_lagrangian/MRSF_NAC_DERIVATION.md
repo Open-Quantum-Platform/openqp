@@ -1435,3 +1435,18 @@ build u from the RAW PRODUCT C0^T S_cross_record C0 (bypassing the
 routine's Sk output), i.e., compute Sk in numpy from overlap_ao --
 one-line change in every sweep/probe -- then re-run v7j/J1: expected
 theory-level closure. THE CAMPAIGN'S LAST STEP IS A ONE-LINE FIX.
+
+### 7.50 *** THE ONE-LINE FIX CLOSES THE U-CHANNEL *** (v17)
+With Sk built as the RAW PRODUCT C0^T S_cross_record C0 (bypassing the
+routine's second-call output):
+  M1 reconstruction: 9.1e-7 (h) -> 2.3e-7 (h/2)  [pure O(h^2): exact]
+  M2 |lhs - staged|: 0.00040 -> 0.00020          [collapsed 50x from
+     0.0195; clean O(h) = the benign mixed truncation term]
+THE ENTIRE "invariant residual" chased through 7.31-7.49 was the Sk
+record's diagonal. The U-channel is CLOSED to FD-truncation level.
+v18 (v7j + the fix in the sweeps) is running as the full re-judge:
+expected theory-level J1/J3 closure on the complete assembly. The fix
+must be propagated to every sweep-based referee (A8-lineage, v3-v15)
+and noted as a LANDMINE: "OQP::overlap_mo_non_orthogonal" from a
+second same-geometry call is NOT C0^T S_cross C0 on the diagonal --
+always rebuild Sk from OQP::overlap_ao_non_orthogonal directly.
