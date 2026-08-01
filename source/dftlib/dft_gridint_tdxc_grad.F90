@@ -39,7 +39,7 @@ module mod_dft_gridint_tdxc_grad
     real(kind=fp), allocatable :: grad_p(:,:,:,:,:) !< diff. density gradient
     real(kind=fp), allocatable :: grad_x(:,:,:,:,:) !< transition (X+Y) gradient
 !   Temporary storage
-    real(kind=fp), allocatable :: tmpGrad_(:,:,:)
+    real(kind=fp), allocatable :: tmpGrad_(:,:,:,:)
     real(kind=fp), allocatable :: tmp_(:,:,:,:)
     real(kind=fp), allocatable :: tmpV_(:,:,:)
     real(kind=fp), allocatable :: tmpG1_(:,:,:)
@@ -89,7 +89,7 @@ contains
       , self%grad_d(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
       , self%grad_p(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
 !   Temporary storage
-      , self%tmpGrad_(xce%numAOs*3, self%nMtx, nthreads) &
+      , self%tmpGrad_(xce%numAOs, 3, self%nMtx, nthreads) &
       , self%tmp_(xce%numAOs * xce%numAOs * self%nMtx, nspin, nDeriv, nthreads) &
       , self%tmpV_(xce%numAOs * xce%maxPts * self%nMtx * nspin, nDeriv, nthreads) &
       , self%tmpG1_(xce%numAOs * xce%maxPts * 3 * self%nMtx * nspin, nDeriv, nthreads) &
@@ -206,8 +206,7 @@ contains
               , nMtx   => self%nMtx &
       )
 
-      tmpGrad(1:numAOs,1:3,1:nMtx) => &
-        self%tmpGrad_(1:numAOs*3,1:nMtx,myThread)
+      tmpGrad => self%tmpGrad_(:,:,:,myThread)
 
       if (present(tmpV)) &
         tmpV(1:numAOs, 1:numPts, 1:nMtx, 1:nSpin, 1:1) => &
