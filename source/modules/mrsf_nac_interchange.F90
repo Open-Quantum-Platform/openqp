@@ -976,12 +976,12 @@ contains
     use basis_tools, only: basis_set
     use oqp_tagarray_driver, only: tagarray_get_data, &
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, TA_TYPE_REAL64
-    use mathlib, only: unpack_matrix, pack_matrix
+    use mathlib, only: unpack_matrix
     use cphf_mod, only: rohf_unpack_trial
     use dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
-    use scf_addons, only: fock_jk, get_response_packed
+    use mod_dft_gridint_fxc, only: utddft_fxc
     use grd1, only: der_overlap_matrix
     use messages, only: show_message, WITH_ABORT
 
@@ -999,11 +999,10 @@ contains
     real(kind=dp), allocatable :: pa(:,:), pb(:,:), pza(:,:), pzb(:,:)
     real(kind=dp), allocatable :: xa(:,:), xb(:,:), work(:,:), half(:,:)
     real(kind=dp), allocatable :: xcd(:,:,:), xcp(:,:,:), gxc(:,:)
-    real(kind=dp), allocatable :: dmz(:,:), vz(:,:), vjkz(:,:)
     real(kind=dp), allocatable :: vxcza(:,:), vxczb(:,:), vxcmoa(:,:), vxcmob(:,:)
-    real(kind=dp), allocatable :: mo_a_work(:,:), mo_b_work(:,:), dsa(:,:,:,:)
-    real(kind=dp) :: scale_exch, reorth
-    integer :: nbf, nbf2, natom, nocca, noccb, nvira, nvirb, offset, ltot
+    real(kind=dp), allocatable :: fxca(:,:,:), fxcb(:,:,:), dsa(:,:,:,:)
+    real(kind=dp) :: reorth
+    integer :: nbf, natom, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: atom, cart, i, j, mu, nu
 
     if (infos%control%scftype /= 3) then
@@ -1014,7 +1013,6 @@ contains
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = basis%nbf
-    nbf2 = nbf*(nbf+1)/2
     natom = infos%mol_prop%natom
     nocca = infos%mol_prop%nelec_A
     noccb = infos%mol_prop%nelec_B
@@ -1087,24 +1085,28 @@ contains
       !       = -1/2 Tr[D^(R,0) f_xc[P_z]],
       !
       ! so f_xc[P_z] is built only once per adjoint pair and then contracted
-      ! with every overlap derivative.  Subtracting fock_jk leaves the XC-only
-      ! response and avoids double-counting the JK reorthonormalization term
-      ! already present in the analytic HF/JK/Pulay right-hand side.
-      allocate(dmz(nbf2,2), vz(nbf2,2), vjkz(nbf2,2), &
-               vxcza(nbf,nbf), vxczb(nbf,nbf), &
+      ! with every overlap derivative.  Evaluating the XC kernel directly
+      ! avoids double-counting the JK reorthonormalization term already present
+      ! in the analytic HF/JK/Pulay right-hand side.
+      allocate(vxcza(nbf,nbf), vxczb(nbf,nbf), &
                vxcmoa(nbf,nbf), vxcmob(nbf,nbf), &
-               mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), &
+               fxca(nbf,nbf,1), fxcb(nbf,nbf,1), &
                dsa(nbf,nbf,3,natom), source=0.0_dp)
-      call pack_matrix(pza, dmz(:,1))
-      call pack_matrix(pzb, dmz(:,2))
-      scale_exch = infos%dft%hfscale
-      call fock_jk(basis, d=dmz, f=vjkz, scale_exch=scale_exch, infos=infos)
-      mo_a_work = mo
-      mo_b_work = mo
-      call get_response_packed(basis, infos, molgrid, mo_a_work, dmz, vz, &
-                               mo_b_work)
-      call unpack_matrix(vz(:,1)-vjkz(:,1), vxcza)
-      call unpack_matrix(vz(:,2)-vjkz(:,2), vxczb)
+      ! get_response_packed forms JK[P_z] + f_xc[P_z].  The previous
+      ! implementation built JK[P_z] a second time solely to subtract it
+      ! again.  This adjoint needs only f_xc[P_z], so evaluate that linear XC
+      ! kernel directly.  Besides removing two ERI traversals, this avoids a
+      ! packed JK subtraction and its cancellation roundoff.
+      fxca = 0.0_dp
+      fxcb = 0.0_dp
+      xcp(:,:,1) = pza
+      xcp(:,:,2) = pzb
+      call utddft_fxc(basis=basis, molGrid=molgrid, isVecs=.true., &
+           wfa=mo, wfb=mo, fxa=fxca, fxb=fxcb, &
+           dxa=xcp(:,:,1:1), dxb=xcp(:,:,2:2), &
+           nMtx=1, threshold=0.0_dp, infos=infos)
+      vxcza = fxca(:,:,1)
+      vxczb = fxcb(:,:,1)
       call ao_to_mo(vxcza, vxcmoa)
       call ao_to_mo(vxczb, vxcmob)
 
@@ -1136,8 +1138,7 @@ contains
       call dftclean(infos)
 
       gxc = -0.5_dp*gxc
-      deallocate(dmz, vz, vjkz, vxcza, vxczb, vxcmoa, vxcmob, &
-                 mo_a_work, mo_b_work, dsa)
+      deallocate(vxcza, vxczb, vxcmoa, vxcmob, fxca, fxcb, dsa)
     else
       gxc = 0.0_dp
     end if

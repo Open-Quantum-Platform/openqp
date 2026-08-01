@@ -115,6 +115,15 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
         self.assertNotIn("gxc0", esum_body)
         self.assertNotIn("gxc0", adjoint_body)
 
+    def test_adjoint_builds_the_xc_kernel_without_redundant_jk_focks(self):
+        body = self.adjoint.split(
+            "subroutine mrsf_nac_xc_adjoint(infos)", 1
+        )[1].split("end subroutine mrsf_nac_xc_adjoint", 1)[0]
+        self.assertIn("call utddft_fxc(", body)
+        self.assertNotIn("call fock_jk(", body)
+        self.assertNotIn("call get_response_packed(", body)
+        self.assertNotIn("call pack_matrix(", body)
+
 
 if __name__ == "__main__":
     unittest.main()
