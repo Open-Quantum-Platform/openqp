@@ -674,6 +674,26 @@ class OpenQP:
                 basis=basis,
                 **keywords,
             )
+        if method_key in {"ccsd", "cc"}:
+            if functional not in (None, ""):
+                raise ValueError(
+                    "Coupled cluster requires an HF reference; do not pass functional.")
+            return self.ccsd(
+                reference=reference or "rhf",
+                runtype=runtype,
+                basis=basis,
+                **keywords,
+            )
+        if method_key in {"ccsd(t)", "ccsd-t", "ccsdt"}:
+            if functional not in (None, ""):
+                raise ValueError(
+                    "Coupled cluster requires an HF reference; do not pass functional.")
+            return self.ccsd_t(
+                reference=reference or "rhf",
+                runtype=runtype,
+                basis=basis,
+                **keywords,
+            )
         if method_key in {"mp2", "moller-plesset", "moller-plesset-2"}:
             if functional not in (None, ""):
                 raise ValueError("MP2 theory requires an HF reference; do not pass functional.")

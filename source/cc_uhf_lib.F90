@@ -609,7 +609,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
       t2n(i,j,a,b) = t2n(i,j,a,b) / dijab
     end do; end do; end do; end do
 
-    rms = sqrt(sum((t1n-t1)**2) + sum((t2n-t2)**2))
+    ! RMS, not the Euclidean norm: cc_lib divides by the amplitude count and
+    ! [cc] conv is documented against that meaning.  Without the division the
+    ! effective per-amplitude tolerance tightens as sqrt(namp) with system
+    ! size, so a larger open-shell job could exhaust maxit on a threshold the
+    ! closed-shell path would have called converged.
+    rms = sqrt((sum((t1n-t1)**2) + sum((t2n-t2)**2)) / real(namp, dp))
 
     ! Push (amplitude, residual) onto the DIIS subspace, oldest evicted.
     if (ndiis > 0) then

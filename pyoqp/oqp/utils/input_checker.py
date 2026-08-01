@@ -1944,6 +1944,26 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
+    # Both solvers require the amplitude RMS and the energy change to fall
+    # strictly below conv, so conv=0 (or a negative or non-finite value) can
+    # never be met: the run would burn every iteration and then abort.
+    conv = _get(config, "cc", "conv", 1e-7)
+    try:
+        conv_value = float(conv)
+        bad_conv = not math.isfinite(conv_value) or conv_value <= 0.0
+    except (TypeError, ValueError):
+        bad_conv = True
+    if bad_conv:
+        report.add(
+            "ERROR",
+            "cc.conv",
+            "The coupled-cluster convergence threshold must be a positive number.",
+            value=str(conv),
+            expected="a positive value such as 1e-7",
+            action="Set [cc] conv to a positive threshold.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
 
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))

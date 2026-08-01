@@ -186,11 +186,21 @@ contains
     if (open_shell) then
       write(iw,'(2X,A,I0)') 'CCSD(T): OpenMP threads = ', nthr
       if (pe%size > 1) then
-        write(iw,'(2X,A,I0,A)') 'CCSD(T): WARNING: the open-shell solver is not ' // &
-            'MPI-parallel; all ', int(pe%size), ' ranks repeat the same work.'
-        write(iw,'(2X,A)') 'CCSD(T): run it on one rank with more threads instead.'
+        write(iw,'(2X,A,I0,A)') 'CCSD(T): the open-shell solver is not MPI-parallel; ' // &
+            'solving on rank 0 of ', int(pe%size), ' and broadcasting the result.'
+        write(iw,'(2X,A)') 'CCSD(T): give it threads rather than ranks.'
       end if
-      call run_open_shell()
+      ! Every rank running the same solve would multiply both the peak memory
+      ! and the CPU time by the rank count for no gain -- the spin-orbital
+      ! kernels take no decomposition.  Solve once and hand the answers out.
+      if (pe%rank == 0) then
+        call run_open_shell()
+      else
+        e_ccsd = 0.0_dp; e_t = 0.0_dp; t_ccsd = 0.0_dp; t_trip = 0.0_dp
+        niter = 0
+        converged = .false.
+      end if
+      if (pe%size > 1) call bcast_open_shell_results()
     else
       write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
                                  ', OpenMP threads = ', nthr
@@ -261,6 +271,7 @@ contains
       real(kind=dp), allocatable :: fso(:,:), fov(:,:), fao(:,:), fmo_a(:,:), fmo_b(:,:), scr(:,:)
       integer, allocatable :: ord(:)
       integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
+      integer :: nocc_seen, nvir_seen
       real(kind=dp) :: so_gb, peak_gb
 
       noa = int(infos%mol_prop%nelec_a) - nfzc
@@ -326,10 +337,41 @@ contains
         eso(2*p-1) = ea_sc(nfzc+p)
         eso(2*p)   = eb_sc(nfzc+p)
       end do
-      do p = 1, nso
-        ord(p) = p
+      ! Partition by occupation first, sort by energy second.  Ordering all
+      ! spin orbitals by energy and then calling the lowest nocc_so of them
+      ! occupied assumes the two spins share an Aufbau boundary, and they need
+      ! not -- a beta virtual can lie below an alpha occupied.  Where that
+      ! happens the permutation silently exchanges an occupied orbital for a
+      ! virtual one and the whole correlation treatment is built on a different
+      ! determinant than the SCF converged.  The occupations are known here, so
+      ! they decide the partition and energy only orders within it.
+      nocc_seen = 0
+      nvir_seen = 0
+      do p = 1, nmo
+        if (p <= noa) then
+          nocc_seen = nocc_seen + 1
+          ord(nocc_seen) = 2*p-1
+        else
+          nvir_seen = nvir_seen + 1
+          ord(nocc_so+nvir_seen) = 2*p-1
+        end if
+        if (p <= nob) then
+          nocc_seen = nocc_seen + 1
+          ord(nocc_seen) = 2*p
+        else
+          nvir_seen = nvir_seen + 1
+          ord(nocc_so+nvir_seen) = 2*p
+        end if
       end do
-      do i = 1, nso-1
+
+      do i = 1, nocc_so-1
+        do j = i+1, nocc_so
+          if (eso(ord(j)) < eso(ord(i))) then
+            q = ord(i); ord(i) = ord(j); ord(j) = q
+          end if
+        end do
+      end do
+      do i = nocc_so+1, nso-1
         do j = i+1, nso
           if (eso(ord(j)) < eso(ord(i))) then
             q = ord(i); ord(i) = ord(j); ord(j) = q
@@ -390,6 +432,23 @@ contains
       deallocate(gso, eso, etmp, ord, ca_sc, cb_sc, ea_sc, eb_sc, fov)
 
     end subroutine run_open_shell
+
+    !> Hand the rank-0 solve's results to every other rank, so all ranks leave
+    !> with the same energies and the same view of whether it converged.
+    subroutine bcast_open_shell_results()
+      real(kind=dp) :: buf(4)
+      integer :: iconv(2)
+
+      buf = [e_ccsd, e_t, t_ccsd, t_trip]
+      call pe%bcast(buf, 4)
+      e_ccsd = buf(1); e_t = buf(2); t_ccsd = buf(3); t_trip = buf(4)
+
+      iconv(1) = merge(1, 0, converged)
+      iconv(2) = niter
+      call pe%bcast(iconv, 2)
+      converged = iconv(1) /= 0
+      niter = iconv(2)
+    end subroutine bcast_open_shell_results
 
 
   end subroutine ccsd_t_energy

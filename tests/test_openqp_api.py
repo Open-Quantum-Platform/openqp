@@ -1226,5 +1226,29 @@ $$$$
         job._require_mrsf_theory_for("SOC")
         job._require_mrsf_theory_for("NAMD")
 
+
+    def test_generic_theory_dispatcher_accepts_the_cc_methods(self):
+        """job.theory("ccsd") must work, not just the named job.theory.ccsd()."""
+        openqp = load_openqp_module()
+
+        for spelling, expected in (("ccsd", "ccsd"),
+                                   ("ccsd(t)", "ccsd(t)"),
+                                   ("ccsd-t", "ccsd(t)"),
+                                   ("ccsdt", "ccsd(t)")):
+            job = (
+                openqp.OpenQP(project="generic")
+                .molecule(geometry="water", basis="sto-3g")
+                .theory(spelling)
+            )
+            self.assertEqual(job.to_input_dict()["input"]["method"], expected,
+                             spelling)
+
+    def test_generic_theory_dispatcher_rejects_a_functional_for_cc(self):
+        openqp = load_openqp_module()
+
+        job = openqp.OpenQP(project="bad").molecule(geometry="water", basis="sto-3g")
+        with self.assertRaises(ValueError):
+            job.theory("ccsd(t)", functional="pbe")
+
 if __name__ == "__main__":
     unittest.main()

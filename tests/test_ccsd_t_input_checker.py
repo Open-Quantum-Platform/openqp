@@ -131,5 +131,27 @@ class TestCCSDTInputChecker(unittest.TestCase):
         self.assertTrue(report.ok, msg=report.to_text())
 
 
+    def test_cc_rejects_a_non_positive_convergence_threshold(self):
+        """conv=0 can never be met: both solvers require the amplitude RMS and
+        the energy change to fall strictly below it, so the job would burn
+        every iteration and then abort."""
+        for bad in ("0", "0.0", "-1e-7", "nonsense"):
+            config = {"input": {"method": "ccsd(t)", "functional": ""},
+                      "scf": {"type": "rhf"}, "cc": {"conv": bad}}
+            report = self._report()
+            self.checker._check_cc(config, report)
+
+            self.assertFalse(report.ok, bad)
+            self.assertIn("cc.conv", report.to_text(), bad)
+
+    def test_cc_accepts_a_positive_convergence_threshold(self):
+        config = {"input": {"method": "ccsd(t)", "functional": ""},
+                  "scf": {"type": "rhf"}, "cc": {"conv": "1e-8"}}
+        report = self._report()
+        self.checker._check_cc(config, report)
+
+        self.assertTrue(report.ok)
+
+
 if __name__ == "__main__":
     unittest.main()
