@@ -40,10 +40,32 @@ class MoldenWriter:
                   4: [4, 5, 3, 6, 2, 7, 1, 8, 0],
                   }
     SHELL_TYPES = 'spdfg'
+
+    #: Highest angular momentum the Molden format can carry.
+    #:
+    #: The [GTO] section defines shell labels only up to g, and the Cartesian
+    #: and spherical reorderings above are tabulated to l=4 for the same
+    #: reason. An h shell therefore has neither a label Molden can read nor a
+    #: reordering to write it with -- emitting one would permute the MO
+    #: coefficients silently, which is worse than not writing the file. Basis
+    #: sets that reach h include cc-pV5Z and larger.
+    MAX_ANG = 4
     NORMS = np.sqrt(np.pi * np.sqrt(np.pi) * np.array([1.0, 0.5, 0.75, 1.875, 6.5625, 29.53125, 162.421875]))
 
     NBFS = list(int((x + 1) * (x + 2) / 2) for x in range(5))
     SPH_NBFS = list(2 * x + 1 for x in range(5))
+
+    @staticmethod
+    def max_angular_momentum(basis):
+        """Highest angular momentum present in `basis`, or 0 if it is empty."""
+        angs = basis['angs']
+        return int(max(angs)) if len(angs) else 0
+
+    @classmethod
+    def unsupported_angular_momentum(cls, basis):
+        """The offending l if `basis` cannot be represented, else None."""
+        lmax = cls.max_angular_momentum(basis)
+        return lmax if lmax > cls.MAX_ANG else None
 
     @staticmethod
     def _is_spherical(basis):
@@ -95,6 +117,13 @@ class MoldenWriter:
         molden_bas = tuple([] for _ in range(num_atoms))
         id_prim0 = 0
         for (sh_at, sh_ang, sh_nc) in zip(basis['centers'], basis['angs'], basis['ncontr']):
+            if sh_ang > MoldenWriter.MAX_ANG:
+                # Reached only if a caller skipped the up-front check; better a
+                # named error here than an IndexError from SHELL_TYPES.
+                raise ValueError(
+                    'Molden format supports up to %s shells (l=%d); this basis '
+                    'has l=%d.' % (MoldenWriter.SHELL_TYPES[-1],
+                                   MoldenWriter.MAX_ANG, sh_ang))
             molden_bas[sh_at].append({
                 'typ': MoldenWriter.SHELL_TYPES[sh_ang],
                 'ang': sh_ang,

@@ -1515,10 +1515,28 @@ class Molecule:
 
     @mpi_dump
     def write_molden(self, filename):
-        """Write calculation results in Molden format"""
+        """Write calculation results in Molden format.
+
+        Returns True if a file was written. Basis sets with shells beyond g
+        cannot be expressed in the Molden format, so those are skipped with a
+        warning rather than aborting the calculation -- the orbitals are a
+        by-product, and losing them should not lose the energy too.
+        """
+
+        basis = self.data.get_basis()
+        bad_l = MoldenWriter.unsupported_angular_momentum(basis)
+        if bad_l is not None:
+            warnings.warn(
+                'Skipping Molden output for %s: the Molden format defines '
+                'shells only up to %s (l=%d) and this basis contains l=%d. '
+                'The calculation itself is unaffected; set [scf] save_molden='
+                'false to silence this.'
+                % (filename, MoldenWriter.SHELL_TYPES[-1],
+                   MoldenWriter.MAX_ANG, bad_l)
+            )
+            return False
 
         with open(filename, mode='w', encoding='ascii') as fout:
-            basis = self.data.get_basis()
             nat = self.data['natom']
             nbf = basis['nbf']
             mdw = MoldenWriter(fout)
@@ -1549,6 +1567,8 @@ class Molecule:
                 occupancies = (1.0 if i < nocc else 0.0 for i in range(nbf))
                 mdw.write_mo(basis, orbitals, eorbitals,
                              occupancies, spin='Beta', header=False)
+
+        return True
 
     def set_log(self):
         """
