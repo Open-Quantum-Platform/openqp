@@ -89,6 +89,34 @@ def _build_Epq_operators(det_list, det_index, norb):
     }
 
 
+
+def _lib_make_rdms(ci, norb, det_list, upto):
+    """dm1..dm_upto through the Fortran engine, or None when unavailable."""
+    try:
+        from oqp.library.fci import _lib_backend
+    except Exception:
+        return None
+    backend = _lib_backend()
+    if backend is None or norb > 31:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "nevpt2_make_rdms"):
+        return None
+    dets = np.ascontiguousarray(np.asarray(det_list, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(ci, dtype=np.float64).reshape(-1))
+    out = []
+    for n in range(1, 5):
+        out.append(np.zeros((norb,) * (2 * n), dtype=np.float64)
+                   if n <= upto else np.zeros(1, dtype=np.float64))
+    info = lib.nevpt2_make_rdms(
+        int(norb), int(dets.size), ffi.cast("int64_t *", dets.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data), int(upto),
+        *[ffi.cast("double *", a.ctypes.data) for a in out])
+    if int(info) != 0:
+        return None
+    return tuple(out[:upto])
+
+
 def make_rdms(ci, norb, active_nelec, upto=4):
     """Spin-free density matrices dm1..dm_upto in the PySCF make_dm123/1234
     convention (``dm_n[p,q,r,s,...] = <0| E_pq E_rs ... |0>``), built directly
@@ -98,6 +126,12 @@ def make_rdms(ci, norb, active_nelec, upto=4):
     det_list = _determinants(norb, active_nelec)
     det_index = {d: i for i, d in enumerate(det_list)}
     ci = np.asarray(ci, dtype=float).reshape(-1)
+
+    # Fortran engine first; the NumPy assembly below is the same algorithm and
+    # stays as the numerical pin / fallback.
+    lib_result = _lib_make_rdms(ci, norb, det_list, upto)
+    if lib_result is not None:
+        return lib_result
 
     # Built once for this determinant basis and reused for every application
     # below; the dm4 loop alone applies them norb^6 times.

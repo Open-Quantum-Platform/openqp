@@ -260,6 +260,12 @@ void rdm1_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *civec, double *d1);
 int64_t rdm2_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *civec, int64_t cap, double *d2, int32_t nthreads);
+/* Spin-free dm1..dm4 (PySCF make_dm1234 convention) from the determinant CI
+ * vector; `upto` selects how many are produced and the caller must have
+ * allocated every array it requests. Returns 0, or -1 on allocation failure. */
+int64_t nevpt2_make_rdms(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, int32_t upto, double *dm1, double *dm2,
+    double *dm3, double *dm4);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
