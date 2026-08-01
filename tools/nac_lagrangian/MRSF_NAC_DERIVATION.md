@@ -1372,3 +1372,18 @@ then bisect which state element (int2 re-init at reference vs
 displaced, grid, screening) carries the h^0 shift. The answer defines
 the final production term or exonerates the assembly entirely (with
 d_num as the only valid referee).
+
+### 7.47 v14: state-dependence ELIMINATED; the terminus sharpens to the
+entrywise scaling of the reconstruction error
+State-swap bisection: IN the displaced state |lhs - staged| = 0.019559;
+in the reference state 0.019453; the state shift itself is only 6.2e-4.
+NOT state-dependence. Therefore the entire residual is A's response to
+e(h) = C+_signfixed - C0(1 + h u), whose MAX-norm scales as h^2 (M1)
+while the response scales as h^1 (M2 constancy) => SOME ENTRIES of
+e(h) must scale as h^1 (masked by larger h^2 entries in the max norm),
+with O(1) gain. NEXT-SESSION MEASUREMENT #1 (final): print e(h) and
+e(h/2) ENTRYWISE; the entries scaling as h^1 name the missing direction
+-- their (p,q) orbital labels ARE the final term of the derivation.
+(Candidate origin of an h^1 reconstruction error: the inverse-metric
+correction (C0^T S_cross)^{-1} vs C0 in u's definition, second-order
+fold/sg interplay, or SCF-convergence tails in specific blocks.)
