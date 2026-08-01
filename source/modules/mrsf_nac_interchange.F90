@@ -37,8 +37,9 @@ contains
 !###############################################################################
 
 !> ABI-compatible alias for clients built against the provisional API name.
-!> Production callers should use mrsf_nac_rohf_zvector, which states that this
-!> entry solves one state-pair adjoint and never a 3N block of forward CPHF
+!> Compatibility clients needing the canonical one-RHS entry should use
+!> mrsf_nac_rohf_zvector.  The resident production driver instead calls the
+!> internal batched routine; neither C entry solves a 3N block of forward CPHF
 !> equations.
   subroutine mrsf_nac_rohf_solve_C(c_handle) &
       bind(C, name="mrsf_nac_rohf_solve")

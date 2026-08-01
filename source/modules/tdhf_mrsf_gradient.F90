@@ -1227,9 +1227,8 @@ contains
     call mrsf_nac_amp(inf)
   end subroutine mrsf_nac_amp_C
 
-!> Compute the explicit-ERI amplitude term for one ordered state pair.  This
-!> is the production NAC entry point: it avoids rebuilding every other pair
-!> when Python is merely orchestrating one pair's adjoint calculation.
+!> Compatibility C entry for the explicit-ERI amplitude term of one ordered
+!> state pair.  The resident production driver calls mrsf_nac_amp directly.
   subroutine mrsf_nac_amp_pair_C(c_handle, istate, jstate) &
       bind(C, name="mrsf_nac_amp_pair")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
@@ -1244,20 +1243,17 @@ contains
 
 !> @brief Phase 11 BP#1: the explicit-ERI part of the analytic amplitude term
 !>        G_IJ = X_I^T (d_x A_2e) X_J for all MRSF state pairs (I/=J), stored as
-!>        OQP::nac_amp (3, natom, nstate, nstate). The Python driver divides by
-!>        the gap and assembles d_ij = d_ov - damp, damp = G_IJ/(Om_J-Om_I).
+!>        OQP::nac_amp (3, natom, nstate, nstate).  A caller may select one
+!>        ordered pair; the resident driver supplies its gap-scaled left
+!>        response y_IJ=X_I/(Omega_J-Omega_I) before calling this routine.
 !>
 !>        Mechanism: the validated bilinear engine grd2_mrsf_nac_compute_data_t
-!>        is run twice per pair --
-!>          (a) FULL  : shared reference d2 + per-state channels spcI/spcJ
-!>                      with p2=0 -> G_full
-!>          (b) BASELINE (FIX-1, SCF subtraction): p2=0, spcI=spcJ=0 -> G_SCF
-!>                      (the X-independent d2*d2 ground-SCF 2e gradient, ~56% of
-!>                      the integrand; the I=J self-test is blind to it because
-!>                      it cancels in deN-deP)
-!>        and G_IJ = G_full - G_SCF (grd2 is a product form, so subtracting the
-!>        d2*d2 baseline removes exactly the ground-SCF gradient and leaves the
-!>        X-dependent transition-density 2e gradient).
+!>        is passed to grd2 once per requested pair with subtract_reference
+!>        enabled.  Its density callback omits the state-independent d2*d2
+!>        contribution before the derivative-integral sweep.  By linearity this
+!>        is G_full-G_SCF, but it avoids both a second grd2 traversal and the
+!>        cancellation that would result from subtracting two gradients after
+!>        integration.
 !>
 !>        OQP::td_p must not be consumed here.  It is unlabelled scratch owned
 !>        by the diagonal gradient Z-vector and can therefore contain the last

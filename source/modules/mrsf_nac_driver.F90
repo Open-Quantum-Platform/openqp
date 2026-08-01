@@ -3,10 +3,11 @@
 !> Every scientific operation for an ordered state pair remains in Fortran:
 !> the exact eigenvector response y_IJ=X_I/(Omega_J-Omega_I), closed exact-TLF
 !> metric column and amplitude/Fock skeletons.  The two ordered sources for
-!> each physical pair are reduced to their exact half-difference, all unordered
-!> ROHF/ROKS adjoints share one batched CPHF context, and the linear HF/XC
-!> contractions run once per physical pair.  Python invokes one C entry point
-!> and only reshapes the final data.
+!> each physical pair are reduced to their exact half-difference.  Unordered
+!> ROHF/ROKS adjoints and their HF/XC contractions are processed in bounded
+!> batches of at most three pairs; the production three-state case therefore
+!> uses one batch for all three physical pairs.  Python invokes one C entry
+!> point and only reshapes the final data.
 module mrsf_nac_driver_mod
 
   use precision, only: dp
