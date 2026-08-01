@@ -1387,3 +1387,28 @@ e(h/2) ENTRYWISE; the entries scaling as h^1 name the missing direction
 (Candidate origin of an h^1 reconstruction error: the inverse-metric
 correction (C0^T S_cross)^{-1} vs C0 in u's definition, second-order
 fold/sg interplay, or SCF-convergence tails in specific blocks.)
+
+### 7.48 v15: THE FINAL TERM IS MEASURED (and my 7.46 scaling misread
+corrected)
+CORRECTION: in 7.46 I misread "2.65e-4 -> 1.33e-4" as O(h^2); halving
+is h^1. The entrywise map settles it:
+  - 161/192 entries of e(h) = C+_sf - C0(1+h u) scale EXACTLY as h^1
+    (ratio 0.500); only 31 as h^2.
+  - RESPONSE ATTRIBUTION: perturbing C0 by the h^1-part of e alone
+    reproduces THE ENTIRE residual: |dA|/h = 0.01959 vs target 0.0196;
+    the h^2-part gives 0.00028. THE MISSING DIRECTION IS MEASURED:
+    V := e(h)/h (an O(1) matrix, virtual-row dominated: rows 16,17,6
+    + socc 5).
+  - Consequence: u = (M - Sk)/h MISSES the O(1) direction V, despite
+    the seemingly exact identity M - Sk = C0^T S_cross dC. The identity
+    chain (with completeness C0 C0^T = S0^{-1}) predicts e = O(h^2) --
+    so ONE of its inputs is not what it seems. NEXT-SESSION #1 (pure
+    numerics, 5 min): verify M - Sk == C0^T S_cross_record dC entry by
+    entry from the run's own overlap_ao record; wherever it fails names
+    the convention (basis_overlap orientation / bfnrm / old-basis copy)
+    behind V.
+PRODUCTION MEANING: the U-channel contraction must use (Ux + V) -- and
+once V's analytic form is identified from the convention fix, the
+Mt-channel closes: Mt:(Ux+V) == exact was verified IMPLICITLY by the
+response attribution. The end of the campaign is one convention-
+identification away.
