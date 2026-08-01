@@ -356,16 +356,17 @@ contains
     if (nv < 2 .or. np <= 0) return
 
     ! Full Gram matrix once; every retry is a trailing sub-block of it.
+    !
+    ! gram(i,j) = sum_k gmat[i,k] gmat[j,k] is G^T G, and the caller's C-order
+    ! [nvec, npar] buffer viewed column-major is exactly the (npar x nvec)
+    ! matrix whose columns are the error vectors -- so this is one DSYRK rather
+    ! than a scalar triple loop.  BLAS fills one triangle; the mirror is
+    ! explicit because the retry loop below reads both.
     allocate(gram(0:nv-1, 0:nv-1))
+    call dsyrk('U', 'T', nv, np, 1.0_dp, gmat, np, 0.0_dp, gram, nv)
     do i = 0, nv - 1
-      do j = i, nv - 1
-        acc = 0.0_dp
-        do k = 0, np - 1
-          acc = acc + gmat(int(i, i8)*int(np, i8) + int(k, i8)) &
-                    * gmat(int(j, i8)*int(np, i8) + int(k, i8))
-        end do
-        gram(i, j) = acc
-        gram(j, i) = acc
+      do j = i + 1, nv - 1
+        gram(j, i) = gram(i, j)
       end do
     end do
 
