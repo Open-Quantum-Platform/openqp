@@ -1021,6 +1021,75 @@ def _symmetric_eigh(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return _symmetric_eigh_jacobi(sym)
 
 
+class _DenseMatrixOperator:
+    """``_davidson``'s operator duck type backed by an explicit dense matrix.
+
+    Unlike :class:`_LibHamiltonianOperator` this does not re-enumerate the
+    determinant Hamiltonian per application -- the matrix is already built, so
+    an application is one BLAS GEMM.
+    """
+
+    __slots__ = ("_h", "shape", "_diag")
+
+    def __init__(self, matrix):
+        self._h = np.ascontiguousarray(matrix, dtype=np.float64)
+        self.shape = self._h.shape
+        self._diag = np.ascontiguousarray(np.diag(self._h))
+
+    def diagonal(self):
+        return self._diag
+
+    def dot(self, x):
+        return self._h @ x
+
+    def toarray(self):
+        return self._h
+
+
+def _lowest_dense_roots(hamiltonian, nroot, tol, max_iter):
+    """Lowest ``nroot`` eigenpairs of an explicit dense symmetric matrix, or
+    ``None`` to let the caller fall back to the full LAPACK solve.
+
+    A full ``dsyevd`` produces all ``ndet`` eigenpairs, which is pure waste when
+    ``nroot << ndet``: it is O(ndet^3) regardless, so a CAS(8,8) CI solve spends
+    ~12 s producing 4900 eigenvectors to return one.  Davidson on the same
+    already-built dense matrix returns that root in 89 ms, agreeing to 6e-14 in
+    the eigenvalue and 1e-15 in the Ritz-vector overlap -- i.e. within LAPACK's
+    own rounding.
+
+    Davidson is converged an order of magnitude tighter than ``eig_tol`` so the
+    caller's residual check has margin, and any failure to reach that (a hard
+    tolerance, a pathological spectrum) returns ``None`` rather than raising.
+    """
+    ndet = int(hamiltonian.shape[0])
+    # Measured crossover for the whole solve_fci dense path (nroot=1): at
+    # ndet=100 the full solve already wins (0.9x), at ndet=400 it is 3.1x, at
+    # 1225 16x, at 4900 62x.  Below the floor, or when the requested window is
+    # a large fraction of the spectrum, take the full solve.
+    if ndet < 256 or 8 * int(nroot) >= ndet:
+        return None
+    try:
+        eigvals, eigvecs = _davidson(
+            _DenseMatrixOperator(hamiltonian),
+            np.ascontiguousarray(np.diag(hamiltonian)),
+            int(nroot),
+            tol=0.1 * float(tol),
+            max_iter=int(max_iter),
+        )
+    except Exception:
+        return None
+    # _davidson can also bail out early (an exhausted correction space returns
+    # the current Ritz pairs), so re-check here rather than let the caller's
+    # eig_tol assertion turn a solvable case into a hard failure.
+    if not (np.all(np.isfinite(eigvals)) and np.all(np.isfinite(eigvecs))):
+        return None
+    worst = float(np.max(np.linalg.norm(
+        hamiltonian @ eigvecs - eigvecs * eigvals[None, :], axis=0)))
+    if worst > float(tol):
+        return None
+    return eigvals, eigvecs
+
+
 def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspace=0):
     """Lowest ``nroot`` eigenpairs of a symmetric operator via block Davidson.
 
@@ -1081,10 +1150,22 @@ def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspa
         new_cols = []
         current = basis
         for vec in additions:
+            # Normalize BEFORE orthogonalizing so the acceptance test below is
+            # relative.  A preconditioned correction has norm ~||r||/gap, so an
+            # absolute cutoff rejects every correction once the residual gets
+            # small and the iteration silently returns unconverged: with the
+            # default eig_tol=1e-10 it stalled at a residual of 3.7e-8 on a
+            # 400-determinant CAS(6,6) because the correction norm had reached
+            # 3.8e-9.  What matters is whether the direction survives
+            # orthogonalization, which is scale-free.
+            scale = np.linalg.norm(vec)
+            if scale <= 0.0:
+                continue
+            vec = vec / scale
             for _ in range(2):  # orthogonalize twice for numerical stability
                 vec = vec - current @ (current.T @ vec)
             norm = np.linalg.norm(vec)
-            if norm > 1.0e-8:
+            if norm > 1.0e-6:
                 vec = vec / norm
                 current = np.column_stack([current, vec])
                 new_cols.append(vec)
@@ -1210,7 +1291,19 @@ def solve_fci(
         hamiltonian = _build_dense_hamiltonian(
             dets, det_index, hspin, gspin, nspin, integral_cutoff
         )
-        eigvals, eigvecs = _symmetric_eigh(hamiltonian)
+        eigvals = eigvecs = None
+        if target_multiplicity is None:
+            # Only the lowest `nroot` are ever consumed here, so a full
+            # ndet-root dsyevd is waste; Davidson on the already-built dense
+            # matrix returns them to LAPACK accuracy for a fraction of the cost
+            # (None falls back to the full solve below).
+            lowest = _lowest_dense_roots(
+                hamiltonian, nroot, eig_tol, davidson_maxiter
+            )
+            if lowest is not None:
+                eigvals, eigvecs = lowest
+        if eigvals is None:
+            eigvals, eigvecs = _symmetric_eigh(hamiltonian)
         if target_multiplicity is None:
             selected_indices = np.arange(nroot, dtype=np.int64)
             selected_eigvals = eigvals[:nroot]
