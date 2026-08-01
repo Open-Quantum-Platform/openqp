@@ -1510,3 +1510,152 @@ derivation requires reading the sigma source's SOCC/fold machinery
 (mrsfmntoia / mrsfcbc spc channels, the U-matrix pairing of JCP 158,
 194105, the fold application) -- a focused fresh-context task. All
 referees (v19 slot-resolved, v7h/v7o matrices) are frozen and synced.
+
+### 7.54 v20: the fold term is the missing XC-kernel Fock response;
+derived and closed analytically
+
+The sigma-source reading removes the ambiguity left in 7.52. In
+`mrsf_matvec_apply`, `mrsfcbc -> int2_driver -> mrsfmntoia` constructs
+the trial-vector two-electron part. Its SPC-scaled channels and the
+`trans` pairing contain no ground-state `DM_A/B` or `FOCK_A/B`
+dependency. The ONLY ground-state-Fock dependency of the sigma build is
+
+```
+call mrsfesum(infos, wrk1, fa, fb, amo, ivec)
+```
+
+Therefore the 7.52 residual cannot be a new `mrsfcbc`, `mrsfmntoia`,
+SPC, or pairing channel. It must be a missing component of the response
+Fock passed through the already-existing `mrsfesum` fold.
+
+Let the reference AO densities be
+
+```
+P^s = C O_s C^T,                    s in {alpha,beta},
+C^x = C U^x.
+```
+
+The first-order density used by the fold is consequently
+
+```
+P^{s,x} = C (U^x O_s + O_s U^{x,T}) C^T.
+```
+
+For a hybrid KS reference the complete response Fock is
+
+```
+F^{s,x}_resp = G^s_JK[P^{alpha,x},P^{beta,x}]
+             + sum_t f_xc^{s,t} P^{t,x}.
+```
+
+The v19 `gbuild` probe perturbed only `OQP::DM_A/B` and called
+`hf_energy`. Source inspection shows why that is incomplete:
+`calc_jk_xc` builds J/K from `DM_A/B`, but `calc_dft_xc -> dftexcor`
+reconstructs the XC density from `VEC_MO_A/B`. A DM-only perturbation
+therefore differentiates J/K while leaving the XC potential unchanged.
+The exact missing object is
+
+```
+Delta F^s_xc = sum_t f_xc^{s,t} P^{t,x},
+Delta sigma_xc = R_X(Delta F^alpha_xc, Delta F^beta_xc),
+```
+
+where `R_X` is not a new operator: it is exactly the linear Fock map
+implemented by `mrsfesum`. In its generic block it forms
+`Xtilde F_beta - F_alpha Xtilde`; for the singlet LR1/LR2 sector it
+adds the four `xlr/sqrt(2)` row/column corrections and overwrites LR1
+with the corresponding signed open-shell contractions and diagonal
+combination. Substituting `Delta F_xc` for `fa/fb` therefore predicts
+both the magnitude and the LR1+socc localization seen in v19.
+
+v20 (`v20_fold_audit.py`, H2O coordinate 5, private workers) separates
+the channels and gates the analytic result:
+
+```
+|trueF|                                      = 8.704022e-2
+actual displaced Fock -> mrsfesum:
+  |trueF - g_actual|                        = 2.2264e-7
+v19 DM-only JK response:
+  |trueF - g_JK|                            = 1.016826e-2
+XC correction alone:
+  |g_xc|                                    = 1.016837e-2
+  |(trueF-g_JK) - g_xc|                     = 2.6537e-7
+analytic get_response_packed vs MO+DM FD:
+  |G_alpha^analytic-G_alpha^FD|             = 2.0554e-10
+  |G_beta^analytic-G_beta^FD|               = 2.0471e-10
+analytic JK+XC -> mrsfesum:
+  |trueF - g_analytic|                      = 2.6539e-7
+```
+
+This closes the entire F channel to the finite-difference/noise floor.
+The largest old residual slot remains LR1 (`+0.00723675`) before the XC
+correction, exactly as the fold formula predicts. A diagnostic C entry
+point, `mrsf_nac_response`, now exposes the existing
+`scf_addons:get_response_packed` JK+XC kernel through packed
+`OQP::nac_dm1_{a,b}` -> `OQP::nac_v1_{a,b}` records. This is a gated
+candidate path, not yet propagated into production `nac_analytic.py`.
+
+BUILD NOTE: rebuilding exposed a pre-existing symbol collision between
+the external Fortran routine `mrsf_nac_wpair` and
+`bind(C,name="mrsf_nac_wpair")`. Renaming only the internal scaffold to
+`mrsf_nac_wpair_impl` restores a clean build without changing behavior.
+
+### 7.55 Full-response propagation and the converged-referee reversal
+
+`mrsf_nac_response` was wired into `nac_analytic.py`: for every ordered
+pair, the interstate alpha/beta densities are passed to
+`get_response_packed`, transformed to MO space, and folded into
+`MT_response`. The resulting reference formula is
+
+```
+d_IJ = antisym[T1 - seam(X) + X:V + gamma:Sk],
+X = MT_frozen + MT_response + gamma.
+```
+
+Against the old H2O numerical referee (`dx=1e-3`) the apparent v21
+closure was 5.370e-4, 5.354e-5, and 7.804e-4 for pairs (1,2), (1,3),
+and (2,3). This verdict was premature: new `dx=5e-4` and `2.5e-4`
+freezes agree pairwise to 3.08e-7, 1.32e-9, and 9.23e-6, whereas the old
+`dx=1e-3` referee differs from `2.5e-4` by 3.223e-4, 5.229e-5, and
+2.771e-3.
+
+Against the converged `dx=2.5e-4` referee, v2 gives
+
+```
+pair       production seam     same-process direct U
+(1,2)      5.8134e-4            3.1921e-5
+(1,3)      1.9583e-6            1.9922e-5
+(2,3)      3.4193e-3            2.6446e-4
+```
+
+Thus the full amplitude/F-response expression is sound; the remaining
+error is introduced by the no-FD replacement of direct U with the
+z-vector interchange seam. The decisive J4 ordered-pair mismatch is
+6.551e-3 for (3,2), which becomes the 3.419e-3 antisymmetrized (2,3)
+error. Forcing NAC-only MINRES and a 1e-10 residual changes none of the
+pair errors, falsifying the earlier loose-CG hypothesis. The MINRES
+change remains a useful precision guard, not the structural fix.
+
+### 7.56 Resident Fortran wpair reference engine
+
+The production-scale Python orbital-generator loop was moved into the
+resident Fortran `mrsf_nac_wpair_impl` routine. The C/tagarray interface
+accepts `nac_ytil` and `nac_xstate` and exports `nac_mt_frozen`; Python
+now performs only one thin call per ordered pair. The rebuilt CFFI path
+and H2O v25 gate reproduce the previous Python-harvest v2 coupling to
+the following state-pair maxima:
+
+```
+(1,2)  1.2741e-9
+(1,3)  1.1012e-10
+(2,3)  3.7301e-10
+```
+
+This is a resident Fortran reference implementation, not the final
+analytic kernel: it still evaluates central orbital generators inside
+Fortran. The next implementation step is to replace that internal
+O(nbf^2) harvest with the closed-form bilinear `mrsfcbc/mrsfmntoia`
+adjoint while preserving the tested external interface. Before the
+ethylene or Acrolein verdict, however, the larger seam/interchange
+error isolated in 7.55 must be corrected and regated against the
+converged small-displacement H2O reference.

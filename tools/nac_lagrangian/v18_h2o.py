@@ -262,7 +262,7 @@ def main():
     cfg['guess']['type'] = 'json'
     cfg['guess']['file'] = json0
     cfg['guess']['continue_geom'] = False
-    HD = 1.0e-3
+    HD = float(os.environ.get('NAC_HD', '1.0e-3'))
 
     def displaced_all(coord):
         mol.update_system(coord)
@@ -363,6 +363,18 @@ def main():
     print(f'maxit control set: {ok_maxit}', flush=True)
 
     def gbuild(Pa, Pb):
+        if os.environ.get('NAC_FULL_RESPONSE'):
+            mol.data['OQP::nac_dm1_a'] = pack_sym(Pa)
+            mol.data['OQP::nac_dm1_b'] = pack_sym(Pb)
+            oqp.mrsf_nac_response(mol)
+            return (
+                unpack_sym(np.array(
+                    mol.data['OQP::nac_v1_a'], copy=True
+                ).reshape(-1)),
+                unpack_sym(np.array(
+                    mol.data['OQP::nac_v1_b'], copy=True
+                ).reshape(-1)),
+            )
         mol.data['OQP::DM_A'] = pack_sym(D0a + EPSG * Pa).reshape(
             saved['OQP::DM_A'].shape)
         mol.data['OQP::DM_B'] = pack_sym(D0b + EPSG * Pb).reshape(
@@ -468,7 +480,7 @@ def main():
     cfg['guess']['type'] = 'json'
     cfg['guess']['file'] = json0
     cfg['guess']['continue_geom'] = False
-    HD = 1.0e-3
+    HD = float(os.environ.get('NAC_HD', '1.0e-3'))
 
     def displaced_all(coord):
         mol.update_system(coord)
@@ -569,6 +581,18 @@ def main():
     print(f'maxit control set: {ok_maxit}', flush=True)
 
     def gbuild(Pa, Pb):
+        if os.environ.get('NAC_FULL_RESPONSE'):
+            mol.data['OQP::nac_dm1_a'] = pack_sym(Pa)
+            mol.data['OQP::nac_dm1_b'] = pack_sym(Pb)
+            oqp.mrsf_nac_response(mol)
+            return (
+                unpack_sym(np.array(
+                    mol.data['OQP::nac_v1_a'], copy=True
+                ).reshape(-1)),
+                unpack_sym(np.array(
+                    mol.data['OQP::nac_v1_b'], copy=True
+                ).reshape(-1)),
+            )
         mol.data['OQP::DM_A'] = pack_sym(D0a + EPSG * Pa).reshape(
             saved['OQP::DM_A'].shape)
         mol.data['OQP::DM_B'] = pack_sym(D0b + EPSG * Pb).reshape(

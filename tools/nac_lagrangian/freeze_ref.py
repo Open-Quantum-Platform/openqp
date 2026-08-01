@@ -1,4 +1,5 @@
 """Dump canonical numerical-NAC reference vectors (post sign-fix) to npz."""
+import os
 import sys
 
 
@@ -8,7 +9,12 @@ def main():
     from oqp.library.single_point import NAC
     import numpy as np
     inp = sys.argv[1]
-    r = Runner(input_file=inp, log=inp.replace('.inp', '_frz.log'))
+    project = os.path.basename(inp).removesuffix('.inp')
+    r = Runner(
+        project=project,
+        input_file=inp,
+        log=os.path.abspath(inp.replace('.inp', '_frz.log')),
+    )
     r.run()
     nac = NAC(r.mol)
     nacv, dcv, flags = nac.numerical_nac()

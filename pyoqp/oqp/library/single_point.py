@@ -3517,16 +3517,16 @@ class NAC(Calculator):
     def analytical_nac(self):
         """Analytic MRSF NAC via the certified nac-lagrangian assembly
         (oqp.library.nac_analytic; see tools/nac_lagrangian/
-        MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md). v1 accuracy is
-        pair-dependent (5e-3..3e-1 abs on typical |d|); the derivative-
-        sigma amplitude engine (route A) is required for theory-level
-        closure. A warning is printed accordingly."""
+        MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md).  v2 is the gated
+        reference implementation of the complete response formula.  Its
+        temporary resident Fortran mrsf_nac_wpair engine still uses an
+        O(nbf**2) orbital-generator reference harvest internally."""
         from oqp.library.nac_analytic import analytic_nac
-        dump_log(self.mol, title='PyOQP: analytic NAC (nac-lagrangian v1; '
-                 'accuracy envelope pair-dependent, see ROUTE_A_SPEC)',
+        dump_log(self.mol, title='PyOQP: analytic NAC (nac-lagrangian v2 '
+                 'reference; resident Fortran wpair harvest)',
                  section='')
         nacv, dcv = analytic_nac(self.mol)
-        return nacv, dcv, ['analytic-v1'] * (3 * self.natom)
+        return nacv, dcv, ['analytic-v2-reference'] * (3 * self.natom)
 
 
     def numerical_nac(self):

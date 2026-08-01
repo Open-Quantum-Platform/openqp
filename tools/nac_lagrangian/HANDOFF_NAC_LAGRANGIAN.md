@@ -3,51 +3,82 @@
 **Branch:** `nac-lagrangian` (from Alireza's `nac` tip b71b864; local
 worktree `sessions/20260731_nac_audit/repo_nac` — NB the plain `repo`
 clone was taken over by a parallel session, do not touch it; chc3 mirror
-`~/nac_audit/repo`, synced by git bundles; **PUSHED to
-`karmachoi/openqp-dev-private` branch `nac-lagrangian`** — NOT pushed to
-origin/Alireza). 64 commits on top of the `nac` tip, every claim
-numeric-gated.
-**Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6, campaign 7.1–7.53).
+`~/nac_audit/repo`, synced by git bundles; publish target is
+`karmachoi/openqp-private` branch `nac-lagrangian` — NOT pushed to
+origin/Alireza). Checkpoint `ae0bf33` was 65 commits on top of the `nac`
+tip; the 7.54–7.56 work described below is the next private-branch
+checkpoint. **Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6,
+campaign 7.1–7.56).
 
 
-## CAMPAIGN STATE AT 2026-08-01 SESSION CLOSE (read 7.44-7.53 first)
+## CAMPAIGN STATE AT 2026-08-01 — 7.54–7.56 RESPONSE CLOSED; SEAM OPEN
 
-THE SINGLE REMAINING ITEM for theory-level closure: the fold-sector
-(~1%-of-channel; ~2e-2 on d for the worst pair) Fock-response term --
-7.52. Derive it ON PAPER from the sigma source's SOCC/spc usage
-(tdhf_mrsf_energy.F90 fa/fb socc combinations, mrsfmntoia/mrsfcbc spc
-channels, the `trans(xvec_dim,2)` U-matrix pairing of JCP 158, 194105,
-and the lr1/lr2 fold application), then gate with v19_fchan.py
-(slot-resolved; targets: the 0.0102 residual on slot 4 = LR1 (i=5,a=5)
-and the i=6 socc2 rows).
+READ 7.52-7.56 FIRST. The former 0.0102 “fold-sector residual” is now
+identified exactly: v19's DM-only `hf_energy` probe included JK response
+but omitted the KS XC-kernel response because J/K reads `DM_A/B` while
+`calc_dft_xc -> dftexcor` rebuilds its density from `VEC_MO_A/B`.
 
-7.53 (the last act of this session) DERIVED AND FALSIFIED the one
-shortcut candidate: the antisym-dD hypothesis (dD = C[U_a,D°]C^T from a
-Loewdin-guess premise). Offline test on the frozen v7h matrices: (1,3)
-improved 8.7e-3->7.0e-3 and assembly-(2,3) 0.205->0.120, BUT (1,2)
-worsened 1.9e-2->1.3e-1 and J1-(2,3)->0.54; the premise is independently
-contradicted by the G-A gate bound (engines == worker-w_skel at
-1e-5..3e-4, so no O(h) orthonormalization shift exists in the workers).
-CONCLUSION: the symmetric-dD channel is REAL under the frozen referee
-protocol; there is no shortcut around reading the sigma source. That
-reading is a focused fresh-context task — start the next session with:
-"Read MRSF_NAC_DERIVATION.md 7.52-7.53, then read the socc/spc sigma
-assembly in tdhf_mrsf_energy.F90 + tdhf_mrsf_lib.F90 (mrsfmntoia,
-mrsfcbc, spc scaling, trans pairing, the fold) and derive the
-fold-sector response term; gate with v19_fchan.py."
+Source-level result: `mrsfcbc -> int2_driver -> mrsfmntoia` and the SPC/
+`trans` machinery have no ground-state Fock/density dependency. The ONLY
+one is `mrsfesum(wrk1,fa,fb,amo)`. Hence there is no new sigma channel:
+
+```
+P^{s,x} = C(U^x O_s + O_s U^{x,T})C^T
+F^{s,x} = G^s_JK[P^x] + sum_t f_xc^{s,t} P^{t,x}
+Delta sigma_xc = mrsfesum_X(Delta F^alpha_xc, Delta F^beta_xc)
+```
+
+v20 H2O/c5 gate: actual-F injection closes `trueF` to 2.23e-7; the
+missing XC contribution has norm 1.016837e-2 and closes the v19 residual
+to 2.65e-7. Existing analytic `get_response_packed` agrees with the
+independent MO+DM central difference at 2.06e-10 (alpha) / 2.05e-10
+(beta), and its sigma injection closes to 2.65e-7. The theory-level
+F-channel derivation is DONE and the analytic JK+XC response has been
+propagated into the v2 reference assembly.
+
+The first H2O v21 verdict against the old `dx=1e-3` numerical referee
+looked closed (5.37e-4, 5.35e-5, 7.80e-4), but that referee was not
+converged. New `dx=5e-4` and `2.5e-4` freezes agree to 3.08e-7,
+1.32e-9, and 9.23e-6 for pairs (1,2), (1,3), and (2,3). Against the
+converged `dx=2.5e-4` referee, v2 errors are 5.813e-4, 1.958e-6, and
+3.419e-3. A same-process direct-U assembly remains tight at 3.192e-5,
+1.992e-5, and 2.645e-4. Therefore the remaining structural error is NOT
+the amplitude/F-response formula: it is introduced when direct U is
+replaced by the z-vector interchange seam, dominated by ordered pair
+(3,2), whose J4 mismatch is 6.551e-3. Forcing NAC-only MINRES to a
+1e-10 residual leaves the result unchanged and falsifies loose CG
+convergence as the cause.
+
+CURRENT WORKING-TREE ENTRY POINTS:
+- `v20_fold_audit.py` — private-worker decomposition + actual Fock,
+  DM-only JK, MO+DM, and analytic JK+XC gates.
+- `mrsf_nac_response` in `tdhf_mrsf_energy.F90` and `include/oqp.h` —
+  packed `nac_dm1_a/b -> nac_v1_a/b` JK+XC response using
+  `scf_addons:get_response_packed`, now consumed by v2.
+- `mrsf_nac_wpair_impl` — resident Fortran reference harvest. It removes
+  the Python O(nbf^2) orbital-generator loop and reproduces the previous
+  Python vector to 1.27e-9 on H2O. It still uses central orbital
+  generators internally and is NOT the final closed-form adjoint.
+- `v21_production_gate.py` — sign-resolved production/referee gate;
+  latest H2O resident-Fortran artifact is
+  `H2O_energy_tlf0_v25_fortran_wpair.npz` on chc3.
+
+NEXT SESSION START SENTENCE:
+"7.54–7.56을 읽고 수렴된 H2O dx=2.5e-4 기준으로 (3,2) seam/interchange
+오차를 Fortran에서 유도·수정한 뒤, wpair 중앙차분 수확기를 닫힌형식
+adjoint로 교체하고 ethylene/Acrolein을 게이트해."
 
 THE COMPLETE CERTIFIED ACCOUNTING (all referees frozen):
   d = ampdir(dX) + gamma:(Sk+U)          [machine, both molecules]
-  U-channel = stagedC [closed 4e-4] + F-channel [dD-model+G, 89%]
-            + fold-sector residual [0.010, THE item]
-  production: T1 engines + direct-injection seam + V-mask + gamma:Sk
-  (v1 rewired & verified); MINRES ytil; G[P] build; all certified.
+  U-channel = stagedC                    [closed 4e-4]
+  F-channel = mrsfesum_X(JK[P^x]+f_xc[P^x]) [closed 2.65e-7 on v20 c5]
+  production v2 reference: full response propagated; direct-U closes,
+  but seam replacement still leaves 3.419e-3 on H2O (2,3).
 
-TWO REAL BUGS FIXED THIS CAMPAIGN: tlf=0 diagonal minors (2242bff, NB
-duplicate fix exists in other sessions -- diff before upstreaming);
-the Sk-record diagonal (7.49: NEVER use overlap_mo_non_orthogonal's
-second-call output for Sk -- rebuild from overlap_ao. One-line fix,
-50x vector-channel improvement).
+THREE REAL BUGS FIXED/IDENTIFIED THIS CAMPAIGN: tlf=0 diagonal minors
+(2242bff; duplicate fix exists elsewhere -- diff before upstreaming);
+the Sk-record diagonal (7.49; rebuild from overlap_ao); and the
+`mrsf_nac_wpair` C/Fortran symbol collision (internal scaffold renamed).
 
 ## What is PROVEN (do not re-litigate; regression tests enforce)
 
@@ -81,22 +112,28 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
 
 ## Deliverables
 
-**PRODUCTION (rewired, v1):**
+**PRODUCTION REFERENCE (rewired, v2; not final):**
 - `pyoqp/oqp/library/nac_analytic.py` — `analytic_nac(mol)`: closed-form
   γ + Sk export (rebuilt from overlap_ao per 7.49!), full-A-free MINRES
   ỹ (certified 2.6e-9), slot-injection T1 engines (certified 1e-5),
-  polarized-combined seam T2 (seam(e_pq) = −U_full), V-mask S^x
-  eliminations, γ:Sk, antisymmetrize. Returns (nacv, dcv).
+  resident-Fortran MT harvest, full JK+XC response, direct-injection seam,
+  V-mask S^x eliminations, γ:Sk, antisymmetrize. Returns (nacv, dcv).
+  Honest current H2O/dx=2.5e-4 max errors: 5.813e-4, 1.958e-6,
+  3.419e-3; the seam/interchange defect keeps this a reference path.
 - `pyoqp/oqp/library/nac_kernel.py` — copy of `nac_formula_kernel.py`.
 - `pyoqp/oqp/library/single_point.py` — `analytical_nac()` REPLACED
   (old pseudo-state polarization removed) with a wrapper calling
-  `nac_analytic.analytic_nac`. Known v1 accuracy (H2O, vs numerical):
-  (1,3) 8.7e-3, (1,2) 1.9e-2, (2,3) 0.21 — limited ONLY by the
-  fold-sector term; propagate the derived term here after closure.
+  `nac_analytic.analytic_nac`; reports `analytic-v2-reference`.
 - `source/modules/tdhf_mrsf_gradient.F90` — NAC_DUMP_DS (dbg_dsket/
   dbg_dsfull, bfnrm applied), NAC_DUMP_PIJ (dbg_pij_a/b), and the
-  `mrsf_nac_wpair` scaffold (aborts by design until the fold term is
-  derived; term checklist in comments).
+  resident `mrsf_nac_wpair` reference harvest. Its internal implementation
+  name is `mrsf_nac_wpair_impl` to avoid collision with the C symbol.
+- `source/modules/tdhf_mrsf_energy.F90` + `include/oqp.h` —
+  `mrsf_nac_response`: apply existing analytic JK+XC response to packed
+  first-order alpha/beta densities and export packed response Focks.
+- `source/modules/tdhf_mrsf_z_vector.F90` — NAC interchange solves use
+  MINRES with residual tolerance at most 1e-10. This improves solver
+  safety but did not change the H2O seam error.
 
 **Kernel + gates (this directory):**
 - `nac_formula_kernel.py` — replica, staged Fortran driver, one-pass
@@ -106,13 +143,15 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
 - Gate harnesses: `assembly_gate.py` (master referee), `assembly_v3*.py`
   (v3–v3h incl. `v3g` = the analytic-structure benchmark), `v4a_adjoint`,
   `v5*`–`v18*` (the forensic chain; `v7j` = unified one-process gate,
-  `v17_fix` = the Sk-fix closure test, `v19_fchan.py` = THE live referee
-  for the fold term), `skel_gate.py` (subprocess worker), plus the
+  `v17_fix` = the Sk-fix closure test, `v19_fchan.py` = the original
+  F-channel referee, `v20_fold_audit.py` = the decisive JK-vs-XC audit
+  and analytic-response gate), `skel_gate.py` (subprocess worker), plus the
   ladder/γ/orientation gates from the first half.
 - `ETH_energy.inp` — the C1 validation input.
 - Frozen data (session dir + chc3 `~/nac_audit/probe/`):
   `H2O_energy_tlf0_{v7h,v7i,v7o}.npz`, `ETH_energy_{v7o,ctx,dnum}.npz`,
-  `H2O_energy_tlf0_dnum.npz`; worker dirs `H2O_energy_tlf0_skel/`,
+  `H2O_energy_tlf0_dnum.npz`, `H2O_energy_tlf0_c5_v20.npz` and
+  `v20_h2o_analytic.out`; worker dirs `H2O_energy_tlf0_skel/`,
   `ETH_energy_skel/` (displaced p{idx}.inp reusable; regenerate ref.npz
   per process for phase consistency). Plus the first-half references
   (`h2o_nac_reference.npz`, `h2o_nac_ref_tlf0.npz`, `ladderA8_data.npz`,
@@ -123,22 +162,17 @@ because the resolvent removes the stacked-FD near-degeneracy noise)
 
 ## Remaining work (in order; every step has a frozen referee)
 
-1. **THE fold-sector term (theory closure — the only derivation left).**
-   Read the sigma source (tdhf_mrsf_energy.F90 socc/fa/fb assembly,
-   tdhf_mrsf_lib.F90 mrsfmntoia/mrsfcbc/spc, the trans pairing, the
-   lr1/lr2 fold), derive the Fock-response term the dD-model misses
-   (7.52: F-channel 89% closed, 0.0102 vector residual on LR1 + socc2
-   rows), gate slot-resolved with `v19_fchan.py`. 7.53's antisym-dD
-   shortcut is FALSIFIED — do not retry it.
-2. **Propagate into `nac_analytic.py`** (production), re-judge H2O AND
-   ethylene against d_num, refreeze references, extend the suite.
-   (The v1 rewiring is already in place with documented accuracy; this
-   step upgrades it to closure. The original branch's mistake — rewiring
-   BEFORE closure — is avoided because v1's accuracy is honestly
-   documented in-code and here.)
-3. **`mrsf_nac_wpair`**: fill the Fortran scaffold with the derived
-   term(s) for a resident implementation.
-4. Sum-rule + translational checks; Acrolein NAMD shakedown (ndtlf=2,
+1. **DONE — derive/gate/propagate the fold-sector term (7.54–7.55).** It is
+   `f_xc[P^x]` passed through the existing `mrsfesum` fold, not a new
+   MRSF/SPC channel. v20 analytic closure: 2.65e-7.
+2. **Fix the seam/interchange contraction in Fortran.** Direct-U is
+   already at 2.65e-4 against the converged referee; seam assembly is
+   3.419e-3. Start with ordered (3,2) and the three ROHF rotation blocks.
+3. **Replace `mrsf_nac_wpair` central harvest with the closed-form
+   bilinear adjoint in Fortran.** Preserve its C/tagarray interface and
+   gate against the resident reference result (1.27e-9 current match).
+4. Re-judge/refreeze H2O and ethylene, then sum-rule/translational checks;
+   Acrolein NAMD shakedown (ndtlf=2,
    /bighome/jin/Projects/MRSF_SOC_NAMD/Acrolein/).
 5. Before upstreaming: diff our 2242bff tlf=0 fix against the duplicate
    fixes in the 07-17/18 sessions (see the related-session map).
@@ -171,10 +205,15 @@ ingredients only).
 - FD sweep data (Ux, w_ref, dX) is valid ONLY in-process: displaced-
   geometry orbital gauge is run-nondeterministic. Never mix npz sweeps
   from different processes at the vector level.
-- In-process 1-iter SCF emulation is broken (trueG blowup) — G[P] and
-  F-channel measurements need SEPARATE-PROCESS workers (v19 pattern:
-  push DM_A/B ← D+εP, oqp.hf_energy at control.maxit=1 in a fresh
-  process, G=(F_eps−F0)/eps; certified linear/self-adjoint).
+- In-process 1-iter SCF emulation is broken (trueG blowup) — displaced
+  F-channel measurements need SEPARATE-PROCESS workers with phases
+  generated by the parent process (v19/v20 pattern).
+- **DM-only DFT response is incomplete (7.54):** `fock_jk` reads
+  `DM_A/B`, but `calc_dft_xc -> dftexcor` reads `VEC_MO_A/B`. Perturbing
+  DM and calling one-iteration `hf_energy` gives JK response only and
+  silently omits `f_xc[P^x]`. Use `get_response_packed` (analytic) or a
+  consistent MO+DM central difference. Never label the DM-only result
+  the full KS response.
 - `sfrorhs` adds 2FT terms absent from the matvec — NAC_ZERO_2FT env.
 - `int2e_cutoff=1e-20` for matvec linearity; get_jacobi is umrsf-only;
   the matvec depends ONLY on VEC_MO+FOCK records.

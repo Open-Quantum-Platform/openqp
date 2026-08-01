@@ -70,6 +70,100 @@ contains
     call mrsf_matvec_apply(inf)
   end subroutine mrsf_matvec_apply_C
 
+!###############################################################################
+
+  subroutine mrsf_nac_response_C(c_handle) bind(C, name="mrsf_nac_response")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_response(inf)
+  end subroutine mrsf_nac_response_C
+
+!> @brief Apply the full ground-state Fock response kernel for analytic NAC.
+!> @detail Reads packed first-order alpha/beta densities from
+!>   OQP::nac_dm1_a/b and writes the corresponding packed JK+XC response
+!>   matrices to OQP::nac_v1_a/b.  Unlike the old DM-only finite-difference
+!>   probe, this route calls get_response_packed, so a DFT calculation includes
+!>   the explicit f_xc P^(1) contribution evaluated on the reference grid.
+!>   OQP::nac_vxc_a/b additionally expose the XC-only difference for the v20
+!>   response audit; production consumes OQP::nac_v1_a/b.
+  subroutine mrsf_nac_response(infos)
+    use oqp_tagarray_driver
+    use types, only: information
+    use basis_tools, only: basis_set
+    use messages, only: with_abort
+    use precision, only: dp
+    use dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use scf_addons, only: fock_jk, get_response_packed
+
+    implicit none
+
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_response"
+    character(len=*), parameter :: OQP_nac_dm1_a = "OQP::nac_dm1_a"
+    character(len=*), parameter :: OQP_nac_dm1_b = "OQP::nac_dm1_b"
+    character(len=*), parameter :: OQP_nac_v1_a = "OQP::nac_v1_a"
+    character(len=*), parameter :: OQP_nac_v1_b = "OQP::nac_v1_b"
+    character(len=*), parameter :: OQP_nac_vxc_a = "OQP::nac_vxc_a"
+    character(len=*), parameter :: OQP_nac_vxc_b = "OQP::nac_vxc_b"
+    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
+      OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_nac_dm1_a, OQP_nac_dm1_b /)
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    type(dft_grid_t) :: molGrid
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), dm1_a(:), dm1_b(:)
+    real(kind=dp), pointer :: nac_v1_a(:), nac_v1_b(:), nac_vxc_a(:), nac_vxc_b(:)
+    real(kind=dp), allocatable :: dm1(:,:), v1(:,:), vjk(:,:), &
+                                  mo_a_work(:,:), mo_b_work(:,:)
+    real(kind=dp) :: scale_exch
+    integer :: nbf, nbf2
+    logical :: dft
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    dft = infos%control%hamilton == 20
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_a, dm1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_dm1_b, dm1_b)
+
+    allocate(dm1(nbf2,2), v1(nbf2,2), vjk(nbf2,2), &
+             mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), source=0.0_dp)
+    dm1(:,1) = dm1_a
+    dm1(:,2) = dm1_b
+    mo_a_work = mo_a
+    mo_b_work = mo_b
+
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%dft%HFscale
+    call fock_jk(basis, d=dm1, f=vjk, scale_exch=scale_exch, infos=infos)
+    if (dft) call dft_initialize(infos, basis, molGrid, verbose=.false.)
+    call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, mo_b_work)
+    if (dft) call dftclean(infos)
+
+    call infos%dat%remove_records((/ character(len=80) :: &
+      OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b /))
+    call infos%dat%reserve_data(OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call infos%dat%reserve_data(OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call infos%dat%reserve_data(OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
+    call infos%dat%reserve_data(OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call tagarray_get_data(infos%dat, OQP_nac_v1_a, nac_v1_a)
+    call tagarray_get_data(infos%dat, OQP_nac_v1_b, nac_v1_b)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_a, nac_vxc_a)
+    call tagarray_get_data(infos%dat, OQP_nac_vxc_b, nac_vxc_b)
+    nac_v1_a = v1(:,1)
+    nac_v1_b = v1(:,2)
+    nac_vxc_a = v1(:,1) - vjk(:,1)
+    nac_vxc_b = v1(:,2) - vjk(:,2)
+
+  end subroutine mrsf_nac_response
+
 !> @brief NAC Phase 11 diagnostic. Apply the MRSF Davidson matvec A (TDA) to a
 !>   single trial amplitude (OQP::td_bvec_mo column 1) using the CURRENT
 !>   orbitals VEC_MO_A/B but the FROZEN AO Fock FOCK_A/B (rebuilt as the MO
@@ -238,6 +332,8 @@ contains
     call infos%dat%reserve_data(OQP_nac_gchan, ta_type_real64, nbf*nbf*6, (/ nbf*nbf*6 /))
     call tagarray_get_data(infos%dat, OQP_nac_gchan, nac_gchan)
     nac_gchan = reshape(gchan, (/ nbf*nbf*6 /))
+
+    call int2_driver%clean()
 
   end subroutine mrsf_matvec_apply
 

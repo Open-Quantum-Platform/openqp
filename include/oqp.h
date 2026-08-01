@@ -779,6 +779,8 @@ void mrsf_nac_esum(struct oqp_handle_t *inf, long istate, long jstate);
 void set_mrsf_nac_cphf(struct oqp_handle_t *inf, int64_t i, int64_t j);
 void set_mrsf_nac_cphf_block(struct oqp_handle_t *inf, int64_t b);
 void mrsf_matvec_apply(struct oqp_handle_t *inf);
+void mrsf_nac_response(struct oqp_handle_t *inf);
+void mrsf_nac_wpair(struct oqp_handle_t *inf, int32_t istate, int32_t jstate);
 
 void mp2_energy(struct oqp_handle_t *inf);
 void mp2_gradient(struct oqp_handle_t *inf);

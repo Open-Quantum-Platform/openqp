@@ -121,7 +121,6 @@ module tdhf_mrsf_z_vector_mod
   integer, save :: minres_nbf_ctx = 0
   logical, save :: minres_dft_ctx = .false.
 
-=================================")')
     call flush(log_unit)
   end subroutine zv_timers_report
 
@@ -248,7 +247,6 @@ module tdhf_mrsf_z_vector_mod
       end do
     end do
   end subroutine zv_sfrogen_gather
-=======
   ! NAC orbital-response (CPHF) mode: when on, the z-vector RHS is the
   ! occ-virt interstate transition density gamma^IJ (interchange theorem,
   ! A^orb Z = gamma^IJ_ov), and the unrelaxed difference density / transition
@@ -1388,6 +1386,10 @@ contains
   ! Default 1e-10 is on the SQUARED residual and is typically over-converged for
   ! gradients; right-sizing it cuts iterations. Default unset = input zvconv.
     if (zv_conv_user > 0.0_dp) cnvtol = zv_conv_user
+    ! The NAC interchange seam is a property solve and its error enters the
+    ! coupling directly.  Keep it on the residual-norm MINRES convention and
+    ! do not inherit the legacy CG path's ||r||^2 stopping criterion.
+    if (mrsf_nac_cphf_mode) cnvtol = min(cnvtol, 1.0e-10_dp)
 
     nocca = infos%mol_prop%nelec_A
     nvira = nbf-noccA
@@ -1477,16 +1479,20 @@ contains
     end if
 
     ! Determine solver name for output (0=CG, 1=GMRES legacy, 2=MINRES, 3=AUTO)
-    select case (infos%tddft%z_solver)
-    case (3)
-      solver_name = "AUTO"
-    case (2)
-      solver_name = "MINRES"
-    case (1)
-      solver_name = "GMRES"
-    case default
-      solver_name = "CG"
-    end select
+    if (mrsf_nac_cphf_mode) then
+      solver_name = "NAC-MINRES"
+    else
+      select case (infos%tddft%z_solver)
+      case (3)
+        solver_name = "AUTO"
+      case (2)
+        solver_name = "MINRES"
+      case (1)
+        solver_name = "GMRES"
+      case default
+        solver_name = "CG"
+      end select
+    end if
 
     ! Save unrelaxed density matrices and the `b=A*x` vector for target state
     if (mrst==1 .or. mrst==3 ) then
@@ -1556,16 +1562,20 @@ contains
     ! Step 2: solve the z-vector linear system.
     !   0 = CG (default)   1 = GMRES (legacy)   2 = MINRES   3 = AUTO (CG->MINRES->GMRES)
     ! ======================================================================
-    select case (infos%tddft%z_solver)
-    case (2)
+    if (mrsf_nac_cphf_mode) then
       call run_mrsf_minres_zvector()
-    case (1)
-      call run_mrsf_gmres_zvector()
-    case (3)
-      call run_mrsf_zvector_auto()
-    case default
-      call run_mrsf_cg_zvector()
-    end select
+    else
+      select case (infos%tddft%z_solver)
+      case (2)
+        call run_mrsf_minres_zvector()
+      case (1)
+        call run_mrsf_gmres_zvector()
+      case (3)
+        call run_mrsf_zvector_auto()
+      case default
+        call run_mrsf_cg_zvector()
+      end select
+    end if
 
     ! Progressive screening ramps the cutoff during the CG loop; restore the
     ! tight floor so the relaxed-density/W back-projection (which sets the

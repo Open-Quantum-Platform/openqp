@@ -2090,27 +2090,14 @@ contains
 end module tdhf_mrsf_gradient_mod
 
 !###############################################################################
-!> ROUTE A (tools/nac_lagrangian/ROUTE_A_SPEC.md): the interstate W engine.
-!>
-!> GOAL: W^IJ for the (ytil, X_J) amplitude pair WITHOUT the eigenpair
-!>   shortcuts of mrsfrowcal (which assumes AX = omega X and <X|X> = 1).
-!>   Each term below must be REDERIVED for the bilinear before being
-!>   enabled; the per-coordinate referees are frozen in
-!>   H2O_energy_tlf0_v7o.npz / ETH_energy_v7o.npz (Delta channel).
-!>
-!> TERM CHECKLIST (from mrsfrowcal, to rederive one by one):
-!>   [ ] W_ix Fock rows      (fa*scr couplings; z-dependent -- OK as-is,
-!>                            z is pair-correct via the injected RHS)
-!>   [ ] eps-weighted z rows (mo_energy*scr; representation-dependent)
-!>   [ ] xhxa/xhxb 2e rows   (hxa from amb-ints x amplitudes: POLARIZE
-!>                            at the density level for (ytil, X))
-!>   [ ] hppija/hppijb rows  (ab1 x amplitude densities: same)
-!>   [ ] 2FT terms           (sfrorhs adds them to the RHS; the matvec
-!>                            does NOT have them: NAC_ZERO_2FT probes)
-!>   [ ] diagonal 1/2 + global -1 conventions
-!>
-!> STATUS: SCAFFOLD ONLY -- returns with an abort message so it cannot be
-!>   used silently before the derivation lands.
+!> ROUTE A resident reference engine.  It evaluates
+!>   M_pq = d[ytil^T A(C) X_J]/d theta_pq at frozen AO Fock
+!> with the already certified central orbital-generator harvest, but keeps the
+!> entire O(nbf^2) loop inside Fortran.  OQP::nac_ytil and OQP::nac_xstate are
+!> input folded vectors; OQP::nac_mt_frozen is the column-major output matrix.
+!> This removes the production-scale Python loop now.  The closed-form
+!> bilinear mrsfcbc/mrsfmntoia adjoint will replace the internal harvest while
+!> preserving this interface.
   subroutine mrsf_nac_wpair_C(c_handle, istate, jstate) &
       bind(C, name="mrsf_nac_wpair")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
@@ -2120,17 +2107,77 @@ end module tdhf_mrsf_gradient_mod
     integer(c_int32_t), intent(in), value :: istate, jstate
     type(information), pointer :: inf
     inf => oqp_handle_get_info(c_handle)
-    call mrsf_nac_wpair(inf, int(istate), int(jstate))
+    call mrsf_nac_wpair_impl(inf, int(istate), int(jstate))
   end subroutine mrsf_nac_wpair_C
 
-  subroutine mrsf_nac_wpair(infos, istate, jstate)
+  subroutine mrsf_nac_wpair_impl(infos, istate, jstate)
+    use oqp_tagarray_driver
     use types, only: information
-    use messages, only: show_message, with_abort
+    use precision, only: dp
+    use messages, only: with_abort
+    use tdhf_mrsf_energy_mod, only: mrsf_matvec_apply
     implicit none
-    type(information), target, intent(inout) :: infos
+    character(len=*), parameter :: module_name = "tdhf_mrsf_gradient_mod"
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_wpair_impl"
+    character(len=*), parameter :: OQP_nac_ytil = "OQP::nac_ytil"
+    character(len=*), parameter :: OQP_nac_xstate = "OQP::nac_xstate"
+    character(len=*), parameter :: OQP_nac_mt = "OQP::nac_mt_frozen"
+    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
+      OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_td_bvec_mo, &
+      OQP_nac_ytil, OQP_nac_xstate /)
+    type(information), intent(inout) :: infos
     integer, intent(in) :: istate, jstate
+    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), bvec_mo(:,:), &
+                                          ytil(:), xstate(:)
+    real(kind=dp), pointer :: ax(:), mt_out(:)
+    real(kind=dp), allocatable :: mo_a0(:,:), mo_b0(:,:), bvec0(:,:), mt(:,:)
+    real(kind=dp), parameter :: step = 1.0e-5_dp
+    real(kind=dp) :: value, sign
+    integer :: nbf, xdim, p, q, isign
+
     if (istate == jstate) return
-    call show_message('mrsf_nac_wpair: ROUTE-A interstate W engine is a &
-        &SCAFFOLD; derive the term checklist (ROUTE_A_SPEC.md) before use', &
-        with_abort)
-  end subroutine mrsf_nac_wpair
+    nbf = infos%basis%nbf
+    xdim = infos%mol_prop%nelec_a * (nbf - infos%mol_prop%nelec_b)
+
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
+    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
+    call tagarray_get_data(infos%dat, OQP_nac_ytil, ytil)
+    call tagarray_get_data(infos%dat, OQP_nac_xstate, xstate)
+
+    allocate(mo_a0(nbf,nbf), mo_b0(nbf,nbf), &
+             bvec0(size(bvec_mo,1),size(bvec_mo,2)), mt(nbf,nbf), &
+             source=0.0_dp)
+    mo_a0 = mo_a
+    mo_b0 = mo_b
+    bvec0 = bvec_mo
+
+    do q = 1, nbf
+      do p = 1, nbf
+        if (p == q) cycle
+        value = 0.0_dp
+        do isign = 1, 2
+          sign = merge(1.0_dp, -1.0_dp, isign == 1)
+          mo_a = mo_a0
+          mo_b = mo_b0
+          mo_a(:,q) = mo_a(:,q) + sign*step*mo_a0(:,p)
+          mo_b(:,q) = mo_b(:,q) + sign*step*mo_b0(:,p)
+          bvec_mo = bvec0
+          bvec_mo(1:xdim,1) = xstate(1:xdim)
+          call mrsf_matvec_apply(infos)
+          call tagarray_get_data(infos%dat, "OQP::nac_mvax", ax)
+          value = value + sign*dot_product(ytil(1:xdim), ax(1:xdim))
+        end do
+        mt(p,q) = value/(2.0_dp*step)
+      end do
+    end do
+
+    mo_a = mo_a0
+    mo_b = mo_b0
+    bvec_mo = bvec0
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mt /))
+    call infos%dat%reserve_data(OQP_nac_mt, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_mt, mt_out)
+    mt_out = reshape(mt, (/ nbf*nbf /))
+  end subroutine mrsf_nac_wpair_impl
