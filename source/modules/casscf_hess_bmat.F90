@@ -92,6 +92,8 @@ contains
     real(dp) :: acc, zpq, zqp
     real(dp), allocatable :: ymat(:,:), cmat(:,:), tmat(:,:), w1(:,:), w2(:,:)
     real(dp), allocatable :: dm(:,:), gb(:,:), rb(:,:), gc(:,:), rc(:,:)
+    real(dp), allocatable :: gbp(:,:), rbp(:,:), gcp(:,:), rcp(:,:)
+    integer :: last_p
     real(dp), allocatable :: zmat(:,:)
 
     n = int(nbf)
@@ -107,6 +109,11 @@ contains
     allocate(dm(0:n-1, 0:n-1))
     allocate(gb(0:n2-1, 0:n-1), rb(0:n2-1, 0:n-1))
     allocate(gc(0:n2-1, 0:n-1), rc(0:n2-1, 0:n-1))
+    ! Separate buffers for the p-indexed gathers so they can be reused across
+    ! the run of pairs that share a p (see the loop below).
+    allocate(gbp(0:n2-1, 0:n-1), rbp(0:n2-1, 0:n-1))
+    allocate(gcp(0:n2-1, 0:n-1), rcp(0:n2-1, 0:n-1))
+    last_p = -1
 
     do i = 0, n - 1
       do j = 0, n - 1
@@ -125,6 +132,20 @@ contains
       p = int(pairs(2*l))
       q = int(pairs(2*l + 1))
 
+      ! The four p-indexed gathers are invariant across a run of pairs sharing
+      ! the same p, and _nonredundant_pairs emits p outermost -- (active,
+      ! inactive) then (virtual, inactive) then (virtual, active) -- so those
+      ! runs are consecutive.  Re-gathering them per pair was half of this
+      ! routine's memory traffic, which is what kept it at 11-16 GFlop/s while
+      ! doing 8x fewer flops than the NumPy it replaced.
+      if (p /= last_p) then
+        call gather_third(eri, p, n, gbp)
+        call gather_third(rdm2, p, n, rbp)
+        call gather_fourth(eri, p, n, gcp)
+        call gather_fourth(rdm2, p, n, rcp)
+        last_p = p
+      end if
+
       ! ---- C1 = A[P,Q] - A[Q,P]
       ! g[:,X,:,:] is a column-major (nbf^2 x nbf) matrix, base X*nbf^2 and
       ! leading dimension nbf^3 -- passed by element reference, no gather.
@@ -134,20 +155,16 @@ contains
                  rdm2(int(p, i8)*int(n2, i8)), int(n3), 1.0_dp, cmat, n)
 
       ! ---- C1 += B[P,Q] - B[Q,P],  B[X,Y][m,n] = sum_bd g[m,b,X,d] G[n,b,Y,d]
-      call gather_third(eri, p, n, gb)
       call gather_third(rdm2, q, n, rb)
-      call dgemm('T', 'N', n, n, n2, 1.0_dp, gb, n2, rb, n2, 1.0_dp, cmat, n)
+      call dgemm('T', 'N', n, n, n2, 1.0_dp, gbp, n2, rb, n2, 1.0_dp, cmat, n)
       call gather_third(eri, q, n, gb)
-      call gather_third(rdm2, p, n, rb)
-      call dgemm('T', 'N', n, n, n2, -1.0_dp, gb, n2, rb, n2, 1.0_dp, cmat, n)
+      call dgemm('T', 'N', n, n, n2, -1.0_dp, gb, n2, rbp, n2, 1.0_dp, cmat, n)
 
       ! ---- C1 += C[P,Q] - C[Q,P],  C[X,Y][m,n] = sum_bc g[m,b,c,X] G[n,b,c,Y]
-      call gather_fourth(eri, p, n, gc)
       call gather_fourth(rdm2, q, n, rc)
-      call dgemm('T', 'N', n, n, n2, 1.0_dp, gc, n2, rc, n2, 1.0_dp, cmat, n)
+      call dgemm('T', 'N', n, n, n2, 1.0_dp, gcp, n2, rc, n2, 1.0_dp, cmat, n)
       call gather_fourth(eri, q, n, gc)
-      call gather_fourth(rdm2, p, n, rc)
-      call dgemm('T', 'N', n, n, n2, -1.0_dp, gc, n2, rc, n2, 1.0_dp, cmat, n)
+      call dgemm('T', 'N', n, n, n2, -1.0_dp, gc, n2, rcp, n2, 1.0_dp, cmat, n)
 
       ! ---- slot-1 slabs: the only pair dependence is which row they land on
       do j = 0, n - 1
@@ -210,6 +227,7 @@ contains
     end do
 
     deallocate(ymat, cmat, tmat, w1, w2, zmat, dm, gb, rb, gc, rc)
+    deallocate(gbp, rbp, gcp, rcp)
 
   contains
 
