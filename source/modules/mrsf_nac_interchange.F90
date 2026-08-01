@@ -15,6 +15,7 @@ module mrsf_nac_interchange_mod
   public :: mrsf_nac_pair_finalize
   public :: mrsf_nac_rohf_hf_adjoint
   public :: mrsf_nac_xc_adjoint
+  public :: mrsf_nac_xc_adjoint_batch
 
 contains
 
@@ -1173,5 +1174,195 @@ contains
                  0.0_dp, transformed, nbf)
     end subroutine ao_to_mo
   end subroutine mrsf_nac_xc_adjoint
+
+!###############################################################################
+
+!> Contract several native-ROHF adjoint vectors with the analytic nuclear XC
+!> stationarity derivative in one molecular-grid traversal.  All probes share
+!> the ground-state density, grid, AO values, functional derivatives, moving-
+!> grid partition geometry, and overlap derivatives; the probe dimension is
+!> retained through every thread-local accumulation and reduction.
+  subroutine mrsf_nac_xc_adjoint_batch(infos, z_vectors, gxc_vectors)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, &
+      OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A
+    use mathlib, only: unpack_matrix
+    use cphf_mod, only: rohf_unpack_trial
+    use dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
+    use mod_dft_gridint_fxc, only: utddft_fxc
+    use grd1, only: der_overlap_matrix
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: z_vectors(:,:)
+    real(kind=dp), intent(out) :: gxc_vectors(:,:,:)
+
+    type(basis_set), pointer :: basis
+    type(dft_grid_t) :: molgrid
+    real(kind=dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:)
+    real(kind=dp), allocatable :: pa(:,:), pb(:,:)
+    real(kind=dp), allocatable :: pza(:,:,:), pzb(:,:,:)
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), work(:,:), half(:,:)
+    real(kind=dp), allocatable :: xcd(:,:,:), xcpa(:,:,:), xcpb(:,:,:)
+    real(kind=dp), allocatable :: fxca(:,:,:), fxcb(:,:,:)
+    real(kind=dp), allocatable :: vxcmoa(:,:), vxcmob(:,:)
+    real(kind=dp), allocatable :: dsa(:,:,:,:), dsa_occ(:,:,:,:)
+    real(kind=dp), allocatable :: gxc_sum(:,:)
+    real(kind=dp) :: reorth
+    integer :: nbf, natom, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: nrhs, irhs, atom, cart, i, j, mu, nu
+
+    if (infos%control%scftype /= 3) then
+      call show_message( &
+        'mrsf_nac_xc_adjoint_batch requires an ROHF/ROKS reference.', &
+        WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    natom = infos%mol_prop%natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    nrhs = size(z_vectors,2)
+    if (nrhs < 1 .or. size(z_vectors,1) /= ltot .or. &
+        size(gxc_vectors,1) /= 3 .or. &
+        size(gxc_vectors,2) /= natom .or. &
+        size(gxc_vectors,3) /= nrhs) then
+      call show_message('Batched XC adjoint dimensions are inconsistent.', &
+                        WITH_ABORT)
+    end if
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), &
+             pza(nbf,nbf,nrhs), pzb(nbf,nbf,nrhs), &
+             xa(nvira,nocca), xb(nvirb,noccb), &
+             work(nbf,nbf), half(nbf,nbf), &
+             xcd(nbf,nbf,2), xcpa(nbf,nbf,nrhs), &
+             xcpb(nbf,nbf,nrhs), gxc_sum(3,natom), source=0.0_dp)
+    call unpack_matrix(dma, pa)
+    call unpack_matrix(dmb, pb)
+
+    do irhs = 1, nrhs
+      call rohf_unpack_trial(z_vectors(:,irhs), xa, xb, &
+                             nbf, nocca, noccb)
+
+      half = 0.0_dp
+      call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
+                 mo(:,nocca+1:nbf), nbf, xa, nvira, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, half, nbf, &
+                 mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
+      pza(:,:,irhs) = work + transpose(work)
+
+      half = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 mo(:,noccb+1:nbf), nbf, xb, nvirb, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+      pzb(:,:,irhs) = work + transpose(work)
+    end do
+
+    gxc_vectors = 0.0_dp
+    if (infos%control%hamilton == 20) then
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molgrid, verbose=.false.)
+
+      xcd(:,:,1) = pa
+      xcd(:,:,2) = pb
+      xcpa = pza
+      xcpb = pzb
+      call utddft_xc_gradient(basis=basis, molGrid=molgrid, &
+           dedft=gxc_sum, da=xcd(:,:,1), db=xcd(:,:,2), &
+           pa=xcpa, pb=xcpb, nMtx=nrhs, threshold=0.0_dp, infos=infos, &
+           include_ground_state=.false., &
+           include_weight_derivative=.true., dedft_mtx=gxc_vectors)
+
+      ! The XC-only coefficient-response kernel is linear in every P_z.
+      ! utddft_fxc already carries an nMtx axis, so evaluate all probes while
+      ! sharing the AO values and functional derivatives of each grid slice.
+      allocate(fxca(nbf,nbf,nrhs), fxcb(nbf,nbf,nrhs), &
+               vxcmoa(nocca,nocca), vxcmob(noccb,noccb), &
+               dsa(nbf,nbf,3,natom), &
+               dsa_occ(nocca,nocca,3,natom), source=0.0_dp)
+      xcpa = pza
+      xcpb = pzb
+      call utddft_fxc(basis=basis, molGrid=molgrid, isVecs=.true., &
+           wfa=mo, wfb=mo, fxa=fxca, fxb=fxcb, dxa=xcpa, dxb=xcpb, &
+           nMtx=nrhs, threshold=0.0_dp, infos=infos)
+
+      ! S^R and its AO->MO transform are independent of the state pair.  Only
+      ! the occupied block enters the trace, so use rectangular DGEMMs and
+      ! retain that block once instead of forming nrhs full MO matrices.
+      call der_overlap_matrix(basis, dsa)
+      do atom = 1, natom
+        do cart = 1, 3
+          do nu = 1, nbf
+            do mu = 1, nbf
+              dsa(mu,nu,cart,atom) = dsa(mu,nu,cart,atom) * &
+                   basis%bfnrm(mu)*basis%bfnrm(nu)
+            end do
+          end do
+          call ao_to_mo_occ(dsa(:,:,cart,atom), nocca, &
+                            dsa_occ(:,:,cart,atom))
+        end do
+      end do
+
+      do irhs = 1, nrhs
+        call ao_to_mo_occ(fxca(:,:,irhs), nocca, vxcmoa)
+        call ao_to_mo_occ(fxcb(:,:,irhs), noccb, vxcmob)
+        do atom = 1, natom
+          do cart = 1, 3
+            reorth = 0.0_dp
+            do j = 1, nocca
+              do i = 1, nocca
+                reorth = reorth + &
+                  dsa_occ(i,j,cart,atom)*vxcmoa(j,i)
+              end do
+            end do
+            do j = 1, noccb
+              do i = 1, noccb
+                reorth = reorth + &
+                  dsa_occ(i,j,cart,atom)*vxcmob(j,i)
+              end do
+            end do
+            gxc_vectors(cart,atom,irhs) = &
+              gxc_vectors(cart,atom,irhs) - reorth
+          end do
+        end do
+      end do
+      gxc_vectors = -0.5_dp*gxc_vectors
+      call dftclean(infos)
+
+      deallocate(fxca, fxcb, vxcmoa, vxcmob, dsa, dsa_occ)
+    end if
+
+    deallocate(pa, pb, pza, pzb, xa, xb, work, half, xcd, xcpa, xcpb, &
+               gxc_sum)
+  contains
+    subroutine ao_to_mo_occ(ao, nocc, transformed)
+      real(kind=dp), intent(in) :: ao(:,:)
+      integer, intent(in) :: nocc
+      real(kind=dp), intent(out) :: transformed(:,:)
+      half = 0.0_dp
+      call dgemm('t','n', nocc, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','n', nocc, nocc, nbf, 1.0_dp, half, nbf, mo, nbf, &
+                 0.0_dp, transformed, nocc)
+    end subroutine ao_to_mo_occ
+  end subroutine mrsf_nac_xc_adjoint_batch
 
 end module mrsf_nac_interchange_mod

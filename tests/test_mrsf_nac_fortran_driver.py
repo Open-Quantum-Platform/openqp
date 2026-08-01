@@ -72,21 +72,25 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     assert body.count(
         "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)"
     ) == 1
+    assert body.count(
+        "call mrsf_nac_xc_adjoint_batch(infos, solution_batch, xc_batch)"
+    ) == 1
     assert body.count("call mrsf_nac_rohf_hf_adjoint(infos)") == 1
-    assert body.count("call mrsf_nac_xc_adjoint(infos)") == 1
+    assert "call mrsf_nac_xc_adjoint(infos)" not in body
     assert body.count("call mrsf_nac_pair_accumulate_antisym(") == 1
 
     pair_loop = body.index("do istate = 1, nstate")
     pair_skip = body.index("if (istate == jstate) cycle", pair_loop)
     pair_source = body.index("call mrsf_nac_rohf_pair_overlap(infos)")
     batch_call = body.index("call mrsf_nac_rohf_zvector_batch(")
+    xc_batch_call = body.index("call mrsf_nac_xc_adjoint_batch(")
     adjoint_loop = body.index("do ipair = 1, npair", batch_call)
     hf_call = body.index("call mrsf_nac_rohf_hf_adjoint(infos)")
-    xc_call = body.index("call mrsf_nac_xc_adjoint(infos)")
+    xc_publish = body.index("xc_tag = xc_batch(:,:,ipair)")
     accumulate_call = body.index("call mrsf_nac_pair_accumulate_antisym(")
     assert (
-        pair_loop < pair_skip < pair_source < batch_call < adjoint_loop
-        < hf_call < xc_call < accumulate_call
+        pair_loop < pair_skip < pair_source < batch_call < xc_batch_call
+        < adjoint_loop < hf_call < xc_publish < accumulate_call
     )
     assert "call mrsf_nac_rohf_zvector(infos)" not in body
     assert "call cphf_solve_rohf" not in body

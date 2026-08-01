@@ -60,7 +60,7 @@ contains
       mrsf_nac_pair_accumulate_antisym, &
       mrsf_nac_pair_finalize, mrsf_nac_rohf_pair_overlap, &
       mrsf_nac_rohf_zvector_batch, mrsf_nac_rohf_hf_adjoint, &
-      mrsf_nac_xc_adjoint
+      mrsf_nac_xc_adjoint_batch
 
     implicit none
 
@@ -82,6 +82,7 @@ contains
     character(len=*), parameter :: tag_esum = "OQP::nac_esum"
     character(len=*), parameter :: tag_overlap = "OQP::nac_pair_overlap"
     character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
+    character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
     character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
       OQP_td_bvec_mo, OQP_td_energies /)
 
@@ -90,11 +91,11 @@ contains
     real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
       pair_overlap(:,:)
     real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), &
-      z_tag(:)
+      z_tag(:), xc_tag(:,:)
     real(kind=dp), allocatable :: bvec_saved(:,:), energies_saved(:), ytil(:)
     real(kind=dp), allocatable :: gamma_column(:,:)
     real(kind=dp), allocatable :: gamma_pair(:), rhs_batch(:,:), &
-      solution_batch(:,:), nonz_batch(:,:)
+      solution_batch(:,:), nonz_batch(:,:), xc_batch(:,:,:)
     integer, allocatable :: pair_i(:), pair_j(:)
     real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign
     real(kind=dp) :: profile_total, profile_metric, profile_wpair
@@ -245,7 +246,8 @@ contains
     allocate(bvec_saved(nij,nstate), energies_saved(nstate), ytil(nij), &
              gamma_column(nbf*nbf,nstate), gamma_pair(nbf*nbf), &
              rhs_batch(ltot,npair), solution_batch(ltot,npair), &
-             nonz_batch(ncoord,npair), pair_i(npair), pair_j(npair))
+             nonz_batch(ncoord,npair), xc_batch(3,natom,npair), &
+             pair_i(npair), pair_j(npair))
     bvec_saved = bvec_mo
     ! TagArray reserve/remove operations below may invalidate every cached
     ! record pointer, not only the record being changed.  Keep an owned copy
@@ -254,6 +256,7 @@ contains
     rhs_batch = 0.0_dp
     solution_batch = 0.0_dp
     nonz_batch = 0.0_dp
+    xc_batch = 0.0_dp
     ipair = 0
     do jstate = 2, nstate
       do istate = 1, jstate - 1
@@ -374,9 +377,15 @@ contains
     call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)
     if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
-    call infos%dat%remove_records((/ character(len=80) :: tag_z /))
+    if (profile_enabled) call system_clock(profile_stop)
+    call mrsf_nac_xc_adjoint_batch(infos, solution_batch, xc_batch)
+    if (profile_enabled) call profile_add(profile_xc, profile_stop)
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_z, tag_xc /))
     call infos%dat%reserve_data(tag_z, TA_TYPE_REAL64, ltot, (/ ltot /), &
       comment='current antisymmetric unordered-pair ROHF adjoint')
+    call infos%dat%reserve_data(tag_xc, TA_TYPE_REAL64, 3*natom, &
+      (/ 3, natom /), comment='batched native ROHF NAC analytic XC adjoint')
     do ipair = 1, npair
       ! Every adjoint contraction is linear in z.  Applying it once to the
       ! half-difference solution is therefore exactly the half-difference of
@@ -386,9 +395,10 @@ contains
       if (profile_enabled) call system_clock(profile_stop)
       call mrsf_nac_rohf_hf_adjoint(infos)
       if (profile_enabled) call profile_add(profile_hf, profile_stop)
-      if (profile_enabled) call system_clock(profile_stop)
-      call mrsf_nac_xc_adjoint(infos)
-      if (profile_enabled) call profile_add(profile_xc, profile_stop)
+      ! The HF routine may grow TagArray storage, so reacquire the pointer
+      ! before publishing this pair's matrix-resolved batched XC result.
+      call tagarray_get_data(infos%dat, tag_xc, xc_tag)
+      xc_tag = xc_batch(:,:,ipair)
       if (profile_enabled) call system_clock(profile_stop)
       call mrsf_nac_pair_accumulate_antisym( &
         infos, pair_i(ipair), pair_j(ipair), nonz_batch(:,ipair))
@@ -415,7 +425,7 @@ contains
     end if
 
     deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair, &
-               rhs_batch, solution_batch, nonz_batch, pair_i, pair_j)
+               rhs_batch, solution_batch, nonz_batch, xc_batch, pair_i, pair_j)
   contains
     pure integer function unordered_pair_index(left_state, right_state) &
         result(index)

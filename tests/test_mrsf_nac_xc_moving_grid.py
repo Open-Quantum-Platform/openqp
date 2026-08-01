@@ -84,9 +84,14 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
     def test_python_partition_names_match_fortran_type_ids(self):
         self.assertIn("{'ssf': 0, 'erf': 1, 'becke': 2", self.oqpdata)
 
-    def test_moving_grid_rejects_unsupported_matrix_and_fxc_modes(self):
+    def test_moving_grid_rejects_fxc_mode_and_preserves_probe_axis(self):
         self.assertIn("requested_weight_derivative .and. doFxc", self.consumer)
-        self.assertIn("requested_weight_derivative .and. nMtx /= 1", self.consumer)
+        self.assertNotIn(
+            "requested_weight_derivative .and. nMtx /= 1", self.consumer
+        )
+        self.assertIn("dedft_mtx", self.consumer)
+        self.assertIn("self%probe_value(ipt,imtx,mythread)", self.consumer)
+        self.assertIn("self%nucgrad(:,b,imtx,mythread)", self.consumer)
         self.assertIn(
             "dat%do_weight_derivative .and. dat%do_ground_state",
             self.consumer,
@@ -99,6 +104,12 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
         self.assertNotIn("allocate(", body)
         self.assertIn("part_dlog", self.consumer)
         self.assertIn("O(Ngrid*Natom**3)", self.consumer)
+
+    def test_partition_thread_scratch_uses_cache_line_atom_stride(self):
+        self.assertIn("nat_stride = ((nat+7)/8)*8", self.consumer)
+        self.assertIn("part_dist(nat_stride,nthreads)", self.consumer)
+        self.assertIn("part_cells(nat_stride,nthreads)", self.consumer)
+        self.assertIn("part_dlog(3,nat,nat_stride,nthreads)", self.consumer)
 
     def test_probe_weight_term_is_not_ground_state_xc_energy(self):
         self.assertIn("probe_value", self.consumer)
@@ -123,6 +134,19 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
         self.assertNotIn("call fock_jk(", body)
         self.assertNotIn("call get_response_packed(", body)
         self.assertNotIn("call pack_matrix(", body)
+
+    def test_production_batches_pair_probes_in_one_moving_grid_call(self):
+        body = self.adjoint.split(
+            "subroutine mrsf_nac_xc_adjoint_batch(infos", 1
+        )[1].split("end subroutine mrsf_nac_xc_adjoint_batch", 1)[0]
+        self.assertEqual(body.count("call dft_initialize("), 1)
+        self.assertEqual(body.count("call utddft_xc_gradient("), 1)
+        self.assertIn("nMtx=nrhs", body)
+        self.assertIn("dedft_mtx=gxc_vectors", body)
+        self.assertIn("call utddft_fxc(", body)
+        self.assertIn("call ao_to_mo_occ(dsa(:,:,cart,atom)", body)
+        self.assertIn("nocc, nocc, nbf", body)
+        self.assertNotIn("call fock_jk(", body)
 
 
 if __name__ == "__main__":
