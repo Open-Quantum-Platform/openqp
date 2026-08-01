@@ -104,13 +104,21 @@ contains
     if (present(tol)) this%tol = tol
     this%dat = c_loc(dat)
 
-    ! r1 = b - A x
-    call this%update(this%av, this%x, this%dat)
-    if (.not. all(ieee_is_finite(this%av))) then
-      this%errcode = MINRES_BREAKDOWN
-      return
+    ! r1 = b - A x.  Allocating with SOURCE above gives the historical zero
+    ! initial guess when x0 is absent.  For a linear MINRES operator A*0 is
+    ! identically zero, so avoid one potentially expensive operator action in
+    ! that overwhelmingly common case.  An explicit x0 retains the complete
+    ! update and finite-value validation used by all existing callers.
+    if (present(x0)) then
+      call this%update(this%av, this%x, this%dat)
+      if (.not. all(ieee_is_finite(this%av))) then
+        this%errcode = MINRES_BREAKDOWN
+        return
+      end if
+      this%r1 = this%b - this%av
+    else
+      this%r1 = this%b
     end if
-    this%r1 = this%b - this%av
     this%r2 = this%r1
 
     ! y = M^-1 r1 ; beta1 = sqrt(r1 . y)  (>0 since M SPD)

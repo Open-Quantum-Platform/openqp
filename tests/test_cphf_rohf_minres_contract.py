@@ -24,6 +24,16 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.source = (ROOT / "source" / "modules" / "cphf.F90").read_text()
         cls.solve = _subroutine(cls.source, "cphf_solve_rohf")
+        cls.apbx = _subroutine(cls.source, "cphf_apbx_rohf")
+        minres_source = (ROOT / "source" / "minres.F90").read_text()
+        minres_init = re.search(
+            r"subroutine\s+minres_init\b.*?end\s+subroutine",
+            minres_source,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if minres_init is None:
+            raise AssertionError("missing Fortran subroutine minres_init")
+        cls.minres_init = minres_init.group(0).lower()
 
     def test_pair_adjoint_minres_uses_an_spd_preconditioner(self):
         solve_loop = self.solve.split("do irhs = 1, nrhs", 1)[1]
@@ -82,6 +92,43 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
             self.solve.index("call minres%clean()"),
             self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
         )
+
+    def test_implicit_zero_guess_skips_the_initial_operator_action(self):
+        residual_setup = self.minres_init.split("! r1 = b - a x", 1)[1].split(
+            "! y = m^-1 r1", 1
+        )[0]
+        explicit_guess, zero_guess = residual_setup.split("else", 1)
+        self.assertIn("if (present(x0)) then", explicit_guess)
+        self.assertIn("call this%update(this%av, this%x, this%dat)", explicit_guess)
+        self.assertIn("all(ieee_is_finite(this%av))", explicit_guess)
+        self.assertIn("this%r1 = this%b - this%av", explicit_guess)
+        self.assertIn("this%r1 = this%b", zero_guess)
+        self.assertNotIn("this%update", zero_guess)
+
+    def test_rohf_response_fock_transforms_only_the_required_vo_blocks(self):
+        response = self.apbx.split("call get_response_packed", 1)[1].split(
+            "call rohf_pack_trial", 1
+        )[0]
+        # V Co, followed by Cv^T (V Co), for alpha and beta respectively.
+        for nocc, nvir, out in (
+            ("nocca", "nvira", "x2a"),
+            ("noccb", "nvirb", "x2b"),
+        ):
+            self.assertRegex(
+                response,
+                rf"(?s)call\s+dgemm\('n','n',\s*nbf,\s*{nocc},\s*nbf,"
+                rf".*?p%mo,\s*nbf,\s*0\.0_dp,\s*work2,\s*nbf\)",
+            )
+            self.assertRegex(
+                response,
+                rf"(?s)call\s+dgemm\('t','n',\s*{nvir},\s*{nocc},\s*nbf,"
+                rf".*?work2,\s*nbf,\s*1\.0_dp,\s*{out},\s*{nvir}\)",
+            )
+        self.assertNotRegex(
+            response, r"call\s+dgemm\([^\n]*nbf,\s*nbf,\s*nbf"
+        )
+        self.assertNotIn("work3(nocca+1:nbf", response)
+        self.assertNotIn("work3(noccb+1:nbf", response)
 
 
 if __name__ == "__main__":

@@ -1174,16 +1174,20 @@ contains
     ! response Fock from the trial density (open-shell: J[dPa+dPb] - cx K[dP^s])
     call get_response_packed(p%basis, p%infos, p%molgrid, p%mo, dm_tri, pfock, p%mo)
 
-    ! add the MO vir-occ block of the response Fock (alpha)
+    ! Add only the MO virtual-occupied block of the response Fock.  Computing
+    ! Cv^T V Co directly avoids the two full nbf-by-nbf output transforms per
+    ! spin that were immediately sliced down to this rectangular block.
     call unpack_matrix(pfock(:,1), v)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
-    x2a = x2a + work3(nocca+1:nbf, 1:nocca)
+    call dgemm('n','n', nbf, nocca, nbf, 1.0_dp, v, nbf, &
+               p%mo, nbf, 0.0_dp, work2, nbf)
+    call dgemm('t','n', nvira, nocca, nbf, 1.0_dp, &
+               p%mo(1,nocca+1), nbf, work2, nbf, 1.0_dp, x2a, nvira)
     ! beta
     call unpack_matrix(pfock(:,2), v)
-    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, p%mo, nbf, v, nbf, 0.0_dp, work2, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, work2, nbf, p%mo, nbf, 0.0_dp, work3, nbf)
-    x2b = x2b + work3(noccb+1:nbf, 1:noccb)
+    call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, v, nbf, &
+               p%mo, nbf, 0.0_dp, work2, nbf)
+    call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
+               p%mo(1,noccb+1), nbf, work2, nbf, 1.0_dp, x2b, nvirb)
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
