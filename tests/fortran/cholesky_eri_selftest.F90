@@ -37,6 +37,7 @@ contains
     use cc_ao2mo, only: cc_eri_collect_t, cc_packed_length
     use cholesky_eri, only: cholesky_eri_decompose, cholesky_eri_max_vectors, &
                             cholesky_packed_index
+    use cholesky_direct, only: cholesky_direct_decompose
 
     implicit none
 
@@ -47,8 +48,11 @@ contains
     type(cc_eri_collect_t), target :: eri_data
 
     real(dp), allocatable, target :: gao(:)
-    real(dp), allocatable :: lvec(:,:)
+    real(dp), allocatable :: lvec(:,:), dvec(:,:)
     integer :: nbf, npair, nchol, maxchol, p, q, iu
+    integer :: dchol, npass
+    real(dp) :: derr, dmax_d, dapprox
+    logical :: dtrunc
     real(dp) :: tol, err, exact, approx, dmax, drms
     integer(8) :: nel
     logical :: truncated
@@ -92,6 +96,20 @@ contains
     end do
     drms = sqrt(drms/real(nel, dp))
 
+    ! Integral-direct factorisation of the same integrals -- it never builds
+    ! the packed store, and is checked against it all the same.
+    allocate(dvec(npair, maxchol))
+    call cholesky_direct_decompose(basis, infos, tol, maxchol, dvec, dchol, &
+                                   derr, dtrunc, npass)
+    dmax_d = 0.0_dp
+    do p = 1, npair
+      do q = 1, p
+        exact = gao(cholesky_packed_index(p, q))
+        dapprox = dot_product(dvec(p,1:dchol), dvec(q,1:dchol))
+        dmax_d = max(dmax_d, abs(exact-dapprox))
+      end do
+    end do
+
     open(newunit=iu, file='/tmp/cholesky_eri_selftest.out', status='replace')
     write(iu,'(A,I0)')    'nbf          = ', nbf
     write(iu,'(A,I0)')    'npair        = ', npair
@@ -102,9 +120,13 @@ contains
     write(iu,'(A,ES14.6)')'recon_max    = ', dmax
     write(iu,'(A,ES14.6)')'recon_rms    = ', drms
     write(iu,'(A,F10.4)') 'nchol_per_nbf= ', real(nchol,dp)/real(nbf,dp)
+    write(iu,'(A,I0)')    'direct_nchol = ', dchol
+    write(iu,'(A,I0)')    'direct_npass = ', npass
+    write(iu,'(A,L1)')    'direct_trunc = ', dtrunc
+    write(iu,'(A,ES14.6)')'direct_recon_max = ', dmax_d
     close(iu)
 
-    deallocate(gao, lvec)
+    deallocate(gao, lvec, dvec)
 
   end subroutine cholesky_eri_selftest
 
