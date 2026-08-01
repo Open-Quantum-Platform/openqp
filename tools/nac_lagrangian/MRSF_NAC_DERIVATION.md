@@ -1491,3 +1491,22 @@ record perturbation represents). This is a ~1%-of-channel effect
 (~2e-2 on d for the worst pair), fold-sector-local, and is THE
 remaining derivation item for theory-level closure. Everything else
 in the U-channel is closed at FD-truncation level.
+
+### 7.53 The antisym-dD derivation: proposed, tested, FALSIFIED (with
+partial signal) -- the fold-term needs the sigma-source reading
+PROPOSED (paper): if the worker skeleton were Lowdin-orthonormalized,
+its density baseline D_g = D_ref - (h/2) C{S^x,D0}C^T would exactly
+cancel the sym-U part of the dD model, leaving dD = C[U_a, D0]C^T.
+TESTED offline (v7h npz): J1 with MTG:U_antisym --
+  (1,3) improves 8.7e-3 -> 7.0e-3; assembly (2,3) 0.205 -> 0.120;
+  BUT (1,2) worsens 1.9e-2 -> 1.3e-1 and J1(2,3) -> 0.54. FALSIFIED
+as the global answer. Consistently: the G-A gate (engines == worker
+w_skel at 1e-5..3e-4) already bounds any orthonormalization shift far
+below the residual -- the premise was wrong; the sym-dD channel is
+REAL under the actual referee convention.
+STATE AT CLOSE: the fold-sector residual (7.52: 0.010 vector-level,
+LR1+socc rows; -> 1.9e-2/8.7e-3/0.21 on d) remains THE item. Its
+derivation requires reading the sigma source's SOCC/fold machinery
+(mrsfmntoia / mrsfcbc spc channels, the U-matrix pairing of JCP 158,
+194105, the fold application) -- a focused fresh-context task. All
+referees (v19 slot-resolved, v7h/v7o matrices) are frozen and synced.
