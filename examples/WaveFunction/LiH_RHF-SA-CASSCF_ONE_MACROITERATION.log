@@ -1,0 +1,21 @@
+Reference generation log for LiH_RHF-SA-CASSCF_ONE_MACROITERATION.inp
+
+Reference program: PySCF 2.10.0
+Reference method: equal-weight two-state SA-CASSCF
+Geometry: Li 0 0 0; H 0 0 1.6
+Geometry unit: Angstrom
+Basis: sto-3g
+Active space: frozen-core CAS(2e,2o)
+Weights: [0.5, 0.5]
+
+PySCF RHF energy: -7.86186476980865 Eh
+PySCF SA-CASSCF state-average energy: -7.806196198024107 Eh
+PySCF SA-CASSCF state energies:
+  root 0: -7.858457073960626 Eh
+  root 1: -7.753935322087588 Eh
+
+OpenQP note:
+  The paired OpenQP input is a native SA-CASSCF one-macroiteration smoke
+  example. It should write LiH_RHF-SA-CASSCF_ONE_MACROITERATION_MACRO.json at
+  runtime. This workspace did not include a compiled liboqp backend when the
+  example reference was added, so no OpenQP runtime log is bundled here.

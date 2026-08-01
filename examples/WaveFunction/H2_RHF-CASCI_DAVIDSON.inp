@@ -1,0 +1,39 @@
+# RHF/STO-3G/CASCI/ENERGY of H2 in the full CAS(2e,2o) space with Davidson CI.
+# This is example/interface coverage for solver=davidson, not a new method
+# acceptance benchmark or performance claim.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=casci
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=60
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=0
+max_det=1000
+max_memory=256
+
+[ci]
+nroot=1
+solver=davidson
+eig_tol=1.0e-10
+integral_backend=native
+integral_cutoff=5.0e-11
+davidson_maxiter=100

@@ -535,7 +535,8 @@ def main():
                         help='run tests from a specified folder or:\n'
                              '  all    - Run the standard suite in examples\n'
                              '           (slow/non-self-contained exclusions apply)\n'
-                             '  other  - Run tests in examples/other')
+                             '  other  - Run tests in examples/other\n'
+                             '  WF_methods - Run curated wavefunction examples')
     parser.add_argument('--input-format', '--input_format', '--test-inputs',
                         dest='test_input_format',
                         choices=('auto', 'inp', 'oqp', 'both'),

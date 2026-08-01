@@ -1,0 +1,13 @@
+{
+  "description": "PySCF RHF/STO-3G H2 MO coefficients, AO rows x MO columns",
+  "mo_coeff": [
+    [
+      0.5488422750886979,
+      1.2124519201795332
+    ],
+    [
+      0.5488422750886977,
+      -1.2124519201795332
+    ]
+  ]
+}

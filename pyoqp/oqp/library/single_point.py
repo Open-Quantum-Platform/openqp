@@ -72,6 +72,21 @@ MP2_VARIANT_SCALES = {
 }
 
 
+SUPPORTED_SINGLE_POINT_ENERGY_METHODS = {
+    'hf', 'tdhf', 'mp2', 'fci', 'casci', 'casscf', 'sa-casscf', 'sacasscf',
+    'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+    'mrmp2', 'mcqdpt2', 'xmcqdpt2',
+}
+
+
+def _normalized_method_label(method):
+    return str(method).strip().lower()
+
+
+def _raise_unavailable_wavefunction_method(method):
+    raise ValueError(f'Unknown method type {method}')
+
+
 class Calculator:
     """
     OQP calculator base class
@@ -409,22 +424,36 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2']:
-            raise ValueError(f'Unknown method type {self.method}')
+        if _normalized_method_label(self.method) not in SUPPORTED_SINGLE_POINT_ENERGY_METHODS:
+            _raise_unavailable_wavefunction_method(self.method)
 
         target_converger = self.mol.config['scf']['converger_type']
         try:
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
 
-            # ixcore
-            self.ixcore_shift()
-
             # compute excitations
             if self.method == 'tdhf':
+                # ixcore is a TDHF/XAS orbital shift and is not used by FCI.
+                self.ixcore_shift()
                 energies = self.excitation(ref_energy)
             elif self.method == 'mp2':
                 energies = self.correlation(ref_energy)
+            elif self.method == 'fci':
+                from oqp.library.fci import FCI
+                energies = FCI(self.mol).energy(ref_energy)
+            elif self.method == 'casci':
+                from oqp.library.casci import CASCI
+                energies = CASCI(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {'casscf', 'sa-casscf', 'sacasscf'}:
+                from oqp.library.casscf import CASSCF
+                energies = CASSCF(self.mol).energy(ref_energy)
+            elif _normalized_method_label(self.method) in {
+                'caspt2', 'ms-caspt2', 'mscaspt2', 'xms-caspt2', 'xmscaspt2',
+                'mrmp2', 'mcqdpt2', 'xmcqdpt2'
+            }:
+                from oqp.library.caspt2_dyall import native_caspt2_energy
+                energies = native_caspt2_energy(self.mol, ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -909,6 +938,15 @@ class Gradient(Calculator):
     def gradient(self):
         # check method
         if self.method not in ['hf', 'tdhf'] and not is_tb_method(self.method):
+            # Native PT2 family (energy-only kernels): central-difference
+            # numerical gradients via oqp.library.pt2_numgrad.  Lazy import to
+            # avoid a circular module dependency.
+            from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS, pt2_numerical_gradient
+            if _normalized_method_label(self.method) in PT2_NUMGRAD_METHODS:
+                dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')
+                grads = pt2_numerical_gradient(self.mol, self.grads)
+                self.mol.grads = grads
+                return grads
             raise ValueError(f'Unknown method type {self.method}')
 
         dump_log(self.mol, title='PyOQP: Entering Gradient Calculation')

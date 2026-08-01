@@ -230,6 +230,29 @@ void proj_dm_newbas(struct oqp_handle_t *inf);
 
 void hf_energy(struct oqp_handle_t *inf);
 void hf_gradient(struct oqp_handle_t *inf);
+void fci_ao_integrals(struct oqp_handle_t *inf);
+/* Matrix-free QDPT2 streaming kernel (diagonal-Fock H0): accumulates the
+ * per-state first-order couplings V_I(Phi) and diagonal E0(Phi) over the
+ * external singles/doubles of the reference determinants into a hash table.
+ * Handle-free: pure array in/out; cap must be a power of two; returns the
+ * number of unique external determinants, or -1 on hash overflow. */
+int64_t qdpt2_stream_kernel(int32_t norb, int32_t ncore, int32_t nact,
+    int64_t nsup, int32_t nstate, int32_t nthreads, int64_t cap,
+    const int64_t *sup_a, const int64_t *sup_b, const double *cvec,
+    const double *h1e, const double *eri, const double *eps,
+    int64_t *out_ka, int64_t *out_kb, double *out_e0, double *out_v);
+/* Determinant-CI Fortran engine (fci_hamiltonian.F90): ILP64-safe dense
+ * symmetric eigensolver, dense Hamiltonian build, diagonal, and matrix-free
+ * block application Y = 0.5(H+H^T) X for the Davidson solver. */
+int64_t oqp_dsyevd(int32_t n, double *a, double *w);
+void fci_dense_hamiltonian(int32_t nspin, int64_t ndet, const int64_t *dets,
+    const double *hspin, const double *gspin, double cutoff, double *hmat,
+    int32_t nthreads);
+void fci_hamiltonian_diag(int32_t nspin, int64_t ndet, const int64_t *dets,
+    const double *hspin, const double *gspin, double *diag);
+int64_t fci_hamiltonian_matvec(int32_t nspin, int64_t ndet, const int64_t *dets,
+    const double *hspin, const double *gspin, double cutoff, int32_t nvec,
+    const double *x, double *y, int32_t nthreads);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

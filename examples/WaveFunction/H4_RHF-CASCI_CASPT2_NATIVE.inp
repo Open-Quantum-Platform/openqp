@@ -1,0 +1,57 @@
+# RHF/STO-3G/CASPT2 ENERGY of linear H4 with a CASCI reference.
+# This dispatches native OpenQP uncontracted determinant-space CASPT2 with
+# IPEA, level-shift, imaginary-shift, and amplitude reporting controls.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=1
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+integral_cutoff=5.0e-11
+davidson_maxiter=100
+
+[pt2]
+reference=casci
+variant=auto
+target_roots=0
+contraction=uncontracted
+ipea_shift=0.25
+imaginary_shift=0.0
+level_shift=0.0
+denominator_cutoff=1.0e-10
+intruder_threshold=1.0e-6
+max_memory=512
+semi_canonical=true
+save_amplitudes=true
+print_amplitudes=true
+amplitude_threshold=1.0e-2

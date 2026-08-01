@@ -1,0 +1,410 @@
+{
+  "accumulated_rotation_orthogonality_error": 8.621561078346848e-15,
+  "benchmark_acceptance_claimed": false,
+  "converged": true,
+  "diagnostic_only": false,
+  "energy_history": [
+    -8.854336129086628,
+    -8.856093384313619,
+    -8.859940432148644,
+    -8.860295092340426,
+    -8.86873199417832,
+    -8.870152652301448,
+    -8.872613413949495,
+    -8.87280239398449,
+    -8.87323286656914,
+    -8.873248568997703,
+    -8.8732515430715,
+    -8.873252286246519,
+    -8.87325247839115,
+    -8.873252528692667,
+    -8.873252541973438,
+    -8.873252545485828,
+    -8.873252546415937,
+    -8.873252546662565,
+    -8.873252546727711,
+    -8.873252546745055,
+    -8.873252546749551
+  ],
+  "final_energies": [
+    -7.88104527630643
+  ],
+  "gradient_norm_history": [
+    0.0037999511823316227,
+    0.012329417591692496,
+    0.023929298823845504,
+    0.023794357636647466,
+    0.044260188650742396,
+    0.031056004617917184,
+    0.020971215161067255,
+    0.014678134635602014,
+    0.011285640864119663,
+    0.004559747868572727,
+    0.0021769939954214023,
+    0.001098720140590239,
+    0.0005614554733673186,
+    0.0002885116676466331,
+    0.0001482221618289139,
+    7.620720269591653e-05,
+    3.9209605946793444e-05,
+    2.0257446509719846e-05,
+    1.0372892460638033e-05,
+    5.4671090689816544e-06,
+    2.9015638763985363e-06
+  ],
+  "is_production_acceptance": true,
+  "loop_stop_reason": "gradient_below_tol",
+  "macroiteration_options": {
+    "energy_decrease_tol": 1e-12,
+    "gradient_norm_tol": 5e-06,
+    "max_function_evaluations": 8000,
+    "max_macro_iterations": 80,
+    "max_rotation_norm": 0.05,
+    "optimizer": "powell",
+    "root": 0,
+    "step_norm_tol": 1e-08
+  },
+  "max_macro_iterations": 80,
+  "n_accepted": 20,
+  "n_iterations": 20,
+  "native_orbital_optimization_enabled": true,
+  "orbitals_mutated": true,
+  "production_acceptance_authorized": true,
+  "report_kind": "casscf_macroiteration_evidence",
+  "root": 0,
+  "root_ambiguous": false,
+  "root_swapped": false,
+  "same_setup_benchmark_accepted": false,
+  "scaffold_reference": false,
+  "source_diagnostic": {
+    "accumulated_rotation": {
+      "array_summary": true,
+      "dtype": "float64",
+      "fro_norm": 2.44948974278318,
+      "max": 0.9999999999999964,
+      "max_abs": 0.9999999999999964,
+      "min": -0.8788008223824021,
+      "shape": [
+        6,
+        6
+      ]
+    },
+    "accumulated_rotation_orthogonality_error": 8.621561078346848e-15,
+    "converged": true,
+    "diagnostic_only": true,
+    "energy_history": [
+      -8.854336129086628,
+      -8.856093384313619,
+      -8.859940432148644,
+      -8.860295092340426,
+      -8.86873199417832,
+      -8.870152652301448,
+      -8.872613413949495,
+      -8.87280239398449,
+      -8.87323286656914,
+      -8.873248568997703,
+      -8.8732515430715,
+      -8.873252286246519,
+      -8.87325247839115,
+      -8.873252528692667,
+      -8.873252541973438,
+      -8.873252545485828,
+      -8.873252546415937,
+      -8.873252546662565,
+      -8.873252546727711,
+      -8.873252546745055,
+      -8.873252546749551
+    ],
+    "final_ci_vector_identity": {
+      "ambiguous": false,
+      "basis_consistent": true,
+      "best_overlap": 0.9999999999999998,
+      "best_root": 0,
+      "ci_vector_overlap_available": true,
+      "energies": [
+        -1.076963129056996
+      ],
+      "energy_gap": "inf",
+      "gram_matrix": {
+        "array_summary": true,
+        "dtype": "float64",
+        "fro_norm": 0.9999999999999998,
+        "max": 0.9999999999999998,
+        "max_abs": 0.9999999999999998,
+        "min": 0.9999999999999998,
+        "shape": [
+          1,
+          1
+        ]
+      },
+      "is_production_acceptance": false,
+      "max_off_diagonal": 0.0,
+      "metadata": {
+        "active_electrons": [
+          1,
+          1
+        ],
+        "determinant_fingerprint": 13833504677027330067,
+        "n_active_orbitals": 2,
+        "n_determinants": 4
+      },
+      "nroot": 1,
+      "orbitals_mutated": false,
+      "orthonormality_error": 2.220446049250313e-16,
+      "overlap_gap": 0.9999999999999998,
+      "overlap_kind": "ci_vector_determinant_basis_gram",
+      "root": 0,
+      "second_best_overlap": 0.0,
+      "stop_reason": "tracked",
+      "tracked_self_overlap": 0.9999999999999998
+    },
+    "final_rdm_sanity": {
+      "expected_rdm1_trace": 2.0,
+      "rdm1_symmetry_error": 0.0,
+      "rdm1_trace": 1.9999999999999996,
+      "rdm1_trace_error": 4.440892098500626e-16,
+      "rdm2_shape": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "root": 0
+    },
+    "final_root_overlap": {
+      "ambiguous": false,
+      "basis_consistent": false,
+      "best_overlap": 0.9891919793495005,
+      "best_root": 0,
+      "caveat": "Active-space RDM Frobenius overlaps are diagnostic warnings only; post-rotation comparisons are not basis-invariant when active--external orbital rotations are present.",
+      "ci_vector_overlap_available": false,
+      "overlap_gap": 0.9891919793495005,
+      "overlap_kind": "active_rdm_frobenius_not_basis_invariant",
+      "overlap_matrix": {
+        "array_summary": true,
+        "dtype": "float64",
+        "fro_norm": 0.9891919793495005,
+        "max": 0.9891919793495005,
+        "max_abs": 0.9891919793495005,
+        "min": 0.9891919793495005,
+        "shape": [
+          1,
+          1
+        ]
+      },
+      "second_best_overlap": 0.0,
+      "stop_reason": "tracked",
+      "swapped": false,
+      "tracked_root_overlaps": [
+        0.9891919793495005
+      ]
+    },
+    "gradient_norm_history": [
+      0.0037999511823316227,
+      0.012329417591692496,
+      0.023929298823845504,
+      0.023794357636647466,
+      0.044260188650742396,
+      0.031056004617917184,
+      0.020971215161067255,
+      0.014678134635602014,
+      0.011285640864119663,
+      0.004559747868572727,
+      0.0021769939954214023,
+      0.001098720140590239,
+      0.0005614554733673186,
+      0.0002885116676466331,
+      0.0001482221618289139,
+      7.620720269591653e-05,
+      3.9209605946793444e-05,
+      2.0257446509719846e-05,
+      1.0372892460638033e-05,
+      5.4671090689816544e-06,
+      2.9015638763985363e-06
+    ],
+    "initial_ci_vector_identity": {
+      "ambiguous": false,
+      "basis_consistent": true,
+      "best_overlap": 1.0,
+      "best_root": 0,
+      "ci_vector_overlap_available": true,
+      "energies": [
+        -1.0581165539251123
+      ],
+      "energy_gap": "inf",
+      "gram_matrix": {
+        "array_summary": true,
+        "dtype": "float64",
+        "fro_norm": 1.0,
+        "max": 1.0,
+        "max_abs": 1.0,
+        "min": 1.0,
+        "shape": [
+          1,
+          1
+        ]
+      },
+      "is_production_acceptance": false,
+      "max_off_diagonal": 0.0,
+      "metadata": {
+        "active_electrons": [
+          1,
+          1
+        ],
+        "determinant_fingerprint": 13833504677027330067,
+        "n_active_orbitals": 2,
+        "n_determinants": 4
+      },
+      "nroot": 1,
+      "orbitals_mutated": false,
+      "orthonormality_error": 0.0,
+      "overlap_gap": 1.0,
+      "overlap_kind": "ci_vector_determinant_basis_gram",
+      "root": 0,
+      "second_best_overlap": 0.0,
+      "stop_reason": "tracked",
+      "tracked_self_overlap": 1.0
+    },
+    "initial_rdm_sanity": {
+      "expected_rdm1_trace": 2.0,
+      "rdm1_symmetry_error": 0.0,
+      "rdm1_trace": 2.0,
+      "rdm1_trace_error": 0.0,
+      "rdm2_shape": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "root": 0
+    },
+    "initial_root_overlap": {
+      "ambiguous": false,
+      "basis_consistent": false,
+      "best_overlap": 1.0,
+      "best_root": 0,
+      "caveat": "Active-space RDM Frobenius overlaps are diagnostic warnings only; post-rotation comparisons are not basis-invariant when active--external orbital rotations are present.",
+      "ci_vector_overlap_available": false,
+      "overlap_gap": 1.0,
+      "overlap_kind": "active_rdm_frobenius_not_basis_invariant",
+      "overlap_matrix": {
+        "array_summary": true,
+        "dtype": "float64",
+        "fro_norm": 1.0,
+        "max": 1.0,
+        "max_abs": 1.0,
+        "min": 1.0,
+        "shape": [
+          1,
+          1
+        ]
+      },
+      "second_best_overlap": 0.0,
+      "stop_reason": "tracked",
+      "swapped": false,
+      "tracked_root_overlaps": [
+        1.0
+      ]
+    },
+    "is_production_acceptance": false,
+    "loop": {
+      "accumulated_rotation": {
+        "array_summary": true,
+        "dtype": "float64",
+        "fro_norm": 2.44948974278318,
+        "max": 0.9999999999999964,
+        "max_abs": 0.9999999999999964,
+        "min": -0.8788008223824021,
+        "shape": [
+          6,
+          6
+        ]
+      },
+      "converged": true,
+      "energy_final": -8.873252546749551,
+      "energy_history": [
+        -8.854336129086628,
+        -8.856093384313619,
+        -8.859940432148644,
+        -8.860295092340426,
+        -8.86873199417832,
+        -8.870152652301448,
+        -8.872613413949495,
+        -8.87280239398449,
+        -8.87323286656914,
+        -8.873248568997703,
+        -8.8732515430715,
+        -8.873252286246519,
+        -8.87325247839115,
+        -8.873252528692667,
+        -8.873252541973438,
+        -8.873252545485828,
+        -8.873252546415937,
+        -8.873252546662565,
+        -8.873252546727711,
+        -8.873252546745055,
+        -8.873252546749551
+      ],
+      "energy_initial": -8.854336129086628,
+      "gradient_norm_final": 2.9015638763985363e-06,
+      "gradient_norm_history": [
+        0.0037999511823316227,
+        0.012329417591692496,
+        0.023929298823845504,
+        0.023794357636647466,
+        0.044260188650742396,
+        0.031056004617917184,
+        0.020971215161067255,
+        0.014678134635602014,
+        0.011285640864119663,
+        0.004559747868572727,
+        0.0021769939954214023,
+        0.001098720140590239,
+        0.0005614554733673186,
+        0.0002885116676466331,
+        0.0001482221618289139,
+        7.620720269591653e-05,
+        3.9209605946793444e-05,
+        2.0257446509719846e-05,
+        1.0372892460638033e-05,
+        5.4671090689816544e-06,
+        2.9015638763985363e-06
+      ],
+      "gradient_norm_initial": 0.0037999511823316227,
+      "is_production_acceptance": false,
+      "iterations": [],
+      "n_accepted": 20,
+      "n_iterations": 20,
+      "orbitals_mutated": false,
+      "stop_reason": "gradient_below_tol",
+      "total_energy_decrease": 0.018916417662923735
+    },
+    "loop_stop_reason": "gradient_below_tol",
+    "metadata": {
+      "active_electron_count": 2,
+      "active_orbitals": [
+        1,
+        2
+      ],
+      "core_orbitals": [
+        0
+      ],
+      "nroot": 1,
+      "root": 0,
+      "state_indices": [
+        0
+      ]
+    },
+    "n_accepted": 20,
+    "n_iterations": 20,
+    "orbitals_mutated": false,
+    "report_kind": "casscf_internal_diagnostic",
+    "root_ambiguous": false,
+    "root_swapped": false,
+    "stop_reason": "gradient_below_tol"
+  },
+  "state_average": {
+    "enabled": false
+  },
+  "stop_reason": "gradient_below_tol"
+}

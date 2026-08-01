@@ -26,6 +26,7 @@ module oqp_tagarray_driver
     "Two-electron repulsion integrals (mu nu|la si) in AO basis, chemist "// &
     "notation, full nbf**4 array stored C-contiguous with si fastest"
   character(len=*), parameter, public :: OQP_WAO = OQP_prefix // "WAO"
+  character(len=*), parameter, public :: OQP_AO_ERI = OQP_prefix // "AO_ERI"
   character(len=*), parameter, public :: OQP_td_abxc = OQP_prefix // "td_abxc"
   character(len=*), parameter, public :: OQP_td_bvec_mo = OQP_prefix // "td_bvec_mo"
   character(len=*), parameter, public :: OQP_td_mrsf_density = OQP_prefix // "td_mrsf_density"
@@ -136,6 +137,7 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_VEC_MO_A_comment = "Coefficients of alpha molecular orbitals"
   character(len=*), parameter, public :: OQP_VEC_MO_B_comment = "Coefficients of beta molecular orbitals"
   character(len=*), parameter, public :: OQP_Hcore_comment = "triangle core Hamiltonian matrix"
+  character(len=*), parameter, public :: OQP_AO_ERI_comment = "Dense AO two-electron integrals in chemists notation"
   character(len=*), parameter, public :: OQP_SM_comment = "triangle Overlap matrix"
   character(len=*), parameter, public :: OQP_QMAT_comment = "canonical orthogonalizer Q = S^(-1/2), full (nbf x nbf)"
   character(len=*), parameter, public :: OQP_TM_comment = "triangle Kinetic-Energy matrix"
@@ -178,9 +180,10 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_soc_evec_im_comment = OQP_prefix // "SOC eigenvectors imaginary part"
   character(len=*), parameter, public :: OQP_soc_hsoc_re_comment = OQP_prefix // "SOC Hamiltonian real part (cm-1)"
   character(len=*), parameter, public :: OQP_soc_hsoc_im_comment = OQP_prefix // "SOC Hamiltonian imaginary part (cm-1)"
+
   character(len=*), parameter, public :: all_tags(*) = (/ character(len=80) :: &
     OQP_DM_A, OQP_DM_B, OQP_FOCK_A, OQP_FOCK_B, OQP_E_MO_A, OQP_E_MO_B, &
-    OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, &
+    OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_Hcore, OQP_SM, OQP_TM, OQP_WAO, OQP_AO_ERI, &
     OQP_td_abxc, OQP_td_bvec_mo, OQP_td_mrsf_density, OQP_td_p, OQP_td_t, &
     OQP_mrsf_ekt_density_mo, OQP_mrsf_ekt_lagrangian_mo, OQP_mrsf_ekt_fock_mo, &
     OQP_mrsf_ekt_orbitals_mo, OQP_mrsf_ekt_eigenvalues, OQP_mrsf_ekt_strengths, OQP_hf_hessian, &

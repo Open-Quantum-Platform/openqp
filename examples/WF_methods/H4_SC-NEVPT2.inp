@@ -1,0 +1,54 @@
+# RHF/6-31G/SC-NEVPT2 of linear H4 in a CAS(4,4) active space, CASCI reference.
+# Strongly contracted NEVPT2 (Angeli-Cimiraglia-Malrieu; [pt2] h0=dyall,
+# contraction=strong).  The RDM-based strong contraction reproduces PySCF/ORCA
+# SC-NEVPT2 to nano-hartree and closes the CAS(4,4) "contraction-flavour" gap of
+# the uncontracted path (H4_NEVPT2.inp):
+#   E(CASCI)     = -2.1594801208
+#   E(2)         = -0.0275992533   (PySCF SC-NEVPT2 -0.0275992508; diff 2.5 nEh)
+#   E(SC-NEVPT2) = -2.1870793741
+# Requires h0=dyall (the strong contraction is defined for Dyall's H0 only).
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+   H   0.000000000   0.000000000   1.480000000
+   H   0.000000000   0.000000000   2.220000000
+charge=0
+runtype=energy
+basis=6-31g
+method=caspt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+forced_attempt=3
+
+[cas]
+active_electrons=4
+active_orbitals=4
+frozen_core=0
+orbital_source=rhf
+sort_orbitals=energy
+max_det=20000
+max_memory=512
+
+[ci]
+nroot=1
+solver=dense
+eig_tol=1.0e-11
+integral_backend=native
+target_spin=any
+
+[pt2]
+reference=casci
+h0=dyall
+# strong = RDM-based strongly contracted NEVPT2 (8 Dyall subspaces, 1-4 RDMs).
+contraction=strong
+ipea_shift=0.0
+level_shift=0.0
+imaginary_shift=0.0
+semi_canonical=true

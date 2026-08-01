@@ -1,0 +1,35 @@
+# RHF/STO-3G/CASCI/ENERGY of H2 using imported JSON MO coefficients and explicit MO indices.
+# active_orbital_indices/core_orbital_indices are 1-based, matching Molden/MO viewers.
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+charge=0
+basis=sto-3g
+method=casci
+runtype=energy
+
+[guess]
+type=hcore
+
+[scf]
+type=rhf
+multiplicity=1
+maxit=60
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+active_orbital_indices=1,2
+orbital_source=json
+orbital_file=examples/WaveFunction/H2_RHF_MO.json
+max_det=1000
+max_memory=256
+
+[ci]
+nroot=1

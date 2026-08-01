@@ -44,6 +44,7 @@ class OQPTester:
     This class can run tests from specified directories:
       - 'openqp --run-tests path_to_folder': Run tests from a specific folder
       - 'openqp --run-tests other': Run tests from the 'other' folder in examples
+      - 'openqp --run-tests WF_methods': Run curated wavefunction-method examples
       - 'openqp --run-tests all': Run the standard suite across examples,
         with documented slow/non-self-contained exclusions
       - '--input-format auto|inp|oqp|both': Select the input syntax to test
@@ -481,6 +482,10 @@ class OQPTester:
             test_dir = os.path.join(self.base_test_dir, 'other')
         elif test_path == 'SCF':
             test_dir = os.path.join(self.base_test_dir, 'SCF')
+        elif test_path == 'FCI':
+            test_dir = os.path.join(self.base_test_dir, 'FCI')
+        elif test_path in {'WF_methods', 'WaveFunction'}:
+            test_dir = os.path.join(self.base_test_dir, test_path)
         elif os.path.isdir(test_path):
             test_dir = test_path
         elif os.path.isfile(test_path) and test_path.lower().endswith(('.inp', '.oqp')):

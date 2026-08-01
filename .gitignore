@@ -10,6 +10,8 @@ __pycache__/
 *.sw?
 *.un~
 *.log
+*.casscf_diagnostic.json
+*.caspt2_reference_preflight.json
 *.pyc
 __pycache__/
 .pytest_cache/

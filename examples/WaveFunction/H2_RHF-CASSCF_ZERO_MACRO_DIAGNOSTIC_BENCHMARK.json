@@ -1,0 +1,26 @@
+{
+  "metadata": {
+    "active_electron_count": 2,
+    "active_orbitals": [
+      0,
+      1
+    ],
+    "core_orbitals": [],
+    "nroot": 1,
+    "root": 0,
+    "state_indices": [
+      0
+    ]
+  },
+  "provenance": {
+    "basis": "STO-3G",
+    "geometry": "H2, R(H-H)=0.740 Angstrom",
+    "program": "PySCF",
+    "program_version": "2.13.0",
+    "quantity": "CASCI electronic energy, total energy minus nuclear repulsion",
+    "reference_total_energy": -1.1372838344885023,
+    "reference_nuclear_repulsion": 0.7151043390810812
+  },
+  "reference_energy": -1.8523881735695835,
+  "report_kind": "casscf_diagnostic_benchmark_reference"
+}

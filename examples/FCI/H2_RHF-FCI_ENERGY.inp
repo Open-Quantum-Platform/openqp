@@ -1,0 +1,30 @@
+# RHF/STO-3G/FCI/ENERGY of H2.
+# MVP FCI supports closed-shell RHF energy calculations for small active spaces.
+# Reference trace:
+#   PySCF 2.13.0 FCI total energy:      -1.137283834488502 Eh
+#   OpenQP native-integral FCI energy:  -1.137283835869487 Eh
+[input]
+system=
+   H   0.000000000   0.000000000   0.000000000
+   H   0.000000000   0.000000000   0.740000000
+charge=0
+runtype=energy
+basis=sto-3g
+method=fci
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=60
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[fci]
+nroot=1
+max_det=1000

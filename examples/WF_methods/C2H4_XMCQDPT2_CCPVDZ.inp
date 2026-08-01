@@ -1,0 +1,56 @@
+# RHF/cc-pVDZ/XMCQDPT2 of ethylene, SA-3 over the N/V/Z valence singlets,
+# CAS(2e,2o) pi/pi* -- the flagship direct-engine example: the correlated
+# determinant space after the automatic PT2 frozen core (2 C 1s) is ~1e14
+# determinants, far beyond any dense construction; the matrix-free QDPT engine
+# streams the singles/doubles interacting space and finishes in ~1 s.
+# ISA (edshft) regularizes single-set intruders as in GAMESS.
+[input]
+system=
+   C   0.000000000   0.000000000   0.669500000
+   C   0.000000000   0.000000000  -0.669500000
+   H   0.000000000   0.927035000   1.235318000
+   H   0.000000000  -0.927035000   1.235318000
+   H   0.000000000   0.927035000  -1.235318000
+   H   0.000000000  -0.927035000  -1.235318000
+charge=0
+runtype=energy
+basis=cc-pvdz
+method=xmcqdpt2
+
+[guess]
+type=hcore
+
+[scf]
+multiplicity=1
+type=rhf
+maxit=80
+forced_attempt=3
+save_molden=false
+
+[properties]
+scf_prop=
+
+[cas]
+active_electrons=2
+active_orbitals=2
+frozen_core=7
+orbital_source=rhf
+sort_orbitals=energy
+max_det=5000
+max_memory=512
+
+[ci]
+nroot=3
+solver=dense
+eig_tol=1.0e-10
+integral_backend=native
+target_spin=singlet
+
+[pt2]
+reference=casci
+target_roots=0,1,2
+nroot=3
+ipea_shift=0.0
+edshft=0.02
+engine=auto
+semi_canonical=true

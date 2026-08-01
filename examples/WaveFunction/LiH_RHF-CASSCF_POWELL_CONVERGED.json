@@ -1,0 +1,15 @@
+{
+  "reference_program": "PySCF 2.10.0",
+  "reference_method": "casscf",
+  "basis": "sto-3g",
+  "geometry_unit": "Angstrom",
+  "geometry": "Li 0 0 0; H 0 0 1.6",
+  "active_space": {
+    "active_electrons": 2,
+    "active_orbitals": 2,
+    "inactive_core_orbitals": 1
+  },
+  "casscf_energy": -7.881045251315449,
+  "rhf_energy": -7.861864769808654,
+  "comparison_note": "PySCF reference uses the standard inactive-core CASSCF convention, not mc.frozen=1. This matches OpenQP [cas] frozen_core=1, where the core is inactive doubly occupied but still participates in orbital optimization."
+}

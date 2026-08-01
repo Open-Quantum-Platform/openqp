@@ -51,3 +51,7 @@ for attr_name in dir(lib):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:
             globals()[attr_name] = attr_value
+
+#: True once the compiled liboqp backend loaded successfully (the import above
+#: fails loudly otherwise). WF/test backend guards probe this flag.
+BACKEND_AVAILABLE = True

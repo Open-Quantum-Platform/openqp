@@ -1,0 +1,20 @@
+{
+  "reference_program": "PySCF 2.10.0",
+  "reference_method": "state_average_casscf",
+  "basis": "sto-3g",
+  "geometry_unit": "Angstrom",
+  "geometry": "Li 0 0 0; H 0 0 1.6",
+  "active_space": {
+    "active_electrons": 2,
+    "active_orbitals": 2,
+    "frozen_core": 1
+  },
+  "state_average": {
+    "roots": [0, 1],
+    "weights": [0.5, 0.5],
+    "state_average_energy": -7.806307491900326,
+    "state_energies": [-7.858371819640192, -7.754243164160460]
+  },
+  "rhf_energy": -7.861864769808654,
+  "comparison_note": "This is a fully converged PySCF SA-CASSCF reference using the standard inactive-core CASSCF convention, not mc.frozen=1. The OpenQP example input intentionally uses max_macro_iterations=1 as a native dispatch and sidecar smoke test, so its one-step macroiteration evidence should be compared separately from this fully converged reference."
+}
