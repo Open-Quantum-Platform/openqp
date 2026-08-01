@@ -51,30 +51,44 @@ def test_driver_uses_actual_resident_state_count_and_streamed_metric():
     assert "default_int_limit64/state_pair_size64" in driver
 
 
-def test_driver_pair_sequence_contains_one_adjoint_per_ordered_pair():
+def test_driver_batches_one_adjoint_per_unordered_pair():
     driver = DRIVER.read_text()
     body = driver.split(
         "subroutine mrsf_nac_lagrangian(infos)", 1
     )[1].split("end subroutine mrsf_nac_lagrangian", 1)[0]
-    expected = (
+    ordered_source_sequence = (
         "call mrsf_nac_wpair_impl(infos, istate, jstate)",
         "call mrsf_nac_amp(infos, istate, jstate)",
         "call mrsf_nac_esum(infos, istate, jstate)",
         "call mrsf_nac_response(infos)",
         "call mrsf_nac_rohf_pair_overlap(infos)",
-        "call mrsf_nac_rohf_zvector(infos)",
-        "call mrsf_nac_rohf_hf_adjoint(infos)",
-        "call mrsf_nac_xc_adjoint(infos)",
-        "call mrsf_nac_pair_accumulate(infos, istate, jstate)",
     )
-    positions = [body.index(token) for token in expected]
+    positions = [body.index(token) for token in ordered_source_sequence]
     assert positions == sorted(positions)
-    assert body.count("call mrsf_nac_rohf_zvector(infos)") == 1
+    assert "npair = nstate*(nstate - 1)/2" in body
+    assert "pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)" in body
+    assert "rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in" in body
+    assert "nonz_batch(coord,ipair) = nonz_batch(coord,ipair) +" in body
+    assert body.count(
+        "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)"
+    ) == 1
+    assert body.count("call mrsf_nac_rohf_hf_adjoint(infos)") == 1
+    assert body.count("call mrsf_nac_xc_adjoint(infos)") == 1
+    assert body.count("call mrsf_nac_pair_accumulate_antisym(") == 1
+
     pair_loop = body.index("do istate = 1, nstate")
     pair_skip = body.index("if (istate == jstate) cycle", pair_loop)
-    zvector_call = body.index("call mrsf_nac_rohf_zvector(infos)")
-    pair_end = body.index("end do", zvector_call)
-    assert pair_loop < pair_skip < zvector_call < pair_end
+    pair_source = body.index("call mrsf_nac_rohf_pair_overlap(infos)")
+    batch_call = body.index("call mrsf_nac_rohf_zvector_batch(")
+    adjoint_loop = body.index("do ipair = 1, npair", batch_call)
+    hf_call = body.index("call mrsf_nac_rohf_hf_adjoint(infos)")
+    xc_call = body.index("call mrsf_nac_xc_adjoint(infos)")
+    accumulate_call = body.index("call mrsf_nac_pair_accumulate_antisym(")
+    assert (
+        pair_loop < pair_skip < pair_source < batch_call < adjoint_loop
+        < hf_call < xc_call < accumulate_call
+    )
+    assert "call mrsf_nac_rohf_zvector(infos)" not in body
     assert "call cphf_solve_rohf" not in body
     assert "hf_hessian" not in body
 

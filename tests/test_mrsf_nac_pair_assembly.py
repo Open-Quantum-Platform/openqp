@@ -34,7 +34,9 @@ class MRSFNACPairAssemblyTests(unittest.TestCase):
         ):
             self.assertIn(f'bind(C, name="{name}")', self.source)
             self.assertIn(f"void {name}(struct oqp_handle_t *inf", self.header)
-            self.assertIn(f"call {name}(infos", self.driver)
+        self.assertIn("call mrsf_nac_pair_accumulator_init(infos)", self.driver)
+        self.assertIn("call mrsf_nac_pair_finalize(infos)", self.driver)
+        self.assertIn("call mrsf_nac_pair_accumulate_antisym(", self.driver)
         self.assertIn("oqp.mrsf_nac_lagrangian(mol)", self.production)
         self.assertEqual(self.production.count("oqp.mrsf_nac_lagrangian(mol)"), 1)
 
@@ -55,6 +57,17 @@ class MRSFNACPairAssemblyTests(unittest.TestCase):
         self.assertNotIn("dp = np.zeros", self.production)
         self.assertNotIn("dpa = 0.5", self.production)
         self.assertNotIn("nacv[I, J] = gap", self.production)
+
+    def test_antisymmetric_accumulator_preserves_final_layout(self):
+        accumulate = self.source.split(
+            "subroutine mrsf_nac_pair_accumulate_antisym(infos", 1
+        )[1].split("end subroutine mrsf_nac_pair_accumulate_antisym", 1)[0]
+        self.assertIn(
+            "value = nonz_antisym(coord) + z_hf(cart,atom) + z_xc(cart,atom)",
+            accumulate,
+        )
+        self.assertIn("dp_ordered(coord,istate,jstate) = value", accumulate)
+        self.assertIn("dp_ordered(coord,jstate,istate) = -value", accumulate)
 
     def test_fortran_pair_layout_is_exposed_without_numeric_reassembly(self):
         nstate = 3

@@ -33,7 +33,7 @@ def test_python_entry_points_preserve_the_fortran_log_state():
     _assert_log_guard(_body(GRADIENT.read_text(), "mrsf_nac_esum_C"), "inf")
     _assert_log_guard(_body(INTERCHANGE.read_text(), "mrsf_nac_xc_adjoint_C"), "inf")
     _assert_log_guard(
-        _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_zvector(infos)"),
+        _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_zvector_batch(infos"),
         "infos",
     )
 

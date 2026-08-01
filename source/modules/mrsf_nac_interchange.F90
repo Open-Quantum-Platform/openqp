@@ -6,10 +6,12 @@ module mrsf_nac_interchange_mod
 
   private
   public :: mrsf_nac_rohf_zvector
+  public :: mrsf_nac_rohf_zvector_batch
   public :: mrsf_nac_rohf_solve
   public :: mrsf_nac_rohf_pair_overlap
   public :: mrsf_nac_pair_accumulator_init
   public :: mrsf_nac_pair_accumulate
+  public :: mrsf_nac_pair_accumulate_antisym
   public :: mrsf_nac_pair_finalize
   public :: mrsf_nac_rohf_hf_adjoint
   public :: mrsf_nac_xc_adjoint
@@ -107,19 +109,19 @@ contains
   end subroutine mrsf_nac_pair_finalize_C
 
 !> Solve one native ROHF adjoint Z-vector equation for one ordered state pair.
-!> Production invokes this routine once per pair with nrhs=1.  It does not solve
-!> the 3N forward nuclear CPHF equations; subsequent resident Fortran adjoint
-!> contractions evaluate z^T B^R directly.  The operator and coordinates are
-!> exactly those used by the nuclear response in hf_hessian_rohf, with no legacy
-!> sfrolhs/sfropcal metric.
+!> This public compatibility entry retains the one-RHS TagArray contract.  The
+!> resident production driver uses mrsf_nac_rohf_zvector_batch to solve the
+!> antisymmetric unordered-pair sources in one shared CPHF context.  Neither
+!> route solves the 3N forward nuclear CPHF equations; subsequent resident
+!> Fortran adjoint contractions evaluate z^T B^R directly.  The operator and
+!> coordinates are exactly those used by the nuclear response in
+!> hf_hessian_rohf, with no legacy sfrolhs/sfropcal metric.
 !>
 !> Input : OQP::nac_rohf_rhs       (ltot)
 !> Output: OQP::nac_rohf_solution  (ltot)
   subroutine mrsf_nac_rohf_zvector(infos)
     use types, only: information
-    use io_constants, only: iw
     use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
-    use cphf_mod, only: cphf_solve_rohf
     use messages, only: show_message, WITH_ABORT
 
     implicit none
@@ -130,8 +132,6 @@ contains
     real(kind=dp), contiguous, pointer :: rhs_in(:)
     real(kind=dp), pointer :: solution_out(:)
     real(kind=dp), allocatable :: rhs(:,:), solution(:,:)
-    real(kind=dp) :: residual(1)
-    logical :: converged(1), log_was_open
     integer :: nbf, nocca, noccb, nvira, offset, ltot
 
     if (infos%control%scftype /= 3) then
@@ -154,27 +154,7 @@ contains
 
     allocate(rhs(ltot,1), solution(ltot,1))
     rhs(:,1) = rhs_in
-    ! Pair-adjoint production path: nrhs is exactly one.  This routine does not
-    ! solve the 3N forward nuclear CPHF block.
-    ! cphf_solve_rohf's ``tol`` is the squared Euclidean residual criterion.
-    ! The pair-adjoint requests its symmetric-indefinite MINRES route and that
-    ! driver certifies the true unpreconditioned residual before returning.
-    ! Request ||H z - rhs||_2 <= 1e-10, not merely 1e-5.
-    ! The energy driver closes IW before the Python NAC orchestrator runs.
-    ! Open the requested log locally so the shared CPHF reporter never creates
-    ! a process-global fort.6 file, which would collide across worker jobs.
-    inquire(unit=iw, opened=log_was_open)
-    if (.not. log_was_open) &
-      open(unit=iw, file=infos%log_filename, position='append')
-    call cphf_solve_rohf(infos, 1, rhs, solution, tol=1.0e-20_dp, &
-                         maxit=max(infos%control%maxit_zv, ltot + 5), &
-                         converged=converged, residual=residual, &
-                         minres_solver=.true.)
-    if (.not. converged(1)) then
-      call show_message('Native ROHF NAC pair Z-vector failed to converge; squared residual=' // &
-                        trim(real_to_string(residual(1))), WITH_ABORT)
-    end if
-    if (.not. log_was_open) close(iw)
+    call mrsf_nac_rohf_zvector_batch(infos, rhs, solution)
 
     call infos%dat%remove_records((/ character(len=80) :: tag_solution /))
     call infos%dat%reserve_data(tag_solution, TA_TYPE_REAL64, ltot, (/ ltot /), &
@@ -183,13 +163,94 @@ contains
     solution_out = solution(:,1)
 
     deallocate(rhs, solution)
+  end subroutine mrsf_nac_rohf_zvector
+
+!###############################################################################
+
+!> Solve a batch of native ROHF adjoint equations in one shared CPHF context.
+!>
+!> The resident driver passes one antisymmetric source for every unordered
+!> state pair,
+!>
+!>   rhs^-_IJ = 1/2 (rhs_IJ - rhs_JI),  I < J.
+!>
+!> Since every pair has the same symmetric ROHF Hessian H, linearity gives
+!> H^-1 rhs^-_IJ = 1/2 (z_IJ - z_JI).  cphf_solve_rohf constructs the Fock,
+!> preconditioner and XC context once, then certifies the true unpreconditioned
+!> residual of every returned MINRES solution.  The public residual convention
+!> is squared, so tol=1e-20 requests ||H z - rhs||_2 <= 1e-10.
+  subroutine mrsf_nac_rohf_zvector_batch(infos, rhs, solution)
+    use types, only: information
+    use io_constants, only: iw
+    use cphf_mod, only: cphf_solve_rohf
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), intent(in) :: rhs(:,:)
+    real(kind=dp), intent(out) :: solution(:,:)
+    real(kind=dp), allocatable :: residual(:)
+    logical, allocatable :: converged(:)
+    logical :: log_was_open
+    integer :: nbf, nocca, noccb, nvira, offset, ltot, nrhs, irhs
+
+    if (infos%control%scftype /= 3) then
+      call show_message( &
+        'mrsf_nac_rohf_zvector_batch requires an ROHF/ROKS reference.', &
+        WITH_ABORT)
+    end if
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    nrhs = size(rhs,2)
+    if (nrhs < 1 .or. size(rhs,1) /= ltot .or. &
+        size(solution,1) /= ltot .or. size(solution,2) /= nrhs) then
+      call show_message( &
+        'Batched ROHF NAC sources/solutions have inconsistent dimensions.', &
+        WITH_ABORT)
+    end if
+
+    allocate(converged(nrhs), residual(nrhs))
+    ! The energy driver closes IW before the Python NAC orchestrator runs.
+    ! Open the requested log locally so the shared CPHF reporter never creates
+    ! a process-global fort.6 file, which would collide across worker jobs.
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
+    ! Request ||H z - rhs||_2 <= 1e-10 independently for every batched RHS.
+    call cphf_solve_rohf(infos, nrhs, rhs, solution, tol=1.0e-20_dp, &
+                         maxit=max(int(infos%control%maxit_zv), ltot + 5), &
+                         converged=converged, residual=residual, &
+                         minres_solver=.true.)
+    do irhs = 1, nrhs
+      if (.not. converged(irhs)) then
+        call show_message( &
+          'Native ROHF NAC batched Z-vector RHS ' // &
+          trim(integer_to_string(irhs)) // &
+          ' failed to converge; squared residual=' // &
+          trim(real_to_string(residual(irhs))), WITH_ABORT)
+      end if
+    end do
+    if (.not. log_was_open) close(iw)
+    deallocate(converged, residual)
   contains
+    function integer_to_string(value) result(text)
+      integer, intent(in) :: value
+      character(len=16) :: text
+      write(text,'(I0)') value
+    end function integer_to_string
+
     function real_to_string(value) result(text)
       real(kind=dp), intent(in) :: value
       character(len=32) :: text
       write(text,'(ES16.8)') value
     end function real_to_string
-  end subroutine mrsf_nac_rohf_zvector
+  end subroutine mrsf_nac_rohf_zvector_batch
 
 !###############################################################################
 
@@ -504,6 +565,69 @@ contains
       end do
     end do
   end subroutine mrsf_nac_pair_accumulate
+
+!###############################################################################
+
+!> Store one already-antisymmetrized unordered-pair Lagrangian vector.
+!>
+!> ``nonz_antisym`` contains one half of the ordered-pair difference for all
+!> explicit amplitude, one-electron/Fock and overlap terms.  The current
+!> OQP::nac_rohf_z record is the solution of the matching half-difference RHS,
+!> so the HF and XC adjoints are already the corresponding half-difference by
+!> linearity.  Store +/- the complete vector in the legacy ordered accumulator;
+!> mrsf_nac_pair_finalize then reproduces the same canonical antisymmetrization
+!> while preserving the existing resident output layout and ABI.
+  subroutine mrsf_nac_pair_accumulate_antisym(infos, istate, jstate, &
+                                               nonz_antisym)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_hf = "OQP::nac_rohf_hf_adjoint"
+    character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
+    character(len=*), parameter :: tag_dp = "OQP::nac_dp_ordered"
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+    real(kind=dp), intent(in) :: nonz_antisym(:)
+    real(kind=dp), contiguous, pointer :: z_hf(:,:), z_xc(:,:)
+    real(kind=dp), pointer :: dp_ordered(:,:,:)
+    real(kind=dp) :: value
+    integer :: natom, nstate, ncoord, atom, cart, coord
+
+    natom = infos%mol_prop%natom
+    nstate = infos%tddft%nstate
+    ncoord = 3*natom
+    if (istate < 1 .or. jstate > nstate .or. istate >= jstate) then
+      call show_message( &
+        'Antisymmetric MRSF NAC accumulation requires 1 <= I < J <= nstate.', &
+        WITH_ABORT)
+    end if
+
+    call tagarray_get_data(infos%dat, tag_hf, z_hf)
+    call tagarray_get_data(infos%dat, tag_xc, z_xc)
+    call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
+    if (size(nonz_antisym) /= ncoord .or. &
+        size(z_hf,1) /= 3 .or. size(z_hf,2) /= natom .or. &
+        size(z_xc,1) /= 3 .or. size(z_xc,2) /= natom .or. &
+        size(dp_ordered,1) /= ncoord .or. &
+        size(dp_ordered,2) /= nstate .or. &
+        size(dp_ordered,3) /= nstate) then
+      call show_message( &
+        'Antisymmetric MRSF NAC pair components have inconsistent dimensions.', &
+        WITH_ABORT)
+    end if
+
+    do atom = 1, natom
+      do cart = 1, 3
+        coord = (atom - 1)*3 + cart
+        value = nonz_antisym(coord) + z_hf(cart,atom) + z_xc(cart,atom)
+        dp_ordered(coord,istate,jstate) = value
+        dp_ordered(coord,jstate,istate) = -value
+      end do
+    end do
+  end subroutine mrsf_nac_pair_accumulate_antisym
 
 !###############################################################################
 

@@ -2,9 +2,11 @@
 !>
 !> Every scientific operation for an ordered state pair remains in Fortran:
 !> the exact eigenvector response y_IJ=X_I/(Omega_J-Omega_I), closed exact-TLF
-!> metric column, amplitude/Fock skeletons, ROHF/ROKS one-RHS adjoint Z-vector,
-!> coordinate contractions, pair accumulation, antisymmetrization, and gap
-!> scaling.  Python invokes one C entry point and only reshapes the final data.
+!> metric column and amplitude/Fock skeletons.  The two ordered sources for
+!> each physical pair are reduced to their exact half-difference, all unordered
+!> ROHF/ROKS adjoints share one batched CPHF context, and the linear HF/XC
+!> contractions run once per physical pair.  Python invokes one C entry point
+!> and only reshapes the final data.
 module mrsf_nac_driver_mod
 
   use precision, only: dp
@@ -54,9 +56,10 @@ contains
     use tdhf_mrsf_gradient_mod, only: mrsf_nac_amp, mrsf_nac_esum
     use tdhf_mrsf_energy_mod, only: mrsf_nac_response
     use mrsf_nac_interchange_mod, only: &
-      mrsf_nac_pair_accumulator_init, mrsf_nac_pair_accumulate, &
+      mrsf_nac_pair_accumulator_init, &
+      mrsf_nac_pair_accumulate_antisym, &
       mrsf_nac_pair_finalize, mrsf_nac_rohf_pair_overlap, &
-      mrsf_nac_rohf_zvector, mrsf_nac_rohf_hf_adjoint, &
+      mrsf_nac_rohf_zvector_batch, mrsf_nac_rohf_hf_adjoint, &
       mrsf_nac_xc_adjoint
 
     implicit none
@@ -74,20 +77,26 @@ contains
     character(len=*), parameter :: tag_ytil = "OQP::nac_ytil"
     character(len=*), parameter :: tag_xstate = "OQP::nac_xstate"
     character(len=*), parameter :: tag_gamma = "OQP::nac_gamma_pair"
-    character(len=*), parameter :: tag_solution = &
-      "OQP::nac_rohf_solution"
+    character(len=*), parameter :: tag_rhs = "OQP::nac_rohf_rhs"
+    character(len=*), parameter :: tag_amp = "OQP::nac_amp"
+    character(len=*), parameter :: tag_esum = "OQP::nac_esum"
+    character(len=*), parameter :: tag_overlap = "OQP::nac_pair_overlap"
     character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
     character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
       OQP_td_bvec_mo, OQP_td_energies /)
 
     type(information), target, intent(inout) :: infos
     real(kind=dp), contiguous, pointer :: bvec_mo(:,:), energies(:)
-    real(kind=dp), contiguous, pointer :: solution(:)
-    real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), z_tag(:)
+    real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
+      pair_overlap(:,:)
+    real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), &
+      z_tag(:)
     real(kind=dp), allocatable :: bvec_saved(:,:), energies_saved(:), ytil(:)
     real(kind=dp), allocatable :: gamma_column(:,:)
-    real(kind=dp), allocatable :: gamma_pair(:), z_work(:)
-    real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved
+    real(kind=dp), allocatable :: gamma_pair(:), rhs_batch(:,:), &
+      solution_batch(:,:), nonz_batch(:,:)
+    integer, allocatable :: pair_i(:), pair_j(:)
+    real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign
     real(kind=dp) :: profile_total, profile_metric, profile_wpair
     real(kind=dp) :: profile_amp, profile_esum, profile_response
     real(kind=dp) :: profile_overlap, profile_zvector, profile_hf
@@ -95,8 +104,9 @@ contains
     integer(c_int64_t) :: nstate64, natom64, nbf64, noca64, nocb64
     integer(c_int64_t) :: nvirb64, nij64, nbfsq64, ncoord64
     integer(c_int64_t) :: state_pair_size64, default_int_limit64
-    integer :: nbf, noca, nocb, nij, nstate, natom
-    integer :: istate, jstate, redundant_index
+    integer :: nbf, noca, nocb, nij, nstate, natom, ncoord
+    integer :: nvira, offset, ltot, npair, ipair
+    integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
     character(len=16) :: profile_value
@@ -206,6 +216,11 @@ contains
     noca = int(noca64)
     nocb = int(nocb64)
     nij = int(nij64)
+    ncoord = 3*natom
+    nvira = nbf - noca
+    offset = noca - nocb
+    ltot = nocb*(offset + nvira) + offset*nvira
+    npair = nstate*(nstate - 1)/2
     call data_has_tags(infos%dat, tags_required, module_name, &
                        subroutine_name, WITH_ABORT)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
@@ -228,12 +243,25 @@ contains
                         WITH_ABORT)
     end if
     allocate(bvec_saved(nij,nstate), energies_saved(nstate), ytil(nij), &
-             gamma_column(nbf*nbf,nstate), gamma_pair(nbf*nbf))
+             gamma_column(nbf*nbf,nstate), gamma_pair(nbf*nbf), &
+             rhs_batch(ltot,npair), solution_batch(ltot,npair), &
+             nonz_batch(ncoord,npair), pair_i(npair), pair_j(npair))
     bvec_saved = bvec_mo
     ! TagArray reserve/remove operations below may invalidate every cached
     ! record pointer, not only the record being changed.  Keep an owned copy
     ! of the state energies for the complete ordered-pair traversal.
     energies_saved = energies
+    rhs_batch = 0.0_dp
+    solution_batch = 0.0_dp
+    nonz_batch = 0.0_dp
+    ipair = 0
+    do jstate = 2, nstate
+      do istate = 1, jstate - 1
+        ipair = ipair + 1
+        pair_i(ipair) = istate
+        pair_j(ipair) = jstate
+      end do
+    end do
 
     call infos%dat%remove_records((/ character(len=80) :: &
       tag_ytil, tag_xstate, tag_gamma, tag_z /))
@@ -308,33 +336,63 @@ contains
         if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_rohf_pair_overlap(infos)
         if (profile_enabled) call profile_add(profile_overlap, profile_stop)
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_rohf_zvector(infos)
-        if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
-        call tagarray_get_data(infos%dat, tag_solution, solution)
-        if (.not. allocated(z_work)) allocate(z_work(size(solution)))
-        if (size(z_work) /= size(solution)) then
-          call show_message('Inconsistent streamed ROHF Z-vector dimension.', &
-                            WITH_ABORT)
+        ! Collect 1/2(ordered IJ - ordered JI) while the pair-local TagArray
+        ! records are live.  This retains metric-column streaming and avoids
+        ! storing a second full ordered tensor for the pre-Z components.
+        ipair = unordered_pair_index(istate, jstate)
+        pair_sign = merge(0.5_dp, -0.5_dp, istate < jstate)
+        call tagarray_get_data(infos%dat, tag_rhs, rhs_in)
+        call tagarray_get_data(infos%dat, tag_amp, amp)
+        call tagarray_get_data(infos%dat, tag_esum, esum)
+        call tagarray_get_data(infos%dat, tag_overlap, pair_overlap)
+        if (size(rhs_in) /= ltot .or. size(amp,1) /= ncoord .or. &
+            size(amp,2) /= nstate .or. size(amp,3) /= nstate .or. &
+            size(esum,1) /= 3 .or. size(esum,2) /= natom .or. &
+            size(pair_overlap,1) /= 3 .or. &
+            size(pair_overlap,2) /= natom) then
+          call show_message( &
+            'Ordered MRSF NAC sources have inconsistent dimensions.', &
+            WITH_ABORT)
         end if
-        z_work = solution
-        call infos%dat%remove_records((/ character(len=80) :: tag_z /))
-        call infos%dat%reserve_data(tag_z, TA_TYPE_REAL64, size(z_work), &
-          (/ size(z_work) /), comment='current streamed pair ROHF adjoint')
-        call tagarray_get_data(infos%dat, tag_z, z_tag)
-        z_tag = z_work
-
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_rohf_hf_adjoint(infos)
-        if (profile_enabled) call profile_add(profile_hf, profile_stop)
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_xc_adjoint(infos)
-        if (profile_enabled) call profile_add(profile_xc, profile_stop)
-        if (profile_enabled) call system_clock(profile_stop)
-        call mrsf_nac_pair_accumulate(infos, istate, jstate)
-        if (profile_enabled) call profile_add(profile_accumulate, profile_stop)
+        rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in
+        do atom = 1, natom
+          do cart = 1, 3
+            coord = (atom - 1)*3 + cart
+            nonz_batch(coord,ipair) = nonz_batch(coord,ipair) + &
+              pair_sign*(amp(coord,istate,jstate) + esum(cart,atom) + &
+                         pair_overlap(cart,atom))
+          end do
+        end do
       end do
+    end do
+
+    ! One shared Hessian/preconditioner/XC context handles every unordered
+    ! pair.  For the production three-state case this is one nrhs=3 call in
+    ! place of six independent nrhs=1 calls.
+    if (profile_enabled) call system_clock(profile_stop)
+    call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)
+    if (profile_enabled) call profile_add(profile_zvector, profile_stop)
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_z /))
+    call infos%dat%reserve_data(tag_z, TA_TYPE_REAL64, ltot, (/ ltot /), &
+      comment='current antisymmetric unordered-pair ROHF adjoint')
+    do ipair = 1, npair
+      ! Every adjoint contraction is linear in z.  Applying it once to the
+      ! half-difference solution is therefore exactly the half-difference of
+      ! the two ordered adjoints, up to the solver's certified residual.
+      call tagarray_get_data(infos%dat, tag_z, z_tag)
+      z_tag = solution_batch(:,ipair)
+      if (profile_enabled) call system_clock(profile_stop)
+      call mrsf_nac_rohf_hf_adjoint(infos)
+      if (profile_enabled) call profile_add(profile_hf, profile_stop)
+      if (profile_enabled) call system_clock(profile_stop)
+      call mrsf_nac_xc_adjoint(infos)
+      if (profile_enabled) call profile_add(profile_xc, profile_stop)
+      if (profile_enabled) call system_clock(profile_stop)
+      call mrsf_nac_pair_accumulate_antisym( &
+        infos, pair_i(ipair), pair_j(ipair), nonz_batch(:,ipair))
+      if (profile_enabled) call profile_add(profile_accumulate, profile_stop)
     end do
 
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
@@ -356,9 +414,19 @@ contains
       flush(iw)
     end if
 
-    deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair)
-    if (allocated(z_work)) deallocate(z_work)
+    deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair, &
+               rhs_batch, solution_batch, nonz_batch, pair_i, pair_j)
   contains
+    pure integer function unordered_pair_index(left_state, right_state) &
+        result(index)
+      integer, intent(in) :: left_state, right_state
+      integer :: lo, hi
+
+      lo = min(left_state, right_state)
+      hi = max(left_state, right_state)
+      index = (hi - 1)*(hi - 2)/2 + lo
+    end function unordered_pair_index
+
     subroutine profile_add(accumulator, start_count)
       real(kind=dp), intent(inout) :: accumulator
       integer(c_int64_t), intent(in) :: start_count

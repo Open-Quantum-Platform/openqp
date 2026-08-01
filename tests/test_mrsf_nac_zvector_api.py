@@ -23,6 +23,7 @@ class MRSFNACZVectorAPITests(unittest.TestCase):
 
     def test_state_pair_zvector_is_the_public_canonical_entry(self):
         self.assertIn("public :: mrsf_nac_rohf_zvector", self.source)
+        self.assertIn("public :: mrsf_nac_rohf_zvector_batch", self.source)
         self.assertIn(
             'bind(C, name="mrsf_nac_rohf_zvector")', self.source
         )
@@ -30,25 +31,44 @@ class MRSFNACZVectorAPITests(unittest.TestCase):
             "void mrsf_nac_rohf_zvector(struct oqp_handle_t *inf);",
             self.header,
         )
-        self.assertIn("call mrsf_nac_rohf_zvector(infos)", self.driver)
+        self.assertIn("call mrsf_nac_rohf_zvector_batch(", self.driver)
         self.assertIn("oqp.mrsf_nac_lagrangian(mol)", self.production)
         self.assertNotIn("oqp.mrsf_nac_rohf_solve(mol)", self.production)
 
-    def test_primary_path_solves_exactly_one_adjoint_rhs(self):
-        body = self.source.split(
+    def test_public_compatibility_path_still_solves_one_adjoint_rhs(self):
+        one_body = self.source.split(
             "subroutine mrsf_nac_rohf_zvector(infos)", 1
         )[1].split("end subroutine mrsf_nac_rohf_zvector", 1)[0]
-        self.assertIn("call cphf_solve_rohf(infos, 1,", body)
-        self.assertIn("minres_solver=.true.", body)
-        self.assertIn("nrhs is exactly one", body.lower())
-        self.assertIn("3n forward", body.lower())
+        batch_body = self.source.split(
+            "subroutine mrsf_nac_rohf_zvector_batch(infos", 1
+        )[1].split("end subroutine mrsf_nac_rohf_zvector_batch", 1)[0]
+        self.assertIn("allocate(rhs(ltot,1), solution(ltot,1))", one_body)
+        self.assertIn(
+            "call mrsf_nac_rohf_zvector_batch(infos, rhs, solution)", one_body
+        )
+        self.assertIn("call cphf_solve_rohf(infos, nrhs,", batch_body)
+        self.assertIn("minres_solver=.true.", batch_body)
+        self.assertIn("3n forward", self.source.lower())
+
+    def test_production_batches_antisymmetric_unordered_pairs(self):
+        self.assertIn("npair = nstate*(nstate - 1)/2", self.driver)
+        self.assertIn(
+            "rhs_batch(:,ipair) = rhs_batch(:,ipair) + pair_sign*rhs_in",
+            self.driver,
+        )
+        self.assertIn(
+            "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)",
+            self.driver,
+        )
 
     def test_pair_adjoint_requests_an_actual_1e_minus_10_residual_norm(self):
         body = self.source.split(
-            "subroutine mrsf_nac_rohf_zvector(infos)", 1
-        )[1].split("end subroutine mrsf_nac_rohf_zvector", 1)[0]
+            "subroutine mrsf_nac_rohf_zvector_batch(infos", 1
+        )[1].split("end subroutine mrsf_nac_rohf_zvector_batch", 1)[0]
         self.assertIn("tol=1.0e-20_dp", body)
         self.assertIn("||H z - rhs||_2 <= 1e-10", body)
+        self.assertIn("do irhs = 1, nrhs", body)
+        self.assertIn(".not. converged(irhs)", body)
 
     def test_old_solve_name_is_a_logic_free_abi_alias(self):
         self.assertIn(
