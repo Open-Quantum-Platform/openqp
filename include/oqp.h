@@ -478,12 +478,22 @@ void casscf_diis_coeffs(int32_t nvec, int32_t npar, const double *gmat,
  * `roots` are 0-based CI root indices).  `energies` and `s2` receive NROOT
  * entries.  `history` is the macroiteration table, C-order [MAXHIST, 5] as
  * (it, E, dE, |g_orb|, |step|), so Python formats the log unchanged; `stats`
- * receives (rows written, macroiterations, converged, evaluations).
+ * receives 10 counters -- (rows written, macroiterations, converged,
+ * evaluations, analytic Hessian builds, DIIS extrapolations accepted, DIIS
+ * extrapolations attempted, `ah` stagnation flag, `auto` outcome, `auto`
+ * macroiterations before falling back) -- from which Python formats the
+ * converger trace.
+ *
+ * The `twophase` (default), `ah`, `diis` and `auto` convergers all run here,
+ * with either orbital-Hessian builder (`CAS_I_HESSIAN`).
  *
  * Returns 0, or a negative status meaning "could not do it here" -- the caller
  * then runs the Python optimizer, which remains the numerical pin and owns
- * every user-facing message.  The `ah`/`diis`/`auto` convergers and
- * `[casscf] hessian = analytic` are declined in Python before the call.
+ * every user-facing message.  Two negative statuses are refusals rather than
+ * fallbacks and the Python re-raises their messages: -8, a root degeneracy
+ * with non-zero orbital coupling (the state-averaged objective is not smooth,
+ * so no orbital Hessian exists), and -9, an excitation stack past the
+ * dense-spectrum memory guard.
  *
  * OPTION SCHEMA -- authoritative copy is the parameter block in
  * source/modules/casscf_driver.F90; pyoqp/oqp/library/casscf.py mirrors it and
@@ -507,7 +517,14 @@ enum {
   CAS_I_CANONICAL = 14, /* 1 = canonicalize the converged orbitals         */
   CAS_I_MAXESCAPE = 15, /* saddle escapes, 0 disables phase 2              */
   CAS_I_MAXHIST   = 16, /* rows the caller's history buffer holds          */
-  CAS_NIOPT       = 17
+  CAS_I_CONVERGER = 17, /* 0 twophase, 1 ah, 2 diis, 3 auto                */
+  CAS_I_HESSIAN   = 18, /* 0 finite difference, 1 analytic                 */
+  CAS_I_AH_MICRO  = 19, /* AH scale-bisection microiterations              */
+  CAS_I_AH_REJECT = 20, /* uphill-step rejections per macroiteration       */
+  CAS_I_DIIS_SPACE= 21, /* stored rotation/gradient pairs                  */
+  CAS_I_DIIS_START= 22, /* pairs required before extrapolating             */
+  CAS_I_AUTO_STAG = 23, /* stalled macroiterations before the fallback     */
+  CAS_NIOPT       = 24
 };
 enum {
   CAS_D_ENUC      = 0,  /* nuclear repulsion, added to every root          */
@@ -521,7 +538,12 @@ enum {
   CAS_D_FD_STEP   = 8,  /* finite-difference Hessian displacement          */
   CAS_D_SADDLE_C  = 9,  /* deep-negative-curvature threshold, phase 2      */
   CAS_D_SADDLE_E  = 10, /* strict energy gain to accept an escape          */
-  CAS_NDOPT       = 11
+  CAS_D_AH_START  = 11, /* AH initial trust radius                         */
+  CAS_D_AH_MAXTR  = 12, /* AH trust-radius ceiling                         */
+  CAS_D_AH_MINTR  = 13, /* AH trust-radius floor / stagnation              */
+  CAS_D_AH_SADC   = 14, /* AH deep-negative-curvature threshold            */
+  CAS_D_AH_SADE   = 15, /* AH strict energy gain to accept an escape       */
+  CAS_NDOPT       = 16
 };
 int64_t casscf_energy(struct oqp_handle_t *inf, const int32_t *iopt,
     const double *dopt, const double *weights, const int32_t *roots,

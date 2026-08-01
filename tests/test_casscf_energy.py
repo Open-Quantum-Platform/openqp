@@ -104,24 +104,41 @@ def test_ci_schema_is_imported_not_redeclared():
 
 # -------------------------------------------------------------- dispatch
 @pytest.mark.parametrize("cfg,expected", [
-    ({}, True),
-    ({"converger": "twophase"}, True),
-    ({"converger": "default"}, True),
-    ({"hessian": "fd"}, True),
-    ({"converger": "ah"}, False),
-    ({"converger": "diis"}, False),
-    ({"converger": "auto"}, False),
-    ({"hessian": "analytic"}, False),
-    ({"converger": "twophase", "hessian": "analytic"}, False),
+    ({}, (0, 0, False)),
+    ({"converger": "twophase"}, (0, 0, False)),
+    ({"converger": "default"}, (0, 0, False)),
+    ({"hessian": "fd"}, (0, 0, False)),
+    ({"converger": "ah"}, (1, 0, True)),
+    ({"converger": "trah"}, (1, 0, True)),
+    ({"converger": "diis"}, (2, 0, True)),
+    ({"converger": "auto"}, (3, 0, True)),
+    ({"hessian": "analytic"}, (0, 1, False)),
+    ({"converger": "twophase", "hessian": "analytic"}, (0, 1, False)),
+    ({"converger": "ah", "hessian": "analytic"}, (1, 1, True)),
+    # `2phase` resolves to the two-phase code but DOES go through the Python
+    # converger framework, so it prints a trace; the flag follows the raw
+    # spelling, not the resolved code.
+    ({"converger": "2phase"}, (0, 0, True)),
 ])
-def test_native_dispatch_only_claims_the_default_path(cfg, expected):
-    """The one-call driver takes the default two-phase / FD-Hessian path only.
+def test_native_dispatch_resolves_every_supported_converger(cfg, expected):
+    """The one-call driver claims all four convergers and both Hessians."""
+    from oqp.library.casscf import _native_converger_codes
 
-    ``ah``/``diis``/``auto`` and the analytic Hessian stay in NumPy, where they
-    are the validated pins; the probe must not claim them."""
-    from oqp.library.casscf import _native_converger_ok
+    assert _native_converger_codes(cfg) == expected
 
-    assert _native_converger_ok(cfg) is expected
+
+@pytest.mark.parametrize("cfg", [
+    {"converger": "bogus"},
+    {"hessian": "bogus"},
+    # accepted by the input checker but rejected by `_hessian_provider`, which
+    # owns that message; the driver must not quietly accept it instead
+    {"hessian": "analytical"},
+])
+def test_native_dispatch_declines_unknown_spellings(cfg):
+    """Unknown spellings go to Python, which owns the error message."""
+    from oqp.library.casscf import _native_converger_codes
+
+    assert _native_converger_codes(cfg) is None
 
 
 # -------------------------------------------------------------- numerics
@@ -162,6 +179,29 @@ _CASES = {
                           casscf={"root": "1"}),
     "davidson": _case(_H2O, _CAS44, ci={"solver": "davidson"}),
     "spin_filter": _case(_H2O, _CAS44, ci={"target_spin": "singlet"}),
+    # the convergers and the analytic Hessian, each against its NumPy pin
+    "analytic": _case(_H2O, _CAS44, casscf={"hessian": "analytic"}),
+    "ah": _case(_H2O, _CAS44, casscf={"converger": "ah"}),
+    "ah_analytic": _case(_H2O, _CAS44,
+                         casscf={"converger": "ah", "hessian": "analytic"}),
+    "diis": _case(_H2O, _CAS44, casscf={"converger": "diis"}),
+    "auto": _case(_H2O, _CAS44, casscf={"converger": "auto"}),
+    "ah_lih": _case("\nLi 0 0 0\nH 0 0 3.0", _CAS22, casscf={"converger": "ah"}),
+    "diis_analytic_lih": _case("\nLi 0 0 0\nH 0 0 3.0", _CAS22,
+                               casscf={"converger": "diis",
+                                       "hessian": "analytic"}),
+    "auto_analytic_lih": _case("\nLi 0 0 0\nH 0 0 3.0", _CAS22,
+                               casscf={"converger": "auto",
+                                       "hessian": "analytic"}),
+    "sa_ah_analytic": _case("\nLi 0 0 0\nH 0 0 1.6", _CAS22,
+                            method="sa-casscf", nroot="2",
+                            state_average={"enabled": "true",
+                                           "weights": "0.5,0.5",
+                                           "nstate": "2",
+                                           "target_roots": "0,1",
+                                           "equal_weights": "true"},
+                            casscf={"converger": "ah",
+                                    "hessian": "analytic"}),
 }
 
 _AGREEMENT_TOL = 1.0e-9
@@ -232,12 +272,16 @@ def test_native_run_reproduces_the_python_optimizer(tmp_path, monkeypatch, name)
 
 
 @requires_driver
-def test_native_path_is_actually_taken(tmp_path):
+@pytest.mark.parametrize("name", ["h2o", "ah_analytic", "diis", "auto"])
+def test_native_path_is_actually_taken(tmp_path, name):
     """One crossing per run, not one per microiteration.
 
     The whole point of the driver is that the boundary is crossed once; a
     silent fallback would still produce the right energy, so the crossing
-    count is what proves the native path ran."""
+    count is what proves the native path ran.  ``ah_analytic`` is the
+    configuration that used to cross it hundreds of times: every AH model
+    step, every Hessian column build, every CI-relaxation amplitude and every
+    RDM was its own call."""
     import collections
 
     import oqp.library.fci as fci
@@ -259,15 +303,37 @@ def test_native_path_is_actually_taken(tmp_path):
     saved = fci._BACKEND_CACHE
     fci._BACKEND_CACHE = (_Counting(), ffi)
     try:
-        _run(tmp_path, "h2o_crossings", _CASES["h2o"])
+        _run(tmp_path, f"{name}_crossings", _CASES[name])
     finally:
         fci._BACKEND_CACHE = saved
 
     assert counter["casscf_energy"] == 1
     # every per-microiteration kernel is now called from inside liboqp
     for kernel in ("fci_solve", "casscf_gfock_grad", "casscf_orbital_rotate",
-                   "mo_transform_eri", "rdm2_spatial"):
+                   "mo_transform_eri", "rdm2_spatial", "casscf_ah_model_step",
+                   "casscf_diis_coeffs", "casscf_hess_bmat", "casscf_hess_amp",
+                   "casscf_hess_wmat", "casscf_hess_relax",
+                   "casscf_excitation_stack", "fci_dense_hamiltonian"):
         assert counter[kernel] == 0, f"{kernel} still crosses the boundary"
+
+
+@requires_driver
+def test_converger_trace_survives_the_round_trip(tmp_path):
+    """The driver returns counters; Python formats the same trace it used to.
+
+    The trace is the only user-visible evidence that a non-default converger
+    ran, so its lines have to come out of the native path unchanged."""
+    _e, _n, _c, text = _run(tmp_path, "h2o_trace", _CASES["ah_analytic"])
+    assert re.search(r"PyOQP converger:\s+ah", text)
+    assert re.search(r"PyOQP orbital hessian:\s+analytic", text)
+    assert re.search(r"PyOQP converger CI evaluations:\s+\d+", text)
+    builds = int(re.search(r"PyOQP analytic hessian builds:\s+(\d+)",
+                           text).group(1))
+    assert builds >= 1
+
+    # ... and the default path still carries no trace at all
+    _e, _n, _c, plain = _run(tmp_path, "h2o_notrace", _CASES["h2o"])
+    assert "PyOQP converger:" not in plain
 
 
 @requires_driver

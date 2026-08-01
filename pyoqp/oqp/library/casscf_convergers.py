@@ -9,6 +9,26 @@ with the ``[casscf] converger`` key.  The key is read with ``dict.get`` defaults
 two-phase production path in ``casscf.py`` -- this module is not even imported
 on the default path.
 
+Where these convergers now RUN
+------------------------------
+All four of them run inside liboqp: ``casscf_driver.F90`` implements
+``_ah_inner`` / ``_curvature_escape`` / ``_ah_converge``, ``_diis_optimize`` and
+``_auto_optimize`` natively, on top of the same three kernels this module
+calls (``casscf_ah.F90``).  ``casscf_energy`` is therefore ONE boundary
+crossing for ``converger = ah`` as well, where the loop below was ~650.
+
+The Python below is unchanged and stays for two reasons, both load-bearing:
+it is the numerical pin the native loops are validated against in the same
+process (``tests/test_casscf_energy.py``), and it is the fallback for every
+run the driver declines -- an unrecognized option spelling, a non-sequential
+active space, a Hessian refusal.  The option parsing in ``_ah_params`` /
+``_cfg_int`` is also still the only parser: ``casscf.py`` calls it to fill the
+driver's option block, so the error messages have exactly one source.
+
+Note that moving the loop is an architectural change, not a performance one --
+the measurement section below was taken before the port and is still the
+honest statement of what this module's arithmetic costs.
+
 Convergers
 ----------
 ``twophase`` (default)

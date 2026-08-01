@@ -15,14 +15,26 @@
 !>
 !> What runs inside
 !> ----------------
-!> The whole default (`converger = twophase`) optimizer:
+!> Every `[casscf] converger`, over either orbital-Hessian builder:
 !>
-!>   * the macroiteration loop `casscf.py::_floored_newton_loop` -- level-
-!>     shifted (eigenvalue-floored) Newton with the 12-step halving backtrack;
-!>   * the symmetrized finite-difference orbital Hessian, i.e. the 2*n_par
-!>     gradient evaluations that dominate the run;
-!>   * the curvature-gated saddle-escape phase `_escape_saddles`, including its
+!>   * `twophase` (default): the macroiteration loop
+!>     `casscf.py::_floored_newton_loop` -- level-shifted (eigenvalue-floored)
+!>     Newton with the 12-step halving backtrack -- followed by the
+!>     curvature-gated saddle-escape phase `_escape_saddles`, including its
 !>     six-amplitude kick line search and its strict-energy-gain acceptance;
+!>   * `ah`: the trust-region augmented-Hessian loop of
+!>     `casscf_convergers.py::_ah_inner`, its rejection/radius bookkeeping and
+!>     its own `_curvature_escape` (which re-converges with the AH loop, and
+!>     stamps rerun history rows differently from `_escape_saddles` -- both
+!>     conventions are reproduced);
+!>   * `diis`: `_diis_optimize`, i.e. Pulay extrapolation of the accumulated
+!>     rotation over the production step, with every candidate re-evaluated
+!>     variationally so acceleration can only match or improve;
+!>   * `auto`: `_auto_optimize`, `ah` under a stagnation watchdog with an
+!>     automatic fallback to `twophase` from the best point reached;
+!>   * the orbital Hessian itself, either the symmetrized finite-difference one
+!>     (2*n_par gradient evaluations, which dominate the run) or the exact
+!>     analytic one (`casscf_anhess.F90`, zero extra CI solves);
 !>   * canonicalization (`_canonicalize` + `_effective_fock`);
 !>   * the final CI on the optimized orbitals and its spin diagnostics;
 !>   * the commit of the optimized orbitals into `OQP::VEC_MO_A`.
@@ -45,19 +57,30 @@
 !>   * option parsing and validation -- integer bookkeeping executed once per
 !>     run, and the source of every user-facing error message;
 !>   * the state-average plan, resolved to explicit `weights`/`roots` arrays;
-!>   * the log, including the macroiteration table: the driver returns the
-!>     history rows and lets `_write_log` format them, so the printed output is
-!>     byte-identical to the Python path's;
-!>   * the `ah` / `diis` / `auto` convergers and `hessian = analytic`.  Those
-!>     are selected by keys absent from every shipped default input, and Python
-!>     does not call the driver for them at all -- it is the same
-!>     `_gfock_backend()` pattern, and it keeps the NumPy implementations as
-!>     the numerical pins they already are.
+!>   * the log, including the macroiteration table and the converger trace: the
+!>     driver returns the history rows and the counters and lets `_write_log`
+!>     format them, so the printed output is byte-identical to the Python
+!>     path's;
+!>   * the converger option parsing, including which spellings are accepted --
+!>     an unrecognized `converger` or `hessian` makes Python decline the driver
+!>     so that `casscf_convergers.run_converger` / `_hessian_provider` raise the
+!>     established message.
+!>
+!> The NumPy implementations in `casscf_convergers.py` and `casscf_hessian.py`
+!> stay in the tree as the numerical pins and as the fallback for every
+!> declined run -- the same `_gfock_backend()` pattern the rest of the stack
+!> uses.
 !>
 !> Any negative status means "could not do it here" and the caller re-runs the
 !> Python optimizer, which is still the numerical pin (see
 !> tests/test_casscf_energy.py, which compares the two arms in the same
-!> process so both use identical integrals and identical CI solves).
+!> process so both use identical integrals and identical CI solves).  Two of
+!> those statuses are REFUSALS, not fallbacks -- `CAS_ERR_DEGEN` (a root
+!> degeneracy with live orbital coupling: the state-averaged objective is not
+!> smooth and no orbital Hessian is defined) and `CAS_ERR_STACK` (an excitation
+!> stack past the dense-spectrum memory guard).  Returning a finite Hessian in
+!> the first case would be wrong, so the Python path re-runs and raises its own
+!> message rather than the driver inventing one.
 !>
 !> Option schema
 !> -------------
@@ -96,6 +119,11 @@ module casscf_driver_mod
   use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri
   use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock
   use casscf_orbrot_mod, only: casscf_orbital_rotate
+  use casscf_ah_mod, only: casscf_ah_model_step, casscf_lowest_mode_step, &
+                           casscf_diis_coeffs
+  use casscf_anhess_mod, only: cas_anhess_ctx_t, cas_anhess_init, &
+                               cas_anhess_build, CAS_HESS_ERR_DEGEN, &
+                               CAS_HESS_ERR_STACK
   use rdm_kernel_mod, only: rdm1_spatial, rdm2_spatial
   ! DGEMM/DGEMV through the ILP64 wrapper layer (AGENTS.md rule 1); see the
   ! same note in fci_driver.F90 for why `only:` cannot be used here.
@@ -134,7 +162,14 @@ module casscf_driver_mod
   integer, parameter :: CAS_I_CANONICAL = 14  ! 1 = canonicalize the orbitals
   integer, parameter :: CAS_I_MAXESCAPE = 15  ! saddle escapes, 0 disables phase 2
   integer, parameter :: CAS_I_MAXHIST   = 16  ! rows the history buffer holds
-  integer, parameter :: CAS_NIOPT       = 17
+  integer, parameter :: CAS_I_CONVERGER = 17  ! 0 twophase, 1 ah, 2 diis, 3 auto
+  integer, parameter :: CAS_I_HESSIAN   = 18  ! 0 finite difference, 1 analytic
+  integer, parameter :: CAS_I_AH_MICRO  = 19  ! AH scale-bisection microiterations
+  integer, parameter :: CAS_I_AH_REJECT = 20  ! uphill-step rejections per macro
+  integer, parameter :: CAS_I_DIIS_SPACE= 21  ! stored rotation/gradient pairs
+  integer, parameter :: CAS_I_DIIS_START= 22  ! pairs required before extrapolating
+  integer, parameter :: CAS_I_AUTO_STAG = 23  ! stalled macros before the fallback
+  integer, parameter :: CAS_NIOPT       = 24
   !
   ! dopt (double):
   integer, parameter :: CAS_D_ENUC      = 0   ! nuclear repulsion, added to every root
@@ -148,7 +183,12 @@ module casscf_driver_mod
   integer, parameter :: CAS_D_FD_STEP   = 8   ! finite-difference Hessian displacement
   integer, parameter :: CAS_D_SADDLE_C  = 9   ! deep-negative-curvature threshold
   integer, parameter :: CAS_D_SADDLE_E  = 10  ! strict energy gain to accept an escape
-  integer, parameter :: CAS_NDOPT       = 11
+  integer, parameter :: CAS_D_AH_START  = 11  ! AH initial trust radius
+  integer, parameter :: CAS_D_AH_MAXTR  = 12  ! AH trust-radius ceiling
+  integer, parameter :: CAS_D_AH_MINTR  = 13  ! AH trust-radius floor / stagnation
+  integer, parameter :: CAS_D_AH_SADC   = 14  ! AH deep-negative-curvature threshold
+  integer, parameter :: CAS_D_AH_SADE   = 15  ! AH strict gain to accept an escape
+  integer, parameter :: CAS_NDOPT       = 16
 
   ! Status codes.  Success is 0; every negative value means "the caller should
   ! run the Python optimizer", which owns the user-facing messages.
@@ -159,6 +199,8 @@ module casscf_driver_mod
   integer(i8), parameter :: CAS_ERR_EIGEN       = -5_i8  ! LAPACK failure
   integer(i8), parameter :: CAS_ERR_TRANSFORM   = -6_i8  ! AO->MO buffer allocation
   integer(i8), parameter :: CAS_ERR_ROTATE      = -7_i8  ! expm/Pade failure
+  integer(i8), parameter :: CAS_ERR_DEGEN       = -8_i8  ! non-smooth SA objective
+  integer(i8), parameter :: CAS_ERR_STACK       = -9_i8  ! active space too large
 
   ! Backtracking budget and acceptance tolerance of `_floored_newton_loop`,
   ! and the escape kick amplitudes of `_escape_saddles`.  Fixed constants in
@@ -167,6 +209,41 @@ module casscf_driver_mod
   real(dp), parameter :: CAS_ACCEPT_TOL = 1.0e-12_dp
   real(dp), parameter :: CAS_ESCAPE_AMPS(6) = &
       [0.3_dp, 0.2_dp, 0.1_dp, -0.1_dp, -0.2_dp, -0.3_dp]
+
+  ! Fixed algorithmic constants of `casscf_convergers.py` -- standard
+  ! trust-region ratio thresholds and factors, the AH reference-component
+  ! cutoff and the DIIS conditioning ceiling.  Deliberately not config keys
+  ! there, so deliberately not options here.
+  real(dp), parameter :: CAS_RHO_SHRINK   = 0.25_dp
+  real(dp), parameter :: CAS_RHO_GROW     = 0.75_dp
+  real(dp), parameter :: CAS_GROW_FACTOR  = 2.0_dp
+  real(dp), parameter :: CAS_REJECT_FACTOR = 0.25_dp
+  real(dp), parameter :: CAS_PRED_FLOOR   = 1.0e-13_dp
+  real(dp), parameter :: CAS_V0_TOL       = 1.0e-10_dp
+  real(dp), parameter :: CAS_DIIS_CONDMAX = 1.0e14_dp
+  integer, parameter :: CAS_DIIS_BACKTRACK = 12
+
+  !> `stats` layout returned to the caller (all int32):
+  !>   0 history rows written        5 DIIS extrapolations accepted
+  !>   1 macroiterations             6 DIIS extrapolations attempted
+  !>   2 converged flag              7 `ah` stagnation flag
+  !>   3 energy/gradient evaluations 8 `auto` outcome (0 converged, 1 stalled,
+  !>   4 analytic Hessian builds       2 macroiteration cap)
+  !>                                 9 `auto` macroiterations before falling back
+  integer, parameter :: CAS_NSTATS = 10
+
+  !> Resolved trust-region parameters of the `ah` converger.  Python owns the
+  !> option parsing (including the "<= 0 means follow max_rotation_norm"
+  !> default for the ceiling), so these arrive already resolved.
+  type :: cas_ah_par_t
+    real(dp) :: start_trust = 0.2_dp
+    real(dp) :: max_trust = 0.5_dp
+    real(dp) :: min_trust = 1.0e-6_dp
+    integer :: max_micro = 32
+    integer :: max_rejects = 6
+    real(dp) :: saddle_curv_tol = 2.5e-2_dp
+    real(dp) :: saddle_egain_tol = 1.0e-3_dp
+  end type cas_ah_par_t
 
   !> Everything one energy/gradient evaluation needs, so `cas_evaluate` can be
   !> the plain procedure Fortran gives us in place of the Python closure.
@@ -191,6 +268,20 @@ module casscf_driver_mod
     ! reusable work buffers -- one allocation per run, not per evaluation
     real(dp), allocatable :: h1e(:), eri(:), civ(:), enci(:), s2w(:)
     real(dp), allocatable :: g1(:), g2(:), fock(:), cvec(:)
+    ! ---- orbital-Hessian backend (`[casscf] hessian`)
+    integer :: hessmode = 0     !< 0 finite difference, 1 analytic
+    integer :: nhess = 0        !< analytic Hessian builds, for the trace
+    type(cas_anhess_ctx_t) :: ah
+    !> CI vectors AT THE CURRENT POINT.  The analytic Hessian is a function of
+    !> the orbitals and of the CI solution at them, and `ctx%civ` is clobbered
+    !> by every trial evaluation (2*n_par of them on the FD path, one per
+    !> backtrack and one per DIIS extrapolation elsewhere), so the accepted
+    !> point's vectors are snapshotted here the moment they are known.
+    real(dp), allocatable :: civ_ref(:)
+    !> Integrals for the Hessian build.  `hess_fn(C, coeffs)` re-transforms at
+    !> C in the Python, and must here too: after a rejected DIIS extrapolation
+    !> `ctx%h1e`/`ctx%eri` belong to the *rejected* point, not to C.
+    real(dp), allocatable :: h1e_h(:), eri_h(:)
   end type cas_ctx_t
 
 contains
@@ -255,16 +346,22 @@ contains
     real(dp), allocatable :: cbuf(:,:), curv_w(:), curv_u(:,:)
     integer :: n, nc, na, nstate, nroot, maxmacro, optimizer, canonical
     integer :: maxescape, maxhist, ierr, k, i, j, nhist, niter, nvirt
-    integer :: idx, p, q, ndet_ok
-    logical :: converged, have_curv
+    integer :: idx, p, q, ndet_ok, converger, hessmode
+    logical :: converged, have_curv, stagnated
     real(dp) :: gradtol, enertol, steptol, maxrot, shift, fdstep
     real(dp) :: saddle_c, saddle_e, objective
+    type(cas_ah_par_t) :: ahpar
+    integer :: n_used, n_extrap, auto_code, auto_it
 
     status = 0_i8
-    stats(0) = 0_c_int32_t
-    stats(1) = 0_c_int32_t
-    stats(2) = 0_c_int32_t
-    stats(3) = 0_c_int32_t
+    do k = 0, CAS_NSTATS - 1
+      stats(k) = 0_c_int32_t
+    end do
+    n_used = 0
+    n_extrap = 0
+    auto_code = 0
+    auto_it = 0
+    stagnated = .false.
 
     n  = infos%basis%nbf
     nc = int(iopt(CAS_I_NCORE))
@@ -276,6 +373,16 @@ contains
     canonical = int(iopt(CAS_I_CANONICAL))
     maxescape = int(iopt(CAS_I_MAXESCAPE))
     maxhist   = int(iopt(CAS_I_MAXHIST))
+    converger = int(iopt(CAS_I_CONVERGER))
+    hessmode  = int(iopt(CAS_I_HESSIAN))
+
+    ahpar%max_micro       = max(1, int(iopt(CAS_I_AH_MICRO)))
+    ahpar%max_rejects     = max(0, int(iopt(CAS_I_AH_REJECT)))
+    ahpar%start_trust     = dopt(CAS_D_AH_START)
+    ahpar%max_trust       = dopt(CAS_D_AH_MAXTR)
+    ahpar%min_trust       = dopt(CAS_D_AH_MINTR)
+    ahpar%saddle_curv_tol = dopt(CAS_D_AH_SADC)
+    ahpar%saddle_egain_tol = dopt(CAS_D_AH_SADE)
 
     gradtol  = dopt(CAS_D_GRAD_TOL)
     enertol  = dopt(CAS_D_ENER_TOL)
@@ -297,6 +404,17 @@ contains
     if (nstate < 1 .or. nroot < 1 .or. maxhist < 2 .or. fdstep <= 0.0_dp) then
       status = CAS_ERR_INPUT
       return
+    end if
+    if (converger < 0 .or. converger > 3 .or. hessmode < 0 .or. hessmode > 1) then
+      status = CAS_ERR_INPUT
+      return
+    end if
+    if (converger == 1 .or. converger == 3) then
+      if (ahpar%start_trust <= 0.0_dp .or. ahpar%max_trust <= 0.0_dp .or. &
+          ahpar%min_trust <= 0.0_dp) then
+        status = CAS_ERR_INPUT
+        return
+      end if
     end if
     do k = 0, nstate - 1
       if (roots(k) < 0 .or. int(roots(k)) >= nroot) then
@@ -443,23 +561,68 @@ contains
       end do
     end do
 
-    ! ================================================== phase 1: damped Newton
-    nhist = 0
-    call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                     steptol, maxrot, shift, fdstep, history, maxhist, &
-                     nhist, .true., converged, niter, curv_w, curv_u, &
-                     have_curv, objective, status)
-    if (status < 0_i8) return
-
-    ! ============================== phase 2: curvature-gated saddle escape
-    if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
-      call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
-                          steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
-                          maxescape, history, maxhist, nhist, niter, &
-                          curv_w, curv_u, objective, status)
-      if (status < 0_i8) return
-      converged = .true.
+    ! ---- orbital-Hessian backend (`[casscf] hessian = fd | analytic`)
+    ctx%hessmode = hessmode
+    if (hessmode == 1) then
+      allocate(ctx%civ_ref(0:ctx%ndet*int(nroot, i8) - 1_i8), &
+               ctx%h1e_h(0:int(n, i8)**2 - 1_i8), &
+               ctx%eri_h(0:int(n, i8)**4 - 1_i8), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_ALLOC
+        return
+      end if
+      status = cas_anhess_init(ctx%ah, n, nc, na, int(iopt(CAS_I_NALPHA)), &
+                               int(iopt(CAS_I_NBETA)), ctx%npar, nstate, &
+                               ctx%nthreads, ctx%ndet, ctx%dets)
+      if (status < 0_i8) then
+        ! The 2 GiB excitation-stack guard and the encoding limit are refusals,
+        ! not fallbacks: hand them back so Python raises its own message.
+        if (status == CAS_HESS_ERR_STACK) status = CAS_ERR_STACK
+        return
+      end if
     end if
+
+    ! ============================================== orbital-optimization phase
+    nhist = 0
+    select case (converger)
+    case (1)          ! ah: trust-region augmented Hessian + curvature escape
+      call ah_converge(ctx, cbuf, maxmacro, gradtol, enertol, steptol, &
+                       fdstep, ahpar, 0, maxescape, history, maxhist, nhist, &
+                       converged, niter, objective, stagnated, status)
+      if (status < 0_i8) return
+
+    case (2)          ! diis: Pulay acceleration over the production step
+      call diis_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                         maxescape, int(iopt(CAS_I_DIIS_SPACE)), &
+                         int(iopt(CAS_I_DIIS_START)), history, maxhist, nhist, &
+                         converged, niter, objective, n_used, n_extrap, status)
+      if (status < 0_i8) return
+
+    case (3)          ! auto: ah with a two-phase fallback on stagnation
+      call auto_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                         steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                         maxescape, ahpar, max(1, int(iopt(CAS_I_AUTO_STAG))), &
+                         history, maxhist, nhist, converged, niter, objective, &
+                         auto_code, auto_it, stagnated, status)
+      if (status < 0_i8) return
+
+    case default      ! twophase: damped Newton, then the saddle escape
+      call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                       steptol, maxrot, shift, fdstep, history, maxhist, &
+                       nhist, .true., converged, niter, curv_w, curv_u, &
+                       have_curv, objective, status)
+      if (status < 0_i8) return
+
+      if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
+        call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                            steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                            maxescape, history, maxhist, nhist, niter, &
+                            curv_w, curv_u, objective, status)
+        if (status < 0_i8) return
+        converged = .true.
+      end if
+    end select
 
     ! ==================================================== canonicalization
     if (canonical /= 0) then
@@ -498,6 +661,15 @@ contains
     stats(1) = int(niter, c_int32_t)
     stats(2) = merge(1_c_int32_t, 0_c_int32_t, converged)
     stats(3) = int(ctx%ncall, c_int32_t)
+    stats(4) = int(ctx%nhess, c_int32_t)
+    stats(5) = int(n_used, c_int32_t)
+    stats(6) = int(n_extrap, c_int32_t)
+    stats(7) = merge(1_c_int32_t, 0_c_int32_t, stagnated)
+    stats(8) = int(auto_code, c_int32_t)
+    stats(9) = int(auto_it, c_int32_t)
+    ! `ctx` is a local, so its allocatable components -- including the
+    ! excitation stack inside `ctx%ah` -- are released on return, on the error
+    ! paths as well as this one.
   end function casscf_energy
 
   ! =================================================================== work
@@ -643,6 +815,7 @@ contains
       status = rc
       return
     end if
+    call cas_snap_ci(ctx)
     first_row = seed_history
     if (first_row) call push_history(history, maxhist, nhist, 0, objective, &
                                      0.0_dp, vnorm(grad), 0.0_dp)
@@ -683,6 +856,9 @@ contains
         step = 0.5_dp * step
       end do
 
+      ! ctx%civ still belongs to the last trial evaluation, which IS the point
+      ! being accepted; snapshot before anything else can clobber it.
+      call cas_snap_ci(ctx)
       cbuf = ctry
       objective = obj_new
       grad = grad_new
@@ -696,7 +872,8 @@ contains
     end do
   end subroutine newton_loop
 
-  !> `casscf.py::_newton_step` with the finite-difference Hessian.
+  !> `casscf.py::_newton_step`, over whichever Hessian `[casscf] hessian`
+  !> selects (`build_hessian` dispatches).
   subroutine newton_step(ctx, cbuf, grad, fdstep, shift, maxrot, step, &
                          curv_w, curv_u, status)
     type(cas_ctx_t), intent(inout) :: ctx
@@ -720,7 +897,7 @@ contains
       return
     end if
 
-    call fd_orbital_hessian(ctx, cbuf, fdstep, hess, status)
+    call build_hessian(ctx, cbuf, fdstep, hess, status)
     if (status < 0_i8) return
 
     ! The Hessian is symmetric by construction, so its C-order buffer and its
@@ -816,6 +993,628 @@ contains
     end do
     deallocate(e, gp, gm, ctry)
   end subroutine fd_orbital_hessian
+
+  ! ================================================== orbital-Hessian backend
+  !> Snapshot the CI vectors of the point just evaluated.
+  !>
+  !> The analytic Hessian is a function of the orbitals AND of the CI solution
+  !> at them (`hess_fn(C, coeffs)` in the Python).  `ctx%civ` is a scratch
+  !> buffer that every trial evaluation overwrites, so the accepted point's
+  !> vectors have to be copied out the moment they are current.  On the FD path
+  !> nothing reads them and the copy is skipped entirely.
+  subroutine cas_snap_ci(ctx)
+    type(cas_ctx_t), intent(inout) :: ctx
+    if (ctx%hessmode == 0) return
+    ctx%civ_ref = ctx%civ
+  end subroutine cas_snap_ci
+
+  !> `[casscf] hessian`: the finite-difference builder or the analytic one.
+  !>
+  !> The FD branch is the original code path, untouched.  The analytic branch
+  !> re-transforms the AO integrals at `cbuf` first, exactly as the Python
+  !> `hess_fn` does -- and not as an accident of tidiness: after a rejected DIIS
+  !> extrapolation `ctx%h1e`/`ctx%eri` belong to the rejected trial point, not
+  !> to the orbitals the Hessian is wanted at.
+  subroutine build_hessian(ctx, cbuf, fdstep, hess, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(in) :: cbuf(0:,0:)
+    real(dp), intent(in) :: fdstep
+    real(dp), contiguous, intent(out) :: hess(:,:)
+    integer(i8), intent(inout) :: status
+
+    integer :: npar, i, j
+    integer(i8) :: rc
+    real(dp) :: tmp
+
+    if (ctx%hessmode == 0) then
+      call fd_orbital_hessian(ctx, cbuf, fdstep, hess, status)
+      return
+    end if
+
+    npar = ctx%npar
+    ctx%nhess = ctx%nhess + 1
+    call mo_transform_h1e(int(ctx%n, c_int32_t), ctx%hcore, cbuf, ctx%h1e_h)
+    if (mo_transform_eri(int(ctx%n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri_h) &
+        /= 0_i8) then
+      status = CAS_ERR_TRANSFORM
+      return
+    end if
+    rc = cas_anhess_build(ctx%ah, ctx%pairs, ctx%weights, ctx%roots, ctx%nroot, &
+                          ctx%dets, ctx%h1e_h, ctx%eri_h, ctx%civ_ref, hess)
+    if (rc < 0_i8) then
+      ! A degeneracy refusal must NOT become a number.  It comes back as its
+      ! own status so the Python path re-raises the message that explains the
+      ! objective is not smooth there.
+      if (rc == CAS_HESS_ERR_DEGEN) then
+        status = CAS_ERR_DEGEN
+      else
+        status = CAS_ERR_ALLOC
+      end if
+      return
+    end if
+    ! The CI-relaxation half closes with a GEMM, so the two triangles agree
+    ! only to rounding.  The Python feeds this matrix to `_symmetric_eigh`,
+    ! which symmetrizes before diagonalizing; do the same so both arms pose the
+    ! same eigenproblem.  (The FD Hessian is already exactly symmetric, which
+    ! is why that branch is left alone.)
+    do j = 1, npar
+      do i = j + 1, npar
+        tmp = 0.5_dp * (hess(i, j) + hess(j, i))
+        hess(i, j) = tmp
+        hess(j, i) = tmp
+      end do
+    end do
+  end subroutine build_hessian
+
+  ! =============================================== ah: trust-region augmented
+  !> `casscf_convergers.py::_ah_inner`: one trust-region AH macroiteration loop.
+  !>
+  !> Each macroiteration builds the orbital Hessian, solves the level-shifted
+  !> augmented-Hessian model in its eigenbasis (`casscf_ah_model_step`, which
+  !> is CI-free), evaluates the trial point, and either accepts it or shrinks
+  !> the radius and re-solves the same model.  `curv_w`/`curv_u` come back as
+  !> the raw eigendecomposition built by the FINAL step, so the escape phase
+  !> costs no extra CI solves -- the same contract `newton_loop` has.
+  subroutine ah_inner(ctx, cbuf, maxmacro, gradtol, enertol, steptol, fdstep, &
+                      par, stagnation_break, history, maxhist, nhist, &
+                      converged, niter, curv_w, curv_u, have_curv, objective, &
+                      stagnated, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, maxhist, stagnation_break
+    real(dp), intent(in) :: gradtol, enertol, steptol, fdstep
+    type(cas_ah_par_t), intent(in) :: par
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(out) :: converged, have_curv, stagnated
+    integer, intent(out) :: niter
+    real(dp), allocatable, intent(inout) :: curv_w(:), curv_u(:,:)
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: grad(:), grad_new(:), step(:), ctry(:,:)
+    real(dp), allocatable :: hess(:,:), uc(:,:)
+    real(dp) :: trust, gnorm, obj_old, obj_new, de, pred, step_norm, rho
+    real(dp) :: best_obj, prd(1), shf(1)
+    integer :: npar, it, rej, ierr, st, stall
+    integer(c_int32_t) :: nmc(1)
+    integer(i8) :: rc
+    logical :: accepted
+
+    npar = ctx%npar
+    trust = par%start_trust
+    converged = .false.
+    stagnated = .false.
+    have_curv = .false.
+    niter = 0
+    objective = 0.0_dp
+    allocate(grad(0:npar-1), grad_new(0:npar-1), step(0:npar-1), &
+             ctry(0:ctx%n-1, 0:ctx%n-1), hess(npar, npar), &
+             uc(0:npar-1, 0:npar-1), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    if (allocated(curv_w)) deallocate(curv_w)
+    if (allocated(curv_u)) deallocate(curv_u)
+    allocate(curv_w(npar), curv_u(npar, npar), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    call cas_evaluate(ctx, cbuf, objective, grad, rc)
+    if (rc < 0_i8) then
+      status = rc
+      return
+    end if
+    call cas_snap_ci(ctx)
+    nhist = 0
+    call push_history(history, maxhist, nhist, 0, objective, 0.0_dp, &
+                      vnorm(grad), 0.0_dp)
+    best_obj = objective
+    stall = 0
+
+    do it = 1, maxmacro
+      niter = it
+      gnorm = vnorm(grad)
+      if (gnorm < gradtol) then
+        converged = .true.
+        exit
+      end if
+
+      call build_hessian(ctx, cbuf, fdstep, hess, status)
+      if (status < 0_i8) return
+      curv_u = hess
+      call oqp_dsyevd_f(npar, curv_u, curv_w, ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_EIGEN
+        return
+      end if
+      have_curv = .true.
+      ! The AH engine reads the eigenvectors as the C-order buffer U[i][k];
+      ! LAPACK left them in Fortran COLUMNS.  U is not symmetric, so this
+      ! transpose is mandatory and omitting it is silent (every shape square).
+      uc = transpose(curv_u)
+
+      obj_old = objective
+      accepted = .false.
+      de = 0.0_dp
+      pred = 0.0_dp
+      obj_new = objective
+      grad_new = grad
+      do rej = 0, par%max_rejects
+        st = int(casscf_ah_model_step(int(npar, c_int32_t), grad, curv_w, uc, &
+                                      trust, int(par%max_micro, c_int32_t), &
+                                      CAS_V0_TOL, step, shf, prd, nmc))
+        if (st == 1) then
+          ! no reference component: the pure negative-curvature case
+          call casscf_lowest_mode_step(int(npar, c_int32_t), grad, curv_w, uc, &
+                                       trust, step, prd)
+        else if (st /= 0) then
+          status = CAS_ERR_EIGEN
+          return
+        end if
+        pred = prd(1)
+        call cas_rotate(ctx, cbuf, step, ctry, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        call cas_evaluate(ctx, ctry, obj_new, grad_new, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        de = obj_new - obj_old
+        if (de <= CAS_ACCEPT_TOL) then
+          accepted = .true.
+          exit
+        end if
+        trust = max(CAS_REJECT_FACTOR * trust, par%min_trust)
+        if (trust <= par%min_trust) exit
+      end do
+      if (.not. accepted) then
+        stagnated = .true.
+        exit
+      end if
+
+      ! adaptive radius from the predicted-vs-actual decrease ratio
+      step_norm = vnorm(step)
+      if (pred < -CAS_PRED_FLOOR) then
+        rho = de / pred
+        if (rho < CAS_RHO_SHRINK) then
+          trust = max(0.5_dp * trust, par%min_trust)
+        else if (rho > CAS_RHO_GROW .and. step_norm >= 0.8_dp * trust) then
+          trust = min(CAS_GROW_FACTOR * trust, par%max_trust)
+        end if
+      end if
+
+      call cas_snap_ci(ctx)
+      cbuf = ctry
+      objective = obj_new
+      grad = grad_new
+      call push_history(history, maxhist, nhist, it, objective, &
+                        objective - obj_old, vnorm(grad), step_norm)
+      if (abs(objective - obj_old) < enertol .and. step_norm < steptol) then
+        converged = vnorm(grad) < gradtol
+        exit
+      end if
+      if (stagnation_break > 0) then
+        if (objective < best_obj - enertol) then
+          best_obj = objective
+          stall = 0
+        else
+          stall = stall + 1
+          if (stall >= stagnation_break) then
+            stagnated = .true.
+            exit
+          end if
+        end if
+      end if
+    end do
+    deallocate(grad, grad_new, step, ctry, hess, uc)
+  end subroutine ah_inner
+
+  !> `casscf_convergers.py::_curvature_escape`.
+  !>
+  !> Same idea as `escape_saddles` -- kick along the lowest mode, line-search
+  !> both signs, re-converge, accept only a strict energy gain -- but it
+  !> re-converges with the AH loop so the converger stays AH end to end, and it
+  !> stamps each rerun row with `total_it + that row's own index` where
+  !> `escape_saddles` stamps them all with the running total.  The two differ
+  !> in the Python and both are reproduced.
+  subroutine ah_curvature_escape(ctx, cbuf, maxmacro, gradtol, enertol, &
+                                 steptol, fdstep, par, maxescape, history, &
+                                 maxhist, nhist, total_it, curv_w, curv_u, &
+                                 have_curv, objective, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, maxescape, maxhist
+    real(dp), intent(in) :: gradtol, enertol, steptol, fdstep
+    type(cas_ah_par_t), intent(in) :: par
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist, total_it
+    real(dp), allocatable, intent(inout) :: curv_w(:), curv_u(:,:)
+    logical, intent(in) :: have_curv
+    real(dp), intent(inout) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: kick(:), grad(:), cbest(:,:), ctry(:,:), c2(:,:)
+    real(dp), allocatable :: w2(:), u2(:,:), hrow(:,:)
+    integer :: npar, escapes, amp, kmin, ierr, it2, nrow2, r
+    integer(i8) :: rc
+    real(dp) :: best_obj, on, obj2
+    logical :: conv2, have2, stag2
+
+    if (.not. have_curv) return          ! `curv is None`: nothing to inspect
+
+    npar = ctx%npar
+    allocate(kick(0:npar-1), grad(0:npar-1), cbest(0:ctx%n-1, 0:ctx%n-1), &
+             ctry(0:ctx%n-1, 0:ctx%n-1), c2(0:ctx%n-1, 0:ctx%n-1), &
+             hrow(5, maxhist), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    escapes = 0
+    do while (escapes < maxescape)
+      kmin = minloc(curv_w, 1)
+      if (curv_w(kmin) >= -par%saddle_curv_tol) exit
+
+      best_obj = 0.0_dp
+      do amp = 1, size(CAS_ESCAPE_AMPS)
+        kick = CAS_ESCAPE_AMPS(amp) * curv_u(1:npar, kmin)
+        call cas_rotate(ctx, cbuf, kick, ctry, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        call cas_evaluate(ctx, ctry, on, grad, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        if (amp == 1 .or. on < best_obj) then
+          best_obj = on
+          cbest = ctry
+        end if
+      end do
+
+      c2 = cbest
+      nrow2 = 0
+      call ah_inner(ctx, c2, maxmacro, gradtol, enertol, steptol, fdstep, par, &
+                    0, hrow, maxhist, nrow2, conv2, it2, w2, u2, have2, obj2, &
+                    stag2, status)
+      if (status < 0_i8) return
+      do r = 2, nrow2
+        call push_history(history, maxhist, nhist, total_it + int(hrow(1, r)), &
+                          hrow(2, r), hrow(3, r), hrow(4, r), hrow(5, r))
+      end do
+      total_it = total_it + it2
+      if (.not. conv2 .or. obj2 >= objective - par%saddle_egain_tol .or. &
+          .not. have2) exit
+
+      cbuf = c2
+      objective = obj2
+      if (allocated(curv_w)) deallocate(curv_w)
+      if (allocated(curv_u)) deallocate(curv_u)
+      call move_alloc(w2, curv_w)
+      call move_alloc(u2, curv_u)
+      escapes = escapes + 1
+    end do
+    deallocate(kick, grad, cbest, ctry, c2, hrow)
+  end subroutine ah_curvature_escape
+
+  !> `casscf_convergers.py::_ah_converge`: the AH loop plus its escape phase.
+  subroutine ah_converge(ctx, cbuf, maxmacro, gradtol, enertol, steptol, &
+                         fdstep, par, stagnation_break, maxescape, history, &
+                         maxhist, nhist, converged, total_it, objective, &
+                         stagnated, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, maxhist, stagnation_break, maxescape
+    real(dp), intent(in) :: gradtol, enertol, steptol, fdstep
+    type(cas_ah_par_t), intent(in) :: par
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(out) :: converged, stagnated
+    integer, intent(out) :: total_it
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: curv_w(:), curv_u(:,:)
+    integer :: niter
+    logical :: have_curv
+
+    call ah_inner(ctx, cbuf, maxmacro, gradtol, enertol, steptol, fdstep, par, &
+                  stagnation_break, history, maxhist, nhist, converged, niter, &
+                  curv_w, curv_u, have_curv, objective, stagnated, status)
+    if (status < 0_i8) return
+    total_it = niter
+    if (converged) then
+      call ah_curvature_escape(ctx, cbuf, maxmacro, gradtol, enertol, steptol, &
+                               fdstep, par, maxescape, history, maxhist, nhist, &
+                               total_it, curv_w, curv_u, have_curv, objective, &
+                               status)
+      if (status < 0_i8) return
+      converged = .true.
+    end if
+  end subroutine ah_converge
+
+  ! ================================================================== diis
+  !> `casscf_convergers.py::_diis_optimize`.
+  !>
+  !> Each macroiteration takes the production step (Newton or Powell) with the
+  !> production backtracking, records the (accumulated-rotation, gradient)
+  !> pair, and once `diis_start` pairs exist EVALUATES the Pulay-extrapolated
+  !> point, keeping whichever candidate has the lower true energy.  Because
+  !> every candidate is re-evaluated variationally the acceleration can only
+  !> match or improve the plain iteration, which is also why the BCH-truncated
+  !> accumulated rotation does not need to be exact.
+  subroutine diis_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                           steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                           maxescape, nspace_in, nstart_in, history, maxhist, &
+                           nhist, converged, total_it, objective, n_used, &
+                           n_extrap, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, optimizer, maxhist, maxescape
+    integer, intent(in) :: nspace_in, nstart_in
+    real(dp), intent(in) :: gradtol, enertol, steptol, maxrot, shift, fdstep
+    real(dp), intent(in) :: saddle_c, saddle_e
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(out) :: converged
+    integer, intent(out) :: total_it, n_used, n_extrap
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: grad(:), grad_new(:), grad_x(:), step(:), astep(:)
+    real(dp), allocatable :: tvec(:), tnew(:), txt(:), coef(:)
+    real(dp), allocatable :: c0(:,:), ctry(:,:), cacc(:,:), cx(:,:)
+    real(dp), allocatable :: gstore(:,:), tstore(:,:)
+    real(dp), allocatable :: curv_w(:), curv_u(:,:)
+    integer(c_int32_t) :: nused(1)
+    integer :: npar, nspace, nstart, nstore, it, bt, k, ierr, ncf
+    integer(i8) :: rc
+    real(dp) :: obj_old, obj_new, obj_x, nrm, step_norm
+    logical :: have_curv
+
+    npar = ctx%npar
+    nspace = max(2, nspace_in)
+    nstart = max(2, nstart_in)
+    converged = .false.
+    have_curv = .false.
+    n_used = 0
+    n_extrap = 0
+    total_it = 0
+    objective = 0.0_dp
+
+    allocate(grad(0:npar-1), grad_new(0:npar-1), grad_x(0:npar-1), &
+             step(0:npar-1), astep(0:npar-1), tvec(0:npar-1), &
+             tnew(0:npar-1), txt(0:npar-1), coef(0:nspace-1), &
+             c0(0:ctx%n-1, 0:ctx%n-1), ctry(0:ctx%n-1, 0:ctx%n-1), &
+             cacc(0:ctx%n-1, 0:ctx%n-1), cx(0:ctx%n-1, 0:ctx%n-1), &
+             gstore(0:npar-1, 0:nspace-1), tstore(0:npar-1, 0:nspace-1), &
+             stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    c0 = cbuf
+    tvec = 0.0_dp
+    nstore = 0
+    call cas_evaluate(ctx, cbuf, objective, grad, rc)
+    if (rc < 0_i8) then
+      status = rc
+      return
+    end if
+    call cas_snap_ci(ctx)
+    nhist = 0
+    call push_history(history, maxhist, nhist, 0, objective, 0.0_dp, &
+                      vnorm(grad), 0.0_dp)
+
+    do it = 1, maxmacro
+      total_it = it
+      if (vnorm(grad) < gradtol) then
+        converged = .true.
+        exit
+      end if
+
+      if (optimizer == 0) then
+        call newton_step(ctx, cbuf, grad, fdstep, shift, maxrot, step, &
+                         curv_w, curv_u, status)
+        if (status < 0_i8) return
+        have_curv = .true.
+      else
+        step = -grad
+        nrm = vnorm(step)
+        if (nrm > maxrot) step = step * (maxrot / nrm)
+      end if
+
+      obj_old = objective
+      astep = step
+      do bt = 1, CAS_DIIS_BACKTRACK
+        call cas_rotate(ctx, cbuf, astep, ctry, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        call cas_evaluate(ctx, ctry, obj_new, grad_new, rc)
+        if (rc < 0_i8) then
+          status = rc
+          return
+        end if
+        if (obj_new <= obj_old + CAS_ACCEPT_TOL) exit
+        astep = 0.5_dp * astep
+      end do
+      call cas_snap_ci(ctx)          ! candidate so far: the plain step
+      cacc = ctry
+      tnew = tvec + astep
+
+      ! FIFO of (accumulated rotation, gradient) pairs, oldest column first --
+      ! which is also the layout `casscf_diis_coeffs` wants (its C-order
+      ! [nvec, npar] buffer IS this Fortran (npar, nvec) array).
+      if (nstore == nspace) then
+        do k = 0, nspace - 2
+          gstore(:, k) = gstore(:, k + 1)
+          tstore(:, k) = tstore(:, k + 1)
+        end do
+        nstore = nspace - 1
+      end if
+      gstore(:, nstore) = grad_new
+      tstore(:, nstore) = tnew
+      nstore = nstore + 1
+
+      if (nstore >= nstart) then
+        call casscf_diis_coeffs(int(nstore, c_int32_t), int(npar, c_int32_t), &
+                                gstore, CAS_DIIS_CONDMAX, coef, nused)
+        ncf = int(nused(1))
+        if (ncf > 0) then
+          txt = 0.0_dp
+          do k = 0, ncf - 1
+            txt = txt + coef(k) * tstore(:, nstore - ncf + k)
+          end do
+          call cas_rotate(ctx, c0, txt, cx, rc)
+          if (rc < 0_i8) then
+            status = rc
+            return
+          end if
+          call cas_evaluate(ctx, cx, obj_x, grad_x, rc)
+          if (rc < 0_i8) then
+            status = rc
+            return
+          end if
+          n_extrap = n_extrap + 1
+          if (obj_x < obj_new - CAS_ACCEPT_TOL) then
+            n_used = n_used + 1
+            call cas_snap_ci(ctx)
+            cacc = cx
+            obj_new = obj_x
+            grad_new = grad_x
+            tnew = txt
+            gstore(:, nstore - 1) = grad_x
+            tstore(:, nstore - 1) = txt
+          end if
+        end if
+      end if
+
+      step_norm = vnorm(tnew - tvec)
+      cbuf = cacc
+      objective = obj_new
+      grad = grad_new
+      tvec = tnew
+      call push_history(history, maxhist, nhist, it, objective, &
+                        objective - obj_old, vnorm(grad), step_norm)
+      if (abs(objective - obj_old) < enertol .and. step_norm < steptol) then
+        converged = vnorm(grad) < gradtol
+        exit
+      end if
+    end do
+
+    if (converged .and. optimizer == 0 .and. maxescape > 0 .and. have_curv) then
+      call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                          steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                          maxescape, history, maxhist, nhist, total_it, &
+                          curv_w, curv_u, objective, status)
+      if (status < 0_i8) return
+      converged = .true.
+    end if
+  end subroutine diis_optimize
+
+  ! ================================================================== auto
+  !> `casscf_convergers.py::_auto_optimize`: `ah` with a stagnation watchdog
+  !> and an automatic fallback to the two-phase converger.
+  !>
+  !> The AH loop accepts only non-increasing steps, so its final point is its
+  !> best point and the fallback never restarts above the initial one; at worst
+  !> `auto` reproduces the default converger's trajectory from there.
+  subroutine auto_optimize(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                           steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                           maxescape, par, stagnation, history, maxhist, nhist, &
+                           converged, total_it, objective, auto_code, auto_it, &
+                           stagnated, status)
+    type(cas_ctx_t), intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, optimizer, maxhist, maxescape, stagnation
+    real(dp), intent(in) :: gradtol, enertol, steptol, maxrot, shift, fdstep
+    real(dp), intent(in) :: saddle_c, saddle_e
+    type(cas_ah_par_t), intent(in) :: par
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(out) :: converged, stagnated
+    integer, intent(out) :: total_it, auto_code, auto_it
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    real(dp), allocatable :: curv_w(:), curv_u(:,:), hrow(:,:)
+    integer :: nrow2, it2, offset, r, ierr
+    logical :: conv1, conv2, have2
+
+    auto_code = 0
+    auto_it = 0
+    call ah_converge(ctx, cbuf, maxmacro, gradtol, enertol, steptol, fdstep, &
+                     par, stagnation, maxescape, history, maxhist, nhist, &
+                     conv1, total_it, objective, stagnated, status)
+    if (status < 0_i8) return
+    if (conv1) then
+      converged = .true.
+      return
+    end if
+
+    auto_code = merge(1, 2, stagnated)     ! 1 stalled, 2 hit the macro cap
+    auto_it = total_it
+    allocate(hrow(5, maxhist), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    nrow2 = 0
+    call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, steptol, &
+                     maxrot, shift, fdstep, hrow, maxhist, nrow2, .true., &
+                     conv2, it2, curv_w, curv_u, have2, objective, status)
+    if (status < 0_i8) return
+    offset = total_it
+    do r = 2, nrow2
+      call push_history(history, maxhist, nhist, offset + int(hrow(1, r)), &
+                        hrow(2, r), hrow(3, r), hrow(4, r), hrow(5, r))
+    end do
+    total_it = offset + it2
+    converged = conv2
+    deallocate(hrow)
+
+    if (conv2 .and. optimizer == 0 .and. maxescape > 0 .and. have2) then
+      call escape_saddles(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
+                          steptol, maxrot, shift, fdstep, saddle_c, saddle_e, &
+                          maxescape, history, maxhist, nhist, total_it, &
+                          curv_w, curv_u, objective, status)
+      if (status < 0_i8) return
+      converged = .true.
+    end if
+  end subroutine auto_optimize
 
   ! ========================================================= saddle escape
   !> `casscf.py::_escape_saddles`.  Only a DEEP negative curvature triggers a

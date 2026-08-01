@@ -1,5 +1,22 @@
 """Analytic MCSCF orbital-rotation Hessian for the native CASSCF.
 
+Where this now RUNS
+-------------------
+The assembly below runs inside liboqp: ``casscf_anhess.F90`` performs the same
+sequence -- SA RDMs, ``casscf_hess_bmat``, the ``0.5 (B + B^T)``
+symmetrization, the inactive-Fock fold, the active-space Hamiltonian and its
+dense spectrum, then the per-root ``wmat`` / ``amp`` / ``relax`` chain -- with
+the excitation stack cached for the whole run.  ``casscf_energy`` therefore
+crosses the boundary once for ``[casscf] hessian = analytic`` too, where this
+function crossed it ~10 times per macroiteration plus one per RDM.
+
+The Python here is unchanged and stays as the numerical pin (both arms are
+compared in the same process by ``tests/test_casscf_energy.py``) and as the
+fallback for every declined run.  In particular the two REFUSALS are still
+raised from here: a root degeneracy with non-zero orbital coupling, and an
+active space past ``_MAX_STACK_BYTES``.  The driver returns a distinguished
+status for each rather than inventing a message or, worse, a number.
+
 This module removes the finite-difference orbital Hessian bottleneck of
 :mod:`oqp.library.casscf` (``_fd_orbital_hessian``: ``2*n_par`` gradient
 evaluations = ``2*n_par`` active-space CI solves per build) by assembling the

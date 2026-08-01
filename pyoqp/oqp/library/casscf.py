@@ -37,8 +37,7 @@ state-averaged energy ``sum_I w_I E_I`` is stationary.
 
 One call per run
 ----------------
-On the default ``[casscf] converger = twophase`` / ``hessian = fd`` path the
-whole optimizer now runs inside liboqp behind a single ``casscf_energy(inf)``
+The whole optimizer runs inside liboqp behind a single ``casscf_energy(inf)``
 entry point (``source/modules/casscf_driver.F90``), the shape every other
 OpenQP method already has (``hf_energy(inf)``, ``mp2_energy(inf)``).  What used
 to be a Python loop calling ~20 fine-grained kernels -- six crossings per
@@ -47,13 +46,20 @@ finite-difference Hessian -- is one crossing: measured 43,317 -> 1 for
 H2O/cc-pVDZ CAS(6,6) and 3,188 -> 1 for the H2O/STO-3G CAS(4,4) example, at an
 identical converged energy.
 
+Every ``[casscf] converger`` (``twophase``, ``ah``, ``diis``, ``auto``) and
+both orbital-Hessian builders (``hessian = fd | analytic``) are covered.  The
+``ah`` + ``analytic`` combination is the one that used to cost most: the
+converger's own control flow, the augmented-Hessian model step and the whole
+analytic-Hessian assembly each crossed the boundary per macroiteration.
+
 Everything below stays: the option parsing and validation that produces the
-user-facing messages, the state-average plan, the log (the driver returns the
-macroiteration table and ``_write_log`` formats it unchanged), and the
-``ah``/``diis``/``auto`` convergers and analytic Hessian, which the driver does
-not claim.  The whole Python optimizer also remains as the numerical pin and as
-the fallback whenever the driver declines -- the established
-``_gfock_backend()`` pattern.
+user-facing messages, the state-average plan, and the log -- the driver returns
+the macroiteration table and the converger counters, and ``_write_log`` /
+``_converger_trace`` format them unchanged.  The whole Python optimizer,
+including :mod:`oqp.library.casscf_convergers` and
+:mod:`oqp.library.casscf_hessian`, also remains as the numerical pin and as the
+fallback whenever the driver declines -- the established ``_gfock_backend()``
+pattern.
 
 This module intentionally keeps a small, readable surface and reuses the
 first-class ``[cas]`` / ``[ci]`` / ``[state_average]`` options plus a ``[casscf]``
@@ -352,15 +358,41 @@ def _lib_effective_fock(h1e, eri, D):
 _CAS_IOPT = (
     "ncore", "nact", "nalpha", "nbeta", "nstate", "nroot", "solver", "maxiter",
     "subspace", "mult", "maxmemory", "nthreads", "maxmacro", "optimizer",
-    "canonical", "maxescape", "maxhist",
+    "canonical", "maxescape", "maxhist", "converger", "hessian", "ah_micro",
+    "ah_reject", "diis_space", "diis_start", "auto_stag",
 )
 _CAS_DOPT = (
     "enuc", "eig_tol", "cutoff", "grad_tol", "ener_tol", "step_tol", "maxrot",
-    "shift", "fd_step", "saddle_c", "saddle_e",
+    "shift", "fd_step", "saddle_c", "saddle_e", "ah_start", "ah_maxtr",
+    "ah_mintr", "ah_sadc", "ah_sade",
 )
 _CAS_IOPT_INDEX = {name: i for i, name in enumerate(_CAS_IOPT)}
 _CAS_DOPT_INDEX = {name: i for i, name in enumerate(_CAS_DOPT)}
 _CAS_OPTIMIZER_CODE = {"newton": 0, "powell": 1}
+
+# Converger / Hessian spellings the driver can run, mapped to its codes.  The
+# accepted spellings are exactly ``casscf_convergers._CONV_ALIASES`` and
+# ``_hessian_provider``'s -- anything else must come back as ``None`` so the
+# Python path runs and raises the established message.  Note ``analytical`` is
+# deliberately absent: ``_hessian_provider`` rejects it too.
+_CAS_CONVERGER_CODE = {
+    "": 0, "twophase": 0, "two-phase": 0, "2phase": 0, "default": 0,
+    "ah": 1, "trah": 1, "augmented-hessian": 1, "augmentedhessian": 1,
+    "diis": 2, "auto": 3,
+}
+_CAS_CONVERGER_NAME = {0: "twophase", 1: "ah", 2: "diis", 3: "auto"}
+_CAS_HESSIAN_CODE = {
+    "": 0, "fd": 0, "finite-difference": 0, "finite_difference": 0,
+    "numerical": 0, "default": 0, "analytic": 1, "exact": 1,
+}
+# Raw spellings for which casscf._optimize does NOT enter the converger
+# framework, hence for which no trace is printed.  The framework canonicalizes
+# more spellings than this (``2phase`` runs the same two-phase code but through
+# ``run_converger``, and therefore does print a trace), so the test is on the
+# raw string, not on the resolved code.
+_CAS_NO_FRAMEWORK = ("", "twophase", "two-phase", "default")
+# Length of the driver's `stats` block (CAS_NSTATS in casscf_driver.F90).
+_CAS_NSTATS = 10
 
 # Fixed algorithmic constants of the two-phase path.  They are hard-coded in
 # the Python functions below (not config keys), so they are passed as the
@@ -382,23 +414,60 @@ def _casscf_energy_backend():
     return lib, ffi
 
 
-def _native_converger_ok(cfg) -> bool:
-    """True when ``[casscf]`` selects the default two-phase / FD-Hessian path.
+def _native_converger_codes(cfg):
+    """``(converger, hessian, framework)`` driver codes for ``[casscf]``.
 
-    The ``ah`` / ``diis`` / ``auto`` convergers and ``hessian = analytic`` stay
-    in Python: they are control flow around the same kernels, their NumPy
-    implementations are the validated pins, and no shipped default input
-    selects them.  Read with ``dict.get`` defaults, exactly as the optimizer
-    reads them, so an input without the keys takes the native path."""
-    converger = str(cfg.get("converger", "twophase")).strip().lower()
-    hessian = str(cfg.get("hessian", "fd")).strip().lower()
-    return (converger in ("", "twophase", "two-phase", "default")
-            and hessian in ("", "fd", "finite-difference", "finite_difference",
-                            "numerical", "default"))
+    ``None`` means the driver must decline and the Python optimizer must run:
+    that is how an unrecognized ``converger`` / ``hessian`` spelling keeps
+    producing its established error message, which is raised by
+    ``casscf_convergers.run_converger`` / ``_hessian_provider`` and not here.
+    ``framework`` says whether ``casscf._optimize`` would have gone through the
+    converger framework, i.e. whether a converger trace is printed.
+
+    Read with ``dict.get`` defaults, exactly as the optimizer reads them, so an
+    input without the keys takes the native default path."""
+    raw_conv = str(cfg.get("converger", "twophase")).strip().lower()
+    raw_hess = str(cfg.get("hessian", "fd")).strip().lower()
+    converger = _CAS_CONVERGER_CODE.get(raw_conv)
+    hessian = _CAS_HESSIAN_CODE.get(raw_hess)
+    if converger is None or hessian is None:
+        return None
+    return converger, hessian, raw_conv not in _CAS_NO_FRAMEWORK
+
+
+def _converger_trace(converger, hessian, framework, nevals, stats):
+    """The log trace ``casscf_convergers.run_converger`` would have written.
+
+    Formatting is presentation, so it stays here; the driver returns the
+    counters.  Line order and field widths match ``run_converger`` exactly,
+    including that the ``ah stagnation`` note comes from ``_ah_converge`` and
+    therefore also appears under ``auto``."""
+    if not framework:
+        return []
+    lines = [f"{'converger:':<30}{_CAS_CONVERGER_NAME[converger]}"]
+    if hessian == 1:
+        lines.append(f"{'orbital hessian:':<30}analytic")
+    if converger in (1, 3) and stats["stagnated"]:
+        lines.append(f"{'ah stagnation:':<30}trust region collapsed / no descent")
+    if converger == 2:
+        lines.append(f"{'diis extrapolations used:':<30}"
+                     f"{stats['diis_used']}/{stats['diis_tried']}")
+    elif converger == 3:
+        if stats["auto_code"] == 0:
+            lines.append(f"{'auto:':<30}ah converged; no fallback")
+        else:
+            reason = ("stagnated" if stats["auto_code"] == 1
+                      else "hit the macroiteration cap")
+            lines.append(f"{'auto:':<30}ah {reason} after {stats['auto_it']} "
+                         "macroiterations; falling back to twophase")
+    lines.append(f"{'converger CI evaluations:':<30}{nevals}")
+    if hessian == 1:
+        lines.append(f"{'analytic hessian builds:':<30}{stats['nhess']}")
+    return lines
 
 
 def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
-                       enuc, weights, roots):
+                       enuc, weights, roots, cfg=None, converger=0, hessian=0):
     """A complete CASSCF run inside liboqp, or ``None`` to use the Python path.
 
     One boundary crossing replaces the entire orchestration loop: the
@@ -415,10 +484,21 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     The driver returns the macroiteration table so ``_write_log`` formats it
     unchanged.
 
-    Returns ``(energies, s2, multiplicity, history, converged, niter, nevals)``
-    or ``None`` -- a missing symbol, an unsupported option combination, or any
-    negative driver status -- in which case the caller runs the Python
-    optimizer, which remains the numerical pin."""
+    The ``ah`` / ``diis`` / ``auto`` convergers and ``hessian = analytic`` run
+    inside the driver too; ``cfg`` is the ``[casscf]`` block and the options
+    those convergers read are parsed here, with the same helpers and therefore
+    the same error messages the Python framework would raise -- and only for
+    the converger that actually reads them, so an unused bad value keeps being
+    ignored exactly as it is today.
+
+    Returns ``(energies, s2, multiplicity, history, converged, niter, nevals,
+    stats)`` or ``None`` -- a missing symbol, an unsupported option
+    combination, or any negative driver status -- in which case the caller runs
+    the Python optimizer, which remains the numerical pin.  Two of those
+    negative statuses are refusals rather than fallbacks (a root degeneracy
+    with live coupling, and an excitation stack past the memory guard); the
+    Python path re-raises their messages, which is why they come back as
+    ``None`` like everything else."""
     backend = _casscf_energy_backend()
     if backend is None:
         return None
@@ -469,10 +549,18 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     if npar <= 0:
         return None
 
+    if hessian == 1 and (
+        tuple(getattr(settings, "active_orbital_indices", ()) or ())
+        or tuple(getattr(settings, "core_orbital_indices", ()) or ())
+    ):
+        return None      # make_hessian_provider raises for this; let it
+
     maxmacro = max(0, int(options.max_macro_iterations))
-    # Upper bound on the rows the two phases can append: one seed row plus one
-    # per macroiteration, and one full re-convergence per accepted escape.
-    maxhist = maxmacro * (1 + _CAS_MAX_ESCAPES) + _CAS_MAX_ESCAPES + 2
+    # Upper bound on the rows an optimization can append: one seed row plus one
+    # per macroiteration, and one full re-convergence per accepted escape --
+    # doubled because `auto` runs an AH optimization with its escape phase and
+    # then a two-phase one with its own.
+    maxhist = maxmacro * (2 + 2 * _CAS_MAX_ESCAPES) + 2 * _CAS_MAX_ESCAPES + 4
 
     iopt = np.zeros(len(_CAS_IOPT), dtype=np.int32)
     iopt[_CAS_IOPT_INDEX["ncore"]] = ncore
@@ -492,6 +580,8 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     iopt[_CAS_IOPT_INDEX["canonical"]] = 1 if options.canonicalize else 0
     iopt[_CAS_IOPT_INDEX["maxescape"]] = _CAS_MAX_ESCAPES
     iopt[_CAS_IOPT_INDEX["maxhist"]] = maxhist
+    iopt[_CAS_IOPT_INDEX["converger"]] = converger
+    iopt[_CAS_IOPT_INDEX["hessian"]] = hessian
 
     dopt = np.zeros(len(_CAS_DOPT), dtype=np.float64)
     dopt[_CAS_DOPT_INDEX["enuc"]] = spec.ecore
@@ -506,12 +596,35 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     dopt[_CAS_DOPT_INDEX["saddle_c"]] = _CAS_SADDLE_CURV_TOL
     dopt[_CAS_DOPT_INDEX["saddle_e"]] = _CAS_SADDLE_EGAIN_TOL
 
+    # Converger options.  Parsed with the framework's own helpers -- and only
+    # for the converger that reads them, so `[casscf] diis_space = nonsense`
+    # keeps being ignored under `converger=ah` exactly as it is today.
+    cfg = cfg or {}
+    if converger in (1, 3):
+        from oqp.library.casscf_convergers import _ah_params
+        par = _ah_params(cfg, options)
+        iopt[_CAS_IOPT_INDEX["ah_micro"]] = par.max_micro
+        iopt[_CAS_IOPT_INDEX["ah_reject"]] = par.max_rejects
+        dopt[_CAS_DOPT_INDEX["ah_start"]] = par.start_trust
+        dopt[_CAS_DOPT_INDEX["ah_maxtr"]] = par.max_trust
+        dopt[_CAS_DOPT_INDEX["ah_mintr"]] = par.min_trust
+        dopt[_CAS_DOPT_INDEX["ah_sadc"]] = par.saddle_curv_tol
+        dopt[_CAS_DOPT_INDEX["ah_sade"]] = par.saddle_egain_tol
+    if converger == 2:
+        from oqp.library.casscf_convergers import _cfg_int
+        iopt[_CAS_IOPT_INDEX["diis_space"]] = max(2, _cfg_int(cfg, "diis_space", 8))
+        iopt[_CAS_IOPT_INDEX["diis_start"]] = max(2, _cfg_int(cfg, "diis_start", 2))
+    if converger == 3:
+        from oqp.library.casscf_convergers import _cfg_int
+        iopt[_CAS_IOPT_INDEX["auto_stag"]] = max(
+            1, _cfg_int(cfg, "auto_stagnation", 3))
+
     w = _as_f64c(np.asarray(weights, dtype=np.float64))
     r = np.ascontiguousarray(np.asarray(roots, dtype=np.int32))
     energies = np.zeros(spec.nroot, dtype=np.float64)
     s2 = np.zeros(spec.nroot, dtype=np.float64)
     history = np.zeros((maxhist, 5), dtype=np.float64)
-    stats = np.zeros(4, dtype=np.int32)
+    stats = np.zeros(_CAS_NSTATS, dtype=np.int32)
 
     status = int(lib.casscf_energy(
         mol.data._data,
@@ -532,8 +645,16 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
             for i in range(nrows)]
     multiplicity = np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * s2))).astype(np.int64)
     multiplicity = np.maximum(multiplicity, 1)
+    counters = {
+        "nhess": int(stats[4]),
+        "diis_used": int(stats[5]),
+        "diis_tried": int(stats[6]),
+        "stagnated": bool(stats[7]),
+        "auto_code": int(stats[8]),
+        "auto_it": int(stats[9]),
+    }
     return (energies, _as_f64c(s2), multiplicity, rows,
-            bool(stats[2]), int(stats[1]), int(stats[3]))
+            bool(stats[2]), int(stats[1]), int(stats[3]), counters)
 
 
 # --------------------------------------------------------------------------- CASCI inside CASSCF
@@ -866,14 +987,20 @@ class CASSCF:
         # option parsing crosses the boundary.  `None` means the driver
         # declined and the Python optimizer below runs, unchanged.
         native = None
-        if _native_converger_ok(mol.config.get("casscf", {}) or {}):
+        cas_cfg = mol.config.get("casscf", {}) or {}
+        codes = _native_converger_codes(cas_cfg)
+        if codes is not None:
             native = _lib_casscf_energy(
                 mol, settings, options, nbf, ncore, nact, active_nelec, enuc,
-                weights, roots)
+                weights, roots, cfg=cas_cfg, converger=codes[0],
+                hessian=codes[1])
         if native is not None:
             if hasattr(mol, "_casscf_converger_trace"):
                 del mol._casscf_converger_trace   # stale trace from a previous run
-            energies, s2, mult, history, converged, niter, _nev = native
+            energies, s2, mult, history, converged, niter, _nev, _cnt = native
+            trace = _converger_trace(codes[0], codes[1], codes[2], _nev, _cnt)
+            if trace:
+                mol._casscf_converger_trace = trace
         else:
             # Only the Python optimizer needs these NumPy views of the handle's
             # records; the driver reads the records itself, and unpacking the
