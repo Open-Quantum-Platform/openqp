@@ -192,6 +192,8 @@ module types
     integer(c_int64_t) :: cc_ndiis  = 8          !< CCSD DIIS subspace size (0 = no DIIS)
     integer(c_int64_t) :: cc_nfzc   = 0          !< frozen core orbitals excluded from CC
     integer(c_int64_t) :: cc_triples = 1         !< evaluate the (T) correction (0=off, 1=on)
+    integer(c_int64_t) :: cc_cholesky = 1        !< Cholesky-factorise the ladder integrals (0=off, 1=on)
+    real(c_double) :: cc_cholesky_tol = 1.0e-10_dp !< Cholesky truncation threshold
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

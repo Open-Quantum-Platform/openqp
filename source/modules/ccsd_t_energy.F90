@@ -48,6 +48,8 @@ contains
                         cc_uhf_ccsd_t
     use mp2_lib, only: semicanonicalize
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
+    use cholesky_eri, only: cholesky_eri_decompose, cholesky_eri_max_vectors, &
+                            cholesky_transform_vv
     use parallel, only: par_env_t
     use memory_info, only: oqp_memory_check
 !$  use omp_lib, only: omp_get_max_threads
@@ -72,6 +74,10 @@ contains
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
     real(kind=dp) :: mem_ao, mem_mo, mem_solver, rno, rnv
+    real(kind=dp), allocatable :: lvec(:,:), bvv(:,:)
+    integer :: nchol, maxchol
+    real(kind=dp) :: chol_tol, chol_err
+    logical :: use_chol, chol_trunc
     integer :: nthr, niter
     logical :: open_shell
     logical :: converged, do_t
@@ -132,8 +138,17 @@ contains
       ! o v^3 / v^3 o ones, plus a DIIS history of 2*ndiis amplitude pairs.
       rno = real(no,dp)
       rnv = real(nv,dp)
-      mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 &
-               + rno*rnv**3 + rnv**4
+      mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3
+      if (infos%control%cc_cholesky /= 0) then
+        ! The ladder integrals are replaced by the vectors and a per-block
+        ! assembly buffer.  nchol is not known until the factorisation runs, so
+        ! estimate it from the vectors-per-basis-function ratio observed at
+        ! this tolerance; the log prints the actual count afterwards.
+        mem_mo = mem_mo + real(nbf*(nbf+1)/2,dp)*15.0_dp*real(nbf,dp) &
+                        + rnv**2*15.0_dp*real(nbf,dp)
+      else
+        mem_mo = mem_mo + rnv**4
+      end if
       mem_solver = mem_mo &
                  + 14.0_dp*rno**2*rnv**2 &
                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
@@ -229,19 +244,66 @@ contains
       write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
                                  ', OpenMP threads = ', nthr
 
+      ! The ladder integrals (nv^4) are the largest array in the run and the
+      ! only consumer of the vvvv block.  Factorising the AO integrals lets the
+      ! ladder rebuild them per block from an nv^2 x nchol object instead, so
+      ! vvvv is never allocated.  It costs flops -- the assembly is nchol/no^2
+      ! times the ladder DGEMM -- which is the trade that turns a job that does
+      ! not fit into one that does.
+      use_chol = infos%control%cc_cholesky /= 0
+      chol_tol = infos%control%cc_cholesky_tol
+
+      if (use_chol) then
+        maxchol = cholesky_eri_max_vectors(nbf, 20)
+        allocate(lvec(nbf*(nbf+1)/2, maxchol), stat=ok)
+        if (ok /= 0) call show_message('CCSD(T): cannot allocate Cholesky vectors', &
+                                       with_abort)
+        call cholesky_eri_decompose(nbf, gao, chol_tol, maxchol, lvec, nchol, &
+                                    chol_err, chol_trunc)
+        write(iw,'(2X,A,I0,A,ES9.2,A,F5.1,A)') &
+            'CCSD(T): Cholesky vectors = ', nchol, ' (residual ', chol_err, &
+            ', ', real(nchol,dp)/real(nbf,dp), ' per basis function)'
+        if (chol_trunc) then
+          write(iw,'(2X,A)') 'CCSD(T): WARNING: Cholesky truncated at the vector ' // &
+              'cap before reaching the tolerance; the correlation energy is ' // &
+              'less accurate than [cc] cholesky_tol requests.'
+        end if
+        allocate(bvv(nv*nv, nchol), stat=ok)
+        if (ok /= 0) call show_message('CCSD(T): cannot allocate the MO Cholesky &
+                                       &block', with_abort)
+        call cholesky_transform_vv(nbf, nv, cmo(:, no+1:nmo), lvec, nchol, bvv)
+        deallocate(lvec)
+      end if
+
       allocate(oooo(no,no,no,no), ooov(no,no,no,nv), oovv(no,no,nv,nv), &
-               ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv), stat=ok)
+               ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), stat=ok)
       if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
+      if (use_chol) then
+        allocate(vvvv(1,1,1,1), stat=ok)
+      else
+        allocate(vvvv(nv,nv,nv,nv), stat=ok)
+      end if
+      if (ok /= 0) call show_message('CCSD(T): cannot allocate the ladder integrals', &
+                                     with_abort)
 
       call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
-                              oooo, ooov, oovv, ovov, ovvv, vvvv)
+                              oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                              skip_vvvv=use_chol)
       deallocate(gao)
 
-      call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                            pe, opts, e_ccsd, e_t, converged, &
-                            time_ccsd=t_ccsd, time_triples=t_trip)
+      if (use_chol) then
+        call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                              pe, opts, e_ccsd, e_t, converged, &
+                              time_ccsd=t_ccsd, time_triples=t_trip, &
+                              bvv=bvv, nchol=nchol)
+      else
+        call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                              pe, opts, e_ccsd, e_t, converged, &
+                              time_ccsd=t_ccsd, time_triples=t_trip)
+      end if
 
       deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv)
+      if (allocated(bvv)) deallocate(bvv)
     end if
     deallocate(cmo, eo, ev)
 

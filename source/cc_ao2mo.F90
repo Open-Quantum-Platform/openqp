@@ -298,7 +298,7 @@ end subroutine cc_build_full_mo
 !> cc_lib: oooo(i,j,k,l)=(ij|kl), ooov(i,j,k,a)=(ij|ka), oovv(i,j,a,b)=(ij|ab),
 !> ovov(i,a,j,b)=(ia|jb), ovvv(i,a,b,c)=(ia|bc), vvvv(a,b,c,d)=(ab|cd).
   subroutine cc_build_mo_blocks(nbf, nmo, no, cmo, g, &
-                                oooo, ooov, oovv, ovov, ovvv, vvvv)
+                                oooo, ooov, oovv, ovov, ovvv, vvvv, skip_vvvv)
 
     integer, intent(in) :: nbf, nmo, no
     real(dp), intent(in) :: cmo(nbf, nmo)
@@ -308,11 +308,19 @@ end subroutine cc_build_full_mo
     real(dp), intent(out) :: oovv(no,no,nmo-no,nmo-no)
     real(dp), intent(out) :: ovov(no,nmo-no,no,nmo-no)
     real(dp), intent(out) :: ovvv(no,nmo-no,nmo-no,nmo-no)
-    real(dp), intent(out) :: vvvv(nmo-no,nmo-no,nmo-no,nmo-no)
+    real(dp), intent(out) :: vvvv(*)
+    !> Do not fill the ladder block.  The Cholesky path rebuilds those
+    !> integrals per block from its vectors, so the caller passes a
+    !> placeholder array and this scatter must not write past it.
+    logical, intent(in), optional :: skip_vvvv
 
     real(dp), allocatable :: half(:,:)
     integer, allocatable :: prow(:), pcol(:), qrow(:), qcol(:)
     integer :: npair, nmopair, nv, pq, p, q, ip
+    logical :: no_vvvv
+
+    no_vvvv = .false.
+    if (present(skip_vvvv)) no_vvvv = skip_vvvv
 
     nv = nmo - no
     npair   = nbf*(nbf+1)/2
@@ -412,10 +420,25 @@ end subroutine cc_build_full_mo
         ovov(i,a,:,:) = n(1:no,      no+1:nmo)
         ovvv(i,a,:,:) = n(no+1:nmo,  no+1:nmo)
       else if (p > no .and. q > no) then
-        a = p - no; b = q - no
-        vvvv(a,b,:,:) = n(no+1:nmo,  no+1:nmo)
+        if (.not. no_vvvv) then
+          a = p - no; b = q - no
+          call store_vvvv(a, b, n(no+1:nmo, no+1:nmo))
+        end if
       end if
     end subroutine scatter_pair
+
+    !> Write one (a,b) panel of the ladder block, addressing the assumed-size
+    !> dummy explicitly so the shape lives in one place.
+    subroutine store_vvvv(a, b, panel)
+      integer, intent(in) :: a, b
+      real(dp), intent(in) :: panel(nv,nv)
+      integer :: c, d
+      do d = 1, nv
+        do c = 1, nv
+          vvvv(a + (b-1)*nv + (c-1)*nv*nv + (d-1)*nv*nv*nv) = panel(c,d)
+        end do
+      end do
+    end subroutine store_vvvv
 
   end subroutine cc_build_mo_blocks
 

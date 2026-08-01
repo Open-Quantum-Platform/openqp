@@ -82,7 +82,7 @@ contains
 !> the disconnected triples, vanishes.
 subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
                             pe, opts, e_ccsd, e_t, converged, &
-                            time_ccsd, time_triples)
+                            time_ccsd, time_triples, bvv, nchol)
 
   integer, intent(in) :: no            !< correlated occupied orbitals
   integer, intent(in) :: nv            !< virtual orbitals
@@ -100,6 +100,11 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   logical, intent(out) :: converged
   !> Wall-clock seconds spent in the CCSD iterations and in the (T) correction.
   real(dp), optional, intent(out) :: time_ccsd, time_triples
+  !> Cholesky vectors over the virtual pair block.  Supplying them makes the
+  !> ladder rebuild its integrals instead of reading @p vvvv, so the caller may
+  !> pass a zero-sized vvvv and never pay for the v^4 array.
+  real(dp), optional, intent(in) :: bvv(:,:)
+  integer, optional, intent(in) :: nchol
 
   real(dp), allocatable :: t1(:,:), t2(:,:,:,:)
   real(dp) :: t0, t1w
@@ -125,7 +130,7 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
 
   call cc_wall_time(t0)
   call ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                    pe, opts, t1, t2, e_ccsd, converged)
+                    pe, opts, t1, t2, e_ccsd, converged, bvv, nchol)
   call cc_wall_time(t1w)
   if (present(time_ccsd)) time_ccsd = t1w - t0
 
@@ -169,7 +174,7 @@ end subroutine cc_wall_time
 
 !> @brief Spin-adapted closed-shell CCSD amplitude iterations with DIIS.
 subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                        pe, opts, t1, t2, ecc, converged)
+                        pe, opts, t1, t2, ecc, converged, bvv, nchol)
 
   integer, intent(in) :: no, nv
   real(dp), intent(in) :: eo(no), ev(nv)
@@ -180,6 +185,10 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
   real(dp), intent(out) :: t1(no,nv), t2(no,no,nv,nv)
   real(dp), intent(out) :: ecc
   logical, intent(out) :: converged
+  !> Cholesky vectors over the virtual pair block; forwarded to the ladder,
+  !> which rebuilds its integrals from them instead of reading vvvv.
+  real(dp), intent(in), optional :: bvv(:,:)
+  integer, intent(in), optional :: nchol
 
   ! --- persistent working arrays -------------------------------------------
   real(dp), allocatable :: tau(:,:,:,:), t1n(:,:), t2n(:,:,:,:), half(:,:,:,:)
@@ -520,7 +529,7 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
     call dgemm('t','n', no2, nv2, no2, 1.0_dp, Woooo, no2, tau, no2, 1.0_dp, t2n, no2)
 
     ! (c) particle-particle ladder, blocked over d and distributed over MPI
-    call ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
+    call ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
 
     ! (d) Lvv / Loo dressing.  The Lvv contraction runs over the third index of
     ! t2, so it is issued as one DGEMM per b rather than a single flat call.
@@ -695,20 +704,32 @@ end subroutine ccsd_t1_equation
 !> is rebuilt one d-block at a time, so the second v^4 array is never
 !> materialised.  Blocks are handed out round-robin to MPI ranks and the partial
 !> results are reduced once at the end -- one collective per iteration.
-subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
+subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
 
   integer, intent(in) :: no, nv
   real(dp), intent(in) :: vvvv(nv,nv,nv,nv), ovvv(no,nv,nv,nv)
   real(dp), intent(in) :: t1(no,nv), tau(no,no,nv,nv)
   type(par_env_t), intent(inout) :: pe
   real(dp), intent(inout) :: t2n(no,no,nv,nv)
+  !> Cholesky vectors over the virtual-virtual block, (nv*nv, nchol), with
+  !> (ac|bd) = sum_J bvv(ac,J) bvv(bd,J).  When present the ladder integrals
+  !> are rebuilt from these per block and @p vvvv is never referenced, which is
+  !> what lets the caller skip allocating the v^4 array at all.
+  real(dp), intent(in), optional :: bvv(:,:)
+  integer, intent(in), optional :: nchol
 
   real(dp), allocatable :: acc(:,:,:,:)
   integer :: nblk, bsize
   integer :: no2, nv2
+  logical :: use_chol
+  integer :: nchol_
 
   no2 = no*no
   nv2 = nv*nv
+
+  use_chol = present(bvv) .and. present(nchol)
+  nchol_ = 0
+  if (use_chol) nchol_ = nchol
 
   ! Target ~64 MB per dressed-integral block, at least one and at most all
   ! virtuals.  OQP_CC_LADDER_BLOCK overrides it (tuning and regression tests).
@@ -751,11 +772,13 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
   block
     ! Declared inside the construct, so each thread gets its own instance --
     ! an allocatable in a private() clause would arrive unallocated instead.
-    real(dp), allocatable :: Wblk(:,:,:,:), accloc(:,:,:,:)
+    real(dp), allocatable :: Wblk(:,:,:,:), accloc(:,:,:,:), Vblk(:,:)
     integer :: a, b, c, d, dd, k, d0, d1, nbd, iblk
     real(dp) :: s
     allocate(Wblk(nv,nv,nv,bsize))
     allocate(accloc(no,no,nv,nv), source=0.0_dp)
+    ! Assembly buffer for the Cholesky path: V(ac, bd) for this block.
+    if (use_chol) allocate(Vblk(nv2, nv*bsize))
 
     !$omp do schedule(dynamic,1)
     do iblk = 1, nblk
@@ -766,12 +789,25 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
       d1 = min(nv, d0 + bsize - 1)
       nbd = d1 - d0 + 1
 
+      ! (ac|bd) for this d-block: either read from the stored v^4 array, or
+      ! rebuilt as B(ac,:) . B(bd,:)^T.  The rows of bvv for d in [d0,d1] are a
+      ! contiguous range, so the second operand is a submatrix of bvv and needs
+      ! no repacking -- only its leading dimension differs.
+      if (use_chol) then
+        call dgemm('n','t', nv2, nv*nbd, nchol_, 1.0_dp, &
+                   bvv, nv2, bvv((d0-1)*nv+1, 1), nv2, 0.0_dp, Vblk, nv2)
+      end if
+
       do dd = 1, nbd
         do c = 1, nv
           do b = 1, nv
             do a = 1, nv
               d = d0 + dd - 1
-              s = vvvv(a,c,b,d)
+              if (use_chol) then
+                s = Vblk((c-1)*nv+a, (dd-1)*nv+b)
+              else
+                s = vvvv(a,c,b,d)
+              end if
               do k = 1, no
                 s = s - ovvv(k,d,a,c)*t1(k,b) - ovvv(k,c,b,d)*t1(k,a)
               end do
@@ -792,6 +828,7 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n)
     !$omp end critical
 
     deallocate(Wblk, accloc)
+    if (allocated(Vblk)) deallocate(Vblk)
   end block
   !$omp end parallel
 

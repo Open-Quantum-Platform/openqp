@@ -164,6 +164,8 @@ OQP_CONFIG_SCHEMA = {
         'conv': {'type': float, 'default': '1e-7'},
         'ndiis': {'type': int, 'default': '8'},
         'nfzc': {'type': int, 'default': '0'},
+        'cholesky': {'type': bool, 'default': 'True'},
+        'cholesky_tol': {'type': float, 'default': '1e-10'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -620,6 +622,8 @@ class OQPData:
             "conv": "set_cc_conv",
             "ndiis": "set_cc_ndiis",
             "nfzc": "set_cc_nfzc",
+            "cholesky": "set_cc_cholesky",
+            "cholesky_tol": "set_cc_cholesky_tol",
         },
         "scf": {
             "type": "set_scf_type",
@@ -1305,6 +1309,14 @@ class OQPData:
     def set_cc_nfzc(self, nfzc):
         """Set the number of frozen core orbitals excluded from CC."""
         self._data.control.cc_nfzc = int(nfzc)
+
+    def set_cc_cholesky(self, flag):
+        """Enable/disable Cholesky factorisation of the ladder integrals."""
+        self._data.control.cc_cholesky = 1 if flag else 0
+
+    def set_cc_cholesky_tol(self, tol):
+        """Set the Cholesky truncation threshold."""
+        self._data.control.cc_cholesky_tol = float(tol)
 
     def set_cc_triples(self, triples):
         """Enable/disable the perturbative (T) correction."""

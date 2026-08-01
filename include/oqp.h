@@ -175,6 +175,8 @@ struct control_parameters {
     int64_t   cc_ndiis;
     int64_t   cc_nfzc;
     int64_t   cc_triples;
+    int64_t   cc_cholesky;
+    double    cc_cholesky_tol;
 };
 
 struct mpi_communicator {
@@ -239,6 +241,7 @@ void hf_gradient(struct oqp_handle_t *inf);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
+void cholesky_eri_selftest(struct oqp_handle_t *inf);
 void hess_skel_selftest(struct oqp_handle_t *inf);
 void hess_skel_open_selftest(struct oqp_handle_t *inf);
 void electric_dipole_au(struct oqp_handle_t *inf, double *dipole);
