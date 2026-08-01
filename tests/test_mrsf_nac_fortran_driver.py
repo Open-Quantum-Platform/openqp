@@ -182,21 +182,27 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
     assert driver.count("!$omp parallel") == 1
     assert "reduction(+:skip1, skip2, numint)" in driver
     assert "reduction(+:skip1, skip2, numint, de)" not in driver
-    parallel_clause = driver.split("!$omp parallel &", 1)[1].split(
-        "reduction(+:skip1, skip2, numint)", 1
+    assert "call batch_worker(skip1, skip2, numint)" in driver
+    assert "recursive subroutine batch_worker(" in driver
+    parallel_region = driver.split("!$omp parallel", 1)[1].split(
+        "!$omp end parallel", 1
     )[0]
-    assert "allocatable" not in parallel_clause
-    assert "private(gdat," in parallel_clause
-    assert "nthreads = omp_get_max_threads()" in driver
-    assert "ithread = omp_get_thread_num()+1" in driver
-    assert "dab_work(maxnbf**4,nprobe,nthreads)" in driver
-    assert "de_work(3,size(de,2),nprobe,nthreads)" in driver
-    assert "active_work(probe_stride,nthreads)" in driver
-    assert "de_work(:,gdat%at,iprobe,ithread)" in driver
-    assert "de = de + de_work(:,:,:,ithread)" in driver
-    assert "critical(grd2_batch_de_merge)" not in driver
-    assert "active_work(1:nprobe,ithread) =" in driver
-    assert "dab_work(1:product(gdat%nbf),iprobe,ithread) = 0.0_dp" in driver
+    assert "allocatable" not in parallel_region
+    assert "private(" not in parallel_region
+    worker = driver.split("subroutine batch_worker(", 1)[1].split(
+        "end subroutine batch_worker", 1
+    )[0]
+    assert "allocatable :: dab(:,:), dabmax(:), fd_batch(:,:,:)" in worker
+    assert "allocatable :: de_thread(:,:,:)" in worker
+    assert "type(grd2_int_data_t) :: gdat" in worker
+    assert "!$omp do schedule(dynamic,4) collapse(2)" in worker
+    assert "de_thread(:,gdat%at,iprobe)" in worker
+    assert "!$omp critical(grd2_batch_de_merge)" in worker
+    assert "de = de + de_thread" in worker
+    assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in worker
+    assert "nquartet = product(basis%naos(gdat%id))" in worker
+    assert "dab(1:nquartet,iprobe) = 0.0_dp" in worker
+    assert "product(gdat%nbf)" not in worker
     assert driver.count("call grd2_rys_compute_batch(") == 2
     assert "do iprobe = 2, nprobe" in driver
     assert "gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated" in driver

@@ -591,7 +591,6 @@ contains
     use int2_pairs, only: int2_pair_storage, int2_cutoffs_t
     use int2_compute, only: petite_quartet_weight, load_petite_shell_map
     use parallel, only: par_env_t
-!$  use omp_lib, only: omp_get_max_threads, omp_get_thread_num
 
     implicit none
 
@@ -600,17 +599,12 @@ contains
     real(kind=dp), intent(inout) :: de(:,:,:)
     class(grd2_compute_data_t), intent(inout) :: gcomps(:)
 
-    real(kind=dp), allocatable :: dab_work(:,:,:), dabmax_work(:,:)
-    real(kind=dp), allocatable :: fd_work(:,:,:,:), de_work(:,:,:,:)
-    logical, allocatable :: active_work(:,:)
     real(kind=dp), allocatable :: schwarz_ints(:,:)
-    real(kind=dp) :: emu2, cutoff, cutoff2, dabcut, gmax
+    real(kind=dp) :: emu2, cutoff, cutoff2, dabcut
     real(kind=dp) :: zbig, rtol, dtol
-    integer :: numint, i, ij, skip1, skip2, mpi_ij
-    integer :: iok, j, k, l, kl, maxnbf, maxl, q4, sym_nops
-    integer :: iprobe, nprobe, probe_stride, nthreads, ithread
+    integer :: numint, skip1, skip2, maxnbf, sym_nops
+    integer :: iprobe, nprobe
     integer(8), contiguous, pointer :: sym_map(:)
-    type(grd2_int_data_t) :: gdat
     type(int2_pair_storage) :: ppairs
     type(int2_cutoffs_t) :: cutoffs
     type(par_env_t) :: pe
@@ -662,121 +656,116 @@ contains
     maxnbf = (basis%mxam+1)*(basis%mxam+2)/2
     dtol = dtol*dtol
 
-    ! Allocate the batch scratch before entering OpenMP.  GCC 15/libgomp can
-    ! mis-handle several allocatable descriptors listed as private on this
-    ! outlined worker; fixed thread-indexed slices avoid that runtime path.
-    nthreads = 1
-!$  nthreads = omp_get_max_threads()
-    ! Pad the small per-probe vectors to a cache line between thread slices.
-    probe_stride = max(nprobe,16)
-    allocate(dab_work(maxnbf**4,nprobe,nthreads), &
-             dabmax_work(probe_stride,nthreads), &
-             fd_work(3,4,nprobe,nthreads), &
-             de_work(3,size(de,2),nprobe,nthreads), source=0.0_dp)
-    allocate(active_work(probe_stride,nthreads), source=.false.)
-
-!$omp parallel &
-!$omp   private(gdat, &
-!$omp           i, j, k, l, ij, maxl, kl, &
-!$omp           gmax, iok, mpi_ij, q4, iprobe, ithread) &
-!$omp   reduction(+:skip1, skip2, numint)
-
-    ithread = 1
-!$  ithread = omp_get_thread_num()+1
-    call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
-
-!$omp barrier
-    if (infos%mpiinfo%usempi) mpi_ij = 0
-    do i = 1, basis%nshell
-      do j = 1, i
-        ij = i*(i-1)/2+j
-        if (ppairs%ppid(1,ij)==0) cycle
-        if (infos%mpiinfo%usempi) then
-          mpi_ij = mpi_ij+1
-          if (mod(mpi_ij,pe%size) /= pe%rank) cycle
-        end if
-
-!$omp do schedule(dynamic,4) collapse(2)
-        do k = 1, i
-          do l = 1, i
-            maxl = k
-            if (k == i) maxl = j
-            if (l > maxl) cycle
-            kl = k*(k-1)/2+l
-            if (ppairs%ppid(1,kl)==0) cycle
-            gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
-            if (gmax<cutoff) then
-              skip1 = skip1+1
-              cycle
-            end if
-
-            call gdat%set_ids(basis,i,j,k,l)
-            if (all(gdat%skip(:))) cycle
-            if (sym_nops > 1) then
-              q4 = petite_quartet_weight( &
-                sym_map,sym_nops,basis%nshell,i,j,k,l)
-              if (q4 == 0) cycle
-            else
-              q4 = 1
-            end if
-
-            do iprobe = 1, nprobe
-              call gcomps(iprobe)%get_density( &
-                basis,gdat%id,dab_work(:,iprobe,ithread), &
-                dabmax_work(iprobe,ithread))
-            end do
-            active_work(1:nprobe,ithread) = &
-              dabmax_work(1:nprobe,ithread)*gmax*real(q4,dp) >= cutoff2
-            if (.not. any(active_work(1:nprobe,ithread))) then
-              skip2 = skip2+1
-              cycle
-            end if
-            ! Match the scalar quartet-level screen for every probe.  The
-            ! common Rys recurrence is selected by the largest surviving
-            ! bound, while screened probes carry an exactly zero density.
-            do iprobe = 1, nprobe
-              if (.not. active_work(iprobe,ithread)) then
-                dab_work(1:product(gdat%nbf),iprobe,ithread) = 0.0_dp
-                dabmax_work(iprobe,ithread) = 0.0_dp
-              end if
-            end do
-
-            numint = numint+1
-            if (gcomps(1)%attenuated) then
-              call grd2_rys_compute_batch( &
-                gdat,ppairs,dab_work(:,:,ithread), &
-                dabmax_work(1:nprobe,ithread),fd_work(:,:,:,ithread),emu2)
-            else
-              call grd2_rys_compute_batch( &
-                gdat,ppairs,dab_work(:,:,ithread), &
-                dabmax_work(1:nprobe,ithread),fd_work(:,:,:,ithread))
-            end if
-            do iprobe = 1, nprobe
-              de_work(:,gdat%at,iprobe,ithread) = &
-                de_work(:,gdat%at,iprobe,ithread) + &
-                real(q4,dp)*fd_work(:,:,iprobe,ithread)
-            end do
-          end do
-        end do
-!$omp end do
-      end do
-    end do
-
-    call gdat%clean()
+    ! Keep allocatable descriptors out of the GCC/libgomp outlined worker.
+    ! Each thread enters a normal procedure invocation with local scratch;
+    ! only the expensive quartet loop is workshared, and the small gradient
+    ! is merged once per thread after all of its quartets are complete.
+!$omp parallel reduction(+:skip1, skip2, numint)
+    call batch_worker(skip1, skip2, numint)
 !$omp end parallel
-
-    ! Fixed thread order makes this merge independent of OpenMP reduction
-    ! descriptor handling and keeps the quartet loop free of shared writes.
-    do ithread = 1, nthreads
-      de = de + de_work(:,:,:,ithread)
-    end do
-    deallocate(dab_work,dabmax_work,fd_work,de_work,active_work)
 
     call pe%allreduce(skip1,1)
     call pe%allreduce(skip2,1)
     call pe%allreduce(numint,1)
     call pe%allreduce(de,size(de))
     deallocate(schwarz_ints)
+  contains
+    recursive subroutine batch_worker(skip1_thread, skip2_thread, numint_thread)
+      integer, intent(inout) :: skip1_thread, skip2_thread, numint_thread
+      real(kind=dp), allocatable :: dab(:,:), dabmax(:), fd_batch(:,:,:)
+      real(kind=dp), allocatable :: de_thread(:,:,:)
+      logical, allocatable :: probe_active(:)
+      real(kind=dp) :: gmax
+      integer :: i, ij, iok, iprobe, j, k, l, kl, maxl, mpi_ij
+      integer :: nquartet, q4
+      type(grd2_int_data_t) :: gdat
+
+      allocate(dab(maxnbf**4,nprobe), dabmax(nprobe), &
+               fd_batch(3,4,nprobe), &
+               de_thread(3,size(de,2),nprobe), source=0.0_dp)
+      allocate(probe_active(nprobe), source=.false.)
+      call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
+
+!$omp barrier
+      if (infos%mpiinfo%usempi) mpi_ij = 0
+      do i = 1, basis%nshell
+        do j = 1, i
+          ij = i*(i-1)/2+j
+          if (ppairs%ppid(1,ij)==0) cycle
+          if (infos%mpiinfo%usempi) then
+            mpi_ij = mpi_ij+1
+            if (mod(mpi_ij,pe%size) /= pe%rank) cycle
+          end if
+
+!$omp do schedule(dynamic,4) collapse(2)
+          do k = 1, i
+            do l = 1, i
+              maxl = k
+              if (k == i) maxl = j
+              if (l > maxl) cycle
+              kl = k*(k-1)/2+l
+              if (ppairs%ppid(1,kl)==0) cycle
+              gmax = schwarz_ints(i,j)*schwarz_ints(k,l)
+              if (gmax<cutoff) then
+                skip1_thread = skip1_thread+1
+                cycle
+              end if
+
+              call gdat%set_ids(basis,i,j,k,l)
+              if (all(gdat%skip(:))) cycle
+              nquartet = product(basis%naos(gdat%id))
+              if (sym_nops > 1) then
+                q4 = petite_quartet_weight( &
+                  sym_map,sym_nops,basis%nshell,i,j,k,l)
+                if (q4 == 0) cycle
+              else
+                q4 = 1
+              end if
+
+              do iprobe = 1, nprobe
+                call gcomps(iprobe)%get_density( &
+                  basis,gdat%id,dab(:,iprobe),dabmax(iprobe))
+              end do
+              probe_active = dabmax*gmax*real(q4,dp) >= cutoff2
+              if (.not. any(probe_active)) then
+                skip2_thread = skip2_thread+1
+                cycle
+              end if
+              do iprobe = 1, nprobe
+                if (.not. probe_active(iprobe)) then
+                  ! gdat%nbf is set later by grd2_rys_compute_batch.  Use the
+                  ! current shell extents here instead of reading that stale
+                  ! recurrence field during quartet-level probe screening.
+                  dab(1:nquartet,iprobe) = 0.0_dp
+                  dabmax(iprobe) = 0.0_dp
+                end if
+              end do
+
+              numint_thread = numint_thread+1
+              if (gcomps(1)%attenuated) then
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch,emu2)
+              else
+                call grd2_rys_compute_batch( &
+                  gdat,ppairs,dab,dabmax,fd_batch)
+              end if
+              do iprobe = 1, nprobe
+                de_thread(:,gdat%at,iprobe) = &
+                  de_thread(:,gdat%at,iprobe) + &
+                  real(q4,dp)*fd_batch(:,:,iprobe)
+              end do
+            end do
+          end do
+!$omp end do
+        end do
+      end do
+
+      call gdat%clean()
+!$omp critical(grd2_batch_de_merge)
+      de = de + de_thread
+!$omp end critical(grd2_batch_de_merge)
+      deallocate(dab,dabmax,fd_batch,probe_active,de_thread)
+    end subroutine batch_worker
   end subroutine grd2_driver_batch_gen
 
 !###############################################################################
