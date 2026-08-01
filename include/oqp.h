@@ -349,6 +349,11 @@ void pt2_diagonal_h0(int32_t norb, int64_t ndet, const int64_t *dets,
 int64_t pt2_occupation_blocks(int32_t norb, int32_t ncore, int32_t nact,
     int64_t next, const int64_t *dets, const int64_t *ext, int64_t *order,
     int64_t *starts);
+/* Loewdin minors of the MS/XMS orbital rotation, T[t,s] = det(R[t_occ,s_occ]).
+ * `occ` is the [nstr,nelec] table of occupied orbitals per single-spin string,
+ * in _string_basis order. */
+void pt2_minor_transform(int32_t norb, int32_t nelec, int64_t nstr,
+    const double *r, const int64_t *occ, double *tmat);
 /* Dominant Koopmans intermediates of the strongly contracted NEVPT2
  * (nevpt2_koopmans.F90).  `h2e` is the physicist-ordered active ERI tensor and
  * dm3/dm4 the spin-free RDMs in the PySCF make_dm1234 convention. */
@@ -356,6 +361,25 @@ void nevpt2_f3ca_f3ac(int32_t nact, const double *h2e, const double *dm4,
     double *f3ca, double *f3ac);
 void nevpt2_a16(int32_t nact, const double *h1e, const double *h2e,
     const double *dm3, const double *f3ca, const double *f3ac, double *a16);
+void nevpt2_a22(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm2, const double *dm3, const double *f3ca,
+    const double *f3ac, double *a22);
+/* Sij / Srs intermediates.  `hdm1` is an argument of the Python _hdm3 and _a9
+ * but never appears in their bodies, so it is not passed.  nevpt2_a7 returns
+ * the reduced 2-RDM alongside a7, as the Python does. */
+void nevpt2_hdm3(int32_t nact, const double *dm1, const double *dm2,
+    const double *dm3, const double *hdm2, double *hdm3);
+void nevpt2_a9(int32_t nact, const double *h1e, const double *h2e,
+    const double *hdm2, const double *hdm3, double *a9);
+void nevpt2_a7(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *dm3,
+    double *rm2, double *a7);
+/* Sir intermediates.  a12's RDM arguments are indexed [q,p,...] while its
+ * output is [p,q,a,b]; a13's carry only q as a spectator. */
+void nevpt2_a12(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm2, const double *dm3, double *a12);
+void nevpt2_a13(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm1, const double *dm2, const double *dm3, double *a13);
 /* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
  * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
  * Fock above. */

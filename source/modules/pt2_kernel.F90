@@ -46,8 +46,13 @@ module pt2_kernel_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
+  ! Radix width of the occupation-signature sort in pt2_occupation_blocks.
+  integer, parameter :: rbits = 8
+  integer, parameter :: rbuck = 2**rbits
+  integer(i8), parameter :: rmask = int(rbuck - 1, i8)
+
   public :: pt2_effective_fock, pt2_h0_dyall_active, pt2_external_indices
-  public :: pt2_diagonal_h0, pt2_occupation_blocks
+  public :: pt2_diagonal_h0, pt2_occupation_blocks, pt2_minor_transform
 
 contains
 
@@ -267,10 +272,24 @@ contains
   !> `starts` holds the block boundaries, so block b is
   !> order(starts(b) : starts(b+1)-1).
   !>
-  !> The sort is a shell sort carrying the permutation, matching the stable-order
-  !> idiom of rdm_kernel.F90: no scratch allocation beyond the signature copy, and
-  !> the block order is deterministic run to run.  The caller still measures that
-  !> the off-block Hamiltonian elements vanish before trusting the partition.
+  !> The sort is an LSD radix sort on the signature, in 8-bit digits.  Radix is
+  !> the right shape here twice over: the signature is a small non-negative
+  !> integer (it is `det` masked down to the inactive+virtual bits, so it never
+  !> exceeds 2^62 and is never negative), and a counting pass is inherently
+  !> STABLE -- equal signatures come out in ascending original position, which is
+  !> exactly what numpy's `argsort(kind="stable")` produces.  The earlier
+  !> revision used a shell sort and had to compare the composite key
+  !> (signature, original position) to recover that order; stability is now a
+  !> property of the algorithm rather than of the comparator, but the requirement
+  !> behind it is unchanged and is the reason radix was chosen over an
+  !> introsort: the intra-block member order feeds a per-block eigendecomposition,
+  !> so any reordering inside a block would perturb the printed energies.
+  !>
+  !> All the digit histograms are built in one sweep, and a pass whose digit is
+  !> constant over the whole array is skipped -- which most of them are, since
+  !> `keep` masks out the whole active window and the signature is sparse.  The
+  !> caller still measures that the off-block Hamiltonian elements vanish before
+  !> trusting the partition.
   !>
   !> @param[in]  norb    spatial orbitals (needs 2*norb <= 62)
   !> @param[in]  ncore   inactive orbitals
@@ -289,9 +308,10 @@ contains
     integer(i8), intent(inout) :: order(0:*), starts(0:*)
     integer(i8) :: nblock
 
-    integer :: no, nc, na, i
-    integer(i8) :: k, act_mask, frozen, keep, gap, j, skey, spos
-    integer(i8), allocatable :: sig(:)
+    integer :: no, nc, na, i, d, nbit, npass, ip, nz
+    integer(i8) :: k, act_mask, frozen, keep
+    logical :: staged
+    integer(i8), allocatable :: sig(:), sig2(:), ord2(:), cnt(:,:)
 
     no = int(norb); nc = int(ncore); na = int(nact)
     nblock = 0_i8
@@ -307,36 +327,52 @@ contains
     frozen = iand(ishft(1_i8, no) - 1_i8, not(act_mask))
     keep = ior(frozen, ishft(frozen, no))          ! both spins, one mask
 
-    allocate(sig(0:next - 1))
+    allocate(sig(0:next - 1), sig2(0:next - 1), ord2(0:next - 1))
     do k = 0_i8, next - 1_i8
       sig(k) = iand(dets(ext(k)), keep)
       order(k) = k
     end do
 
-    ! Shell sort of `sig` carrying `order` alongside.  The comparison is on the
-    ! COMPOSITE key (signature, original position), which is a total order
-    ! because the positions are distinct.  That makes the result identical to
-    ! numpy's stable argsort even though shell sort is not itself stable, so the
-    ! intra-block member order -- and with it the per-block eigenproblem the
-    ! caller then solves -- is bit-for-bit what the Python fallback produces.
-    gap = next / 2_i8
-    do while (gap > 0_i8)
-      do k = gap, next - 1_i8
-        skey = sig(k)
-        spos = order(k)
-        j = k
-        do while (j >= gap)
-          if (sig(j - gap) < skey) exit
-          if (sig(j - gap) == skey .and. order(j - gap) < spos) exit
-          sig(j) = sig(j - gap)
-          order(j) = order(j - gap)
-          j = j - gap
-        end do
-        sig(j) = skey
-        order(j) = spos
-      end do
-      gap = gap / 2_i8
+    ! Only the digits a signature can actually reach are worth a pass, and
+    ! `keep` bounds those exactly.
+    nbit = 0
+    do i = 0, 62
+      if (btest(keep, i)) nbit = i + 1
     end do
+    npass = max(1, (nbit + rbits - 1) / rbits)
+
+    allocate(cnt(0:rbuck - 1, 0:npass - 1))
+    cnt = 0_i8
+    do k = 0_i8, next - 1_i8
+      do ip = 0, npass - 1
+        d = int(iand(ishft(sig(k), -ip * rbits), rmask))
+        cnt(d, ip) = cnt(d, ip) + 1_i8
+      end do
+    end do
+
+    ! `staged` tracks which pair of buffers currently holds the data, so the
+    ! passes ping-pong without copying between them.
+    staged = .false.
+    do ip = 0, npass - 1
+      nz = 0
+      do d = 0, rbuck - 1
+        if (cnt(d, ip) /= 0_i8) nz = nz + 1
+      end do
+      if (nz <= 1) cycle              ! digit constant: the pass is a no-op
+      if (staged) then
+        call radix_pass(next, ip * rbits, cnt(0, ip), sig2, ord2, sig, order)
+      else
+        call radix_pass(next, ip * rbits, cnt(0, ip), sig, order, sig2, ord2)
+      end if
+      staged = .not. staged
+    end do
+    if (staged) then
+      do k = 0_i8, next - 1_i8
+        sig(k) = sig2(k)
+        order(k) = ord2(k)
+      end do
+    end if
+    deallocate(sig2, ord2, cnt)
 
     starts(0) = 0_i8
     nblock = 1_i8
@@ -350,5 +386,159 @@ contains
 
     deallocate(sig)
   end function pt2_occupation_blocks
+
+  !> The single-spin orbital-rotation transform on the string space:
+  !> T[t,s] = det( R[t_occ, s_occ] ), the Loewdin minors of `R`.
+  !>
+  !> This is the MS/XMS rotation's inner loop and it was the most expensive
+  !> Python left anywhere on the PT2 path -- not because the arithmetic is
+  !> large (nstr^2 determinants of an nelec x nelec matrix is ~4 MFlop at
+  !> norb=10) but because it was `np.linalg.det` called once per string PAIR:
+  !> 63504 LAPACK round trips through the interpreter for 4 MFlop of work.
+  !>
+  !> The determinant is therefore evaluated inline rather than by calling
+  !> LAPACK per minor, and the elimination reproduces `dgetf2` step for step --
+  !> IDAMAX pivoting taking the FIRST row of maximal magnitude, the row swap,
+  !> the reciprocal-multiply scaling (with dgetf2's own fallback to division
+  !> below the safe minimum), the right-looking rank-1 update, and finally the
+  !> diagonal product accumulated in ascending k.  That is the same
+  !> factorization `np.linalg.det` gets from `dgetrf`, which at these sizes
+  !> dispatches straight to the unblocked `dgetf2`.  Measured against numpy on
+  !> random unitary R the two agree to one ulp (max 1.7e-16 absolute on O(1)
+  !> minors at norb=10) rather than bit for bit -- close enough that nothing
+  !> printed moves, but not identical, so do not rely on exact equality.  The
+  !> zero-pivot exit IS exact on both sides: a structurally singular minor
+  !> returns a bit-zero determinant.
+  !>
+  !> The `nelec` rows of `R` a given `t` selects are gathered once and reused
+  !> across all `nstr` values of `s`, so the strided read of `R` happens
+  !> nstr times rather than nstr^2.
+  !>
+  !> @param[in]  norb   spatial orbitals
+  !> @param[in]  nelec  electrons of this spin (the minor is nelec x nelec)
+  !> @param[in]  nstr   number of single-spin strings
+  !> @param[in]  rmat   the rotation, C-order [norb,norb]
+  !> @param[in]  occ    occupied orbital indices per string, C-order [nstr,nelec]
+  !> @param[out] tmat   C-order [nstr,nstr]
+  subroutine pt2_minor_transform(norb, nelec, nstr, rmat, occ, tmat) &
+      bind(C, name="pt2_minor_transform")
+    integer(c_int32_t), value :: norb, nelec
+    integer(i8), value :: nstr
+    real(dp), intent(in) :: rmat(0:*)
+    integer(i8), intent(in) :: occ(0:*)
+    real(dp), intent(inout) :: tmat(0:*)
+
+    integer :: no, ne, x, y, k, ipiv, ib
+    integer(i8) :: t, s, tb, sb, ob
+    real(dp) :: amax, piv, det, sgn, v, sfmin
+    real(dp), allocatable :: a(:,:), rows(:,:)
+
+    no = int(norb); ne = int(nelec)
+    if (nstr <= 0_i8) return
+
+    ! The 0 x 0 minor has determinant 1, which is what numpy returns too.
+    if (ne <= 0) then
+      do t = 0_i8, nstr * nstr - 1_i8
+        tmat(t) = 1.0_dp
+      end do
+      return
+    end if
+
+    sfmin = tiny(1.0_dp)                 ! dlamch('S')
+    allocate(a(0:ne - 1, 0:ne - 1), rows(0:ne - 1, 0:no - 1))
+
+    do t = 0_i8, nstr - 1_i8
+      tb = t * int(ne, i8)
+      do x = 0, ne - 1
+        ib = int(occ(tb + int(x, i8)))
+        do y = 0, no - 1
+          rows(x, y) = rmat(int(ib, i8) * int(no, i8) + int(y, i8))
+        end do
+      end do
+
+      ob = t * nstr
+      do s = 0_i8, nstr - 1_i8
+        sb = s * int(ne, i8)
+        do y = 0, ne - 1
+          ib = int(occ(sb + int(y, i8)))
+          do x = 0, ne - 1
+            a(x, y) = rows(x, ib)
+          end do
+        end do
+
+        sgn = 1.0_dp
+        det = 1.0_dp
+        do k = 0, ne - 1
+          ipiv = k                        ! idamax: first row of maximal |.|
+          amax = abs(a(k, k))
+          do x = k + 1, ne - 1
+            if (abs(a(x, k)) > amax) then
+              amax = abs(a(x, k))
+              ipiv = x
+            end if
+          end do
+          piv = a(ipiv, k)
+          if (piv == 0.0_dp) then
+            det = 0.0_dp
+            exit
+          end if
+          if (ipiv /= k) then
+            do y = 0, ne - 1
+              v = a(k, y); a(k, y) = a(ipiv, y); a(ipiv, y) = v
+            end do
+            sgn = -sgn
+          end if
+          if (abs(piv) >= sfmin) then
+            v = 1.0_dp / piv
+            do x = k + 1, ne - 1
+              a(x, k) = a(x, k) * v
+            end do
+          else
+            do x = k + 1, ne - 1
+              a(x, k) = a(x, k) / piv
+            end do
+          end if
+          do y = k + 1, ne - 1
+            v = a(k, y)
+            do x = k + 1, ne - 1
+              a(x, y) = a(x, y) - a(x, k) * v
+            end do
+          end do
+          det = det * piv
+        end do
+        tmat(ob + s) = sgn * det
+      end do
+    end do
+
+    deallocate(a, rows)
+  end subroutine pt2_minor_transform
+
+  !> One stable LSD counting pass: distribute (key, val) into `dst` by the
+  !> `rbits`-wide digit of the key at `shift`, using the pre-built histogram.
+  !>
+  !> Stability is the whole point (see pt2_occupation_blocks): the source is
+  !> walked in ascending order and each bucket cursor only advances, so records
+  !> sharing a digit keep their relative order.
+  subroutine radix_pass(n, shift, cnt, src_key, src_val, dst_key, dst_val)
+    integer(i8), value :: n
+    integer, value :: shift
+    integer(i8), intent(in) :: cnt(0:*), src_key(0:*), src_val(0:*)
+    integer(i8), intent(inout) :: dst_key(0:*), dst_val(0:*)
+
+    integer(i8) :: off(0:rbuck - 1), k, pos
+    integer :: d
+
+    off(0) = 0_i8
+    do d = 1, rbuck - 1
+      off(d) = off(d - 1) + cnt(d - 1)
+    end do
+    do k = 0_i8, n - 1_i8
+      d = int(iand(ishft(src_key(k), -shift), rmask))
+      pos = off(d)
+      off(d) = pos + 1_i8
+      dst_key(pos) = src_key(k)
+      dst_val(pos) = src_val(k)
+    end do
+  end subroutine radix_pass
 
 end module pt2_kernel_mod

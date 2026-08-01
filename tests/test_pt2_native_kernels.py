@@ -127,7 +127,11 @@ def test_diagonal_zeroth_order_matches_python(nbf, ncore, nact):
 
 
 @pt2_only
-@pytest.mark.parametrize("nbf,ncore,nact", [(8, 2, 4), (10, 2, 4)])
+# (12, 3, 4) is 627k determinants: it is the size at which the native sort was
+# actually measured, and with 24 signature bits it exercises three radix passes
+# (an odd count, so the ping-pong ends in the scratch buffers and the copy-back
+# path runs) over an array where nearly every signature is a tie.
+@pytest.mark.parametrize("nbf,ncore,nact", [(8, 2, 4), (10, 2, 4), (12, 3, 4)])
 def test_occupation_blocks_match_python_exactly(nbf, ncore, nact):
     from oqp.library.fci import _determinants
 
@@ -145,6 +149,57 @@ def test_occupation_blocks_match_python_exactly(nbf, ncore, nact):
     assert sum(len(g) for g in native) == len(ext)
     assert np.array_equal(np.sort(np.concatenate(native)), np.arange(len(ext)))
 
+    # ... and pin the stability property directly rather than only through the
+    # fallback: reading the blocks out in order must reproduce numpy's stable
+    # argsort of the signature, ties included.
+    act_mask = ((1 << nact) - 1) << ncore
+    keep = np.int64(((1 << nbf) - 1) & ~act_mask) | (
+        np.int64(((1 << nbf) - 1) & ~act_mask) << nbf)
+    sig = np.asarray(dets, dtype=np.int64)[np.asarray(ext)] & keep
+    assert np.array_equal(np.concatenate(native),
+                          np.argsort(sig, kind="stable"))
+    assert len(native) > 1          # the partition is not trivial
+
+
+@pt2_only
+@pytest.mark.parametrize("norb,nelec", [(4, 2), (6, 3), (8, 4)])
+def test_minor_transform_matches_python(norb, nelec):
+    rng = np.random.default_rng(101 + norb)
+    # a genuine orbital rotation: the minors are then O(1) and the pivots never
+    # reach dgetf2's safe-minimum branch, which is the regime that matters
+    R = np.linalg.qr(rng.standard_normal((norb, norb)))[0]
+    occ = cp._occ_tuples(norb, nelec)
+
+    native, python = _both(cp, "_pt2_lib", lambda: cp._minor_transform(R, occ))
+    assert native.shape == python.shape == (len(occ), len(occ))
+    assert np.max(np.abs(native - python)) < 1e-11
+    # the string transform of a unitary R is itself unitary; a wrong sign on
+    # any single minor breaks this while staying inside a loose tolerance
+    assert np.max(np.abs(native @ native.T - np.eye(len(occ)))) < 1e-10
+
+
+@pt2_only
+def test_minor_transform_handles_a_singular_rotation():
+    """An exactly zero column of R drives dgetf2's zero-pivot early exit, which
+    a well-conditioned rotation never reaches.  Every minor selecting that
+    column must come back as an EXACT zero, not merely a small number: the
+    elimination leaves the pivot bit-zero, so an implementation that divided by
+    it (or that accumulated the diagonal product past the exit) would show up
+    here as a NaN or a denormal rather than as a tolerance failure."""
+    norb, nelec = 5, 2
+    R = np.linalg.qr(np.random.default_rng(7).standard_normal((norb, norb)))[0]
+    R[:, 3] = 0.0
+    occ = cp._occ_tuples(norb, nelec)
+    native, python = _both(cp, "_pt2_lib", lambda: cp._minor_transform(R, occ))
+    assert np.all(np.isfinite(native))
+    assert np.max(np.abs(native - python)) < 1e-11
+    # The singular minors are exact on both sides (the well-conditioned ones
+    # only agree to an ulp, so this is asserted on the singular columns only).
+    singular = [s for s, cols in enumerate(occ) if 3 in cols]
+    assert singular
+    assert np.all(native[:, singular] == 0.0)
+    assert np.all(python[:, singular] == 0.0)
+
 
 # ---------------------------------------------------------------- Koopmans
 koopmans_only = pytest.mark.skipif(
@@ -159,15 +214,17 @@ def _koopmans_operands(n, seed):
     h1e = 0.5 * (h1e + h1e.T)
     h2e = rng.standard_normal((n, n, n, n)) * 0.1
     h2e = h2e + h2e.transpose(3, 2, 1, 0)      # real physicist-ordered ERIs
+    dm1 = rng.standard_normal((n, n)) * 0.1
+    dm2 = rng.standard_normal((n,) * 4) * 0.1
     dm3 = rng.standard_normal((n,) * 6) * 0.1
     dm4 = rng.standard_normal((n,) * 8) * 0.1
-    return h1e, h2e, dm3, dm4
+    return h1e, h2e, dm1, dm2, dm3, dm4
 
 
 @koopmans_only
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_f3ca_f3ac_match_python(n):
-    _h1e, h2e, _dm3, dm4 = _koopmans_operands(n, 41 + n)
+    _h1e, h2e, _d1, _d2, _dm3, dm4 = _koopmans_operands(n, 41 + n)
     native, python = _both(sc, "_koopmans_lib", lambda: sc._f3ca_f3ac(h2e, dm4))
     for a, b in zip(native, python):
         assert a.shape == (n,) * 6
@@ -177,9 +234,79 @@ def test_f3ca_f3ac_match_python(n):
 @koopmans_only
 @pytest.mark.parametrize("n", [3, 4, 5])
 def test_a16_matches_python(n):
-    h1e, h2e, dm3, dm4 = _koopmans_operands(n, 53 + n)
+    h1e, h2e, _dm1, _dm2, dm3, dm4 = _koopmans_operands(n, 53 + n)
     f3ca, f3ac = sc._f3ca_f3ac(h2e, dm4)
     native, python = _both(
         sc, "_koopmans_lib", lambda: sc._a16(h1e, h2e, dm3, f3ca, f3ac))
     assert native.shape == (n,) * 6
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a22_matches_python(n):
+    h1e, h2e, _dm1, dm2, dm3, dm4 = _koopmans_operands(n, 67 + n)
+    f3ca, f3ac = sc._f3ca_f3ac(h2e, dm4)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._a22(h1e, h2e, dm2, dm3, f3ca, f3ac))
+    assert native.shape == (n,) * 6
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_hdm3_matches_python(n):
+    _h1e, _h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 79 + n)
+    hdm1 = sc._hdm1(dm1)
+    hdm2 = sc._hdm2(dm1, dm2)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._hdm3(dm1, dm2, dm3, hdm1, hdm2))
+    assert native.shape == (n,) * 6
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a9_matches_python(n):
+    h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 83 + n)
+    hdm1 = sc._hdm1(dm1)
+    hdm2 = sc._hdm2(dm1, dm2)
+    hdm3 = sc._hdm3(dm1, dm2, dm3, hdm1, hdm2)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._a9(h1e, h2e, hdm1, hdm2, hdm3))
+    assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a7_matches_python(n):
+    h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 89 + n)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._a7(h1e, h2e, dm1, dm2, dm3))
+    # _a7 returns (rm2, a7); both are part of the contract -- rm2 goes straight
+    # into the Srs norm, so a drift there would move the energy without ever
+    # touching a7.
+    for a, b in zip(native, python):
+        assert a.shape == (n,) * 4
+        assert np.max(np.abs(a - b)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a12_matches_python(n):
+    h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 97 + n)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._a12(h1e, h2e, dm1, dm2, dm3))
+    assert native.shape == (n,) * 4
+    assert np.max(np.abs(native - python)) < 1e-11
+
+
+@koopmans_only
+@pytest.mark.parametrize("n", [3, 4, 5])
+def test_a13_matches_python(n):
+    h1e, h2e, dm1, dm2, dm3, _dm4 = _koopmans_operands(n, 103 + n)
+    native, python = _both(
+        sc, "_koopmans_lib", lambda: sc._a13(h1e, h2e, dm1, dm2, dm3))
+    assert native.shape == (n,) * 4
     assert np.max(np.abs(native - python)) < 1e-11

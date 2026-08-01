@@ -313,6 +313,22 @@ def _a16(h1e, h2e, dm3, f3ca, f3ac):
 
 
 def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
+    """The a22 intermediate (Si subspace).
+
+    The liboqp engine (``nevpt2_a22``) evaluates the same terms as ten GEMMs
+    over the whole (k,i) block stack of dm3; the NumPy assembly below stays as
+    the fallback and the pin."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a22"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (h1e, h2e, dm2, dm3, f3ca, f3ac)]
+            out = np.zeros((n,) * 6, dtype=np.float64)
+            lib.nevpt2_a22(n, *[cast(a) for a in ops], cast(out))
+            return out
     a22 = -_ein('pb,kipjac->ijkabc', h1e, dm3)
     a22 -= _ein('pa,kibjpc->ijkabc', h1e, dm3)
     a22 += _ein('cp,kibjap->ijkabc', h1e, dm3)
@@ -383,6 +399,24 @@ def _hdm2(dm1, dm2):
 
 
 def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
+    """The hole 3-RDM (Sij subspace).
+
+    Every term carries a Kronecker delta, so the liboqp engine
+    (``nevpt2_hdm3``) writes each one as a plane of the output instead of
+    materializing the n^6 outer product einsum needs; the NumPy assembly below
+    stays as the fallback and the pin.  ``hdm1`` is unused here (it is passed
+    for symmetry with the other builders) and so is not handed to liboqp."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_hdm3"):
+            n = int(dm1.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (dm1, dm2, dm3, hdm2)]
+            out = np.zeros((n,) * 6, dtype=np.float64)
+            lib.nevpt2_hdm3(n, *[cast(a) for a in ops], cast(out))
+            return out
     delta = np.eye(dm3.shape[0])
     return - _ein('pb,qrac->pqrabc', delta, hdm2) \
         - _ein('br,pqac->pqrabc', delta, hdm2) \
@@ -409,6 +443,23 @@ def _k27(h1e, h2e, dm1, dm2):
 
 
 def _a7(h1e, h2e, dm1, dm2, dm3):
+    """The reduced 2-RDM and the a7 intermediate (Srs subspace).
+
+    The liboqp engine (``nevpt2_a7``) builds rm2/rm3 by direct scatter and
+    evaluates a7's two n^7 terms as GEMMs over permuted copies of rm3; the
+    NumPy assembly below stays as the fallback and the pin."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a7"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (h1e, h2e, dm1, dm2, dm3)]
+            rm2 = np.zeros((n,) * 4, dtype=np.float64)
+            a7 = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a7(n, *[cast(a) for a in ops], cast(rm2), cast(a7))
+            return rm2, a7
     delta = np.eye(dm2.shape[0])
     rm2 = _ein('iljk->ijkl', dm2) - _ein('ik,jl->ijkl', dm1, delta)
     rm3 = _ein('injmkl->ijklmn', dm3) \
@@ -424,6 +475,23 @@ def _a7(h1e, h2e, dm1, dm2, dm3):
 
 
 def _a9(h1e, h2e, hdm1, hdm2, hdm3):
+    """The a9 intermediate (Sij subspace).
+
+    The liboqp engine (``nevpt2_a9``) folds the six one-index hdm2 terms into
+    two applications of a single integral panel and drives the two hdm3 terms
+    as GEMMs; the NumPy assembly below stays as the fallback and the pin.
+    ``hdm1`` is unused here and so is not handed to liboqp."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a9"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (h1e, h2e, hdm2, hdm3)]
+            out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a9(n, *[cast(a) for a in ops], cast(out))
+            return out
     a9 = _ein('ib,pqai->pqab', h1e, hdm2)
     a9 += _ein('ijib,pqaj->pqab', h2e, hdm2) * 2.0
     a9 -= _ein('ijjb,pqai->pqab', h2e, hdm2)
@@ -437,6 +505,22 @@ def _a9(h1e, h2e, hdm1, hdm2, hdm3):
 
 
 def _a12(h1e, h2e, dm1, dm2, dm3):
+    """The a12 intermediate (Sir subspace).
+
+    The liboqp engine (``nevpt2_a12``) evaluates the same six terms as five
+    GEMMs over the (q,p) block stack; the NumPy assembly below stays as the
+    fallback and the pin.  ``dm1`` is unused here and so is not handed over."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a12"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (h1e, h2e, dm2, dm3)]
+            out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a12(n, *[cast(a) for a in ops], cast(out))
+            return out
     return _ein('ia,qpib->pqab', h1e, dm2) \
         - _ein('bi,qpai->pqab', h1e, dm2) \
         + _ein('ijka,qpjbik->pqab', h2e, dm3) \
@@ -446,6 +530,22 @@ def _a12(h1e, h2e, dm1, dm2, dm3):
 
 
 def _a13(h1e, h2e, dm1, dm2, dm3):
+    """The a13 intermediate (Sir subspace).
+
+    The liboqp engine (``nevpt2_a13``) drives the two dm3 terms as GEMMs over
+    permuted copies and folds the three delta-carrying terms onto the a == p
+    plane; the NumPy assembly below stays as the fallback and the pin."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a13"):
+            n = int(h1e.shape[0])
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            ops = [np.ascontiguousarray(a, dtype=np.float64)
+                   for a in (h1e, h2e, dm1, dm2, dm3)]
+            out = np.zeros((n,) * 4, dtype=np.float64)
+            lib.nevpt2_a13(n, *[cast(a) for a in ops], cast(out))
+            return out
     delta = np.eye(dm3.shape[0])
     a13 = -_ein('ia,qbip->pqab', h1e, dm2)
     a13 += _ein('pa,qb->pqab', h1e, dm1) * 2.0

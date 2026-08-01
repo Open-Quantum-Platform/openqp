@@ -555,8 +555,8 @@ def _occupation_blocks(full_dets, external, ncore, nact, norb):
     if 2 * norb > 62:
         return None
     # liboqp engine; the NumPy partition below is the fallback and the pin.  The
-    # native sort compares the COMPOSITE key (signature, original position), so
-    # it reproduces numpy's stable argsort exactly -- the intra-block member
+    # native sort is a stable LSD radix sort on the same signature, so it
+    # reproduces ``np.argsort(kind="stable")`` exactly -- the intra-block member
     # order, and hence each block's eigenproblem, is bit-for-bit identical.
     backend = _pt2_lib()
     if backend is not None:
@@ -743,8 +743,26 @@ def _occ_tuples(norb, nelec):
 
 def _minor_transform(R, occ):
     """T[t, s] = det( R[ix_(t_occ, s_occ)] ): the single-spin orbital-rotation
-    transform on the string space (Loewdin minors), ordered by ``occ``."""
+    transform on the string space (Loewdin minors), ordered by ``occ``.
+
+    The liboqp engine (``pt2_minor_transform``) evaluates the same minors with
+    the determinant inlined instead of one ``np.linalg.det`` call per string
+    PAIR, which is what made this the most expensive Python on the PT2 path;
+    the loop below stays as the fallback and the numerical pin."""
     n = len(occ)
+    backend = _pt2_lib()
+    if backend is not None and n:
+        lib, ffi = backend
+        if hasattr(lib, "pt2_minor_transform"):
+            nelec = len(occ[0])
+            r = np.ascontiguousarray(R, dtype=np.float64)
+            table = np.ascontiguousarray(
+                np.asarray(occ, dtype=np.int64).reshape(n, nelec))
+            T = np.zeros((n, n), dtype=np.float64)
+            lib.pt2_minor_transform(int(R.shape[0]), int(nelec), int(n),
+                                    _dptr(ffi, r), _iptr(ffi, table),
+                                    _dptr(ffi, T))
+            return T
     T = np.zeros((n, n))
     for it, t in enumerate(occ):
         rows = list(t)
