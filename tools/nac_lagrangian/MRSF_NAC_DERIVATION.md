@@ -1294,3 +1294,33 @@ question: derive d(sigma)/d(theta) term-by-term FROM THE SIGMA SOURCE
 compare against the staged directional derivative -- wherever they
 differ is the final term. All probes, referees, and datasets for that
 comparison are in place.
+
+### 7.44 v10: THE PARADOX, precisely stated (session terminus)
+v10 (single coordinate, in-process):
+- The C-channel residual [A(C',INTS_d) - A(C0,INTS_d)]/FD minus the
+  staged directional response is h-INDEPENDENT: 0.01965 (h) vs 0.01968
+  (h/2). The invariant residual LIVES IN THE C-CHANNEL.
+- (The in-process 1-iter "worker emulation" is broken -- trueG blew up
+  to 32.8; discard. The F-channel accounting stands via 7.43's
+  closed-G == measured-G.)
+THE PARADOX: every link is individually certified --
+  (i)   Ux == C0^{-1} dC_raw (orthonormality, exact);
+  (ii)  the staging measures the code's own directional C-derivative
+        (t = 1e-5, linearity certified);
+  (iii) cross terms (d2A/dtheta dx, d2A/dtheta2, U(h)-curvature) cancel
+        at EVEN order in the central FD;
+yet the true-path C-response differs from the staged response by an
+h-independent 3% (13% on the near-degenerate pair). One of the hidden
+premises is false. Candidate premises to attack in the route-A paper
+derivation: the smoothness/single-valuedness of the displaced SCF
+solution C(x) in the near-degenerate virtual sector (is C(+h) vs
+C(-h) on the SAME smooth branch?); the exactness of the sg-branch
+choice; whether the matvec output depends on pieces of C beyond the
+occupied+active blocks that the M-frame Ux does not constrain (virtual
+-virtual rotations of C(x') are NOT fixed by any condition used here
+-- THE VIRTUAL-GAUGE: Ux_vv is whatever the displaced SCF returns,
+but the staged and true paths agree on it BY CONSTRUCTION since Ux is
+measured from the same runs... unless sign-fixing branch-cuts).
+NEXT SESSION: start exactly here, with v10_probe.py as the instrument
+(fix its worker branch by using SEPARATE PROCESSES for the 1-iter
+skel), and the derivation target of 7.43.
