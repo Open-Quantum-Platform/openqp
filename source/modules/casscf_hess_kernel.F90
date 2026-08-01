@@ -24,12 +24,25 @@
 !>   4. sigma += 1/2 stack^T . x              nact^2 GEMMs, accumulating
 !>   5. amp    = vecs . sigma                 one GEMM over all k
 !>
-!> Step 4 is written as one GEMM per (t,u) so the stack is consumed in place:
-!> each (t,u) block is already a contiguous ndet x ndet matrix stored as (b,a),
-!> and the matching slice of x is a strided submatrix, which sequence
-!> association expresses as a leading dimension.  Transposing the stack into
-!> ((t,u,b),a) order instead would cost a full nact^2*ndet^2 copy -- the very
-!> memory traffic this kernel exists to remove.
+!> Step 4 has two forms and picks between them on size.  Written as one GEMM
+!> per (t,u) the stack is consumed in place: each (t,u) block is already a
+!> contiguous ndet x ndet matrix stored as (b,a), and the matching slice of x
+!> is a strided submatrix, which sequence association expresses as a leading
+!> dimension.  Written as ((t,u,b), a) the whole of step 4 collapses into ONE
+!> GEMM of inner dimension nact^2*ndet -- and getting there is NOT a transpose:
+!> the (t,u) block is stored as (b,a) already, so the re-blocking is a copy of
+!> contiguous ndet-long runs.
+!>
+!> The merged form removes nact^2 - 1 GEMM calls and their separate
+!> accumulations into sigma, and pays one extra pass over the stack.  Measured
+!> against the per-block loop in one process, best of many, nact 3-8 and
+!> ndet 9-400: 1.35x at ndet=9, 1.26x at ndet=36 for every nact, 1.18-1.20x at
+!> ndet=60, 1.10-1.12x at ndet=100, and 1.00x or below once the re-blocked
+!> stack passes ~2 MiB -- past that the extra pass costs what the merge saves.
+!> The per-block loop is kept above that threshold, and below a handful of
+!> pairs, which is the other way the copy fails to amortise.  Both forms are
+!> one call per chunk of the pair index; the re-blocking is done once for the
+!> whole call, and its buffer is bounded by the same threshold.
 !>
 !> The x buffer is npar*nact^2*ndet doubles, which outgrows memory for the
 !> larger active spaces the dense-spectrum path still admits, so the pair index
@@ -49,6 +62,17 @@ module casscf_hess_kernel_mod
 
   !> Budget for the per-chunk x buffer, in doubles (128 MiB).
   integer(i8), parameter :: x_budget = 16777216_i8
+
+  !> Largest re-blocked excitation stack worth building, in doubles (2 MiB).
+  !> This is the measured crossover of the two step-4 forms, and it doubles as
+  !> the memory bound on the copy: the buffer never exceeds this.
+  integer(i8), parameter :: sblk_max = 262144_i8
+
+  !> Fewest rotation pairs that amortise the re-blocking copy.  The copy is
+  !> independent of npar while the work it feeds is linear in it, so below a
+  !> handful of pairs the merged form loses: measured 0.52x at npar=2, 1.0x
+  !> around npar=16, 1.19x at 64, 1.27x at 131.
+  integer, parameter :: merge_min_pairs = 16
 
   public :: casscf_hess_amp, casscf_hess_wmat, casscf_hess_relax
 
@@ -111,10 +135,11 @@ contains
 
     ! Default (ILP64) integer kind, matching the linked BLAS.
     integer :: na, na2, na4, np, nd, nb, ncols, kbase, nchunk
-    integer :: chunk, kk, t, u, w, tu
-    integer(i8) :: need
+    integer :: chunk, kk, t, u, w, tu, b
+    integer(i8) :: need, nblk
     real(dp) :: acc
-    real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:)
+    logical :: merged
+    real(dp), allocatable :: sigma(:,:), xbuf(:), gtr(:), sblk(:)
 
     na = int(nact)
     np = int(npar)
@@ -132,6 +157,25 @@ contains
     allocate(sigma(0:nd-1, 0:nb-1))
     allocate(xbuf(0:need*int(nb, i8) - 1_i8))
     allocate(gtr(0:int(na2, i8)*int(nb, i8) - 1_i8))
+
+    ! Re-block the stack into ((t,u,b), a) once for the whole call, when that
+    ! is the cheaper of the two step-4 forms (see the module header).  Both
+    ! sides of the copy are contiguous ndet-long runs.
+    nblk = int(na2, i8) * int(nd, i8) * int(nd, i8)
+    merged = nblk <= sblk_max .and. np >= merge_min_pairs
+    if (merged) then
+      allocate(sblk(0:nblk - 1_i8))
+      do tu = 0, na2 - 1
+        do b = 0, nd - 1
+          sblk(int(tu, i8)*int(nd, i8) + int(b, i8)*int(na2, i8)*int(nd, i8) : &
+               int(tu, i8)*int(nd, i8) + int(b, i8)*int(na2, i8)*int(nd, i8) &
+               + int(nd, i8) - 1_i8) = &
+              stack(int(tu, i8)*int(nd, i8)*int(nd, i8) + int(b, i8)*int(nd, i8) : &
+                    int(tu, i8)*int(nd, i8)*int(nd, i8) + int(b, i8)*int(nd, i8) &
+                    + int(nd, i8) - 1_i8)
+        end do
+      end do
+    end if
 
     do chunk = 0, nchunk - 1
       kbase = chunk * nb
@@ -170,16 +214,23 @@ contains
                  0.0_dp, xbuf, nd)
 
       ! ---- 4. sigma(a,k) += 1/2 sum_(t,u) sum_b stack[t,u,a,b] x(b,(k,t,u))
-      ! The (t,u) stack block is contiguous and stored as (b,a), so 'T'
-      ! contracts over b; the matching x columns are strided by na2*nd, which
-      ! becomes the leading dimension.  Both operands are passed by element
-      ! reference so no temporary is materialised.
-      do tu = 0, na2 - 1
-        call dgemm('T', 'N', nd, ncols, nd, 0.5_dp, &
-                   stack(int(tu, i8)*int(nd, i8)*int(nd, i8)), nd, &
-                   xbuf(int(tu, i8)*int(nd, i8)), na2*nd, &
-                   1.0_dp, sigma, nd)
-      end do
+      ! x is already ((t,u,b), k) with leading dimension na2*nd, so against the
+      ! re-blocked stack this is one GEMM contracting over (t,u,b).  Otherwise
+      ! one GEMM per (t,u): the block is contiguous and stored as (b,a), so 'T'
+      ! contracts over b, and the matching x columns are strided by na2*nd,
+      ! which becomes the leading dimension.  Both operands are passed by
+      ! element reference so no temporary is materialised.
+      if (merged) then
+        call dgemm('T', 'N', nd, ncols, na2*nd, 0.5_dp, &
+                   sblk, na2*nd, xbuf, na2*nd, 1.0_dp, sigma, nd)
+      else
+        do tu = 0, na2 - 1
+          call dgemm('T', 'N', nd, ncols, nd, 0.5_dp, &
+                     stack(int(tu, i8)*int(nd, i8)*int(nd, i8)), nd, &
+                     xbuf(int(tu, i8)*int(nd, i8)), na2*nd, &
+                     1.0_dp, sigma, nd)
+        end do
+      end if
 
       ! ---- 5. amp(j,k) = sum_a vecs(j,a) sigma(a,k)
       call dgemm('N', 'N', nd, ncols, nd, 1.0_dp, &
@@ -188,6 +239,7 @@ contains
     end do
 
     deallocate(sigma, xbuf, gtr)
+    if (allocated(sblk)) deallocate(sblk)
   end subroutine casscf_hess_amp
 
   !> CI-relaxation accumulation for one averaged root.
