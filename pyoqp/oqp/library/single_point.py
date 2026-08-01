@@ -47,6 +47,11 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.nac_utils import (
+    canonical_state_overlap,
+    hst_derivative_coupling,
+    interstate_coupling,
+)
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.state_labels import is_mrsf, public_state_label
@@ -1804,14 +1809,19 @@ class NACME(BasisOverlap):
             self.dftb_states_overlap()
         else:
             oqp.get_states_overlap(self.mol)
-        state_overlap = self.mol.data["OQP::td_states_overlap"]
+        # Two-dimensional native tags are exposed as the transpose of their
+        # Fortran matrices.  Convert once at the storage boundary so the
+        # Python indices retain the documented convention
+        # S[i,j] = <old i | new j>.  DFTB/xTB deliberately use the same tag
+        # layout, so this conversion applies to every overlap backend.
+        state_overlap = canonical_state_overlap(
+            self.mol.data["OQP::td_states_overlap"]
+        )
 
         # compute time-derivative nac
-        dc_matrix = (state_overlap - state_overlap.T) / self.dt
-        e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
-        e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
-        gap = e_j - e_i
-        nac_matrix = dc_matrix * gap
+        dc_matrix = hst_derivative_coupling(state_overlap, self.dt)
+        state_energies = np.asarray(self.mol.energies[1:], dtype=float)
+        nac_matrix = interstate_coupling(dc_matrix, state_energies)
         nac_matrix = nac_matrix[0:self.nac_dim, 0:self.nac_dim]
         self.mol.data["OQP::dc_matrix"] = dc_matrix
         self.mol.data["OQP::nac_matrix"] = nac_matrix
@@ -1819,6 +1829,8 @@ class NACME(BasisOverlap):
         dump_log(self.mol, title='PyOQP: Non-Adiabatic Coupling Matrix Calculation', section='nacme')
         dump_log(self.mol, title='PyOQP: phase corrected state overlap (s_ij)', section='nacm', info=state_overlap)
         dump_log(self.mol, title='PyOQP: phase corrected derivative coupling (d_ij)', section='nacm', info=dc_matrix)
+        gap = (state_energies.reshape((1, -1))
+               - state_energies.reshape((-1, 1)))
         dump_log(self.mol, title='PyOQP: state energy gap (e_ji)', section='nacm', info=gap)
         dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm',
                  info=nac_matrix)
@@ -2011,16 +2023,10 @@ class NAC(Calculator):
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
         dcm = (forward - backward) / 2
-        e_i = np.array(self.mol.energies[1:]).reshape((1, -1))
-        e_j = np.array(self.mol.energies[1:]).reshape((-1, 1))
-        gap = e_j - e_i
-        np.fill_diagonal(gap, 1)
-        gap = gap.reshape((1, -1))
-        nacm = dcm * gap
-
         # reshape matrix -> (nstate x nstate, natom x 3) -> (nstate, nstate, natom, 3)
         dcv = dcm.T.reshape((self.nstate, self.nstate, self.natom, 3))
-        nacv = nacm.T.reshape((self.nstate, self.nstate, self.natom, 3))
+        state_energies = np.asarray(self.mol.energies[1:], dtype=float)
+        nacv = interstate_coupling(dcv, state_energies)
 
         # delete scratch folder
         if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:

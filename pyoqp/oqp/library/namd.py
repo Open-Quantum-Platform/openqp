@@ -35,6 +35,7 @@ import numpy as np
 
 import oqp
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
+from oqp.library.nac_utils import canonical_state_overlap
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_section_name
 from oqp.utils.file_utils import dump_log
 
@@ -243,7 +244,9 @@ class NAMD:
     def _state_overlap(self):
         """Compute the phase-corrected state overlap S(i,j)=<i(t-dt)|j(t)>."""
         NACME(self.mol).nacme()
-        return np.array(self.mol.data["OQP::td_states_overlap"])
+        return canonical_state_overlap(
+            self.mol.data["OQP::td_states_overlap"]
+        )
 
     # ------------------------------------------------------------------ #
     # time-derivative couplings
@@ -302,7 +305,9 @@ class NAMD:
         # state overlap + time-derivative couplings (FD or NPI), passed to the
         # Fortran hop as flat row-major (n x n) matrices; absolute state
         # energies via namd_eabs. (Same-spin MRSF path.)
-        s = np.array(mol.data["OQP::td_states_overlap"]).reshape((n, n))
+        s = canonical_state_overlap(
+            np.asarray(mol.data["OQP::td_states_overlap"]).reshape((n, n))
+        )
         tdc = self._compute_tdc(s)
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
         mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
@@ -1010,7 +1015,9 @@ class NAMD_SOC(NAMD):
             _dftb_spatial_overlap(mol, 1)
         else:
             oqp.get_states_overlap(mol)
-        s_s = np.array(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
+        s_s = canonical_state_overlap(
+            np.asarray(mol.data['OQP::td_states_overlap']).reshape((ns, ns))
+        )
 
         _select_response_manifold(mol, 3)
         mol.data['OQP::td_bvec_mo'] = self.tbvec.copy()
@@ -1019,7 +1026,9 @@ class NAMD_SOC(NAMD):
             _dftb_spatial_overlap(mol, 3)
         else:
             oqp.get_states_overlap(mol)
-        s_t = np.array(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
+        s_t = canonical_state_overlap(
+            np.asarray(mol.data['OQP::td_states_overlap']).reshape((nt, nt))
+        )
 
         s = np.zeros((n, n))
         s[:ns, :ns] = s_s

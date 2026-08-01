@@ -50,8 +50,17 @@ def load_runfunc_with_namd_stubs():
         setattr(namd, name, type(name, (_Runner,), {}))
 
     oqp = types.ModuleType("oqp")
+    oqp.__path__ = []
     for name in ("electric_moments", "mulliken", "lowdin", "resp_charges"):
         setattr(oqp, name, lambda *_args, **_kwargs: None)
+
+    library = types.ModuleType("oqp.library")
+    library.__path__ = []
+    utils = types.ModuleType("oqp.utils")
+    utils.__path__ = []
+    tb_backends = types.ModuleType("oqp.utils.tb_backends")
+    setattr(tb_backends, "is_tb_method", lambda *_args, **_kwargs: False)
+    setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
 
     single_point = types.ModuleType("oqp.library.single_point")
     noop = type("_Noop", (), {
@@ -69,12 +78,14 @@ def load_runfunc_with_namd_stubs():
 
     modules = {
         "oqp": oqp,
-        "oqp.library": types.ModuleType("oqp.library"),
+        "oqp.library": library,
         "oqp.library.namd": namd,
         "oqp.library.single_point": single_point,
         "oqp.library.libscipy": types.ModuleType("oqp.library.libscipy"),
         "oqp.library.libgeometric": types.ModuleType("oqp.library.libgeometric"),
         "oqp.library.liboqp": types.ModuleType("oqp.library.liboqp"),
+        "oqp.utils": utils,
+        "oqp.utils.tb_backends": tb_backends,
     }
     for module_name, names in {
         "oqp.library.libscipy": ("StateSpecificOpt", "MECIOpt", "MECPOpt", "MEP", "QMMMOpt"),
@@ -133,13 +144,25 @@ def load_namd_with_stubs():
         setattr(single_point, name, noop)
     file_utils = types.ModuleType("oqp.utils.file_utils")
     setattr(file_utils, "dump_log", lambda *_args, **kwargs: logs.append(kwargs.get("title")))
+    nac_utils = types.ModuleType("oqp.library.nac_utils")
+    setattr(
+        nac_utils,
+        "canonical_state_overlap",
+        lambda overlap: np.array(np.asarray(overlap).T, copy=True),
+    )
+    tb_backends = types.ModuleType("oqp.utils.tb_backends")
+    setattr(tb_backends, "is_tb_method", lambda *_args, **_kwargs: False)
+    setattr(tb_backends, "make_tb_adapter", lambda *_args, **_kwargs: None)
+    setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
 
     modules = {
         "oqp": oqp,
         "oqp.library": library,
+        "oqp.library.nac_utils": nac_utils,
         "oqp.library.single_point": single_point,
         "oqp.utils": utils,
         "oqp.utils.file_utils": file_utils,
+        "oqp.utils.tb_backends": tb_backends,
     }
     saved = {name: sys.modules.get(name) for name in modules}
     sys.modules.update(modules)
