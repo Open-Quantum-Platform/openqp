@@ -14,13 +14,14 @@ class MRSFNACSymmetricUTests(unittest.TestCase):
         body = source.split(
             "subroutine mrsf_nac_rohf_pair_overlap(infos)", 1
         )[1].split("end subroutine mrsf_nac_rohf_pair_overlap", 1)[0]
+        self.assertIn("overlap_weight(p,p) = -0.5_dp*xmat(p,p)", body)
         self.assertIn(
-            "value = value - 0.5_dp*xmat(p,p)*sxmo(p,p)", body
+            "coefficient = -0.5_dp*(xmat(p,q)+xmat(q,p))", body
         )
-        self.assertIn(
-            "(xmat(p,q)+xmat(q,p))*sxmo(p,q)", body
-        )
-        self.assertIn("value = value - xmat(lo,hi)*sxmo(hi,lo)", body)
+        self.assertIn("coefficient = -xmat(lo,hi)", body)
+        self.assertIn("value = sum(overlap_weight_ao*dsfull", body)
+        self.assertIn("gsk = sum(gamma_ao*dsket", body)
+        self.assertNotIn("call ao_to_mo", body)
 
         production = (
             ROOT / "pyoqp" / "oqp" / "library" / "nac_analytic.py"

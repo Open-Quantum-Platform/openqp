@@ -308,8 +308,9 @@ contains
     real(kind=dp), pointer :: rhs(:), xflat_out(:), out(:,:), &
       out_vmask(:,:), out_gsk(:,:)
     real(kind=dp), allocatable :: xmat(:,:), gamma(:,:), dsket(:,:,:,:), &
-      dsfull(:,:,:,:), skmo(:,:), sxmo(:,:), half(:,:)
-    real(kind=dp) :: value, gsk
+      dsfull(:,:,:,:), overlap_weight(:,:), overlap_weight_ao(:,:), &
+      gamma_ao(:,:), half(:,:)
+    real(kind=dp) :: value, gsk, coefficient, norm_product
     integer :: nbf, natom, nocca, noccb, nvira, offset, ltot
     integer :: atom, cart, mu, nu, p, q, hi, lo, k
 
@@ -341,7 +342,8 @@ contains
 
     allocate(xmat(nbf,nbf), gamma(nbf,nbf), &
              dsket(nbf,nbf,3,natom), dsfull(nbf,nbf,3,natom), &
-             skmo(nbf,nbf), sxmo(nbf,nbf), half(nbf,nbf))
+             overlap_weight(nbf,nbf), overlap_weight_ao(nbf,nbf), &
+             gamma_ao(nbf,nbf), half(nbf,nbf))
     gamma = reshape(gflat, (/ nbf, nbf /))
     xmat = reshape(mt_frozen_flat, (/ nbf, nbf /)) &
          + reshape(mt_response_flat, (/ nbf, nbf /)) + gamma
@@ -394,45 +396,63 @@ contains
       end do
     end do
 
+    ! The coordinate loop used to transform every derivative overlap matrix
+    ! AO->MO (two nbf**3 DGEMMs for each of 3*natom coordinates).  Both outputs
+    ! are Frobenius contractions, so transform their pair-dependent weights
+    ! once in the reverse direction instead:
+    !   <W, C^T S^R C> = <C W C^T, S^R>.
+    ! overlap_weight reproduces the original lower-triangular
+    ! diagonal/same-space/cross-space dependent-MO contraction exactly.  It is
+    ! deliberately not symmetrized, so this identity also holds before using
+    ! the mathematical symmetry of the full overlap derivative.
+    overlap_weight = 0.0_dp
+    do p = 1, nbf
+      overlap_weight(p,p) = -0.5_dp*xmat(p,p)
+      do q = 1, p - 1
+        if (orbital_space(p) == orbital_space(q)) then
+          coefficient = -0.5_dp*(xmat(p,q)+xmat(q,p))
+        else
+          if (orbital_space(p) > orbital_space(q)) then
+            hi = p; lo = q
+          else
+            hi = q; lo = p
+          end if
+          coefficient = -xmat(lo,hi)
+        end if
+        overlap_weight(p,q) = coefficient
+      end do
+    end do
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, &
+               overlap_weight, nbf, 0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+               0.0_dp, overlap_weight_ao, nbf)
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, gamma, nbf, &
+               0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+               0.0_dp, gamma_ao, nbf)
+    do nu = 1, nbf
+      do mu = 1, nbf
+        norm_product = basis%bfnrm(mu)*basis%bfnrm(nu)
+        overlap_weight_ao(mu,nu) = overlap_weight_ao(mu,nu)*norm_product
+        gamma_ao(mu,nu) = gamma_ao(mu,nu)*norm_product
+      end do
+    end do
+
     call der_overlap_matrix_ket(basis, dsket)
     call der_overlap_matrix(basis, dsfull)
     do atom = 1, natom
       do cart = 1, 3
-        do nu = 1, nbf
-          do mu = 1, nbf
-            dsket(mu,nu,cart,atom) = dsket(mu,nu,cart,atom) * &
-              basis%bfnrm(mu)*basis%bfnrm(nu)
-            dsfull(mu,nu,cart,atom) = dsfull(mu,nu,cart,atom) * &
-              basis%bfnrm(mu)*basis%bfnrm(nu)
-          end do
-        end do
-        call ao_to_mo(dsket(:,:,cart,atom), skmo)
-        call ao_to_mo(dsfull(:,:,cart,atom), sxmo)
-
-        value = 0.0_dp
-        do p = 1, nbf
-          value = value - 0.5_dp*xmat(p,p)*sxmo(p,p)
-          do q = 1, p - 1
-            if (orbital_space(p) == orbital_space(q)) then
-              value = value - 0.5_dp*(xmat(p,q)+xmat(q,p))*sxmo(p,q)
-            else
-              if (orbital_space(p) > orbital_space(q)) then
-                hi = p; lo = q
-              else
-                hi = q; lo = p
-              end if
-              value = value - xmat(lo,hi)*sxmo(hi,lo)
-            end if
-          end do
-        end do
-        gsk = sum(gamma*skmo)
+        value = sum(overlap_weight_ao*dsfull(:,:,cart,atom))
+        gsk = sum(gamma_ao*dsket(:,:,cart,atom))
         out_vmask(cart,atom) = value
         out_gsk(cart,atom) = gsk
         out(cart,atom) = value + gsk
       end do
     end do
 
-    deallocate(xmat, gamma, dsket, dsfull, skmo, sxmo, half)
+    deallocate(xmat, gamma, dsket, dsfull, overlap_weight, &
+               overlap_weight_ao, &
+               gamma_ao, half)
 
   contains
     pure integer function orbital_space(iorb) result(space)
@@ -446,14 +466,6 @@ contains
       end if
     end function orbital_space
 
-    subroutine ao_to_mo(ao, transformed)
-      real(kind=dp), intent(in) :: ao(:,:)
-      real(kind=dp), intent(out) :: transformed(:,:)
-      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
-                 0.0_dp, half, nbf)
-      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
-                 0.0_dp, transformed, nbf)
-    end subroutine ao_to_mo
   end subroutine mrsf_nac_rohf_pair_overlap
 
 !###############################################################################
