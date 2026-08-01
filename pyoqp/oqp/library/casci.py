@@ -207,6 +207,14 @@ class CASCI(FCI):
             f"OQP::{prefix}_TRIAL_ACTIVE_NELEC",
         }
         for key, value in trial_tensors.items():
+            # tagarray rejects zero-byte records (Record.hpp asserts
+            # byte_count() != 0), so an empty tensor would abort the process
+            # rather than round-trip.  These tensors are published for
+            # downstream consumers only, and an absent key is the natural
+            # encoding for "none of these orbitals exist" -- e.g. a CAS run
+            # with frozen_core=0 has no core orbitals at all.
+            if np.asarray(value).size == 0:
+                continue
             if key in integer_metadata:
                 self.mol.data[key] = np.ascontiguousarray(value, dtype=np.int64)
             else:

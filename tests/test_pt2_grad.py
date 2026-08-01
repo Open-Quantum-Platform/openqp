@@ -7,16 +7,10 @@ central-difference gradients over Cartesian displacements and
 makes runtype=grad and the gradient-driven optimizers (optimize, penalty
 MECI) work for PT2.
 
-Two wiring notes (see PT2_GRAD_NOTES.md):
-
-* The input checker still gates the CAS/PT2 family to runtype=energy
-  (``_check_casci``), so these tests construct the Runner with
-  runtype=energy and flip ``mol.config['input']['runtype']`` afterwards --
-  ``Runner.run`` reads the runtype from the live config.
-* The config parser rejects unknown ``[pt2]`` keys, so the optional
-  ``grad_step``/``grad_guess``/``grad_gap_warn`` knobs are injected into
-  ``mol.config['pt2']`` post-construction; pt2_numgrad reads them with
-  ``dict.get`` defaults.
+One wiring note: these tests construct the Runner with runtype=energy and
+flip ``mol.config['input']['runtype']`` afterwards -- ``Runner.run`` reads
+the runtype from the live config, so this exercises the dispatch without
+re-parsing an input file per case.
 """
 import os
 import time

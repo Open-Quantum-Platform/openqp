@@ -23,8 +23,8 @@ Conventions
 * Coordinates are Bohr; energies Hartree; gradients Hartree/Bohr, shaped
   ``(nstate, natom, 3)`` like the hf/tdhf gradient arrays.
 
-Configuration ([pt2] section, read with dict.get so missing schema rows are
-harmless; see PT2_GRAD_NOTES.md for the schema/checker rows to add)
+Configuration ([pt2] section; read with dict.get so an older config without
+these rows still runs on the documented defaults)
 --------------------------------------------------------------------------
 * ``grad_step``  (float, default 1.0e-3 Bohr): central-difference half-step.
   The energy pipeline is converged to ~1e-9..1e-10 Eh and bitwise

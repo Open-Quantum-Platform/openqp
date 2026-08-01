@@ -482,10 +482,8 @@ class OQPTester:
             test_dir = os.path.join(self.base_test_dir, 'other')
         elif test_path == 'SCF':
             test_dir = os.path.join(self.base_test_dir, 'SCF')
-        elif test_path == 'FCI':
-            test_dir = os.path.join(self.base_test_dir, 'FCI')
-        elif test_path in {'WF_methods', 'WaveFunction'}:
-            test_dir = os.path.join(self.base_test_dir, test_path)
+        elif test_path == 'WF_methods':
+            test_dir = os.path.join(self.base_test_dir, 'WF_methods')
         elif os.path.isdir(test_path):
             test_dir = test_path
         elif os.path.isfile(test_path) and test_path.lower().endswith(('.inp', '.oqp')):

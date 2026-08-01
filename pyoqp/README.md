@@ -403,7 +403,7 @@ tdhf section handle the time-dependent calculations
 
 fci section handles small dense full configuration interaction (FCI) energy
 calculations on top of a closed-shell RHF reference. This is an MVP intended for
-small active spaces only; see examples/FCI for usage and current limitations.
+small active spaces only; see examples/WF_methods for usage and current limitations.
 Each FCI root is reported with `<S^2>` and an inferred spin multiplicity; these
 diagnostics are stored as `OQP::FCI_S2` and `OQP::FCI_MULTIPLICITY`, and
 multi-root jobs note when roots span multiple multiplicities. In exactly

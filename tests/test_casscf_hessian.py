@@ -22,8 +22,7 @@ Contracts:
       (trace counter), the default path stays untouched when the key is
       absent (or explicitly 'fd'), and an unknown value raises.
 
-The ``hessian`` key is read with a ``dict.get`` default and has no schema
-entry yet (proposed rows are in WF_CONVERGER_NOTES.md), so tests inject it
+The ``hessian`` key is read with a ``dict.get`` default, so tests inject it
 into ``runner.mol.config`` after validation -- the same supported
 programmatic path the converger tests use.
 """
