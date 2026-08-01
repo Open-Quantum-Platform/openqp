@@ -44,7 +44,8 @@ contains
     use int2_compute, only: int2_compute_t
     use cc_ao2mo, only: cc_eri_collect_t, cc_build_mo_blocks, cc_packed_length, &
                         cc_build_full_mo
-    use cc_uhf_lib, only: cc_uhf_spinorb_build, cc_uhf_spinorb_gb, cc_uhf_ccsd_t
+    use cc_uhf_lib, only: cc_uhf_spinorb_build, cc_uhf_spinorb_gb, cc_uhf_peak_gb, &
+                        cc_uhf_ccsd_t
     use mp2_lib, only: semicanonicalize
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
     use parallel, only: par_env_t
@@ -106,12 +107,15 @@ contains
     end if
 
     ! ---- memory guard ------------------------------------------------------
-    ! The dominant allocations are the packed AO integrals (nbf^4/8), the
+    ! Common to both paths: the packed AO integrals (nbf^4/8) and the
     ! half-transformed intermediate that lives alongside them (nbf^4/4 at
-    ! nmo ~ nbf) and the ladder integrals (nv^4).
-    mem_gb = ( real(cc_packed_length(nbf),dp) &
-               + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2 &
-               + real(nv,dp)**4 ) * 8.0_dp / 1.073741824e9_dp
+    ! nmo ~ nbf).  The closed-shell path then adds the ladder integrals
+    ! (nv^4); the open-shell one has its own, larger accounting below, so
+    ! charging it nv^4 here would be charging it for arrays it never makes.
+    mem_gb = real(cc_packed_length(nbf),dp) &
+             + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+    if (.not. open_shell) mem_gb = mem_gb + real(nv,dp)**4
+    mem_gb = mem_gb * 8.0_dp / 1.073741824e9_dp
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
         ', correlated occ = ', no, ', virt = ', nv
     if (nfzc > 0) write(iw,'(2X,A,I0)') 'CCSD(T): frozen core orbitals = ', nfzc
@@ -157,11 +161,6 @@ contains
     call eri_data%clean()
     call int2_driver%clean()
 
-    ! ---- transform and slice ----------------------------------------------
-    allocate(oooo(no,no,no,no), ooov(no,no,no,nv), oovv(no,no,nv,nv), &
-             ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv), stat=ok)
-    if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
-
     ! ---- coupled cluster ---------------------------------------------------
     do_t = infos%control%cc_triples /= 0
     opts%maxit      = int(infos%control%cc_maxit)
@@ -177,23 +176,37 @@ contains
 
     ! Report the decomposition actually in force.  A silent fallback to one
     ! rank looks exactly like a slow run, so make the parallel width visible.
+    ! Only the closed-shell solver is distributed; the spin-orbital one is
+    ! threaded but not, so claiming its rank count would be claiming a
+    ! speed-up that is not there -- every rank would repeat the same work.
     nthr = 1
     !$ nthr = omp_get_max_threads()
-    write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
-                               ', OpenMP threads = ', nthr
 
     if (open_shell) then
+      write(iw,'(2X,A,I0)') 'CCSD(T): OpenMP threads = ', nthr
+      if (pe%size > 1) then
+        write(iw,'(2X,A,I0,A)') 'CCSD(T): WARNING: the open-shell solver is not ' // &
+            'MPI-parallel; all ', int(pe%size), ' ranks repeat the same work.'
+        write(iw,'(2X,A)') 'CCSD(T): run it on one rank with more threads instead.'
+      end if
       call run_open_shell()
     else
-    call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
-                            oooo, ooov, oovv, ovov, ovvv, vvvv)
-    deallocate(gao)
+      write(iw,'(2X,A,I0,A,I0)') 'CCSD(T): MPI ranks = ', int(pe%size), &
+                                 ', OpenMP threads = ', nthr
 
-    call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                          pe, opts, e_ccsd, e_t, converged, &
-                          time_ccsd=t_ccsd, time_triples=t_trip)
+      allocate(oooo(no,no,no,no), ooov(no,no,no,nv), oovv(no,no,nv,nv), &
+               ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv), stat=ok)
+      if (ok /= 0) call show_message('CCSD(T): cannot allocate MO integral blocks', with_abort)
 
-    deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv)
+      call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
+                              oooo, ooov, oovv, ovov, ovvv, vvvv)
+      deallocate(gao)
+
+      call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
+                            pe, opts, e_ccsd, e_t, converged, &
+                            time_ccsd=t_ccsd, time_triples=t_trip)
+
+      deallocate(oooo, ooov, oovv, ovov, ovvv, vvvv)
     end if
     deallocate(cmo, eo, ev)
 
@@ -247,28 +260,33 @@ contains
       real(kind=dp), allocatable :: fso(:,:), fov(:,:), fao(:,:), fmo_a(:,:), fmo_b(:,:), scr(:,:)
       integer, allocatable :: ord(:)
       integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
-      real(kind=dp) :: so_gb, tw0, tw1
+      real(kind=dp) :: so_gb, peak_gb
 
       noa = int(infos%mol_prop%nelec_a) - nfzc
       nob = int(infos%mol_prop%nelec_b) - nfzc
       nocc_so = noa + nob
       nso = 2*nmo
-      so_gb = cc_uhf_spinorb_gb(nmo)
 
       write(iw,'(2X,A,I0,A,I0,A,I0)') 'CCSD(T): open shell, alpha occ = ', noa, &
           ', beta occ = ', nob, ', spin orbitals = ', nso
-      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital storage ~', so_gb, ' GB'
 
       if (nob < 0 .or. nocc_so <= 0 .or. nso-nocc_so <= 0) then
         close(iw)
         call show_message('CCSD(T): no correlated occupied or virtual spin orbitals', &
                           with_abort)
       end if
-      ! The open-shell path stores the full spin-orbital tensor, sixteen times
-      ! the spatial one.  Refuse early rather than die in the allocator.
-      if (so_gb > 32.0_dp) then
+
+      ! Peak over the whole path, not just the spin-orbital tensor: the solver
+      ! intermediates and the DIIS history are the same order of magnitude, and
+      ! a guard that ignores them waves jobs through that then die allocating.
+      so_gb = cc_uhf_spinorb_gb(nmo)
+      peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis))
+      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
+      write(iw,'(2X,A,F8.2,A)') 'CCSD(T): open-shell peak      ~', peak_gb, ' GB'
+
+      if (peak_gb > 32.0_dp) then
         close(iw)
-        call show_message('CCSD(T): open-shell integral storage exceeds 32 GB; &
+        call show_message('CCSD(T): open-shell peak memory exceeds 32 GB; &
             &freeze more core orbitals or use a smaller basis', with_abort)
       end if
 
@@ -302,11 +320,9 @@ contains
       call cc_build_full_mo(nbf, nmo, ca_sc(:,nfzc+1:nbf), cb_sc(:,nfzc+1:nbf), gao, eri_ab)
       deallocate(gao)
 
-      allocate(gso(nso,nso,nso,nso), eso(nso), etmp(nso), ord(nso), stat=ok2)
-      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital tensor alloc failed', &
+      allocate(eso(nso), etmp(nso), ord(nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital energy alloc failed', &
                                       with_abort)
-      call cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, gso)
-      deallocate(eri_aa, eri_bb, eri_ab)
 
       ! Interleaved spin-orbital energies, then permuted so the occupied ones
       ! come first in ascending energy -- the ordering the solver assumes.
@@ -328,7 +344,16 @@ contains
         etmp(p) = eso(ord(p))
       end do
       eso = etmp
-      gso = gso(ord,ord,ord,ord)
+
+      ! Build the tensor already in the sorted order.  Doing it the other way
+      ! round -- build interleaved, then `gso = gso(ord,ord,ord,ord)` -- makes
+      ! a full second copy of the biggest array in the run, so the true peak
+      ! was twice what the guard above reported.
+      allocate(gso(nso,nso,nso,nso), stat=ok2)
+      if (ok2 /= 0) call show_message('CCSD(T): spin-orbital tensor alloc failed', &
+                                      with_abort)
+      call cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, gso, ord=ord)
+      deallocate(eri_aa, eri_bb, eri_ab)
 
       ! Occupied-virtual Fock block in the same spin-orbital basis.  It is zero
       ! for UHF but not for ROHF: semicanonicalisation only diagonalises the
@@ -359,13 +384,10 @@ contains
       fov = fso(1:nocc_so, nocc_so+1:nso)
       deallocate(fao, fmo_a, fmo_b, scr, fso)
 
-      call system_clock_seconds(tw0)
       call cc_uhf_ccsd_t(nso, nocc_so, eso, gso, int(infos%control%cc_maxit), &
                          infos%control%cc_conv, do_t, e_ccsd, e_t, converged, niter, &
-                         fov=fov)
-      call system_clock_seconds(tw1)
-      t_ccsd = tw1 - tw0
-      t_trip = 0.0_dp
+                         fov=fov, time_ccsd=t_ccsd, time_triples=t_trip, &
+                         ndiis_in=int(infos%control%cc_ndiis))
 
       write(iw,'(2X,A,I0)') 'CCSD(T): open-shell iterations = ', niter
 
@@ -373,12 +395,6 @@ contains
 
     end subroutine run_open_shell
 
-    subroutine system_clock_seconds(t)
-      real(kind=dp), intent(out) :: t
-      integer(8) :: c, r
-      call system_clock(c, r)
-      t = real(c, kind=dp)/real(r, kind=dp)
-    end subroutine system_clock_seconds
 
   end subroutine ccsd_t_energy
 

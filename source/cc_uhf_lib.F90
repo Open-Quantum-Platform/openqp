@@ -41,6 +41,7 @@ module cc_uhf_lib
   private
   public :: cc_uhf_spinorb_build
   public :: cc_uhf_spinorb_gb
+  public :: cc_uhf_peak_gb
   public :: cc_uhf_mp2
   public :: cc_uhf_ccsd_t
 
@@ -57,6 +58,42 @@ end function cc_uhf_spinorb_gb
 
 !###############################################################################
 
+!> Peak gigabytes for the whole open-shell path, not just its largest array.
+!>
+!> Two stages compete for the peak and the larger one wins:
+!>
+!>   * assembly -- the three spatial spin-block tensors (3 nmo^4) are still
+!>     alive while the spin-orbital tensor (nso^4) is being filled;
+!>   * solution -- the spin-orbital tensor stays, and the solver adds the
+!>     ladder intermediate Wabef (nv^4), Wmbej (no^2 nv^2), Wmnij (no^4),
+!>     gmnef and the six amplitude arrays (~7 no^2 nv^2), and a DIIS history
+!>     of 2*ndiis vectors of no*nv + no^2 nv^2 each.
+!>
+!> Reporting only nso^4 understated the real requirement by roughly a factor
+!> of three, which is worse than useless in a guard: it waves through jobs
+!> that then die in the allocator.
+pure function cc_uhf_peak_gb(nmo, nocc, ndiis) result(gb)
+  integer, intent(in) :: nmo    !< correlated spatial MOs
+  integer, intent(in) :: nocc   !< occupied spin orbitals
+  integer, intent(in) :: ndiis  !< DIIS subspace size (0 = no DIIS)
+  real(dp) :: gb
+  real(dp) :: nso, no, nv, assembly, solve, amp
+
+  nso = 2.0_dp*real(nmo,dp)
+  no  = real(nocc,dp)
+  nv  = nso - no
+
+  assembly = 3.0_dp*real(nmo,dp)**4 + nso**4
+
+  amp   = no*nv + no**2*nv**2
+  solve = nso**4 + nv**4 + no**4 + 2.0_dp*no**2*nv**2 &
+        + 7.0_dp*no**2*nv**2 + 2.0_dp*real(max(ndiis,0),dp)*amp
+
+  gb = max(assembly, solve) * 8.0_dp / 1.073741824e9_dp
+end function cc_uhf_peak_gb
+
+!###############################################################################
+
 !> Build antisymmetrised spin-orbital integrals in physicist notation,
 !>   g(p,q,r,s) = <pq||rs> = (pr|qs) - (ps|qr),
 !> from spatial MO integrals supplied in chemist notation for the three spin
@@ -65,17 +102,36 @@ end function cc_uhf_spinorb_gb
 !>
 !> The Coulomb operator is spin free, so (pr|qs) survives only when p,r share a
 !> spin and q,s share a spin; that is the whole content of the spin tests below.
-subroutine cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, g)
+!>
+!> @param[in] ord  optional permutation, ord(i) = the interleaved spin orbital
+!>                 that lands at position i.  The tensor is written directly in
+!>                 that order.  Building it permuted costs nothing here, while
+!>                 permuting afterwards would mean `g = g(ord,ord,ord,ord)` --
+!>                 a whole second copy of the largest array in the run, which
+!>                 doubles the peak of the open-shell path.
+subroutine cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, g, ord)
 
   integer, intent(in) :: nmo
   real(dp), intent(in) :: eri_aa(nmo,nmo,nmo,nmo)
   real(dp), intent(in) :: eri_bb(nmo,nmo,nmo,nmo)
   real(dp), intent(in) :: eri_ab(nmo,nmo,nmo,nmo)
   real(dp), intent(out) :: g(2*nmo,2*nmo,2*nmo,2*nmo)
+  integer, intent(in), optional :: ord(2*nmo)
 
   integer :: p, q, r, s, ps, qs, rs_, ss
   integer :: pp, qq, rr, ssp
+  integer :: omap(2*nmo)
   real(dp) :: coul, exch
+
+  ! Resolve the permutation once so the hot loop indexes an array rather than
+  ! branching on present() every element.
+  if (present(ord)) then
+    omap = ord
+  else
+    do p = 1, 2*nmo
+      omap(p) = p
+    end do
+  end if
 
   !$omp parallel do collapse(4) default(shared) &
   !$omp   private(p,q,r,s,ps,qs,rs_,ss,pp,qq,rr,ssp,coul,exch) schedule(static) &
@@ -84,11 +140,12 @@ subroutine cc_uhf_spinorb_build(nmo, eri_aa, eri_bb, eri_ab, g)
     do r = 1, 2*nmo
       do q = 1, 2*nmo
         do p = 1, 2*nmo
-          ! spatial index and spin (1 = alpha, 2 = beta) of each spin orbital
-          pp = (p+1)/2; ps  = 2 - mod(p,2)
-          qq = (q+1)/2; qs  = 2 - mod(q,2)
-          rr = (r+1)/2; rs_ = 2 - mod(r,2)
-          ssp= (s+1)/2; ss  = 2 - mod(s,2)
+          ! spatial index and spin (1 = alpha, 2 = beta) of each spin orbital,
+          ! taken from the orbital that belongs at this position
+          pp = (omap(p)+1)/2; ps  = 2 - mod(omap(p),2)
+          qq = (omap(q)+1)/2; qs  = 2 - mod(omap(q),2)
+          rr = (omap(r)+1)/2; rs_ = 2 - mod(omap(r),2)
+          ssp= (omap(s)+1)/2; ss  = 2 - mod(omap(s),2)
 
           coul = 0.0_dp
           if (ps == rs_ .and. qs == ss) coul = chem(pp, rr, qq, ssp, ps, qs)
@@ -176,7 +233,8 @@ end function cc_uhf_mp2
 !> against the closed-shell code's DGEMMs, and the spin-orbital tensors are
 !> sixteen times the spatial ones.  Use it for small open-shell systems.
 subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
-                         e_ccsd, e_t, converged, niter, fov)
+                         e_ccsd, e_t, converged, niter, fov, &
+                         time_ccsd, time_triples, ndiis_in)
 
   integer,  intent(in)  :: nso            !< total spin orbitals
   integer,  intent(in)  :: nocc           !< occupied spin orbitals
@@ -192,6 +250,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   !> canonical UHF reference; for ROHF it survives semicanonicalisation and
   !> dropping it costs ~5e-3 Hartree.  Absent means zero.
   real(dp), optional, intent(in) :: fov(nocc, nso-nocc)
+  !> Wall-clock seconds in the CCSD iterations and in the (T) correction,
+  !> reported separately -- (T) is the more expensive half on anything but the
+  !> smallest cases, and folding it into the iteration time hides that.
+  real(dp), optional, intent(out) :: time_ccsd, time_triples
+  !> DIIS subspace size; 0 disables DIIS.  Absent keeps the default of 8.
+  integer, optional, intent(in) :: ndiis_in
 
   real(dp), allocatable :: t1(:,:), t2(:,:,:,:), t1n(:,:), t2n(:,:,:,:)
   real(dp), allocatable :: tau(:,:,:,:), taut(:,:,:,:)
@@ -205,6 +269,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   integer :: no2, nv2, namp, ndiis, ndim, nvec, pos, ii, jj, info
   integer  :: no, nv, i, j, k, a, b, c, m, n, e, f_, it
   real(dp) :: s_, d, eold, rms, dia, dijab
+  real(dp) :: tw0, tw1
 
   no = nocc
   nv = nso - nocc
@@ -221,7 +286,11 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   nblas_save = blas_thread_count()
   if (nblas_save > 0) call blas_thread_set(1_c_int64_t)
   e_ccsd = 0.0_dp; e_t = 0.0_dp; converged = .false.; niter = 0
+  if (present(time_ccsd)) time_ccsd = 0.0_dp
+  if (present(time_triples)) time_triples = 0.0_dp
   if (no <= 0 .or. nv <= 0) return
+
+  call cc_uhf_wall_time(tw0)
 
   allocate(t1(no,nv), t2(no,no,nv,nv), t1n(no,nv), t2n(no,no,nv,nv))
   allocate(tau(no,no,nv,nv), taut(no,no,nv,nv))
@@ -248,10 +317,12 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
 
   ! DIIS.  Without it these equations take 40-50 iterations; the closed-shell
   ! solver reaches the same tolerance in 15-20 with it.  Eight vectors is the
-  ! same subspace size cc_lib uses.
+  ! same subspace size cc_lib defaults to, and [cc] ndiis selects it here too
+  ! -- the keyword used to apply to the closed-shell path only.
   namp = no*nv + no*no*nv*nv
   ndiis = 8
-  allocate(dv(namp,ndiis), de(namp,ndiis))
+  if (present(ndiis_in)) ndiis = max(0, ndiis_in)
+  if (ndiis > 0) allocate(dv(namp,ndiis), de(namp,ndiis))
   nvec = 0
 
   eold = 0.0_dp
@@ -509,8 +580,16 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     eold = e_ccsd
   end do
 
+  call cc_uhf_wall_time(tw1)
+  if (present(time_ccsd)) time_ccsd = tw1 - tw0
+
   ! --- (T) -----------------------------------------------------------------
-  if (do_triples) call triples(e_t)
+  if (do_triples) then
+    call cc_uhf_wall_time(tw0)
+    call triples(e_t)
+    call cc_uhf_wall_time(tw1)
+    if (present(time_triples)) time_triples = tw1 - tw0
+  end if
 
   deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef, f_ov)
   if (allocated(dv)) deallocate(dv, de)
@@ -606,5 +685,15 @@ contains
   end function p1
 
 end subroutine cc_uhf_ccsd_t
+
+!###############################################################################
+
+!> Wall-clock seconds from the system clock.
+subroutine cc_uhf_wall_time(t)
+  real(dp), intent(out) :: t
+  integer(8) :: c, r
+  call system_clock(c, r)
+  t = real(c, kind=dp)/real(r, kind=dp)
+end subroutine cc_uhf_wall_time
 
 end module cc_uhf_lib
