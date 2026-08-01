@@ -2088,3 +2088,49 @@ contains
 !###############################################################################
 
 end module tdhf_mrsf_gradient_mod
+
+!###############################################################################
+!> ROUTE A (tools/nac_lagrangian/ROUTE_A_SPEC.md): the interstate W engine.
+!>
+!> GOAL: W^IJ for the (ytil, X_J) amplitude pair WITHOUT the eigenpair
+!>   shortcuts of mrsfrowcal (which assumes AX = omega X and <X|X> = 1).
+!>   Each term below must be REDERIVED for the bilinear before being
+!>   enabled; the per-coordinate referees are frozen in
+!>   H2O_energy_tlf0_v7o.npz / ETH_energy_v7o.npz (Delta channel).
+!>
+!> TERM CHECKLIST (from mrsfrowcal, to rederive one by one):
+!>   [ ] W_ix Fock rows      (fa*scr couplings; z-dependent -- OK as-is,
+!>                            z is pair-correct via the injected RHS)
+!>   [ ] eps-weighted z rows (mo_energy*scr; representation-dependent)
+!>   [ ] xhxa/xhxb 2e rows   (hxa from amb-ints x amplitudes: POLARIZE
+!>                            at the density level for (ytil, X))
+!>   [ ] hppija/hppijb rows  (ab1 x amplitude densities: same)
+!>   [ ] 2FT terms           (sfrorhs adds them to the RHS; the matvec
+!>                            does NOT have them: NAC_ZERO_2FT probes)
+!>   [ ] diagonal 1/2 + global -1 conventions
+!>
+!> STATUS: SCAFFOLD ONLY -- returns with an abort message so it cannot be
+!>   used silently before the derivation lands.
+  subroutine mrsf_nac_wpair_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_wpair")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    type(oqp_handle_t) :: c_handle
+    integer(c_int32_t), intent(in), value :: istate, jstate
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_wpair(inf, int(istate), int(jstate))
+  end subroutine mrsf_nac_wpair_C
+
+  subroutine mrsf_nac_wpair(infos, istate, jstate)
+    use types, only: information
+    use messages, only: show_message, with_abort
+    implicit none
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+    if (istate == jstate) return
+    call show_message('mrsf_nac_wpair: ROUTE-A interstate W engine is a &
+        &SCAFFOLD; derive the term checklist (ROUTE_A_SPEC.md) before use', &
+        with_abort)
+  end subroutine mrsf_nac_wpair
