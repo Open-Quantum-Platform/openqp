@@ -1248,3 +1248,24 @@ route (A) of 7.39: the derivative-sigma amp channel built as a WHOLE
 relaxation), gated per coordinate against the certified w_ref referee.
 All datasets for that work are frozen: H2O_energy_tlf0_{v7h,v7i,v7o}.npz
 and ETH_energy_{v7o,ctx,dnum}.npz (local + chc3).
+
+### 7.42 v8 w-VECTOR FINGERPRINT: the Delta channel is the SOCC/FOLD
+sector's orbital response (route-A target LOCALIZED)
+v8_wprobe (H2O, c0=5, J=3): [w_ref - w_skel] vs [staged(Ux) + G-vector]
+per raw amplitude slot: |lhs|=0.651, |rhs|=0.663, |diff|=0.089 (~14%).
+The residual is STRUCTURED, not noise:
+  - worst slot = LR1 (the +-RS spin-folded SOCC-pair slot): staged
+    OVERSHOOTS 10x (lhs +0.006 vs rhs +0.067);
+  - systematic socc2-row (i=6) misses across many virtuals
+    (a=7,8,9,12,13,15,17);
+  - doc rows only on the LUMO column (i=3,4 @ a=7).
+=> the missing channel is the C-response of the MRSF SPIN-PAIRING /
+FOLD machinery itself (the U-matrix pairing + spc scalings + the +-RS
+fold conventions; JCP 158,194105 structures) -- a structured response
+that naive single-element C-staging mis-weights on the socc/lr slots.
+ROUTE-A first derivation item is therefore: the fold/pairing-sector
+orbital derivative (kernel socc rows + lr slot), to be implemented in
+mrsf_nac_wpair and gated per slot against this probe (v8_wprobe.py,
+extendable to any coordinate/pair). Bonus: the G-channel VECTOR
+(FOCK-record perturbation + matvec) measured here validates the
+Mt_G closed form at the vector level.
