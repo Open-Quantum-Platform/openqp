@@ -31,43 +31,62 @@ strong contraction makes the *external* (core/virtual) space cheap.
 from __future__ import annotations
 
 import numpy as np
+from scipy import sparse
 
 from oqp.library.fci import _determinants
+from oqp.library.rdm import _bit_count
 
 NUMERICAL_ZERO = 1.0e-14
 
 
 # --------------------------------------------------------------------------- RDMs
-def _apply_Epq(p, q, ci, det_list, det_index, norb):
-    """Spin-free single excitation E_pq = sum_sigma a_{p,sigma}^ a_{q,sigma}
-    applied to a determinant-basis coefficient vector ``ci``.
+def _Epq_matrix(p, q, det_list, det_index, norb):
+    """Build E_pq = sum_sigma a_{p,sigma}^+ a_{q,sigma} as a sparse matrix.
+
+    E_pq is a fixed linear operator on the determinant basis, so its nonzero
+    structure depends only on ``(p, q, det_list, norb)`` -- never on the vector
+    it is applied to.  Building it once and reusing it turns the RDM assembly
+    from a Python walk over every determinant per application into a sparse
+    mat-vec; ``make_rdms`` applies these operators O(norb^6) times.
 
     Determinants are OpenQP-encoded: det = a | (b << norb) with occupied spatial
     orbitals as set bits (alpha in the low ``norb`` bits, beta in the high)."""
-    out = np.zeros_like(ci)
-    full_mask = None
+    rows = []
+    cols = []
+    data = []
     for k, det in enumerate(det_list):
-        c = ci[k]
-        if c == 0.0:
-            continue
         for shift in (0, norb):
             qbit = 1 << (q + shift)
             if not (det & qbit):
                 continue
-            mask_below_q = (1 << (q + shift)) - 1
-            sgn = -1.0 if (bin(det & mask_below_q).count("1") & 1) else 1.0
+            mask_below_q = qbit - 1
+            sgn = -1.0 if (_bit_count(det & mask_below_q) & 1) else 1.0
             det1 = det & ~qbit
             pbit = 1 << (p + shift)
             if det1 & pbit:
                 continue
-            mask_below_p = (1 << (p + shift)) - 1
-            if bin(det1 & mask_below_p).count("1") & 1:
+            mask_below_p = pbit - 1
+            if _bit_count(det1 & mask_below_p) & 1:
                 sgn = -sgn
-            det2 = det1 | pbit
-            idx = det_index.get(det2)
+            idx = det_index.get(det1 | pbit)
             if idx is not None:
-                out[idx] += sgn * c
-    return out
+                rows.append(idx)
+                cols.append(k)
+                data.append(sgn)
+
+    ndet = len(det_list)
+    if not data:
+        return sparse.csr_matrix((ndet, ndet))
+    return sparse.csr_matrix((data, (rows, cols)), shape=(ndet, ndet))
+
+
+def _build_Epq_operators(det_list, det_index, norb):
+    """All norb^2 single-excitation operators for one determinant basis."""
+    return {
+        (p, q): _Epq_matrix(p, q, det_list, det_index, norb)
+        for p in range(norb)
+        for q in range(norb)
+    }
 
 
 def make_rdms(ci, norb, active_nelec, upto=4):
@@ -80,10 +99,14 @@ def make_rdms(ci, norb, active_nelec, upto=4):
     det_index = {d: i for i, d in enumerate(det_list)}
     ci = np.asarray(ci, dtype=float).reshape(-1)
 
+    # Built once for this determinant basis and reused for every application
+    # below; the dm4 loop alone applies them norb^6 times.
+    Eop = _build_Epq_operators(det_list, det_index, norb)
+
     E1 = {}
     for p in range(norb):
         for q in range(norb):
-            E1[(p, q)] = _apply_Epq(p, q, ci, det_list, det_index, norb)
+            E1[(p, q)] = Eop[(p, q)] @ ci
 
     dm1 = np.zeros((norb,) * 2)
     for p in range(norb):
@@ -108,7 +131,7 @@ def make_rdms(ci, norb, active_nelec, upto=4):
             base = E1[(t, u)]
             for r in range(norb):
                 for s in range(norb):
-                    E2[(r, s, t, u)] = _apply_Epq(r, s, base, det_list, det_index, norb)
+                    E2[(r, s, t, u)] = Eop[(r, s)] @ base
     dm3 = np.zeros((norb,) * 6)
     for p in range(norb):
         for q in range(norb):
@@ -129,7 +152,7 @@ def make_rdms(ci, norb, active_nelec, upto=4):
                     base2 = E2[(t, u, v, w)]
                     for r in range(norb):
                         for s in range(norb):
-                            e3 = _apply_Epq(r, s, base2, det_list, det_index, norb)
+                            e3 = Eop[(r, s)] @ base2
                             for p in range(norb):
                                 for q in range(norb):
                                     dm4[p, q, r, s, t, u, v, w] = E1[(q, p)] @ e3

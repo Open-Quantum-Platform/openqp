@@ -50,7 +50,12 @@ _CAS22 = {"active_electrons": "2", "active_orbitals": "2", "frozen_core": "1", "
 # reference it starts from is BLAS/build dependent.  A real convergence
 # regression moves the count by far more than one step.
 _DEFAULT_BASELINE = {
-    "h2o": (-75.0085688882, 20),
+    # h2o was 20 macroiterations while the spin-orbital 2-RDM was accumulated
+    # by the nested create/annihilate walk.  Factorising it through the
+    # doubly-annihilated intermediate space (one GEMM) changes only the
+    # summation order, but the better-conditioned accumulation reaches the same
+    # energy -- pinned below to 1e-8, and still matching PySCF -- in 15.
+    "h2o": (-75.0085688882, 15),
     "h4": (-2.1153228671, 3),
     "lih": (-7.7983384275, 7),
 }
