@@ -1450,3 +1450,25 @@ must be propagated to every sweep-based referee (A8-lineage, v3-v15)
 and noted as a LANDMINE: "OQP::overlap_mo_non_orthogonal" from a
 second same-geometry call is NOT C0^T S_cross C0 on the diagonal --
 always rebuild Sk from OQP::overlap_ao_non_orthogonal directly.
+
+### 7.51 v18: J1 unchanged -- and rightly so; the deficit is CORNERED
+INTO THE F-CHANNEL
+v18 (full gate + the 7.49 fix): J1/J3/J2 identical to v7j to all
+digits. This is CONSISTENT, not a failure: Mt's diagonal is exactly
+zero, so the diagonal Sk correction cannot enter Mt:Ux. The v13-v17
+discovery was a VECTOR-norm sub-mystery (a real landmine + real fix,
+but ytil-projection-blind).
+THE DECISIVE CONSEQUENCE of v17 stands: with the fixed u, the pure
+C-channel VECTOR identity [A(C')-A(C0)]|sameF == staged(u) closed to
+4e-4 (O(h) truncation). Therefore the remaining J1 deficit
+(1.94e-2 / 8.7e-3 / 2.06e-1) can only live in the F-CHANNEL:
+   [A(C0, F_d[D']) - A(C0, F_d[D_ref])] X    (true)
+   vs  MTG:Ux == gvec(dD_model(Ux))          (model)
+i.e., THE DENSITY-RESPONSE MODEL dD = C(U D0 + D0 U^T)C^T vs the true
+Delta-D. Everything else in the chain is now closed at the vector
+level. MEASUREMENT (next session #1): the worker-style 1-iter skel in
+SEPARATE PROCESSES (the in-process emulation is broken, 7.44) gives
+w_skel(F[D_ref]); [w_ref - w_skel - stagedC] = the true F-channel;
+diff against gvec(dD(Ux)) names the dD-model error (candidates: the
+ROHF occupation model, the XC response in gbuild vs the sigma's Fock
+usage, spin-resolution of dD).
