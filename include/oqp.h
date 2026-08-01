@@ -311,6 +311,9 @@ void casscf_gfock_grad(int32_t nbf, int32_t ncore, int32_t nact, int32_t nroot,
 void casscf_hess_amp(int32_t nact, int64_t ndet, int32_t npar,
     const double *stack, const double *fder, const double *gder,
     const double *wmat, const double *vecs, double *amp);
+/* W_tua = (E_tu|c>)_a for one CI vector (casscf_hess_kernel.F90). */
+void casscf_hess_wmat(int32_t nact, int64_t ndet, const double *stack,
+    const double *civec, double *wmat);
 /* Fixed-CI half of the analytic CASSCF orbital Hessian (casscf_hess_bmat.F90):
  * the B columns and the folded active derivative integrals, assembled from the
  * sparse one-index derivative slabs so no nbf^4 temporary is formed. */

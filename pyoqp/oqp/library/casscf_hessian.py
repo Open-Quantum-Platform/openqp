@@ -410,6 +410,31 @@ def _hess_amp_backend():
     return lib, ffi
 
 
+def _lib_hess_wmat(stack, civec):
+    """``W_tua = (E_tu|c>)_a`` through the Fortran engine, or None.
+
+    Replaces ``np.tensordot(stack, c, axes=([3], [0]))``; the C-order stack is
+    already the right matrix for a single DGEMV, so this is one call with no
+    repacking."""
+    backend = _hess_amp_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_hess_wmat"):
+        return None
+    nact = int(stack.shape[0])
+    ndet = int(stack.shape[2])
+    st = np.ascontiguousarray(stack, dtype=np.float64)
+    cv = np.ascontiguousarray(civec, dtype=np.float64)
+    wmat = np.zeros((nact, nact, ndet), dtype=np.float64)
+    lib.casscf_hess_wmat(
+        nact, ndet,
+        ffi.cast("double *", st.ctypes.data),
+        ffi.cast("double *", cv.ctypes.data),
+        ffi.cast("double *", wmat.ctypes.data))
+    return wmat
+
+
 def _lib_hess_amp(stack, f_der, g_der, wmat, vecs):
     """Projected derivative-operator amplitudes through the Fortran engine.
 
@@ -527,7 +552,9 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
             raise ValueError("CI vector for an averaged root has zero norm")
         c /= nrm
         e_i = float(c @ (hact @ c))
-        wmat = np.tensordot(stack, c, axes=([3], [0]))  # (nact, nact, ndet)
+        wmat = _lib_hess_wmat(stack, c)
+        if wmat is None:
+            wmat = np.tensordot(stack, c, axes=([3], [0]))  # (nact, nact, ndet)
         amp = _lib_hess_amp(stack, f_der, g_der, wmat, vecs)
         if amp is None:
             amp = np.empty((npar, ndet))

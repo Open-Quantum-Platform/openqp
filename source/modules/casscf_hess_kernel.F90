@@ -50,9 +50,40 @@ module casscf_hess_kernel_mod
   !> Budget for the per-chunk x buffer, in doubles (128 MiB).
   integer(i8), parameter :: x_budget = 16777216_i8
 
-  public :: casscf_hess_amp
+  public :: casscf_hess_amp, casscf_hess_wmat
 
 contains
+
+  !> W_tua = (E_tu |c>)_a, the excitation operators applied to one CI vector.
+  !>
+  !> Every CI-relaxation amplitude is contracted against this, so it is built
+  !> once per averaged root.  The C-order stack [nact,nact,ndet,ndet] viewed
+  !> column-major is the matrix (b, (t,u,a)) with leading dimension ndet, so
+  !> the whole thing is a single DGEMV against the CI vector -- no per-block
+  !> loop and no repacking.
+  !>
+  !> @param[in]  nact   active orbitals
+  !> @param[in]  ndet   determinants
+  !> @param[in]  stack  excitation matrices, C-order [nact,nact,ndet,ndet]
+  !> @param[in]  civec  CI vector, [ndet]
+  !> @param[out] wmat   C-order [nact,nact,ndet]
+  subroutine casscf_hess_wmat(nact, ndet, stack, civec, wmat) &
+      bind(C, name="casscf_hess_wmat")
+    integer(c_int32_t), value :: nact
+    integer(i8), value :: ndet
+    ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
+    real(dp), intent(in) :: stack(0:*), civec(0:*)
+    real(dp), intent(inout) :: wmat(0:*)
+
+    integer :: na, nd, ncols
+
+    na = int(nact)
+    nd = int(ndet)
+    if (na <= 0 .or. nd <= 0) return
+    ncols = na * na * nd
+
+    call dgemv('T', nd, ncols, 1.0_dp, stack, nd, civec, 1, 0.0_dp, wmat, 1)
+  end subroutine casscf_hess_wmat
 
   !> Projected derivative-operator amplitudes for the CI-relaxation Hessian.
   !>
