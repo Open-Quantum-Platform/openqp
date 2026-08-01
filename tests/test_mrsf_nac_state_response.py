@@ -38,16 +38,19 @@ class MRSFNACStateResponseTests(unittest.TestCase):
             ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
         ).read_text()
         self.assertIn(
-            "gap = energies_saved(jstate)-energies_saved(istate)", driver
+            "gap = energies_saved(pair_j(batch_pair))", driver
         )
+        self.assertIn("energies_saved(pair_i(batch_pair))", driver)
         self.assertIn("energies_saved = energies", driver)
         self.assertIn(
             "gap_floor = 128.0_dp*epsilon(1.0_dp)*energy_scale", driver
         )
         self.assertIn(".not. ieee_is_finite(gap)", driver)
         self.assertIn("abs(gap) <= gap_floor", driver)
-        self.assertIn("ytil = bvec_saved(:,istate)/gap", driver)
-        self.assertIn("ytil(redundant_index) = 0.0_dp", driver)
+        self.assertIn("bvec_saved(:,pair_i(batch_pair))/gap", driver)
+        self.assertIn(
+            "wpair_ytil(redundant_index,wpair_index) = 0.0_dp", driver
+        )
         production = (
             ROOT / "pyoqp" / "oqp" / "library" / "nac_analytic.py"
         ).read_text()

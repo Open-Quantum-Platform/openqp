@@ -56,7 +56,8 @@ def test_amp_and_esum_own_inputs_that_survive_record_mutation():
 def test_driver_owns_energy_record_and_guards_integer_products_before_cast():
     body = _body(DRIVER.read_text(), "mrsf_nac_lagrangian(infos)")
     assert "energies_saved = energies" in body
-    assert "gap = energies_saved(jstate)-energies_saved(istate)" in body
+    assert "gap = energies_saved(pair_j(batch_pair))" in body
+    assert "energies_saved(pair_i(batch_pair))" in body
     cast = body.index("nstate = int(nstate64)")
     for guard in (
         "default_int_limit64/state_pair_size64",

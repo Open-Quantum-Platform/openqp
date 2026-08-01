@@ -50,7 +50,8 @@ def test_driver_uses_actual_resident_state_count_and_streamed_metric():
     assert "raw_sab(nvirb,nvirb,nstate)" in metric
     assert "raw_sia(noca,nvirb,nstate)" in metric
     assert "energies_saved = energies" in driver
-    assert "gap = energies_saved(jstate)-energies_saved(istate)" in driver
+    assert "gap = energies_saved(pair_j(batch_pair))" in driver
+    assert "energies_saved(pair_i(batch_pair))" in driver
     assert "default_int_limit64/state_pair_size64" in driver
 
 
@@ -60,7 +61,8 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
         "subroutine mrsf_nac_lagrangian(infos)", 1
     )[1].split("end subroutine mrsf_nac_lagrangian", 1)[0]
     ordered_source_sequence = (
-        "call mrsf_nac_wpair_impl(infos, istate, jstate)",
+        "call mrsf_nac_wpair_batch_impl(",
+        "mt_frozen_tag = reshape(wpair_mt(:,:,wpair_index)",
         "call mrsf_nac_amp(infos, istate, jstate)",
         "call mrsf_nac_esum(infos, istate, jstate)",
         "call mrsf_nac_response(infos)",
@@ -74,7 +76,9 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     assert "rhs_batch(:,ipair) = rhs_batch(:,ipair) + rhs_in" in body
     assert "pair_sign*rhs_in" not in body
     assert "nonz_batch(coord,ipair) = nonz_batch(coord,ipair) +" in body
-    assert body.count("call mrsf_nac_wpair_impl(infos, istate, jstate)") == 1
+    assert body.count("call mrsf_nac_wpair_batch_impl(") == 1
+    assert "integer, parameter :: wpair_batch_width = 3" in body
+    assert "call mrsf_nac_wpair_impl(infos, istate, jstate)" not in body
     assert body.count("call mrsf_nac_amp(infos, istate, jstate)") == 1
     assert body.count("call mrsf_nac_esum(infos, istate, jstate)") == 1
     assert body.count("call mrsf_nac_response(infos)") == 1
@@ -83,7 +87,7 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
         "call mrsf_nac_rohf_pair_overlap(infos, metric_only=.true.)"
     ) == 1
     direct_guard = body.index("if (istate < jstate) then")
-    direct_call = body.index("call mrsf_nac_wpair_impl(infos, istate, jstate)")
+    direct_call = body.index("call mrsf_nac_wpair_batch_impl(")
     metric_publish = body.index("gamma_tag = gamma_pair", direct_call)
     assert direct_guard < direct_call < metric_publish
     assert body.count("call mrsf_nac_rohf_zvector_batch(") == 1

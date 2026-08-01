@@ -65,16 +65,21 @@ contains
     implicit none
 
     interface
-      subroutine mrsf_nac_wpair_impl(infos, istate, jstate)
+      subroutine mrsf_nac_wpair_batch_impl(infos, ytil_batch, &
+                                           xstate_batch, mt_batch)
         use types, only: information
+        use precision, only: dp
         type(information), target, intent(inout) :: infos
-        integer, intent(in) :: istate, jstate
-      end subroutine mrsf_nac_wpair_impl
+        real(kind=dp), contiguous, intent(in) :: ytil_batch(:,:), &
+                                                 xstate_batch(:,:)
+        real(kind=dp), contiguous, intent(out) :: mt_batch(:,:,:)
+      end subroutine mrsf_nac_wpair_batch_impl
     end interface
 
     character(len=*), parameter :: subroutine_name = &
       "mrsf_nac_lagrangian"
     integer, parameter :: z_batch_width = 3
+    integer, parameter :: wpair_batch_width = 3
     integer, parameter :: hf_batch_width = 3
     integer, parameter :: xc_batch_width = 3
     character(len=*), parameter :: tag_ytil = "OQP::nac_ytil"
@@ -84,6 +89,7 @@ contains
     character(len=*), parameter :: tag_amp = "OQP::nac_amp"
     character(len=*), parameter :: tag_esum = "OQP::nac_esum"
     character(len=*), parameter :: tag_overlap = "OQP::nac_pair_overlap"
+    character(len=*), parameter :: tag_mt_frozen = "OQP::nac_mt_frozen"
     character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
     character(len=*), parameter :: tag_hf = "OQP::nac_rohf_hf_adjoint"
     character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
@@ -95,11 +101,13 @@ contains
     real(kind=dp), contiguous, pointer :: rhs_in(:), amp(:,:,:), esum(:,:), &
       pair_overlap(:,:)
     real(kind=dp), pointer :: ytil_tag(:), xstate_tag(:), gamma_tag(:), &
-      z_tag(:), hf_tag(:,:), xc_tag(:,:)
+      mt_frozen_tag(:), z_tag(:), hf_tag(:,:), xc_tag(:,:)
     real(kind=dp), allocatable :: bvec_saved(:,:), energies_saved(:), ytil(:)
     real(kind=dp), allocatable :: gamma_column(:,:)
     real(kind=dp), allocatable :: gamma_pair(:), rhs_batch(:,:), &
       solution_batch(:,:), nonz_batch(:,:), hf_batch(:,:,:), xc_batch(:,:,:)
+    real(kind=dp), allocatable :: wpair_ytil(:,:), wpair_xstate(:,:), &
+      wpair_mt(:,:,:)
     integer, allocatable :: pair_i(:), pair_j(:)
     real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved, pair_sign
     real(kind=dp) :: profile_total, profile_metric, profile_wpair
@@ -112,6 +120,7 @@ contains
     integer :: nbf, noca, nocb, nij, nstate, natom, ncoord
     integer :: nvira, offset, ltot, npair, ipair, z_first, z_last, &
       hf_first, hf_last, xc_first, xc_last
+    integer :: wpair_first, wpair_last, wpair_count, wpair_index, batch_pair
     integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
@@ -253,6 +262,9 @@ contains
              rhs_batch(ltot,npair), solution_batch(ltot,npair), &
              nonz_batch(ncoord,npair), hf_batch(3,natom,npair), &
              xc_batch(3,natom,npair), &
+             wpair_ytil(nij,wpair_batch_width), &
+             wpair_xstate(nij,wpair_batch_width), &
+             wpair_mt(nbf,nbf,wpair_batch_width), &
              pair_i(npair), pair_j(npair))
     bvec_saved = bvec_mo
     ! TagArray reserve/remove operations below may invalidate every cached
@@ -264,6 +276,8 @@ contains
     nonz_batch = 0.0_dp
     hf_batch = 0.0_dp
     xc_batch = 0.0_dp
+    wpair_first = 1
+    wpair_last = 0
     ipair = 0
     do jstate = 2, nstate
       do istate = 1, jstate - 1
@@ -307,29 +321,58 @@ contains
         ! the energy gap, so its direct source is exactly the negative of this
         ! canonical I<J source.  Evaluate that expensive source only once.
         if (istate < jstate) then
-          gap = energies_saved(jstate)-energies_saved(istate)
-          energy_scale = max(1.0_dp, abs(energies_saved(istate)), &
-                             abs(energies_saved(jstate)))
-          gap_floor = 128.0_dp*epsilon(1.0_dp)*energy_scale
-          if (.not. ieee_is_finite(gap) .or. abs(gap) <= gap_floor) then
-            call show_message( &
-              'MRSF NAC state-response gap is zero or numerically unresolved.', &
-              WITH_ABORT)
+          if (ipair > wpair_last) then
+            wpair_first = ipair
+            wpair_last = min(npair, wpair_first + wpair_batch_width - 1)
+            wpair_count = wpair_last - wpair_first + 1
+            do wpair_index = 1, wpair_count
+              batch_pair = wpair_first + wpair_index - 1
+              gap = energies_saved(pair_j(batch_pair)) - &
+                    energies_saved(pair_i(batch_pair))
+              energy_scale = max(1.0_dp, &
+                abs(energies_saved(pair_i(batch_pair))), &
+                abs(energies_saved(pair_j(batch_pair))))
+              gap_floor = 128.0_dp*epsilon(1.0_dp)*energy_scale
+              if (.not. ieee_is_finite(gap) .or. &
+                  abs(gap) <= gap_floor) then
+                call show_message( &
+                  'MRSF NAC state-response gap is zero or numerically unresolved.', &
+                  WITH_ABORT)
+              end if
+              wpair_ytil(:,wpair_index) = &
+                bvec_saved(:,pair_i(batch_pair))/gap
+              wpair_ytil(redundant_index,wpair_index) = 0.0_dp
+              wpair_xstate(:,wpair_index) = &
+                bvec_saved(:,pair_j(batch_pair))
+              if (.not. all(ieee_is_finite( &
+                    wpair_ytil(:,wpair_index)))) then
+                call show_message('Non-finite MRSF ordered-pair response.', &
+                                  WITH_ABORT)
+              end if
+            end do
+            if (profile_enabled) call system_clock(profile_stop)
+            call mrsf_nac_wpair_batch_impl( &
+              infos, wpair_ytil(:,1:wpair_count), &
+              wpair_xstate(:,1:wpair_count), &
+              wpair_mt(:,:,1:wpair_count))
+            if (profile_enabled) call profile_add(profile_wpair, profile_stop)
           end if
-          ytil = bvec_saved(:,istate)/gap
-          ytil(redundant_index) = 0.0_dp
-          if (.not. all(ieee_is_finite(ytil))) then
-            call show_message('Non-finite MRSF ordered-pair response.', &
-                              WITH_ABORT)
-          end if
+          wpair_index = ipair - wpair_first + 1
+          ytil = wpair_ytil(:,wpair_index)
 
           call tagarray_get_data(infos%dat, tag_ytil, ytil_tag)
           call tagarray_get_data(infos%dat, tag_xstate, xstate_tag)
           ytil_tag = ytil
           xstate_tag = bvec_saved(:,jstate)
-          if (profile_enabled) call system_clock(profile_stop)
-          call mrsf_nac_wpair_impl(infos, istate, jstate)
-          if (profile_enabled) call profile_add(profile_wpair, profile_stop)
+          ! Publish only the current pair.  Downstream overlap assembly sees
+          ! the same record at the same point as in the scalar implementation.
+          call infos%dat%remove_records((/ character(len=80) :: &
+            tag_mt_frozen /))
+          call infos%dat%reserve_data(tag_mt_frozen, TA_TYPE_REAL64, &
+            nbf*nbf, (/ nbf*nbf /), &
+            comment='current batched MRSF frozen pair orbital source')
+          call tagarray_get_data(infos%dat, tag_mt_frozen, mt_frozen_tag)
+          mt_frozen_tag = reshape(wpair_mt(:,:,wpair_index), (/ nbf*nbf /))
 
           ! The pair amplitude engine reads the selected left response from its
           ! normal TD slot. Reacquire the TagArray pointer before injection and
@@ -485,6 +528,7 @@ contains
 
     deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair, &
                rhs_batch, solution_batch, nonz_batch, hf_batch, xc_batch, &
+               wpair_ytil, wpair_xstate, wpair_mt, &
                pair_i, pair_j)
   contains
     pure integer function unordered_pair_index(left_state, right_state) &

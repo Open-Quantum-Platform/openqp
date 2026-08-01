@@ -2022,6 +2022,67 @@ end module tdhf_mrsf_gradient_mod
     use types, only: information
     use precision, only: dp
     use messages, only: show_message, with_abort
+    implicit none
+    character(len=*), parameter :: module_name = "tdhf_mrsf_gradient_mod"
+    character(len=*), parameter :: subroutine_name = "mrsf_nac_wpair_impl"
+    character(len=*), parameter :: OQP_nac_ytil = "OQP::nac_ytil"
+    character(len=*), parameter :: OQP_nac_xstate = "OQP::nac_xstate"
+    character(len=*), parameter :: OQP_nac_mt = "OQP::nac_mt_frozen"
+    character(len=*), parameter :: tags_required(2) = (/ character(len=80) :: &
+      OQP_nac_ytil, OQP_nac_xstate /)
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+    real(kind=dp), contiguous, pointer :: ytil(:), xstate(:)
+    real(kind=dp), pointer :: mt_out(:)
+    real(kind=dp), allocatable :: ytil_batch(:,:), xstate_batch(:,:), &
+                                  mt_batch(:,:,:)
+    integer :: nbf, xdim
+    interface
+      subroutine mrsf_nac_wpair_batch_impl(infos, ytil_batch, &
+                                           xstate_batch, mt_batch)
+        use types, only: information
+        use precision, only: dp
+        type(information), target, intent(inout) :: infos
+        real(kind=dp), contiguous, intent(in) :: ytil_batch(:,:), &
+                                                 xstate_batch(:,:)
+        real(kind=dp), contiguous, intent(out) :: mt_batch(:,:,:)
+      end subroutine mrsf_nac_wpair_batch_impl
+    end interface
+
+    if (istate == jstate) return
+    nbf = infos%basis%nbf
+    xdim = infos%mol_prop%nelec_a*(nbf-infos%mol_prop%nelec_b)
+    call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, &
+                       with_abort)
+    call tagarray_get_data(infos%dat, OQP_nac_ytil, ytil)
+    call tagarray_get_data(infos%dat, OQP_nac_xstate, xstate)
+    if (size(ytil) /= xdim .or. size(xstate) /= xdim) &
+      call show_message('Invalid scalar MRSF NAC wpair vectors.', with_abort)
+    allocate(ytil_batch(xdim,1), xstate_batch(xdim,1), &
+             mt_batch(nbf,nbf,1))
+    ytil_batch(:,1) = ytil
+    xstate_batch(:,1) = xstate
+    call mrsf_nac_wpair_batch_impl(infos, ytil_batch, xstate_batch, mt_batch)
+
+    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mt /))
+    call infos%dat%reserve_data(OQP_nac_mt, ta_type_real64, nbf*nbf, &
+                                (/ nbf*nbf /))
+    call tagarray_get_data(infos%dat, OQP_nac_mt, mt_out)
+    mt_out = reshape(mt_batch(:,:,1), (/ nbf*nbf /))
+  end subroutine mrsf_nac_wpair_impl
+
+!###############################################################################
+
+!> Batch the frozen pair source for at most three canonical state pairs.  Each
+!> pair contributes its folded X and Y density, so one integral traversal
+!> evaluates 2*nrhs Fock-like sources.  mt_batch is kept outside TagArray;
+!> the resident driver publishes one slice at the original pair-consumption
+!> point, preserving the legacy record lifetime and metric-column streaming.
+  subroutine mrsf_nac_wpair_batch_impl(infos, ytil_batch, xstate_batch, mt_batch)
+    use oqp_tagarray_driver
+    use types, only: information
+    use precision, only: dp
+    use messages, only: show_message, with_abort
     use basis_tools, only: basis_set
     use int2_compute, only: int2_compute_t
     use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfxvec, mrsfsp
@@ -2031,22 +2092,19 @@ end module tdhf_mrsf_gradient_mod
     use, intrinsic :: iso_c_binding, only: c_f_pointer, c_int
     implicit none
     character(len=*), parameter :: module_name = "tdhf_mrsf_gradient_mod"
-    character(len=*), parameter :: subroutine_name = "mrsf_nac_wpair_impl"
-    character(len=*), parameter :: OQP_nac_ytil = "OQP::nac_ytil"
-    character(len=*), parameter :: OQP_nac_xstate = "OQP::nac_xstate"
-    character(len=*), parameter :: OQP_nac_mt = "OQP::nac_mt_frozen"
-    character(len=*), parameter :: tags_required(6) = (/ character(len=80) :: &
-      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B, &
-      OQP_nac_ytil, OQP_nac_xstate /)
+    character(len=*), parameter :: subroutine_name = &
+      "mrsf_nac_wpair_batch_impl"
+    integer, parameter :: max_batch_width = 3
+    character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B /)
     type(information), target, intent(inout) :: infos
-    integer, intent(in) :: istate, jstate
+    real(kind=dp), contiguous, intent(in) :: ytil_batch(:,:), xstate_batch(:,:)
+    real(kind=dp), contiguous, intent(out) :: mt_batch(:,:,:)
     type(basis_set), pointer :: basis
     type(int2_compute_t) :: int2_driver
     type(int2_mrsf_data_t), target :: int2_data_st
     real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
-                                          mo_a(:,:), mo_b(:,:), &
-                                          ytil(:), xstate(:)
-    real(kind=dp), pointer :: mt_out(:)
+                                          mo_a(:,:), mo_b(:,:)
     real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
     real(kind=dp), pointer :: fmrst2(:,:,:,:)
     real(kind=dp), allocatable :: wrk(:,:), xu(:,:), yu(:,:), &
@@ -2059,9 +2117,8 @@ end module tdhf_mrsf_gradient_mod
     integer(c_int), pointer :: ixcore_ptr(:)
     real(kind=dp) :: scale_exch, hfs
     integer :: nbf, nbf2, noca, nocb, nvirb, xdim, mrst, k, ok
+    integer :: ipair, nrhs, source_x, source_y
     logical :: dft
-
-    if (istate == jstate) return
 
     if (infos%tddft%umrsf) &
       call show_message('Analytic NAC wpair is not available for UMRSF-TDDFT.', with_abort)
@@ -2077,6 +2134,14 @@ end module tdhf_mrsf_gradient_mod
     nocb = infos%mol_prop%nelec_b
     nvirb = nbf - nocb
     xdim = noca*nvirb
+    nrhs = size(ytil_batch,2)
+    if (nrhs < 1 .or. nrhs > max_batch_width .or. &
+        size(ytil_batch,1) /= xdim .or. &
+        size(xstate_batch,1) /= xdim .or. &
+        size(xstate_batch,2) /= nrhs .or. &
+        size(mt_batch,1) /= nbf .or. size(mt_batch,2) /= nbf .or. &
+        size(mt_batch,3) /= nrhs) &
+      call show_message('Invalid MRSF NAC wpair batch dimensions.', with_abort)
     dft = infos%control%hamilton == 20
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%tddft%hfscale
@@ -2093,10 +2158,8 @@ end module tdhf_mrsf_gradient_mod
     call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
-    call tagarray_get_data(infos%dat, OQP_nac_ytil, ytil)
-    call tagarray_get_data(infos%dat, OQP_nac_xstate, xstate)
 
-    allocate(mrsf_density(2,7,nbf,nbf), wrk(nbf,nbf), &
+    allocate(mrsf_density(2*nrhs,7,nbf,nbf), wrk(nbf,nbf), &
              xu(nbf,nbf), yu(nbf,nbf), xuvec(xdim), yuvec(xdim), &
              fa(nbf,nbf), fb(nbf,nbf), fpk(nbf2), &
              gamma_a(nbf,nbf), gamma_b(nbf,nbf), mt(nbf,nbf), &
@@ -2114,15 +2177,21 @@ end module tdhf_mrsf_gradient_mod
     call unpack_matrix(fpk, fb)
 
     ! The ERI source uses the folded eigenvectors, exactly as the matvec does.
-    call iatogen(xstate(1:xdim), wrk, noca, nocb)
-    call mrsfcbc(infos, mo_a, mo_b, wrk, mrsf_density(1,:,:,:))
-    call iatogen(ytil(1:xdim), wrk, noca, nocb)
-    call mrsfcbc(infos, mo_a, mo_b, wrk, mrsf_density(2,:,:,:))
+    do ipair = 1, nrhs
+      source_x = 2*ipair - 1
+      source_y = source_x + 1
+      call iatogen(xstate_batch(:,ipair), wrk, noca, nocb)
+      call mrsfcbc(infos, mo_a, mo_b, wrk, &
+                   mrsf_density(source_x,:,:,:))
+      call iatogen(ytil_batch(:,ipair), wrk, noca, nocb)
+      call mrsfcbc(infos, mo_a, mo_b, wrk, &
+                   mrsf_density(source_y,:,:,:))
+    end do
 
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
     int2_data_st = int2_mrsf_data_t( &
-      d3 = mrsf_density(:2,:,:,:), &
+      d3 = mrsf_density(:2*nrhs,:,:,:), &
       tamm_dancoff = .true., &
       scale_exchange = scale_exch, &
       scale_coulomb = scale_exch)
@@ -2145,52 +2214,58 @@ end module tdhf_mrsf_gradient_mod
         fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
     end if
 
-    ! The derivative-side amplitudes are unfolded once.  Pre-unfolding the
-    ! density source above would apply the SOMO fold twice.
-    call mrsfxvec(infos, xstate(1:xdim), xuvec)
-    call iatogen(xuvec, xu, noca, nocb)
-    call mrsfxvec(infos, ytil(1:xdim), yuvec)
-    call iatogen(yuvec, yu, noca, nocb)
+    if (infos%tddft%ixcore_len > 0) &
+      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, &
+                       [infos%tddft%ixcore_len])
 
-    ! H(y,Kx) + H(x,Ky), including all six spin-pair channels.  The half
-    ! factor is the adjoint symmetrisation of B(C)^T K B(C).
-    call mrsf_nac_hx_side(mo_a, mo_b, yu, fmrst2(1,:,:,:), &
-                          noca, nocb, ha_yx, hb_yx, &
-                          hx_tmp, hx_g, hx_f7)
-    call mrsf_nac_hx_side(mo_a, mo_b, xu, fmrst2(2,:,:,:), &
-                          noca, nocb, ha_xy, hb_xy, &
-                          hx_tmp, hx_g, hx_f7)
-    mt = 0.5_dp*(ha_yx + hb_yx + ha_xy + hb_xy)
+    do ipair = 1, nrhs
+      source_x = 2*ipair - 1
+      source_y = source_x + 1
+      ! The derivative-side amplitudes are unfolded once.  Pre-unfolding the
+      ! density source above would apply the SOMO fold twice.
+      call mrsfxvec(infos, xstate_batch(:,ipair), xuvec)
+      call iatogen(xuvec, xu, noca, nocb)
+      call mrsfxvec(infos, ytil_batch(:,ipair), yuvec)
+      call iatogen(yuvec, yu, noca, nocb)
 
-    ! Frozen-Fock part: d Tr[Gamma C^T F_AO C]/d theta.
-    gamma_a(1:noca,1:noca) = -0.5_dp*( &
-      matmul(yu(1:noca,nocb+1:nbf), transpose(xu(1:noca,nocb+1:nbf))) + &
-      matmul(xu(1:noca,nocb+1:nbf), transpose(yu(1:noca,nocb+1:nbf))))
-    gamma_b(nocb+1:nbf,nocb+1:nbf) = 0.5_dp*( &
-      matmul(transpose(yu(1:noca,nocb+1:nbf)), xu(1:noca,nocb+1:nbf)) + &
-      matmul(transpose(xu(1:noca,nocb+1:nbf)), yu(1:noca,nocb+1:nbf)))
-    ! gamma_a and gamma_b are confined to the alpha-occupied and
-    ! beta-virtual blocks, respectively.  Restrict the contractions to those
-    ! nonzero blocks instead of forming two full nbf-by-nbf MATMUL temporaries.
-    call dgemm('n', 'n', nbf, noca, noca, 2.0_dp, &
-               fa, nbf, gamma_a, nbf, 1.0_dp, mt, nbf)
-    call dgemm('n', 'n', nbf, nvirb, nvirb, 2.0_dp, &
-               fb(1,nocb+1), nbf, gamma_b(nocb+1,nocb+1), nbf, &
-               1.0_dp, mt(1,nocb+1), nbf)
+      ! H(y,Kx) + H(x,Ky), including all six spin-pair channels.  The half
+      ! factor is the adjoint symmetrisation of B(C)^T K B(C).
+      call mrsf_nac_hx_side(mo_a, mo_b, yu, fmrst2(source_x,:,:,:), &
+                            noca, nocb, ha_yx, hb_yx, &
+                            hx_tmp, hx_g, hx_f7)
+      call mrsf_nac_hx_side(mo_a, mo_b, xu, fmrst2(source_y,:,:,:), &
+                            noca, nocb, ha_xy, hb_xy, &
+                            hx_tmp, hx_g, hx_f7)
+      mt = 0.5_dp*(ha_yx + hb_yx + ha_xy + hb_xy)
 
-    if (infos%tddft%ixcore_len > 0) then
-      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
-      do k = 1, nocb
-        if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == k)) &
-          mt(:,k) = mt(:,k) - 2.0_dp*fa(:,k)*gamma_a(k,k)
-      end do
-    end if
+      ! Frozen-Fock part: d Tr[Gamma C^T F_AO C]/d theta.
+      gamma_a = 0.0_dp
+      gamma_b = 0.0_dp
+      gamma_a(1:noca,1:noca) = -0.5_dp*( &
+        matmul(yu(1:noca,nocb+1:nbf), transpose(xu(1:noca,nocb+1:nbf))) + &
+        matmul(xu(1:noca,nocb+1:nbf), transpose(yu(1:noca,nocb+1:nbf))))
+      gamma_b(nocb+1:nbf,nocb+1:nbf) = 0.5_dp*( &
+        matmul(transpose(yu(1:noca,nocb+1:nbf)), &
+               xu(1:noca,nocb+1:nbf)) + &
+        matmul(transpose(xu(1:noca,nocb+1:nbf)), &
+               yu(1:noca,nocb+1:nbf)))
+      ! Restrict the Fock contractions to the nonzero occupied/virtual blocks.
+      call dgemm('n', 'n', nbf, noca, noca, 2.0_dp, &
+                 fa, nbf, gamma_a, nbf, 1.0_dp, mt, nbf)
+      call dgemm('n', 'n', nbf, nvirb, nvirb, 2.0_dp, &
+                 fb(1,nocb+1), nbf, gamma_b(nocb+1,nocb+1), nbf, &
+                 1.0_dp, mt(1,nocb+1), nbf)
+
+      if (infos%tddft%ixcore_len > 0) then
+        do k = 1, nocb
+          if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == k)) &
+            mt(:,k) = mt(:,k) - 2.0_dp*fa(:,k)*gamma_a(k,k)
+        end do
+      end if
+      mt_batch(:,:,ipair) = mt
+    end do
 
     call int2_driver%clean()
-    call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mt /))
-    call infos%dat%reserve_data(OQP_nac_mt, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
-    call tagarray_get_data(infos%dat, OQP_nac_mt, mt_out)
-    mt_out = reshape(mt, (/ nbf*nbf /))
 
   contains
 
@@ -2227,4 +2302,4 @@ end module tdhf_mrsf_gradient_mod
       call mrsfsp(ha, hb, ca, cb, v, f, nocc_a, nocc_b)
     end subroutine mrsf_nac_hx_side
 
-  end subroutine mrsf_nac_wpair_impl
+  end subroutine mrsf_nac_wpair_batch_impl

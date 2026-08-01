@@ -20,7 +20,7 @@ def _body(source, name):
 
 
 def test_wpair_restricts_products_to_the_nonzero_iatogen_blocks():
-    body = _body(GRADIENT.read_text(), "mrsf_nac_wpair_impl")
+    body = _body(GRADIENT.read_text(), "mrsf_nac_wpair_batch_impl")
     assert "fb(1,nocb+1)" in body
     assert "gamma_b(nocb+1,nocb+1)" in body
     assert "g(:,nocc_b+1:n)" in body
@@ -55,6 +55,24 @@ def test_wpair_restricts_products_to_the_nonzero_iatogen_blocks():
     hb_blocked[:, nocb:] = 2.0 * g[:noca, :].T @ v[:noca, nocb:]
     np.testing.assert_allclose(ha_blocked, ha_full, rtol=0.0, atol=3.0e-14)
     np.testing.assert_allclose(hb_blocked, hb_full, rtol=0.0, atol=3.0e-14)
+
+
+def test_wpair_batches_three_pairs_in_one_bounded_eri_traversal():
+    gradient = GRADIENT.read_text()
+    batch = _body(gradient, "mrsf_nac_wpair_batch_impl")
+    driver = _body(DRIVER.read_text(), "mrsf_nac_lagrangian")
+    assert "integer, parameter :: max_batch_width = 3" in batch
+    assert "mrsf_density(2*nrhs,7,nbf,nbf)" in batch
+    assert "d3 = mrsf_density(:2*nrhs,:,:,:)" in batch
+    assert batch.count("call int2_driver%run") == 1
+    assert "source_x = 2*ipair - 1" in batch
+    assert "source_y = source_x + 1" in batch
+    assert "integer, parameter :: wpair_batch_width = 3" in driver
+    assert "wpair_mt(nbf,nbf,wpair_batch_width)" in driver
+    assert "wpair_last = min(npair, wpair_first + wpair_batch_width - 1)" in driver
+    assert "call mrsf_nac_wpair_batch_impl(" in driver
+    assert "mt_frozen_tag = reshape(wpair_mt(:,:,wpair_index)" in driver
+    assert "call mrsf_nac_wpair_impl(infos, istate, jstate)" not in driver
 
 
 def test_response_exports_jk_from_its_existing_integral_pass():

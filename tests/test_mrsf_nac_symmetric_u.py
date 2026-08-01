@@ -40,8 +40,8 @@ class MRSFNACSymmetricUTests(unittest.TestCase):
         source = (
             ROOT / "source" / "modules" / "tdhf_mrsf_gradient.F90"
         ).read_text()
-        body = source.split("subroutine mrsf_nac_wpair_impl", 1)[1].split(
-            "end subroutine mrsf_nac_wpair_impl", 1
+        body = source.split("subroutine mrsf_nac_wpair_batch_impl", 1)[1].split(
+            "end subroutine mrsf_nac_wpair_batch_impl", 1
         )[0]
         self.assertNotIn("mt(k,k) = 0.0_dp", body)
 
