@@ -52,6 +52,7 @@ contains
     integer :: nbf, npair, nchol, maxchol, p, q, iu
     integer :: dchol, npass
     real(dp) :: derr, dmax_d, dapprox
+    real(dp) :: t0, t1, t_packed, t_incore, t_direct
     logical :: dtrunc
     real(dp) :: tol, err, exact, approx, dmax, drms
     integer(8) :: nel
@@ -65,6 +66,7 @@ contains
     allocate(gao(cc_packed_length(nbf)))
     gao = 0.0_dp
 
+    call wall(t0)
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
     eri_data%g => gao
@@ -73,13 +75,18 @@ contains
     call int2_driver%run(eri_data)
     call eri_data%clean()
     call int2_driver%clean()
+    call wall(t1)
+    t_packed = t1 - t0
 
     tol = 1.0e-8_dp
     maxchol = cholesky_eri_max_vectors(nbf, 20)
     allocate(lvec(npair, maxchol))
 
+    call wall(t0)
     call cholesky_eri_decompose(nbf, gao, tol, maxchol, lvec, nchol, err, &
                                 truncated)
+    call wall(t1)
+    t_incore = t1 - t0
 
     ! Reconstruct and compare against the integrals we started from.
     dmax = 0.0_dp
@@ -99,8 +106,11 @@ contains
     ! Integral-direct factorisation of the same integrals -- it never builds
     ! the packed store, and is checked against it all the same.
     allocate(dvec(npair, maxchol))
+    call wall(t0)
     call cholesky_direct_decompose(basis, infos, tol, maxchol, dvec, dchol, &
                                    derr, dtrunc, npass)
+    call wall(t1)
+    t_direct = t1 - t0
     dmax_d = 0.0_dp
     do p = 1, npair
       do q = 1, p
@@ -124,10 +134,22 @@ contains
     write(iu,'(A,I0)')    'direct_npass = ', npass
     write(iu,'(A,L1)')    'direct_trunc = ', dtrunc
     write(iu,'(A,ES14.6)')'direct_recon_max = ', dmax_d
+    write(iu,'(A,F12.4)') 't_packed     = ', t_packed
+    write(iu,'(A,F12.4)') 't_incore     = ', t_incore
+    write(iu,'(A,F12.4)') 't_direct     = ', t_direct
+    write(iu,'(A,F12.4)') 't_stored_tot = ', t_packed + t_incore
     close(iu)
 
     deallocate(gao, lvec, dvec)
 
   end subroutine cholesky_eri_selftest
+
+  subroutine wall(t)
+    use precision, only: dp
+    real(dp), intent(out) :: t
+    integer(8) :: c, r
+    call system_clock(c, r)
+    t = real(c, dp)/real(r, dp)
+  end subroutine wall
 
 end module cholesky_eri_selftest_mod
