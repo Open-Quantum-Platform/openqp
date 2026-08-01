@@ -429,3 +429,106 @@ def test_sc_nevpt2_strong_contraction_matches_pyscf(tmp_path):
     assert _correction(uncontracted) == pytest.approx(-0.0280053140, abs=1.0e-6)
     # Strong contraction genuinely differs from uncontracted (the ~0.4 mEh flavor gap).
     assert _correction(strong) > _correction(uncontracted) + 3.0e-4
+
+
+# --------------------------------------------------------------- H0 representations
+# The zeroth-order Hamiltonian is stored in whichever exact representation is
+# cheapest (diagonal for Fock H0, block-diagonal over the core+virtual occupation
+# patterns for Dyall H0).  The explicit dense ndet x ndet matrix with one full
+# eigendecomposition per root remains in the module as the fallback; these tests
+# pin the cheap representations against it.
+def _fast_and_dense(tmp_path, project, **kwargs):
+    """Run a case as shipped, then again with the H0 fast paths disabled."""
+    import oqp.library.caspt2_dyall as cd
+    from oqp.library.fci import _symmetric_eigh
+
+    fast = _run_caspt2(tmp_path, project + "_fast", **kwargs)
+
+    def _full_eigh(self):
+        blk = self.dense[np.ix_(self.external, self.external)]
+        w, U = _symmetric_eigh(0.5 * (blk + blk.T))
+        return w, ((slice(None), U),)
+
+    saved_diag = cd._diagonal_zeroth_order
+    saved_eig = cd._ZerothOrder.external_eigenbasis
+    cd._diagonal_zeroth_order = lambda *a, **k: None
+    cd._ZerothOrder.external_eigenbasis = _full_eigh
+    try:
+        dense = _run_caspt2(tmp_path, project + "_dense", **kwargs)
+    finally:
+        cd._diagonal_zeroth_order = saved_diag
+        cd._ZerothOrder.external_eigenbasis = saved_eig
+    return fast, dense
+
+
+_CAS44 = {"active_electrons": "4", "active_orbitals": "4", "frozen_core": "0",
+          "max_det": "20000"}
+
+
+def test_diagonal_h0_matches_the_dense_zeroth_order_matrix(tmp_path):
+    """``h0=fock`` H0 is a one-electron operator that is already diagonal in the MO
+    basis, hence exactly diagonal in the determinant basis: it needs neither the
+    dense matrix nor a denominator diagonalization.  Same energy either way."""
+    if not _backend_available():
+        pytest.skip("native OQP backend not built; build liboqp to run end-to-end CASPT2 tests")
+
+    fast, dense = _fast_and_dense(
+        tmp_path, "caspt2_diag_h0", system=_H4_LINEAR, basis="6-31g", cas=_CAS44,
+        pt2={"reference": "casci", "h0": "fock"},
+    )
+    assert _correction(fast) == pytest.approx(_correction(dense), abs=1.0e-12)
+    assert _caspt2_energy(fast) == pytest.approx(_caspt2_energy(dense), abs=1.0e-12)
+
+
+def test_dyall_h0_block_partition_matches_the_full_eigendecomposition(tmp_path):
+    """Dyall H0 cannot move an electron in or out of a core or virtual orbital, so
+    ``H0_ext`` is exactly block-diagonal over the core+virtual occupation patterns.
+    Diagonalizing those blocks must reproduce the single full solve."""
+    if not _backend_available():
+        pytest.skip("native OQP backend not built; build liboqp to run end-to-end CASPT2 tests")
+
+    fast, dense = _fast_and_dense(
+        tmp_path, "caspt2_dyall_blocks", system=_H4_LINEAR, basis="6-31g", cas=_CAS44,
+        pt2={"reference": "casci", "h0": "dyall", "contraction": "none"},
+    )
+    assert _correction(fast) == pytest.approx(_correction(dense), abs=1.0e-12)
+    assert _caspt2_energy(fast) == pytest.approx(_caspt2_energy(dense), abs=1.0e-12)
+
+
+def test_occupation_blocks_close_the_dyall_zeroth_order_operator(tmp_path):
+    """The partition is only sound if nothing at all lives outside the blocks."""
+    if not _backend_available():
+        pytest.skip("native OQP backend not built; build liboqp to run end-to-end CASPT2 tests")
+
+    import oqp.library.caspt2_dyall as cd
+
+    seen = {}
+    original = cd._build_operators
+
+    def _spy(*args, **kwargs):
+        out = original(*args, **kwargs)
+        h0op = out[3]
+        if h0op.dense is not None and h0op.blocks is not None:
+            blk = h0op.dense[np.ix_(h0op.external, h0op.external)]
+            off = 0.0
+            for g in h0op.blocks:
+                rows = np.abs(blk[g, :])
+                rows[:, g] = 0.0
+                off = max(off, float(rows.max()))
+            seen.update(off=off, nblocks=len(h0op.blocks),
+                        scale=float(np.max(np.abs(blk))))
+        return out
+
+    cd._build_operators = _spy
+    try:
+        _run_caspt2(
+            tmp_path, "caspt2_dyall_blockcheck", system=_H4_LINEAR, basis="6-31g",
+            cas=_CAS44, pt2={"reference": "casci", "h0": "dyall", "contraction": "none"},
+        )
+    finally:
+        cd._build_operators = original
+
+    assert seen, "the Dyall path did not build a dense H0 with a block partition"
+    assert seen["nblocks"] > 1
+    # Exactly 0.0 in practice; the tolerance only guards a LAPACK-level denormal.
+    assert seen["off"] <= 1.0e-12 * seen["scale"]

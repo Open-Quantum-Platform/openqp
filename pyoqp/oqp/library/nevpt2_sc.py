@@ -39,6 +39,26 @@ from oqp.library.rdm import _bit_count
 NUMERICAL_ZERO = 1.0e-14
 
 
+def _ein(subscripts, *operands):
+    """``np.einsum`` with contraction-order optimization forced on.
+
+    NumPy's default einsum evaluates the whole index expression in one naive
+    nested loop.  The Koopmans intermediates below are 8- and 9-index
+    expressions, so that loop is where they live: measured on ``norb = 8``,
+
+        f3ca ``kbij,rpqjkiac->pqrabc``  0.268 s (1.0 GFlop/s) -> 0.034 s (7.8x)
+        a16  ``kbia,rpqcki->pqrabc``    0.034 s (1.0 GFlop/s) -> 0.0007 s (49x)
+        Sr   ``ipqr,pqrabc,iabc->i``    0.010 s (0.6 GFlop/s) -> 0.0004 s (25x)
+
+    ``optimize=True`` instead picks a pairwise contraction order and hands each
+    step to BLAS.  It is the same sum evaluated in a different (pairwise, better
+    conditioned) order -- agreement measured at 4e-13 absolute on O(1) random
+    operands, and the pinned example energies are unchanged to all 10 printed
+    digits.
+    """
+    return np.einsum(subscripts, *operands, optimize=True)
+
+
 # --------------------------------------------------------------------------- RDMs
 def _Epq_matrix(p, q, det_list, det_index, norb):
     """Build E_pq = sum_sigma a_{p,sigma}^+ a_{q,sigma} as a sparse matrix.
@@ -218,84 +238,84 @@ def _f3ca_f3ac(h2e, dm4):
     compiled ``NEVPTkern_cedf_aedf`` / ``NEVPTkern_aedf_ecdf`` kernels,
     reconstructed here from the genuine spin-free 4-RDM (machine precision)."""
     dm4ca = dm4.transpose(0, 1, 4, 5, 6, 7, 2, 3)
-    f3ca = np.einsum('kbij,rpqjkiac->pqrabc', h2e, dm4ca).transpose(
+    f3ca = _ein('kbij,rpqjkiac->pqrabc', h2e, dm4ca).transpose(
         np.argsort((1, 4, 0, 2, 5, 3)))
-    f3ac = np.einsum('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(
+    f3ac = _ein('ijka,rpqbjcik->pqrabc', h2e, dm4).transpose(
         np.argsort((1, 2, 0, 4, 3, 5)))
     return f3ca, f3ac
 
 
 def _a16(h1e, h2e, dm3, f3ca, f3ac):
-    a16 = -np.einsum('ib,rpqiac->pqrabc', h1e, dm3)
-    a16 += np.einsum('ia,rpqbic->pqrabc', h1e, dm3)
-    a16 -= np.einsum('ci,rpqbai->pqrabc', h1e, dm3)
+    a16 = -_ein('ib,rpqiac->pqrabc', h1e, dm3)
+    a16 += _ein('ia,rpqbic->pqrabc', h1e, dm3)
+    a16 -= _ein('ci,rpqbai->pqrabc', h1e, dm3)
     a16 -= f3ca.transpose(1, 4, 0, 2, 5, 3)
-    a16 -= np.einsum('kbia,rpqcki->pqrabc', h2e, dm3)
-    a16 -= np.einsum('kbaj,rpqjkc->pqrabc', h2e, dm3)
-    a16 += np.einsum('cbij,rpqjai->pqrabc', h2e, dm3)
-    fdm2 = np.einsum('kbij,rpajki->prab', h2e, dm3)
+    a16 -= _ein('kbia,rpqcki->pqrabc', h2e, dm3)
+    a16 -= _ein('kbaj,rpqjkc->pqrabc', h2e, dm3)
+    a16 += _ein('cbij,rpqjai->pqrabc', h2e, dm3)
+    fdm2 = _ein('kbij,rpajki->prab', h2e, dm3)
     for i in range(h1e.shape[0]):
         a16[:, i, :, :, :, i] += fdm2
     a16 += f3ac.transpose(1, 2, 0, 4, 3, 5)
     a16 -= f3ca.transpose(1, 2, 0, 4, 3, 5)
-    a16 += np.einsum('jbij,rpqiac->pqrabc', h2e, dm3)
-    a16 -= np.einsum('cjka,rpqbjk->pqrabc', h2e, dm3)
-    a16 += np.einsum('jcij,rpqbai->pqrabc', h2e, dm3)
+    a16 += _ein('jbij,rpqiac->pqrabc', h2e, dm3)
+    a16 -= _ein('cjka,rpqbjk->pqrabc', h2e, dm3)
+    a16 += _ein('jcij,rpqbai->pqrabc', h2e, dm3)
     return a16
 
 
 def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
-    a22 = -np.einsum('pb,kipjac->ijkabc', h1e, dm3)
-    a22 -= np.einsum('pa,kibjpc->ijkabc', h1e, dm3)
-    a22 += np.einsum('cp,kibjap->ijkabc', h1e, dm3)
-    a22 += np.einsum('cqra,kibjqr->ijkabc', h2e, dm3)
-    a22 -= np.einsum('qcpq,kibjap->ijkabc', h2e, dm3)
+    a22 = -_ein('pb,kipjac->ijkabc', h1e, dm3)
+    a22 -= _ein('pa,kibjpc->ijkabc', h1e, dm3)
+    a22 += _ein('cp,kibjap->ijkabc', h1e, dm3)
+    a22 += _ein('cqra,kibjqr->ijkabc', h2e, dm3)
+    a22 -= _ein('qcpq,kibjap->ijkabc', h2e, dm3)
     a22 -= f3ac.transpose(1, 5, 0, 2, 4, 3)
-    fdm2 = np.einsum('pqrb,kiqcpr->ikbc', h2e, dm3)
+    fdm2 = _ein('pqrb,kiqcpr->ikbc', h2e, dm3)
     for i in range(h1e.shape[0]):
         a22[:, i, :, i, :, :] -= fdm2
-    a22 -= np.einsum('pqab,kiqjpc->ijkabc', h2e, dm3)
-    a22 += np.einsum('pcrb,kiajpr->ijkabc', h2e, dm3)
-    a22 += np.einsum('cqrb,kiqjar->ijkabc', h2e, dm3)
+    a22 -= _ein('pqab,kiqjpc->ijkabc', h2e, dm3)
+    a22 += _ein('pcrb,kiajpr->ijkabc', h2e, dm3)
+    a22 += _ein('cqrb,kiqjar->ijkabc', h2e, dm3)
     a22 -= f3ac.transpose(1, 3, 0, 4, 2, 5)
     a22 += f3ca.transpose(1, 3, 0, 4, 2, 5)
-    a22 += 2.0 * np.einsum('jb,kiac->ijkabc', h1e, dm2)
-    a22 += 2.0 * np.einsum('pjrb,kiprac->ijkabc', h2e, dm3)
-    fdm2 = np.einsum('pa,kipc->ikac', h1e, dm2)
-    fdm2 -= np.einsum('cp,kiap->ikac', h1e, dm2)
-    fdm2 -= np.einsum('cqra,kiqr->ikac', h2e, dm2)
-    fdm2 += np.einsum('qcpq,kiap->ikac', h2e, dm2)
-    fdm2 += np.einsum('pqra,kiqcpr->ikac', h2e, dm3)
-    fdm2 -= np.einsum('rcpq,kiaqrp->ikac', h2e, dm3)
+    a22 += 2.0 * _ein('jb,kiac->ijkabc', h1e, dm2)
+    a22 += 2.0 * _ein('pjrb,kiprac->ijkabc', h2e, dm3)
+    fdm2 = _ein('pa,kipc->ikac', h1e, dm2)
+    fdm2 -= _ein('cp,kiap->ikac', h1e, dm2)
+    fdm2 -= _ein('cqra,kiqr->ikac', h2e, dm2)
+    fdm2 += _ein('qcpq,kiap->ikac', h2e, dm2)
+    fdm2 += _ein('pqra,kiqcpr->ikac', h2e, dm3)
+    fdm2 -= _ein('rcpq,kiaqrp->ikac', h2e, dm3)
     for i in range(h1e.shape[0]):
         a22[:, i, :, :, i, :] += fdm2 * 2
     return a22
 
 
 def _a17(h1e, h2e, dm2, dm3):
-    h1e = h1e - np.einsum('mjjn->mn', h2e)
-    return -np.einsum('pi,cabi->abcp', h1e, dm2) \
-        - np.einsum('kpij,cabjki->abcp', h2e, dm3)
+    h1e = h1e - _ein('mjjn->mn', h2e)
+    return -_ein('pi,cabi->abcp', h1e, dm2) \
+        - _ein('kpij,cabjki->abcp', h2e, dm3)
 
 
 def _a19(h1e, h2e, dm1, dm2):
-    h1e = h1e - np.einsum('mjjn->mn', h2e)
-    return -np.einsum('pi,ai->ap', h1e, dm1) \
-        - np.einsum('kpij,ajki->ap', h2e, dm2)
+    h1e = h1e - _ein('mjjn->mn', h2e)
+    return -_ein('pi,ai->ap', h1e, dm1) \
+        - _ein('kpij,ajki->ap', h2e, dm2)
 
 
 def _a23(h1e, h2e, dm1, dm2, dm3):
-    return -np.einsum('ip,caib->abcp', h1e, dm2) \
-        - np.einsum('pijk,cajbik->abcp', h2e, dm3) \
-        + 2.0 * np.einsum('bp,ca->abcp', h1e, dm1) \
-        + 2.0 * np.einsum('pibk,caik->abcp', h2e, dm2)
+    return -_ein('ip,caib->abcp', h1e, dm2) \
+        - _ein('pijk,cajbik->abcp', h2e, dm3) \
+        + 2.0 * _ein('bp,ca->abcp', h1e, dm1) \
+        + 2.0 * _ein('pibk,caik->abcp', h2e, dm2)
 
 
 def _a25(h1e, h2e, dm1, dm2):
-    return -np.einsum('pi,ai->ap', h1e, dm1) \
-        - np.einsum('pijk,jaik->ap', h2e, dm2) \
-        + 2.0 * np.einsum('ap->pa', h1e) \
-        + 2.0 * np.einsum('piaj,ij->ap', h2e, dm1)
+    return -_ein('pi,ai->ap', h1e, dm1) \
+        - _ein('pijk,jaik->ap', h2e, dm2) \
+        + 2.0 * _ein('ap->pa', h1e) \
+        + 2.0 * _ein('piaj,ij->ap', h2e, dm1)
 
 
 def _hdm1(dm1):
@@ -304,93 +324,93 @@ def _hdm1(dm1):
 
 def _hdm2(dm1, dm2):
     delta = np.eye(dm2.shape[0])
-    dm2 = np.einsum('ikjl->ijkl', dm2) - np.einsum('jk,il->ijkl', delta, dm1)
-    return np.einsum('klij->ijkl', dm2) \
-        + np.einsum('il,kj->ijkl', delta, dm1) \
-        + np.einsum('jk,li->ijkl', delta, dm1) \
-        - 2.0 * np.einsum('ik,lj->ijkl', delta, dm1) \
-        - 2.0 * np.einsum('jl,ki->ijkl', delta, dm1) \
-        - 2.0 * np.einsum('il,jk->ijkl', delta, delta) \
-        + 4.0 * np.einsum('ik,jl->ijkl', delta, delta)
+    dm2 = _ein('ikjl->ijkl', dm2) - _ein('jk,il->ijkl', delta, dm1)
+    return _ein('klij->ijkl', dm2) \
+        + _ein('il,kj->ijkl', delta, dm1) \
+        + _ein('jk,li->ijkl', delta, dm1) \
+        - 2.0 * _ein('ik,lj->ijkl', delta, dm1) \
+        - 2.0 * _ein('jl,ki->ijkl', delta, dm1) \
+        - 2.0 * _ein('il,jk->ijkl', delta, delta) \
+        + 4.0 * _ein('ik,jl->ijkl', delta, delta)
 
 
 def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
     delta = np.eye(dm3.shape[0])
-    return - np.einsum('pb,qrac->pqrabc', delta, hdm2) \
-        - np.einsum('br,pqac->pqrabc', delta, hdm2) \
-        + np.einsum('bq,prac->pqrabc', delta, hdm2) * 2.0 \
-        + np.einsum('ap,bqcr->pqrabc', delta, dm2) * 2.0 \
-        - np.einsum('ap,cr,bq->pqrabc', delta, delta, dm1) * 4.0 \
-        + np.einsum('cr,bqap->pqrabc', delta, dm2) * 2.0 \
-        - np.einsum('bqapcr->pqrabc', dm3) \
-        + np.einsum('ar,pc,bq->pqrabc', delta, delta, dm1) * 2.0 \
-        - np.einsum('ar,bqcp->pqrabc', delta, dm2)
+    return - _ein('pb,qrac->pqrabc', delta, hdm2) \
+        - _ein('br,pqac->pqrabc', delta, hdm2) \
+        + _ein('bq,prac->pqrabc', delta, hdm2) * 2.0 \
+        + _ein('ap,bqcr->pqrabc', delta, dm2) * 2.0 \
+        - _ein('ap,cr,bq->pqrabc', delta, delta, dm1) * 4.0 \
+        + _ein('cr,bqap->pqrabc', delta, dm2) * 2.0 \
+        - _ein('bqapcr->pqrabc', dm3) \
+        + _ein('ar,pc,bq->pqrabc', delta, delta, dm1) * 2.0 \
+        - _ein('ar,bqcp->pqrabc', delta, dm2)
 
 
 def _a3(h1e, h2e, dm1, dm2, hdm1):
     delta = np.eye(dm2.shape[0])
-    return np.einsum('ia,ip->pa', h1e, hdm1) \
-        + 2.0 * np.einsum('ijka,pj,ik->pa', h2e, delta, dm1) \
-        - np.einsum('ijka,jpik->pa', h2e, dm2)
+    return _ein('ia,ip->pa', h1e, hdm1) \
+        + 2.0 * _ein('ijka,pj,ik->pa', h2e, delta, dm1) \
+        - _ein('ijka,jpik->pa', h2e, dm2)
 
 
 def _k27(h1e, h2e, dm1, dm2):
-    return -np.einsum('ai,pi->pa', h1e, dm1) \
-        - np.einsum('iajk,pkij->pa', h2e, dm2) \
-        + np.einsum('iaji,pj->pa', h2e, dm1)
+    return -_ein('ai,pi->pa', h1e, dm1) \
+        - _ein('iajk,pkij->pa', h2e, dm2) \
+        + _ein('iaji,pj->pa', h2e, dm1)
 
 
 def _a7(h1e, h2e, dm1, dm2, dm3):
     delta = np.eye(dm2.shape[0])
-    rm2 = np.einsum('iljk->ijkl', dm2) - np.einsum('ik,jl->ijkl', dm1, delta)
-    rm3 = np.einsum('injmkl->ijklmn', dm3) \
-        - np.einsum('jn,imkl->ijklmn', delta, dm2) \
-        - np.einsum('km,ijln->ijklmn', delta, rm2) \
-        - np.einsum('kn,ijml->ijklmn', delta, rm2)
-    a7 = -np.einsum('bi,pqia->pqab', h1e, rm2) \
-        - np.einsum('ai,pqbi->pqab', h1e, rm2) \
-        - np.einsum('kbij,pqkija->pqab', h2e, rm3) \
-        - np.einsum('kaij,pqkibj->pqab', h2e, rm3) \
-        - np.einsum('baij,pqij->pqab', h2e, rm2)
+    rm2 = _ein('iljk->ijkl', dm2) - _ein('ik,jl->ijkl', dm1, delta)
+    rm3 = _ein('injmkl->ijklmn', dm3) \
+        - _ein('jn,imkl->ijklmn', delta, dm2) \
+        - _ein('km,ijln->ijklmn', delta, rm2) \
+        - _ein('kn,ijml->ijklmn', delta, rm2)
+    a7 = -_ein('bi,pqia->pqab', h1e, rm2) \
+        - _ein('ai,pqbi->pqab', h1e, rm2) \
+        - _ein('kbij,pqkija->pqab', h2e, rm3) \
+        - _ein('kaij,pqkibj->pqab', h2e, rm3) \
+        - _ein('baij,pqij->pqab', h2e, rm2)
     return rm2, a7
 
 
 def _a9(h1e, h2e, hdm1, hdm2, hdm3):
-    a9 = np.einsum('ib,pqai->pqab', h1e, hdm2)
-    a9 += np.einsum('ijib,pqaj->pqab', h2e, hdm2) * 2.0
-    a9 -= np.einsum('ijjb,pqai->pqab', h2e, hdm2)
-    a9 -= np.einsum('ijkb,pkqaij->pqab', h2e, hdm3)
-    a9 += np.einsum('ia,pqib->pqab', h1e, hdm2)
-    a9 -= np.einsum('ijja,pqib->pqab', h2e, hdm2)
-    a9 -= np.einsum('ijba,pqji->pqab', h2e, hdm2)
-    a9 += np.einsum('ijia,pqjb->pqab', h2e, hdm2) * 2.0
-    a9 -= np.einsum('ijka,pqkjbi->pqab', h2e, hdm3)
+    a9 = _ein('ib,pqai->pqab', h1e, hdm2)
+    a9 += _ein('ijib,pqaj->pqab', h2e, hdm2) * 2.0
+    a9 -= _ein('ijjb,pqai->pqab', h2e, hdm2)
+    a9 -= _ein('ijkb,pkqaij->pqab', h2e, hdm3)
+    a9 += _ein('ia,pqib->pqab', h1e, hdm2)
+    a9 -= _ein('ijja,pqib->pqab', h2e, hdm2)
+    a9 -= _ein('ijba,pqji->pqab', h2e, hdm2)
+    a9 += _ein('ijia,pqjb->pqab', h2e, hdm2) * 2.0
+    a9 -= _ein('ijka,pqkjbi->pqab', h2e, hdm3)
     return a9
 
 
 def _a12(h1e, h2e, dm1, dm2, dm3):
-    return np.einsum('ia,qpib->pqab', h1e, dm2) \
-        - np.einsum('bi,qpai->pqab', h1e, dm2) \
-        + np.einsum('ijka,qpjbik->pqab', h2e, dm3) \
-        - np.einsum('kbij,qpajki->pqab', h2e, dm3) \
-        - np.einsum('bjka,qpjk->pqab', h2e, dm2) \
-        + np.einsum('jbij,qpai->pqab', h2e, dm2)
+    return _ein('ia,qpib->pqab', h1e, dm2) \
+        - _ein('bi,qpai->pqab', h1e, dm2) \
+        + _ein('ijka,qpjbik->pqab', h2e, dm3) \
+        - _ein('kbij,qpajki->pqab', h2e, dm3) \
+        - _ein('bjka,qpjk->pqab', h2e, dm2) \
+        + _ein('jbij,qpai->pqab', h2e, dm2)
 
 
 def _a13(h1e, h2e, dm1, dm2, dm3):
     delta = np.eye(dm3.shape[0])
-    a13 = -np.einsum('ia,qbip->pqab', h1e, dm2)
-    a13 += np.einsum('pa,qb->pqab', h1e, dm1) * 2.0
-    a13 += np.einsum('bi,qiap->pqab', h1e, dm2)
-    a13 -= np.einsum('pa,bi,qi->pqab', delta, h1e, dm1) * 2.0
-    a13 -= np.einsum('ijka,qbjpik->pqab', h2e, dm3)
-    a13 += np.einsum('kbij,qjapki->pqab', h2e, dm3)
-    a13 += np.einsum('blma,qmlp->pqab', h2e, dm2)
-    a13 += np.einsum('kpma,qbkm->pqab', h2e, dm2) * 2.0
-    a13 -= np.einsum('bpma,qm->pqab', h2e, dm1) * 2.0
-    a13 -= np.einsum('lbkl,qkap->pqab', h2e, dm2)
-    a13 -= np.einsum('ap,mbkl,qlmk->pqab', delta, h2e, dm2) * 2.0
-    a13 += np.einsum('ap,lbkl,qk->pqab', delta, h2e, dm1) * 2.0
+    a13 = -_ein('ia,qbip->pqab', h1e, dm2)
+    a13 += _ein('pa,qb->pqab', h1e, dm1) * 2.0
+    a13 += _ein('bi,qiap->pqab', h1e, dm2)
+    a13 -= _ein('pa,bi,qi->pqab', delta, h1e, dm1) * 2.0
+    a13 -= _ein('ijka,qbjpik->pqab', h2e, dm3)
+    a13 += _ein('kbij,qjapki->pqab', h2e, dm3)
+    a13 += _ein('blma,qmlp->pqab', h2e, dm2)
+    a13 += _ein('kpma,qbkm->pqab', h2e, dm2) * 2.0
+    a13 -= _ein('bpma,qm->pqab', h2e, dm1) * 2.0
+    a13 -= _ein('lbkl,qkap->pqab', h2e, dm2)
+    a13 -= _ein('ap,mbkl,qlmk->pqab', delta, h2e, dm2) * 2.0
+    a13 += _ein('ap,lbkl,qk->pqab', delta, h2e, dm1) * 2.0
     return a13
 
 
@@ -401,36 +421,36 @@ def _norm_to_energy(norm, h, diff):
 
 
 # --------------------------------------------------------------------- subspaces
-def _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_virt):
-    f3ca, f3ac = _f3ca_f3ac(h2e, dm4)
+def _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_virt, f3=None):
+    f3ca, f3ac = _f3ca_f3ac(h2e, dm4) if f3 is None else f3
     a16 = _a16(h1e, h2e, dm3, f3ca, f3ac)
     a17 = _a17(h1e, h2e, dm2, dm3)
     a19 = _a19(h1e, h2e, dm1, dm2)
-    ener = np.einsum('ipqr,pqrabc,iabc->i', h2e_v, a16, h2e_v) \
-        + np.einsum('ipqr,pqra,ia->i', h2e_v, a17, h1e_v) * 2.0 \
-        + np.einsum('ip,pa,ia->i', h1e_v, a19, h1e_v)
-    norm = np.einsum('ipqr,rpqbac,iabc->i', h2e_v, dm3, h2e_v) \
-        + np.einsum('ipqr,rpqa,ia->i', h2e_v, dm2, h1e_v) * 2.0 \
-        + np.einsum('ip,pa,ia->i', h1e_v, dm1, h1e_v)
+    ener = _ein('ipqr,pqrabc,iabc->i', h2e_v, a16, h2e_v) \
+        + _ein('ipqr,pqra,ia->i', h2e_v, a17, h1e_v) * 2.0 \
+        + _ein('ip,pa,ia->i', h1e_v, a19, h1e_v)
+    norm = _ein('ipqr,rpqbac,iabc->i', h2e_v, dm3, h2e_v) \
+        + _ein('ipqr,rpqa,ia->i', h2e_v, dm2, h1e_v) * 2.0 \
+        + _ein('ip,pa,ia->i', h1e_v, dm1, h1e_v)
     return _norm_to_energy(norm, ener, e_virt)
 
 
-def _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_core):
-    f3ca, f3ac = _f3ca_f3ac(h2e, dm4)
+def _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1e_v, h2e_v, e_core, f3=None):
+    f3ca, f3ac = _f3ca_f3ac(h2e, dm4) if f3 is None else f3
     a22 = _a22(h1e, h2e, dm2, dm3, f3ca, f3ac)
     a23 = _a23(h1e, h2e, dm1, dm2, dm3)
     a25 = _a25(h1e, h2e, dm1, dm2)
     ncas = dm1.shape[0]
     delta = np.eye(ncas)
-    dm3_h = np.einsum('abef,cd->abcdef', dm2, delta) * 2 - dm3.transpose(0, 1, 3, 2, 4, 5)
-    dm2_h = np.einsum('ab,cd->abcd', dm1, delta) * 2 - dm2.transpose(0, 1, 3, 2)
+    dm3_h = _ein('abef,cd->abcdef', dm2, delta) * 2 - dm3.transpose(0, 1, 3, 2, 4, 5)
+    dm2_h = _ein('ab,cd->abcd', dm1, delta) * 2 - dm2.transpose(0, 1, 3, 2)
     dm1_h = 2 * delta - dm1.transpose(1, 0)
-    ener = np.einsum('qpir,pqrabc,baic->i', h2e_v, a22, h2e_v) \
-        + np.einsum('qpir,pqra,ai->i', h2e_v, a23, h1e_v) * 2.0 \
-        + np.einsum('pi,pa,ai->i', h1e_v, a25, h1e_v)
-    norm = np.einsum('qpir,rpqbac,baic->i', h2e_v, dm3_h, h2e_v) \
-        + np.einsum('qpir,rpqa,ai->i', h2e_v, dm2_h, h1e_v) * 2.0 \
-        + np.einsum('pi,pa,ai->i', h1e_v, dm1_h, h1e_v)
+    ener = _ein('qpir,pqrabc,baic->i', h2e_v, a22, h2e_v) \
+        + _ein('qpir,pqra,ai->i', h2e_v, a23, h1e_v) * 2.0 \
+        + _ein('pi,pa,ai->i', h1e_v, a25, h1e_v)
+    norm = _ein('qpir,rpqbac,baic->i', h2e_v, dm3_h, h2e_v) \
+        + _ein('qpir,rpqa,ai->i', h2e_v, dm2_h, h1e_v) * 2.0 \
+        + _ein('pi,pa,ai->i', h1e_v, dm1_h, h1e_v)
     return _norm_to_energy(norm, ener, -e_core)
 
 
@@ -447,8 +467,8 @@ def _Sijrs(e_core, e_virt, g_cvcv):
         djba = (eia.reshape(-1, 1) + eia[i].reshape(1, -1)).ravel()
         t2i = (gi.ravel() / djba).reshape(ncore, nvirt, nvirt)
         theta = gi * 2 - gi.transpose(0, 2, 1)
-        norm += np.einsum('jab,jab', gi, theta)
-        e += np.einsum('jab,jab', t2i, theta)
+        norm += _ein('jab,jab', gi, theta)
+        e += _ein('jab,jab', t2i, theta)
     return norm, e
 
 
@@ -460,12 +480,12 @@ def _Sijr(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
     ncore = len(e_core)
     ci_diag = np.diag_indices(ncore)
     ci_triu = np.triu_indices(ncore)
-    norm = 2.0 * np.einsum('rpji,raji,pa->rji', h2e_v, h2e_v, hdm1) \
-        - 1.0 * np.einsum('rpji,raij,pa->rji', h2e_v, h2e_v, hdm1)
+    norm = 2.0 * _ein('rpji,raji,pa->rji', h2e_v, h2e_v, hdm1) \
+        - 1.0 * _ein('rpji,raij,pa->rji', h2e_v, h2e_v, hdm1)
     norm += norm.transpose(0, 2, 1)
     norm[:, ci_diag[0], ci_diag[1]] *= 0.5
-    h = 2.0 * np.einsum('rpji,raji,pa->rji', h2e_v, h2e_v, a3) \
-        - 1.0 * np.einsum('rpji,raij,pa->rji', h2e_v, h2e_v, a3)
+    h = 2.0 * _ein('rpji,raji,pa->rji', h2e_v, h2e_v, a3) \
+        - 1.0 * _ein('rpji,raij,pa->rji', h2e_v, h2e_v, a3)
     h += h.transpose(0, 2, 1)
     h[:, ci_diag[0], ci_diag[1]] *= 0.5
     diff = e_virt[:, None, None] - e_core[None, :, None] - e_core[None, None, :]
@@ -481,12 +501,12 @@ def _Srsi(dm1, dm2, h1e, h2e, h2e_v, e_core, e_virt):
     nvirt = len(e_virt)
     vi_diag = np.diag_indices(nvirt)
     vi_triu = np.triu_indices(nvirt)
-    norm = 2.0 * np.einsum('rsip,rsia,pa->rsi', h2e_v, h2e_v, dm1) \
-        - 1.0 * np.einsum('rsip,sria,pa->rsi', h2e_v, h2e_v, dm1)
+    norm = 2.0 * _ein('rsip,rsia,pa->rsi', h2e_v, h2e_v, dm1) \
+        - 1.0 * _ein('rsip,sria,pa->rsi', h2e_v, h2e_v, dm1)
     norm += norm.transpose(1, 0, 2)
     norm[vi_diag] *= 0.5
-    h = 2.0 * np.einsum('rsip,rsia,pa->rsi', h2e_v, h2e_v, k27) \
-        - 1.0 * np.einsum('rsip,sria,pa->rsi', h2e_v, h2e_v, k27)
+    h = 2.0 * _ein('rsip,rsia,pa->rsi', h2e_v, h2e_v, k27) \
+        - 1.0 * _ein('rsip,sria,pa->rsi', h2e_v, h2e_v, k27)
     h += h.transpose(1, 0, 2)
     h[vi_diag] *= 0.5
     diff = e_virt[:, None, None] + e_virt[None, :, None] - e_core[None, None, :]
@@ -497,8 +517,8 @@ def _Srs(dm1, dm2, dm3, h1e, h2e, h2e_v, e_virt):
     if len(e_virt) == 0:
         return 0.0, 0.0
     rm2, a7 = _a7(h1e, h2e, dm1, dm2, dm3)
-    norm = 0.5 * np.einsum('rsqp,rsba,pqba->rs', h2e_v, h2e_v, rm2)
-    h = 0.5 * np.einsum('rsqp,rsba,pqab->rs', h2e_v, h2e_v, a7)
+    norm = 0.5 * _ein('rsqp,rsba,pqba->rs', h2e_v, h2e_v, rm2)
+    h = 0.5 * _ein('rsqp,rsba,pqab->rs', h2e_v, h2e_v, a7)
     diff = e_virt[:, None] + e_virt[None, :]
     return _norm_to_energy(norm, h, diff)
 
@@ -510,8 +530,8 @@ def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
     hdm2 = _hdm2(dm1, dm2)
     hdm3 = _hdm3(dm1, dm2, dm3, hdm1, hdm2)
     a9 = _a9(h1e, h2e, hdm1, hdm2, hdm3)
-    norm = 0.5 * np.einsum('qpij,baij,pqab->ij', h2e_v, h2e_v, hdm2)
-    h = 0.5 * np.einsum('qpij,baij,pqab->ij', h2e_v, h2e_v, a9)
+    norm = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, hdm2)
+    h = 0.5 * _ein('qpij,baij,pqab->ij', h2e_v, h2e_v, a9)
     diff = e_core[:, None] + e_core[None, :]
     return _norm_to_energy(norm, h, -diff)
 
@@ -519,21 +539,21 @@ def _Sij(dm1, dm2, dm3, h1e, h2e, h2e_v, e_core):
 def _Sir(dm1, dm2, dm3, h1e, h2e, h1e_v, h2e_v1, h2e_v2, e_core, e_virt):
     if len(e_core) == 0 or len(e_virt) == 0:
         return 0.0, 0.0
-    norm = np.einsum('rpiq,raib,qpab->ir', h2e_v1, h2e_v1, dm2) * 2.0 \
-        - np.einsum('rpiq,rabi,qpab->ir', h2e_v1, h2e_v2, dm2) \
-        - np.einsum('rpqi,raib,qpab->ir', h2e_v2, h2e_v1, dm2) \
-        + np.einsum('raqi,rabi,qb->ir', h2e_v2, h2e_v2, dm1) * 2.0 \
-        - np.einsum('rpqi,rabi,qbap->ir', h2e_v2, h2e_v2, dm2) \
-        + np.einsum('rpqi,raai,qp->ir', h2e_v2, h2e_v2, dm1) \
-        + np.einsum('rpiq,ri,qp->ir', h2e_v1, h1e_v, dm1) * 4.0 \
-        - np.einsum('rpqi,ri,qp->ir', h2e_v2, h1e_v, dm1) * 2.0 \
-        + np.einsum('ri,ri->ir', h1e_v, h1e_v) * 2.0
+    norm = _ein('rpiq,raib,qpab->ir', h2e_v1, h2e_v1, dm2) * 2.0 \
+        - _ein('rpiq,rabi,qpab->ir', h2e_v1, h2e_v2, dm2) \
+        - _ein('rpqi,raib,qpab->ir', h2e_v2, h2e_v1, dm2) \
+        + _ein('raqi,rabi,qb->ir', h2e_v2, h2e_v2, dm1) * 2.0 \
+        - _ein('rpqi,rabi,qbap->ir', h2e_v2, h2e_v2, dm2) \
+        + _ein('rpqi,raai,qp->ir', h2e_v2, h2e_v2, dm1) \
+        + _ein('rpiq,ri,qp->ir', h2e_v1, h1e_v, dm1) * 4.0 \
+        - _ein('rpqi,ri,qp->ir', h2e_v2, h1e_v, dm1) * 2.0 \
+        + _ein('ri,ri->ir', h1e_v, h1e_v) * 2.0
     a12 = _a12(h1e, h2e, dm1, dm2, dm3)
     a13 = _a13(h1e, h2e, dm1, dm2, dm3)
-    h = np.einsum('rpiq,raib,pqab->ir', h2e_v1, h2e_v1, a12) * 2.0 \
-        - np.einsum('rpiq,rabi,pqab->ir', h2e_v1, h2e_v2, a12) \
-        - np.einsum('rpqi,raib,pqab->ir', h2e_v2, h2e_v1, a12) \
-        + np.einsum('rpqi,rabi,pqab->ir', h2e_v2, h2e_v2, a13)
+    h = _ein('rpiq,raib,pqab->ir', h2e_v1, h2e_v1, a12) * 2.0 \
+        - _ein('rpiq,rabi,pqab->ir', h2e_v1, h2e_v2, a12) \
+        - _ein('rpqi,raib,pqab->ir', h2e_v2, h2e_v1, a12) \
+        + _ein('rpqi,rabi,pqab->ir', h2e_v2, h2e_v2, a13)
     diff = e_core[:, None] - e_virt[None, :]
     return _norm_to_energy(norm, h, -diff)
 
@@ -549,8 +569,8 @@ def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
     A = slice(ncore, nocc)
     V = slice(nocc, nbf)
 
-    vhf = (2.0 * np.einsum('pqii->pq', eri_mo[:, :, C, C])
-           - np.einsum('piiq->pq', eri_mo[:, C, C, :]))
+    vhf = (2.0 * _ein('pqii->pq', eri_mo[:, :, C, C])
+           - _ein('piiq->pq', eri_mo[:, C, C, :]))
     heff = h1e_mo + vhf
 
     def phys(block):
@@ -561,7 +581,7 @@ def _blocks(h1e_mo, eri_mo, ncore, nact, eps):
 
     blocks = {'h1e': h1e, 'h2e': h2e}
     v = phys(eri_mo[V, A, A, A])
-    blocks['Sr'] = (v, heff[V, A] - np.einsum('mbbn->mn', v))
+    blocks['Sr'] = (v, heff[V, A] - _ein('mbbn->mn', v))
     v = phys(eri_mo[A, C, A, A])
     blocks['Si'] = (v, heff[A, C])
     blocks['Sijrs'] = eri_mo[C, V, C, V]
@@ -600,10 +620,15 @@ def sc_nevpt2_energy(h1e_mo, eri_mo, eps, ncore, nact, active_nelec, ci_vector):
     ec, ev = B['e_core'], B['e_virt']
 
     comp = {}
+    # Sr and Si consume the SAME pair of eri-folded 4-pdm intermediates -- they
+    # depend only on (h2e, dm4).  Building them once instead of once per subspace
+    # removes the single most expensive contraction in the module (measured 1.9 s
+    # of a 11.0 s CAS(8,8) block before the einsum-order fix).
+    f3 = _f3ca_f3ac(h2e, dm4)
     v, h1v = B['Sr']
-    comp['Sr'] = _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ev)[1]
+    comp['Sr'] = _Sr(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ev, f3=f3)[1]
     v, h1v = B['Si']
-    comp['Si'] = _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ec)[1]
+    comp['Si'] = _Si(dm1, dm2, dm3, dm4, h1e, h2e, h1v, v, ec, f3=f3)[1]
     comp['Sijrs'] = _Sijrs(ec, ev, B['Sijrs'])[1]
     comp['Sijr'] = _Sijr(dm1, dm2, h1e, h2e, B['Sijr'], ec, ev)[1]
     comp['Srsi'] = _Srsi(dm1, dm2, h1e, h2e, B['Srsi'], ec, ev)[1]
