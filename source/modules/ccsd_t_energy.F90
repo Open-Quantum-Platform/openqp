@@ -83,6 +83,8 @@ contains
     logical :: use_chol, chol_trunc, use_direct
     integer :: chol_npass
     real(kind=dp) :: packed_gb
+    integer :: nthr_est
+    real(kind=dp) :: lad_blk
     integer :: nthr, niter
     logical :: open_shell
     logical :: converged, do_t
@@ -154,11 +156,25 @@ contains
       else
         mem_mo = mem_mo + rnv**4
       end if
+      ! The ladder gives every thread a dressed-integral block, so this part of
+      ! the cost scales with the thread count and not with the problem alone.
+      ! Left out, the estimate understated a wide run badly.  The block is
+      ! capped against available memory in ladder_contraction, so charge that
+      ! same capped size here rather than the tuned one.
+      nthr_est = 1
+      !$ nthr_est = omp_get_max_threads()
+      lad_blk = 8.0e6_dp
+      if (oqp_available_memory_gb() > 0.0_dp) then
+        lad_blk = min(lad_blk, max(rnv**3, &
+            OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb() &
+            *1.073741824e9_dp/8.0_dp/3.0_dp/real(nthr_est,dp)))
+      end if
       mem_solver = mem_mo &
                  + 14.0_dp*rno**2*rnv**2 &
                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
-                   * (rno*rnv + rno**2*rnv**2)
+                   * (rno*rnv + rno**2*rnv**2) &
+                 + real(nthr_est,dp)*lad_blk
       mem_gb = max(mem_ao + mem_mo, mem_solver) * 8.0_dp / 1.073741824e9_dp
     end if
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &

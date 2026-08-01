@@ -45,6 +45,8 @@ module cc_lib
   use precision, only: dp
   use parallel, only: par_env_t
   use blas_thread, only: blas_thread_count, blas_thread_set
+  use memory_info, only: oqp_available_memory_gb, OQP_MEMORY_SAFETY_FRACTION
+  use io_constants, only: iw
   use, intrinsic :: iso_c_binding, only: c_int64_t
 
   implicit none
@@ -723,6 +725,8 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   integer :: no2, nv2
   logical :: use_chol
   integer :: nchol_
+  integer :: nthr_use, max_thr
+  real(dp) :: target_dp, avail_gb, share_dp, per_thread
 
   no2 = no*no
   nv2 = nv*nv
@@ -733,7 +737,19 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
 
   ! Target ~64 MB per dressed-integral block, at least one and at most all
   ! virtuals.  OQP_CC_LADDER_BLOCK overrides it (tuning and regression tests).
-  bsize = max(1, min(nv, int(8.0e6_dp / real(max(1,nv2*nv),dp))))
+  !
+  ! That target is per thread, so cap it by what this machine can give as
+  ! well.  The cap only ever shrinks the tuned size: with room the behaviour
+  ! is unchanged, and without it the job blocks smaller instead of dying in
+  ! the allocator.
+  target_dp = 8.0e6_dp
+  avail_gb = oqp_available_memory_gb()
+  if (avail_gb > 0.0_dp) then
+    share_dp = OQP_MEMORY_SAFETY_FRACTION*avail_gb*1.073741824e9_dp/8.0_dp/3.0_dp
+    share_dp = share_dp/real(max(1,nthreads_now()), dp)
+    if (share_dp < target_dp) target_dp = max(real(nv2,dp)*real(nv,dp), share_dp)
+  end if
+  bsize = max(1, min(nv, int(target_dp / real(max(1,nv2*nv),dp))))
 
   ! The memory target alone says nothing about work granularity: for moderate
   ! nv it yields a SINGLE block, which would leave every rank but one idle.
@@ -762,73 +778,103 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
 
   allocate(acc(no,no,nv,nv), source=0.0_dp)
 
+  ! How many threads this region can afford.  Wblk is genuine private working
+  ! storage -- each thread builds a different block at the same time, so there
+  ! is nothing to share -- and it shrinks with bsize, so the width is capped
+  ! only when even the smallest useful block will not fit across the pool.
+  nthr_use = max(1, nthreads_now())
+  if (avail_gb > 0.0_dp) then
+    per_thread = real(nv2,dp)*real(nv,dp)*real(bsize,dp)
+    max_thr = int(OQP_MEMORY_SAFETY_FRACTION*avail_gb*1.073741824e9_dp/8.0_dp &
+                  /3.0_dp/max(1.0_dp, per_thread))
+    if (max_thr < nthr_use) then
+      nthr_use = max(1, max_thr)
+      write(iw,'(2X,A,I0,A,I0,A)') 'CCSD: ladder limited to ', nthr_use, &
+          ' of ', nthreads_now(), ' threads by available memory'
+    end if
+  end if
+
   ! Parallelise over blocks rather than inside them.  Threading the block build
   ! and then calling a threaded DGEMM alternates two thread pools, and the idle
   ! one spin-waits through the other's region -- measured ~2x slowdown at four
   ! cores.  One pool owning whole blocks, with BLAS pinned to a single thread
-  ! (restored by the caller), keeps every core on useful work.  Each thread
-  ! accumulates privately and the partial sums are combined once at the end.
-  !$omp parallel default(shared)
+  ! (restored by the caller), keeps every core on useful work.
+  !
+  ! The blocked index is b, an OUTPUT index, not the contracted d.  That is
+  ! what keeps the per-thread cost proportional to the block: each thread
+  ! writes a disjoint slice acc(:,:,:,b0:b1), so there is no private
+  ! accumulator and no reduction at the end.  Blocking d instead made every
+  ! thread accumulate the whole no^2 nv^2 output -- 500 MB per thread at
+  ! nbf = 300, unshrinkable, and the largest thing in a wide run.
+  !$omp parallel default(shared) num_threads(nthr_use)
   block
     ! Declared inside the construct, so each thread gets its own instance --
     ! an allocatable in a private() clause would arrive unallocated instead.
-    real(dp), allocatable :: Wblk(:,:,:,:), accloc(:,:,:,:), Vblk(:,:)
-    integer :: a, b, c, d, dd, k, d0, d1, nbd, iblk
+    real(dp), allocatable :: Wblk(:,:,:,:), Vblk(:,:), Bsub(:,:)
+    integer :: a, b, c, d, bb, k, b0, b1, nbb, iblk, jj
     real(dp) :: s
-    allocate(Wblk(nv,nv,nv,bsize))
-    allocate(accloc(no,no,nv,nv), source=0.0_dp)
-    ! Assembly buffer for the Cholesky path: V(ac, bd) for this block.
-    if (use_chol) allocate(Vblk(nv2, nv*bsize))
+    ! W((a,bb),(c,d)) for the b-block in hand.
+    allocate(Wblk(nv,bsize,nv,nv))
+    ! Cholesky path: V(ac,(bb,d)) for this block and the bvv rows it is built
+    ! from.  Unlike a d-block, the (b,d) rows of a b-block are strided -- b
+    ! runs inside each d -- so they are gathered rather than passed directly.
+    if (use_chol) allocate(Vblk(nv2, bsize*nv), Bsub(bsize*nv, nchol_))
 
     !$omp do schedule(dynamic,1)
     do iblk = 1, nblk
       if (pe%size > 1) then
         if (mod(iblk-1, int(pe%size)) /= int(pe%rank)) cycle
       end if
-      d0 = (iblk-1)*bsize + 1
-      d1 = min(nv, d0 + bsize - 1)
-      nbd = d1 - d0 + 1
+      b0 = (iblk-1)*bsize + 1
+      b1 = min(nv, b0 + bsize - 1)
+      nbb = b1 - b0 + 1
 
-      ! (ac|bd) for this d-block: either read from the stored v^4 array, or
-      ! rebuilt as B(ac,:) . B(bd,:)^T.  The rows of bvv for d in [d0,d1] are a
-      ! contiguous range, so the second operand is a submatrix of bvv and needs
-      ! no repacking -- only its leading dimension differs.
       if (use_chol) then
-        call dgemm('n','t', nv2, nv*nbd, nchol_, 1.0_dp, &
-                   bvv, nv2, bvv((d0-1)*nv+1, 1), nv2, 0.0_dp, Vblk, nv2)
+        do jj = 1, nchol_
+          do d = 1, nv
+            do bb = 1, nbb
+              Bsub(bb + (d-1)*nbb, jj) = bvv((b0+bb-1) + (d-1)*nv, jj)
+            end do
+          end do
+        end do
+        call dgemm('n','t', nv2, nbb*nv, nchol_, 1.0_dp, &
+                   bvv, nv2, Bsub, bsize*nv, 0.0_dp, Vblk, nv2)
       end if
 
-      do dd = 1, nbd
+      do d = 1, nv
         do c = 1, nv
-          do b = 1, nv
+          do bb = 1, nbb
+            b = b0 + bb - 1
             do a = 1, nv
-              d = d0 + dd - 1
               if (use_chol) then
-                s = Vblk((c-1)*nv+a, (dd-1)*nv+b)
+                s = Vblk((c-1)*nv+a, bb + (d-1)*nbb)
               else
                 s = vvvv(a,c,b,d)
               end if
               do k = 1, no
                 s = s - ovvv(k,d,a,c)*t1(k,b) - ovvv(k,c,b,d)*t1(k,a)
               end do
-              Wblk(a,b,c,dd) = s
+              Wblk(a,bb,c,d) = s
             end do
           end do
         end do
       end do
 
-      ! accloc(ij,ab) += sum_(c,dd) tau(ij,(c,d0+dd-1)) * Wblk((a,b),(c,dd))
-      call dgemm('n','t', no2, nv2, nv*nbd, 1.0_dp, tau(1,1,1,d0), no2, &
-                 Wblk, nv2, 1.0_dp, accloc, no2)
+      ! acc(ij,(a,b)) += sum_(c,d) tau(ij,(c,d)) * W((a,bb),(c,d)), written
+      ! straight into this block's slice, which no other thread touches.
+      !
+      ! Wblk is dimensioned on bsize, so its (c,d) columns are nv*bsize apart
+      ! whatever the current block holds.  The last block has nbb < bsize, and
+      ! passing nv*nbb here walks the wrong stride -- silently, and differently
+      ! for every block size, which is how it first showed up as an energy that
+      ! depended on the thread count.
+      call dgemm('n','t', no2, nv*nbb, nv2, 1.0_dp, tau, no2, &
+                 Wblk, nv*bsize, 1.0_dp, acc(1,1,1,b0), no2)
     end do
     !$omp end do
 
-    !$omp critical
-    acc = acc + accloc
-    !$omp end critical
-
-    deallocate(Wblk, accloc)
-    if (allocated(Vblk)) deallocate(Vblk)
+    deallocate(Wblk)
+    if (allocated(Vblk)) deallocate(Vblk, Bsub)
   end block
   !$omp end parallel
 
