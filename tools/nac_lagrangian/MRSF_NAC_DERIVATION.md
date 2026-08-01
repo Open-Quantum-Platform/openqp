@@ -1269,3 +1269,28 @@ mrsf_nac_wpair and gated per slot against this probe (v8_wprobe.py,
 extendable to any coordinate/pair). Bonus: the G-channel VECTOR
 (FOCK-record perturbation + matvec) measured here validates the
 Mt_G closed form at the vector level.
+
+### 7.43 v8/v8b/v8c/v9: the elimination program's terminus
+- v8b == v8 to every digit (global phase only): the sg_apply transport
+  and sign-fixed-C referee are EQUIVALENT (the matvec's exact lr2-axis
+  annihilation makes the fold transport safe). Referee methodology
+  exonerated.
+- socc orbitals DO sign-flip asymmetrically at +-h displacements (sg
+  probe) -- harmless given the above.
+- v8c: the pure C-channel [A(C')-A(C)] at converged F matches the
+  staged response to |diff| = 0.0197 (3%); the v8 "socc fingerprint"
+  was G-vector misplacement in the probe wiring.
+- v9: the MEASURED vector G-channel (per-coordinate G[dD] build +
+  FOCK-perturbed matvec) reproduces the closed-form Mt_G contraction
+  TO ALL DIGITS -- the closed form is CORRECT (another certification).
+RESULT: the invariant residual (1.94e-2 / 8.7e-3 / 2.06e-1 on the
+final d; ~3%/13% on the U-channel) survives every representation:
+closed-G == measured-G; staged-C == true-C to 3%; h-independent;
+process-independent; structured. The ONLY remaining unverified link in
+the entire chain is the numerical STAGING as a proxy for the analytic
+d/d(theta) of the sigma build. ROUTE-A PROPER therefore reduces to ONE
+question: derive d(sigma)/d(theta) term-by-term FROM THE SIGMA SOURCE
+(mrsfmntoia/mrsfcbc channels, spc scalings, fold application) and
+compare against the staged directional derivative -- wherever they
+differ is the final term. All probes, referees, and datasets for that
+comparison are in place.
