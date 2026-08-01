@@ -1348,3 +1348,27 @@ judged only through h->0-extrapolated or integral-consistent referees
 -- potentially dissolving the entire "invariant residual" as a
 referee artifact at finite h, with d_num (production, its own FD) the
 final arbiter.
+
+### 7.46 v13: both named measurements done; the residual is an h^0
+STATE-DEPENDENCE of the response operator
+Clean process (no maxit hacks), one-sided, h and h/2:
+  M1 reconstruction |C0(1+h u) - C+_sf| = 2.65e-4 -> 1.33e-4 (EXACT
+     halving: pure O(h^2)); u is faithful. Premise (i) closed.
+  M2 |lhs - staged| = 0.01952 -> 0.01957 (h-INDEPENDENT, clean).
+     The mixed d2A/dxdtheta hypothesis (predicting halving) is DEAD.
+Since every input difference between the lhs pair and the staged pair
+(C: h*u certified; integrals: O(h); FOCK/DM/eps records: O(h)) scales
+with h, an h-independent response difference forces the conclusion:
+the matvec's response operator differs at O(h^0) between the
+DISPLACED-state evaluation (lhs pair, run inside the displaced-SCF
+process state) and the REFERENCE-state evaluation (staged pair) --
+i.e., some piece of process state that the record set does not
+capture (int2 driver internals / screening tables / module-level
+caches?) shifts the C-response.
+NEXT MEASUREMENT (#1 of next session): the STATE-SWAP bisection --
+evaluate the staged pair [A(C0), A(C0(1+h u))] INSIDE the displaced
+state (before restore) and compare with lhs (expected == to ~3e-4);
+then bisect which state element (int2 re-init at reference vs
+displaced, grid, screening) carries the h^0 shift. The answer defines
+the final production term or exonerates the assembly entirely (with
+d_num as the only valid referee).
