@@ -38,6 +38,17 @@ module cholesky_direct
   private
   public :: cholesky_direct_decompose
 
+  !> How far below the block's opening pivot a candidate may fall and still be
+  !> taken from the block in hand.
+  !>
+  !> Leaving as soon as the globally largest diagonal moves elsewhere costs an
+  !> integral pass per vector or so, because the global best hops between
+  !> blocks constantly.  Accepting anything within this factor drains the block
+  !> that was already paid for.  The pivots taken are still all comparable in
+  !> size to the largest available, so the factorisation stays well
+  !> conditioned; the tolerance, not this, decides the accuracy.
+  real(dp), parameter :: BLOCK_SPAN = 1.0e-2_dp
+
   !> Per-shell extents in the AO space the integrals are delivered in.
   type :: ao_map_t
     integer, allocatable :: first(:)   !< first AO of each shell
@@ -332,8 +343,10 @@ contains
     type(column_collect_t), target :: ccons
     type(ao_map_t) :: map
     real(dp), allocatable, target :: colblk(:,:), diag(:)
+    integer, allocatable :: slot_pair(:)
     integer :: npair, p, j, pivot, mu, nu, si, sj, sw, nblk, slot
-    real(dp) :: vmax, scale_
+    integer :: a, b, m
+    real(dp) :: vmax, scale_, dopen, bestval
 
     npair = basis%nbf*(basis%nbf+1)/2
     nchol = 0
@@ -380,27 +393,51 @@ contains
       nblk = ccons%n_i*ccons%n_j
 
       if (allocated(colblk)) deallocate(colblk)
+      if (allocated(slot_pair)) deallocate(slot_pair)
       allocate(colblk(npair, nblk), source=0.0_dp)
-      ccons%col => colblk
+      allocate(slot_pair(nblk))
 
+      ! Which global pair each column of the block belongs to, so the search
+      ! below can be restricted to this block without scanning all of diag.
+      do b = 1, ccons%n_j
+        do a = 1, ccons%n_i
+          m = a + (b-1)*ccons%n_i
+          slot_pair(m) = pair_index(ccons%ao_i + a - 1, ccons%ao_j + b - 1)
+        end do
+      end do
+
+      ccons%col => colblk
       call drv%run(ccons)
       call ccons%clean()
       npass = npass + 1
 
+      dopen = vmax
+
       ! Drain this block: its columns are already in hand, so taking every
       ! vector it still supports is free relative to fetching another.
       inner: do
-        pivot = maxloc(diag, dim=1)
-        vmax = diag(pivot)
-        if (vmax < tol) exit outer
+        ! Best pivot inside this block, not globally: the columns are already
+        ! in hand, so anything comparable in size is cheaper to take now than
+        ! to fetch again later.
+        slot = 0
+        bestval = 0.0_dp
+        do m = 1, nblk
+          p = slot_pair(m)
+          if (diag(p) > bestval) then
+            bestval = diag(p)
+            slot = m
+            pivot = p
+          end if
+        end do
+
+        if (slot == 0) exit inner
+        vmax = bestval
+        if (vmax < tol) exit inner
+        if (vmax < BLOCK_SPAN*dopen) exit inner
         if (nchol >= maxchol) then
           truncated = .true.
           exit outer
         end if
-
-        call pair_to_ao(pivot, mu, nu)
-        slot = slot_of(ccons, mu, nu)
-        if (slot == 0) exit inner     ! the best pivot moved to another block
 
         nchol = nchol + 1
         do p = 1, npair
