@@ -71,6 +71,8 @@ import numpy as np
 
 import oqp
 from oqp.library.fci import (
+    _as_f64c,
+    _as_i64c,
     _build_dense_hamiltonian,
     _determinants,
     _spin_orbital_integrals,
@@ -755,9 +757,8 @@ def _minor_transform(R, occ):
         lib, ffi = backend
         if hasattr(lib, "pt2_minor_transform"):
             nelec = len(occ[0])
-            r = np.ascontiguousarray(R, dtype=np.float64)
-            table = np.ascontiguousarray(
-                np.asarray(occ, dtype=np.int64).reshape(n, nelec))
+            r = _as_f64c(R)
+            table = _as_i64c(np.asarray(occ, dtype=np.int64).reshape(n, nelec))
             T = np.zeros((n, n), dtype=np.float64)
             lib.pt2_minor_transform(int(R.shape[0]), int(nelec), int(n),
                                     _dptr(ffi, r), _iptr(ffi, table),

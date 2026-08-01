@@ -33,7 +33,7 @@ from __future__ import annotations
 import numpy as np
 from scipy import sparse
 
-from oqp.library.fci import _determinants
+from oqp.library.fci import _as_f64c, _determinants
 from oqp.library.rdm import _bit_count
 
 NUMERICAL_ZERO = 1.0e-14
@@ -255,8 +255,8 @@ def _f3ca_f3ac(h2e, dm4):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_f3ca_f3ac"):
             n = int(h2e.shape[0])
-            g = np.ascontiguousarray(h2e, dtype=np.float64)
-            d4 = np.ascontiguousarray(dm4, dtype=np.float64)
+            g = _as_f64c(h2e)
+            d4 = _as_f64c(dm4)
             f3ca = np.zeros((n,) * 6, dtype=np.float64)
             f3ac = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_f3ca_f3ac(
@@ -284,11 +284,11 @@ def _a16(h1e, h2e, dm3, f3ca, f3ac):
         lib, ffi = backend
         if hasattr(lib, "nevpt2_a16"):
             n = int(h1e.shape[0])
-            h1 = np.ascontiguousarray(h1e, dtype=np.float64)
-            g = np.ascontiguousarray(h2e, dtype=np.float64)
-            d3 = np.ascontiguousarray(dm3, dtype=np.float64)
-            ca = np.ascontiguousarray(f3ca, dtype=np.float64)
-            ac = np.ascontiguousarray(f3ac, dtype=np.float64)
+            h1 = _as_f64c(h1e)
+            g = _as_f64c(h2e)
+            d3 = _as_f64c(dm3)
+            ca = _as_f64c(f3ca)
+            ac = _as_f64c(f3ac)
             out = np.zeros((n,) * 6, dtype=np.float64)
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
             lib.nevpt2_a16(n, cast(h1), cast(g), cast(d3), cast(ca), cast(ac),
@@ -324,7 +324,7 @@ def _a22(h1e, h2e, dm2, dm3, f3ca, f3ac):
         if hasattr(lib, "nevpt2_a22"):
             n = int(h1e.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (h1e, h2e, dm2, dm3, f3ca, f3ac)]
             out = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_a22(n, *[cast(a) for a in ops], cast(out))
@@ -412,7 +412,7 @@ def _hdm3(dm1, dm2, dm3, hdm1, hdm2):
         if hasattr(lib, "nevpt2_hdm3"):
             n = int(dm1.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (dm1, dm2, dm3, hdm2)]
             out = np.zeros((n,) * 6, dtype=np.float64)
             lib.nevpt2_hdm3(n, *[cast(a) for a in ops], cast(out))
@@ -454,7 +454,7 @@ def _a7(h1e, h2e, dm1, dm2, dm3):
         if hasattr(lib, "nevpt2_a7"):
             n = int(h1e.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (h1e, h2e, dm1, dm2, dm3)]
             rm2 = np.zeros((n,) * 4, dtype=np.float64)
             a7 = np.zeros((n,) * 4, dtype=np.float64)
@@ -487,7 +487,7 @@ def _a9(h1e, h2e, hdm1, hdm2, hdm3):
         if hasattr(lib, "nevpt2_a9"):
             n = int(h1e.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (h1e, h2e, hdm2, hdm3)]
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a9(n, *[cast(a) for a in ops], cast(out))
@@ -516,7 +516,7 @@ def _a12(h1e, h2e, dm1, dm2, dm3):
         if hasattr(lib, "nevpt2_a12"):
             n = int(h1e.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (h1e, h2e, dm2, dm3)]
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a12(n, *[cast(a) for a in ops], cast(out))
@@ -541,7 +541,7 @@ def _a13(h1e, h2e, dm1, dm2, dm3):
         if hasattr(lib, "nevpt2_a13"):
             n = int(h1e.shape[0])
             cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
-            ops = [np.ascontiguousarray(a, dtype=np.float64)
+            ops = [_as_f64c(a)
                    for a in (h1e, h2e, dm1, dm2, dm3)]
             out = np.zeros((n,) * 4, dtype=np.float64)
             lib.nevpt2_a13(n, *[cast(a) for a in ops], cast(out))
