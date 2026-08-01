@@ -1517,10 +1517,14 @@ class Molecule:
     def write_molden(self, filename):
         """Write calculation results in Molden format.
 
-        Returns True if a file was written. Basis sets with shells beyond g
-        cannot be expressed in the Molden format, so those are skipped with a
-        warning rather than aborting the calculation -- the orbitals are a
-        by-product, and losing them should not lose the energy too.
+        Basis sets with shells beyond g cannot be expressed in the Molden
+        format, so those are skipped with a warning rather than aborting the
+        calculation -- the orbitals are a by-product, and losing them should
+        not lose the energy too.
+
+        No status is returned: this runs under @mpi_dump, which does not call
+        the wrapped function at all on non-zero ranks, so any return value
+        would be meaningless there.
         """
 
         basis = self.data.get_basis()
@@ -1534,7 +1538,11 @@ class Molecule:
                 % (filename, MoldenWriter.SHELL_TYPES[-1],
                    MoldenWriter.MAX_ANG, bad_l)
             )
-            return False
+            # A stale file from an earlier run would otherwise survive and look
+            # like valid output for this one.
+            if os.path.exists(filename):
+                os.remove(filename)
+            return
 
         with open(filename, mode='w', encoding='ascii') as fout:
             nat = self.data['natom']
@@ -1567,8 +1575,6 @@ class Molecule:
                 occupancies = (1.0 if i < nocc else 0.0 for i in range(nbf))
                 mdw.write_mo(basis, orbitals, eorbitals,
                              occupancies, spin='Beta', header=False)
-
-        return True
 
     def set_log(self):
         """

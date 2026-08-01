@@ -79,3 +79,27 @@ def test_write_basis_still_works_for_g(tmp_path):
     assert "[GTO]" in text
     # s and g shells both labelled
     assert "\ns 1" in text and "\ng 1" in text
+
+
+def test_molecule_write_molden_clears_stale_output(tmp_path):
+    """End-to-end on the real method, with the native layers stubbed out."""
+    import types
+    import warnings as _warnings
+    from oqp.molecule.molecule import Molecule
+
+    stale = tmp_path / "orbitals.molden"
+    stale.write_text("[Molden Format]\nstale\n")
+
+    mol = Molecule.__new__(Molecule)
+    mol.usempi = False
+    mol.data = types.SimpleNamespace(get_basis=lambda: _basis([0, 5]))
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        # Call the undecorated function; @mpi_dump only gates on rank.
+        Molecule.write_molden.__wrapped__(mol, str(stale)) \
+            if hasattr(Molecule.write_molden, "__wrapped__") \
+            else Molecule.write_molden(mol, str(stale))
+
+    assert not stale.exists(), "stale Molden file must be removed when skipping"
+    assert any("Skipping Molden output" in str(w.message) for w in caught)
