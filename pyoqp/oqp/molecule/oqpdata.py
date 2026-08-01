@@ -166,6 +166,7 @@ OQP_CONFIG_SCHEMA = {
         'nfzc': {'type': int, 'default': '0'},
         'cholesky': {'type': bool, 'default': 'True'},
         'cholesky_tol': {'type': float, 'default': '1e-10'},
+        'cholesky_direct': {'type': string, 'default': 'auto'},
     },
     'guess': {
         'type': {'type': string, 'default': 'huckel'},
@@ -624,6 +625,7 @@ class OQPData:
             "nfzc": "set_cc_nfzc",
             "cholesky": "set_cc_cholesky",
             "cholesky_tol": "set_cc_cholesky_tol",
+            "cholesky_direct": "set_cc_cholesky_direct",
         },
         "scf": {
             "type": "set_scf_type",
@@ -1317,6 +1319,20 @@ class OQPData:
     def set_cc_cholesky_tol(self, tol):
         """Set the Cholesky truncation threshold."""
         self._data.control.cc_cholesky_tol = float(tol)
+
+    _cc_direct_modes = {"auto": 0, "true": 1, "false": 2}
+
+    def set_cc_cholesky_direct(self, mode):
+        """Select the integral-direct factorisation: auto, true, or false.
+
+        auto takes it only when the packed AO store would not fit -- it is
+        slower wherever both fit, so memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key not in OQPData._cc_direct_modes:
+            raise ValueError(
+                "[cc] cholesky_direct must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky_direct = OQPData._cc_direct_modes[key]
 
     def set_cc_triples(self, triples):
         """Enable/disable the perturbative (T) correction."""

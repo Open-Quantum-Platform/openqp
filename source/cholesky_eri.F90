@@ -39,6 +39,8 @@ module cholesky_eri
   public :: cholesky_eri_max_vectors
   public :: cholesky_packed_index
   public :: cholesky_transform_vv
+  public :: cholesky_transform_block
+  public :: cholesky_assemble_mo_blocks
 
 contains
 
@@ -179,20 +181,36 @@ contains
 !> @param[in]  nchol  number of vectors
 !> @param[out] bvv    (nv*nv, nchol), indexed (a + (c-1)*nv, J)
   subroutine cholesky_transform_vv(nbf, nv, cv, lvec, nchol, bvv)
-
     integer, intent(in) :: nbf, nv, nchol
     real(dp), intent(in) :: cv(nbf, nv)
     real(dp), intent(in) :: lvec(:,:)
     real(dp), intent(out) :: bvv(nv*nv, nchol)
+    call cholesky_transform_block(nbf, nv, cv, nv, cv, lvec, nchol, bvv)
+  end subroutine cholesky_transform_vv
+
+!###############################################################################
+
+!> @brief Transform the AO vectors into an arbitrary MO block.
+!>
+!>   B(p,q,J) = sum_(mu,nu) C1(mu,p) C2(nu,q) L(pair(mu,nu), J)  =  C1^T L_J C2
+!>
+!> so that (pq|rs) = sum_J B(p,q,J) B(r,s,J) for any pair of blocks.  Indexing
+!> is p + (q-1)*n1, which is the column-major layout of a (n1,n2) slice, so
+!> the results drop straight into the four-index arrays cc_lib expects.
+  subroutine cholesky_transform_block(nbf, n1, c1, n2, c2, lvec, nchol, b)
+
+    integer, intent(in) :: nbf, n1, n2, nchol
+    real(dp), intent(in) :: c1(nbf, n1), c2(nbf, n2)
+    real(dp), intent(in) :: lvec(:,:)
+    real(dp), intent(out) :: b(n1*n2, nchol)
 
     real(dp), allocatable :: lao(:,:), scr(:,:)
     integer :: j, mu, nu, ip
 
     !$omp parallel default(shared) private(j, mu, nu, ip, lao, scr)
-    allocate(lao(nbf,nbf), scr(nbf,nv))
+    allocate(lao(nbf,nbf), scr(nbf,n2))
     !$omp do schedule(static)
     do j = 1, nchol
-      ! Unpack the vector into a full symmetric AO matrix.
       do mu = 1, nbf
         do nu = 1, mu
           ip = mu*(mu-1)/2 + nu
@@ -200,14 +218,50 @@ contains
           lao(nu,mu) = lao(mu,nu)
         end do
       end do
-      call dgemm('n','n', nbf, nv, nbf, 1.0_dp, lao, nbf, cv, nbf, 0.0_dp, scr, nbf)
-      call dgemm('t','n', nv, nv, nbf, 1.0_dp, cv, nbf, scr, nbf, 0.0_dp, &
-                 bvv(1,j), nv)
+      call dgemm('n','n', nbf, n2, nbf, 1.0_dp, lao, nbf, c2, nbf, 0.0_dp, scr, nbf)
+      call dgemm('t','n', n1, n2, nbf, 1.0_dp, c1, nbf, scr, nbf, 0.0_dp, b(1,j), n1)
     end do
     !$omp end do
     deallocate(lao, scr)
     !$omp end parallel
 
-  end subroutine cholesky_transform_vv
+  end subroutine cholesky_transform_block
+
+!###############################################################################
+
+!> @brief Assemble the coupled-cluster MO integral blocks from the vectors.
+!>
+!> Each block is one DGEMM over the vector index, in the exact index order
+!> cc_lib reads:
+!>   oooo(ij,kl)  ooov(ij,ka)  oovv(ij,ab)  ovov(ia,jb)  ovvv(ia,bc)
+!> The ladder block is deliberately absent -- it stays factorised and is
+!> rebuilt per block inside the ladder contraction.
+!>
+!> With this the packed AO store has no remaining consumer, which is what
+!> lets the direct factorisation actually remove it from the peak.
+  subroutine cholesky_assemble_mo_blocks(no, nv, nchol, boo, bov, bvv, &
+                                         oooo, ooov, oovv, ovov, ovvv)
+
+    integer, intent(in) :: no, nv, nchol
+    real(dp), intent(in) :: boo(no*no, nchol), bov(no*nv, nchol)
+    real(dp), intent(in) :: bvv(nv*nv, nchol)
+    real(dp), intent(out) :: oooo(no*no, no*no)
+    real(dp), intent(out) :: ooov(no*no, no*nv)
+    real(dp), intent(out) :: oovv(no*no, nv*nv)
+    real(dp), intent(out) :: ovov(no*nv, no*nv)
+    real(dp), intent(out) :: ovvv(no*nv, nv*nv)
+
+    call dgemm('n','t', no*no, no*no, nchol, 1.0_dp, boo, no*no, boo, no*no, &
+               0.0_dp, oooo, no*no)
+    call dgemm('n','t', no*no, no*nv, nchol, 1.0_dp, boo, no*no, bov, no*nv, &
+               0.0_dp, ooov, no*no)
+    call dgemm('n','t', no*no, nv*nv, nchol, 1.0_dp, boo, no*no, bvv, nv*nv, &
+               0.0_dp, oovv, no*no)
+    call dgemm('n','t', no*nv, no*nv, nchol, 1.0_dp, bov, no*nv, bov, no*nv, &
+               0.0_dp, ovov, no*nv)
+    call dgemm('n','t', no*nv, nv*nv, nchol, 1.0_dp, bov, no*nv, bvv, nv*nv, &
+               0.0_dp, ovvv, no*nv)
+
+  end subroutine cholesky_assemble_mo_blocks
 
 end module cholesky_eri

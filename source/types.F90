@@ -194,6 +194,7 @@ module types
     integer(c_int64_t) :: cc_triples = 1         !< evaluate the (T) correction (0=off, 1=on)
     integer(c_int64_t) :: cc_cholesky = 1        !< Cholesky-factorise the ladder integrals (0=off, 1=on)
     real(c_double) :: cc_cholesky_tol = 1.0e-10_dp !< Cholesky truncation threshold
+    integer(c_int64_t) :: cc_cholesky_direct = 0 !< 0=auto (on memory), 1=always, 2=never
   end type control_parameters
 
   type, public, bind(c) :: tddft_parameters

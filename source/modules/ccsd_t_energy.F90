@@ -48,10 +48,13 @@ contains
                         cc_uhf_ccsd_t
     use mp2_lib, only: semicanonicalize
     use cc_lib, only: cc_ccsd_t_energy, cc_options_t
+    use cholesky_direct, only: cholesky_direct_decompose
     use cholesky_eri, only: cholesky_eri_decompose, cholesky_eri_max_vectors, &
-                            cholesky_transform_vv
+                            cholesky_transform_vv, cholesky_transform_block, &
+                            cholesky_assemble_mo_blocks
     use parallel, only: par_env_t
-    use memory_info, only: oqp_memory_check
+    use memory_info, only: oqp_memory_check, oqp_available_memory_gb, &
+                           oqp_mem_str, OQP_MEMORY_SAFETY_FRACTION
 !$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
 
@@ -74,10 +77,12 @@ contains
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
     real(kind=dp) :: mem_ao, mem_mo, mem_solver, rno, rnv
-    real(kind=dp), allocatable :: lvec(:,:), bvv(:,:)
+    real(kind=dp), allocatable :: lvec(:,:), bvv(:,:), boo(:,:), bov(:,:)
     integer :: nchol, maxchol
     real(kind=dp) :: chol_tol, chol_err
-    logical :: use_chol, chol_trunc
+    logical :: use_chol, chol_trunc, use_direct
+    integer :: chol_npass
+    real(kind=dp) :: packed_gb
     integer :: nthr, niter
     logical :: open_shell
     logical :: converged, do_t
@@ -186,6 +191,32 @@ contains
     end do
 
     ! ---- AO integrals ------------------------------------------------------
+    ! With Cholesky every MO block comes from the vectors, so the packed store
+    ! exists only to produce them.  The direct factorisation produces the same
+    ! vectors without it, but sweeps the shell-pair list once per pivot block
+    ! and is measurably slower wherever both fit -- so it is chosen on memory,
+    ! never on speed.
+    use_chol = infos%control%cc_cholesky /= 0
+    chol_tol = infos%control%cc_cholesky_tol
+    packed_gb = real(cc_packed_length(nbf), dp)*8.0_dp/1.073741824e9_dp
+    use_direct = .false.
+    if (use_chol .and. .not. open_shell) then
+      select case (int(infos%control%cc_cholesky_direct))
+      case (1); use_direct = .true.
+      case (2); use_direct = .false.
+      case default
+        if (oqp_available_memory_gb() > 0.0_dp) then
+          use_direct = packed_gb > &
+              OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
+        end if
+      end select
+      if (use_direct) then
+        write(iw,'(2X,A)') 'CCSD(T): the packed AO store ('// &
+            trim(oqp_mem_str(packed_gb))//') would not fit; factorising directly.'
+      end if
+    end if
+
+    if (.not. use_direct) then
     allocate(gao(cc_packed_length(nbf)), stat=ok)
     if (ok /= 0) call show_message('CCSD(T): cannot allocate the AO integral &
                                    &store -- system too large for in-core CC', with_abort)
@@ -200,6 +231,7 @@ contains
     call int2_driver%run(eri_data)
     call eri_data%clean()
     call int2_driver%clean()
+    end if
 
     ! ---- coupled cluster ---------------------------------------------------
     do_t = infos%control%cc_triples /= 0
@@ -250,16 +282,23 @@ contains
       ! vvvv is never allocated.  It costs flops -- the assembly is nchol/no^2
       ! times the ladder DGEMM -- which is the trade that turns a job that does
       ! not fit into one that does.
-      use_chol = infos%control%cc_cholesky /= 0
-      chol_tol = infos%control%cc_cholesky_tol
+
+
 
       if (use_chol) then
         maxchol = cholesky_eri_max_vectors(nbf, 20)
         allocate(lvec(nbf*(nbf+1)/2, maxchol), stat=ok)
         if (ok /= 0) call show_message('CCSD(T): cannot allocate Cholesky vectors', &
                                        with_abort)
-        call cholesky_eri_decompose(nbf, gao, chol_tol, maxchol, lvec, nchol, &
-                                    chol_err, chol_trunc)
+        if (use_direct) then
+          call cholesky_direct_decompose(basis, infos, chol_tol, maxchol, lvec, &
+                                         nchol, chol_err, chol_trunc, chol_npass)
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): direct factorisation used ', &
+              chol_npass, ' integral passes'
+        else
+          call cholesky_eri_decompose(nbf, gao, chol_tol, maxchol, lvec, nchol, &
+                                      chol_err, chol_trunc)
+        end if
         write(iw,'(2X,A,I0,A,ES9.2,A,F5.1,A)') &
             'CCSD(T): Cholesky vectors = ', nchol, ' (residual ', chol_err, &
             ', ', real(nchol,dp)/real(nbf,dp), ' per basis function)'
@@ -268,10 +307,15 @@ contains
               'cap before reaching the tolerance; the correlation energy is ' // &
               'less accurate than [cc] cholesky_tol requests.'
         end if
-        allocate(bvv(nv*nv, nchol), stat=ok)
+        allocate(boo(no*no, nchol), bov(no*nv, nchol), bvv(nv*nv, nchol), stat=ok)
         if (ok /= 0) call show_message('CCSD(T): cannot allocate the MO Cholesky &
-                                       &block', with_abort)
-        call cholesky_transform_vv(nbf, nv, cmo(:, no+1:nmo), lvec, nchol, bvv)
+                                       &blocks', with_abort)
+        call cholesky_transform_block(nbf, no, cmo(:, 1:no), no, cmo(:, 1:no), &
+                                      lvec, nchol, boo)
+        call cholesky_transform_block(nbf, no, cmo(:, 1:no), nv, cmo(:, no+1:nmo), &
+                                      lvec, nchol, bov)
+        call cholesky_transform_block(nbf, nv, cmo(:, no+1:nmo), nv, &
+                                      cmo(:, no+1:nmo), lvec, nchol, bvv)
         deallocate(lvec)
       end if
 
@@ -286,10 +330,18 @@ contains
       if (ok /= 0) call show_message('CCSD(T): cannot allocate the ladder integrals', &
                                      with_abort)
 
-      call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
-                              oooo, ooov, oovv, ovov, ovvv, vvvv, &
-                              skip_vvvv=use_chol)
-      deallocate(gao)
+      if (use_chol) then
+        ! Every block comes from the vectors, so the packed AO store has no
+        ! consumer left -- which is the point: it can be released here, and
+        ! with the direct factorisation it is never built at all.
+        call cholesky_assemble_mo_blocks(no, nv, nchol, boo, bov, bvv, &
+                                         oooo, ooov, oovv, ovov, ovvv)
+        deallocate(boo, bov)
+      else
+        call cc_build_mo_blocks(nbf, nmo, no, cmo, gao, &
+                                oooo, ooov, oovv, ovov, ovvv, vvvv)
+      end if
+      if (allocated(gao)) deallocate(gao)
 
       if (use_chol) then
         call cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &

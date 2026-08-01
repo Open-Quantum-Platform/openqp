@@ -177,6 +177,7 @@ struct control_parameters {
     int64_t   cc_triples;
     int64_t   cc_cholesky;
     double    cc_cholesky_tol;
+    int64_t   cc_cholesky_direct;
 };
 
 struct mpi_communicator {
