@@ -410,6 +410,41 @@ def _hess_amp_backend():
     return lib, ffi
 
 
+def _lib_hess_relax(npar, ndet, iavg, ovl, weights, eps, e_i, amp, hess,
+                    degeneracy_tol):
+    """CI-relaxation accumulation through the Fortran engine.
+
+    Returns ``True`` when the engine ran (``hess`` updated in place), ``False``
+    when unavailable so the caller runs the Python loop.  Raises on a genuine
+    root degeneracy, matching the Python path's message."""
+    backend = _hess_amp_backend()
+    if backend is None:
+        return False
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_hess_relax"):
+        return False
+    ov = np.ascontiguousarray(ovl, dtype=np.float64)
+    wt = np.ascontiguousarray(weights, dtype=np.float64)
+    ep = np.ascontiguousarray(eps, dtype=np.float64)
+    am = np.ascontiguousarray(amp, dtype=np.float64)
+    info = int(lib.casscf_hess_relax(
+        int(npar), int(ndet), int(ov.shape[0]), int(iavg),
+        ffi.cast("double *", ov.ctypes.data),
+        ffi.cast("double *", wt.ctypes.data),
+        ffi.cast("double *", ep.ctypes.data),
+        float(e_i), float(degeneracy_tol), float(_COUPLING_NOISE),
+        ffi.cast("double *", am.ctypes.data),
+        ffi.cast("double *", hess.ctypes.data)))
+    if info != 0:
+        j = info - 1
+        denom = float(e_i) - float(eps[j])
+        raise ValueError(
+            "analytic CASSCF Hessian: root degeneracy with non-zero orbital "
+            f"coupling (|E_I - E_J| = {abs(denom):.2e}); the objective is not "
+            "smooth here and no orbital Hessian is defined")
+    return True
+
+
 def _lib_hess_wmat(stack, civec):
     """``W_tua = (E_tu|c>)_a`` through the Fortran engine, or None.
 
@@ -561,31 +596,33 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
             for k in range(npar):
                 amp[k] = _apply_active_operator(f_der[k], g_der[k], stack, wmat) @ vecs
 
-        factors = np.zeros(ndet)
-        for j in range(ndet):
-            if ovl[i_avg, j] > 0.5:
-                continue  # this eigenstate IS the averaged root I
-            m = int(np.argmax(ovl[:, j]))
-            if ovl[m, j] > 0.5:
-                # coupling within the averaged set: (w_I - w_J), split over the
-                # two ordered visits -> exact cancellation for equal weights
-                coef = 0.5 * (w_i - float(weights[m]))
-            else:
-                coef = float(w_i)
-            if coef == 0.0:
-                continue
-            denom = e_i - float(eps[j])
-            if abs(denom) < degeneracy_tol:
-                if float(np.max(np.abs(amp[:, j]))) * abs(coef) < _COUPLING_NOISE:
-                    continue  # symmetry/spin-forbidden partner: exact zero coupling
-                raise ValueError(
-                    "analytic CASSCF Hessian: root degeneracy with non-zero orbital "
-                    f"coupling (|E_I - E_J| = {abs(denom):.2e}); the objective is not "
-                    "smooth here and no orbital Hessian is defined")
-            factors[j] = 2.0 * coef / denom
-        nz = factors != 0.0
-        if np.any(nz):
-            hess += (amp[:, nz] * factors[nz]) @ amp[:, nz].T
+        if not _lib_hess_relax(npar, ndet, i_avg, ovl, weights, eps, e_i,
+                               amp, hess, degeneracy_tol):
+            factors = np.zeros(ndet)
+            for j in range(ndet):
+                if ovl[i_avg, j] > 0.5:
+                    continue  # this eigenstate IS the averaged root I
+                m = int(np.argmax(ovl[:, j]))
+                if ovl[m, j] > 0.5:
+                    # coupling within the averaged set: (w_I - w_J), split over the
+                    # two ordered visits -> exact cancellation for equal weights
+                    coef = 0.5 * (w_i - float(weights[m]))
+                else:
+                    coef = float(w_i)
+                if coef == 0.0:
+                    continue
+                denom = e_i - float(eps[j])
+                if abs(denom) < degeneracy_tol:
+                    if float(np.max(np.abs(amp[:, j]))) * abs(coef) < _COUPLING_NOISE:
+                        continue  # symmetry/spin-forbidden partner: exact zero coupling
+                    raise ValueError(
+                        "analytic CASSCF Hessian: root degeneracy with non-zero orbital "
+                        f"coupling (|E_I - E_J| = {abs(denom):.2e}); the objective is not "
+                        "smooth here and no orbital Hessian is defined")
+                factors[j] = 2.0 * coef / denom
+            nz = factors != 0.0
+            if np.any(nz):
+                hess += (amp[:, nz] * factors[nz]) @ amp[:, nz].T
 
     return hess
 

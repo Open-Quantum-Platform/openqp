@@ -314,6 +314,13 @@ void casscf_hess_amp(int32_t nact, int64_t ndet, int32_t npar,
 /* W_tua = (E_tu|c>)_a for one CI vector (casscf_hess_kernel.F90). */
 void casscf_hess_wmat(int32_t nact, int64_t ndet, const double *stack,
     const double *civec, double *wmat);
+/* CI-relaxation accumulation for one averaged root (casscf_hess_kernel.F90).
+ * Returns 0, or j+1 when eigenstate j is degenerate with the reference and
+ * still genuinely coupled -- the caller raises, since no orbital Hessian
+ * exists there. */
+int64_t casscf_hess_relax(int32_t npar, int64_t ndet, int32_t navg, int32_t iavg,
+    const double *ovl, const double *weights, const double *eps, double e_i,
+    double degen_tol, double noise_tol, const double *amp, double *hess);
 /* Fixed-CI half of the analytic CASSCF orbital Hessian (casscf_hess_bmat.F90):
  * the B columns and the folded active derivative integrals, assembled from the
  * sparse one-index derivative slabs so no nbf^4 temporary is formed. */

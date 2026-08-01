@@ -50,7 +50,7 @@ module casscf_hess_kernel_mod
   !> Budget for the per-chunk x buffer, in doubles (128 MiB).
   integer(i8), parameter :: x_budget = 16777216_i8
 
-  public :: casscf_hess_amp, casscf_hess_wmat
+  public :: casscf_hess_amp, casscf_hess_wmat, casscf_hess_relax
 
 contains
 
@@ -189,5 +189,113 @@ contains
 
     deallocate(sigma, xbuf, gtr)
   end subroutine casscf_hess_amp
+
+  !> CI-relaxation accumulation for one averaged root.
+  !>
+  !> Builds the response weights
+  !>
+  !>     factor_j = 2 coef_j / (E_I - eps_j)
+  !>
+  !> and accumulates `hess += sum_j factor_j amp[:,j] amp[:,j]^T`, which is one
+  !> DGEMM against a column-scaled copy rather than the ndet-long Python loop
+  !> plus a masked NumPy product.
+  !>
+  !> `coef_j` follows casscf_hessian exactly: eigenstates that ARE the averaged
+  !> root are skipped; couplings *within* the averaged set carry 0.5*(w_I - w_J)
+  !> so equal weights cancel over the two ordered visits; everything else
+  !> carries w_I.
+  !>
+  !> Degeneracy is not silently absorbed.  A denominator below `degen_tol` with
+  !> a genuinely non-zero coupling means the state-averaged objective is not
+  !> smooth and no orbital Hessian exists there, so the routine refuses:
+  !> it returns j+1 and the caller raises.  A vanishing coupling at the same
+  !> denominator is the spin/symmetry-forbidden case and is simply skipped.
+  !>
+  !> @param[in]     npar, ndet, navg, iavg  sizes and which averaged root this is
+  !> @param[in]     ovl        squared overlaps, C-order [navg,ndet]
+  !> @param[in]     weights    state-average weights, [navg]
+  !> @param[in]     eps        active-Hamiltonian eigenvalues, [ndet]
+  !> @param[in]     e_i        <c|H|c> for this root
+  !> @param[in]     amp        projected amplitudes, C-order [npar,ndet]
+  !> @param[inout]  hess       accumulated into, C-order [npar,npar]
+  !> @return 0 on success, or j+1 for the offending degenerate eigenstate.
+  function casscf_hess_relax(npar, ndet, navg, iavg, ovl, weights, eps, &
+                             e_i, degen_tol, noise_tol, amp, hess) result(info) &
+      bind(C, name="casscf_hess_relax")
+    integer(c_int32_t), value :: npar, navg, iavg
+    integer(i8), value :: ndet
+    real(dp), value :: e_i, degen_tol, noise_tol
+    ! bind(C) hands over bare pointers: array dummies must be assumed-SIZE.
+    real(dp), intent(in) :: ovl(0:*), weights(0:*), eps(0:*), amp(0:*)
+    real(dp), intent(inout) :: hess(0:*)
+    integer(i8) :: info
+
+    integer :: np, na, ia, m, mm, k
+    integer(i8) :: j, nd
+    real(dp) :: coef, denom, best, amax, w_i
+    real(dp), allocatable :: factors(:), bmat(:,:)
+    logical :: any_nz
+
+    info = 0_i8
+    np = int(npar)
+    na = int(navg)
+    ia = int(iavg)
+    nd = ndet
+    if (np <= 0 .or. nd <= 0_i8) return
+    w_i = weights(ia)
+
+    allocate(factors(0:nd-1))
+    factors = 0.0_dp
+    any_nz = .false.
+
+    do j = 0_i8, nd - 1_i8
+      ! ovl is C-order [navg, ndet]: entry (a, j) sits at a*ndet + j.
+      if (ovl(int(ia, i8)*nd + j) > 0.5_dp) cycle   ! this eigenstate IS root I
+      m = 0
+      best = ovl(j)
+      do mm = 1, na - 1
+        if (ovl(int(mm, i8)*nd + j) > best) then
+          best = ovl(int(mm, i8)*nd + j)
+          m = mm
+        end if
+      end do
+      if (best > 0.5_dp) then
+        coef = 0.5_dp * (w_i - weights(m))
+      else
+        coef = w_i
+      end if
+      if (coef == 0.0_dp) cycle
+      denom = e_i - eps(j)
+      if (abs(denom) < degen_tol) then
+        amax = 0.0_dp
+        do k = 0, np - 1
+          amax = max(amax, abs(amp(int(k, i8)*nd + j)))
+        end do
+        if (amax * abs(coef) < noise_tol) cycle    ! forbidden partner: exact zero
+        info = j + 1_i8                            ! genuine degeneracy: refuse
+        deallocate(factors)
+        return
+      end if
+      factors(j) = 2.0_dp * coef / denom
+      any_nz = .true.
+    end do
+
+    if (any_nz) then
+      ! hess += (amp . diag(factors)) . amp^T.  C-order amp[k,j] is the Fortran
+      ! (j,k) matrix, so scaling columns of the Fortran view scales rows of the
+      ! caller's -- exactly the diag(factors) product -- and one DGEMM closes it.
+      allocate(bmat(0:nd-1, 0:np-1))
+      do k = 0, np - 1
+        do j = 0_i8, nd - 1_i8
+          bmat(j, k) = amp(int(k, i8)*nd + j) * factors(j)
+        end do
+      end do
+      call dgemm('T', 'N', np, np, int(nd), 1.0_dp, bmat, int(nd), &
+                 amp, int(nd), 1.0_dp, hess, np)
+      deallocate(bmat)
+    end if
+
+    deallocate(factors)
+  end function casscf_hess_relax
 
 end module casscf_hess_kernel_mod
