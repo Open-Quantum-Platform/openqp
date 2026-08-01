@@ -578,6 +578,141 @@ contains
    end associate
  end subroutine
 
+!> Add the derivative of the normalized atom-centred fuzzy-cell weights for
+!> a *linear* density probe P.  The AO/basis part is handled above; this is the
+!> missing second term in
+!>
+!>   d sum_g w_g q_g / dR = sum_g w_g dq_g/dR + sum_g (dw_g/dR) q_g.
+!>
+!> To match the finite quadrature used by the production energy and numerical
+!> reference, the point moves with its slice owner.  Its contribution to the
+!> partition derivative is retained here and the compensating dq/dr term is
+!> accumulated from tmpGrad in update above.  Keeping only one of these two
+!> moving-grid pieces produces a large spurious term.  The radial/angular base
+!> measure is geometry independent; only p_O = c_O/sum_K c_K is differentiated.
+ subroutine add_partition_weight_gradient(self, xce, mythread)
+    use mod_dft_partfunc, only: partition_function
+
+    class(xc_consumer_tdg_t), intent(inout) :: self
+    class(xc_engine_t), intent(in) :: xce
+    integer, intent(in) :: mythread
+
+    type(partition_function) :: partfunc
+    real(kind=fp) :: point(3), ui(3), uj(3), df(3)
+    real(kind=fp) :: dri(3), drj(3), drij(3), dmu(3)
+    real(kind=fp) :: mu0, mu, f, fi, fj, dfi_scale, dfj_scale
+    real(kind=fp) :: sumc, p_owner, q_weighted, aij, dfactor
+    integer :: nat, owner, ipt, i, j, b, ib, nb
+    integer :: derivative_atoms(3)
+
+    nat = xce%numAtoms
+    owner = xce%gridOrigin
+    if (owner < 1 .or. owner > nat) return
+    if (.not. allocated(self%atom_xyz)) return
+    call partfunc%set(self%part_fun_type)
+
+    associate ( &
+        dist => self%part_dist(:,mythread) &
+      , cells => self%part_cells(:,mythread) &
+      , dlog => self%part_dlog(:,:,:,mythread) &
+      , dsum => self%part_dsum(:,:,mythread))
+      do ipt = 1, xce%numPts
+        q_weighted = self%probe_value(ipt,mythread)
+        if (abs(q_weighted) <= tiny(1.0_fp)) cycle
+
+        point = xce%xyzw(ipt,1:3)
+        do i = 1, nat
+          dist(i) = norm2(point-self%atom_xyz(:,i))
+        end do
+
+        cells = 1.0_fp
+        where (self%dummy_atom) cells = 0.0_fp
+        dlog = 0.0_fp
+
+        do i = 2, nat
+          if (self%dummy_atom(i)) cycle
+          do j = 1, i-1
+            if (self%dummy_atom(j)) cycle
+            if (self%part_rij(j,i) <= tiny(1.0_fp)) cycle
+
+            mu0 = (dist(i)-dist(j))/self%part_rij(j,i)
+            mu = mu0
+            aij = 0.0_fp
+            if (self%has_surface_shift) then
+              aij = self%surface_shift(j,i)
+              mu = mu0 + aij*(1.0_fp-mu0*mu0)
+            end if
+            f = partfunc%eval(mu)
+            fi = abs(f)
+            fj = abs(1.0_fp-f)
+            dfi_scale = sign(1.0_fp, f)
+            dfj_scale = -sign(1.0_fp, 1.0_fp-f)
+
+            ui = 0.0_fp
+            uj = 0.0_fp
+            if (dist(i) > tiny(1.0_fp)) &
+              ui = (point-self%atom_xyz(:,i))/dist(i)
+            if (dist(j) > tiny(1.0_fp)) &
+              uj = (point-self%atom_xyz(:,j))/dist(j)
+
+            ! Only the point owner and the two atoms in this pair can change
+            ! mu.  Accumulating logarithmic cell derivatives avoids rescaling
+            ! a dense (3,natom) derivative for every atom pair, reducing the
+            ! moving-grid work from O(Ngrid*Natom**3) to O(Ngrid*Natom**2).
+            derivative_atoms = owner
+            derivative_atoms(2) = i
+            derivative_atoms(3) = j
+            nb = 1
+            if (i /= owner) nb = nb + 1
+            if (j /= owner .and. j /= i) nb = nb + 1
+            if (nb == 2) then
+              if (i == owner) derivative_atoms(2) = j
+            else if (nb == 3) then
+              derivative_atoms(2) = i
+              derivative_atoms(3) = j
+            end if
+
+            do ib = 1, nb
+              b = derivative_atoms(ib)
+              dri = ui * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == i), fp)
+              drj = uj * real(merge(1,0,b == owner) - &
+                              merge(1,0,b == j), fp)
+              drij = self%part_rhat(:,i,j) * &
+                      real(merge(1,0,b == i) - merge(1,0,b == j), fp)
+              dmu = (dri-drj-mu0*drij)/self%part_rij(j,i)
+              if (self%has_surface_shift) &
+                dmu = (1.0_fp-2.0_fp*aij*mu0)*dmu
+              df = partfunc%deriv(mu)*dmu
+              if (fi > tiny(1.0_fp)) &
+                dlog(:,b,i) = dlog(:,b,i) + dfi_scale*df/fi
+              if (fj > tiny(1.0_fp)) &
+                dlog(:,b,j) = dlog(:,b,j) + dfj_scale*df/fj
+            end do
+            cells(i) = cells(i)*fi
+            cells(j) = cells(j)*fj
+          end do
+        end do
+
+        sumc = sum(cells)
+        if (sumc <= tiny(1.0_fp)) cycle
+        p_owner = cells(owner)/sumc
+        if (p_owner <= sqrt(tiny(1.0_fp))) cycle
+        dsum = 0.0_fp
+        do i = 1, nat
+          do b = 1, nat
+            dsum(:,b) = dsum(:,b) + cells(i)*dlog(:,b,i)
+          end do
+        end do
+        do b = 1, nat
+          dfactor = 1.0_fp/sumc
+          self%nucgrad(:,b,mythread) = self%nucgrad(:,b,mythread) &
+            + q_weighted * (dlog(:,b,owner)-dfactor*dsum(:,b))
+        end do
+      end do
+    end associate
+ end subroutine add_partition_weight_gradient
+
 !> @brief Compute contribution to the AO gradient from
 !>   LDA, GGA and metaGGA functional derivatives
 !> @param[inout] bfGrad   array of gradient contributions per AO

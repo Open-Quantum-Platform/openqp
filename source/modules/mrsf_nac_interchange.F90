@@ -1,0 +1,1040 @@
+module mrsf_nac_interchange_mod
+
+  use precision, only: dp
+
+  implicit none
+
+  private
+  public :: mrsf_nac_rohf_zvector
+  public :: mrsf_nac_rohf_solve
+  public :: mrsf_nac_rohf_pair_overlap
+  public :: mrsf_nac_pair_accumulator_init
+  public :: mrsf_nac_pair_accumulate
+  public :: mrsf_nac_pair_finalize
+  public :: mrsf_nac_rohf_hf_adjoint
+  public :: mrsf_nac_xc_adjoint
+
+contains
+
+!###############################################################################
+
+  subroutine mrsf_nac_rohf_zvector_C(c_handle) &
+      bind(C, name="mrsf_nac_rohf_zvector")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_rohf_zvector(inf)
+  end subroutine mrsf_nac_rohf_zvector_C
+
+!###############################################################################
+
+!> ABI-compatible alias for clients built against the provisional API name.
+!> Production callers should use mrsf_nac_rohf_zvector, which states that this
+!> entry solves one state-pair adjoint and never a 3N block of forward CPHF
+!> equations.
+  subroutine mrsf_nac_rohf_solve_C(c_handle) &
+      bind(C, name="mrsf_nac_rohf_solve")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_rohf_solve(inf)
+  end subroutine mrsf_nac_rohf_solve_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_rohf_pair_overlap_C(c_handle) &
+      bind(C, name="mrsf_nac_rohf_pair_overlap")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_rohf_pair_overlap(inf)
+  end subroutine mrsf_nac_rohf_pair_overlap_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_pair_accumulator_init_C(c_handle) &
+      bind(C, name="mrsf_nac_pair_accumulator_init")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_pair_accumulator_init(inf)
+  end subroutine mrsf_nac_pair_accumulator_init_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_pair_accumulate_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_pair_accumulate")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+
+    type(oqp_handle_t) :: c_handle
+    integer(c_int32_t), intent(in), value :: istate, jstate
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_pair_accumulate(inf, int(istate), int(jstate))
+  end subroutine mrsf_nac_pair_accumulate_C
+
+!###############################################################################
+
+  subroutine mrsf_nac_pair_finalize_C(c_handle) &
+      bind(C, name="mrsf_nac_pair_finalize")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_pair_finalize(inf)
+  end subroutine mrsf_nac_pair_finalize_C
+
+!> Solve one native ROHF adjoint Z-vector equation for one ordered state pair.
+!> Production invokes this routine once per pair with nrhs=1.  It does not solve
+!> the 3N forward nuclear CPHF equations; subsequent resident Fortran adjoint
+!> contractions evaluate z^T B^R directly.  The operator and coordinates are
+!> exactly those used by the nuclear response in hf_hessian_rohf, with no legacy
+!> sfrolhs/sfropcal metric.
+!>
+!> Input : OQP::nac_rohf_rhs       (ltot)
+!> Output: OQP::nac_rohf_solution  (ltot)
+  subroutine mrsf_nac_rohf_zvector(infos)
+    use types, only: information
+    use io_constants, only: iw
+    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+    use cphf_mod, only: cphf_solve_rohf
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_rhs = "OQP::nac_rohf_rhs"
+    character(len=*), parameter :: tag_solution = "OQP::nac_rohf_solution"
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), contiguous, pointer :: rhs_in(:)
+    real(kind=dp), pointer :: solution_out(:)
+    real(kind=dp), allocatable :: rhs(:,:), solution(:,:)
+    real(kind=dp) :: residual(1)
+    logical :: converged(1), log_was_open
+    integer :: nbf, nocca, noccb, nvira, offset, ltot
+
+    if (infos%control%scftype /= 3) then
+      call show_message('mrsf_nac_rohf_zvector requires an ROHF/ROKS reference.', &
+                        WITH_ABORT)
+    end if
+
+    nbf = infos%basis%nbf
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+
+    call tagarray_get_data(infos%dat, tag_rhs, rhs_in)
+    if (size(rhs_in) /= ltot) then
+      call show_message('OQP::nac_rohf_rhs has the wrong ROHF rotation dimension.', &
+                        WITH_ABORT)
+    end if
+
+    allocate(rhs(ltot,1), solution(ltot,1))
+    rhs(:,1) = rhs_in
+    ! Pair-adjoint production path: nrhs is exactly one.  This routine does not
+    ! solve the 3N forward nuclear CPHF block.
+    ! cphf_solve_rohf's ``tol`` is the squared Euclidean residual criterion.
+    ! The pair-adjoint requests its symmetric-indefinite MINRES route and that
+    ! driver certifies the true unpreconditioned residual before returning.
+    ! Request ||H z - rhs||_2 <= 1e-10, not merely 1e-5.
+    ! The energy driver closes IW before the Python NAC orchestrator runs.
+    ! Open the requested log locally so the shared CPHF reporter never creates
+    ! a process-global fort.6 file, which would collide across worker jobs.
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=infos%log_filename, position='append')
+    call cphf_solve_rohf(infos, 1, rhs, solution, tol=1.0e-20_dp, &
+                         maxit=max(infos%control%maxit_zv, ltot + 5), &
+                         converged=converged, residual=residual, &
+                         minres_solver=.true.)
+    if (.not. converged(1)) then
+      call show_message('Native ROHF NAC pair Z-vector failed to converge; squared residual=' // &
+                        trim(real_to_string(residual(1))), WITH_ABORT)
+    end if
+    if (.not. log_was_open) close(iw)
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_solution /))
+    call infos%dat%reserve_data(tag_solution, TA_TYPE_REAL64, ltot, (/ ltot /), &
+         comment='one-pair ROHF NAC adjoint Z-vector; no 3N forward CPHF')
+    call tagarray_get_data(infos%dat, tag_solution, solution_out)
+    solution_out = solution(:,1)
+
+    deallocate(rhs, solution)
+  contains
+    function real_to_string(value) result(text)
+      real(kind=dp), intent(in) :: value
+      character(len=32) :: text
+      write(text,'(ES16.8)') value
+    end function real_to_string
+  end subroutine mrsf_nac_rohf_zvector
+
+!###############################################################################
+
+!> Fortran ABI/source-compatible alias for the provisional entry-point name.
+!> Keep this wrapper free of solver logic: the state-pair Z-vector routine above
+!> is the sole implementation.
+  subroutine mrsf_nac_rohf_solve(infos)
+    use types, only: information
+    implicit none
+    type(information), target, intent(inout) :: infos
+    call mrsf_nac_rohf_zvector(infos)
+  end subroutine mrsf_nac_rohf_solve
+
+!###############################################################################
+
+!> Form the native ROHF dual source and the explicit overlap/reorthonormalization
+!> contribution for one ordered MRSF state pair.  The matrix inputs are flat
+!> Fortran-column-major arrays so the C/Python boundary has no ambiguous 2-D
+!> TagArray transpose.
+!>
+!> Input : OQP::nac_mt_frozen   vec(M_IJ^frozen), length nbf**2
+!>         OQP::nac_mt_response vec(M_IJ^response), length nbf**2
+!>         OQP::nac_gamma_pair  vec(gamma_IJ), length nbf**2
+!> Output: OQP::nac_xmat        vec(sum of the three sources), length nbf**2
+!>         OQP::nac_rohf_rhs    E^T(M_IJ-M_IJ^T), length ltot
+!>         OQP::nac_pair_vmask   = M_IJ:V^R, (3,natom)
+!>         OQP::nac_pair_gsk     = gamma_IJ:Sk^R, (3,natom)
+!>         OQP::nac_pair_overlap = their sum, (3,natom)
+!>
+!> V^R is the dependent MO response fixed by orthonormality.  This routine is
+!> the resident-Fortran counterpart of the former Python
+!> _symmetric_u_contraction plus gamma:Sk coordinate loop.
+  subroutine mrsf_nac_rohf_pair_overlap(infos)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, &
+      TA_TYPE_REAL64
+    use grd1, only: der_overlap_matrix_ket, der_overlap_matrix
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_mt_frozen = "OQP::nac_mt_frozen"
+    character(len=*), parameter :: tag_mt_response = "OQP::nac_mt_response"
+    character(len=*), parameter :: tag_xmat = "OQP::nac_xmat"
+    character(len=*), parameter :: tag_gamma = "OQP::nac_gamma_pair"
+    character(len=*), parameter :: tag_rhs = "OQP::nac_rohf_rhs"
+    character(len=*), parameter :: tag_out = "OQP::nac_pair_overlap"
+    character(len=*), parameter :: tag_vmask = "OQP::nac_pair_vmask"
+    character(len=*), parameter :: tag_gsk = "OQP::nac_pair_gsk"
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: mo(:,:), mt_frozen_flat(:), &
+      mt_response_flat(:), gflat(:)
+    real(kind=dp), pointer :: rhs(:), xflat_out(:), out(:,:), &
+      out_vmask(:,:), out_gsk(:,:)
+    real(kind=dp), allocatable :: xmat(:,:), gamma(:,:), dsket(:,:,:,:), &
+      dsfull(:,:,:,:), skmo(:,:), sxmo(:,:), half(:,:)
+    real(kind=dp) :: value, gsk
+    integer :: nbf, natom, nocca, noccb, nvira, offset, ltot
+    integer :: atom, cart, mu, nu, p, q, hi, lo, k
+
+    if (infos%control%scftype /= 3) then
+      call show_message('mrsf_nac_rohf_pair_overlap requires an ROHF/ROKS reference.', &
+                        WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    natom = infos%mol_prop%natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, tag_mt_frozen, mt_frozen_flat)
+    call tagarray_get_data(infos%dat, tag_mt_response, mt_response_flat)
+    call tagarray_get_data(infos%dat, tag_gamma, gflat)
+    if (size(mt_frozen_flat) /= nbf*nbf .or. &
+        size(mt_response_flat) /= nbf*nbf .or. &
+        size(gflat) /= nbf*nbf) then
+      call show_message('MRSF NAC pair matrices have the wrong dimension.', &
+                        WITH_ABORT)
+    end if
+
+    allocate(xmat(nbf,nbf), gamma(nbf,nbf), &
+             dsket(nbf,nbf,3,natom), dsfull(nbf,nbf,3,natom), &
+             skmo(nbf,nbf), sxmo(nbf,nbf), half(nbf,nbf))
+    gamma = reshape(gflat, (/ nbf, nbf /))
+    xmat = reshape(mt_frozen_flat, (/ nbf, nbf /)) &
+         + reshape(mt_response_flat, (/ nbf, nbf /)) + gamma
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_xmat, tag_rhs, &
+                                                        tag_out, tag_vmask, &
+                                                        tag_gsk /))
+    call infos%dat%reserve_data(tag_xmat, TA_TYPE_REAL64, nbf*nbf, &
+         (/ nbf*nbf /), comment='assembled ordered MRSF orbital source')
+    call infos%dat%reserve_data(tag_rhs, TA_TYPE_REAL64, ltot, (/ ltot /), &
+         comment='native ROHF dual of ordered MRSF orbital source')
+    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+         (/ 3, natom /), &
+         comment='ordered MRSF overlap and dependent-MO response')
+    call infos%dat%reserve_data(tag_vmask, TA_TYPE_REAL64, 3*natom, &
+         (/ 3, natom /), comment='ordered MRSF dependent-MO response')
+    call infos%dat%reserve_data(tag_gsk, TA_TYPE_REAL64, 3*natom, &
+         (/ 3, natom /), comment='ordered MRSF metric-overlap response')
+    ! A TagArray reserve can relocate the backing store for records other than
+    ! the one being added.  The MO record itself is unchanged, so reacquire its
+    ! pointer after the final reserve before the AO-to-MO contractions below.
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, tag_xmat, xflat_out)
+    call tagarray_get_data(infos%dat, tag_rhs, rhs)
+    call tagarray_get_data(infos%dat, tag_out, out)
+    call tagarray_get_data(infos%dat, tag_vmask, out_vmask)
+    call tagarray_get_data(infos%dat, tag_gsk, out_gsk)
+    xflat_out = reshape(xmat, (/ nbf*nbf /))
+
+    ! Exact tangent-dual projection E^T(M-M^T), in the same SD/DV/SV order
+    ! as rohf_unpack_trial and cphf_solve_rohf.  There is deliberately no
+    ! extra 1/2: pack_rohf_dual acts on the full generator derivative.
+    k = 0
+    do p = noccb + 1, nocca
+      do q = 1, noccb
+        k = k + 1
+        rhs(k) = xmat(p,q) - xmat(q,p)
+      end do
+    end do
+    do p = nocca + 1, nbf
+      do q = 1, noccb
+        k = k + 1
+        rhs(k) = xmat(p,q) - xmat(q,p)
+      end do
+    end do
+    do p = nocca + 1, nbf
+      do q = noccb + 1, nocca
+        k = k + 1
+        rhs(k) = xmat(p,q) - xmat(q,p)
+      end do
+    end do
+
+    call der_overlap_matrix_ket(basis, dsket)
+    call der_overlap_matrix(basis, dsfull)
+    do atom = 1, natom
+      do cart = 1, 3
+        do nu = 1, nbf
+          do mu = 1, nbf
+            dsket(mu,nu,cart,atom) = dsket(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+            dsfull(mu,nu,cart,atom) = dsfull(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+          end do
+        end do
+        call ao_to_mo(dsket(:,:,cart,atom), skmo)
+        call ao_to_mo(dsfull(:,:,cart,atom), sxmo)
+
+        value = 0.0_dp
+        do p = 1, nbf
+          value = value - 0.5_dp*xmat(p,p)*sxmo(p,p)
+          do q = 1, p - 1
+            if (orbital_space(p) == orbital_space(q)) then
+              value = value - 0.5_dp*(xmat(p,q)+xmat(q,p))*sxmo(p,q)
+            else
+              if (orbital_space(p) > orbital_space(q)) then
+                hi = p; lo = q
+              else
+                hi = q; lo = p
+              end if
+              value = value - xmat(lo,hi)*sxmo(hi,lo)
+            end if
+          end do
+        end do
+        gsk = sum(gamma*skmo)
+        out_vmask(cart,atom) = value
+        out_gsk(cart,atom) = gsk
+        out(cart,atom) = value + gsk
+      end do
+    end do
+
+    deallocate(xmat, gamma, dsket, dsfull, skmo, sxmo, half)
+
+  contains
+    pure integer function orbital_space(iorb) result(space)
+      integer, intent(in) :: iorb
+      if (iorb <= noccb) then
+        space = 1
+      else if (iorb <= nocca) then
+        space = 2
+      else
+        space = 3
+      end if
+    end function orbital_space
+
+    subroutine ao_to_mo(ao, transformed)
+      real(kind=dp), intent(in) :: ao(:,:)
+      real(kind=dp), intent(out) :: transformed(:,:)
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+                 0.0_dp, transformed, nbf)
+    end subroutine ao_to_mo
+  end subroutine mrsf_nac_rohf_pair_overlap
+
+!###############################################################################
+
+!> Allocate the resident ordered-pair NAC accumulator and discard stale final
+!> tensors from an earlier call on the same molecule handle.
+!>
+!> Output: OQP::nac_dp_ordered (3*natom,nstate,nstate)
+  subroutine mrsf_nac_pair_accumulator_init(infos)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_dp = "OQP::nac_dp_ordered"
+    character(len=*), parameter :: tag_dcv = "OQP::nac_dcv"
+    character(len=*), parameter :: tag_nacv = "OQP::nac_nacv"
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), pointer :: dp_ordered(:,:,:)
+    integer :: natom, nstate, ncoord
+
+    natom = infos%mol_prop%natom
+    nstate = infos%tddft%nstate
+    ncoord = 3*natom
+    if (natom < 1 .or. nstate < 1) then
+      call show_message('Cannot initialize an empty MRSF NAC pair tensor.', &
+                        WITH_ABORT)
+    end if
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_dp, tag_dcv, &
+                                                        tag_nacv /))
+    call infos%dat%reserve_data(tag_dp, TA_TYPE_REAL64, &
+         ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
+         comment='resident ordered MRSF NAC Lagrangian vectors')
+    call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
+    dp_ordered = 0.0_dp
+  end subroutine mrsf_nac_pair_accumulator_init
+
+!###############################################################################
+
+!> Add all resident analytic components for one ordered pair.  The selected
+!> amplitude block and current-pair coordinate records were produced by the
+!> immediately preceding Fortran kernels in the production call sequence.
+!>
+!> Inputs: OQP::nac_amp                  (3*natom,nstate,nstate)
+!>         OQP::nac_esum                 (3,natom)
+!>         OQP::nac_rohf_hf_adjoint      (3,natom)
+!>         OQP::nac_rohf_xc_adjoint      (3,natom)
+!>         OQP::nac_pair_overlap         (3,natom)
+!> In/out: OQP::nac_dp_ordered           (3*natom,nstate,nstate)
+  subroutine mrsf_nac_pair_accumulate(infos, istate, jstate)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_amp = "OQP::nac_amp"
+    character(len=*), parameter :: tag_esum = "OQP::nac_esum"
+    character(len=*), parameter :: tag_hf = "OQP::nac_rohf_hf_adjoint"
+    character(len=*), parameter :: tag_xc = "OQP::nac_rohf_xc_adjoint"
+    character(len=*), parameter :: tag_overlap = "OQP::nac_pair_overlap"
+    character(len=*), parameter :: tag_dp = "OQP::nac_dp_ordered"
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: istate, jstate
+    real(kind=dp), contiguous, pointer :: amp(:,:,:), esum(:,:), &
+      z_hf(:,:), z_xc(:,:), pair_overlap(:,:)
+    real(kind=dp), pointer :: dp_ordered(:,:,:)
+    real(kind=dp) :: t1, z_response
+    integer :: natom, nstate, ncoord, atom, cart, coord
+
+    natom = infos%mol_prop%natom
+    nstate = infos%tddft%nstate
+    ncoord = 3*natom
+    if (istate < 1 .or. istate > nstate .or. &
+        jstate < 1 .or. jstate > nstate .or. istate == jstate) then
+      call show_message('Invalid ordered pair in MRSF NAC accumulation.', &
+                        WITH_ABORT)
+    end if
+
+    call tagarray_get_data(infos%dat, tag_amp, amp)
+    call tagarray_get_data(infos%dat, tag_esum, esum)
+    call tagarray_get_data(infos%dat, tag_hf, z_hf)
+    call tagarray_get_data(infos%dat, tag_xc, z_xc)
+    call tagarray_get_data(infos%dat, tag_overlap, pair_overlap)
+    call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
+    if (size(amp,1) /= ncoord .or. size(amp,2) /= nstate .or. &
+        size(amp,3) /= nstate .or. &
+        size(esum,1) /= 3 .or. size(esum,2) /= natom .or. &
+        size(z_hf,1) /= 3 .or. size(z_hf,2) /= natom .or. &
+        size(z_xc,1) /= 3 .or. size(z_xc,2) /= natom .or. &
+        size(pair_overlap,1) /= 3 .or. &
+        size(pair_overlap,2) /= natom .or. &
+        size(dp_ordered,1) /= ncoord .or. &
+        size(dp_ordered,2) /= nstate .or. &
+        size(dp_ordered,3) /= nstate) then
+      call show_message('MRSF NAC resident pair components have inconsistent dimensions.', &
+                        WITH_ABORT)
+    end if
+
+    do atom = 1, natom
+      do cart = 1, 3
+        coord = (atom - 1)*3 + cart
+        t1 = amp(coord,istate,jstate) + esum(cart,atom)
+        z_response = z_hf(cart,atom) + z_xc(cart,atom)
+        dp_ordered(coord,istate,jstate) = t1 + z_response &
+          + pair_overlap(cart,atom)
+      end do
+    end do
+  end subroutine mrsf_nac_pair_accumulate
+
+!###############################################################################
+
+!> Antisymmetrize the complete ordered-pair Lagrangian tensor and form the
+!> canonical gap-scaled coupling in resident Fortran:
+!>
+!>   d_IJ = 1/2 (dp_IJ - dp_JI)
+!>   h_IJ = (Omega_J - Omega_I) d_IJ.
+!>
+!> Input : OQP::nac_dp_ordered (3*natom,nstate,nstate)
+!>         OQP::td_energies    (nstate), MRSF excitation energies
+!> Output: OQP::nac_dcv        (3*natom,nstate,nstate)
+!>         OQP::nac_nacv       (3*natom,nstate,nstate)
+  subroutine mrsf_nac_pair_finalize(infos)
+    use types, only: information
+    use oqp_tagarray_driver, only: tagarray_get_data, TA_TYPE_REAL64, &
+      OQP_td_energies
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_dp = "OQP::nac_dp_ordered"
+    character(len=*), parameter :: tag_dcv = "OQP::nac_dcv"
+    character(len=*), parameter :: tag_nacv = "OQP::nac_nacv"
+    type(information), target, intent(inout) :: infos
+    real(kind=dp), contiguous, pointer :: dp_ordered(:,:,:), energies(:)
+    real(kind=dp), pointer :: dcv(:,:,:), nacv(:,:,:)
+    real(kind=dp) :: gap
+    integer :: natom, nstate, ncoord, istate, jstate, coord
+
+    natom = infos%mol_prop%natom
+    nstate = infos%tddft%nstate
+    ncoord = 3*natom
+    call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
+    call tagarray_get_data(infos%dat, OQP_td_energies, energies)
+    if (size(dp_ordered,1) /= ncoord .or. &
+        size(dp_ordered,2) /= nstate .or. &
+        size(dp_ordered,3) /= nstate .or. size(energies) /= nstate) then
+      call show_message('Cannot finalize inconsistent MRSF NAC pair tensors.', &
+                        WITH_ABORT)
+    end if
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_dcv, &
+                                                        tag_nacv /))
+    call infos%dat%reserve_data(tag_dcv, TA_TYPE_REAL64, &
+         ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
+         comment='antisymmetric MRSF derivative coupling')
+    call infos%dat%reserve_data(tag_nacv, TA_TYPE_REAL64, &
+         ncoord*nstate*nstate, (/ ncoord, nstate, nstate /), &
+         comment='symmetric gap-scaled MRSF nonadiabatic coupling')
+    ! Output reservations may relocate unrelated TagArray records.  Reacquire
+    ! both unchanged inputs before using them to finalize the pair tensors.
+    call tagarray_get_data(infos%dat, tag_dp, dp_ordered)
+    call tagarray_get_data(infos%dat, OQP_td_energies, energies)
+    call tagarray_get_data(infos%dat, tag_dcv, dcv)
+    call tagarray_get_data(infos%dat, tag_nacv, nacv)
+    dcv = 0.0_dp
+    nacv = 0.0_dp
+
+    do jstate = 1, nstate
+      do istate = 1, nstate
+        if (istate == jstate) cycle
+        gap = energies(jstate) - energies(istate)
+        do coord = 1, ncoord
+          dcv(coord,istate,jstate) = 0.5_dp * &
+            (dp_ordered(coord,istate,jstate) &
+             - dp_ordered(coord,jstate,istate))
+          nacv(coord,istate,jstate) = gap*dcv(coord,istate,jstate)
+        end do
+      end do
+    end do
+  end subroutine mrsf_nac_pair_finalize
+
+!###############################################################################
+
+  subroutine mrsf_nac_rohf_hf_adjoint_C(c_handle) &
+      bind(C, name="mrsf_nac_rohf_hf_adjoint")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_rohf_hf_adjoint(inf)
+  end subroutine mrsf_nac_rohf_hf_adjoint_C
+
+!###############################################################################
+
+!> Contract one native ROHF Z vector with the analytic HF/JK/Pulay part of
+!> every nuclear stationarity derivative.  This is the adjoint (Z-vector)
+!> evaluation of z^T B^R: it never solves the 3N forward CPHF equations.
+!>
+!> The algebra is the exact transpose of the non-canonical RHS assembled in
+!> hf_hessian_rohf.  In particular, the expensive orbital-by-orbital 2e
+!> skeleton is collapsed by response symmetry into one derivative contraction
+!> for each spin, and G[D^(R,0)] is collapsed into S^R:G[P_z].
+!>
+!> Input : OQP::nac_rohf_z              (ltot)
+!> Output: OQP::nac_rohf_hf_adjoint     (3,natom)
+  subroutine mrsf_nac_rohf_hf_adjoint(infos)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, OQP_DM_A, OQP_DM_B, &
+      OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B, TA_TYPE_REAL64
+    use mathlib, only: unpack_matrix, pack_matrix
+    use cphf_mod, only: rohf_unpack_trial
+    use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix
+    use fock_deriv_mod, only: fock_deriv_contract_os
+    use scf_addons, only: fock_jk
+    use ecp_tool, only: ecp_deriv_ints
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
+    character(len=*), parameter :: tag_out = "OQP::nac_rohf_hf_adjoint"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    real(kind=dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), &
+      focka(:), fockb(:), z(:)
+    real(kind=dp), pointer :: out(:,:)
+    real(kind=dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), pza(:,:), pzb(:,:)
+    real(kind=dp), allocatable :: work(:,:), half(:,:), probe(:,:)
+    real(kind=dp), allocatable :: fa(:,:), fb(:,:), famo(:,:), fbmo(:,:)
+    real(kind=dp), allocatable :: dmz(:,:), vjkz(:,:), vza(:,:), vzb(:,:)
+    real(kind=dp), allocatable :: vzamo(:,:), vzbmo(:,:)
+    real(kind=dp), allocatable :: dsa(:,:,:,:), dta(:,:,:,:), dva(:,:,:,:), &
+      dvecp(:,:,:,:)
+    real(kind=dp), allocatable :: ghf(:,:), gx(:,:), sxmo(:,:), hxmo(:,:)
+    real(kind=dp) :: hfscale, value
+    integer :: nbf, nbf2, natom, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: atom, cart, i, j, a, mu, nu
+
+    if (infos%control%scftype /= 3) then
+      call show_message('mrsf_nac_rohf_hf_adjoint requires an ROHF/ROKS reference.', &
+                        WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = infos%mol_prop%natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+    hfscale = 1.0_dp
+    if (infos%control%hamilton >= 20) hfscale = infos%dft%hfscale
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
+    call tagarray_get_data(infos%dat, tag_z, z)
+    if (size(z) /= ltot) then
+      call show_message('OQP::nac_rohf_z has the wrong ROHF rotation dimension.', &
+                        WITH_ABORT)
+    end if
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf))
+    allocate(xa(nvira,nocca), xb(nvirb,noccb), pza(nbf,nbf), pzb(nbf,nbf))
+    allocate(work(nbf,nbf), half(nbf,nbf), probe(nbf,nbf))
+    allocate(fa(nbf,nbf), fb(nbf,nbf), famo(nbf,nbf), fbmo(nbf,nbf))
+    allocate(dmz(nbf2,2), vjkz(nbf2,2), vza(nbf,nbf), vzb(nbf,nbf), &
+             vzamo(nbf,nbf), vzbmo(nbf,nbf))
+    allocate(dsa(nbf,nbf,3,natom), dta(nbf,nbf,3,natom), &
+             dva(nbf,nbf,3,natom), dvecp(nbf,nbf,3,natom))
+    allocate(ghf(3,natom), gx(3,natom), sxmo(nbf,nbf), hxmo(nbf,nbf), &
+             source=0.0_dp)
+
+    call unpack_matrix(dma, pa)
+    call unpack_matrix(dmb, pb)
+    ptot = pa + pb
+    call unpack_matrix(focka, fa)
+    call unpack_matrix(fockb, fb)
+    call ao_to_mo(fa, famo)
+    call ao_to_mo(fb, fbmo)
+    call rohf_unpack_trial(z, xa, xb, nbf, nocca, noccb)
+
+    ! Physical first-order spin densities generated by the Z rotations.
+    half = 0.0_dp
+    call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
+               mo(:,nocca+1:nbf), nbf, xa, nvira, 0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, half, nbf, &
+               mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
+    pza = work + transpose(work)
+    half = 0.0_dp
+    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+               mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+               mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+    pzb = work + transpose(work)
+
+    ! One analytic two-electron derivative contraction per spin replaces the
+    ! forward code's (virtual,occupied) probe sweep.  The factor 1/2 follows
+    ! because P_z contains both AO triangles while each forward probe is
+    ! 1/2(C_a C_i^T + C_i C_a^T).
+    probe = 0.5_dp*pza
+    gx = 0.0_dp
+    call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
+    ghf = ghf - gx
+    probe = 0.5_dp*pzb
+    gx = 0.0_dp
+    call fock_deriv_contract_os(infos, basis, ptot, pb, probe, hfscale, gx)
+    ghf = ghf - gx
+
+    ! Build the JK response to P_z once.  Kernel symmetry turns the forward
+    ! -G[D^(R,0)] term into +1/2 S^R_occ:G[P_z]_occ for every coordinate.
+    call pack_matrix(pza, dmz(:,1))
+    call pack_matrix(pzb, dmz(:,2))
+    call fock_jk(basis, d=dmz, f=vjkz, scale_exch=hfscale, infos=infos)
+    call unpack_matrix(vjkz(:,1), vza)
+    call unpack_matrix(vjkz(:,2), vzb)
+    call ao_to_mo(vza, vzamo)
+    call ao_to_mo(vzb, vzbmo)
+
+    call der_overlap_matrix(basis, dsa)
+    call der_kinetic_matrix(basis, dta)
+    call der_nucattr_matrix(basis, basis%atoms%xyz, &
+                            basis%atoms%zn - basis%ecp_zn_num, dva)
+    call ecp_deriv_ints(basis, basis%atoms%xyz, dvecp)
+    do atom = 1, natom
+      do cart = 1, 3
+        do nu = 1, nbf
+          do mu = 1, nbf
+            dsa(mu,nu,cart,atom) = dsa(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+            dta(mu,nu,cart,atom) = dta(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+            dva(mu,nu,cart,atom) = dva(mu,nu,cart,atom) * &
+              basis%bfnrm(mu)*basis%bfnrm(nu)
+          end do
+        end do
+        ! ECP derivative integrals are already in the normalized AO convention.
+        dva(:,:,cart,atom) = dva(:,:,cart,atom) + dvecp(:,:,cart,atom)
+        call ao_to_mo(dsa(:,:,cart,atom), sxmo)
+        call ao_to_mo(dta(:,:,cart,atom)+dva(:,:,cart,atom), hxmo)
+
+        value = 0.0_dp
+        do i = 1, nocca
+          do a = 1, nvira
+            value = value + xa(a,i) * ( &
+              -hxmo(i,nocca+a) &
+              +dot_product(sxmo(nocca+a,1:nocca), famo(1:nocca,i)) &
+              +dot_product(famo(nocca+a,1:nocca), sxmo(1:nocca,i)) )
+          end do
+        end do
+        do i = 1, noccb
+          do a = 1, nvirb
+            value = value + xb(a,i) * ( &
+              -hxmo(i,noccb+a) &
+              +dot_product(sxmo(noccb+a,1:noccb), fbmo(1:noccb,i)) &
+              +dot_product(fbmo(noccb+a,1:noccb), sxmo(1:noccb,i)) )
+          end do
+        end do
+        do j = 1, nocca
+          do i = 1, nocca
+            value = value + 0.5_dp*sxmo(i,j)*vzamo(j,i)
+          end do
+        end do
+        do j = 1, noccb
+          do i = 1, noccb
+            value = value + 0.5_dp*sxmo(i,j)*vzbmo(j,i)
+          end do
+        end do
+        ghf(cart,atom) = ghf(cart,atom) + value
+      end do
+    end do
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_out /))
+    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+         (/ 3, natom /), comment='native ROHF NAC analytic HF/JK/Pulay adjoint')
+    call tagarray_get_data(infos%dat, tag_out, out)
+    out = ghf
+
+    deallocate(pa, pb, ptot, xa, xb, pza, pzb, work, half, probe, &
+      fa, fb, famo, fbmo, dmz, vjkz, vza, vzb, vzamo, vzbmo, &
+      dsa, dta, dva, dvecp, ghf, gx, sxmo, hxmo)
+  contains
+    subroutine ao_to_mo(ao, transformed)
+      real(kind=dp), intent(in) :: ao(:,:)
+      real(kind=dp), intent(out) :: transformed(:,:)
+      half = 0.0_dp
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+                 0.0_dp, transformed, nbf)
+    end subroutine ao_to_mo
+  end subroutine mrsf_nac_rohf_hf_adjoint
+
+!###############################################################################
+
+  subroutine mrsf_nac_xc_adjoint_C(c_handle) &
+      bind(C, name="mrsf_nac_xc_adjoint")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
+    use types, only: information
+
+    type(oqp_handle_t) :: c_handle
+    type(information), pointer :: inf
+    logical :: log_was_open
+
+    inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
+    call mrsf_nac_xc_adjoint(inf)
+    if (.not. log_was_open) close(iw)
+  end subroutine mrsf_nac_xc_adjoint_C
+
+!###############################################################################
+
+!> Contract a native-ROHF adjoint vector with the *analytic* nuclear XC part
+!> of the SCF stationarity derivative.
+!>
+!> Let
+!>   r = ( F_beta(sd), F_alpha(vd)+F_beta(vd), F_alpha(vs) )
+!> be the half-gradient used by the native ROHF CPHF equations and let z use
+!> the matching rohf_pack_trial coordinates.  The physical orbital-rotation
+!> densities generated by z obey
+!>
+!>   delta E_xc = Tr[V_xc^a delta P_a] + Tr[V_xc^b delta P_b]
+!>              = 2 z^T r_xc .
+!>
+!> Mixed-derivative symmetry therefore gives the XC contribution to the NAC
+!> adjoint contraction as
+!>
+!>   z^T b_xc = -z^T (d r_xc/dR) = -1/2 d/dR(delta E_xc).
+!>
+!> utddft_xc_gradient evaluates the last mixed derivative analytically on the
+!> moving atom-centred grid, including the normalized fuzzy-cell weight
+!> response.  Its probe-independent ground-state contribution is disabled at
+!> the consumer level.
+!>
+!> Input : OQP::nac_rohf_z              (ltot)
+!> Output: OQP::nac_rohf_xc_adjoint     (3,natom)
+  subroutine mrsf_nac_xc_adjoint(infos)
+    use types, only: information
+    use basis_tools, only: basis_set
+    use oqp_tagarray_driver, only: tagarray_get_data, &
+      OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, TA_TYPE_REAL64
+    use mathlib, only: unpack_matrix, pack_matrix
+    use cphf_mod, only: rohf_unpack_trial
+    use dft, only: dft_initialize, dftclean
+    use mod_dft_molgrid, only: dft_grid_t
+    use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
+    use scf_addons, only: fock_jk, get_response_packed
+    use grd1, only: der_overlap_matrix
+    use messages, only: show_message, WITH_ABORT
+
+    implicit none
+
+    character(len=*), parameter :: tag_z = "OQP::nac_rohf_z"
+    character(len=*), parameter :: tag_out = "OQP::nac_rohf_xc_adjoint"
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), pointer :: basis
+    type(dft_grid_t) :: molgrid
+
+    real(kind=dp), contiguous, pointer :: dma(:), dmb(:), mo(:,:), z(:)
+    real(kind=dp), pointer :: out(:,:)
+    real(kind=dp), allocatable :: pa(:,:), pb(:,:), pza(:,:), pzb(:,:)
+    real(kind=dp), allocatable :: xa(:,:), xb(:,:), work(:,:), half(:,:)
+    real(kind=dp), allocatable :: xcd(:,:,:), xcp(:,:,:), gxc(:,:)
+    real(kind=dp), allocatable :: dmz(:,:), vz(:,:), vjkz(:,:)
+    real(kind=dp), allocatable :: vxcza(:,:), vxczb(:,:), vxcmoa(:,:), vxcmob(:,:)
+    real(kind=dp), allocatable :: mo_a_work(:,:), mo_b_work(:,:), dsa(:,:,:,:)
+    real(kind=dp) :: scale_exch, reorth
+    integer :: nbf, nbf2, natom, nocca, noccb, nvira, nvirb, offset, ltot
+    integer :: atom, cart, i, j, mu, nu
+
+    if (infos%control%scftype /= 3) then
+      call show_message('mrsf_nac_xc_adjoint requires an ROHF/ROKS reference.', &
+                        WITH_ABORT)
+    end if
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    natom = infos%mol_prop%natom
+    nocca = infos%mol_prop%nelec_A
+    noccb = infos%mol_prop%nelec_B
+    nvira = nbf - nocca
+    nvirb = nbf - noccb
+    offset = nocca - noccb
+    ltot = noccb*(offset + nvira) + offset*nvira
+
+    call tagarray_get_data(infos%dat, OQP_DM_A, dma)
+    call tagarray_get_data(infos%dat, OQP_DM_B, dmb)
+    call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
+    call tagarray_get_data(infos%dat, tag_z, z)
+    if (size(z) /= ltot) then
+      call show_message('OQP::nac_rohf_z has the wrong ROHF rotation dimension.', &
+                        WITH_ABORT)
+    end if
+
+    allocate(pa(nbf,nbf), pb(nbf,nbf), pza(nbf,nbf), pzb(nbf,nbf))
+    allocate(xa(nvira,nocca), xb(nvirb,noccb), work(nbf,nbf), half(nbf,nbf))
+    allocate(xcd(nbf,nbf,2), xcp(nbf,nbf,2), gxc(3,natom), &
+             source=0.0_dp)
+
+    call unpack_matrix(dma, pa)
+    call unpack_matrix(dmb, pb)
+    call rohf_unpack_trial(z, xa, xb, nbf, nocca, noccb)
+
+    ! delta P_alpha = C_v xa C_o^T + transpose.
+    half = 0.0_dp
+    call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
+               mo(:,nocca+1:nbf), nbf, xa, nvira, 0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, half, nbf, &
+               mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
+    pza = work + transpose(work)
+
+    ! delta P_beta = C_(socc+virt) xb C_docc^T + transpose.  The first
+    ! offset rows of xb are the socc-docc block; the remaining rows are vd.
+    half = 0.0_dp
+    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+               mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
+    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+               mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+    pzb = work + transpose(work)
+
+    if (infos%control%hamilton == 20) then
+      ! This public entry may be called independently of the Z solver.  Make
+      ! libxc setup deterministic even if an earlier driver left a live
+      ! process-global functional list.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molgrid, verbose=.false.)
+
+      xcd(:,:,1) = pa
+      xcd(:,:,2) = pb
+      xcp(:,:,1) = pza
+      xcp(:,:,2) = pzb
+      call utddft_xc_gradient(basis=basis, molGrid=molgrid, dedft=gxc, &
+           da=xcd(:,:,1), db=xcd(:,:,2), pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
+           nmtx=1, threshold=0.0_dp, infos=infos, &
+           include_ground_state=.false., include_weight_derivative=.true.)
+
+      ! The nuclear CPKS skeleton also contains f_xc[D^(R,0)], where
+      ! D^(R,0) is the occupied-space reorthonormalization density
+      !
+      !   D_s^(R,0) = -C_occ,s S^R_occ,s C_occ,s^T .
+      !
+      ! utddft_xc_gradient above differentiates at fixed AO density and hence
+      ! supplies the explicit moving-grid/basis dV_xc/dR part, but not this
+      ! coefficient-response term.  By symmetry of the XC kernel,
+      !
+      !   -1/2 Tr[P_z f_xc[D^(R,0)]]
+      !       = -1/2 Tr[D^(R,0) f_xc[P_z]],
+      !
+      ! so f_xc[P_z] is built only once per adjoint pair and then contracted
+      ! with every overlap derivative.  Subtracting fock_jk leaves the XC-only
+      ! response and avoids double-counting the JK reorthonormalization term
+      ! already present in the analytic HF/JK/Pulay right-hand side.
+      allocate(dmz(nbf2,2), vz(nbf2,2), vjkz(nbf2,2), &
+               vxcza(nbf,nbf), vxczb(nbf,nbf), &
+               vxcmoa(nbf,nbf), vxcmob(nbf,nbf), &
+               mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), &
+               dsa(nbf,nbf,3,natom), source=0.0_dp)
+      call pack_matrix(pza, dmz(:,1))
+      call pack_matrix(pzb, dmz(:,2))
+      scale_exch = infos%dft%hfscale
+      call fock_jk(basis, d=dmz, f=vjkz, scale_exch=scale_exch, infos=infos)
+      mo_a_work = mo
+      mo_b_work = mo
+      call get_response_packed(basis, infos, molgrid, mo_a_work, dmz, vz, &
+                               mo_b_work)
+      call unpack_matrix(vz(:,1)-vjkz(:,1), vxcza)
+      call unpack_matrix(vz(:,2)-vjkz(:,2), vxczb)
+      call ao_to_mo(vxcza, vxcmoa)
+      call ao_to_mo(vxczb, vxcmob)
+
+      call der_overlap_matrix(basis, dsa)
+      do atom = 1, natom
+        do cart = 1, 3
+          do nu = 1, nbf
+            do mu = 1, nbf
+              dsa(mu,nu,cart,atom) = dsa(mu,nu,cart,atom) * &
+                   basis%bfnrm(mu)*basis%bfnrm(nu)
+            end do
+          end do
+          call ao_to_mo(dsa(:,:,cart,atom), work)
+          reorth = 0.0_dp
+          do j = 1, nocca
+            do i = 1, nocca
+              reorth = reorth + work(i,j)*vxcmoa(j,i)
+            end do
+          end do
+          do j = 1, noccb
+            do i = 1, noccb
+              reorth = reorth + work(i,j)*vxcmob(j,i)
+            end do
+          end do
+          ! Tr[P_z f_xc[D^(R,0)]] = -reorth.
+          gxc(cart,atom) = gxc(cart,atom) - reorth
+        end do
+      end do
+      call dftclean(infos)
+
+      gxc = -0.5_dp*gxc
+      deallocate(dmz, vz, vjkz, vxcza, vxczb, vxcmoa, vxcmob, &
+                 mo_a_work, mo_b_work, dsa)
+    else
+      gxc = 0.0_dp
+    end if
+
+    call infos%dat%remove_records((/ character(len=80) :: tag_out /))
+    call infos%dat%reserve_data(tag_out, TA_TYPE_REAL64, 3*natom, &
+         (/ 3, natom /), comment='native ROHF NAC analytic XC adjoint')
+    call tagarray_get_data(infos%dat, tag_out, out)
+    out = gxc
+
+    deallocate(pa, pb, pza, pzb, xa, xb, work, half, xcd, xcp, gxc)
+  contains
+    subroutine ao_to_mo(ao, transformed)
+      real(kind=dp), intent(in) :: ao(:,:)
+      real(kind=dp), intent(out) :: transformed(:,:)
+      half = 0.0_dp
+      call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
+                 0.0_dp, half, nbf)
+      call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, half, nbf, mo, nbf, &
+                 0.0_dp, transformed, nbf)
+    end subroutine ao_to_mo
+  end subroutine mrsf_nac_xc_adjoint
+
+end module mrsf_nac_interchange_mod

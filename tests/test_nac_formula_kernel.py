@@ -8,6 +8,8 @@ Asserts, on H2O/BHHLYP/6-31G* (compiled code required; skips otherwise):
   R2. The closed-form gamma^formula (cofactor sensitivities x multilinear
       contraction partials) equals a spot-check of generator-sweep
       derivatives of the replica to 1e-10.
+  R3. The resident Fortran sparse-cofactor kernel equals gamma^formula and
+      fourth-order exact-overlap generator derivatives in every orbital block.
 
 These freeze the two central derivation results: the formula is exactly
 understood, and its orbital-response kernel is available in one
@@ -71,6 +73,16 @@ class FormulaKernelTests(unittest.TestCase):
         cls.K = K
         cls.ctx = K.build_context(cls.mol)
 
+        oqp.mrsf_nac_metric_data(cls.mol)
+        nbf = cls.ctx['nbf']
+        nstate = cls.ctx['nstate']
+        flat = np.array(
+            cls.mol.data['OQP::nac_gamma_tlf'], copy=True
+        ).reshape(-1)
+        cls.resident_gamma = flat.reshape(
+            (nbf, nbf, nstate, nstate), order='F'
+        ).transpose(2, 3, 0, 1)
+
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
@@ -107,6 +119,74 @@ class FormulaKernelTests(unittest.TestCase):
             pred = 2.0 * gam[:, :, p, q]      # slot convention: dS = 2*gam[p,q]
             self.assertLessEqual(np.abs(pred - dS).max(), 1e-10,
                                  msg=f"generator ({p},{q})")
+
+    def test_resident_fortran_gamma_matches_closed_form(self):
+        reference = self.K.gamma_closed(self.ctx)
+        resident_error = np.abs(self.resident_gamma - reference).max()
+        if os.environ.get('NAC_GATE_REPORT'):
+            print(f'resident-vs-cofactor maxdiff={resident_error:.12e}')
+        self.assertLessEqual(resident_error, 1e-10)
+        self.assertLessEqual(
+            np.abs(
+                self.resident_gamma
+                + self.resident_gamma.transpose(0, 1, 3, 2)
+            ).max(),
+            1e-14,
+        )
+
+        # H2O freezes both facts that invalidated the retired approximation:
+        # same-space response is material and state labels are not antisymmetry
+        # partners after one-sided column normalization.
+        nocb, noca = self.ctx['nocb'], self.ctx['noca']
+        same_space = self.resident_gamma[0, 1, nocb:noca, nocb:noca]
+        self.assertGreater(np.abs(same_space).max(), 0.5)
+        state_antisymmetry_residual = np.abs(
+            self.resident_gamma
+            + self.resident_gamma.transpose(1, 0, 2, 3)
+        ).max()
+        self.assertGreater(state_antisymmetry_residual, 0.5)
+
+    def test_resident_gamma_matches_all_orbital_blocks(self):
+        ctx, K = self.ctx, self.K
+        nbf, nocb, noca = ctx['nbf'], ctx['nocb'], ctx['noca']
+        spaces = {
+            'd': slice(0, nocb),
+            's': slice(nocb, noca),
+            'v': slice(noca, nbf),
+        }
+        rng = np.random.default_rng(37)
+        hh = 1e-4
+
+        for block_name in ('dd', 'ds', 'dv', 'ss', 'sv', 'vv'):
+            left = spaces[block_name[0]]
+            right = spaces[block_name[1]]
+            generator = np.zeros((nbf, nbf))
+            shape = (left.stop - left.start, right.stop - right.start)
+            block = rng.standard_normal(shape)
+            if block_name[0] == block_name[1]:
+                generator[left, right] = block - block.T
+            else:
+                generator[left, right] = block
+                generator[right, left] = -block.T
+
+            plus_one = K.replica_S(ctx, expm(hh * generator))
+            minus_one = K.replica_S(ctx, expm(-hh * generator))
+            plus_two = K.replica_S(ctx, expm(2 * hh * generator))
+            minus_two = K.replica_S(ctx, expm(-2 * hh * generator))
+            derivative = (
+                8.0 * (plus_one - minus_one) - (plus_two - minus_two)
+            ) / (12.0 * hh)
+            prediction = np.einsum(
+                'ijpq,pq->ij', self.resident_gamma, generator
+            )
+            block_error = np.abs(prediction - derivative).max()
+            if os.environ.get('NAC_GATE_REPORT'):
+                print(f'block {block_name} maxdiff={block_error:.12e}')
+            self.assertLessEqual(
+                block_error,
+                2e-9,
+                msg=f"orbital block {block_name}",
+            )
 
 
 if __name__ == "__main__":

@@ -1619,6 +1619,31 @@ contains
 
     call flush(iw)
 
+    ! Diagonal Lee-limit audit: expose the converged legacy-coordinate
+    ! multiplier beside its already exported RHS.  This is deliberately tied
+    ! to NAC_DUMP_RHS and is not consumed by production.  The native pair
+    ! adjoint uses the opposite convention, so a matched diagonal gate checks
+    !     zeta_native + xk_legacy/2 = 0.
+    ! xk is already a flat lzdim vector in the SD/DV/SV loop ordering shared by
+    ! sfrorhs, sfrolhs, and the native ROHF solver.  The factor 1/2 is physical,
+    ! not a packing conversion: sfropcal inserts xk/2 into the relaxed density,
+    ! whereas rohf_unpack_trial inserts zeta directly.  Keep this TagArray 1-D
+    ! so the diagnostic consumer can reject any accidental reshape/transpose.
+    block
+      character(len=8) :: ev_dump
+      real(kind=dp), pointer :: xk_dump(:)
+      call get_environment_variable('NAC_DUMP_RHS', ev_dump)
+      if (len_trim(ev_dump) > 0) then
+        call infos%dat%remove_records((/ character(len=80) :: &
+          'OQP::nac_zvec_solution' /))
+        call infos%dat%reserve_data('OQP::nac_zvec_solution', &
+             ta_type_real64, lzdim, (/ lzdim /), &
+             comment='flat SD/DV/SV legacy multiplier; density uses xk/2')
+        call tagarray_get_data(infos%dat, 'OQP::nac_zvec_solution', xk_dump)
+        xk_dump = xk
+      end if
+    end block
+
     ! ======================================================================
     ! Step 3: build the relaxed density (td_p) and energy-weighted density (wao).
     ! ======================================================================

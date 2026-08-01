@@ -1,0 +1,63 @@
+"""Guards against dangling TagArray views in the resident NAC traversal."""
+
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
+GRADIENT = ROOT / "source" / "modules" / "tdhf_mrsf_gradient.F90"
+DRIVER = ROOT / "source" / "modules" / "mrsf_nac_driver.F90"
+
+
+def _body(source, name):
+    return source.split(f"subroutine {name}", 1)[1].split(
+        f"end subroutine {name}", 1
+    )[0]
+
+
+def test_pair_overlap_reacquires_mos_after_output_reservations():
+    body = _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_pair_overlap(infos)")
+    last_reserve = body.index("reserve_data(tag_gsk")
+    reacquire = body.index("tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)", last_reserve)
+    first_transform = body.index("call der_overlap_matrix_ket")
+    assert last_reserve < reacquire < first_transform
+
+
+def test_pair_finalize_reacquires_inputs_after_output_reservations():
+    body = _body(INTERCHANGE.read_text(), "mrsf_nac_pair_finalize(infos)")
+    last_reserve = body.index("reserve_data(tag_nacv")
+    dp_reacquire = body.index("tagarray_get_data(infos%dat, tag_dp, dp_ordered)", last_reserve)
+    energy_reacquire = body.index(
+        "tagarray_get_data(infos%dat, OQP_td_energies, energies)", last_reserve
+    )
+    first_use = body.index("gap = energies(jstate) - energies(istate)")
+    assert last_reserve < dp_reacquire < first_use
+    assert last_reserve < energy_reacquire < first_use
+
+
+def test_amp_and_esum_own_inputs_that_survive_record_mutation():
+    source = GRADIENT.read_text()
+    amp = _body(source, "mrsf_nac_amp(infos, only_istate, only_jstate)")
+    esum = _body(source, "mrsf_nac_esum(infos, istate, jstate)")
+    for body in (amp, esum):
+        assert "bvec_mo_owned = bvec_mo" in body
+        assert "mo_a_owned = mo_a" in body
+        assert "bvec_mo => bvec_mo_owned" in body
+        assert "mo_a => mo_a_owned" in body
+    assert "dmat_a_owned = dmat_a" in amp
+    assert "dmat_a => dmat_a_owned" in amp
+    assert "mo_b_owned = mo_b" in esum
+    assert "dmat_b_owned = dmat_b" in esum
+
+
+def test_driver_owns_energy_record_and_guards_integer_products_before_cast():
+    body = _body(DRIVER.read_text(), "mrsf_nac_lagrangian(infos)")
+    assert "energies_saved = energies" in body
+    assert "gap = energies_saved(jstate)-energies_saved(istate)" in body
+    cast = body.index("nstate = int(nstate64)")
+    for guard in (
+        "default_int_limit64/state_pair_size64",
+        "default_int_limit64/nij64",
+        "default_int_limit64/nbfsq64",
+    ):
+        assert body.index(guard) < cast

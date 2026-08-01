@@ -1055,6 +1055,14 @@ contains
           end do
           det = -1.0_dp*det
        end if
+       ! A structurally singular overlap minor has an exact zero pivot after
+       ! partial pivoting.  Return its determinant as zero instead of dividing
+       ! by zero below.  Sparse orbital-plane rotations used by the analytic
+       ! MRSF metric expose this ordinary determinant case frequently.
+       if (abs(array(k,k)) <= tiny(1.0_dp)) then
+          det = 0.0_dp
+          return
+       end if
        do m = k+1, n
           work(m,k) = array(m,k)/array(k,k)
           do l = k, n

@@ -270,3 +270,68 @@ def gamma_closed(ctx):
             gam[:, :, p, q] += 0.5 * dSds * w
             gam[:, :, q, p] -= 0.5 * dSds * w
     return gam
+
+
+# ---------------- independent exact-overlap generator oracle --------------
+def antisymmetric_generator(nbf, p, q):
+    """Return K with K[p,q]=+1 and K[q,p]=-1 for one p>q coordinate."""
+    if not (0 <= q < p < nbf):
+        raise ValueError("an independent orbital generator requires 0 <= q < p < nbf")
+    generator = np.zeros((nbf, nbf))
+    generator[p, q] = 1.0
+    generator[q, p] = -1.0
+    return generator
+
+
+def exact_generator_rotation(nbf, p, q, theta):
+    """Return exp(theta*K_pq) as its exact two-orbital plane rotation."""
+    antisymmetric_generator(nbf, p, q)  # shared bounds/order validation
+    rotation = np.eye(nbf)
+    cosine = np.cos(theta)
+    sine = np.sin(theta)
+    rotation[p, p] = cosine
+    rotation[q, q] = cosine
+    rotation[p, q] = sine
+    rotation[q, p] = -sine
+    return rotation
+
+
+def exact_overlap_generator_derivative(ctx, p, q, step=1.0e-4):
+    """Differentiate the exact state-overlap replica along one generator.
+
+    A fourth-order centred Richardson stencil is applied to ``replica_S`` at
+    ``exp(theta*K_pq)``.  The underlying overlaps are the literal exact-tlf
+    determinant minors.  The returned array is dS[I,J]/dtheta for every
+    ordered state pair; no state transpose or antisymmetry is imposed.
+    """
+    if step <= 0.0:
+        raise ValueError("the generator derivative step must be positive")
+    nbf = ctx['nbf']
+    plus_1 = replica_S(ctx, exact_generator_rotation(nbf, p, q, step))
+    minus_1 = replica_S(ctx, exact_generator_rotation(nbf, p, q, -step))
+    plus_2 = replica_S(ctx, exact_generator_rotation(nbf, p, q, 2.0*step))
+    minus_2 = replica_S(ctx, exact_generator_rotation(nbf, p, q, -2.0*step))
+    return (8.0*(plus_1 - minus_1) - (plus_2 - minus_2))/(12.0*step)
+
+
+def generator_derivative_sweep(ctx, step=1.0e-4, progress=None):
+    """Evaluate dS/dtheta for every independent p>q orbital generator.
+
+    The result has shape ``(nstate,nstate,nbf,nbf)``.  Only the independent
+    lower-triangle slots ``[...,p,q]`` with p>q are populated.  In particular,
+    this routine does not manufacture the upper triangle by orbital
+    antisymmetrization and does not manufacture reverse state pairs.
+    """
+    nstate, nbf = ctx['nstate'], ctx['nbf']
+    derivative = np.zeros((nstate, nstate, nbf, nbf))
+    total = nbf*(nbf - 1)//2
+    done = 0
+    for q in range(nbf - 1):
+        for p in range(q + 1, nbf):
+            derivative[:, :, p, q] = exact_overlap_generator_derivative(
+                ctx, p, q, step=step
+            )
+            done += 1
+            if progress is not None:
+                progress(done, total, p, q)
+    return derivative

@@ -19,9 +19,11 @@ import copy
 import subprocess
 import numpy as np
 
-H = 1.0e-3          # displacement in get_system units (same as production dx)
-NPAR = 12           # concurrent workers
-WOMP = '2'          # OMP threads per worker
+H = float(os.environ.get(
+    'NAC_SKEL_H', '1.0e-3'
+))                   # displacement in get_system units
+NPAR = int(os.environ.get('NAC_SKEL_NPAR', '12'))
+WOMP = os.environ.get('NAC_SKEL_OMP', '2')
 
 
 def worker(inp, ref_npz, out_npz):

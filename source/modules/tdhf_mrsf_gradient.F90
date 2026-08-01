@@ -1206,6 +1206,21 @@ contains
     call mrsf_nac_amp(inf)
   end subroutine mrsf_nac_amp_C
 
+!> Compute the explicit-ERI amplitude term for one ordered state pair.  This
+!> is the production NAC entry point: it avoids rebuilding every other pair
+!> when Python is merely orchestrating one pair's adjoint calculation.
+  subroutine mrsf_nac_amp_pair_C(c_handle, istate, jstate) &
+      bind(C, name="mrsf_nac_amp_pair")
+    use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use types, only: information
+    use, intrinsic :: iso_c_binding, only: c_int32_t
+    type(oqp_handle_t) :: c_handle
+    integer(c_int32_t), intent(in), value :: istate, jstate
+    type(information), pointer :: inf
+    inf => oqp_handle_get_info(c_handle)
+    call mrsf_nac_amp(inf, int(istate), int(jstate))
+  end subroutine mrsf_nac_amp_pair_C
+
 !> @brief Phase 11 BP#1: the explicit-ERI part of the analytic amplitude term
 !>        G_IJ = X_I^T (d_x A_2e) X_J for all MRSF state pairs (I/=J), stored as
 !>        OQP::nac_amp (3, natom, nstate, nstate). The Python driver divides by
@@ -1213,25 +1228,24 @@ contains
 !>
 !>        Mechanism: the validated bilinear engine grd2_mrsf_nac_compute_data_t
 !>        is run twice per pair --
-!>          (a) FULL  : shared reference d2 + interstate relaxed p2 + per-state
-!>                      channels spcI/spcJ  -> G_full
+!>          (a) FULL  : shared reference d2 + per-state channels spcI/spcJ
+!>                      with p2=0 -> G_full
 !>          (b) BASELINE (FIX-1, SCF subtraction): p2=0, spcI=spcJ=0 -> G_SCF
 !>                      (the X-independent d2*d2 ground-SCF 2e gradient, ~56% of
 !>                      the integrand; the I=J self-test is blind to it because
 !>                      it cancels in deN-deP)
 !>        and G_IJ = G_full - G_SCF (grd2 is a product form, so subtracting the
 !>        d2*d2 baseline removes exactly the ground-SCF gradient and leaves the
-!>        X-dependent relaxed+transition^2 2e gradient).
+!>        X-dependent transition-density 2e gradient).
 !>
-!>        FIX-2 (relaxed interstate p2): if OQP::td_p is present and nonzero on
-!>        entry it is used as p2 (the per-pair interstate Z-vector-relaxed
-!>        difference density, populated by the Python interstate z-vector seam);
-!>        the env OQP_NAC_AMP_NOP2 forces p2=0 for the transition^2-only
-!>        measurement.
-  subroutine mrsf_nac_amp(infos)
-    use io_constants, only: iw
+!>        OQP::td_p must not be consumed here.  It is unlabelled scratch owned
+!>        by the diagonal gradient Z-vector and can therefore contain the last
+!>        requested root when NAC follows a gradient.  The interstate
+!>        difference-density/Fock skeleton is evaluated by mrsf_nac_esum;
+!>        reusing td_p here both makes the result call-history dependent and
+!>        contaminates every pair with one diagonal state's relaxed density.
+  subroutine mrsf_nac_amp(infos, only_istate, only_jstate)
     use oqp_tagarray_driver
-    use, intrinsic :: iso_c_binding, only: c_int32_t
     use types, only: information
     use basis_tools, only: basis_set
     use messages, only: show_message, with_abort
@@ -1243,9 +1257,10 @@ contains
     character(len=*), parameter :: OQP_nac_amp = "OQP::nac_amp"
 
     type(information), target, intent(inout) :: infos
+    integer, intent(in), optional :: only_istate, only_jstate
     type(basis_set), pointer :: basis
 
-    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:), td_p(:,:)
+    real(kind=dp), contiguous, pointer :: dmat_a(:), dmat_b(:)
     real(kind=dp), contiguous, pointer :: mo_a(:,:), bvec_mo(:,:)
     real(kind=dp), pointer :: nac_amp(:,:,:)
     character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
@@ -1254,12 +1269,14 @@ contains
     real(kind=dp), allocatable, target :: d0(:,:,:), pIJ(:,:,:), &
          spcI(:,:,:), spcJ(:,:,:), zerospc(:,:,:), zerop(:,:,:), &
          dcopy(:,:,:)
+    real(kind=dp), allocatable, target :: dmat_a_owned(:), &
+         dmat_b_owned(:), mo_a_owned(:,:), bvec_mo_owned(:,:)
     real(kind=dp), allocatable :: deFull(:,:), deSCF(:,:)
     class(grd2_compute_data_t), allocatable :: gFull, gSCF
     real(kind=dp) :: scale_exch, scale_exch2
-    logical :: dft, do_cam, use_p2
+    logical :: dft, do_cam
     integer :: nbf, mrst, natom, nstate, ist, jst, c, a, ok
-    character(len=16) :: env_nop2
+    integer :: ist_first, ist_last, jst_first, jst_last
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1267,6 +1284,26 @@ contains
     natom  = ubound(infos%atoms%grad, 2)
     nstate = infos%tddft%nstate
     mrst   = infos%tddft%mult
+
+    if (present(only_istate) .neqv. present(only_jstate)) then
+      call show_message('mrsf_nac_amp pair selection requires both states', &
+                        with_abort)
+    end if
+    ist_first = 1
+    ist_last = nstate
+    jst_first = 1
+    jst_last = nstate
+    if (present(only_istate)) then
+      if (only_istate < 1 .or. only_istate > nstate .or. &
+          only_jstate < 1 .or. only_jstate > nstate .or. &
+          only_istate == only_jstate) then
+        call show_message('mrsf_nac_amp ordered pair is invalid', with_abort)
+      end if
+      ist_first = only_istate
+      ist_last = only_istate
+      jst_first = only_jstate
+      jst_last = only_jstate
+    end if
 
     if (mrst/=1 .and. mrst/=3) &
       call show_message('mrsf_nac_amp supports mult=1,3 only', with_abort)
@@ -1286,20 +1323,21 @@ contains
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
 
-    ! FIX-2 source: use the interstate relaxed density in OQP::td_p (populated
-    ! by the Python interstate z-vector seam) unless explicitly suppressed.
-    call get_environment_variable("OQP_NAC_AMP_NOP2", env_nop2)
-    use_p2 = (len_trim(env_nop2) == 0)
-    nullify(td_p)
-    if (use_p2) then
-      block
-        character(len=80) :: tags_p(1)
-        integer(c_int32_t) :: pstat, ptag_id
-        tags_p(1) = OQP_td_p
-        pstat = infos%dat%has_records(tags_p, ptag_id)
-        if (pstat == ta_ok) call tagarray_get_data(infos%dat, OQP_td_p, td_p)
-      end block
-    end if
+    ! Any output reserve may move TagArray storage and invalidate every cached
+    ! input pointer.  Keep owned production inputs across the whole amplitude
+    ! kernel, including nested gradient routines that may manage records.
+    allocate(dmat_a_owned(size(dmat_a)), dmat_b_owned(size(dmat_b)), &
+             mo_a_owned(size(mo_a,1),size(mo_a,2)), &
+             bvec_mo_owned(size(bvec_mo,1),size(bvec_mo,2)), stat=ok)
+    if (ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
+    dmat_a_owned = dmat_a
+    dmat_b_owned = dmat_b
+    mo_a_owned = mo_a
+    bvec_mo_owned = bvec_mo
+    dmat_a => dmat_a_owned
+    dmat_b => dmat_b_owned
+    mo_a => mo_a_owned
+    bvec_mo => bvec_mo_owned
 
     call infos%dat%remove_records((/ character(len=80) :: OQP_nac_amp /))
     call infos%dat%reserve_data(OQP_nac_amp, ta_type_real64, &
@@ -1316,23 +1354,19 @@ contains
     call unpack_matrix(dmat_a, d0(:,:,1))
     call unpack_matrix(dmat_b, d0(:,:,2))
 
-    ! interstate relaxed difference density p2^{IJ} (shared by all pairs only if
-    ! it is a single-state object; here we read whatever the seam left in td_p).
-    if (associated(td_p)) then
-      call unpack_matrix(td_p(:,1), pIJ(:,:,1))
-      call unpack_matrix(td_p(:,2), pIJ(:,:,2))
-    end if
+    ! This engine owns its p2 input and keeps it zero.  In particular, never
+    ! infer pair identity or freshness from the generic OQP::td_p record.
 
-    do ist = 1, nstate
-      do jst = 1, nstate
+    do ist = ist_first, ist_last
+      do jst = jst_first, jst_last
         if (ist == jst) cycle
 
         ! per-state channel densities (mirror production td_mrsf_density build)
         call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, ist, spcI)
         call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, jst, spcJ)
 
-        ! (a) FULL: reference + relaxed p2 + per-state channels (init mutates
-        !     d2/p2 in place -> fresh copies each time).
+        ! (a) FULL: reference + per-state channels with an owned zero p2
+        !     (init mutates d2/p2 in place -> fresh copies each time).
         dcopy = d0
         deFull = 0.0_dp
         gFull = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = pIJ, &
@@ -1371,10 +1405,8 @@ contains
       end do
     end do
 
-    write(iw,'(/5X,"=== Phase 11 NAC amplitude (explicit-ERI) computed ===")')
-    write(iw,'(5X,"OQP::nac_amp shape (3,natom,nstate,nstate)")')
-
-    deallocate(d0, dcopy, pIJ, zerop, spcI, spcJ, zerospc, deFull, deSCF)
+    deallocate(d0, dcopy, pIJ, zerop, spcI, spcJ, zerospc, deFull, deSCF, &
+               dmat_a_owned, dmat_b_owned, mo_a_owned, bvec_mo_owned)
   end subroutine mrsf_nac_amp
 
 !###############################################################################
@@ -1412,17 +1444,23 @@ contains
   subroutine mrsf_nac_esum_C(c_handle, istate, jstate) &
       bind(C, name="mrsf_nac_esum")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
     use types, only: information
     use, intrinsic :: iso_c_binding, only: c_int64_t
     type(oqp_handle_t) :: c_handle
     integer(c_int64_t), value :: istate, jstate
     type(information), pointer :: inf
+    logical :: log_was_open
+
     inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
     call mrsf_nac_esum(inf, int(istate), int(jstate))
+    if (.not. log_was_open) close(iw)
   end subroutine mrsf_nac_esum_C
 
   subroutine mrsf_nac_esum(infos, istate, jstate)
-    use io_constants, only: iw
     use oqp_tagarray_driver
     use types, only: information
     use basis_tools, only: basis_set
@@ -1432,9 +1470,7 @@ contains
     use fock_deriv_mod, only: fock_deriv_contract_os
     use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, &
                     grad_ee_overlap
-    use scf_addons, only: fock_jk
-    use int1e_mod, only: int1e
-    use dft, only: dft_initialize, dftclean, dftexcor
+    use dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
 
@@ -1452,13 +1488,14 @@ contains
     real(kind=dp), allocatable :: tij(:,:), tab(:,:), pij_a(:,:), pij_b(:,:), &
                                   pa(:,:), pb(:,:), ptot(:,:), scr(:,:), &
                                   p1e(:), gx(:,:), g1(:,:)
+    real(kind=dp), allocatable, target :: bvec_mo_owned(:,:), &
+      mo_a_owned(:,:), mo_b_owned(:,:), dmat_a_owned(:), dmat_b_owned(:)
     real(kind=dp) :: hfscale, tol
     integer :: nbf, nbf2, nocca, noccb, nvirb, natom, ok
     character(len=80) :: tags_req(5)
     type(dft_grid_t) :: molGrid
     logical :: dft
-    real(kind=dp), allocatable :: xcd(:,:,:), xcp(:,:,:), gxc(:,:), gxc_keep(:,:), &
-                                  g1e_keep(:,:)
+    real(kind=dp), allocatable :: xcd(:,:,:), xcp(:,:,:), gxc(:,:)
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -1486,6 +1523,25 @@ contains
     call tagarray_get_data(infos%dat, OQP_DM_A, dmat_a)
     call tagarray_get_data(infos%dat, OQP_DM_B, dmat_b)
 
+    ! Pair/diagnostic output records are reserved repeatedly below.  Own every
+    ! resident input that remains live after the first reserve so allocator
+    ! movement cannot turn a valid calculation into a dangling-pointer read.
+    allocate(bvec_mo_owned(size(bvec_mo,1),size(bvec_mo,2)), &
+             mo_a_owned(size(mo_a,1),size(mo_a,2)), &
+             mo_b_owned(size(mo_b,1),size(mo_b,2)), &
+             dmat_a_owned(size(dmat_a)), dmat_b_owned(size(dmat_b)), stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
+    bvec_mo_owned = bvec_mo
+    mo_a_owned = mo_a
+    mo_b_owned = mo_b
+    dmat_a_owned = dmat_a
+    dmat_b_owned = dmat_b
+    bvec_mo => bvec_mo_owned
+    mo_a => mo_a_owned
+    mo_b => mo_b_owned
+    dmat_a => dmat_a_owned
+    dmat_b => dmat_b_owned
+
     allocate(tij(nocca,nocca), tab(nvirb,nvirb), &
              pij_a(nbf,nbf), pij_b(nbf,nbf), &
              pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf), scr(nbf,nbf), &
@@ -1507,8 +1563,32 @@ contains
     call dgemm('n','t', nbf, nbf, nvirb, &
                1.0_dp, scr, nbf, mo_b(1,noccb+1), nbf, 0.0_dp, pij_b, nbf)
 
-  ! optional export of the interstate AO Fock-channel densities for the
-  ! Python-side G[P]-channel assembly (env NAC_DUMP_PIJ)
+  ! Formal pair outputs used by the native response assembly.  These are part
+  ! of the production ABI; production must not depend on env-gated dbg_* tags.
+    block
+      real(kind=dp), pointer :: pa_pair(:), pb_pair(:), pa_packed(:), pb_packed(:)
+      call infos%dat%remove_records((/ character(len=80) :: &
+        'OQP::nac_pij_a', 'OQP::nac_pij_b', &
+        'OQP::nac_dm1_a', 'OQP::nac_dm1_b' /))
+      call infos%dat%reserve_data('OQP::nac_pij_a', ta_type_real64, &
+            nbf*nbf, (/ nbf*nbf /), comment='ordered MRSF alpha AO pair density')
+      call infos%dat%reserve_data('OQP::nac_pij_b', ta_type_real64, &
+            nbf*nbf, (/ nbf*nbf /), comment='ordered MRSF beta AO pair density')
+      call infos%dat%reserve_data('OQP::nac_dm1_a', ta_type_real64, &
+            nbf2, (/ nbf2 /), comment='packed ordered MRSF alpha AO pair density')
+      call infos%dat%reserve_data('OQP::nac_dm1_b', ta_type_real64, &
+            nbf2, (/ nbf2 /), comment='packed ordered MRSF beta AO pair density')
+      call tagarray_get_data(infos%dat, 'OQP::nac_pij_a', pa_pair)
+      call tagarray_get_data(infos%dat, 'OQP::nac_pij_b', pb_pair)
+      call tagarray_get_data(infos%dat, 'OQP::nac_dm1_a', pa_packed)
+      call tagarray_get_data(infos%dat, 'OQP::nac_dm1_b', pb_packed)
+      pa_pair = reshape(pij_a, (/ nbf*nbf /))
+      pb_pair = reshape(pij_b, (/ nbf*nbf /))
+      call pack_matrix(pij_a, pa_packed)
+      call pack_matrix(pij_b, pb_packed)
+    end block
+
+  ! Optional backward-compatible diagnostic aliases for forensic scripts.
     block
       character(len=16) :: ev_p
       real(kind=dp), pointer :: pa_out(:), pb_out(:)
@@ -1545,9 +1625,6 @@ contains
       call tagarray_get_data(infos%dat, 'OQP::nac_esum_1e', o1)
       o1 = gx
     end block
-    allocate(g1e_keep(3,natom))
-    g1e_keep = gx        ! analytic 1e, retained for the 1e FD self-test below
-
   ! (4) explicit 2e at FROZEN reference density:
   !     Tr[P^IJ_a . dG^a[Pa,Pb]] + Tr[P^IJ_b . dG^b[Pa,Pb]]
     call unpack_matrix(dmat_a, pa)
@@ -1566,47 +1643,33 @@ contains
   !      relaxed density replaced by the interstate probe P^IJ. No xa/xb is
   !      passed, so only the grad_v_xc branch runs (no f_xc kernel term, which
   !      belongs to the transition-density/2e side, not to the Fock part).
-  !      NOTE two landmines: utddft_xc_gradient has `intent(out) dedft` (it
-  !      OVERWRITES -> accumulate through a scratch) and its da/db/pa/pb are
+  !      NOTE two landmines: utddft_xc_gradient ACCUMULATES into dedft (start
+  !      the scratch at zero) and its da/db/pa/pb are
   !      `intent(inout)` and get SCALED BY BASIS NORMS IN PLACE -> pass COPIES,
   !      otherwise pij_a/pij_b are silently corrupted for anything downstream.
     if (dft) then
       allocate(xcd(nbf,nbf,2), xcp(nbf,nbf,2), gxc(3,natom), source=0.0_dp, stat=ok)
       if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
-      ! utddft_xc_gradient also carries a probe-INDEPENDENT ground-state XC
-      ! gradient piece (it depends only on da/db). That constant is NOT part of
-      ! Tr[P^IJ . dVxc/dR], so it must be removed by a zero-probe baseline --
-      ! the same gZ-gS seam pattern used elsewhere in this file. Diagnosed from
-      ! the XC FD test returning max|an-FD| = 8.8799e-02 IDENTICALLY for all
-      ! three pairs, which can only be a pair-independent additive term.
-      block
-        real(kind=dp), allocatable :: gxc0(:,:)
-        allocate(gxc0(3,natom), source=0.0_dp)
-        call dft_initialize(infos, basis, molGrid, verbose=.false.)
-        ! (a) with the interstate probe
-        xcd(:,:,1) = pa
-        xcd(:,:,2) = pb
-        xcp(:,:,1) = pij_a
-        xcp(:,:,2) = pij_b
-        call utddft_xc_gradient(basis=basis, molGrid=molGrid, dedft=gxc, &
-             da=xcd(:,:,1), db=xcd(:,:,2), &
-             pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
-             nmtx=1, threshold=0.0d0, infos=infos)
-        ! (b) baseline with a ZERO probe (fresh copies: da/db are scaled in place)
-        xcd(:,:,1) = pa
-        xcd(:,:,2) = pb
-        xcp = 0.0_dp
-        call utddft_xc_gradient(basis=basis, molGrid=molGrid, dedft=gxc0, &
-             da=xcd(:,:,1), db=xcd(:,:,2), &
-             pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
-             nmtx=1, threshold=0.0d0, infos=infos)
-        call dftclean(infos)
-        gxc = gxc - gxc0
-        deallocate(gxc0)
-      end block
+      ! This is an interstate *linear probe*: exclude the probe-independent
+      ! ground-state gradient and include the derivative of the normalized
+      ! atom-centred fuzzy-cell weights.  The latter is essential here because
+      ! the small unrelaxed probe is amplified by the near-degenerate pair-Z
+      ! resolvent.  A zero-probe subtraction removes only the ground-state
+      ! constant; it cannot recover the missing (dw/dR)*delta_P e_xc term.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid, verbose=.false.)
+      xcd(:,:,1) = pa
+      xcd(:,:,2) = pb
+      xcp(:,:,1) = pij_a
+      xcp(:,:,2) = pij_b
+      call utddft_xc_gradient(basis=basis, molGrid=molGrid, dedft=gxc, &
+           da=xcd(:,:,1), db=xcd(:,:,2), &
+           pa=xcp(:,:,1:1), pb=xcp(:,:,2:2), &
+           nmtx=1, threshold=0.0d0, infos=infos, &
+           include_ground_state=.false., &
+           include_weight_derivative=.true.)
+      call dftclean(infos)
       gx = gx + gxc
-      allocate(gxc_keep(3,natom))
-      gxc_keep = gxc          ! retained for the XC FD self-test below
       deallocate(xcd, xcp, gxc)
     end if
 
@@ -1663,183 +1726,14 @@ contains
       deallocate(fa, fb, mA, mB, wao, wpk, gw, sc, fpk)
     end block
 
-  ! (5) OPTIONAL rigorous FD self-test of the 2e piece (env NAC_ESUM_FDTEST).
-  !     Central difference of  Tr[P^IJ_a . G^a[Pa,Pb]] + Tr[P^IJ_b . G^b[Pa,Pb]]
-  !     at FROZEN densities and FROZEN probe (fock_jk rebuilt at R+-h), which is
-  !     exactly what fock_deriv_contract_os must return. No SCF iteration, so the
-  !     reference is truncation-limited O(h^2) -- same design as fockx_os_selftest.
-    block
-      character(len=16) :: ev
-      real(kind=dp), allocatable :: dpack(:,:), fpack(:,:), g2an(:,:), g2fd(:,:)
-      real(kind=dp) :: hh, trp, trm
-      integer :: kk, aa, uu
-      call get_environment_variable('NAC_ESUM_FDTEST', ev)
-      if (len_trim(ev) > 0) then
-        allocate(dpack(nbf2,2), fpack(nbf2,2), g2an(3,natom), g2fd(3,natom))
-        ! NOTE: fock_deriv_contract_os has intent(out) gx and zeroes it, so the
-        ! two spin contributions MUST be accumulated through a scratch array.
-        g2an = 0.0_dp
-        call fock_deriv_contract_os(infos, basis, ptot, pa, pij_a, hfscale, g1)
-        g2an = g2an + g1
-        call fock_deriv_contract_os(infos, basis, ptot, pb, pij_b, hfscale, g1)
-        g2an = g2an + g1
-        call pack_matrix(pa, dpack(:,1))
-        call pack_matrix(pb, dpack(:,2))
-        g2fd = 0.0_dp
-        hh = 1.0e-4_dp
-        do kk = 1, natom
-          do aa = 1, 3
-            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-            fpack = 0.0_dp
-            call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
-            trp = tr_mg(pij_a, fpack(:,1), nbf) + tr_mg(pij_b, fpack(:,2), nbf)
-            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
-            fpack = 0.0_dp
-            call fock_jk(basis, d=dpack, f=fpack, scale_exch=hfscale, infos=infos)
-            trm = tr_mg(pij_a, fpack(:,1), nbf) + tr_mg(pij_b, fpack(:,2), nbf)
-            basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-            g2fd(aa,kk) = (trp - trm)/(2*hh)
-          end do
-        end do
-      ! ---- XC FD reference ------------------------------------------------
-      ! Central difference of Tr[P^IJ_a . Vxc^a] + Tr[P^IJ_b . Vxc^b] with the
-      ! probe P^IJ FROZEN and the MO coefficients FROZEN, rebuilding the DFT grid
-      ! at each displaced geometry (so grid-movement effects are included, which
-      ! the analytic utddft_xc_gradient also carries). dftexcor builds the packed
-      ! Vxc from FIXED MO coefficients => exactly the frozen-density / moving-basis
-      ! skeleton condition. MRSF is ROHF, so iscftyp=2 with beta MOs = alpha MOs,
-      ! matching the production ROHF branch in scf_addons.
-      ! NOTE: dftexcor has coeffa/coeffb intent(inout) and scales them in place,
-      ! so a FRESH copy must be handed over on every single call.
-        if (dft) then
-          block
-            real(kind=dp), allocatable :: fxc(:,:), cA(:,:), cB(:,:), gxcfd(:,:)
-            real(kind=dp) :: eexc, totele, totkin
-            allocate(fxc(nbf2,2), cA(nbf,nbf), cB(nbf,nbf), gxcfd(3,natom))
-            gxcfd = 0.0_dp
-            do kk = 1, natom
-              do aa = 1, 3
-                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-                cA = mo_a; cB = mo_a; fxc = 0.0_dp
-                call dft_initialize(infos, basis, molGrid, verbose=.false.)
-                call dftexcor(basis, molGrid, 2, fxc(:,1), fxc(:,2), cA, cB, &
-                              nbf, nbf2, eexc, totele, totkin, infos)
-                call dftclean(infos)
-                trp = tr_mg(pij_a, fxc(:,1), nbf) + tr_mg(pij_b, fxc(:,2), nbf)
-                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
-                cA = mo_a; cB = mo_a; fxc = 0.0_dp
-                call dft_initialize(infos, basis, molGrid, verbose=.false.)
-                call dftexcor(basis, molGrid, 2, fxc(:,1), fxc(:,2), cA, cB, &
-                              nbf, nbf2, eexc, totele, totkin, infos)
-                call dftclean(infos)
-                trm = tr_mg(pij_a, fxc(:,1), nbf) + tr_mg(pij_b, fxc(:,2), nbf)
-                basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-                gxcfd(aa,kk) = (trp - trm)/(2*hh)
-              end do
-            end do
-            open(newunit=uu, file='/tmp/nac_esum_xcfd.out', status='replace', action='write')
-            write(uu,'(a,2i4)')    'pair                    = ', istate, jstate
-            write(uu,'(a,es12.4)') 'esum XC max|an - FD|    = ', maxval(abs(gxc_keep-gxcfd))
-            write(uu,'(a,es12.4)') 'esum XC |an|            = ', sqrt(sum(gxc_keep**2))
-            write(uu,'(a,es12.4)') 'esum XC |FD|            = ', sqrt(sum(gxcfd**2))
-            write(uu,'(a)') 'analytic gxc(:,1):'
-            write(uu,'(3es16.8)') gxc_keep(:,1)
-            write(uu,'(a)') 'finite-d gxc(:,1):'
-            write(uu,'(3es16.8)') gxcfd(:,1)
-            close(uu)
-            deallocate(fxc, cA, cB, gxcfd)
-          end block
-        end if
-
-      ! ---- 1e FD reference ------------------------------------------------
-      ! Central difference of Tr[(P^IJ_a + P^IJ_b) . Hcore(R)] with the probe
-      ! FROZEN, rebuilding the 1e integrals (int1e -> OQP::Hcore) at each
-      ! displaced geometry. This is the piece the logtol bug hit and the only
-      ! one never independently checked.
-        block
-          real(kind=dp), allocatable :: g1fd(:,:), psum(:,:)
-          real(kind=dp), contiguous, pointer :: hc(:)
-          allocate(g1fd(3,natom), psum(nbf,nbf))
-          psum = pij_a + pij_b
-          g1fd = 0.0_dp
-          do kk = 1, natom
-            do aa = 1, 3
-              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-              call int1e(infos)
-              call tagarray_get_data(infos%dat, OQP_Hcore, hc)
-              trp = tr_mg(psum, hc, nbf)
-              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) - 2*hh
-              call int1e(infos)
-              call tagarray_get_data(infos%dat, OQP_Hcore, hc)
-              trm = tr_mg(psum, hc, nbf)
-              basis%atoms%xyz(aa,kk) = basis%atoms%xyz(aa,kk) + hh
-              g1fd(aa,kk) = (trp - trm)/(2*hh)
-            end do
-          end do
-          call int1e(infos)   ! restore Hcore/S at the original geometry
-          open(newunit=uu, file='/tmp/nac_esum_1efd.out', status='replace', action='write')
-          write(uu,'(a,2i4)')    'pair                    = ', istate, jstate
-          write(uu,'(a,es12.4)') 'esum 1e max|an - FD|    = ', maxval(abs(g1e_keep-g1fd))
-          write(uu,'(a,es12.4)') 'esum 1e |an|            = ', sqrt(sum(g1e_keep**2))
-          write(uu,'(a,es12.4)') 'esum 1e |FD|            = ', sqrt(sum(g1fd**2))
-          write(uu,'(a)') 'analytic g1(:,1):'
-          write(uu,'(3es16.8)') g1e_keep(:,1)
-          write(uu,'(a)') 'finite-d g1(:,1):'
-          write(uu,'(3es16.8)') g1fd(:,1)
-          close(uu)
-          deallocate(g1fd, psum)
-        end block
-
-        open(newunit=uu, file='/tmp/nac_esum_fdtest.out', status='replace', action='write')
-        write(uu,'(a,2i4)')   'pair                     = ', istate, jstate
-        write(uu,'(a,es12.4)') 'esum 2e  max|an - FD|    = ', maxval(abs(g2an-g2fd))
-        write(uu,'(a,es12.4)') 'esum 2e  |an|            = ', sqrt(sum(g2an**2))
-        write(uu,'(a,es12.4)') 'esum 2e  |FD|            = ', sqrt(sum(g2fd**2))
-        write(uu,'(a)') 'analytic g2(:,1):'
-        write(uu,'(3es16.8)') g2an(:,1)
-        write(uu,'(a)') 'finite-d g2(:,1):'
-        write(uu,'(3es16.8)') g2fd(:,1)
-        if (maxval(abs(g2an-g2fd)) < 1.0e-6_dp) then
-          write(uu,'(a)') 'NAC_ESUM_2E_FDTEST PASS'
-        else
-          write(uu,'(a)') 'NAC_ESUM_2E_FDTEST FAIL'
-        end if
-        close(uu)
-        deallocate(dpack, fpack, g2an, g2fd)
-      end if
-    end block
-
     call infos%dat%remove_records((/ character(len=80) :: OQP_nac_esum /))
     call infos%dat%reserve_data(OQP_nac_esum, ta_type_real64, 3*natom, (/ 3, natom /))
     call tagarray_get_data(infos%dat, OQP_nac_esum, out)
     out = gx
 
-    write(iw,'(/5X,"=== NAC closed-form esum(",I0,",",I0,") computed ===")') &
-         istate, jstate
-    deallocate(tij, tab, pij_a, pij_b, pa, pb, ptot, scr, p1e, gx, g1)
-    if (allocated(gxc_keep)) deallocate(gxc_keep)
-    if (allocated(g1e_keep)) deallocate(g1e_keep)
-
-  contains
-    !> Tr(M . G) for square symmetric M and packed symmetric G.
-    pure function tr_mg(m, gp, n) result(tr)
-      real(kind=dp), intent(in) :: m(:,:), gp(:)
-      integer, intent(in) :: n
-      real(kind=dp) :: tr
-      integer :: ii, jj, ij
-      tr = 0.0_dp
-      ij = 0
-      do ii = 1, n
-        do jj = 1, ii
-          ij = ij + 1
-          if (ii == jj) then
-            tr = tr + m(ii,ii)*gp(ij)
-          else
-            tr = tr + 2.0_dp*m(ii,jj)*gp(ij)
-          end if
-        end do
-      end do
-    end function tr_mg
+    deallocate(tij, tab, pij_a, pij_b, pa, pb, ptot, scr, p1e, gx, g1, &
+               bvec_mo_owned, mo_a_owned, mo_b_owned, dmat_a_owned, &
+               dmat_b_owned)
   end subroutine mrsf_nac_esum
 
 !###############################################################################
@@ -2090,14 +1984,13 @@ contains
 end module tdhf_mrsf_gradient_mod
 
 !###############################################################################
-!> ROUTE A resident reference engine.  It evaluates
+!> ROUTE A resident closed-form engine.  It evaluates
 !>   M_pq = d[ytil^T A(C) X_J]/d theta_pq at frozen AO Fock
-!> with the already certified central orbital-generator harvest, but keeps the
-!> entire O(nbf^2) loop inside Fortran.  OQP::nac_ytil and OQP::nac_xstate are
-!> input folded vectors; OQP::nac_mt_frozen is the column-major output matrix.
-!> This removes the production-scale Python loop now.  The closed-form
-!> bilinear mrsfcbc/mrsfmntoia adjoint will replace the internal harvest while
-!> preserving this interface.
+!> using the exact mrsfcbc/mrsfmntoia adjoint.  The two response vectors share
+!> one batched ERI build; the frozen-Fock contribution is evaluated directly
+!> in MO space, including the matvec's ixcore diagonal-overwrite semantics.
+!> OQP::nac_ytil and OQP::nac_xstate are input folded vectors;
+!> OQP::nac_mt_frozen is the column-major output matrix.
   subroutine mrsf_nac_wpair_C(c_handle, istate, jstate) &
       bind(C, name="mrsf_nac_wpair")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
@@ -2106,6 +1999,13 @@ end module tdhf_mrsf_gradient_mod
     type(oqp_handle_t) :: c_handle
     integer(c_int32_t), intent(in), value :: istate, jstate
     type(information), pointer :: inf
+    interface
+      subroutine mrsf_nac_wpair_impl(infos, istate, jstate)
+        use types, only: information
+        type(information), target, intent(inout) :: infos
+        integer, intent(in) :: istate, jstate
+      end subroutine mrsf_nac_wpair_impl
+    end interface
     inf => oqp_handle_get_info(c_handle)
     call mrsf_nac_wpair_impl(inf, int(istate), int(jstate))
   end subroutine mrsf_nac_wpair_C
@@ -2114,70 +2014,192 @@ end module tdhf_mrsf_gradient_mod
     use oqp_tagarray_driver
     use types, only: information
     use precision, only: dp
-    use messages, only: with_abort
-    use tdhf_mrsf_energy_mod, only: mrsf_matvec_apply
+    use messages, only: show_message, with_abort
+    use basis_tools, only: basis_set
+    use int2_compute, only: int2_compute_t
+    use tdhf_mrsf_lib, only: int2_mrsf_data_t, mrsfcbc, mrsfxvec, mrsfsp
+    use tdhf_lib, only: iatogen
+    use mathlib, only: orthogonal_transform_sym, unpack_matrix
+    use oqp_linalg
+    use, intrinsic :: iso_c_binding, only: c_f_pointer, c_int
     implicit none
     character(len=*), parameter :: module_name = "tdhf_mrsf_gradient_mod"
     character(len=*), parameter :: subroutine_name = "mrsf_nac_wpair_impl"
     character(len=*), parameter :: OQP_nac_ytil = "OQP::nac_ytil"
     character(len=*), parameter :: OQP_nac_xstate = "OQP::nac_xstate"
     character(len=*), parameter :: OQP_nac_mt = "OQP::nac_mt_frozen"
-    character(len=*), parameter :: tags_required(5) = (/ character(len=80) :: &
-      OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_td_bvec_mo, &
+    character(len=*), parameter :: tags_required(6) = (/ character(len=80) :: &
+      OQP_FOCK_A, OQP_FOCK_B, OQP_VEC_MO_A, OQP_VEC_MO_B, &
       OQP_nac_ytil, OQP_nac_xstate /)
-    type(information), intent(inout) :: infos
+    type(information), target, intent(inout) :: infos
     integer, intent(in) :: istate, jstate
-    real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), bvec_mo(:,:), &
+    type(basis_set), pointer :: basis
+    type(int2_compute_t) :: int2_driver
+    type(int2_mrsf_data_t), target :: int2_data_st
+    real(kind=dp), contiguous, pointer :: fock_a(:), fock_b(:), &
+                                          mo_a(:,:), mo_b(:,:), &
                                           ytil(:), xstate(:)
-    real(kind=dp), pointer :: ax(:), mt_out(:)
-    real(kind=dp), allocatable :: mo_a0(:,:), mo_b0(:,:), bvec0(:,:), mt(:,:)
-    real(kind=dp), parameter :: step = 1.0e-5_dp
-    real(kind=dp) :: value, sign
-    integer :: nbf, xdim, p, q, isign
+    real(kind=dp), pointer :: mt_out(:)
+    real(kind=dp), allocatable, target :: mrsf_density(:,:,:,:)
+    real(kind=dp), pointer :: fmrst2(:,:,:,:)
+    real(kind=dp), allocatable :: wrk(:,:), xu(:,:), yu(:,:), &
+                                  fa(:,:), fb(:,:), fpk(:), &
+                                  gamma_a(:,:), gamma_b(:,:), mt(:,:), &
+                                  ha_yx(:,:), hb_yx(:,:), &
+                                  ha_xy(:,:), hb_xy(:,:), &
+                                  xuvec(:), yuvec(:)
+    integer(c_int), pointer :: ixcore_ptr(:)
+    real(kind=dp) :: scale_exch, hfs
+    integer :: nbf, nbf2, noca, nocb, xdim, mrst, k, ok
+    logical :: dft
 
     if (istate == jstate) return
-    nbf = infos%basis%nbf
-    xdim = infos%mol_prop%nelec_a * (nbf - infos%mol_prop%nelec_b)
+
+    if (infos%tddft%umrsf) &
+      call show_message('Analytic NAC wpair is not available for UMRSF-TDDFT.', with_abort)
+    mrst = infos%tddft%mult
+    if (mrst /= 1 .and. mrst /= 3) &
+      call show_message('Analytic NAC wpair requires singlet or triplet MRSF-TDDFT.', with_abort)
+
+    basis => infos%basis
+    basis%atoms => infos%atoms
+    nbf = basis%nbf
+    nbf2 = nbf*(nbf+1)/2
+    noca = infos%mol_prop%nelec_a
+    nocb = infos%mol_prop%nelec_b
+    xdim = noca*(nbf-nocb)
+    dft = infos%control%hamilton == 20
+    scale_exch = 1.0_dp
+    if (dft) scale_exch = infos%tddft%hfscale
+    hfs = infos%tddft%hfscale
+
+    if (abs(hfs) <= epsilon(1.0_dp) .and. &
+        (infos%tddft%spc_coco /= 0.0_dp .or. &
+         infos%tddft%spc_ovov /= 0.0_dp .or. &
+         infos%tddft%spc_coov /= 0.0_dp)) &
+      call show_message('MRSF-TDDFT spin-pair coupling overrides require nonzero HFscale.', with_abort)
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, WITH_ABORT)
+    call tagarray_get_data(infos%dat, OQP_FOCK_A, fock_a)
+    call tagarray_get_data(infos%dat, OQP_FOCK_B, fock_b)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)
-    call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
     call tagarray_get_data(infos%dat, OQP_nac_ytil, ytil)
     call tagarray_get_data(infos%dat, OQP_nac_xstate, xstate)
 
-    allocate(mo_a0(nbf,nbf), mo_b0(nbf,nbf), &
-             bvec0(size(bvec_mo,1),size(bvec_mo,2)), mt(nbf,nbf), &
-             source=0.0_dp)
-    mo_a0 = mo_a
-    mo_b0 = mo_b
-    bvec0 = bvec_mo
+    allocate(mrsf_density(2,7,nbf,nbf), wrk(nbf,nbf), &
+             xu(nbf,nbf), yu(nbf,nbf), xuvec(xdim), yuvec(xdim), &
+             fa(nbf,nbf), fb(nbf,nbf), fpk(nbf2), &
+             gamma_a(nbf,nbf), gamma_b(nbf,nbf), mt(nbf,nbf), &
+             ha_yx(nbf,nbf), hb_yx(nbf,nbf), &
+             ha_xy(nbf,nbf), hb_xy(nbf,nbf), &
+             source=0.0_dp, stat=ok)
+    if (ok /= 0) call show_message('Cannot allocate memory', with_abort)
 
-    do q = 1, nbf
-      do p = 1, nbf
-        if (p == q) cycle
-        value = 0.0_dp
-        do isign = 1, 2
-          sign = merge(1.0_dp, -1.0_dp, isign == 1)
-          mo_a = mo_a0
-          mo_b = mo_b0
-          mo_a(:,q) = mo_a(:,q) + sign*step*mo_a0(:,p)
-          mo_b(:,q) = mo_b(:,q) + sign*step*mo_b0(:,p)
-          bvec_mo = bvec0
-          bvec_mo(1:xdim,1) = xstate(1:xdim)
-          call mrsf_matvec_apply(infos)
-          call tagarray_get_data(infos%dat, "OQP::nac_mvax", ax)
-          value = value + sign*dot_product(ytil(1:xdim), ax(1:xdim))
-        end do
-        mt(p,q) = value/(2.0_dp*step)
+    ! Raw frozen Fock in the unshifted MO basis.  The ixcore overwrite is a
+    ! constant diagonal replacement, whose derivative is removed below.
+    call orthogonal_transform_sym(nbf, nbf, fock_a, mo_a, nbf, fpk)
+    call unpack_matrix(fpk, fa)
+    call orthogonal_transform_sym(nbf, nbf, fock_b, mo_b, nbf, fpk)
+    call unpack_matrix(fpk, fb)
+
+    ! The ERI source uses the folded eigenvectors, exactly as the matvec does.
+    call iatogen(xstate(1:xdim), wrk, noca, nocb)
+    call mrsfcbc(infos, mo_a, mo_b, wrk, mrsf_density(1,:,:,:))
+    call iatogen(ytil(1:xdim), wrk, noca, nocb)
+    call mrsfcbc(infos, mo_a, mo_b, wrk, mrsf_density(2,:,:,:))
+
+    call int2_driver%init(basis, infos)
+    call int2_driver%set_screening()
+    int2_data_st = int2_mrsf_data_t( &
+      d3 = mrsf_density(:2,:,:,:), &
+      tamm_dancoff = .true., &
+      scale_exchange = scale_exch, &
+      scale_coulomb = scale_exch)
+    call int2_driver%run(int2_data_st, &
+      cam = dft .and. infos%dft%cam_flag, &
+      alpha = infos%tddft%cam_alpha, &
+      alpha_coulomb = infos%tddft%cam_alpha, &
+      beta = infos%tddft%cam_beta, &
+      beta_coulomb = infos%tddft%cam_beta, &
+      mu = infos%tddft%cam_mu)
+    fmrst2 => int2_data_st%f3(:,:,:,:,1)
+
+    if (mrst == 3) fmrst2(:,1:6,:,:) = -fmrst2(:,1:6,:,:)
+    if (abs(hfs) > epsilon(1.0_dp)) then
+      if (infos%tddft%spc_coco /= hfs) &
+        fmrst2(:,6,:,:) = fmrst2(:,6,:,:)*infos%tddft%spc_coco/hfs
+      if (infos%tddft%spc_ovov /= hfs) &
+        fmrst2(:,5,:,:) = fmrst2(:,5,:,:)*infos%tddft%spc_ovov/hfs
+      if (infos%tddft%spc_coov /= hfs) &
+        fmrst2(:,1:4,:,:) = fmrst2(:,1:4,:,:)*infos%tddft%spc_coov/hfs
+    end if
+
+    ! The derivative-side amplitudes are unfolded once.  Pre-unfolding the
+    ! density source above would apply the SOMO fold twice.
+    call mrsfxvec(infos, xstate(1:xdim), xuvec)
+    call iatogen(xuvec, xu, noca, nocb)
+    call mrsfxvec(infos, ytil(1:xdim), yuvec)
+    call iatogen(yuvec, yu, noca, nocb)
+
+    ! H(y,Kx) + H(x,Ky), including all six spin-pair channels.  The half
+    ! factor is the adjoint symmetrisation of B(C)^T K B(C).
+    call mrsf_nac_hx_side(mo_a, mo_b, yu, fmrst2(1,:,:,:), &
+                          noca, nocb, ha_yx, hb_yx)
+    call mrsf_nac_hx_side(mo_a, mo_b, xu, fmrst2(2,:,:,:), &
+                          noca, nocb, ha_xy, hb_xy)
+    mt = 0.5_dp*(ha_yx + hb_yx + ha_xy + hb_xy)
+
+    ! Frozen-Fock part: d Tr[Gamma C^T F_AO C]/d theta.
+    gamma_a(1:noca,1:noca) = -0.5_dp*( &
+      matmul(yu(1:noca,nocb+1:nbf), transpose(xu(1:noca,nocb+1:nbf))) + &
+      matmul(xu(1:noca,nocb+1:nbf), transpose(yu(1:noca,nocb+1:nbf))))
+    gamma_b(nocb+1:nbf,nocb+1:nbf) = 0.5_dp*( &
+      matmul(transpose(yu(1:noca,nocb+1:nbf)), xu(1:noca,nocb+1:nbf)) + &
+      matmul(transpose(xu(1:noca,nocb+1:nbf)), yu(1:noca,nocb+1:nbf)))
+    mt = mt + 2.0_dp*(matmul(fa, gamma_a) + matmul(fb, gamma_b))
+
+    if (infos%tddft%ixcore_len > 0) then
+      call c_f_pointer(infos%tddft%ixcore, ixcore_ptr, [infos%tddft%ixcore_len])
+      do k = 1, nocb
+        if (.not. any(ixcore_ptr(1:infos%tddft%ixcore_len) == k)) &
+          mt(:,k) = mt(:,k) - 2.0_dp*fa(:,k)*gamma_a(k,k)
       end do
-    end do
+    end if
 
-    mo_a = mo_a0
-    mo_b = mo_b0
-    bvec_mo = bvec0
+    call int2_driver%clean()
     call infos%dat%remove_records((/ character(len=80) :: OQP_nac_mt /))
     call infos%dat%reserve_data(OQP_nac_mt, ta_type_real64, nbf*nbf, (/ nbf*nbf /))
     call tagarray_get_data(infos%dat, OQP_nac_mt, mt_out)
     mt_out = reshape(mt, (/ nbf*nbf /))
+
+  contains
+
+    subroutine mrsf_nac_hx_side(ca, cb, v, f, nocc_a, nocc_b, ha, hb)
+      real(kind=dp), intent(in) :: ca(:,:), cb(:,:), v(:,:)
+      real(kind=dp), intent(in), target :: f(:,:,:)
+      integer, intent(in) :: nocc_a, nocc_b
+      real(kind=dp), intent(out) :: ha(:,:), hb(:,:)
+      real(kind=dp), allocatable :: tmp(:,:), g(:,:), f7(:,:)
+      integer :: n, ierr
+
+      n = size(ca,1)
+      allocate(tmp(n,n), g(n,n), f7(n,n), source=0.0_dp, stat=ierr)
+      if (ierr /= 0) call show_message('Cannot allocate memory', with_abort)
+
+      ! General channel: g = C_alpha^T F_7 C_beta.
+      f7 = f(7,:,:)
+      call dgemm('t', 'n', n, n, n, 1.0_dp, ca, n, f7, n, &
+                 0.0_dp, tmp, n)
+      call dgemm('n', 'n', n, n, n, 1.0_dp, tmp, n, cb, n, &
+                 0.0_dp, g, n)
+      call dgemm('n', 't', n, nocc_a, n, 2.0_dp, g, n, v, n, &
+                 0.0_dp, ha, n)
+      call dgemm('t', 'n', n, n, nocc_a, 2.0_dp, g, n, v, n, &
+                 0.0_dp, hb, n)
+
+      ! mrsfsp accumulates the channel 1:6 adjoint into the general part.
+      call mrsfsp(ha, hb, ca, cb, v, f, nocc_a, nocc_b)
+    end subroutine mrsf_nac_hx_side
+
   end subroutine mrsf_nac_wpair_impl

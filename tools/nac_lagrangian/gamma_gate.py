@@ -1,383 +1,340 @@
-"""Step-2 gate: EXACT interstate one-particle transition density gamma^IJ
-for MRSF SF determinants via Slater-Condon, with fermionic signs derived,
-not scanned.
+#!/usr/bin/env python3
+"""Gate the resident exact-tlf MRSF metric against two formula oracles.
 
-  gamma^{sigma}_pq = sum_mn Xt^I_m Xt^J_n <Phi_m| a+_{p sigma} a_{q sigma} |Phi_n>
+This diagnostic is deliberately outside the production NAC Python path.  It
+runs one H2O energy calculation, asks resident Fortran to export
+``OQP::nac_gamma_tlf``, and compares that record against:
 
-Phi_(i,a) = ROHF triplet reference with one alpha electron removed from
-spatial i (i in 1..noca) and one beta electron added to spatial a
-(a in nocb+1..nbf). Xt = unfolded (determinant-grid) amplitudes.
+1. ``nac_formula_kernel.gamma_closed``: the cofactor-sensitivity oracle;
+2. a fourth-order generator derivative of the literal exact state-overlap
+   replica for every independent antisymmetric orbital generator.
 
-Checks performed:
-  A. exact gamma vs closed-form dgemm candidate (occ-occ alpha,
-     virt-virt beta) -> localizes every socc/sign subtlety.
-  B. antisymmetrized exact gamma_a vs the branch's sign-scanned TLF
-     kernel (kernel_pair(I,J) - kernel_pair(J,I), cross-mask).
-  C. (needs liboqp) rotation-FD of the TLF state overlap:
-     d/dtheta <Psi_I(C) | Psi_J(C e^{theta K})> == sum_pq gamma_pq K_pq
-     for random antisymmetric K per rotation block.
+The gate compares every ordered state pair I!=J independently.  It includes
+the same-space dd, ss, and vv generators as well as ds, dv, and sv.  It never
+replaces (J,I) from (I,J), averages the two state directions, or projects the
+resident matrix onto an antisymmetric form.  Orbital antisymmetry is instead a
+separate raw-record invariant that must pass on its own.
 
-Run:  python gamma_gate.py H2O_energy.inp
+For K[p,q]=+1 and K[q,p]=-1 (p>q), the resident slot convention is
+
+    d S_IJ / d theta_pq = 2 gamma_IJ[p,q].
+
+Default H2O invocation::
+
+    python3 tools/nac_lagrangian/gamma_gate.py
 """
-import sys
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
 import numpy as np
 
-
-# ---------------------------------------------------------------- Slater-Condon
-def sc_tdm(dets_bra_coef, dets_ket_coef, dets, nbf):
-    """Exact spin-resolved 1-TDM between two CI vectors over determinants.
-
-    dets: list of (alpha_occ_tuple, beta_occ_tuple) with orbitals 0-based,
-          tuples SORTED ascending (canonical order defines the sign).
-    Returns (gamma_alpha, gamma_beta), gamma[p, q] = <I|a+_p a_q|J>.
-    """
-    ga = np.zeros((nbf, nbf))
-    gb = np.zeros((nbf, nbf))
-
-    def one_sector(occ_bra, occ_ket):
-        """Return (kind, data) for a single spin sector.
-        kind 'same' -> data None; kind 'single' -> data (p, q, sign);
-        kind 'far' -> differ by 2+."""
-        sb, sk = set(occ_bra), set(occ_ket)
-        db = sorted(sb - sk)          # in bra only  (create p)
-        dk = sorted(sk - sb)          # in ket only  (annihilate q)
-        if not db and not dk:
-            return 'same', None
-        if len(db) == 1 and len(dk) == 1:
-            p, q = db[0], dk[0]
-            # sign: move q to the end of ket list, p to end of bra list
-            iq = occ_ket.index(q)
-            ip = occ_bra.index(p)
-            sign = (-1) ** (len(occ_ket) - 1 - iq) * (-1) ** (len(occ_bra) - 1 - ip)
-            return 'single', (p, q, sign)
-        return 'far', None
-
-    n = len(dets)
-    for m in range(n):
-        am, bm = dets[m]
-        for k in range(n):
-            an, bn = dets[k]
-            w = dets_bra_coef[m] * dets_ket_coef[k]
-            if w == 0.0:
-                continue
-            ka, da_ = one_sector(am, an)
-            kb, db_ = one_sector(bm, bn)
-            if ka == 'far' or kb == 'far':
-                continue
-            if ka == 'same' and kb == 'same':      # diagonal: occupation numbers
-                for p in am:
-                    ga[p, p] += w
-                for p in bm:
-                    gb[p, p] += w
-            elif ka == 'single' and kb == 'same':
-                p, q, s = da_
-                ga[p, q] += s * w
-            elif ka == 'same' and kb == 'single':
-                p, q, s = db_
-                gb[p, q] += s * w
-            # single x single -> two-particle, not in 1-TDM
+import nac_formula_kernel as FORMULA
 
 
-# ------------------------------------------------------------------- main gate
-def main():
-    import oqp                        # before numpy-heavy imports (ILP64)
+HERE = Path(__file__).resolve().parent
+DEFAULT_INPUT = HERE / "H2O_energy_tlf0_tight_analytic.inp"
+
+
+def ordered_state_pairs(nstate):
+    """Return all I!=J pairs without inferring either state direction."""
+    return [(istate, jstate) for jstate in range(nstate)
+            for istate in range(nstate) if istate != jstate]
+
+
+def decode_resident_gamma(raw, nstate, nbf):
+    """Decode TagArray (nbf**2,nstate,nstate) in its Fortran layout."""
+    flat = np.asarray(raw).reshape(-1)
+    expected = nbf*nbf*nstate*nstate
+    if flat.size != expected:
+        raise RuntimeError(
+            f"OQP::nac_gamma_tlf has {flat.size} values; expected {expected}"
+        )
+    gamma = np.empty((nstate, nstate, nbf, nbf))
+    block = nbf*nbf
+    for istate in range(nstate):
+        for jstate in range(nstate):
+            start = (istate + jstate*nstate)*block
+            gamma[istate, jstate] = flat[start:start + block].reshape(
+                nbf, nbf, order="F"
+            )
+    if not np.all(np.isfinite(gamma)):
+        raise RuntimeError("OQP::nac_gamma_tlf contains a non-finite value")
+    return gamma
+
+
+def generator_blocks(nocb, noca, nbf):
+    """Return all six independent ROHF orbital-generator blocks."""
+    if not 0 <= nocb <= noca <= nbf:
+        raise ValueError("orbital spaces must satisfy 0 <= nocb <= noca <= nbf")
+    spaces = {
+        "d": range(0, nocb),
+        "s": range(nocb, noca),
+        "v": range(noca, nbf),
+    }
+    blocks = {}
+    for low_name, high_name in (
+        ("d", "d"), ("d", "s"), ("d", "v"),
+        ("s", "s"), ("s", "v"), ("v", "v"),
+    ):
+        indices = []
+        for q in spaces[low_name]:
+            for p in spaces[high_name]:
+                if p > q:
+                    indices.append((p, q))
+        blocks[low_name + high_name] = tuple(indices)
+    return blocks
+
+
+def _max_values(values):
+    values = list(values)
+    return float(np.max(values, initial=0.0))
+
+
+def analyze_gamma(resident, cofactor, generator_derivative, nocb, noca):
+    """Compare raw tensors without orbital or state-space projection."""
+    resident = np.asarray(resident)
+    cofactor = np.asarray(cofactor)
+    generator_derivative = np.asarray(generator_derivative)
+    if resident.ndim != 4 or resident.shape[0] != resident.shape[1]:
+        raise ValueError("resident gamma must have shape (nstate,nstate,nbf,nbf)")
+    if resident.shape != cofactor.shape or resident.shape != generator_derivative.shape:
+        raise ValueError("resident, cofactor, and generator tensors must have one shape")
+    if resident.shape[2] != resident.shape[3]:
+        raise ValueError("orbital gamma dimensions must be square")
+
+    nstate, _, nbf, _ = resident.shape
+    pairs = ordered_state_pairs(nstate)
+    blocks = generator_blocks(nocb, noca, nbf)
+    npair, nblock = len(pairs), len(blocks)
+    cofactor_pair = np.zeros(npair)
+    resident_generator_pair = np.zeros(npair)
+    cofactor_generator_pair = np.zeros(npair)
+    orbital_antisym_pair = np.zeros(npair)
+    cofactor_block = np.zeros((npair, nblock))
+    resident_generator_block = np.zeros((npair, nblock))
+    cofactor_generator_block = np.zeros((npair, nblock))
+
+    for pair_index, (istate, jstate) in enumerate(pairs):
+        raw = resident[istate, jstate]
+        oracle = cofactor[istate, jstate]
+        derivative = generator_derivative[istate, jstate]
+        cofactor_pair[pair_index] = _max_values(np.abs(raw - oracle).flat)
+        orbital_antisym_pair[pair_index] = _max_values(
+            np.abs(raw + raw.T).flat
+        )
+
+        resident_generator_errors = []
+        cofactor_generator_errors = []
+        for block_index, indices in enumerate(blocks.values()):
+            block_cofactor = []
+            block_resident_generator = []
+            block_cofactor_generator = []
+            for p, q in indices:
+                block_cofactor.extend((
+                    abs(raw[p, q] - oracle[p, q]),
+                    abs(raw[q, p] - oracle[q, p]),
+                ))
+                block_resident_generator.append(
+                    abs(2.0*raw[p, q] - derivative[p, q])
+                )
+                block_cofactor_generator.append(
+                    abs(2.0*oracle[p, q] - derivative[p, q])
+                )
+            cofactor_block[pair_index, block_index] = _max_values(block_cofactor)
+            resident_generator_block[pair_index, block_index] = _max_values(
+                block_resident_generator
+            )
+            cofactor_generator_block[pair_index, block_index] = _max_values(
+                block_cofactor_generator
+            )
+            resident_generator_errors.extend(block_resident_generator)
+            cofactor_generator_errors.extend(block_cofactor_generator)
+
+        resident_generator_pair[pair_index] = _max_values(
+            resident_generator_errors
+        )
+        cofactor_generator_pair[pair_index] = _max_values(
+            cofactor_generator_errors
+        )
+
+    return {
+        "ordered_pairs": np.asarray(pairs, dtype=int),
+        "block_names": np.asarray(tuple(blocks)),
+        "cofactor_pair_max_abs": cofactor_pair,
+        "resident_generator_pair_max_abs": resident_generator_pair,
+        "cofactor_generator_pair_max_abs": cofactor_generator_pair,
+        "orbital_antisym_pair_max_abs": orbital_antisym_pair,
+        "cofactor_block_max_abs": cofactor_block,
+        "resident_generator_block_max_abs": resident_generator_block,
+        "cofactor_generator_block_max_abs": cofactor_generator_block,
+    }
+
+
+def run_gate(input_file=DEFAULT_INPUT, output=None, cofactor_atol=5.0e-11,
+             generator_atol=1.0e-9, orbital_antisym_atol=5.0e-13,
+             generator_step=1.0e-4, log=None):
+    import oqp
     from oqp.pyoqp import Runner
 
-    inp = sys.argv[1]
-    r = Runner(input_file=inp, log=inp.replace('.inp', '_gg.log'))
-    r.run()
-    mol = r.mol
+    input_path = Path(input_file).resolve()
+    log_path = Path(log).resolve() if log else input_path.with_name(
+        input_path.stem + "_gamma_gate.log"
+    )
+    runner = Runner(input_file=str(input_path), log=str(log_path))
+    runner.run()
+    mol = runner.mol
+    context = FORMULA.build_context(mol)
+    nstate = context["nstate"]
+    nbf = context["nbf"]
+    noca = context["noca"]
+    nocb = context["nocb"]
+    if nstate < 2:
+        raise RuntimeError("the resident gamma gate needs at least two states")
+    if noca - nocb != 2:
+        raise RuntimeError("the resident gamma gate requires a two-SOMO MRSF reference")
 
-    nstate = mol.config['tdhf']['nstate']
-    noca = int(np.asarray(mol.data['nelec_A']).ravel()[0])
-    nocb = noca - 2
-    C = np.array(mol.data['OQP::VEC_MO_A'], copy=True)
-    nbf = C.shape[0]
-    nvirb = nbf - nocb
-    nij = noca * nvirb
-    RS = 1.0 / np.sqrt(2.0)
-    X0 = np.array(mol.data['OQP::td_bvec_mo'], copy=True
-                  ).reshape(-1).reshape((nstate, nij)).T.copy()
+    oqp.mrsf_nac_metric_data(mol)
+    resident = decode_resident_gamma(
+        mol.data["OQP::nac_gamma_tlf"], nstate, nbf
+    )
+    streamed = np.zeros_like(resident)
+    for jstate in range(nstate):
+        oqp.mrsf_nac_metric_column(mol, jstate + 1)
+        flat_column = np.asarray(
+            mol.data["OQP::nac_gamma_column"]
+        ).reshape(-1)
+        expected = nbf*nbf*nstate
+        if flat_column.size != expected:
+            raise RuntimeError(
+                "OQP::nac_gamma_column has an inconsistent size"
+            )
+        for istate in range(nstate):
+            start = istate*nbf*nbf
+            streamed[istate, jstate] = flat_column[
+                start:start + nbf*nbf
+            ].reshape(nbf, nbf, order="F")
+    streamed_max = float(np.max(np.abs(streamed - resident)))
+    cofactor = FORMULA.gamma_closed(context)
 
-    # ---- unfold (constant V; the mult=1 convention, validated in Phase 11)
-    def unfold(bv, st):
-        ijlr1 = (noca - 1 - nocb - 1) * noca + noca - 1
-        ijlr2 = (noca - nocb - 1) * noca + noca
-        x = np.zeros((noca, nvirb))
-        for i in range(1, noca + 1):
-            for jj in range(nocb + 1, nbf + 1):
-                ij = (jj - nocb - 1) * noca + i
-                if ij == ijlr1:
-                    x[i - 1, jj - nocb - 1] = bv[ijlr1 - 1, st - 1] * RS
-                elif ij == ijlr2:
-                    x[i - 1, jj - nocb - 1] = -bv[ijlr1 - 1, st - 1] * RS
-                else:
-                    x[i - 1, jj - nocb - 1] = bv[ij - 1, st - 1]
-        return x
+    def progress(done, total, p, q):
+        if done == 1 or done == total or done % 25 == 0:
+            print(
+                f"exact-overlap generator sweep {done}/{total} "
+                f"(p={p + 1}, q={q + 1})",
+                flush=True,
+            )
 
-    Xt = [unfold(X0, s + 1) for s in range(nstate)]
+    generator_derivative = FORMULA.generator_derivative_sweep(
+        context, step=generator_step, progress=progress
+    )
+    report = analyze_gamma(
+        resident, cofactor, generator_derivative, nocb=nocb, noca=noca
+    )
 
-    # ---- determinant list: (alpha_occ, beta_occ), 0-based, sorted
-    ref_a = list(range(noca))
-    ref_b = list(range(nocb))
-    dets, amp_index = [], {}
-    for i in range(noca):
-        for a in range(nvirb):
-            aocc = tuple(sorted(set(ref_a) - {i}))
-            bocc = tuple(sorted(set(ref_b) | {nocb + a}))
-            amp_index[(i, a)] = len(dets)
-            dets.append((aocc, bocc))
+    print("\n===== resident exact-tlf gamma gate =====")
+    print("state directions are compared independently; no state antisymmetry is imposed")
+    print("orbital blocks: dd ds dv ss sv vv (same-space dd/ss/vv included)")
+    print(f"streamed-column/all-pair maxabs={streamed_max:.3e}")
+    for pair_index, pair in enumerate(report["ordered_pairs"]):
+        istate, jstate = pair + 1
+        print(
+            f"({istate},{jstate}): "
+            f"resident/cofactor={report['cofactor_pair_max_abs'][pair_index]:.3e} "
+            f"resident/dS={report['resident_generator_pair_max_abs'][pair_index]:.3e} "
+            f"cofactor/dS={report['cofactor_generator_pair_max_abs'][pair_index]:.3e} "
+            f"orbital-antisym={report['orbital_antisym_pair_max_abs'][pair_index]:.3e}"
+        )
+        for block_index, block_name in enumerate(report["block_names"]):
+            print(
+                f"  {block_name}: resident/cofactor="
+                f"{report['cofactor_block_max_abs'][pair_index, block_index]:.3e} "
+                f"resident/dS="
+                f"{report['resident_generator_block_max_abs'][pair_index, block_index]:.3e} "
+                f"cofactor/dS="
+                f"{report['cofactor_generator_block_max_abs'][pair_index, block_index]:.3e}"
+            )
 
-    def coefs(x):
-        # Code amplitudes multiply |i->a> = a+_{a b} a_{i a} |ref>; converting
-        # to the sorted-occupancy determinant kets used here costs the alpha
-        # annihilation parity (-1)^(noca-1-i) (electrons after slot i in the
-        # alpha string). The beta creation parity is det-independent (a lands
-        # at the end of the sorted beta string) and cancels in all bilinears.
-        c = np.zeros(len(dets))
-        for (i, a), idx in amp_index.items():
-            c[idx] = x[i, a] * ((-1.0) ** (noca - 1 - i))
-        return c
+    output_path = Path(output).resolve() if output else input_path.with_name(
+        input_path.stem + "_gamma_gate.npz"
+    )
+    np.savez(
+        output_path,
+        resident_gamma=resident,
+        streamed_gamma=streamed,
+        streamed_column_max_abs=streamed_max,
+        cofactor_gamma=cofactor,
+        exact_generator_derivative=generator_derivative,
+        cofactor_atol=float(cofactor_atol),
+        generator_atol=float(generator_atol),
+        orbital_antisym_atol=float(orbital_antisym_atol),
+        generator_step=float(generator_step),
+        input_path=str(input_path),
+        **report,
+    )
+    print(f"saved {output_path}")
 
-    print(f'\nnbf={nbf} noca={noca} nocb={nocb} nvirb={nvirb} ndet={len(dets)}')
-
-    # ---- exact TDMs for every pair
-    def tdm_pair(I, J):
-        ga = np.zeros((nbf, nbf))
-        gb = np.zeros((nbf, nbf))
-        cb, ck = coefs(Xt[I]), coefs(Xt[J])
-
-        def one_sector(occ_bra, occ_ket):
-            sb, sk = set(occ_bra), set(occ_ket)
-            db = sorted(sb - sk)
-            dk = sorted(sk - sb)
-            if not db and not dk:
-                return 'same', None
-            if len(db) == 1 and len(dk) == 1:
-                p, q = db[0], dk[0]
-                iq = occ_ket.index(q)
-                ip = occ_bra.index(p)
-                sign = (-1) ** (len(occ_ket) - 1 - iq) * (-1) ** (len(occ_bra) - 1 - ip)
-                return 'single', (p, q, sign)
-            return 'far', None
-
-        for m in range(len(dets)):
-            if cb[m] == 0.0:
-                continue
-            am, bm = dets[m]
-            for k in range(len(dets)):
-                w = cb[m] * ck[k]
-                if w == 0.0:
-                    continue
-                an, bn = dets[k]
-                ka, da_ = one_sector(am, an)
-                if ka == 'far':
-                    continue
-                kb, db_ = one_sector(bm, bn)
-                if kb == 'far':
-                    continue
-                if ka == 'same' and kb == 'same':
-                    for p in am:
-                        ga[p, p] += w
-                    for p in bm:
-                        gb[p, p] += w
-                elif ka == 'single' and kb == 'same':
-                    p, q, s = da_
-                    ga[p, q] += s * w
-                elif ka == 'same' and kb == 'single':
-                    p, q, s = db_
-                    gb[p, q] += s * w
-        return ga, gb
-
-    # ---- closed-form candidate (to be CONFIRMED against exact, incl. signs)
-    # alpha occ-occ: gamma_a[j,i] = -sum_a Xt^I[i,a] Xt^J[j,a] (hole density)
-    # beta virt-virt: gamma_b[a,b] = +sum_i Xt^I[i,a] Xt^J[i,b] (particle)
-    # diagonal reference terms included separately.
-    def closed_form(I, J):
-        ga = np.zeros((nbf, nbf))
-        gb = np.zeros((nbf, nbf))
-        xi, xj = Xt[I], Xt[J]
-        ov = float(np.sum(xi * xj))
-        # diagonal occupation part
-        for p in range(noca):
-            ga[p, p] += ov
-        for p in range(nocb):
-            gb[p, p] += ov
-        ga[:noca, :noca] -= xj @ xi.T          # gamma_a[j,i] -= sum_a xj[j,a] xi[i,a]
-        Gv = xi.T @ xj                          # [a,b] = sum_i xi[i,a] xj[i,b]
-        gb[nocb:, nocb:] += Gv
-        return ga, gb
-
-    print('\n===== A. exact Slater-Condon vs closed-form candidate =====')
-    for I in range(nstate):
-        for J in range(nstate):
-            if I >= J:
-                continue
-            ga_e, gb_e = tdm_pair(I, J)
-            ga_c, gb_c = closed_form(I, J)
-            print(f'pair ({I+1},{J+1}): '
-                  f'max|ga_exact - ga_closed| = {np.abs(ga_e-ga_c).max():.3e}   '
-                  f'max|gb_exact - gb_closed| = {np.abs(gb_e-gb_c).max():.3e}')
-
-    print('\n===== B. antisymmetrized spatial gamma vs branch TLF kernel =====')
-    # branch kernel (sign-scanned) rebuilt via the NAC class helper
-    from oqp.library.single_point import NAC
-    nac = NAC(mol)
-    nac._build_nac_gamma_tlf()
-    gt = np.array(mol.data['OQP::nac_gamma_tlf'], copy=True
-                  ).reshape(-1)
-    gt = gt.reshape((nstate * nstate, nbf * nbf))
-    for I in range(nstate):
-        for J in range(nstate):
-            if I >= J:
-                continue
-            ga_e, gb_e = tdm_pair(I, J)
-            g_sp = ga_e + gb_e                 # spatial total (contracts T_pq)
-            g_a = 0.5 * (g_sp - g_sp.T)        # only antisym part survives
-            # branch buffer: F-flat index (I + J*nstate), C-flat of G^T
-            k = np.linalg.norm
-            gtlf = gt[I + J * nstate].reshape((nbf, nbf)).T
-            num = float(np.sum(g_a * gtlf))
-            cos = num / (k(g_a) * k(gtlf) + 1e-300)
-            print(f'pair ({I+1},{J+1}): |gamma_a|={k(g_a):.6f} |gamma_TLF|={k(gtlf):.6f} '
-                  f'cos={cos:+.6f} ratio={k(gtlf)/(k(g_a)+1e-300):.6f}')
-            # per-block comparison (doc/socc/virt)
-            sl = {'d': slice(0, nocb), 's': slice(nocb, noca), 'v': slice(noca, nbf)}
-            for bn1 in 'dsv':
-                for bn2 in 'dsv':
-                    b1, b2 = sl[bn1], sl[bn2]
-                    na_, nt_ = k(g_a[b1, b2]), k(gtlf[b1, b2])
-                    if na_ < 1e-12 and nt_ < 1e-12:
-                        continue
-                    cb_ = float(np.sum(g_a[b1, b2] * gtlf[b1, b2])) / (na_ * nt_ + 1e-300)
-                    print(f'    block {bn1}{bn2}: |exact|={na_:.5f} |tlf|={nt_:.5f} cos={cb_:+.4f}')
-
-    # ---- C runs twice: production tlf=2 and exact-minor tlf=0 ----------
-    try:
-        mol.data.set_tdhf_tlf(int(sys.argv[2]) if len(sys.argv) > 2 else 0)
-        print(f'\n(tlf set to {int(sys.argv[2]) if len(sys.argv) > 2 else 0} for gate C)')
-    except Exception as e:
-        print('(could not set tlf:', e, ')')
-    print('\n===== C. rotation-FD of the TLF overlap vs gamma (per block) =====')
-    OVTAG = 'OQP::overlap_mo_non_orthogonal'
-    ao_S = None
-    try:
-        import oqp as _oqp
-        mol.data['OQP::VEC_MO_A_old'] = C
-        mol.data['OQP::VEC_MO_B_old'] = np.array(mol.data['OQP::VEC_MO_B'], copy=True)
-        mol.data['OQP::E_MO_A_old'] = np.array(mol.data['OQP::E_MO_A'], copy=True)
-        mol.data['OQP::E_MO_B_old'] = np.array(mol.data['OQP::E_MO_B'], copy=True)
-        mol.data['OQP::td_bvec_mo_old'] = np.array(mol.data['OQP::td_bvec_mo'], copy=True)
-        mol.data['OQP::xyz_old'] = np.array(mol.get_system(), copy=True).reshape((3, -1))
-    except Exception as e:
-        print('  (skipped: cannot stage old-geometry records:', e, ')')
-        return
-
-    rng = np.random.default_rng(7)
-    th = 1e-5
-    Cb = np.array(mol.data['OQP::VEC_MO_B'], copy=True)
-    X_raw = np.array(mol.data['OQP::td_bvec_mo'], copy=True)
-
-    def overlap_matrix():
-        import oqp as _o
-        _o.get_structures_ao_overlap(mol)
-        _o.get_states_overlap(mol)
-        return np.array(mol.data['OQP::td_states_overlap'], copy=True)
-
-    blocks = {'ds': (slice(0, nocb), slice(nocb, noca)),
-              'dv': (slice(0, nocb), slice(noca, nbf)),
-              'sv': (slice(nocb, noca), slice(noca, nbf)),
-              'ss': (slice(nocb, noca), slice(nocb, noca))}
-    gam_sp = {}
-    for I in range(nstate):
-        for J in range(nstate):
-            if I == J:
-                continue
-            ga_e, gb_e = tdm_pair(min(I, J), max(I, J))
-            g = ga_e + gb_e
-            if I > J:
-                g = g.T
-            gam_sp[(I, J)] = g
-
-    for bname, (lo, hi) in blocks.items():
-        K = np.zeros((nbf, nbf))
-        blk = rng.standard_normal((hi.stop - hi.start, lo.stop - lo.start))
-        K[hi, lo] = blk
-        K[lo, hi] = -blk.T
-        # rotate ONLY the current MOs; "old" stays at reference.
-        # NOTE: numpy tagarray 2-D = TRANSPOSE of the Fortran matrix, so the
-        # MO rotation C_f -> C_f e^{th K} is staged as W -> expm(-th K) @ W.
-        from scipy.linalg import expm
-        mol.data['OQP::VEC_MO_A'] = expm(-th * K) @ C
-        mol.data['OQP::VEC_MO_B'] = expm(-th * K) @ C
-        mol.data['OQP::td_bvec_mo'] = X_raw
-        Sp = overlap_matrix()
-        mol.data['OQP::VEC_MO_A'] = expm(th * K) @ C
-        mol.data['OQP::VEC_MO_B'] = expm(th * K) @ C
-        mol.data['OQP::td_bvec_mo'] = X_raw
-        Sm = overlap_matrix()
-        dS = (Sp - Sm) / (2 * th)
-        print(f'  block {bname}:')
-        for I in range(nstate):
-            for J in range(nstate):
-                if I >= J:
-                    continue
-                an = float(np.sum(gam_sp[(I, J)] * K))
-                # branch TLF kernel (formula-representation candidate):
-                # buffer F-layout [I + J*nstate], C-flat of G^T
-                gtlf = gt[I + J * nstate].reshape((nbf, nbf)).T
-                at = float(np.sum(gtlf * K))
-                print(f'    ({I+1},{J+1}): FD={dS[I, J]:+.8f}  raw_gamma.K={an:+.8f} '
-                      f'(diff {abs(dS[I, J]-an):.1e})  gammaTLF.K={at:+.8f} '
-                      f'(diff {abs(dS[I, J]-at):.1e})')
-    # restore
-    mol.data['OQP::VEC_MO_A'] = C
-    mol.data['OQP::VEC_MO_B'] = Cb
-    mol.data['OQP::td_bvec_mo'] = X_raw
-
-    print('\n===== D. EXACT biorthogonal overlap FD vs gamma (code-independent) =====')
-    # <Psi_I(C) | Psi_J(C e^{th K})> = sum_mn c^I_m c^J_n det(M[am,an]) det(M[bm,bn]),
-    # M = e^{th K} (MO cross-overlap at the same geometry). First order must
-    # equal sum_pq gamma_pq K_pq EXACTLY -- this is the self-consistency gate
-    # for the Slater-Condon machinery, independent of the Fortran TLF code.
-    from scipy.linalg import expm as _expm
-    cvecs = [coefs(Xt[s]) for s in range(nstate)]
-
-    def exact_overlap(M):
-        S = np.zeros((nstate, nstate))
-        for m in range(len(dets)):
-            am, bm = dets[m]
-            wa = np.array([cv[m] for cv in cvecs])
-            if np.all(wa == 0.0):
-                continue
-            for k in range(len(dets)):
-                an, bn = dets[k]
-                wb = np.array([cv[k] for cv in cvecs])
-                if np.all(wb == 0.0):
-                    continue
-                ov = (np.linalg.det(M[np.ix_(am, an)])
-                      * np.linalg.det(M[np.ix_(bm, bn)]))
-                S += np.outer(wa, wb) * ov
-        return S
-
-    for bname, (lo, hi) in blocks.items():
-        K = np.zeros((nbf, nbf))
-        rngD = np.random.default_rng(11)
-        blk = rngD.standard_normal((hi.stop - hi.start, lo.stop - lo.start))
-        K[hi, lo] = blk
-        K[lo, hi] = -blk.T
-        Sp = exact_overlap(_expm(th * K))
-        Sm = exact_overlap(_expm(-th * K))
-        dS = (Sp - Sm) / (2 * th)
-        print(f'  block {bname}:')
-        for I in range(nstate):
-            for J in range(nstate):
-                if I >= J:
-                    continue
-                an_ = float(np.sum(gam_sp[(I, J)] * K))
-                print(f'    ({I+1},{J+1}): exactFD={dS[I, J]:+.8f}  gamma.K={an_:+.8f}  '
-                      f'diff={abs(dS[I, J]-an_):.2e}')
+    cofactor_max = float(np.max(report["cofactor_pair_max_abs"]))
+    resident_generator_max = float(np.max(
+        report["resident_generator_pair_max_abs"]
+    ))
+    cofactor_generator_max = float(np.max(
+        report["cofactor_generator_pair_max_abs"]
+    ))
+    orbital_antisym_max = float(np.max(
+        report["orbital_antisym_pair_max_abs"]
+    ))
+    failures = []
+    if streamed_max > cofactor_atol:
+        failures.append(
+            f"streamed/all-pair={streamed_max:.3e}>{cofactor_atol:.3e}"
+        )
+    if cofactor_max > cofactor_atol:
+        failures.append(f"resident/cofactor={cofactor_max:.3e}>{cofactor_atol:.3e}")
+    if resident_generator_max > generator_atol:
+        failures.append(
+            f"resident/dS={resident_generator_max:.3e}>{generator_atol:.3e}"
+        )
+    if cofactor_generator_max > generator_atol:
+        failures.append(
+            f"cofactor/dS={cofactor_generator_max:.3e}>{generator_atol:.3e}"
+        )
+    if orbital_antisym_max > orbital_antisym_atol:
+        failures.append(
+            f"orbital-antisym={orbital_antisym_max:.3e}>"
+            f"{orbital_antisym_atol:.3e}"
+        )
+    if failures:
+        raise SystemExit("FAIL: " + "; ".join(failures))
+    print(
+        "PASS: every ordered state pair and all six orbital blocks satisfy "
+        "the resident/cofactor/generator contracts"
+    )
+    return output_path
 
 
-if __name__ == '__main__':
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", nargs="?", default=str(DEFAULT_INPUT))
+    parser.add_argument("--output")
+    parser.add_argument("--cofactor-atol", type=float, default=5.0e-11)
+    parser.add_argument("--generator-atol", type=float, default=1.0e-9)
+    parser.add_argument("--orbital-antisym-atol", type=float, default=5.0e-13)
+    parser.add_argument("--generator-step", type=float, default=1.0e-4)
+    parser.add_argument("--log")
+    args = parser.parse_args()
+    run_gate(
+        args.input,
+        output=args.output,
+        cofactor_atol=args.cofactor_atol,
+        generator_atol=args.generator_atol,
+        orbital_antisym_atol=args.orbital_antisym_atol,
+        generator_step=args.generator_step,
+        log=args.log,
+    )
+
+
+if __name__ == "__main__":
     main()

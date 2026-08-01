@@ -213,10 +213,20 @@ def main():
         mol.data['OQP::td_bvec_mo'] = rr.reshape(X0_raw.shape)
 
     T1 = {}
+    AMP2E = {}
+    ESUM = {}
     PIJ = {}
+    requested_t1 = os.environ.get('NAC_T1_PAIR', '')
+    requested_t1_pair = None
+    if requested_t1:
+        requested_t1_pair = tuple(
+            int(value) - 1 for value in requested_t1.split(',')
+        )
     for I in range(nstate):
         for J in range(nstate):
             if I == J:
+                continue
+            if requested_t1_pair is not None and (I, J) != requested_t1_pair:
                 continue
             inject(I, ytil[(I, J)])
             oqp.mrsf_nac_amp(mol)
@@ -228,10 +238,75 @@ def main():
                           ).reshape(-1).reshape(nbf, nbf).T
             pb = np.array(mol.data['OQP::dbg_pij_b'], copy=True
                           ).reshape(-1).reshape(nbf, nbf).T
-            T1[(I, J)] = a[J, I].reshape(-1) + es
+            AMP2E[(I, J)] = a[J, I].reshape(-1).copy()
+            ESUM[(I, J)] = es.copy()
+            T1[(I, J)] = AMP2E[(I, J)] + ESUM[(I, J)]
             PIJ[(I, J)] = (pa.copy(), pb.copy())
             mol.data['OQP::td_bvec_mo'] = X0_raw
     print('T1 engines done.', flush=True)
+
+    if os.environ.get('NAC_T1_ONLY'):
+        snapshot = {'Xf': Xf.copy(), 'energies': np.asarray(E0)}
+        for I, J in T1:
+            snapshot[f'ytil_{I}{J}'] = ytil[(I, J)].copy()
+            snapshot[f'amp2e_{I}{J}'] = AMP2E[(I, J)].copy()
+            snapshot[f'esum_{I}{J}'] = ESUM[(I, J)].copy()
+            snapshot[f'T1_{I}{J}'] = T1[(I, J)].copy()
+        output = os.environ.get('NAC_T1_OUTPUT', 't1_snapshot.npz')
+        np.savez(output, **snapshot)
+        print(f'saved T1 snapshot: {output}', flush=True)
+        return
+
+    # Cheap closed-form wpair snapshot for cross-molecule regression.  This
+    # exits before the displaced-geometry and O(nbf**2) reference sweeps below.
+    # The saved ytil vectors make state/process phase alignment explicit.
+    if os.environ.get('NAC_WPAIR_ONLY'):
+        requested = os.environ.get('NAC_WPAIR_PAIR', '')
+        if requested:
+            requested_pair = tuple(
+                int(value) - 1 for value in requested.split(',')
+            )
+            pairs = [requested_pair]
+        else:
+            pairs = [
+                (I, J) for I in range(nstate) for J in range(nstate)
+                if I != J
+            ]
+        snapshot = {'Xf': Xf.copy(), 'energies': np.asarray(E0)}
+        for I, J in pairs:
+            mol.data['OQP::nac_ytil'] = ytil[(I, J)].copy()
+            mol.data['OQP::nac_xstate'] = Xf[:, J].copy()
+            oqp.mrsf_nac_wpair(mol, I + 1, J + 1)
+            snapshot[f'ytil_{I}{J}'] = ytil[(I, J)].copy()
+            closed_mt = np.array(
+                mol.data['OQP::nac_mt_frozen'], copy=True
+            ).reshape(nbf, nbf).T
+            snapshot[f'MT_{I}{J}'] = closed_mt
+            if os.environ.get('NAC_WPAIR_DIAG_FD'):
+                diagonal_fd = np.full(nbf, np.nan)
+                for p in range(nocb, noca):
+                    value = 0.0
+                    for sign in (1.0, -1.0):
+                        rotated = W0.copy()
+                        rotated[p, :] += sign * TROT * W0[p, :]
+                        mol.data['OQP::VEC_MO_A'] = rotated
+                        mol.data['OQP::VEC_MO_B'] = rotated
+                        value += sign * float(
+                            np.dot(ytil[(I, J)], matvec(Xf[:, J]))
+                        ) / (2.0 * TROT)
+                    diagonal_fd[p] = value
+                mol.data['OQP::VEC_MO_A'] = W0
+                mol.data['OQP::VEC_MO_B'] = Wb0
+                snapshot[f'MT_diag_fd_{I}{J}'] = diagonal_fd
+                error = np.nanmax(np.abs(np.diag(closed_mt) - diagonal_fd))
+                print(
+                    f'wpair diagonal ({I + 1},{J + 1}) maxdiff={error:.8e}',
+                    flush=True,
+                )
+        output = os.environ.get('NAC_WPAIR_OUTPUT', 'wpair_snapshot.npz')
+        np.savez(output, **snapshot)
+        print(f'saved closed-form wpair snapshot: {output}', flush=True)
+        return
 
     # ---- displaced w_ref + Ux sweep (exact referee) -----------------------
     def refold(x):
@@ -318,27 +393,49 @@ def main():
     # ---- FULL Mt_frozen sweep (single-element directions) -----------------
     print('FULL Mt sweep (single-element directions)...', flush=True)
     MT = {}
-    for I in range(nstate):
-        for J in range(nstate):
-            if I == J:
-                continue
-            y = ytil[(I, J)]
-            M = np.zeros((nbf, nbf))
-            for p in range(nbf):
-                for q in range(nbf):
-                    acc = 0.0
-                    for sgn in (1.0, -1.0):
-                        Wp = W0.copy()
-                        Wp[q, :] += sgn * TROT * W0[p, :]
-                        mol.data['OQP::VEC_MO_A'] = Wp
-                        mol.data['OQP::VEC_MO_B'] = Wp
-                        acc += sgn * float(np.dot(y, matvec(Xf[:, J]))) / (2 * TROT)
-                    M[p, q] = acc
-            mol.data['OQP::VEC_MO_A'] = W0
-            mol.data['OQP::VEC_MO_B'] = Wb0
-            MT[(I, J)] = M
-            print(f'  Mt ({I+1},{J+1}) done |Mt|max={np.abs(M).max():.3f}',
-                  flush=True)
+    if os.environ.get('NAC_CLOSED_WPAIR'):
+        for I in range(nstate):
+            for J in range(nstate):
+                if I == J:
+                    continue
+                mol.data['OQP::nac_ytil'] = ytil[(I, J)].copy()
+                mol.data['OQP::nac_xstate'] = Xf[:, J].copy()
+                oqp.mrsf_nac_wpair(mol, I + 1, J + 1)
+                MT[(I, J)] = np.array(
+                    mol.data['OQP::nac_mt_frozen'], copy=True
+                ).reshape(nbf, nbf).T
+                print(
+                    f'  closed Mt ({I+1},{J+1}) '
+                    f'|Mt|max={np.abs(MT[(I,J)]).max():.3f}',
+                    flush=True,
+                )
+    else:
+        for I in range(nstate):
+            for J in range(nstate):
+                if I == J:
+                    continue
+                y = ytil[(I, J)]
+                M = np.zeros((nbf, nbf))
+                for p in range(nbf):
+                    for q in range(nbf):
+                        acc = 0.0
+                        for sgn in (1.0, -1.0):
+                            Wp = W0.copy()
+                            Wp[q, :] += sgn * TROT * W0[p, :]
+                            mol.data['OQP::VEC_MO_A'] = Wp
+                            mol.data['OQP::VEC_MO_B'] = Wp
+                            acc += sgn * float(
+                                np.dot(y, matvec(Xf[:, J]))
+                            ) / (2 * TROT)
+                        M[p, q] = acc
+                mol.data['OQP::VEC_MO_A'] = W0
+                mol.data['OQP::VEC_MO_B'] = Wb0
+                MT[(I, J)] = M
+                print(
+                    f'  Mt ({I+1},{J+1}) done '
+                    f'|Mt|max={np.abs(M).max():.3f}',
+                    flush=True,
+                )
     mol.data['OQP::td_bvec_mo'] = X0_raw
 
     # ---- T3 G-channel -----------------------------------------------------
@@ -415,6 +512,156 @@ def main():
             continue
     mol.config['scf']['maxit'] = 30
 
+    # Same-process source/fold referee.  This bypasses both the nuclear CPHF
+    # block and the adjoint interchange: ytil.w_ref is the direct derivative
+    # of the displaced MRSF sigma action, while gamma:(Sk+U) supplies the
+    # overlap/state metric.  It therefore decides whether a residual belongs
+    # to the interstate MRSF source or to the ROHF/ROKS nuclear-response side.
+    if os.environ.get('NAC_SOURCE_GATE_ONLY'):
+        exact_dp = np.zeros((ncoord, nstate, nstate))
+        closed_dp = np.zeros_like(exact_dp)
+        source_delta = {}
+        directional_frozen = {}
+        directional_coord = int(os.environ.get(
+            'NAC_SOURCE_DIRECTION_COORD', '0'
+        ))
+        directional_step = float(os.environ.get(
+            'NAC_SOURCE_DIRECTION_STEP', '1.0e-6'
+        ))
+        directional_response = {}
+        if os.environ.get('NAC_SOURCE_DIRECTIONAL_AUDIT'):
+            direction = Ux_FD[directional_coord]
+            dmo_a = direction * occ_a[None, :]
+            dmo_a = dmo_a + dmo_a.T
+            dmo_b = direction * occ_b[None, :]
+            dmo_b = dmo_b + dmo_b.T
+            response_a, response_b = gbuild(
+                C @ dmo_a @ C.T,
+                C @ dmo_b @ C.T,
+            )
+            for I in range(nstate):
+                for J in range(nstate):
+                    if I == J:
+                        continue
+                    value = 0.0
+                    for sign in (1.0, -1.0):
+                        # W0 stores MO coefficients by row on the Python side.
+                        # U[p,q] means C_q <- C_q + theta*C_p, hence the
+                        # simultaneous directional rotation is U.T @ W0.
+                        rotated = W0 + (
+                            sign * directional_step * direction.T @ W0
+                        )
+                        mol.data['OQP::VEC_MO_A'] = rotated
+                        mol.data['OQP::VEC_MO_B'] = rotated
+                        value += sign * float(np.dot(
+                            ytil[(I, J)], matvec(Xf[:, J])
+                        )) / (2.0 * directional_step)
+                    directional_frozen[(I, J)] = value
+                    predicted = float(np.sum(MT[(I, J)] * direction))
+                    probe_a, probe_b = PIJ[(I, J)]
+                    response_value = float(
+                        np.sum(probe_a * response_a)
+                        + np.sum(probe_b * response_b)
+                    )
+                    directional_response[(I, J)] = response_value
+                    predicted_response = float(np.sum(
+                        MTG[(I, J)] * direction
+                    ))
+                    print(
+                        f'  frozen-direction ({I+1},{J+1}) coord '
+                        f'{directional_coord}: direct={value:.12e} '
+                        f'closed={predicted:.12e} '
+                        f'diff={predicted-value:.8e}',
+                        flush=True,
+                    )
+                    print(
+                        f'  response-direction ({I+1},{J+1}) coord '
+                        f'{directional_coord}: direct={response_value:.12e} '
+                        f'closed={predicted_response:.12e} '
+                        f'diff={predicted_response-response_value:.8e}',
+                        flush=True,
+                    )
+            mol.data['OQP::VEC_MO_A'] = W0
+            mol.data['OQP::VEC_MO_B'] = Wb0
+            mol.data['OQP::td_bvec_mo'] = X0_raw
+        for I in range(nstate):
+            for J in range(nstate):
+                if I == J:
+                    continue
+                frozen_direct = np.array([
+                    float(np.dot(ytil[(I, J)], w_ref[c, J]))
+                    for c in range(ncoord)
+                ])
+                gsk = np.array([
+                    float(np.sum(gam[I, J] * Sk_an[c]))
+                    for c in range(ncoord)
+                ])
+                gu = np.array([
+                    float(np.sum(gam[I, J] * Ux_FD[c]))
+                    for c in range(ncoord)
+                ])
+                mfull = MT[(I, J)] + MTG[(I, J)]
+                mu = np.array([
+                    float(np.sum(mfull * Ux_FD[c]))
+                    for c in range(ncoord)
+                ])
+                exact_dp[:, I, J] = frozen_direct + gsk + gu
+                closed_dp[:, I, J] = T1[(I, J)] + mu + gsk + gu
+                source_delta[(I, J)] = mu - (frozen_direct - T1[(I, J)])
+                print(
+                    f'  source ({I+1},{J+1}) '
+                    f'max|Mt.U-(y.w-T1)|='
+                    f'{np.max(np.abs(source_delta[(I,J)])):.8e}',
+                    flush=True,
+                )
+
+        def report(label, ordered):
+            antisym = 0.5 * (ordered - ordered.transpose(0, 2, 1))
+            print(f'===== {label} vs numerical NAC =====', flush=True)
+            for I in range(nstate):
+                for J in range(I + 1, nstate):
+                    value = antisym[:, I, J]
+                    reference = dcv_n[I, J].reshape(-1)
+                    same = np.max(np.abs(value - reference))
+                    flipped = np.max(np.abs(value + reference))
+                    print(
+                        f'  ({I+1},{J+1}) sign-res maxdiff='
+                        f'{min(same, flipped):.8e}',
+                        flush=True,
+                    )
+            return antisym
+
+        exact_dcv = report('direct displaced MRSF source', exact_dp)
+        closed_dcv = report('closed-form source', closed_dp)
+        output = os.environ.get(
+            'NAC_SOURCE_OUTPUT', inp.replace('.inp', '_source_gate.npz')
+        )
+        payload = {
+            'Ux_FD': Ux_FD,
+            'w_ref': w_ref,
+            'exact_dcv': exact_dcv,
+            'closed_dcv': closed_dcv,
+            'dcv_reference': dcv_n,
+            'energies': np.asarray(E0),
+            'Xf': Xf,
+        }
+        for (I, J), delta in source_delta.items():
+            payload[f'source_delta_{I}{J}'] = delta
+            payload[f'MT_{I}{J}'] = MT[(I, J)]
+            payload[f'MTG_{I}{J}'] = MTG[(I, J)]
+            payload[f'T1_{I}{J}'] = T1[(I, J)]
+            payload[f'ytil_{I}{J}'] = ytil[(I, J)]
+            if (I, J) in directional_frozen:
+                payload[f'frozen_directional_{I}{J}'] = np.asarray(
+                    directional_frozen[(I, J)]
+                )
+                payload[f'response_directional_{I}{J}'] = np.asarray(
+                    directional_response[(I, J)]
+                )
+        np.savez(output, **payload)
+        print(f'saved source/fold gate: {output}', flush=True)
+        return
+
 
 
     # ---- direct-injection seams (X = MT + MTG + gamma) --------------------
@@ -445,6 +692,202 @@ def main():
             T2d[(I, J)] = gZ - gS
             print(f'  ({I+1},{J+1}) conv={conv} |seam|={np.linalg.norm(gZ-gS):.5f}',
                   flush=True)
+
+    # Diagnostic-only decomposition of the same-process interchange seam.
+    # Never use X/U records from another process here: both the SCF orbital
+    # gauge and Davidson state phases belong to this run.
+    if os.environ.get('NAC_BLOCK_AUDIT'):
+        requested = os.environ.get('NAC_BLOCK_PAIR', '3,2')
+        pair = tuple(int(value) - 1 for value in requested.split(','))
+
+        def orbital_space(iorb):
+            if iorb < nocb:
+                return 0
+            if iorb < noca:
+                return 1
+            return 2
+
+        def pack_block(matrix, block):
+            result = np.zeros(ncoord)
+            for coord, ucoord in enumerate(Ux_FD):
+                for p in range(nbf):
+                    for q in range(p):
+                        sp, sq = orbital_space(p), orbital_space(q)
+                        if sp == sq:
+                            continue
+                        hi, lo = (p, q) if sp > sq else (q, p)
+                        this_block = {
+                            (1, 0): 1,
+                            (2, 0): 2,
+                            (2, 1): 3,
+                        }[(orbital_space(hi), orbital_space(lo))]
+                        if this_block == block:
+                            result[coord] += (
+                                matrix[hi, lo] - matrix[lo, hi]
+                            ) * ucoord[hi, lo]
+            return result
+
+        I, J = pair
+        Xm = MT[(I, J)] + MTG[(I, J)] + gam[I, J]
+        seam_blocks = []
+        pack_blocks = []
+        print(f'===== SAME-PROCESS SEAM BLOCKS ({I+1},{J+1}) =====',
+              flush=True)
+        for block, label in (
+            (1, 'doc-socc'), (2, 'doc-virt'), (3, 'socc-virt')
+        ):
+            mol.data['OQP::nac_orbgrad_L'] = Xm.ravel(order='F').copy()
+            mol.data['OQP::td_bvec_mo'] = X0_raw
+            mol.data.set_tdhf_target(J + 1)
+            oqp.set_mrsf_nac_cphf_block(mol, block)
+            oqp.set_mrsf_nac_cphf(mol, I + 1, J + 1)
+            oqp.tdhf_mrsf_z_vector(mol)
+            gZ = grad_now()
+            mol.data['OQP::td_p'] = np.zeros_like(
+                np.array(mol.data['OQP::td_p'], copy=True))
+            mol.data['OQP::WAO'] = np.zeros_like(
+                np.array(mol.data['OQP::WAO'], copy=True))
+            gS = grad_now()
+            seam = gZ - gS
+            packed = pack_block(Xm, block)
+            seam_blocks.append(seam)
+            pack_blocks.append(packed)
+            delta = -seam - packed
+            print(f'  {label:9s} |seam|={np.linalg.norm(seam):.8e} '
+                  f'|pack|={np.linalg.norm(packed):.8e} '
+                  f'maxdiff={np.max(np.abs(delta)):.8e} '
+                  f'arg={np.argmax(np.abs(delta))}', flush=True)
+        seam_sum = np.sum(seam_blocks, axis=0)
+        pack_sum = np.sum(pack_blocks, axis=0)
+        delta = -seam_sum - pack_sum
+        print(f'  sum       |seam|={np.linalg.norm(seam_sum):.8e} '
+              f'|pack|={np.linalg.norm(pack_sum):.8e} '
+              f'maxdiff={np.max(np.abs(delta)):.8e} '
+              f'arg={np.argmax(np.abs(delta))} '
+              f'linear={np.max(np.abs(seam_sum-T2d[(I,J)])):.8e}',
+              flush=True)
+        oqp.set_mrsf_nac_cphf_block(mol, 0)
+        oqp.set_mrsf_nac_cphf(mol, 0, 0)
+
+    # First-principles ROHF Lagrangian gate.  This deliberately compares the
+    # native response and its adjoint in one orbital/state frame; it never
+    # feeds a native CPHF solution through the legacy sfropcal gradient metric.
+    if os.environ.get('NAC_LAGRANGIAN_GATE'):
+        requested = os.environ.get('NAC_BLOCK_PAIR', '3,2')
+        I, J = (int(value) - 1 for value in requested.split(','))
+        lmat = MT[(I, J)] + MTG[(I, J)] + gam[I, J]
+
+        def pack_rohf(matrix):
+            packed = []
+            for ii in range(nocb, noca):
+                for jj in range(nocb):
+                    packed.append(matrix[ii, jj] - matrix[jj, ii])
+            for kk in range(noca, nbf):
+                for jj in range(nocb):
+                    packed.append(matrix[kk, jj] - matrix[jj, kk])
+            for kk in range(noca, nbf):
+                for ii in range(nocb, noca):
+                    packed.append(matrix[kk, ii] - matrix[ii, kk])
+            return np.asarray(packed)
+
+        def pack_u(matrix):
+            packed = []
+            for ii in range(nocb, noca):
+                for jj in range(nocb):
+                    packed.append(matrix[ii, jj])
+            for kk in range(noca, nbf):
+                for jj in range(nocb):
+                    packed.append(matrix[kk, jj])
+            for kk in range(noca, nbf):
+                for ii in range(nocb, noca):
+                    packed.append(matrix[kk, ii])
+            return np.asarray(packed)
+
+        os.environ['NAC_DUMP_ROHF_RESPONSE'] = '1'
+        oqp.hf_hessian(mol)
+
+        def rotation_by_cartesian(tag):
+            raw = np.array(mol.data[tag], copy=True)
+            if raw.ndim != 2:
+                raise RuntimeError(f'{tag} is not a 2-D TagArray: {raw.shape}')
+            if raw.size % ncoord:
+                raise RuntimeError(f'{tag} size is not divisible by '
+                                   f'{ncoord}: {raw.shape}')
+            # OQPData exposes the Fortran buffer through a C-order reshape
+            # using the dimensions recorded by Fortran.  For a non-square
+            # Fortran array A(rotation,Cartesian), neither ``raw`` nor
+            # ``raw.T`` is A: its flat storage must first be reshaped as the
+            # reversed dimensions, then transposed.  (The usual bare ``.T``
+            # happened to work only for square TagArrays.)
+            nrotation = raw.size // ncoord
+            return raw.reshape(ncoord, nrotation).T
+
+        b_hf = rotation_by_cartesian('OQP::nac_rohf_bvec_hf_jk_pulay')
+        b_full = rotation_by_cartesian('OQP::nac_rohf_bvec_full')
+        u_native = rotation_by_cartesian('OQP::nac_rohf_uvec')
+        u_fd = np.column_stack([pack_u(Ux_FD[c]) for c in range(ncoord)])
+
+        nds = (noca - nocb) * nocb
+        ndv = (nbf - noca) * nocb
+        blocks = (
+            ('doc-socc', slice(0, nds)),
+            ('doc-virt', slice(nds, nds + ndv)),
+            ('socc-virt', slice(nds + ndv, None)),
+        )
+        print(f'===== NATIVE ROHF LAGRANGIAN GATE ({I+1},{J+1}) =====',
+              flush=True)
+        for label, block in blocks:
+            delta = u_native[block] - u_fd[block]
+            print(f'  U {label:9s} maxdiff={np.max(np.abs(delta)):.8e} '
+                  f'rms={np.sqrt(np.mean(delta**2)):.8e}', flush=True)
+
+        lvec = pack_rohf(lmat)
+        mol.data['OQP::nac_rohf_rhs'] = lvec.copy()
+        oqp.mrsf_nac_rohf_zvector(mol)
+        zvec = np.array(
+            mol.data['OQP::nac_rohf_solution'], copy=True
+        ).reshape(-1)
+        direct = lvec @ u_native
+        direct_fd = lvec @ u_fd
+        adjoint = zvec @ b_full
+        print(f'  native-U vs FD-U contraction maxdiff='
+              f'{np.max(np.abs(direct-direct_fd)):.8e} '
+              f'|FD|={np.linalg.norm(direct_fd):.8e}', flush=True)
+        print(f'  adjoint maxdiff={np.max(np.abs(direct-adjoint)):.8e} '
+              f'|direct|={np.linalg.norm(direct):.8e}', flush=True)
+
+        # The old nuclear RHS obtains this term from dftexcor(R+/-h).  The new
+        # path is the analytic moving-grid mixed derivative
+        # -1/2 d_R Tr[Vxc delta P_z].
+        mol.data['OQP::nac_rohf_z'] = zvec.copy()
+        oqp.mrsf_nac_rohf_hf_adjoint(mol)
+        hf_analytic = np.array(
+            mol.data['OQP::nac_rohf_hf_adjoint'], copy=True
+        ).reshape(-1)
+        hf_forward = zvec @ b_hf
+        print(f'  HF adjoint-vs-forward-RHS maxdiff='
+              f'{np.max(np.abs(hf_analytic-hf_forward)):.8e} '
+              f'|HF|={np.linalg.norm(hf_analytic):.8e}', flush=True)
+        oqp.mrsf_nac_xc_adjoint(mol)
+        xc_analytic = np.array(
+            mol.data['OQP::nac_rohf_xc_adjoint'], copy=True
+        ).reshape(-1)
+        xc_fd_rhs = zvec @ (b_full - b_hf)
+        print(f'  XC analytic-vs-FD-RHS maxdiff='
+              f'{np.max(np.abs(xc_analytic-xc_fd_rhs)):.8e} '
+              f'|XC|={np.linalg.norm(xc_analytic):.8e}', flush=True)
+        print('  XC analytic = ' + np.array2string(
+            xc_analytic, precision=9, suppress_small=False), flush=True)
+        print('  XC FD RHS   = ' + np.array2string(
+            xc_fd_rhs, precision=9, suppress_small=False), flush=True)
+        full_analytic = hf_analytic + xc_analytic
+        full_forward = zvec @ b_full
+        print(f'  FULL Z-vector analytic-vs-forward-RHS maxdiff='
+              f'{np.max(np.abs(full_analytic-full_forward)):.8e} '
+              f'|FULL|={np.linalg.norm(full_analytic):.8e}', flush=True)
+        del os.environ['NAC_DUMP_ROHF_RESPONSE']
+        if os.environ.get('NAC_LAGRANGIAN_GATE_ONLY'):
+            return
     try:
         del mol.data['OQP::nac_orbgrad_L']
     except Exception:

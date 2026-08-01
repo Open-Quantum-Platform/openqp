@@ -886,7 +886,7 @@ class OQPData:
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}
-    _dftgrid_partition_functions = {'ssf': 0, 'becke': 1, 'erf': 2,
+    _dftgrid_partition_functions = {'ssf': 0, 'erf': 1, 'becke': 2,
                                     'sstep2': 3, 'sstep3': 4, 'sstep4': 5, 'sstep5': 6}
     _handlers = {
         "input": {

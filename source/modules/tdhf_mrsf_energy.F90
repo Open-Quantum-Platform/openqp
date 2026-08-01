@@ -74,11 +74,18 @@ contains
 
   subroutine mrsf_nac_response_C(c_handle) bind(C, name="mrsf_nac_response")
     use c_interop, only: oqp_handle_t, oqp_handle_get_info
+    use io_constants, only: iw
     use types, only: information
     type(oqp_handle_t) :: c_handle
     type(information), pointer :: inf
+    logical :: log_was_open
+
     inf => oqp_handle_get_info(c_handle)
+    inquire(unit=iw, opened=log_was_open)
+    if (.not. log_was_open) &
+      open(unit=iw, file=inf%log_filename, position='append')
     call mrsf_nac_response(inf)
+    if (.not. log_was_open) close(iw)
   end subroutine mrsf_nac_response_C
 
 !> @brief Apply the full ground-state Fock response kernel for analytic NAC.
@@ -88,7 +95,8 @@ contains
 !>   probe, this route calls get_response_packed, so a DFT calculation includes
 !>   the explicit f_xc P^(1) contribution evaluated on the reference grid.
 !>   OQP::nac_vxc_a/b additionally expose the XC-only difference for the v20
-!>   response audit; production consumes OQP::nac_v1_a/b.
+!>   response audit.  Production consumes the resident full-MO orbital source
+!>   OQP::nac_mt_response, avoiding AO packing and MO transforms in Python.
   subroutine mrsf_nac_response(infos)
     use oqp_tagarray_driver
     use types, only: information
@@ -108,23 +116,29 @@ contains
     character(len=*), parameter :: OQP_nac_v1_b = "OQP::nac_v1_b"
     character(len=*), parameter :: OQP_nac_vxc_a = "OQP::nac_vxc_a"
     character(len=*), parameter :: OQP_nac_vxc_b = "OQP::nac_vxc_b"
+    character(len=*), parameter :: OQP_nac_mt_response = &
+      "OQP::nac_mt_response"
     character(len=*), parameter :: tags_required(4) = (/ character(len=80) :: &
       OQP_VEC_MO_A, OQP_VEC_MO_B, OQP_nac_dm1_a, OQP_nac_dm1_b /)
     type(information), target, intent(inout) :: infos
     type(basis_set), pointer :: basis
     type(dft_grid_t) :: molGrid
     real(kind=dp), contiguous, pointer :: mo_a(:,:), mo_b(:,:), dm1_a(:), dm1_b(:)
-    real(kind=dp), pointer :: nac_v1_a(:), nac_v1_b(:), nac_vxc_a(:), nac_vxc_b(:)
+    real(kind=dp), pointer :: nac_v1_a(:), nac_v1_b(:), nac_vxc_a(:), &
+                              nac_vxc_b(:), nac_mt_response(:)
     real(kind=dp), allocatable :: dm1(:,:), v1(:,:), vjk(:,:), &
-                                  mo_a_work(:,:), mo_b_work(:,:)
+                                  mo_a_work(:,:), mo_b_work(:,:), vmo_packed(:), &
+                                  vmo_a(:,:), vmo_b(:,:), mt_response(:,:)
     real(kind=dp) :: scale_exch
-    integer :: nbf, nbf2
+    integer :: nbf, nbf2, nocca, noccb, q
     logical :: dft
 
     basis => infos%basis
     basis%atoms => infos%atoms
     nbf = basis%nbf
     nbf2 = nbf*(nbf+1)/2
+    nocca = infos%mol_prop%nelec_a
+    noccb = infos%mol_prop%nelec_b
     dft = infos%control%hamilton == 20
 
     call data_has_tags(infos%dat, tags_required, module_name, subroutine_name, with_abort)
@@ -134,7 +148,9 @@ contains
     call tagarray_get_data(infos%dat, OQP_nac_dm1_b, dm1_b)
 
     allocate(dm1(nbf2,2), v1(nbf2,2), vjk(nbf2,2), &
-             mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), source=0.0_dp)
+             mo_a_work(nbf,nbf), mo_b_work(nbf,nbf), vmo_packed(nbf2), &
+             vmo_a(nbf,nbf), vmo_b(nbf,nbf), mt_response(nbf,nbf), &
+             source=0.0_dp)
     dm1(:,1) = dm1_a
     dm1(:,2) = dm1_b
     mo_a_work = mo_a
@@ -143,24 +159,55 @@ contains
     scale_exch = 1.0_dp
     if (dft) scale_exch = infos%dft%HFscale
     call fock_jk(basis, d=dm1, f=vjk, scale_exch=scale_exch, infos=infos)
-    if (dft) call dft_initialize(infos, basis, molGrid, verbose=.false.)
+    if (dft) then
+      ! get_response_packed is a reusable public NAC kernel and may follow a
+      ! displaced SCF/DFT worker in the same process.  Reset libxc before
+      ! initialization so the functional list cannot be appended twice.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid, verbose=.false.)
+    end if
     call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, mo_b_work)
     if (dft) call dftclean(infos)
 
+    ! Transform the full response potential to the reference MO basis and
+    ! form exactly the orbital source used by the MRSF pair Lagrangian:
+    !   M_response(p,q) = 2 [V1_a(p,q) n_a(q) + V1_b(p,q) n_b(q)].
+    ! This used to be rebuilt in Python for every ordered state pair.
+    block
+      use mathlib, only: orthogonal_transform_sym, unpack_matrix
+      call orthogonal_transform_sym(nbf, nbf, v1(:,1), mo_a, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_a)
+      call orthogonal_transform_sym(nbf, nbf, v1(:,2), mo_b, nbf, vmo_packed)
+      call unpack_matrix(vmo_packed, vmo_b)
+      mt_response = 0.0_dp
+      do q = 1, nocca
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_a(:,q)
+      end do
+      do q = 1, noccb
+        mt_response(:,q) = mt_response(:,q) + 2.0_dp*vmo_b(:,q)
+      end do
+    end block
+
     call infos%dat%remove_records((/ character(len=80) :: &
-      OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b /))
+      OQP_nac_v1_a, OQP_nac_v1_b, OQP_nac_vxc_a, OQP_nac_vxc_b, &
+      OQP_nac_mt_response /))
     call infos%dat%reserve_data(OQP_nac_v1_a, ta_type_real64, nbf2, (/ nbf2 /))
     call infos%dat%reserve_data(OQP_nac_v1_b, ta_type_real64, nbf2, (/ nbf2 /))
     call infos%dat%reserve_data(OQP_nac_vxc_a, ta_type_real64, nbf2, (/ nbf2 /))
     call infos%dat%reserve_data(OQP_nac_vxc_b, ta_type_real64, nbf2, (/ nbf2 /))
+    call infos%dat%reserve_data(OQP_nac_mt_response, ta_type_real64, &
+         nbf*nbf, (/ nbf*nbf /), &
+         comment='ordered MRSF full ground-state response orbital source')
     call tagarray_get_data(infos%dat, OQP_nac_v1_a, nac_v1_a)
     call tagarray_get_data(infos%dat, OQP_nac_v1_b, nac_v1_b)
     call tagarray_get_data(infos%dat, OQP_nac_vxc_a, nac_vxc_a)
     call tagarray_get_data(infos%dat, OQP_nac_vxc_b, nac_vxc_b)
+    call tagarray_get_data(infos%dat, OQP_nac_mt_response, nac_mt_response)
     nac_v1_a = v1(:,1)
     nac_v1_b = v1(:,2)
     nac_vxc_a = v1(:,1) - vjk(:,1)
     nac_vxc_b = v1(:,2) - vjk(:,2)
+    nac_mt_response = reshape(mt_response, (/ nbf*nbf /))
 
   end subroutine mrsf_nac_response
 

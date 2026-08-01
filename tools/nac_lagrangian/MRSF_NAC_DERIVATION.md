@@ -1,22 +1,137 @@
 # Fully Analytic MRSF-TDDFT Nonadiabatic Couplings — Derivation
 
-**Goal.** A closed-form interstate derivative coupling
+**Final production statement (2026-08-01).**  OpenQP evaluates the static
+singlet MRSF-TDA interstate derivative coupling
 
 ```
 d_IJ = <Psi_I | d/dx | Psi_J>,      h_IJ = (E_J - E_I) d_IJ
 ```
 
-for MRSF-TDA states, with ONE z-vector solve per state pair (no finite
-differences anywhere), reusing OpenQP's validated gradient machinery. The
-structure is the interstate generalization of the Handy–Schaefer / Fatehi–
-Subotnik Lagrangian, specialized to the MRSF three-space (doc/socc/virt)
-ROHF reference and the spin-pair fold.
+with one **adjoint Z-vector RHS per ordered state pair**, not `3N` forward
+CPHF right-hand sides.  Every scientific operation in the production path is
+resident Fortran: the exact state-overlap metric, amplitude/Fock bilinear,
+ROHF/ROKS orbital source, one-RHS MINRES solve, HF/JK/Pulay and XC adjoint
+contractions, ordered-pair accumulation, HST projection, and gap scaling.
+`pyoqp/oqp/library/nac_analytic.py` validates the public scope, invokes the
+single `mrsf_nac_lagrangian` entry point, and reshapes the final records only.
+Nuclear and orbital-generator finite differences remain independent
+diagnostics and are not part of production.
 
-Conventions: `x` = one nuclear coordinate; `p,q,r,s` MO; `mu,nu` AO;
-`i,j` occupied-alpha (doc+socc), `a,b` virtual-beta (socc+virt);
-antisymmetric `d_IJ = -d_JI`, symmetric `h_IJ = +h_JI`, `gap = E_J - E_I`.
+Code/legacy compact conventions in Secs. 0--7: `x` = one nuclear
+coordinate; `p,q,r,s` MO; `mu,nu` AO; `i,j` occupied-alpha
+(doc+socc), `a,b` virtual-beta (socc+virt).  When the Lee et al. paper
+is quoted below its notation is used instead: `i,j in C` (doubly
+occupied), `x,y in O` (the two singly occupied orbitals), and `a,b in
+V` (virtual).  In all sections, `d_IJ = -d_JI`, `h_IJ = +h_JI`, and
+`gap = E_J - E_I`.  Symbols called an "ordered kernel" below denote a
+one-sided HST derivative before the state-index projection.  Only the returned
+observable is constrained by `d_IJ=-d_JI` and `h_IJ=h_JI`.
+
+This document is also a chronological forensic log.  Sections 0--7.67 retain
+failed hypotheses, intermediate implementations, and old accuracy snapshots.
+They are deliberately preserved as an audit trail, but are **non-normative**.
+The published anchor immediately below and Section 8 onward are the final
+specification whenever an older statement conflicts with them.
+
+## Published energy-gradient anchor and its exact scope
+
+The primary reference is S. Lee, E. E. Kim, H. Nakata, S. Lee, and
+C. H. Choi, *J. Chem. Phys.* **150**, 184111 (2019),
+doi:[10.1063/1.5086895](https://doi.org/10.1063/1.5086895),
+"Efficient implementations of analytic energy gradient for
+mixed-reference spin-flip time-dependent density functional theory
+(MRSF-TDDFT)."  The paper and its supplementary derivation were checked
+against the authors' local PDF/TeX, not reconstructed from code comments.
+
+The paper fixes the diagonal (`I=J`) Lagrangian normalization that the
+implementation must reproduce:
+
+```
+Eq. (3.3):
+L^k = G^k
+    + 2 sum_{ia,s} Z^k_{ia,s} Fbar_{ia,s}
+    +   sum_{ix,s} Z^k_{ix,s} Fbar_{ix,s}
+    +   sum_{xa,s} Z^k_{xa,s} Fbar_{xa,s}
+    - 2 sum_{p<=q,s} W^k_{pq,s}(S_{pq,s}-delta_pq)
+
+Eq. (3.6):       Jbar Zbar = -Rbar
+Eq. (3.7):       Zbar_ix = Z_ix,beta
+                  Zbar_xa = Z_xa,alpha
+                  Zbar_ia = Z_ia,alpha = Z_ia,beta
+```
+
+Equations (3.8a--f) give the ROHF orbital Hessian `Jbar`.  The paper
+states explicitly that this left-hand side is identical to the existing
+SF-TDDFT one.  The MRSF-specific state dependence is on the right:
+Eq. (3.9) gives `Rbar` in terms of `H+[T]` and `H[X,X]`, Eq. (3.10)
+defines `H+`, and Eqs. (3.11--3.15) define `T`, the expanded `U X`, and
+the spin-pairing additions.  After the solve, Eq. (3.16) is `P=T+Z`;
+Eq. (3.18) determines the energy-weighted density `W`; and Eq. (3.21)
+contracts the relaxed one-particle density, overlap multiplier, and
+two-particle density with nuclear integral derivatives:
+
+```
+Omega^R = sum h^R P - sum S^R W + sum (mu nu|kappa lambda)^R Gamma.
+```
+
+The supplementary derivation fixes the same normalization from the
+coefficient-stationarity side.  SI Eqs. (S25a--i) are the paired equations for
+the energy-weighted multiplier `Wbar` after inserting `Zbar`.  Subtracting
+S25a from S25b, S25c from S25d, and S25e from S25f removes `Wbar` and gives SI
+Eqs. (S26a--c).  Their left sides define `Jbar Zbar`, their right sides define
+`-Rbar`, and substituting the solution back into S25 determines `Wbar`.  Thus
+S25/S26 independently lock the C--O, C--V, and O--V half factors; they are not
+license to add a second factor after converting to OpenQP's native tangent and
+dual coordinates.
+
+The corresponding OpenQP gradient map is:
+
+```
+mrsfcbc / mrsfmntoia   <-> U expansion and U^T projection, Eqs. (2.5),(2.8)
+SPC channel scaling    <-> spin pairing, Eqs. (2.13)--(2.15)
+mrsfxvec               <-> expanded U X used in T, Eq. (3.11)
+mrsfsp                 <-> pairing part of H[X,X], Eqs. (3.12)--(3.15)
+sfrorhs                <-> -2 Rbar in the code's internal normalization
+sfrolhs                <-> Jbar action, Eqs. (3.6),(3.8), SI Eq. (S26)
+sfropcal               <-> xk/2 -> the paper's one-sided Zbar density
+mrsfrowcal             <-> W, Eqs. (3.18)--(3.19)
+```
+
+The final interstate driver reuses these validated kernels but does not route
+its computational adjoint through the legacy `sfropcal` half-density seam.
+The exact sign and coordinate conversion are derived in Section 8.5.
+
+There are therefore **two different Hessians** in this code.  The
+MRSF Davidson Hessian is the response-state operator assembled through
+`mrsfcbc -> int2 -> SPC -> mrsfmntoia`.  The orbital-stationarity
+Hessian is the SF/ROHF `Jbar` used by the Z-vector equation.  They must
+not be identified with each other.
+
+One typesetting defect in the published paper must not be copied:
+Eq. (3.8f) prints `-1/c_H` in the singly-occupied--virtual block.
+Equation (3.10), SI Eq. (S26), direct differentiation, and the working
+implementation all give `-c_H/2` for that exchange pair.
+
+Most importantly, this is an **energy-gradient paper**.  It proves the
+state-diagonal Lagrangian and provides a mandatory `I=J` limit, but it
+does not derive an interstate NAC Lagrangian.  In particular it does
+not prove the off-diagonal polarization/order of every quadratic
+`T[X,X]`, `H[X,X]`, pairing `Gamma`, or `W` term.  The interstate
+bilinearization in the remainder of this document is a new derivation,
+validated numerically where stated; it must not be described as a
+theorem of Lee et al.
 
 ---
+
+## Historical archive boundary
+
+Everything from Section 0 through Section 7.67 records the route to the final
+formula.  Terms such as "current", "production", "remaining", and "final" in
+that archive describe the campaign stage at which they were written.  In
+particular, the raw-determinant metric, sign-scanned TLF kernel, same-space
+projection, antisymmetric-`dD` fold hypothesis, Python pair algebra, forward
+`3N` CPHF interpretation, and irreducible XC-grid-floor claims were all
+superseded.  Section 8 is the only normative interstate derivation.
 
 ## 0. Representation choice (the lesson of Phase 11)
 
@@ -62,7 +177,7 @@ sign absorbed into the definition below).
 
 ---
 
-## 2. The orbital part d_orb — antisymmetry is emergent
+## 2. The orbital part d_orb — orbital and state antisymmetries
 
 ### 2.1 The one-particle reduction
 
@@ -75,9 +190,20 @@ Sk_pq := sum_{mu,nu} C_mu_p C_nu_q <chi_mu | d/dx chi_nu>     (ket-half overlap 
 
 Orthonormality `d/dx <phi_p|phi_q> = 0` gives **T_qp = -T_pq exactly**:
 the full orbital-derivative matrix is antisymmetric. (Equivalently
-`U^x_pq + U^x_qp = -S^x_pq` with `S^x = Sk + Sk^T`.) This is where the
-antisymmetry of d_IJ comes from — it must NOT be imposed by hand; if the
-assembled d is not antisymmetric to solver tolerance, a term is missing.
+`U^x_pq + U^x_qp = -S^x_pq` with `S^x = Sk + Sk^T`.) This fixes the
+orbital-index contraction.  It does **not** require either one-sided ordered
+HST kernel to be antisymmetric in the state labels.  The observable evaluated
+by both the numerical HST referee and the analytic implementation is
+
+```
+d_IJ = 1/2 (Dord_IJ - Dord_JI).
+```
+
+That projection is part of the HST definition, not an independent theory
+gate and not evidence that each ordered leg is complete.  In the H2O v64
+debug artifact the unprojected symmetric parts are sizeable; only comparisons
+of the projected observable with an independent numerical reference test the
+assembled formula.
 
 Slater–Condon on `<Phi_m| d/dx Phi_n>` (determinants differing by at most
 one spin-orbital, and the derivative is a one-particle substitution) yields
@@ -96,10 +222,10 @@ socc cross terms: generated automatically because the socc orbitals are
    get_trans_den are the V-entries appearing here, fixed, not fitted.
 ```
 
-Only the antisymmetric part `gamma_a := (gamma - gamma^T)/2` survives —
-this is the first-principles derivation of the sign set that the branch
-obtained by scanning `(sg_ij, sg_ab, sg_ia) = (1,-1,-1)` against an oracle,
-and of the antisymmetrization `kernel_pair(I,J) - kernel_pair(J,I)`.
+Only the orbital-index antisymmetric part
+`gamma_a := (gamma - gamma^T)/2` survives its contraction with `T`.  This is
+distinct from the state-index HST projection
+`(Dord_IJ-Dord_JI)/2`; neither operation may be substituted for the other.
 
 **Correction to the branch:** same-space (doc-doc / socc-socc / virt-virt)
 blocks of `gamma_a` are NOT automatically "pure gauge". The doc-doc and
@@ -254,10 +380,11 @@ d_IJ  = h_IJ / gap  +  Tr[ gamma_a Sk ]
                                      (+ optional ETF correction, Sec. 5)
 ```
 
-No fitted coefficient anywhere: the 1/2s and signs are fixed by
-orthonormality and the perturbation identity. `d` antisymmetry and `h`
-symmetry are consequences (gamma_a antisym, T antisym, gap flips sign under
-I<->J) — compute (I,J) and (J,I) independently and CHECK, never stamp.
+No fitted coefficient appears: the orbital 1/2s and signs are fixed by
+orthonormality and the perturbation identity.  Compute both ordered kernels
+independently and apply the same HST projection as the numerical observable.
+The resulting `d` antisymmetry and `h=gap*d` symmetry are output contracts;
+their zero residuals alone are not independent validation evidence.
 
 ---
 
@@ -291,7 +418,7 @@ I<->J) — compute (I,J) and (J,I) independently and CHECK, never stamp.
 | z-vector interstate solve | EXISTS (RHS hook + GMRES) | `OQP::nac_orbgrad_L`, `set_mrsf_nac_cphf` |
 | `z . B^x` contraction | EXISTS | gradient seam (gZ - gS) |
 | FD oracle sign fix | TODO first | `single_point.py:2273, 2196` |
-| Gates: L rotation-FD (unfolded), interchange identity, antisymmetry-emergent, C1 system, sum rule, frozen numeric refs with assert | TODO | new `tests/` files |
+| Gates: L rotation-FD (unfolded), interchange identity, HST projected C1 reference, raw-translation identity, frozen numeric refs with assert | PARTIAL/UPDATED; see 7.61 onward | `tests/`, `tools/nac_lagrangian/` |
 
 ### Sequencing (non-negotiable, per the audit's lessons)
 
@@ -1659,3 +1786,1098 @@ adjoint while preserving the tested external interface. Before the
 ethylene or Acrolein verdict, however, the larger seam/interchange
 error isolated in 7.55 must be corrected and regated against the
 converged small-displacement H2O reference.
+
+### 7.57 Lee-gradient audit: the old seam mixed two normalizations
+
+The paper/SI audit summarized at the start of this document changes the
+interpretation of 7.55--7.56.  Let the independent ROHF rotation be
+
+```
+kappa = (kappa_SD, kappa_DV, kappa_SV),
+SD = docc-socc, DV = docc-virt, SV = socc-virt.
+```
+
+The physical reference-stationarity residual used by native OpenQP is
+
+```
+r = (F_beta_SD, F_alpha_DV + F_beta_DV, F_alpha_SV).
+```
+
+Lee et al.'s `Fbar`, coefficient stationarity, and the one-half factors
+in Eq. (3.8)/SI Eq. (S26) imply
+
+```
+H_native := dr/dkappa = 2 Jbar,
+l_native := dG/dkappa = 2 Rbar.
+```
+
+The Lee Lagrange multiplier therefore obeys
+
+```
+H_native Z_Lee = -l_native,
+Z_Lee = Zbar.
+```
+
+OpenQP's nuclear response is written `H_native U^R=B^R` with
+`B^R=-partial_R r`.  Production therefore stores the sign-reversed
+computational adjoint `zeta=-Z_Lee`, solves
+
+```
+H_native zeta = +l_native,
+zeta^T B^R = l_native^T U^R,
+```
+
+and adds `zeta^T B^R` to the ordered derivative.  The code record is named
+`nac_rohf_z`, but its sign is `zeta=-Zbar` in Lee's multiplier convention.
+There is no extra *factor* of two.  In the legacy gradient solver the same
+accounting is distributed differently: `sfrorhs` builds `-2 Rbar`,
+`sfrolhs` applies `Jbar`, its solved vector is `xk=2 Zbar`, and `sfropcal`
+inserts `xk/2`.  Feeding the computational `zeta=-Zbar` through that legacy
+half-density seam, or feeding `xk=2Zbar` into a native adjoint contraction,
+mixes sign and normalization conventions.
+The v3 production path therefore bypasses `sfropcal/mrsfrowcal` for the
+interstate adjoint and contracts the native solution directly.
+
+The native tangent embedding and dual projection are also not mutual
+array inverses.  In block form,
+
+```
+rohf_unpack_trial(kappa):
+  SD -> beta only
+  DV -> alpha = kappa and beta = kappa
+  SV -> alpha only
+
+rohf_pack_trial(g_alpha,g_beta):
+  SD <- g_beta
+  DV <- g_alpha + g_beta
+  SV <- g_alpha
+```
+
+Thus the induced coordinate metric is
+
+```
+E^T E = diag(1,2,1) = pack(unpack(1))
+```
+
+over `(SD,DV,SV)`.  `unpack` is the tangent embedding `E`; `pack` is
+the cotangent projection `E^T`.  In particular the DV factor two is
+already present on both sides of the native stationarity equation and
+must not be "corrected" afterward.  The old source comment calling the
+two routines inverses is mathematically misleading.
+
+The audit also fixed a non-square TagArray trap in the forward gate.
+A Fortran record `A(ltot,ncart)` exposed through OQPData must be
+recovered in Python as
+
+```
+raw.reshape(ncart, ltot).T
+```
+
+not as a bare `raw.T`.  Any earlier native-U result read with the latter
+layout is void.
+
+### 7.58 Native Z-vector production path and the DFT lifecycle bug
+
+The production numerical route is now resident in Fortran, with Python
+only orchestrating one call sequence per ordered state pair:
+
+```
+Xmat = MT_frozen + MT_response + gamma
+Ldual = E^T (Xmat - transpose(Xmat))            [pack_rohf_dual]
+H_native zeta = Ldual                          [one ROHF/ROKS solve]
+zB_HF = zeta^T B^R_HF/JK/Pulay                 [analytic Fortran adjoint]
+zB_XC = zeta^T B^R_XC                          [analytic Fortran adjoint]
+d_IJ = T1 + zB_HF + zB_XC + Xmat:V + gamma:Sk
+```
+
+The entry points are `mrsf_nac_rohf_solve`,
+`mrsf_nac_rohf_hf_adjoint`, and `mrsf_nac_xc_adjoint` in
+`source/modules/mrsf_nac_interchange.F90`.  The solver uses the same
+`cphf_apbx_rohf` operator and coordinates as `hf_hessian_rohf`, requires
+a residual-converged solve, and performs one adjoint solve rather than
+`3N` forward CPHF solves.  The HF routine transposes the nuclear
+one-electron, two-electron, JK-response, and Pulay contractions.  The XC
+routine evaluates the moving-grid mixed derivative and adds the
+occupied-space reorthonormalization response through one
+`f_xc[P_z]` build.
+
+For the full symmetric physical rotation density
+
+```
+delta P_z^s = C_v^s z^s C_o^{s,T} + transpose,
+```
+
+the exact XC normalization is
+
+```
+Tr[V_xc delta P_z] = 2 z^T r_xc,
+z^T b_xc = -1/2 d_R Tr[V_xc delta P_z].
+```
+
+Therefore the final `-0.5` in `mrsf_nac_xc_adjoint` is required.  An
+early gate appeared to make the analytic XC result twice the forward
+one, but the factor was not algebraic.  `dft_initialize` appends
+functionals to process-global XC state; `cphf_solve_rohf` initialized
+the grid and returned without `dftclean`, after which the XC adjoint
+initialized it again.  BHHLYP was consequently present twice.  The
+solver now brackets its DFT state with `dft_initialize/dftclean` (as do
+the reusable RHF/UHF CPHF drivers), and the `-1/2` factor is retained.
+Do not revive the rejected `-1/4` workaround.
+
+The `mrsf_nac_wpair_impl` status also changed after 7.56: its central
+orbital-generator harvest has been replaced by a closed-form
+`mrsfcbc/mrsfmntoia` adjoint.  It uses a two-vector batched ERI build,
+adds both spin-pair sides through `mrsfsp`, evaluates the frozen-Fock
+term in MO space, and preserves the tested C/tagarray interface.  Thus
+the expensive production kernels are Fortran-resident; Python retains
+only state-pair orchestration and gate logic.
+
+### 7.59 The apparent 7.55 seam failure was primarily loose SCF/TDHF
+
+The former `3.419e-3` H2O verdict refined the nuclear displacement but
+left both SCF and TDHF at `1e-6`.  It therefore tested a stable finite
+difference of incompletely stationary orbitals, not the Lagrangian
+limit.  This is especially damaging for the near-degenerate `(3,2)`
+pair, whose large adjoint amplifies a small stationarity residual.
+
+The same-process v33/v34 comparison isolates this effect.  At
+`scf.conv=tdhf.conv=1e-6`, native CPHF `U` differed from the independently
+reconverged finite-difference `U` by
+
+```
+SD 8.974e-3,  DV 1.158e-3,  SV 6.699e-3,
+L.U max difference = 6.579e-3.
+```
+
+At `scf.conv=tdhf.conv=1e-10`, with the same geometry and algebra, these
+became
+
+```
+SD 8.262e-6,  DV 3.164e-6,  SV 8.462e-6,
+L.U max difference = 1.181e-5.
+```
+
+This three-orders-of-magnitude collapse identifies loose electronic
+convergence as the main source of the old large "seam" error.  It also
+explains why merely tightening the Z solver did not repair 7.55: the Z
+equation was already solved, while its reference orbitals and numerical
+referee were not stationary enough.  `nac_analytic.py` now refuses
+`scf.conv > 1e-8` and recommends `1e-10` near a crossing.
+
+Independent component gates on ordered pair `(3,2)` give, at tight
+convergence,
+
+```
+native direct L.U vs native adjoint z.B       1.151e-5
+analytic HF/JK/Pulay vs forward RHS           3.116e-8
+analytic XC vs finite-difference XC RHS       1.70490e-4
+full analytic Z contraction vs forward RHS    1.70474e-4
+```
+
+The remaining `1.7e-4` is the XC mixed-derivative/forward-FD gate level;
+it is not evidence for a missing factor or a second MRSF sigma channel.
+
+### 7.60 H2O v36 production verdict (tight reference)
+
+The first end-to-end gate of the pairwise one-Z-vector production path
+uses H2O/BHHLYP/6-31G*, singlet MRSF, `tlf=0`,
+`scf.conv=tdhf.conv=1e-10`.  The analytic artifact is
+
+```
+~/nac_audit/probe/H2O_energy_tlf0_tight_v36_z.npz
+```
+
+and the numerical reference is
+
+```
+~/nac_audit/probe/H2O_energy_tlf0_tight_dx25e5_dnum.npz
+dx = 2.5e-4 Angstrom.
+```
+
+Gauge-resolved maximum component errors are
+
+```
+pair (1,2)   2.10885792e-5
+pair (1,3)   1.50539330e-5
+pair (2,3)   2.10869153e-4
+overall      2.10869153e-4   PASS (criterion 3.0e-4)
+```
+
+The tight numerical references at `dx=5.0e-4` and `2.5e-4` agree to
+`2.49864104e-7` overall, so displacement truncation is well below the
+production error.  One artifact trap must be recorded: the
+`dcv_reference` array embedded in `H2O_energy_tlf0_tight_v36_z.npz`
+and the accompanying v36 log still point to the older loose-convergence
+freeze and display a misleading `3.27076e-3`.  The certified comparison
+is the artifact's `dcv` against the separate tight `dx25e5` file named
+above.
+
+This is a real H2O production pass, not a general completion claim.
+Tight-convergence ethylene/C1, Acrolein, translational/sum-rule gates,
+and upstream duplicate-fix review remain.  More fundamentally, the Lee
+energy-gradient paper does not prove the interstate bilinearization;
+the H2O result validates this implementation and its diagonal
+normalization on one system.  Broader systems and the explicit `I=J`
+collapse remain the evidence required before calling the MRSF NAC
+Lagrangian generally established.
+
+### 7.61 Former v3 ordered-HST formulation (superseded by Section 8)
+
+Sections 7.55--7.60 describe the route by which the implementation was
+localized, but their H2O-only accuracy verdict is superseded below.  The
+production observable is the central/Hammes--Schiffer--Tully (HST) derivative
+of a state-overlap matrix.  Write the one-sided analytic derivative before the
+state projection as `Dord_IJ`.  The definition shared by the numerical referee
+and production code is
+
+```
+d_IJ = 1/2 (Dord_IJ - Dord_JI),
+h_IJ = (E_J-E_I) d_IJ.
+```
+
+The zero residuals of `d+d^T` and `h-h^T` are therefore output-contract
+checks, not independent proof of the interstate Lagrangian.  In particular,
+the unprojected H2O v64 kernels have non-negligible symmetric parts.
+
+For a fixed ket state `J`, differentiation of the MRSF state-overlap formula
+gives the ordered kernel
+
+```
+Dord_IJ = Gmet_IJ^T X_J^R + gamma_IJ : (Sk^R + U^R).
+```
+
+Here `Gmet_IJ` is the derivative of the exact `tlf=0` overlap expression with
+respect to the ket amplitudes; `gamma_IJ` is its orbital-overlap derivative;
+`Sk` is the ket-half AO overlap derivative; and `U^R` is the MO response.  On
+the physical folded configuration space, define the amplitude adjoint by
+
+```
+(Omega_J - A) y_IJ = Q_J Gmet_IJ,
+Q_J = 1 - X_J X_J^T.
+```
+
+Symmetry of the MRSF/TDA response operator then eliminates the coordinate-wise
+amplitude response:
+
+```
+Gmet_IJ^T X_J^R = y_IJ^T A^R X_J.
+```
+
+The derivative of this bilinear response contraction is split in the same way
+as an analytic gradient: a frozen-orbital skeleton plus an orbital-gradient
+source.  In the implementation,
+
+```
+T1   = [mrsf_nac_amp + mrsf_nac_esum](y_IJ, X_J),
+M_IJ = MT_frozen(y_IJ,X_J) + MT_response(P_IJ) + gamma_IJ,
+```
+
+and the ordered kernel is
+
+```
+Dord_IJ = T1 + z_IJ^T B^R_HF/JK/Pulay + z_IJ^T B^R_XC
+              + M_IJ : V^R + gamma_IJ : Sk^R.
+```
+
+`V^R` is the overlap-fixed symmetric/reorthonormalization part of the MO
+derivative.  The independent ROHF rotations are eliminated by the *adjoint*
+stationarity equation
+
+```
+H_native^T zeta_IJ = E^T (M_IJ-M_IJ^T),
+```
+
+where `E` is `rohf_unpack_trial` and `E^T` is the native dual projection used
+by `pack_rohf_dual`.  The ROHF orbital Hessian is symmetric in these physical
+tangent/dual coordinates, so the same matrix-action implementation used by a
+CPHF driver may solve the adjoint equation.  This does not turn the production
+algorithm into a `3N` forward CPHF calculation: production supplies exactly
+one state-pair RHS and evaluates `z^T B^R` for all coordinates analytically.
+The public production entry is consequently named
+`mrsf_nac_rohf_zvector`; `cphf_solve_rohf` is only the historical name of the
+reused orbital-Hessian linear solver.
+
+The Lee-gradient normalization fixes the remaining apparent factor ambiguity.
+For native OpenQP stationarity coordinates,
+
+```
+H_native = 2 Jbar,
+l_native = E^T (M_II-M_II^T) = +2 Rbar,
+(2 Jbar) zeta = +2 Rbar  =>  zeta = -Zbar.
+```
+
+The legacy diagonal chain instead solves `Jbar xk=-2Rbar`, obtains
+`xk=2Zbar`, and inserts `xk/2` in `sfropcal`.  The sign-reversed native
+computational adjoint `zeta=-Zbar` must never be sent through that legacy
+half-density seam.  Likewise,
+`pack(unpack(kappa))=diag(1,2,1)` over `(SD,DV,SV)` is the correct induced
+metric, not a missing factor that should be repaired after the solve.
+
+### 7.62 The actual residual source: XC fuzzy-cell moving-grid response
+
+After tight SCF/TDHF and the native Z-vector seam had been established, the
+remaining ordered-pair error localized completely to the XC part of
+`mrsf_nac_esum`: the one-electron and two-electron skeletons agreed with
+finite differences to `5e-8` and `2e-8`, while the XC skeleton differed by
+`1.7974e-3`.  A zero-probe subtraction could remove an accidentally included
+ground-state term, but it could not differentiate the atom-centred quadrature
+itself.
+
+For a linear interstate probe `P`, OpenQP evaluates a finite quadrature
+
+```
+E_xc[P;R] = sum_g w_g(R) q_P(r_g(R);R).
+```
+
+The consistent derivative contains three pieces:
+
+```
+dE_xc = sum_g w_g dq_P|basis
+      + sum_g q_P dw_g|partition
+      + sum_g w_g grad_r(q_P) . d r_owner.
+```
+
+The last two terms are a pair: every atom-centred slice point moves with its
+owner, so retaining only the normalized partition derivative or only the
+integrand owner motion produces a large spurious result.  For fuzzy cells
+`p_O=c_O/sum_K c_K`, the implemented logarithmic form is
+
+```
+d log p_O = d log c_O - sum_K p_K d log c_K.
+```
+
+Only the point owner and the two atoms of a Becke pair affect a given `mu_ij`.
+Precomputed `R_ij`/unit vectors and thread-local logarithmic derivatives reduce
+the new work from `O(Ngrid*Natom^3)` to `O(Ngrid*Natom^2)` and avoid inner-loop
+allocation.  Production invokes the linear-probe branch with
+`include_ground_state=.false.` and `include_weight_derivative=.true.`.  The
+routine now accumulates into `dedft` (`intent(inout)`), so the ordinary
+state-diagonal MRSF gradient is not overwritten.
+
+The decisive ethylene pair `(2,3)` XC check changed from `1.7974e-3` to
+`6.5165e-8`.  This supersedes the `1.7e-4` "XC floor" in 7.59: that value was
+not an unavoidable grid error but a missing analytic moving-grid term.
+
+### 7.63 Historical v65/v60/v62 numerical reference gates
+
+All gates below use independently reconverged displaced workers, one process
+per displacement, `scf.conv=tdhf.conv=1e-10`, and a central step of
+`2.5e-4 Angstrom`.  One state gauge is solved globally; pair signs are not
+chosen independently.
+
+```
+system / artifact                    pair       max component error
+H2O v65                              (1,2)      4.58748968e-8
+                                     (1,3)      2.15320715e-7
+                                     (2,3)      1.12841328e-6
+ethylene v60                         (1,2)      2.70646099e-6
+                                     (1,3)      1.25137596e-7
+                                     (2,3)      7.06993091e-6
+Acrolein v62, tlf=2                  (1,2)      2.13691099e-6
+                                     (1,3)      2.30623982e-6
+                                     (2,3)      2.22002911e-6
+```
+
+The corresponding maximum energy mismatches are `0`, `2.416e-13`, and
+`2.274e-13 Hartree`.  Every pair passes the deliberately loose publication
+gate `3e-4`; the observed production errors are two orders of magnitude
+smaller.  The certified artifacts are
+
+```
+~/nac_audit/probe/H2O_production_optimized_v65.{npz,out}
+~/nac_audit/probe/ETH_production_movinggrid_v60.{npz,out}
+~/nac_audit/probe/Acrolein_production_movinggrid_v62.{npz,out}
+```
+
+The frozen references are the matching `*_dx25e5_dnum.npz` files and their
+worker directories.  `nac_reference_gate.py` is the reproducible comparison;
+it also checks the returned-array contracts, but those construction identities
+must not be counted as separate theory evidence.
+
+### 7.64 Lifecycle and diagonal-gradient regressions
+
+The ordered pair engine must be independent of what ran earlier in the same
+process.  `mrsf_nac_amp` previously reused a resident `OQP::td_p` created by a
+gradient call; it now owns a zero two-particle-response slot for the NAC
+skeleton.  Together with the paired `dft_initialize/dftclean` lifecycle, this
+gives exact history invariance:
+
+```
+H2O v64: energy -> NAC  versus  energy -> gradient(root 3) -> NAC
+maximum gauge-resolved difference over every pair = 0.0.
+```
+
+The ordinary Lee MRSF gradient is unchanged by the new accumulation and grid
+metadata plumbing.  Against the frozen H2O reference, the final binary gives
+
+```
+ground/total energy max difference = 7.1054e-14
+TD energy max difference           = 1.2698e-14
+gradient max difference            = 1.6048e-13.
+```
+
+`OQP_NAC_SELFTEST` additionally proves that the bilinear 2e derivative engine
+collapses bit-for-bit to the production quadratic 2e engine at `I=J`
+(`max difference=0`, production norm `9.6123e-1`).  Its scope is deliberately
+narrow: it does not by itself prove the full esum, native RHS/Z normalization,
+HF/XC adjoints, or `Vmask` diagonal continuation.
+
+The meaningful Lee limit is not the returned `d_II`, which is zero by the
+real-state/HST convention.  Let `Delta_IJ=Omega_J-Omega_I`.  The overlap
+derivative gives `Gmet_IJ -> X_I`, hence
+
+```
+Delta_IJ y_IJ -> X_I,
+Delta_IJ Dord_IJ = Q_R[X_I,X_J] + Delta_IJ A_R[gamma_IJ].
+```
+
+The diagonal continuation is `Q_R[X_I,X_I]=d Omega_I/dR`, with
+`gamma_II=0`; the total Lee gradient is `dE_0/dR+dOmega_I/dR`.  Frozen
+off-diagonal artifacts satisfy `max|Delta*y-X_I|=1.10e-6` for H2O and
+`6.16e-6` for the ethylene `(2,3)` pair, consistent with the current
+`EPSA=1e-6` state-space unit sweep.  This algebra establishes the required
+limit.  A duplicated-slot H2O v71 source gate additionally sets `y=X_I`,
+`gamma=0`, and evaluates the pair source with two distinct but identical
+amplitude slots.  It verifies the sign-correct Lee relation
+
+```
+ell_pair + rhs_legacy = 0,
+ell_pair = +2 Rbar,       rhs_legacy = -2 Rbar,
+```
+
+with state maxima `3.22e-8`, `1.60e-7`, and `3.93e-7`
+(`H2O_diagonal_rhs_all_v71.npz`).  This closes the source normalization and
+the fact that the computational native adjoint is `zeta=-Zbar`.  A full
+duplicated-slot *value* comparison against `dOmega_I/dR` remains a useful
+future diagnostic; the present 2e self-test and v71 source gate must not be
+described as that full Eq. (3.21) comparison.
+
+### 7.65 Raw translation rule, not an ETF zero-sum rule
+
+The current result is a raw electronic derivative coupling and contains no
+electron translation factor (ETF).  Therefore `sum_A d_IJ^A=0` is the wrong
+gate.  The correct implementation identity is
+
+```
+sum_A d_IJ^A = antisym_IJ sum_A (gamma_IJ : Sk_A).
+```
+
+On the H2O v64 debug decomposition, the atom sums of antisymmetrized `T1`,
+`z_HF`, `z_XC`, and `Vmask` are each below `3.1e-14`; the full raw sum equals
+the `gamma:Sk` sum to `4.1e-14`.  The raw atom sums themselves are nonzero:
+
+```
+H2O       1.1084e-1
+ethylene  4.9231e-2
+Acrolein  1.7962e-1.
+```
+
+`translation_gate.py` encodes this structural rule and deliberately never
+subtracts an atomic mean or imposes zero.  Such a subtraction is not an ETF.
+An ETF-corrected observable would require a separately derived mode and
+separate references.
+
+### 7.66 Partition-function audit and performance recheck
+
+Adding the analytic weight derivative exposed dormant derivative/mapping
+errors outside the default SSF path.  The Fortran type IDs are
+`SSF=0, ERF=1, BECKE4=2`; Python had ERF and Becke reversed.  The ERF
+derivative lacked one factor `1/(1-x^2)`, smoothstep orders 2--5 omitted the
+chain factor `-SCALEF`, and the smoothstep-5 dispatch limit was `0.74` instead
+of its definition's `0.73`.  These are corrected before the weight derivative
+is exposed to production.
+
+An independent H2O ERF grid gate gives maximum pair errors
+`4.5806e-8`, `2.1533e-7`, and `1.1294e-6`, with zero energy mismatch
+(`H2O_erf_dx25e5_dnum_v67.npz` versus `H2O_erf_production_v68.npz`).  The
+optimized default H2O result reproduces v61.  The optimized Acrolein v66 rerun
+reproduces v62 to `5.12e-11` maximum component and independently retains the
+`2.30624e-6` numerical-reference error; its wall time was 1328.64 s on chc3.
+
+### 7.67 Historical production boundary before resident finalization
+
+At this historical checkpoint the following statement was supported:
+**static singlet MRSF-TDDFT analytic raw NAC was implemented and independently
+gated for H2O, C1 ethylene, and Acrolein.**  It was not correct to call the
+entire OpenQP SOC-NAMD stack production-ready:
+
+* analytic NAC currently rejects multiplicities other than singlet;
+* `md` runtype is not implemented;
+* trajectory-continuous state permutation/near-degenerate subspace rotation
+  is not yet applied consistently to NAC, SOC, gradients, and coefficients;
+* that checkpoint's driver still retained Python state-pair algebra, the
+  `G_met`/`gamma` construction, MINRES, and small contractions.  Section 8.6
+  supersedes this item: the final production pair path is resident Fortran.
+
+For any future OpenQP numerical work, implement the numerical kernel in
+Fortran first and keep Python to API orchestration and validation.  A future
+NAMD shakedown must replay consecutive Acrolein frames, establish one causal
+state/subspace gauge, compare `tau_IJ=sum_A v_A.d_IJ^A` with the time-overlap
+coupling at two timesteps, remove COM velocity for the raw convention (or add
+a separately validated ETF mode), and only then exercise hopping dynamics.
+
+---
+
+## 8. Final normative Lagrangian and production contract
+
+This section supersedes every formula and implementation-status statement in
+Sections 0--7.67.  It separates three operations that were repeatedly mixed
+during the campaign:
+
+1. differentiation of the one-sided, column-normalized MRSF state overlap;
+2. symmetric polarization of the Lee diagonal excitation-gradient source;
+3. adjoint elimination of the ROHF/ROKS orbital response.
+
+The first makes an ordered HST leg, the second constructs its interstate MRSF
+source, and the third is the one-RHS Z-vector.  Only after both ordered legs
+have been evaluated is the HST state-index projection applied.
+
+### 8.1 Ordered HST derivative and state response
+
+Let `S_IJ(R0,R)` be the exact MRSF state-overlap formula with the bra at the
+reference geometry and the ket at `R`.  Define its one-sided analytic
+derivative
+
+```
+Dord_IJ^R = [d S_IJ(R0,R) / dR]_(R=R0).
+```
+
+The observable shared by the numerical referee and the analytic code is
+
+```
+d_IJ^R = 1/2 (Dord_IJ^R - Dord_JI^R),
+h_IJ^R = (Omega_J-Omega_I) d_IJ^R.
+```
+
+Thus `d+d^T=0` and `h-h^T=0` are returned-array contracts.  They are not
+independent evidence that either ordered leg is complete.
+
+At the reference geometry the normalized MRSF/TDA eigenvectors obey
+
+```
+A X_K = Omega_K X_K,                 X_I^T X_J = delta_IJ.
+```
+
+For `I != J`, differentiating the eigenproblem and projecting on `X_I` gives
+
+```
+X_I^T X_J^R = X_I^T A^R X_J / Delta_IJ,
+Delta_IJ = Omega_J-Omega_I.
+```
+
+The general state-space adjoint notation is
+
+```
+(Omega_J-A)^T y_IJ = Q_J Gmet_IJ,       Q_J=1-X_J X_J^T.
+```
+
+The exact overlap metric has `Gmet_IJ=X_I` at the identity.  Since `A` is
+symmetric, `I != J`, and `Q_J X_I=X_I`, the spectral solution reduces exactly
+to the production state-response vector
+
+```
+y_IJ = X_I / Delta_IJ
+```
+
+with the redundant folded slot set to zero.  No coordinate-wise Davidson
+response solve is needed.  The small-gap division is nevertheless physical:
+the driver rejects a zero or numerically unresolved `Delta_IJ`; it does not
+pretend that an isolated-state NAC is well defined at an exact degeneracy.
+
+The one-sided chain rule is then
+
+```
+Dord_IJ^R = y_IJ^T A^R X_J + gamma_IJ : (Sk^R + U^R),
+```
+
+where `Sk^R=<chi|d_R chi>` is the ket-half AO-overlap derivative in the MO
+basis, `U^R` is the MO coefficient response, and `gamma_IJ` is the orbital
+derivative of the exact state-overlap formula.  `gamma_IJ` is ordered in the
+state labels and must not be replaced by `-gamma_JI`.
+
+### 8.2 Symmetric interstate polarization
+
+Lee Eq. (3.21) supplies a diagonal excitation-gradient functional.  If its
+homogeneous amplitude-quadratic part is denoted by
+
+```
+Q_R[X] = X^T A^R X,
+```
+
+the unique real symmetric bilinear continuation used here is
+
+```
+B_R[y,X] = 1/2 { Q_R[y+X] - Q_R[y] - Q_R[X] }.
+```
+
+Equivalently, if a diagnostic evaluates the *full* gradient
+`G_R[X]=G_R[0]+Q_R[X]`, it must use
+
+```
+B_R[y,X] = 1/2 { G_R[y+X] - G_R[y] - G_R[X] + G_R[0] }.
+```
+
+Production does not obtain this bilinear by subtracting four complete
+gradients.  Its Fortran kernels construct the two-vector terms directly.  In
+particular, every quadratic MRSF channel is symmetrized between the two slots;
+the closed `wpair` source contains
+
+```
+1/2 [ H(y,KX) + H(X,Ky) ],
+```
+
+and the two-electron and spin-pair density channels use the corresponding
+`1/2(yX+Xy)` products.  A left-slot-only or right-slot-only continuation is
+not the implemented Lagrangian.
+
+This interstate polarization is a new derivation.  Lee et al. prove the
+diagonal functional and its stationarity, not this off-diagonal continuation.
+The mandatory diagonal identity is `B_R[X,X]=Q_R[X]`.  The literal real-state
+self-overlap derivative has `gamma_II=0` and the returned HST `d_II=0`; the
+Lee value test therefore uses two distinct, duplicated amplitude slots and
+then takes their diagonal continuation.  Those are different statements and
+must not be conflated.
+
+### 8.3 Exact streamed state-overlap metric
+
+The production metric is the analytic first derivative at the identity of the
+literal `ndtlf=0` MRSF overlap formula.  Before normalization, its seven
+determinant-block contractions are products of the `s_ij`, `s_ab`, and `s_ia`
+minor families, including the two SOMO spin-pair blocks.  For raw overlaps
+`R_KJ`, the formula normalizes each ket column:
+
+```
+n_J  = [sum_K R_KJ^2]^(1/2),
+S_IJ = R_IJ / n_J,
+
+dS_IJ/dR_KJ = delta_IK/n_J - R_IJ R_KJ/n_J^3.
+```
+
+Production first reverses that normalization, accumulates the analytic
+product-rule sensitivities of all seven contractions, and contracts them with
+the exact determinant cofactors at the identity.  Direct cofactors are
+required: some relevant minors are singular, so an inverse-based Jacobi
+formula is not valid.  For the independent generator
+
+```
+K_pq=+1, K_qp=-1  (p>q),
+```
+
+half of the directional derivative is placed in each orbital slot,
+
+```
+gamma_IJ(p,q) =  1/2 dS_IJ/dtheta_pq,
+gamma_IJ(q,p) = -gamma_IJ(p,q).
+```
+
+Orbital-slot antisymmetry is exact; state-index antisymmetry is deliberately
+not imposed.  Same-space blocks are retained.  A fixed ket column `J` shares
+one normalization denominator, so `mrsf_nac_metric_column` streams only
+`O(nstate*nbf^2)` storage rather than materializing
+`O(nstate^2*nbf^2)` data.
+
+The independent gates are:
+
+```
+resident streamed column vs closed cofactor oracle     5.219e-13
+exact-generator residual by block:
+  doc-doc  2.385e-18      doc-socc 6.476e-13      doc-virt 0
+  socc-socc 1.110e-15     socc-virt 8.327e-13     virt-virt 5.551e-13
+orbital-slot antisymmetry residual                     0
+same-space signal (must not be projected away)         7.0910e-1
+ordered-state non-antisymmetry signal                  7.0111e-1
+```
+
+The old raw-determinant `gamma`, sign-scanned TLF kernel, and same-space-zero
+claims therefore have no production role.
+
+### 8.4 Pair orbital source and the complete ordered formula
+
+Symmetric polarization of `y_IJ^T A^R X_J` produces an explicit nuclear
+skeleton and an orbital derivative.  In the current Fortran decomposition,
+
+```
+T1_IJ^R = mrsf_nac_amp(y_IJ,X_J)^R
+        + mrsf_nac_esum(y_IJ,X_J)^R,
+
+M_IJ = MT_frozen(y_IJ,X_J)
+     + MT_response(PairDensity_IJ)
+     + gamma_IJ.
+```
+
+`MT_frozen` contains the closed `mrsfcbc`/ERI/`mrsfsp` bilinear and the
+frozen-Fock derivative.  `MT_response` is the full JK plus XC response to the
+pair density and includes the semilocal `f_xc` response through
+`get_response_packed`.  It is not reconstructed from Python AO records.
+
+Let `V^R` denote the dependent symmetric/reorthonormalization part of the MO
+response fixed by `U^R+U^{R,T}=-S^R`.  Let `E` be the native ROHF tangent
+embedding and `E^T` its dual projection.  The independent orbital source is
+
+```
+ell_IJ = E^T (M_IJ-M_IJ^T).
+```
+
+After adjoint elimination (Section 8.5), the complete ordered derivative is
+
+```
+Dord_IJ^R = T1_IJ^R
+          + zeta_IJ^T B_HF/JK/Pulay^R
+          + zeta_IJ^T B_XC^R
+          + M_IJ : V^R
+          + gamma_IJ : Sk^R.
+```
+
+There are no fitted factors or post-solve block repairs in this expression.
+The resident accumulator stores this as `OQP::nac_dp_ordered`; the finalizer
+forms
+
+```
+OQP::nac_dcv  = 1/2 (Dord-Dord^T_state),
+OQP::nac_nacv = (Omega_J-Omega_I) OQP::nac_dcv.
+```
+
+### 8.5 Why this is a Z-vector, not `3N` CPHF
+
+For each nuclear coordinate, the forward ROHF/ROKS response convention is
+
+```
+H_native U^R = B^R,                 B^R = -partial_R r,
+```
+
+where the independent stationarity residual is
+
+```
+r = (F_beta_SD, F_alpha_DV+F_beta_DV, F_alpha_SV).
+```
+
+A forward CPHF implementation would solve this equation for every one of the
+`3N` columns and then form `ell_IJ^T U^R`.  The adjoint interchange instead
+solves once per ordered state pair,
+
+```
+H_native^T zeta_IJ = ell_IJ,
+```
+
+and evaluates all coordinates as
+
+```
+ell_IJ^T U^R = zeta_IJ^T B^R.
+```
+
+The physical ROHF tangent/dual Hessian is symmetric, so production reuses the
+same matrix action and the symmetric-indefinite MINRES route.  The internal
+routine name `cphf_solve_rohf` is historical; `nrhs=1` and the surrounding
+algorithm are an adjoint Z-vector calculation.  The only `3N` forward solve
+is an explicit diagnostic gate.
+
+Lee Eqs. (3.6)--(3.10) and SI S25/S26 fix the sign.  In OpenQP native
+coordinates,
+
+```
+H_native = 2 Jbar,
+ell_II   = +2 Rbar,
+Jbar Zbar_Lee = -Rbar,
+
+H_native zeta = ell  =>  zeta = -Zbar_Lee.
+```
+
+This computational `zeta` is what contracts with `B^R`.  The legacy diagonal
+chain distributes the same normalization differently:
+
+```
+sfrorhs = -2 Rbar,
+Jbar xk = -2 Rbar  =>  xk = 2 Zbar_Lee,
+sfropcal inserts xk/2 = Zbar_Lee.
+```
+
+Consequently the diagonal cross-seam closure is
+
+```
+zeta + xk/2 = 0,
+```
+
+not `zeta-xk/2=0`.  Passing `zeta` through `sfropcal`, or adding another
+factor to the DV block, is wrong.  The native maps already satisfy
+
+```
+pack(unpack(kappa)) = diag(1,2,1) kappa       over (SD,DV,SV),
+```
+
+which is the induced tangent/dual metric rather than a missing normalization.
+
+### 8.6 Resident Fortran implementation map
+
+The final scientific call graph is:
+
+```
+pyoqp analytic_nac
+  -> mrsf_nac_lagrangian                         [one C call]
+     -> mrsf_nac_metric_column                   [exact streamed gamma]
+     -> mrsf_nac_wpair_impl                      [closed frozen source]
+     -> mrsf_nac_amp + mrsf_nac_esum             [explicit skeleton]
+     -> mrsf_nac_response                        [JK+fxc pair response]
+     -> mrsf_nac_rohf_pair_overlap               [ell, V, gamma:Sk]
+     -> mrsf_nac_rohf_zvector                     [one pair RHS]
+     -> mrsf_nac_rohf_hf_adjoint + _xc_adjoint   [all coordinates]
+     -> mrsf_nac_pair_accumulate + _finalize     [HST and gap]
+```
+
+The owning files are:
+
+```
+source/modules/mrsf_nac_driver.F90
+source/modules/mrsf_nac_metric_data.F90
+source/modules/mrsf_nac_interchange.F90
+source/modules/tdhf_mrsf_gradient.F90
+source/modules/tdhf_mrsf_energy.F90
+pyoqp/oqp/library/nac_analytic.py                [scope/API/reshape only]
+```
+
+Production never materializes the all-pair metric, never sweeps orbital
+generators, never performs pair algebra in Python, and never solves forward
+CPHF for every nuclear coordinate.  Python scripts under
+`tools/nac_lagrangian/` are diagnostic referees only.
+
+### 8.7 XC moving-grid derivative for a linear relaxed-density probe
+
+This was the last substantive diagonal-Lagrangian error.  Let the reference
+spin densities be `D=(D_a,D_b)` and let the relaxed linear probe be
+`P=(P_a,P_b)`.  On a GGA/meta-GGA grid point define
+
+```
+rho_P   = (rho_Pa, rho_Pb),
+
+sigma_P = ( 2 grad(rho_a).grad(rho_Pa),
+            2 grad(rho_b).grad(rho_Pb),
+              grad(rho_Pa).grad(rho_b)
+            + grad(rho_a).grad(rho_Pb) ),
+
+q_P = e_rho.rho_P + e_sigma.sigma_P + e_tau.tau_P.
+```
+
+There is no extra `1/2` in `sigma_P`.  For LDA the sigma/tau terms vanish;
+for GGA tau vanishes.  In the standard Lee MRSF gradient the probe is the
+relaxed one-particle density
+
+```
+P = T + Z                                      [Lee Eq. (3.16)].
+```
+
+Here `Z` is Lee's relaxed-density contribution `Zbar_Lee`, inserted by the
+legacy diagonal path as `xk/2`.  It is **not** the sign-reversed computational
+adjoint `zeta`; in the matched diagonal convention
+`Zbar_Lee=xk/2=-zeta`.
+
+OpenQP calls `utddft_xc_gradient` for this MRSF term without `xa/xb`, hence
+`doFxc=.false.`.  It is the linear `grad_v_xc` branch.  The separate
+transition-density `grad_f_xc` branch is not part of this call.  The required
+`f_xc` response of the ROHF orbital Hessian and interstate pair source is
+already evaluated in `utddft_fxc/get_response_packed`; inventing an additional
+`X f_xc X` moving-grid term in the MRSF gradient would double count a different
+object.  The current moving-grid extension intentionally aborts if `xa/xb`
+are present because that general third-derivative case has not been derived.
+
+For an atom-centred slice owned by atom `O`, write its finite quadrature weight
+as `w_g=w_g^base p_O`, with normalized fuzzy cell
+
+```
+p_O = c_O / sum_K c_K.
+```
+
+The exact derivative of the *discrete quadrature used by the energy* is
+
+```
+D_A E_xc[P] = (fixed AO/basis contribution)
+            + sum_g w_g [ delta_AO grad_r(q_P)
+                         + q_P D_A log(p_O) ],
+
+D_A log(p_O) = D_A log(c_O) - sum_K p_K D_A log(c_K).
+```
+
+The owner-motion term and normalized-partition term are inseparable.  Keeping
+only one gives a large spurious contribution.  Only the point owner and the
+two atoms in each Becke pair enter a local `D_A mu_ij`; logarithmic cell
+derivatives therefore give `O(Ngrid*Natom^2)` work and no inner-loop
+allocation.
+
+The production use is deliberately split:
+
+* interstate `mrsf_nac_esum` and `mrsf_nac_xc_adjoint` request the complete
+  linear-probe derivative with `include_ground_state=.false.` and moving-grid
+  response enabled;
+* the ordinary diagonal gradient first performs its established ground plus
+  fixed-grid relaxed-density sweep, then performs a second resident
+  `weight_derivative_only` sweep using a copy of `P=T+Z`, with the ground state
+  excluded.  That second sweep adds only owner motion plus partition response
+  and cannot double count the AO/basis term.
+
+Allowing the correction while `include_ground_state=.true.` is forbidden.
+The naive mixed call translates a ground-state integrand without its matching
+ground partition derivative and was the v89 failure.
+
+### 8.8 v84--v90 diagonal-value evidence
+
+The following H2O/BHHLYP diagonal continuation compares the duplicated-slot
+pair Lagrangian with the Lee analytic excitation gradient.  Values are maximum
+Cartesian-component errors in hartree/bohr for states 1--3.  This diagnostic
+sets `gamma=0`, as required by the literal diagonal metric limit; consequently
+it does not test the exact metric of Section 8.3.  The phrase "exact metric" in
+the v84 row identifies the binary/campaign stage only.
+
+```
+gate    change                                      state 1       state 2       state 3
+v84     exact metric + native MINRES                 2.8941616e-5  8.4319324e-6  1.2237472e-5
+v85     force exact zeta=-xk/2                      ~2.8938569e-5 ~8.4575500e-6 ~1.2217980e-5
+v86     tighten solve/electronic thresholds         ~2.8941210e-5 ~8.4380600e-6 ~1.2264900e-5
+v87     disable only pair-esum grid derivative       7.0430381e-6  1.4347500e-6  2.3365700e-6
+v88     pure HF, removing XC entirely                3.9063379e-6  6.3663000e-8  3.5826000e-7
+v89     naive ground+probe moving-grid call           approximately 5.33e-1 for every state (REJECTED)
+v90     correction-only moving grid for P=T+Z        6.6297107e-7  3.6219095e-8  6.6150102e-8
+```
+
+The unchanged v84--v86 errors exclude the Z solver and ordinary convergence
+as the limiting cause; the exact metric is absent from this gate by
+construction.  v87 and the pure-HF v88 gate localize the defect to XC
+quadrature response.  v89 proves that a ground and probe mixture is not the
+derivative being sought.  v90 implements the correction-only `P=T+Z`
+derivative and passes the `5e-6` diagonal-value gate.
+Its `max|zeta+xk/2|` is `4.20265769e-7`; the pure-HF v88 closure is
+`4.61e-11`.
+
+The v85/v86 entries are the rounded campaign log values; the v84, v87, v88,
+and v90 entries are the retained gate values used for the final decisions.
+The final pointer-hardened binary rerun is retained as
+`H2O_diagonal_value_v94_final.npz`; it reproduces the worst Lee-value error
+`6.62971067e-7` and native/legacy Z closure `4.20265769e-7`, both below the
+final `5e-6` gates.
+
+The diagnosis is therefore precise: the ROHF/ROKS Hessian was not the main
+problem, and no missing antisymmetric MRSF fold term was required.  The error
+sat at the interface between Lee's relaxed density `P=T+Z` and the moving
+atom-centred XC quadrature.
+
+### 8.9 Final independent NAC reference gates
+
+Independent references reconverge every displaced geometry in a separate
+process, use one global state gauge, and never choose signs pair by pair.  The
+current resident formula gives the following maximum component errors.  The
+`tlf` label in this table belongs to the finite-displacement HST *reference*
+calculation.  The analytic production metric itself always uses the exact
+`ndtlf=0` identity derivative described in Section 8.3; it has no separate
+`tlf=2` production branch.
+
+```
+system / final gate              pair (1,2)      pair (1,3)      pair (2,3)
+H2O v94, tlf=0                   7.68935260e-8   2.09421460e-7   2.30391559e-6
+C1 ethylene v94, tlf=0           3.21820655e-6   1.97306408e-7   7.55836774e-6
+Acrolein v94, tlf=2              2.13672772e-6   2.30452788e-6   2.21028518e-6
+```
+
+H2O and C1 ethylene pass their final `1e-5` component gates; Acrolein passes
+its final `2e-5` component gate.  The final artifacts are
+`H2O_final_fortran_v94.npz`, `ETH_final_fortran_v94.npz`, and
+`Acrolein_final_fortran_v94.npz`.  The earlier v80 resident accumulator and
+finalizer reproduced the v76 H2O assembly exactly, proving that moving the
+last pair algebra from Python to Fortran did not change the observable.  The
+frozen NPZ files and their separate-process worker directories under
+`~/nac_audit/probe/` remain the numerical referees; historical v65/v60/v62
+values in Section 7.63 and the v76--v78 closeout labels are superseded by the
+final-binary v94 runs.
+
+For the raw electronic coupling, translation is not a zero-sum constraint.
+Without an electron-translation factor (ETF), the exact code identity is
+
+```
+sum_A d_IJ^A = antisym_IJ sum_A gamma_IJ : Sk_A.
+```
+
+Subtracting an atomic mean would hide an error and is not an ETF.
+
+### 8.10 Diagonal Lee checks and what they prove
+
+The final diagonal evidence is layered:
+
+* the bilinear two-electron engine collapses bit-for-bit to the quadratic
+  Lee engine at duplicated equal slots;
+* the v71 source test gives `ell_pair=+2Rbar` and
+  `rhs_legacy=-2Rbar`, with state maxima `3.22e-8`, `1.60e-7`, and
+  `3.93e-7`;
+* the native/legacy multiplier test gives `zeta=-xk/2=-Zbar_Lee` within its
+  stated solver/source tolerance;
+* v90 identifies and closes the complete duplicated-slot excitation-gradient
+  value, including the previously missing XC moving-grid response of `P=T+Z`;
+  the final binary repeat `H2O_diagonal_value_v94_final.npz` passes at
+  `6.62971067e-7` worst value error and `4.20265769e-7` Z closure.
+
+These checks establish the computational sign, source normalization, the
+diagonal normalization of the chosen symmetric continuation, and its full
+excitation-gradient diagonal value for the tested H2O/BHHLYP case.  They do
+not by themselves establish the off-diagonal continuation or turn the Lee
+energy-gradient paper into an off-diagonal NAC proof; that support comes from
+the derivation in Sections 8.1--8.5 and the independent H2O, C1 ethylene, and
+Acrolein interstate gates in Section 8.9.
+
+### 8.11 Supported scope and remaining limitations
+
+The supportable statement is:
+
+> OpenQP contains a resident-Fortran, static, singlet, two-SOMO
+> ROHF/ROKS MRSF-TDA analytic raw electronic NAC, using one adjoint Z-vector
+> RHS per ordered state pair, independently gated on H2O, C1 ethylene, and
+> Acrolein, with its Lee diagonal continuation gated on H2O/BHHLYP.
+
+The boundaries are equally important:
+
+* UMRSF and multiplicities other than singlet are rejected by the production
+  driver, even though some lower-level metric/bilinear kernels have broader
+  diagnostic support.
+* This is a raw electronic derivative coupling.  No ETF, SOC-NAC combination,
+  `md` runtime, hopping dynamics, or trajectory-continuous state/subspace
+  gauge is supplied by this derivation.
+* The isolated-pair `1/Delta_IJ` form is not a near-degenerate subspace
+  treatment.  Exactly or numerically unresolved gaps are rejected; physically
+  clustered states require a separately derived subspace connection.
+* The exact metric is the first derivative at the identity of the literal
+  column-normalized `ndtlf=0` overlap formula.  It contains no production
+  nuclear finite difference, but it is not a finite-displacement all-order
+  overlap propagator.  The Acrolein v94 gate establishes end-to-end
+  compatibility with a `tlf=2` numerical HST reference for that tested system;
+  it is neither a separate analytic `tlf=2` implementation nor a general proof
+  of every finite-displacement tracking mode.
+* The implemented XC moving-grid extension is restricted to the linear-probe
+  `doFxc=.false.` branch.  A future `xa/xb` third-functional-derivative moving
+  grid needs its own derivation and gates.
+* The final moving-grid value evidence is the named BHHLYP/H2O GGA gate (with
+  the historical H2O ERF partition check in Section 7.66).  The LDA/GGA/meta-
+  GGA linear-probe algebra is implemented generically, but this document does
+  not claim an independent diagonal-value reference for every functional,
+  quadrature, or basis.
+* Lee et al. establish the diagonal energy gradient.  The interstate
+  symmetric polarization and ordered exact-overlap metric are new work and
+  must be cited and validated as such.
+* Production numerical kernels belong in Fortran.  Python remains a thin API,
+  reshaping, orchestration, and independent validation layer only.
+
+### 8.12 Superseded claims retained only for forensic value
+
+The following archived conclusions must not re-enter the implementation:
+
+```
+raw determinant gamma is the production metric                 false
+the exact TLF metric has no same-space content                  false
+gamma_IJ may be replaced by -gamma_JI before HST projection    false
+an antisymmetric-dD fold term closes the F channel              falsified by v19/7.53
+production requires orbital-generator finite differences       false
+production requires 3N forward CPHF                             false
+the remaining XC error is an irreducible fixed-grid floor       false
+the ROHF/ROKS Z-vector Hessian is the dominant residual source  false
+Python performs the production state-pair algebra               false
+```
+
+The durable lessons of the v3--v19 campaign are instead the exact ordered HST
+decomposition, strict process-isolated numerical workers, one global state
+gauge, the Fortran/Python TagArray transpose distinction, the `Sk` record
+diagonal bug, the necessity of full JK+XC response, and the need to
+differentiate both the owner motion and normalized fuzzy-cell weights of the
+finite XC quadrature.

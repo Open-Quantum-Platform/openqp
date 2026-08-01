@@ -20,12 +20,14 @@ module cphf_mod
 
   use precision, only: dp
   use iso_c_binding, only: c_ptr, c_loc, c_f_pointer
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
   use types, only: information
   use basis_tools, only: basis_set
   use int2_compute, only: int2_compute_t, int2_fock_data_t
   use tdhf_lib, only: int2_td_data_t, iatogen, mntoia
   use mod_dft_molgrid, only: dft_grid_t
   use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
+  use minres_mod, only: minres_t, MINRES_OK, MINRES_CONVERGED
   use io_constants, only: iw
 
   implicit none
@@ -128,7 +130,7 @@ contains
 !> @param[out]   converged true only when every right-hand side converged (optional)
   subroutine cphf_solve(infos, nrhs, bvec, uvec, tol, maxit, converged)
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_E_MO_A, OQP_VEC_MO_A
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -170,7 +172,14 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_A, mo_energy_a)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      ! libxc_input appends to process-global functional storage.  A reusable
+      ! response solve may be entered after another DFT driver, so make the
+      ! lifecycle idempotent at both boundaries rather than assuming a clean
+      ! caller.
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     allocate(wrk1(nbf,nbf), pa(nbf,nbf,1), xm(lexc), xminv(lexc), source=0.0_dp)
 
@@ -281,6 +290,7 @@ contains
     call flush(iw)
 
     call int2_driver%clean()
+    if (dft) call dftclean(infos)
     deallocate(wrk1, pa, xm, xminv)
   end subroutine cphf_solve
 
@@ -475,7 +485,7 @@ contains
   subroutine cphf_solve_uhf(infos, nrhs, bvec, uvec, tol, maxit)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_E_MO_A, OQP_VEC_MO_A, OQP_E_MO_B, OQP_VEC_MO_B
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -518,7 +528,10 @@ contains
     call tagarray_get_data(infos%dat, OQP_E_MO_B, epsb)
     call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mob)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     allocate(wrka(nbf,nbf), wrkb(nbf,nbf), xm(ltot), xminv(ltot), source=0.0_dp)
 
@@ -602,6 +615,7 @@ contains
     ! file; flush so the summary is there when the capture is read.
     call flush(iw)
 
+    if (dft) call dftclean(infos)
     deallocate(wrka, wrkb, xm, xminv)
   end subroutine cphf_solve_uhf
 
@@ -830,7 +844,10 @@ contains
     end if
   end subroutine rohf_pack_trial
 
-!> @brief Inverse of rohf_pack_trial (scf_converger::unpack_rohf_trial).
+!> @brief Embed independent ROHF rotations into alpha/beta tangent blocks.
+!>   This is not the array inverse of rohf_pack_trial: the shared docc-virt
+!>   coordinate is copied to both spins, while rohf_pack_trial is the dual
+!>   projection that sums those two spin components.
   subroutine rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
     real(kind=dp), intent(in)  :: x(:)
     real(kind=dp), intent(out) :: xa(:,:), xb(:,:)
@@ -870,11 +887,15 @@ contains
 !>   Fvv x - x Foo (full MO Fock blocks, so non-canonical orbitals are handled)
 !>   plus the response Fock from the trial rotation density (get_response_packed,
 !>   scftype>=2 -> Coulomb from the spin-summed density, exchange same-spin).
-  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit)
+!>   ``tol`` and the optional ``residual`` use the squared Euclidean residual
+!>   convention retained by the historical CPHF drivers; PCG itself receives
+!>   sqrt(tol) and tests the unsquared residual norm.
+  subroutine cphf_solve_rohf(infos, nrhs, bvec, uvec, tol, maxit, &
+                             converged, residual, minres_solver)
     use oqp_tagarray_driver, only: tagarray_get_data, &
         OQP_VEC_MO_A, OQP_FOCK_A, OQP_FOCK_B
     use mathlib, only: unpack_matrix
-    use mod_dft, only: dft_initialize
+    use mod_dft, only: dft_initialize, dftclean
     real(kind=dp), parameter :: default_tol = 1.0d-9
     type(information), target, intent(inout) :: infos
     integer, intent(in) :: nrhs
@@ -882,21 +903,25 @@ contains
     real(kind=dp), intent(out) :: uvec(:,:)
     real(kind=dp), intent(in), optional :: tol
     integer, intent(in), optional :: maxit
+    logical, intent(out), optional :: converged(:)
+    real(kind=dp), intent(out), optional :: residual(:)
+    logical, intent(in), optional :: minres_solver
 
     type(basis_set), pointer :: basis
     type(dft_grid_t), target :: molgrid
     type(cphf_cg_data_rohf), target :: cgdata
     type(pcg_t) :: pcg
+    type(minres_t) :: minres
 
     real(kind=dp), contiguous, pointer :: mo(:,:), focka(:), fockb(:)
     real(kind=dp), allocatable, target :: famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable, target :: xminv(:)
-    real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:)
+    real(kind=dp), allocatable :: fao(:,:), w2(:,:), w3(:,:), ax(:)
     integer :: nbf, nocca, noccb, nvira, nvirb, offset, ltot
     integer :: i, a, k, irhs, iter, mxit
     integer :: iter_min, iter_max, nconv
-    logical :: dft
-    real(kind=dp) :: cnv, scale_exch, d
+    logical :: dft, use_minres, solved
+    real(kind=dp) :: cnv, scale_exch, d, residual_norm, residual_sq
 
     basis => infos%basis
     basis%atoms => infos%atoms
@@ -910,18 +935,32 @@ contains
     dft = infos%control%hamilton == 20
     cnv = default_tol; if (present(tol)) cnv = tol
     mxit = 100; if (present(maxit)) mxit = maxit
+    use_minres = .false.; if (present(minres_solver)) use_minres = minres_solver
     if (mxit < ltot + 5) mxit = ltot + 5
+    if (present(converged)) then
+      if (size(converged) < nrhs) error stop &
+        'cphf_solve_rohf: converged output is smaller than nrhs'
+      converged(1:nrhs) = .false.
+    end if
+    if (present(residual)) then
+      if (size(residual) < nrhs) error stop &
+        'cphf_solve_rohf: residual output is smaller than nrhs'
+      residual(1:nrhs) = huge(1.0_dp)
+    end if
 
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo)
     call tagarray_get_data(infos%dat, OQP_FOCK_A, focka)
     call tagarray_get_data(infos%dat, OQP_FOCK_B, fockb)
 
-    if (dft) call dft_initialize(infos, basis, molGrid)
+    if (dft) then
+      call dftclean(infos)
+      call dft_initialize(infos, basis, molGrid)
+    end if
 
     ! converged spin Fock matrices in the MO basis (FULL matrices; the operator
     ! needs the off-diagonal vir-occ blocks for the non-canonical commutator)
     allocate(famo(nbf,nbf), fbmo(nbf,nbf))
-    allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf))
+    allocate(fao(nbf,nbf), w2(nbf,nbf), w3(nbf,nbf), ax(ltot))
     call unpack_matrix(focka, fao)
     call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, mo, nbf, 0.0_dp, w2, nbf)
     call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, mo, nbf, w2, nbf, 0.0_dp, famo, nbf)
@@ -972,45 +1011,85 @@ contains
     cgdata%scale_exch = scale_exch
     cgdata%dft = dft
 
-    if (infos%control%verbose >= 1) then
-      write(iw,'(/3x,60("-"))')
+    write(iw,'(/3x,60("-"))')
+    if (use_minres) then
+      write(iw,'(6x,"open-shell (ROHF) adjoint Z-vector solver")')
+    else
       write(iw,'(6x,"open-shell (ROHF) CPHF iterative solver")')
-      write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
-      write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
-      write(iw,'(3x,60("-"))')
     end if
-    iter_min = huge(iter_min)
-    iter_max = 0
-    nconv = 0
+    write(iw,'(6x,"right-hand sides =",I5,3x,"rotation dim =",I6)') nrhs, ltot
+    write(iw,'(6x,"tolerance =",1P,E10.3,3x,"max iterations =",I6)') cnv, mxit
+    write(iw,'(3x,60("-"))')
 
     do irhs = 1, nrhs
-      call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
-                    dat=cgdata, tol=sqrt(abs(cnv)))
-      do iter = 1, mxit
-        if (pcg%errcode /= PCG_OK) exit
-        call pcg%step()
-      end do
-      iter_min = min(iter_min, iter - 1)
-      iter_max = max(iter_max, iter - 1)
-      if (pcg%errcode == PCG_CONVERGED) nconv = nconv + 1
-      if (infos%control%verbose >= 2) &
+      if (use_minres) then
+        ! An orbital Hessian is symmetric but need not be positive definite
+        ! near a reference instability.  Pair-adjoint Z vectors therefore use
+        ! MINRES, while ordinary forward CPHF keeps the historical PCG default.
+        ! Ask the recurrence for a slightly tighter estimate, then certify the
+        ! returned vector with the true unpreconditioned residual below.
+        call minres%init(b=bvec(:,irhs), update=cphf_apbx_rohf, &
+                         precond=cphf_precond_rohf_minres, dat=cgdata, &
+                         tol=0.1_dp*sqrt(abs(cnv)))
+        do iter = 1, mxit
+          if (minres%errcode /= MINRES_OK) exit
+          call minres%step()
+        end do
+        if (allocated(minres%x)) then
+          uvec(:,irhs) = minres%x
+          call cphf_apbx_rohf(ax, uvec(:,irhs), c_loc(cgdata))
+          residual_norm = norm2(bvec(:,irhs) - ax)
+        else
+          uvec(:,irhs) = 0.0_dp
+          residual_norm = huge(1.0_dp)
+        end if
+        ! The public residual convention is squared.  Square only after a
+        ! finite overflow check so an initialization/breakdown failure remains
+        ! a clean fail-closed HUGE value even with floating-point traps enabled.
+        residual_sq = huge(1.0_dp)
+        if (ieee_is_finite(residual_norm)) then
+          if (residual_norm == 0.0_dp) then
+            residual_sq = 0.0_dp
+          else if (residual_norm > 0.0_dp) then
+            if (residual_norm <= huge(1.0_dp)/residual_norm) then
+              residual_sq = residual_norm*residual_norm
+            end if
+          end if
+        end if
+        solved = (minres%errcode == MINRES_CONVERGED .or. &
+                  minres%errcode == MINRES_OK) .and. &
+                 residual_norm <= sqrt(abs(cnv))
+        write(iw,'(" ROHF Z-VECTOR MINRES RHS",I5," stopped after",I5," iterations; status=",I3,"; true error=",1P,E10.3)') &
+                 irhs, max(0,iter-1), int(minres%errcode), residual_sq
+        call flush(iw)
+        if (present(converged)) converged(irhs) = solved
+        if (present(residual)) residual(irhs) = residual_sq
+        call minres%clean()
+      else
+        call pcg%init(b=bvec(:,irhs), update=cphf_apbx_rohf, precond=cphf_precond_rohf, &
+                      dat=cgdata, tol=sqrt(abs(cnv)))
+        do iter = 1, mxit
+          if (pcg%errcode /= PCG_OK) exit
+          call pcg%step()
+        end do
         write(iw,'(" ROHF CPHF RHS",I5," completed in",I5," iterations; error =",1P,E10.3)') &
-              irhs, iter - 1, pcg%error**2
-      call flush(iw)
-      uvec(:,irhs) = pcg%x
-      call pcg%clean()
+                irhs, iter - 1, pcg%error**2
+        call flush(iw)
+        uvec(:,irhs) = pcg%x
+        if (present(converged)) converged(irhs) = pcg%errcode == PCG_CONVERGED
+        if (present(residual)) residual(irhs) = pcg%error**2
+        call pcg%clean()
+      end if
     end do
 
-    if (infos%control%verbose >= 1 .and. nrhs > 0) &
-      write(iw,'(6x,"converged",I5," of",I5," right-hand sides in",I5," -",I5," iterations")') &
-            nconv, nrhs, iter_min, iter_max
-    if (nconv < nrhs) write(iw,'(6x,"WARNING: ROHF CPHF did not converge for",I5," of",I5," right-hand sides")') &
-            nrhs - nconv, nrhs
-    ! Analytic open-shell Hessians write this unit through the captured fort.6
-    ! file; flush so the summary is there when the capture is read.
-    call flush(iw)
+    ! dft_initialize owns process-global XC work arrays.  Leaving them live
+    ! here makes a second CPHF solve in the same process reuse stale grid state
+    ! (and, in practice, changes an identical solution).  Every other OpenQP
+    ! response driver brackets the grid lifecycle explicitly; do the same for
+    ! the reusable ROHF solver.
+    if (dft) call dftclean(infos)
 
-    deallocate(famo, fbmo, xminv, fao, w2, w3)
+    deallocate(famo, fbmo, xminv, fao, w2, w3, ax)
   end subroutine cphf_solve_rohf
 
 !###############################################################################
@@ -1116,6 +1195,23 @@ contains
     call c_f_pointer(dat, p)
     y = p%xminv*x
   end subroutine cphf_precond_rohf
+
+!###############################################################################
+
+!> @brief Positive Jacobi preconditioner for the ROHF MINRES adjoint.
+!>
+!> Preconditioned MINRES permits an indefinite orbital Hessian but requires its
+!> preconditioner to be symmetric positive definite.  The historical PCG path
+!> intentionally retains the signed inverse gaps above; only the state-pair
+!> Z-vector route removes those signs.
+  subroutine cphf_precond_rohf_minres(y, x, dat)
+    real(kind=dp) :: x(:)
+    real(kind=dp) :: y(:)
+    type(c_ptr) :: dat
+    type(cphf_cg_data_rohf), pointer :: p
+    call c_f_pointer(dat, p)
+    y = abs(p%xminv)*x
+  end subroutine cphf_precond_rohf_minres
 
 !###############################################################################
 

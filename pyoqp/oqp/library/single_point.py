@@ -3209,123 +3209,25 @@ class NAC(Calculator):
         return x, y, sx, sy, pitch, tilt, peak, bifu
 
     def _build_nac_gamma_tlf(self):
-        """Build the closed-form TLF interstate transition density gamma^TLF
-        and push it as OQP::nac_gamma_tlf for mrsf_nac_overlap to contract.
+        """Reject the retired Python linearized-overlap approximation.
 
-        This is the analytic first-order coefficient of the orbital rotation
-        theta_pq in compute_states_overlap's 7-term TLF determinant overlap,
-        evaluated on the linearized determinant blocks.  It is validated to
-        ~1e-12 against the overlap-code oracle.  We MUST push it: the internal
-        get_mrsf_transition_density fallback (z_vector.F90) is NOT
-        TLF-consistent and blows up the frozen-overlap d^ov ~8x for S0-touching
-        pairs (E4 de-risk).  Cross-spin blocks only are kept (same-space blocks
-        are pure gauge and vanish from the antisymmetrized kernel).
-
-        Returns (nbf, nocb, noca) for downstream use.  No-op-safe: any stale
-        record is removed first so a previous run cannot leak a wrong gamma.
+        The historical body below omitted the exact minor cofactors, the
+        column-normalization derivative, and same-space orbital generators;
+        it is not the derivative of ``compute_states_overlap``.  Production
+        obtains the ordered exact metric from resident Fortran through
+        ``oqp.mrsf_nac_metric_data``.  Keep this guard while old forensic
+        scripts still reference the private helper, so they fail loudly
+        instead of silently reinstating the rejected approximation.
         """
-        mol = self.mol
-        nstate = self.nstate
-        RS = 1.0 / np.sqrt(2.0)
-        # (s_ij, s_ab, s_ia) determinant-block first-order signs from the
-        # closed-form fit against the overlap oracle (gamma_tlf_model.py).
-        sg_ij, sg_ab, sg_ia = (1.0, -1.0, -1.0)
-
-        noca = int(np.asarray(mol.data['nelec_A']).ravel()[0])
-        nocb = noca - 2
-        moa = np.array(mol.data['OQP::VEC_MO_A'], copy=True)
-        nbf = moa.shape[0]
-        nvirb = nbf - nocb
-        nij = noca * nvirb
-        X0 = np.array(mol.data['OQP::td_bvec_mo'], copy=True
-                      ).reshape(-1).reshape((nstate, nij)).T.copy()
-
-        def unfold(bv, st):
-            """folded -> (noca, nvirb) determinant amplitudes (mult=1)."""
-            ijlr1 = (noca - 1 - nocb - 1) * noca + noca - 1
-            ijlr2 = (noca - nocb - 1) * noca + noca
-            x = np.zeros((noca, nvirb))
-            for i in range(1, noca + 1):
-                for jj in range(nocb + 1, nbf + 1):
-                    ij = (jj - nocb - 1) * noca + i
-                    if ij == ijlr1:
-                        x[i - 1, jj - nocb - 1] = bv[ijlr1 - 1, st - 1] * RS
-                    elif ij == ijlr2:
-                        x[i - 1, jj - nocb - 1] = -bv[ijlr1 - 1, st - 1] * RS
-                    else:
-                        x[i - 1, jj - nocb - 1] = bv[ij - 1, st - 1]
-            return x
-
-        iocc = np.arange(noca)
-        avir = np.arange(nvirb)
-        OO = (iocc[:, None] >= nocb) & (avir[None, :] < 2)   # 4 socc^2 slots
-        GEN = ~OO
-        S_IA0 = np.zeros((noca, nvirb))
-        for a in range(2):
-            S_IA0[nocb + a, a] = 1.0
-
-        def kernel_pair(cI, cJ):
-            G = np.zeros((nbf, nbf))
-            co = cI * GEN
-            cn = cJ * GEN
-            pq = slice(nocb, noca)
-            qv = slice(0, 2)
-            # term A
-            G[nocb:, nocb:] += sg_ab * (co.T @ cn)
-            G[:noca, :noca] += sg_ij * (cn @ co.T)
-            # term B
-            g0 = co @ S_IA0.T
-            d0 = (cn @ S_IA0.T).T
-            G[:noca, nocb:] += sg_ia * (co.T @ d0).T
-            G[:noca, nocb:] += sg_ia * (g0 @ cn)
-            # term C (OO x OO)
-            cIo = cI[pq, qv]
-            cJo = cJ[pq, qv]
-            G[nocb:noca, nocb:noca] += sg_ij * (cJo @ cIo.T)
-            G[nocb:noca, nocb:noca] += sg_ab * (cIo.T @ cJo)
-            # terms D/E (OO x generic, weight 1/sqrt2)
-            cIo_full = np.zeros_like(cI); cIo_full[pq, qv] = cI[pq, qv]
-            cJo_full = np.zeros_like(cJ); cJo_full[pq, qv] = cJ[pq, qv]
-            cJg = cJ * GEN
-            cIg = cI * GEN
-            G[:noca, nocb:noca] += RS * sg_ij * (cJg[:, 0:2] @ cIo_full[pq, qv].T)
-            G[nocb:nocb + 2, nocb:] += RS * sg_ab * (cIo_full[pq, qv].T @ cJg[pq, :])
-            G[nocb:noca, nocb:] += RS * sg_ia * (cIo_full[pq, qv] @ cJg[pq, :])
-            G[:noca, nocb:nocb + 2] += RS * sg_ia * (cJg[:, 0:2] @ cIo_full[pq, qv])
-            G[nocb:noca, :noca] += RS * sg_ij * (cJo_full[pq, qv] @ cIg[:, 0:2].T)
-            G[nocb:, nocb:nocb + 2] += RS * sg_ab * (cIg[pq, :].T @ cJo_full[pq, qv])
-            G[:noca, nocb:nocb + 2] += RS * sg_ia * (cIg[:, 0:2] @ cJo_full[pq, qv])
-            G[nocb:noca, nocb:] += RS * sg_ia * (cJo_full[pq, qv] @ cIg[pq, :])
-            return G
-
-        C = [unfold(X0, s + 1) for s in range(nstate)]
-        sp = np.zeros(nbf, dtype=int); sp[nocb:noca] = 1; sp[noca:] = 2
-        cross = sp[:, None] != sp[None, :]
-        gam = np.zeros((nbf, nbf, nstate, nstate))
-        for I in range(1, nstate + 1):
-            for J in range(1, nstate + 1):
-                if I == J:
-                    continue
-                Gp = kernel_pair(C[I - 1], C[J - 1]) - kernel_pair(C[J - 1], C[I - 1])
-                gam[:, :, I - 1, J - 1] = np.where(cross, Gp, 0.0)
-
-        # remove any stale record so a previous run's gamma cannot leak, then
-        # push as the Fortran (nbf*nbf, nstate, nstate) column-major buffer:
-        # F-flat[k + nbf^2*ist + nbf^2*nst*jst], k = p + q*nbf -> C-flat of G^T.
-        try:
-            del mol.data['OQP::nac_gamma_tlf']
-        except Exception:
-            pass
-        flatF = np.zeros(nbf * nbf * nstate * nstate)
-        for I in range(nstate):
-            for J in range(nstate):
-                flatF[(I + J * nstate) * nbf * nbf:(I + J * nstate + 1) * nbf * nbf] = \
-                    gam[:, :, I, J].T.reshape(-1)
-        mol.data['OQP::nac_gamma_tlf'] = flatF.reshape((nbf * nbf, nstate, nstate))
-        return nbf, nocb, noca
+        raise RuntimeError(
+            "_build_nac_gamma_tlf is retired; use resident "
+            "oqp.mrsf_nac_metric_data"
+        )
 
     def _compute_amp_damp(self, dx=1.0e-3):
-        """BP#1 amplitude term damp(I,J) = X_I^T (dA/dR) X_J / (Om_J - Om_I).
+        """Historical displaced-operator diagnostic; never a production path.
+
+        BP#1 amplitude term damp(I,J) = X_I^T (dA/dR) X_J / (Om_J - Om_I).
 
         A is the MRSF TDA matvec (mrsf_matvec_apply: full 2e + the mrsfesum 1e/
         Fock/W contraction).  A is SYMMETRIC in the 90-dim amplitude space, so the
@@ -3336,7 +3238,7 @@ class NAC(Calculator):
 
         This is the analytic amplitude derivative captured semi-numerically (FD of
         the analytic matvec OPERATOR, not of energies/states): it reproduces the
-        transported-matvec oracle to FD floor (cos +/-1, ratio ~1) for all H2O
+        transported-matvec reference to FD floor (cos +/-1, ratio ~1) for all H2O
         BHHLYP+HF pairs, and so the assembly d_ij = d_ov - damp reproduces the
         numerical NAC.  The 1e/W + U^x physics that the explicit-ERI 2e-only
         Fortran term (mrsf_nac_amp) omits is included here because the FULL matvec
@@ -3517,16 +3419,17 @@ class NAC(Calculator):
     def analytical_nac(self):
         """Analytic MRSF NAC via the certified nac-lagrangian assembly
         (oqp.library.nac_analytic; see tools/nac_lagrangian/
-        MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md).  v2 is the gated
-        reference implementation of the complete response formula.  Its
-        temporary resident Fortran mrsf_nac_wpair engine still uses an
-        O(nbf**2) orbital-generator reference harvest internally."""
+        MRSF_NAC_DERIVATION.md and ROUTE_A_SPEC.md).  v3 is the gated
+        native-Z-vector implementation of the complete response formula.  The
+        resident Fortran mrsf_nac_wpair engine uses the closed-form MRSF
+        bilinear adjoint; no orbital-generator finite-difference harvest is
+        present in production."""
         from oqp.library.nac_analytic import analytic_nac
-        dump_log(self.mol, title='PyOQP: analytic NAC (nac-lagrangian v2 '
-                 'reference; resident Fortran wpair harvest)',
+        dump_log(self.mol, title='PyOQP: analytic NAC (nac-lagrangian v3 '
+                 'native Z-vector; closed-form Fortran wpair)',
                  section='')
         nacv, dcv = analytic_nac(self.mol)
-        return nacv, dcv, ['analytic-v2-reference'] * (3 * self.natom)
+        return nacv, dcv, ['analytic-v3-zvector'] * (3 * self.natom)
 
 
     def numerical_nac(self):

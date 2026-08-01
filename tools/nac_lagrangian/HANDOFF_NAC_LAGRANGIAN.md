@@ -1,256 +1,705 @@
-# MRSF-TDDFT Analytic NAC — the nac-lagrangian rebuild — HANDOFF
+# MRSF-TDDFT analytic NAC Lagrangian — final handoff
 
-**Branch:** `nac-lagrangian` (from Alireza's `nac` tip b71b864; local
-worktree `sessions/20260731_nac_audit/repo_nac` — NB the plain `repo`
-clone was taken over by a parallel session, do not touch it; chc3 mirror
-`~/nac_audit/repo`, synced by git bundles; publish target is
-`karmachoi/openqp-private` branch `nac-lagrangian` — NOT pushed to
-origin/Alireza). Checkpoint `ae0bf33` was 65 commits on top of the `nac`
-tip; the 7.54–7.56 work described below is the next private-branch
-checkpoint. **Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6,
-campaign 7.1–7.56).
+## Status block (2026-08-01)
 
+- Checkout: `sessions/20260731_nac_audit/repo_nac`
+- Branch: `nac-lagrangian`
+- Private publication target: remote `private`,
+  `git@github.com:karmachoi/openqp-private.git`, branch `nac-lagrangian`
+- Never push this private NAC work to `origin` (Alireza) unless the owner
+  explicitly authorizes an upstream submission.
+- H2O final-binary v94 one-call gate: maximum pair component error
+  `2.30391559e-6`, **PASS** at `1e-5`.
+- H2O final-binary v94 Lee diagonal gate: value error `6.62971067e-7` and
+  native/legacy Z closure `4.20265769e-7`, both **PASS** at `5e-6`.
+- C1 ethylene final-binary v94 one-call gate: maximum pair component error
+  `7.55836774e-6`, **PASS** at `1e-5`.
+- Acrolein final-binary v94 one-call gate: pair errors
+  `(1,2)=2.13672772e-6`, `(1,3)=2.30452788e-6`, and
+  `(2,3)=2.21028518e-6`; **PASS** at `2e-5` against the numerical `tlf=2`
+  HST reference. The analytic metric remains the exact `ndtlf=0` identity
+  derivative; there is no analytic `tlf=2` branch.
+- Final Z-vector-only/log guard rebuild: `H2O_fort6_guard_v96.npz` reproduces
+  the v94 H2O errors, logs six ordered-pair Z-vector solves and zero forward
+  CPHF solves, and creates no `fort.6`.
+- Publication status is defined by the live branch-HEAD equality below. The
+  authoritative revision is the branch `HEAD`, not a prospective hash
+  embedded in that same commit.
 
-## CAMPAIGN STATE AT 2026-08-01 — 7.54–7.56 RESPONSE CLOSED; SEAM OPEN
+### Publication verification record
 
-READ 7.52-7.56 FIRST. The former 0.0102 “fold-sector residual” is now
-identified exactly: v19's DM-only `hf_energy` probe included JK response
-but omitted the KS XC-kernel response because J/K reads `DM_A/B` while
-`calc_dft_xc -> dftexcor` rebuilds its density from `VEC_MO_A/B`.
-
-Source-level result: `mrsfcbc -> int2_driver -> mrsfmntoia` and the SPC/
-`trans` machinery have no ground-state Fock/density dependency. The ONLY
-one is `mrsfesum(wrk1,fa,fb,amo)`. Hence there is no new sigma channel:
+After the closeout commit is made, verify all three commands report the same
+object:
 
 ```
-P^{s,x} = C(U^x O_s + O_s U^{x,T})C^T
-F^{s,x} = G^s_JK[P^x] + sum_t f_xc^{s,t} P^{t,x}
-Delta sigma_xc = mrsfesum_X(Delta F^alpha_xc, Delta F^beta_xc)
+git rev-parse HEAD
+git rev-parse private/nac-lagrangian
+ssh chc3 'git -C ~/nac_audit/repo rev-parse HEAD'
 ```
 
-v20 H2O/c5 gate: actual-F injection closes `trueF` to 2.23e-7; the
-missing XC contribution has norm 1.016837e-2 and closes the v19 residual
-to 2.65e-7. Existing analytic `get_response_packed` agrees with the
-independent MO+DM central difference at 2.06e-10 (alpha) / 2.05e-10
-(beta), and its sigma injection closes to 2.65e-7. The theory-level
-F-channel derivation is DONE and the analytic JK+XC response has been
-propagated into the v2 reference assembly.
+Fetch the private branch before the second check and bundle-sync the chc3
+mirror before the third. Equality of those live branch heads is the
+publication record. Do not insert a future commit's own hash into the file
+that the commit is supposed to contain.
 
-The first H2O v21 verdict against the old `dx=1e-3` numerical referee
-looked closed (5.37e-4, 5.35e-5, 7.80e-4), but that referee was not
-converged. New `dx=5e-4` and `2.5e-4` freezes agree to 3.08e-7,
-1.32e-9, and 9.23e-6 for pairs (1,2), (1,3), and (2,3). Against the
-converged `dx=2.5e-4` referee, v2 errors are 5.813e-4, 1.958e-6, and
-3.419e-3. A same-process direct-U assembly remains tight at 3.192e-5,
-1.992e-5, and 2.645e-4. Therefore the remaining structural error is NOT
-the amplitude/F-response formula: it is introduced when direct U is
-replaced by the z-vector interchange seam, dominated by ordered pair
-(3,2), whose J4 mismatch is 6.551e-3. Forcing NAC-only MINRES to a
-1e-10 residual leaves the result unchanged and falsifies loose CG
-convergence as the cause.
+The old 7.52--7.53 conclusion that a fold-sector Fock-response term still had
+to be derived is superseded. Reading the `socc/fa/fb`, `mrsfmntoia`,
+`mrsfcbc`, `spc`, `trans`, and fold paths produced the closed resident
+`mrsf_nac_wpair_impl`; the old antisymmetric-`dD` shortcut remains falsified
+and must not be revived. The last large diagonal residual was then localized
+to, and fixed in, the XC moving-grid derivative of the relaxed probe `P=T+Z`;
+it was not caused by ROKS versus MRSF or by an omitted coordinate CPHF
+calculation.
 
-CURRENT WORKING-TREE ENTRY POINTS:
-- `v20_fold_audit.py` — private-worker decomposition + actual Fock,
-  DM-only JK, MO+DM, and analytic JK+XC gates.
-- `mrsf_nac_response` in `tdhf_mrsf_energy.F90` and `include/oqp.h` —
-  packed `nac_dm1_a/b -> nac_v1_a/b` JK+XC response using
-  `scf_addons:get_response_packed`, now consumed by v2.
-- `mrsf_nac_wpair_impl` — resident Fortran reference harvest. It removes
-  the Python O(nbf^2) orbital-generator loop and reproduces the previous
-  Python vector to 1.27e-9 on H2O. It still uses central orbital
-  generators internally and is NOT the final closed-form adjoint.
-- `v21_production_gate.py` — sign-resolved production/referee gate;
-  latest H2O resident-Fortran artifact is
-  `H2O_energy_tlf0_v25_fortran_wpair.npz` on chc3.
+The intended production architecture is now:
 
-NEXT SESSION START SENTENCE:
-"7.54–7.56을 읽고 수렴된 H2O dx=2.5e-4 기준으로 (3,2) seam/interchange
-오차를 Fortran에서 유도·수정한 뒤, wpair 중앙차분 수확기를 닫힌형식
-adjoint로 교체하고 ethylene/Acrolein을 게이트해."
+1. Python validates scope and calls one C entry point.
+2. Fortran owns the complete ordered-state-pair Lagrangian, exact metric,
+   amplitude source, one-RHS adjoint Z-vector, coordinate contractions,
+   antisymmetrization, and gap scaling.
+3. Python only reshapes the final `dcv` and `nacv` records.
 
-THE COMPLETE CERTIFIED ACCOUNTING (all referees frozen):
-  d = ampdir(dX) + gamma:(Sk+U)          [machine, both molecules]
-  U-channel = stagedC                    [closed 4e-4]
-  F-channel = mrsfesum_X(JK[P^x]+f_xc[P^x]) [closed 2.65e-7 on v20 c5]
-  production v2 reference: full response propagated; direct-U closes,
-  but seam replacement still leaves 3.419e-3 on H2O (2,3).
+This is deliberately a **Z-vector implementation**. The routine named
+`cphf_solve_rohf` is reused only as the native ROHF orbital-Hessian linear
+solver. Production never constructs or solves the `3N` coordinate-response
+block.
 
-THREE REAL BUGS FIXED/IDENTIFIED THIS CAMPAIGN: tlf=0 diagonal minors
-(2242bff; duplicate fix exists elsewhere -- diff before upstreaming);
-the Sk-record diagonal (7.49; rebuild from overlap_ao); and the
-`mrsf_nac_wpair` C/Fortran symbol collision (internal scaffold renamed).
+## Exact next-session entry sentence
 
-## What is PROVEN (do not re-litigate; regression tests enforce)
+"`HANDOFF_NAC_LAGRANGIAN.md`의 v94 H2O·ethylene·Acrolein 최종 통과를
+읽고, 완료된 정적 singlet raw-electronic analytic NAC 범위를 유지한 채
+`openqp-private` push와 chc3 branch-HEAD 일치만 확인해."
 
-| Result | Evidence |
+## Scientific anchor: Lee gradient Lagrangian and its NAC continuation
+
+Primary reference: S. Lee, E. E. Kim, H. Nakata, S. Lee, and C. H. Choi,
+*J. Chem. Phys.* **150**, 184111 (2019),
+doi:[10.1063/1.5086895](https://doi.org/10.1063/1.5086895).
+
+Use the paper's index sets `C` (doubly occupied), `O` (the two singly
+occupied orbitals), and `V` (virtual):
+
+- Eq. (3.3) is the MRSF excited-state Lagrangian. The C--V multiplier has
+  the explicit leading factor two; C--O and O--V do not.
+- Eq. (3.6) is `Jbar Zbar = -Rbar`.
+- Eqs. (3.8)--(3.10) define the SF/ROHF orbital Hessian, the MRSF source,
+  and `H+`. The left-hand operator is the SF/ROHF orbital Hessian; MRSF
+  changes the source.
+- Eq. (3.16) gives the relaxed density `P=T+Z`.
+- Eq. (3.21) gives the full gradient structure
+  `Omega^R = h^R:P - S^R:W + ERI^R:Gamma`.
+- Published Eq. (3.8f) has a `-1/c_H` typo. Eq. (3.10), SI Eq. (S26),
+  direct differentiation, and the OpenQP implementation require `-c_H/2`.
+
+The paper proves the **state-diagonal energy-gradient** Lagrangian. It does
+not by itself prove the interstate polarization of every quadratic MRSF
+term. The off-diagonal continuation implemented here is therefore supported
+by the exact-overlap derivation, the duplicated-slot Lee limit, adjoint
+identities, and independent numerical NAC references; it must not be
+described as a formula quoted directly from the paper.
+
+For a ket column `J`, the ordered HST derivative is
+
+```
+Dord_IJ = Gmet_IJ^T X_J^R + gamma_IJ : (Sk^R + U^R),
+d_IJ    = 1/2 (Dord_IJ - Dord_JI),
+h_IJ    = (E_J-E_I) d_IJ.
+```
+
+On the physical folded response space,
+
+```
+(Omega_J-A) y_IJ = Q_J Gmet_IJ,
+Q_J = 1-X_J X_J^T,
+Gmet_IJ^T X_J^R = y_IJ^T A^R X_J.
+```
+
+The resident implementation splits the last bilinear derivative into
+
+```
+T1   = mrsf_nac_amp(y_IJ,X_J) + mrsf_nac_esum(y_IJ,X_J),
+M_IJ = MT_frozen + MT_response + gamma_IJ,
+
+Dord_IJ = T1
+        + zeta_IJ^T B_HF/JK/Pulay^R
+        + zeta_IJ^T B_XC^R
+        + M_IJ : V^R
+        + gamma_IJ : Sk^R.
+```
+
+`V^R` is the overlap-fixed symmetric/reorthonormalization response. The
+independent ROHF rotations are eliminated by the adjoint equation, not by
+coordinate-wise response:
+
+```
+H_native^T zeta_IJ = E^T (M_IJ-M_IJ^T).
+```
+
+### Z-vector, not coordinate CPHF
+
+The production solve has exactly one RHS for each ordered state pair and
+contracts `zeta^T B^R` analytically for all nuclear coordinates. It does not
+solve `H U^R=B^R` independently for `3N` coordinates. The implementation
+reuses `cphf_solve_rohf` because that routine already provides the correct
+native symmetric-indefinite ROHF Hessian action and MINRES convergence
+check. Its historical name does not change the algorithm into forward CPHF.
+`source/modules/hf_hessian.F90` and forward CPHF records are diagnostic
+oracles only and must stay out of the production path.
+
+### Sign and normalization that must not change
+
+In the native OpenQP independent-rotation coordinates,
+
+```
+H_native = 2 Jbar,
+ell_pair = E^T(M_II-M_II^T) = +2 Rbar,
+H_native zeta = ell_pair  =>  zeta = -Zbar.
+```
+
+The legacy diagonal gradient uses a different bookkeeping seam:
+
+```
+sfrorhs = -2 Rbar,
+sfrolhs = Jbar,
+xk      = 2 Zbar,
+sfropcal inserts xk/2.
+```
+
+Therefore the diagonal convention closure is
+
+```
+zeta_native + xk_legacy/2 = 0.
+```
+
+Never feed native `zeta=-Zbar` through `sfropcal`, and never feed legacy
+`xk=2Zbar` directly to a native adjoint contraction. The earlier handoff
+statement `native z=Zbar` was wrong and is superseded by the duplicated-slot
+source and Z-closure gates.
+
+The native tangent and dual maps are also not ordinary array inverses:
+
+```
+unpack(kappa): SD -> beta; DV -> alpha and beta; SV -> alpha
+pack(g):       SD <- beta; DV <- alpha + beta; SV <- alpha
+pack(unpack(kappa)) = diag(1,2,1) kappa.
+```
+
+The DV factor is already present in both sides of the stationarity equation.
+Do not add another `1/2` or `2`.
+
+## Production: one-call resident Fortran path
+
+The public entry point is
+`include/oqp.h:mrsf_nac_lagrangian(struct oqp_handle_t *inf)`. The source is
+`source/modules/mrsf_nac_driver.F90`, module `mrsf_nac_driver_mod`. The module
+source glob in `source/modules/CMakeLists.txt` picks up the new `.F90` file.
+
+The driver uses the **actual resident** `infos%tddft%nstate`, not a Python
+configuration guess. It checks finite resident amplitudes and energies,
+converged SCF and Davidson states, and a numerically resolved nonzero pair
+gap. It currently hard-gates:
+
+- ROHF/ROKS (`scftype==3`);
+- restricted MRSF, not UMRSF;
+- singlet target states;
+- the two-SOMO reference (`N_alpha-N_beta=2`);
+- `scf.conv` and TD convergence thresholds no looser than `1e-8`
+  (`1e-10` is recommended near crossings).
+
+The full resident traversal is:
+
+1. Save `td_bvec_mo` and `int2e_cutoff`; set the NAC ERI cutoff to `1e-20`.
+2. For each ket column `J`, build one exact streamed metric column with
+   `mrsf_nac_metric_column`.
+3. For each `I != J`, form `ytil=X_I/(E_J-E_I)` and zero the redundant
+   folded coordinate.
+4. Run `mrsf_nac_wpair_impl`, inject `ytil` only into the selected amplitude
+   slot, run `mrsf_nac_amp`, `mrsf_nac_esum`, restore amplitudes, and run
+   `mrsf_nac_response`.
+5. Stream the current `gamma_IJ`, form the overlap/native source, solve the
+   one-RHS `mrsf_nac_rohf_zvector`, then evaluate HF/JK/Pulay and XC
+   adjoints.
+6. Accumulate the ordered pair, then finalize all pairs by HST
+   antisymmetrization and energy-gap scaling.
+7. Restore amplitudes and the original ERI cutoff. The wrapper keeps the
+   requested log unit open so a normal run does not create `fort.6`.
+
+The streamed work records are `OQP::nac_ytil`, `OQP::nac_xstate`,
+`OQP::nac_gamma_pair`, and `OQP::nac_rohf_z`; only the final
+`OQP::nac_dcv`/`OQP::nac_nacv` tensors cross back to Python in production.
+
+### TagArray pointer lifetime and dimension hardening
+
+A TagArray `remove_records` or `reserve_data` operation may relocate the
+entire backing store and invalidate pointers to records that were not
+themselves changed. The final driver is hardened around that ownership rule:
+
+- `mrsf_nac_lagrangian` copies both the resident amplitudes and state energies
+  into owned `bvec_saved`/`energies_saved` arrays before it creates streamed
+  records. Pair gaps are always read from the owned energy copy.
+- `mrsf_nac_amp` owns copies of its alpha/beta densities, MO coefficients,
+  and amplitude matrix before reserving `OQP::nac_amp` or entering nested
+  gradient routines.
+- `mrsf_nac_esum` likewise owns its amplitude, alpha/beta MO, and density
+  inputs before repeatedly reserving pair and diagnostic outputs.
+- `mrsf_nac_rohf_pair_overlap` reacquires the unchanged MO record after its
+  final output reservation. `mrsf_nac_pair_finalize` reacquires both the
+  ordered-pair tensor and state energies after creating `dcv` and `nacv`.
+
+The one-call driver performs dimension arithmetic in 64-bit integers before
+converting to default Fortran integers. It guards `3*natom`, `nstate^2`,
+`ncoord*nstate^2`, `noca*(nbf-nocb)`, `nbf^2`, and the resident
+state-amplitude/metric products against overflow and TagArray dimension
+limits. Invalid orbital occupations and inconsistent resident tensor shapes
+abort before allocation or reshape.
+
+### Source map
+
+| Source | Production responsibility |
 |---|---|
-| Conventions: `dcv[i,j]=d_ij` antisym, `nacv=(E_j−E_i)d` sym | absolute-orientation gate vs a code-independent exact biorthogonal oracle; suite green |
-| numpy 2-D tagarrays are TRANSPOSED Fortran matrices | the root of a whole trap family; storage-boundary fix 60c5412 |
-| Davidson state phases random per run | 3-run experiment; gauge-product rule (=+1) in the tests |
-| compute_states_overlap exactly replicated | 1.9e-16 (`nac_formula_kernel.replica_S`) |
-| γ^formula closed form (one pass) | == generator sweep to 1e-13 (`gamma_closed`) |
-| **Master decomposition** `d_num = antisym[∂S/∂X̃·dX̃ + γ^formula:T]`, `T=dM/dx` | H2O 0.1%; **C1 ethylene 0.02–1.2%, cos +0.9996..+1.0000000, signed, per-component** |
-| tlf=0 exact-overlap path fixed (GAMESS-inherited diagonal-minor bug) | bounds-check + valgrind; tlf0 vs tlf2 numerical NACs agree to 1e-10 |
-| Raw-frame matvec PT numerically impossible | Rayleigh 2nd-order: ‖δ‖²×(spectral radius ~300 Ha); quantifies why transport/interchange is mandatory |
-| z-vector interchange OPERATIONAL | polarized-L RHS → sfrolhs → gZ−gS seam == direct L∘U^x to ~1% |
-| Amplitude response closes scan-free on H2O | zB + same-space L + inter-sym term: 95/64/93%, all signs +1 as derived |
-| Same-space rotations need NO Fock rebuild | D invariant under same-space rotations (derived + used) |
+| `source/modules/mrsf_nac_driver.F90` | One-call ordered-pair loop, scope/state guards, streaming, restoration, finalization |
+| `source/modules/mrsf_nac_metric_data.F90` | Exact `tlf=0` metric oracle and `O(nstate*nbf^2)` production column streamer |
+| `source/modules/tdhf_mrsf_gradient.F90` | `mrsf_nac_amp`, `mrsf_nac_esum`, closed analytic `mrsf_nac_wpair_impl`, standard-gradient moving-grid correction |
+| `source/modules/tdhf_mrsf_energy.F90` | Resident MRSF response/source assembly |
+| `source/modules/mrsf_nac_interchange.F90` | Pair overlap/source, one-RHS Z-vector, HF/JK/Pulay and XC adjoints, accumulation/finalization |
+| `source/modules/cphf.F90` | Reused native ROHF Hessian action, tangent/dual maps, MINRES; not a production `3N` solve |
+| `source/dftlib/dft_gridint_tdxc_grad.F90` | Linear-probe XC derivative and probe-only partition/owner moving-grid response |
+| `pyoqp/oqp/library/nac_analytic.py` | Thin scope wrapper, exactly one `oqp.mrsf_nac_lagrangian(mol)`, optional observational debug save, output reshape |
+| `include/oqp.h` | C declarations for the one-call driver and diagnostic component entries |
 
-## Benchmark table (v3g ANALYTIC-STRUCTURE assembly, 7.27-7.28, signed)
+`nac_analytic.py` must not regain state-pair scientific loops. Future OpenQP
+numerical kernels are Fortran-first; Python is for API orchestration,
+validation, and artifact inspection.
 
-| system | pair | cos(pred,num) | maxdiff |
-|---|---|---|---|
-| H2O (C2v) | (1,2) | phase-gauge exact | \|pred\|==\|num\| all digits |
-| H2O | (1,3) | **+1.00000000** | **4.2e-9 (machine)** |
-| H2O | (2,3) | -0.99999999 (phase) | 0.12% |
-| ethylene (C1) | (1,2) | +0.99999979 | 9.6e-5 |
-| ethylene | (1,3) | **+1.00000000** | 1.2e-5 |
-| ethylene | (2,3) gap=10.2mHa | +0.99999997 | 4.6e-4 (0.012%) |
+## Exact metric streaming
 
-(previous v4 all-FD gate: 0.02-1.2%; the analytic structure is BETTER
-because the resolvent removes the stacked-FD near-degeneracy noise)
+`mrsf_nac_metric_data` is the full diagnostic oracle and may materialize all
+pair metric derivatives at `O(nstate^2*nbf^2)` storage. Production instead
+calls
 
-## Deliverables
+```
+mrsf_nac_metric_column(infos, jstate, gamma_column)
+```
 
-**PRODUCTION REFERENCE (rewired, v2; not final):**
-- `pyoqp/oqp/library/nac_analytic.py` — `analytic_nac(mol)`: closed-form
-  γ + Sk export (rebuilt from overlap_ao per 7.49!), full-A-free MINRES
-  ỹ (certified 2.6e-9), slot-injection T1 engines (certified 1e-5),
-  resident-Fortran MT harvest, full JK+XC response, direct-injection seam,
-  V-mask S^x eliminations, γ:Sk, antisymmetrize. Returns (nacv, dcv).
-  Honest current H2O/dx=2.5e-4 max errors: 5.813e-4, 1.958e-6,
-  3.419e-3; the seam/interchange defect keeps this a reference path.
-- `pyoqp/oqp/library/nac_kernel.py` — copy of `nac_formula_kernel.py`.
-- `pyoqp/oqp/library/single_point.py` — `analytical_nac()` REPLACED
-  (old pseudo-state polarization removed) with a wrapper calling
-  `nac_analytic.analytic_nac`; reports `analytic-v2-reference`.
-- `source/modules/tdhf_mrsf_gradient.F90` — NAC_DUMP_DS (dbg_dsket/
-  dbg_dsfull, bfnrm applied), NAC_DUMP_PIJ (dbg_pij_a/b), and the
-  resident `mrsf_nac_wpair` reference harvest. Its internal implementation
-  name is `mrsf_nac_wpair_impl` to avoid collision with the C symbol.
-- `source/modules/tdhf_mrsf_energy.F90` + `include/oqp.h` —
-  `mrsf_nac_response`: apply existing analytic JK+XC response to packed
-  first-order alpha/beta densities and export packed response Focks.
-- `source/modules/tdhf_mrsf_z_vector.F90` — NAC interchange solves use
-  MINRES with residual tolerance at most 1e-10. This improves solver
-  safety but did not change the H2O seam error.
+once for a fixed normalized ket column and consumes each `I` immediately.
+Its workspace is `O(nstate*nbf^2)`.
 
-**Kernel + gates (this directory):**
-- `nac_formula_kernel.py` — replica, staged Fortran driver, one-pass
-  γ^formula. Imported by the tests.
-- `ROUTE_A_SPEC.md` — the derivative-sigma amp-channel blueprint,
-  rewiring plan, validation ladder, landmine checklist.
-- Gate harnesses: `assembly_gate.py` (master referee), `assembly_v3*.py`
-  (v3–v3h incl. `v3g` = the analytic-structure benchmark), `v4a_adjoint`,
-  `v5*`–`v18*` (the forensic chain; `v7j` = unified one-process gate,
-  `v17_fix` = the Sk-fix closure test, `v19_fchan.py` = the original
-  F-channel referee, `v20_fold_audit.py` = the decisive JK-vs-XC audit
-  and analytic-response gate), `skel_gate.py` (subprocess worker), plus the
-  ladder/γ/orientation gates from the first half.
-- `ETH_energy.inp` — the C1 validation input.
-- Frozen data (session dir + chc3 `~/nac_audit/probe/`):
-  `H2O_energy_tlf0_{v7h,v7i,v7o}.npz`, `ETH_energy_{v7o,ctx,dnum}.npz`,
-  `H2O_energy_tlf0_dnum.npz`, `H2O_energy_tlf0_c5_v20.npz` and
-  `v20_h2o_analytic.out`; worker dirs `H2O_energy_tlf0_skel/`,
-  `ETH_energy_skel/` (displaced p{idx}.inp reusable; regenerate ref.npz
-  per process for phase consistency). Plus the first-half references
-  (`h2o_nac_reference.npz`, `h2o_nac_ref_tlf0.npz`, `ladderA8_data.npz`,
-  `gamma_formula_h2o.npz`).
-- Repo tests: `tests/test_nac_convention_numeric.py`,
-  `tests/test_nac_gamma_exact.py`, `tests/test_nac_formula_kernel.py`
-  (suite: 11 passed).
+For exact `ndtlf=0`, the implementation differentiates the seven determinant
+blocks used by the state-overlap code. It uses the same physical MRSF fold as
+`mrsfxvec`, zeros the special 2-by-2 SOMO coefficients in the generic blocks,
+and constructs the `sij`, `sab`, and `sia` minor families. The normalized
+column derivative includes
 
-## Remaining work (in order; every step has a frozen referee)
+```
+delta_IK/n_J - R_IJ R_KJ/n_J^3.
+```
 
-1. **DONE — derive/gate/propagate the fold-sector term (7.54–7.55).** It is
-   `f_xc[P^x]` passed through the existing `mrsfesum` fold, not a new
-   MRSF/SPC channel. v20 analytic closure: 2.65e-7.
-2. **Fix the seam/interchange contraction in Fortran.** Direct-U is
-   already at 2.65e-4 against the converged referee; seam assembly is
-   3.419e-3. Start with ordered (3,2) and the three ROHF rotation blocks.
-3. **Replace `mrsf_nac_wpair` central harvest with the closed-form
-   bilinear adjoint in Fortran.** Preserve its C/tagarray interface and
-   gate against the resident reference result (1.27e-9 current match).
-4. Re-judge/refreeze H2O and ethylene, then sum-rule/translational checks;
-   Acrolein NAMD shakedown (ndtlf=2,
-   /bighome/jin/Projects/MRSF_SOC_NAMD/Acrolein/).
-5. Before upstreaming: diff our 2242bff tlf=0 fix against the duplicate
-   fixes in the 07-17/18 sessions (see the related-session map).
+Direct identity-minor cofactors are required; inverse/Jacobi formulas are
+invalid because some relevant minors are singular. The orbital source stores
+the half-antisymmetric derivative in opposite slots,
+`0.5*(g_pq-g_qp)`. Because the overlap normalization is one-sided by ket
+column, `gamma_IJ` must **not** be assumed equal to `-gamma_JI`; HST
+antisymmetrization happens only after both ordered kernels have been built.
 
-Historical context for (1)-(2): C2's empirical program closed 7.22–7.23
-(vv/dd and target-ordering ruled out; near-degeneracy sharp; production
-prescription = ONE z-vector with the combined RHS Ltot = L + gap·γ_a,
-never term-by-term splitting — the split gates A2–A11 certify
-ingredients only).
+Primary checks are `tests/test_mrsf_nac_metric_data.py`,
+`tests/test_nac_gamma_resident_gate.py`, and
+`tests/test_mrsf_nac_fortran_driver.py`. The closed-metric artifacts are
+`H2O_closed_metric_v81.npz` and `H2O_closed_metric_v81_debug.npz` on chc3.
 
-## Landmines (all cost a wrong result once; all now understood)
+## XC moving-grid correction and the large-error diagnosis
 
-- Transpose EVERY 2-D tagarray read/write (`.T` or explicit F-order).
-- `_run_oqp_external` prefers PATH `openqp` over the launching venv.
-- The matvec needs `int2e_cutoff=1e-20` for column-exact linearity.
-- Symmetric-generator staging: `(Ce^{tS})^T = e^{+tS}W` (opposite sign
-  from the antisymmetric case).
-- The literal ov_exact index layouts (overwrite semantics) differ from
-  the clean set-theoretic minors at socc edges — use `_ia_maps`.
-- C2v H2O makes cosines degenerate (1-D irreps) — judge by ratios there;
-  C1 ethylene is the real test.
-- Davidson phases are random per run — gauge-resolve, enforce the
-  pair-sign product rule.
-- **Sk record (7.49, a REAL bug):** `OQP::overlap_mo_non_orthogonal`
-  from a SECOND same-geometry call has a wrong DIAGONAL. Always rebuild
-  `Sk = C0^T · (OQP::overlap_ao_non_orthogonal) · C0`. One line; 50x.
-- Fortran-CREATED tagarray records reach numpy transposed; PYTHON-created
-  records keep their dims verbatim (certified via nac_trden_mo echo).
-  Know which side created the record before transposing.
-- FD sweep data (Ux, w_ref, dX) is valid ONLY in-process: displaced-
-  geometry orbital gauge is run-nondeterministic. Never mix npz sweeps
-  from different processes at the vector level.
-- In-process 1-iter SCF emulation is broken (trueG blowup) — displaced
-  F-channel measurements need SEPARATE-PROCESS workers with phases
-  generated by the parent process (v19/v20 pattern).
-- **DM-only DFT response is incomplete (7.54):** `fock_jk` reads
-  `DM_A/B`, but `calc_dft_xc -> dftexcor` reads `VEC_MO_A/B`. Perturbing
-  DM and calling one-iteration `hf_energy` gives JK response only and
-  silently omits `f_xc[P^x]`. Use `get_response_packed` (analytic) or a
-  consistent MO+DM central difference. Never label the DM-only result
-  the full KS response.
-- `sfrorhs` adds 2FT terms absent from the matvec — NAC_ZERO_2FT env.
-- `int2e_cutoff=1e-20` for matvec linearity; get_jacobi is umrsf-only;
-  the matvec depends ONLY on VEC_MO+FOCK records.
-- Do NOT polarize the gradient chain state-specifically (4-term
-  polarization needs +1/2·g(0); ruled out quantitatively in 7.30).
+The large residual was not evidence that ROKS is incompatible with MRSF and
+was not repaired by adding coordinate CPHF. A finite atom-centred quadrature
+for a relaxed linear probe is
 
-## Related-session map (2026-08-01, CORRECTED after a wider sweep)
+```
+Q_XC[P;R] = sum_g w_g(R) q_P(r_g(R);R),     P=T+Z.
+```
 
-An extended sweep (keywords: nacme/tlf/analytic NAC/Alireza) DID find
-substantive related chats missed by the first pass:
+Its derivative contains all of
 
-1. "Fix same ov_exact OOB bug in native OpenQP" (2026-07-17) and
-   "Fix states_overlap heap abort on gfortran-11/Linux" (2026-07-18):
-   THE SAME tlf=0 diagonal-minor bug this campaign re-discovered and
-   fixed (2242bff) was found and fixed there two weeks earlier (DFTB
-   worktrees / native OpenQP). ACTION ITEM: before upstreaming or
-   merging, diff our 2242bff against those fixes (possible duplicate/
-   conflicting patches in openqp-dftb worktrees or upstream PRs).
-2. "NAMD-QMMM" (2026-06-17, /Volumes/External_Storage/claude/NAMD-QMMM):
-   origin of the canonical NAC conventions used by this campaign's
-   audit brief (d_ij antisym, h_ij = gap*d_ij, (S-S^T)/2dt), plus real
-   NAMD trajectories: Acrolein ndtlf=2 runs (with/without alignment,
-   /bighome/jin/Projects/MRSF_SOC_NAMD/Acrolein/) -- a natural
-   REAL-WORLD VALIDATION TARGET for the analytic NAC once rewired.
-3. "Audit OpenQP NAMD/SOC/QMMM energy conservation" (2026-07-10):
-   NACME/state-overlap machinery audit (Python layer, md.soc flags).
-4. DFTB chats: NACME plumbing analysis (dc=(S-S^T)/dt, single_point
-   L1669-1711) -- the production numerical pipeline map.
+```
+sum_g w_g dq_P/dR
++ sum_g q_P dw_g/dR
++ owner-point motion of q_P.
+```
 
-Clarification kept from the first pass: the "Phase 11/12" results the
-derivation cites are ALIREZA'S `nac` BRANCH COMMITS -- in-repo, not a
-chat. Key clarification: the "Phase 11/12" results the
-derivation cites (fcac55a, 90943f8, the engine FD-validations) are
-ALIREZA'S `nac` BRANCH COMMITS -- already in this repo's history.
+The pair `mrsf_nac_esum(T)` and `mrsf_nac_xc_adjoint(Z)` already carried
+their moving-grid pieces. The ordinary diagonal MRSF gradient did not carry
+the corresponding relaxed-probe `P=T+Z` weight/owner derivative. That omission
+was why the full duplicated-slot Lee value did not close even after the
+source and Z-vector were correct.
 
-Also adjacent (pointers): the two bounds-fix spin-off sessions
-(upstreaming, independent); "Hessian and MRSF-TDDFT status"
-(2026-07-01: CPHF infrastructure exists -- cphf_* selftests,
-hf_hessian); QMRSF chats are unrelated (QMRSF_NACT is an orbital
-count).
+The standard gradient now retains its established ground-plus-probe XC call
+and adds a second correction-only resident sweep with
+
+```
+include_ground_state=.false.
+include_weight_derivative=.true.
+weight_derivative_only=.true.
+```
+
+The second sweep uses relaxed `P=T+Z`, omits the ordinary AO/basis-gradient
+part, and adds only the partition-weight and owner-point correction. A naive
+single combined call is mathematically mismatched: it adds ground-state owner
+motion while the partition probe contains only `P`. The deliberately failed
+v89 experiment produced a state-independent error of about `0.533282` and
+must never be used as a shortcut.
+
+The implemented moving-grid branch is currently restricted to a single
+linear probe (`nMtx=1`, `doFxc=false`). It aborts for the unsupported `xa/xb`
+third-derivative branch rather than silently returning an incomplete answer.
+
+### Decisive duplicated-slot gates
+
+- `H2O_diagonal_rhs_all_v71.npz`: `ell_pair + rhs_legacy` maximum absolute
+  errors `3.22e-8`, `1.60e-7`, `3.93e-7`; relative L2
+  `5.15e-8`, `4.25e-6`, `4.87e-6`; fitted sign/scale is `-1` for all roots.
+  This proves the aggregate `y=X` Eq. (3.9) source and the native
+  `zeta=-Zbar` convention.
+- v84: Z closure passed, but the full value still failed at
+  `2.894e-5`, `8.432e-6`, `1.224e-5`.
+- v85: direct `-xk/2` re-contraction left the same value error, excluding the
+  Z solver and exposing amplitude/esum/Z-HF/Z-XC/overlap components.
+- v86: `1e-12` SCF/TD/Z thresholds did not change the residual.
+- v87, no esum grid: residuals fell to
+  `7.0430e-6`, `1.43475e-6`, `2.33657e-6`.
+- v88, pure HF: `3.9063e-6`, `6.37e-8`, `3.58e-7`, localizing the remaining
+  DFT term.
+- v89: the intentionally wrong combined ground-plus-probe moving-grid call;
+  error about `0.533282`.
+- `H2O_diagonal_value_v90_gridfixed.npz`: correct probe-only moving-grid
+  sweep. Full-value errors are `6.6297e-7`, `3.6219e-8`, `6.6150e-8`;
+  native/legacy Z closure is `2.89e-8`, `2.51e-7`, `4.20e-7`; pair and
+  production translational sums are at about `1e-14`.
+
+The `T` moving-grid weight accounts for 95--99% of the squared pre-v90
+residual; the full correction has cosine `0.999966`, `0.999979`, `0.999993`
+with that residual. v90 establishes the complete Lee diagonal continuation
+on this H2O case. It does not, by itself, certify the final one-call
+off-diagonal driver on other molecules; the v94 H2O, ethylene, and Acrolein
+gates in the next section now supply that separate evidence.
+
+## Final-binary v94 numerical evidence
+
+The current one-call Fortran binary has now been judged against independent,
+separately reconverged tight references rather than only against its
+predecessor implementation:
+
+| Final artifact | Quantity | Result | Gate |
+|---|---|---:|---:|
+| `H2O_final_fortran_v94.npz` | maximum off-diagonal pair component error | `2.30391559e-6` | **PASS**, `<=1e-5` |
+| `H2O_diagonal_value_v94_final.npz` | maximum Lee diagonal value error | `6.62971067e-7` | **PASS**, `<=5e-6` |
+| `H2O_diagonal_value_v94_final.npz` | maximum native/legacy Z closure | `4.20265769e-7` | **PASS**, `<=5e-6` |
+| `ETH_final_fortran_v94.npz` | maximum off-diagonal pair component error | `7.55836774e-6` | **PASS**, `<=1e-5` |
+| `Acrolein_final_fortran_v94.npz` | pair `(1,2)` component error | `2.13672772e-6` | **PASS**, `<=2e-5` |
+| `Acrolein_final_fortran_v94.npz` | pair `(1,3)` component error | `2.30452788e-6` | **PASS**, `<=2e-5` |
+| `Acrolein_final_fortran_v94.npz` | pair `(2,3)` component error | `2.21028518e-6` | **PASS**, `<=2e-5` |
+
+The H2O, C1 ethylene, and Acrolein results close the final-driver state-pair
+ownership, streaming, TagArray lifetime, and output-reshape question across
+the symmetric H2O case, a C1 small molecule, and Acrolein judged against a
+numerical `tlf=2` HST reference. In every case the analytic production metric
+is the exact `ndtlf=0` identity derivative described above. The v94 diagonal
+result reproduces the v90 moving-grid closure with the same final binary and
+confirms that the one-RHS native Z-vector remains Lee-normalized after the
+pointer-lifetime hardening.
+
+For historical comparison, the pre-one-call Fortran-kernel/Python-pair
+orchestrated path had passed the following `2.5e-4 Angstrom`,
+`scf.conv=tdhf.conv=1e-10` references:
+
+| Historical artifact | Pair errors (max component) |
+|---|---|
+| `H2O_production_optimized_v65.npz` | `4.59e-8`, `2.15e-7`, `1.13e-6` |
+| `ETH_production_movinggrid_v60.npz` | `2.71e-6`, `1.25e-7`, `7.07e-6` |
+| `Acrolein_production_movinggrid_v62.npz`, `tlf=2` | `2.14e-6`, `2.31e-6`, `2.22e-6` |
+
+Those older freezes remain useful scientific referees, but all three final
+completion claims now rest on v94.
+
+## v3--v19 forensic gate map
+
+These scripts document how the old error was localized. They are referees,
+not the current production API.
+
+| Campaign | Files | Purpose / surviving conclusion |
+|---|---|---|
+| v3 | `assembly_v3.py`, `assembly_v3c.py`, `v3d`--`v3h` | Master exact-overlap decomposition, PT amplitude response, analytic `Sk`, exact displaced `w_ref`; H2O and C1 structure established |
+| v4 | `v4a_adjoint.py` | Machine-level identity between direct response and amplitude adjoint |
+| v5 | `v5_prod_h2o.py`, `v5b_h2o.py`, `v5c_probe.py` | First production-form source, polarization and record-scaling diagnostics; state-specific gradient-chain polarization rejected |
+| v6 | `v6_h2o.py`, `v6b_h2o.py` | Split skeleton, W, Z/P, and seam channels |
+| v7a--v7d | corresponding scripts | Symmetric channel, same-space response, calibrated seam, and full-record restoration |
+| v7e--v7i | corresponding scripts | Unit-L seam calibration, V-mask convention, full `MT` harvest, direct-injection and two-step FD checks |
+| v7j | `v7j_h2o.py` | Unified one-process referee; never cross process-local gauges |
+| v7k--v7o | `v7k`, `v7l`, `v7m`, `v7o` | Fock/Jacobi record dependence, DM response, G[P] linearity/self-adjointness, consolidated freezes |
+| v8 | `v8_wprobe.py`, `v8b_wprobe.py`, `v8c_wprobe.py` | Slot-resolved `w`/fold response and fixed-reference gauge |
+| v9 | `v9_gvec.py` | Measured Fock-response `G[dD]` channel |
+| v10 | `v10_probe.py` | Continuation of fixed-reference slot diagnostics |
+| v11 | `v11_branch.py` | One-sided branch/kink check |
+| v12 | `v12_tscan.py` | Staged-response step-size scan |
+| v13 | `v13_final.py` | Coefficient reconstruction and mixed-order error scaling |
+| v14 | `v14_swap.py` | Same-state versus restored-state bisection |
+| v15 | `v15_emap.py` | Entrywise reconstruction-error scaling map |
+| v16 | `v16_convcheck.py` | Located the overlap/`Sk` convention mismatch |
+| v17 | `v17_fix.py` | Fixed the second-call `Sk` diagonal by rebuilding `C0^T S_cross C0` |
+| v18 | `v18_h2o.py` | Re-ran the unified gate with the `Sk` fix; closed the U channel to FD level |
+| v19 | `v19_fchan.py` | Separate-process F-channel referee; isolated the fold-sector residual that was subsequently closed in analytic Fortran `mrsf_nac_wpair_impl` |
+
+`v20_fold_audit.py` and `v21_production_gate.py` are later bridge/audit
+scripts. The current decisive API tests live under `tests/`; do not extend the
+historical Python campaign into a new production implementation.
+
+## Frozen artifacts and worker directories
+
+Canonical remote artifact root is chc3 `~/nac_audit/probe/`. The repo mirror
+is `~/nac_audit/repo`.
+
+### Current decisive artifacts
+
+- Final-binary v94 gates:
+  `H2O_final_fortran_v94.npz`,
+  `H2O_diagonal_value_v94_final.npz`, and
+  `ETH_final_fortran_v94.npz` are passed freezes with the exact errors listed
+  above. `~/nac_audit/probe/Acrolein_final_fortran_v94.npz` is also passed;
+  its three pair errors are `2.13672772e-6`, `2.30452788e-6`, and
+  `2.21028518e-6` at the `2e-5` gate.
+- Prior tight off-diagonal production referees:
+  `H2O_production_optimized_v65.{npz,out}`,
+  `ETH_production_movinggrid_v60.{npz,out}`,
+  `Acrolein_production_movinggrid_v62.{npz,out}`.
+- Intermediate resident/one-call development freezes:
+  `H2O_production_fortranfirst_v74.{npz,out}`,
+  `H2O_production_fortranfirst_v76.{npz,out}`,
+  `H2O_resident_finalize_v80.{npz,log}`,
+  `H2O_closed_metric_v81{,_debug}.npz`.
+  These explain the route to v94 but no longer define the final H2O verdict.
+- Diagonal source/value campaign:
+  `H2O_diagonal_rhs_all_v71.npz`,
+  `H2O_diagonal_value_v84.npz`, `v85`, `v86`, `v87_nogrid`, `v88_hf`,
+  deliberately failed `v89_gridfixed`, and decisive
+  `H2O_diagonal_value_v90_gridfixed.npz`. The final-binary successor is
+  `H2O_diagonal_value_v94_final.npz`.
+- Tight numerical references:
+  - `H2O_energy_tlf0_tight_dx25e5_dnum.npz`, SHA256
+    `6c889520914e61c2ad2e5687875d3496471f87513424391645dfed9b51a8e450`,
+    worker `~/nac_audit/probe/H2O_energy_tlf0_tight_num_nacv/`;
+  - `ETH_energy_tight_dx25e5_dnum.npz`, SHA256
+    `5bd3e1fcc1b796176be68b22a4cd030b0076d8c7cd6942757114fb77d372a086`,
+    worker
+    `~/nac_audit/repo/tools/nac_lagrangian/ETH_energy_tight_dx25e5_num_nacv/`;
+  - `Acrolein_S2_tlf2_dx25e5_dnum.npz`, SHA256
+    `d5a8eac3ef9c83231f5180efd8188a00a780b3d76629f476c1837c3f62532d55`,
+    worker
+    `~/nac_audit/repo/tools/nac_lagrangian/Acrolein_S2_tlf2_dx25e5_num_nacv/`.
+  The old `H2O_energy_tlf0_tight_v36_z.npz` has a stale embedded reference;
+  compare its `dcv` only against the separate tight file.
+
+### Historical v3--v19 freezes
+
+- Session parent and/or chc3:
+  `H2O_energy_tlf0_{v7h,v7i,v7o}.npz`,
+  `ETH_energy_{v7o,ctx,dnum}.npz`, and
+  `H2O_energy_tlf0_dnum.npz`.
+- The early campaign also cited `h2o_nac_reference.npz`,
+  `h2o_nac_ref_tlf0.npz`, `ladderA8_data.npz`, and
+  `gamma_formula_h2o.npz`. Only `h2o_nac_reference.npz` is present in the
+  current session parent; verify the physical file before depending on the
+  other three historical names.
+- Verified chc3 worker directories:
+  `~/nac_audit/probe/H2O_energy_tlf0_skel/` and
+  `~/nac_audit/probe/ETH_energy_skel/`.
+- Verified numerical displacement directories include
+  `H2O_energy_tlf0_dx25e5_num_nacv/`,
+  `H2O_energy_tlf0_dx5e4_num_nacv/`, and tight H2O variants.
+- Worker amplitudes, state phases, and displaced-frame vectors are
+  process-local. Recreate `ref.npz` in the same worker/gauge cycle; never
+  splice vector arrays from independent processes just because filenames
+  match.
+
+## Completed stages
+
+1. Fixed the exact `tlf=0` diagonal-minor path and established the signed HST
+   `dcv`/`nacv` conventions against independent overlap derivatives.
+2. Derived and gated the master exact-overlap decomposition, normalized
+   metric derivative, amplitude adjoint, and one-sided state gauge.
+3. Read the MRSF sigma implementation and replaced the old fold/F-channel
+   hypothesis with closed analytic `mrsf_nac_wpair_impl`; the O(`nbf^2`)
+   orbital-generator FD harvest is gone from production.
+4. Established the native tangent/dual metric and the one-RHS ROHF/ROKS
+   Z-vector convention; fixed DFT initialize/clean lifecycle and eliminated
+   coordinate CPHF from production.
+5. Moved exact metric work to resident Fortran and reduced production metric
+   workspace to `O(nstate*nbf^2)` by column streaming.
+6. Moved the ordered-pair traversal and final assembly to the single Fortran
+   `mrsf_nac_lagrangian` entry; reduced Python to one call and reshape.
+7. Closed the duplicated-slot Lee source and Z sign with v71, then closed the
+   full H2O diagonal value with the probe-only `P=T+Z` moving-grid fix in v90.
+8. Hardened every final-driver TagArray lifetime boundary with owned
+   amplitude/esum inputs, copied driver amplitudes and energies, and explicit
+   pointer reacquisition in pair-overlap and finalization. Added 64-bit
+   dimension-product and occupation/shape guards before allocation.
+9. Rebuilt the final one-call binary and passed H2O off-diagonal, H2O full
+   Lee diagonal/Z closure, C1 ethylene, and the Acrolein v94 gate against its
+   numerical `tlf=2` HST reference at the criteria recorded above. The
+   analytic metric is exact `ndtlf=0` in all four gates.
+
+## Original five-stage analytic-NAC closeout
+
+| Original stage | Status | Closure evidence |
+|---|---|---|
+| 1. Derive the fold/F-channel term | **COMPLETE** | Sigma-source audit and closed analytic `mrsf_nac_wpair_impl`; the 7.53 antisymmetric-`dD` shortcut remains falsified |
+| 2. Propagate, rejudge, and refreeze | **COMPLETE** | Final one-call H2O, diagonal, ethylene, and Acrolein v94 freezes pass |
+| 3. Fill the resident wpair implementation | **COMPLETE** | No production orbital-generator FD harvest; resident analytic source is called by the one-call driver |
+| 4. Validate Acrolein against the numerical `tlf=2` HST reference | **COMPLETE** | Exact-`ndtlf=0` analytic v94 pair errors `2.13672772e-6`, `2.30452788e-6`, `2.21028518e-6`; pass criterion `2e-5` |
+| 5. Audit the duplicate `tlf=0` fix before upstreaming | **COMPLETE for this private closeout** | `e5eeed07` on `private/main` and this branch's historical `2242bff` implement the same principal-minor correction; the randomized comparison differed by zero |
+
+All five stages are complete. The original task is therefore
+**COMPLETE: static singlet MRSF-TDDFT raw-electronic analytic NAC**. Do not
+keep it artificially open for publication mechanics or the extensions below.
+
+## Publication operation — separate from scientific completion
+
+To publish or re-verify the result, review the intended dirty-tree scope,
+commit and push to `openqp-private`, bundle-sync `~/nac_audit/repo`, and
+execute the three branch-HEAD checks in the publication record. This branch
+operation is required before saying a particular revision is published, but
+it is not a missing derivation, code path, or numerical gate.
+
+## Future extensions — not blockers to the static analytic-NAC closeout
+
+- Consecutive-frame Acrolein SOC-NAMD validation with one causal
+  state/subspace gauge applied consistently to NAC, SOC, gradients, and
+  coefficients.
+- An explicitly derived ETF-corrected coupling mode. The present result is
+  raw electronic NAC and obeys its nonzero raw translation identity.
+- Triplet, UMRSF, arbitrary/non-two-SOMO open-shell references, and
+  exact-degenerate subspace response.
+- The `doFxc`/third-functional-derivative moving-grid branch and multi-probe
+  grid batching.
+- Additional term-resolved diagnostics such as
+  `grid(P)=grid(T)+grid(Z)`, broader method/basis coverage, and performance
+  optimization. These can strengthen or extend the result but are not
+  missing terms in the gated singlet raw-electronic formula.
+
+## Landmine registry
+
+1. **Z-vector versus CPHF:** production is one adjoint RHS per pair.
+   `cphf_solve_rohf` is only the reused Hessian solver; a `3N` forward block
+   is a diagnostic and is neither necessary nor acceptable in production.
+2. **Two Hessians:** the MRSF Davidson matrix `A` is not the ROHF orbital
+   Hessian `Jbar`/`H_native`.
+3. **Two Z conventions:** native computational `zeta=-Zbar`; legacy gradient
+   `xk=2Zbar` followed by `xk/2`. Mixing them produces a sign/factor error.
+4. **Tangent/dual metric:** `pack(unpack)=diag(1,2,1)`, not identity. The DV
+   factor two is not missing.
+5. **TagArray layout:** Fortran-created non-square 2-D records arrive in
+   NumPy with the Fortran storage interpretation; recover `(ltot,ncart)` as
+   `raw.reshape(ncart,ltot).T`. Python-created and Fortran-created records do
+   not have one universal transpose rule.
+6. **Actual state count:** use resident `infos%tddft%nstate` and Fortran-first
+   state indexing. Never reshape outputs from a requested/configured state
+   count without checking what Davidson actually produced.
+7. **State gauge:** Davidson phases are process-random. Solve one phase per
+   state and enforce the cycle product; never choose signs independently per
+   pair.
+8. **Process-local vectors:** `Ux`, `w_ref`, amplitudes, and displaced-state
+   frames cannot be mixed across processes. Scalar contractions may be
+   compared after gauge resolution; raw arrays may not.
+9. **Separate-process workers:** DM/Fock perturbation and `G[P]` referees need
+   fresh worker processes. The in-process one-iteration SCF emulation has a
+   known `trueG` blow-up and is not a valid referee.
+10. **`Sk` diagonal bug:** the second same-geometry
+    `overlap_mo_non_orthogonal` record has a bad diagonal. Rebuild
+    `Sk=C0^T S_cross,AO C0` from the AO overlap record.
+11. **DFT lifecycle:** every `dft_initialize` must be paired with `dftclean`.
+    Otherwise functionals append to process-global state and XC can double.
+12. **Moving-grid pairing:** partition-weight and owner-point terms must be
+    differentiated together. The v89 combined ground-plus-probe shortcut is
+    wrong; use the probe-only correction sweep. Production hard-wires the
+    required weight derivative on; never add an environment kill switch that
+    silently changes the scientific result.
+13. **Moving-grid scope:** the present implementation is only for one linear
+    probe with `doFxc=false`. Abort unsupported branches.
+14. **Exact metric direction:** normalized overlap is one-sided by ket
+    column. Do not impose `gamma_IJ=-gamma_JI` before ordered assembly.
+15. **Singular minors:** exact `tlf=0` metric derivatives need direct
+    identity-minor cofactors; inverse/Jacobi formulas fail at singular
+    minors.
+16. **Fold conventions:** `mrsfxvec` produces the physical `sqrt(2)` unfolded
+    amplitudes, while the response-space fold uses `1/sqrt(2)`. These are
+    adjoint roles, not interchangeable arrays. Always zero the redundant
+    folded coordinate in `ytil`.
+17. **ERI cutoff:** the response/matvec path needs `int2e_cutoff=1e-20` for
+    column-exact linearity. Save and restore the user's cutoff.
+18. **Log unit:** resident kernels called after the energy driver closes `IW`
+    can create `fort.6`. Keep the requested log open around the one-call
+    driver and gate that no normal path leaves `fort.6`.
+19. **Loose stationarity:** a displacement-converged result at
+    `scf.conv=tdhf.conv=1e-6` can still be wrong near a small state gap. Use
+    `1e-10` for certification; tightening only the Z solve cannot repair
+    unconverged reference orbitals.
+20. **Exact degeneracy:** `y=X_I/(E_J-E_I)` is singular at an exact or
+    numerically unresolved gap. Abort; a degenerate-subspace theory is a
+    separate derivation.
+21. **Raw translation is not zero:** without ETF,
+    `sum_A d_IJ^A = antisym sum_A gamma_IJ:Sk_A`, not zero. Never subtract an
+    atomic mean and call it ETF.
+22. **Paper typo and scope:** use `-c_H/2`, not published `-1/c_H`; the Lee
+    gradient paper anchors the diagonal limit but does not alone prove the
+    interstate formula.
+23. **Stale freezes:** v36 embeds the wrong reference, v89 is deliberately
+    wrong, and historical vector freezes are gauge/process dependent. Artifact
+    names are not proof; always state the exact comparison.
+24. **Duplicate `tlf=0` fixes:** `e5eeed07` is already on `private/main`, while
+    this branch carries historical `2242bff`. They implement the same
+    principal-minor correction and the randomized comparison differed by
+    zero. When integrating with `private/main`, drop/rebase the functional
+    `2242bff` patch instead of stacking it; preserve only useful comments.
+25. **TagArray pointer lifetime:** any reserve/remove can relocate the entire
+    arena, not only the named record. Never retain resident pointers across a
+    reservation; copy long-lived scientific inputs into owned arrays or
+    reacquire unchanged records after the final reservation. This was a real
+    final-driver hardening issue in amp, esum, pair overlap, and finalize.
+26. **Dimension-product overflow:** validate occupations and compute all
+    `3*natom`, `nstate^2`, orbital-matrix, amplitude, metric, and final-output
+    products in a wider integer kind before default-integer conversion. A
+    successful small-factor check does not prove the multiplied TagArray size
+    is representable.
+27. **Production environment switches:** do not put coordinate-FD self-tests or
+    scientific kill switches inside `mrsf_nac_lagrangian` or its resident
+    kernels. The hidden Python forward-CPHF gate, the esum moving-grid disable
+    switch, and the in-routine `/tmp` FD self-test were removed at closeout.
+    Observational record exports may remain only when they cannot change the
+    returned coupling or mutate geometry-dependent state.
+
+## Honest scope and completion claim
+
+What is established now:
+
+- the Lee-consistent diagonal source, native Z sign, and final-binary full H2O
+  diagonal value including relaxed XC moving-grid response;
+- final one-call off-diagonal accuracy on H2O, C1 ethylene, and Acrolein,
+  where the Acrolein exact-`ndtlf=0` analytic result is judged against an
+  independent tight numerical `tlf=2` HST reference in v94;
+- a Fortran-resident exact metric, closed MRSF source, one-RHS ROHF/ROKS
+  adjoint, analytic coordinate contractions, pointer-safe record ownership,
+  overflow guards, and one-call driver architecture;
+- completion of the original static singlet raw-electronic analytic-NAC task.
+
+What remains outside that completed scope:
+
+- triplet, UMRSF, arbitrary open-shell references, exact-degenerate
+  subspaces, or `doFxc` moving-grid response;
+- a trajectory-continuous NAC/SOC/gradient/coefficient gauge and a complete
+  production SOC-NAMD shakedown;
+- an ETF-corrected coupling mode;
+- publication is an external branch-state assertion and must be read from the
+  live private/chc3 branch-HEAD checks rather than an embedded self-hash.
+
+Therefore the correct closeout statement is: **static singlet MRSF-TDDFT
+raw-electronic analytic NAC is complete and final-binary gated on H2O, C1
+ethylene, and Acrolein; publication status is determined operationally from
+the live branch heads, while NAMD, ETF, triplet/UMRSF, `doFxc`, and
+degenerate-subspace work are explicit future extensions rather than
+blockers.**
