@@ -74,6 +74,7 @@ contains
 
     character(len=*), parameter :: subroutine_name = &
       "mrsf_nac_lagrangian"
+    integer, parameter :: xc_batch_width = 3
     character(len=*), parameter :: tag_ytil = "OQP::nac_ytil"
     character(len=*), parameter :: tag_xstate = "OQP::nac_xstate"
     character(len=*), parameter :: tag_gamma = "OQP::nac_gamma_pair"
@@ -106,7 +107,7 @@ contains
     integer(c_int64_t) :: nvirb64, nij64, nbfsq64, ncoord64
     integer(c_int64_t) :: state_pair_size64, default_int_limit64
     integer :: nbf, noca, nocb, nij, nstate, natom, ncoord
-    integer :: nvira, offset, ltot, npair, ipair
+    integer :: nvira, offset, ltot, npair, ipair, xc_first, xc_last
     integer :: istate, jstate, redundant_index, atom, cart, coord
     integer(c_int64_t) :: profile_start, profile_stop, profile_rate
     integer :: profile_status
@@ -378,7 +379,14 @@ contains
     if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
     if (profile_enabled) call system_clock(profile_stop)
-    call mrsf_nac_xc_adjoint_batch(infos, solution_batch, xc_batch)
+    ! Bound the grid-consumer workspace for callers requesting many states.
+    ! The production three-state case still traverses the grid only once.
+    do xc_first = 1, npair, xc_batch_width
+      xc_last = min(npair, xc_first + xc_batch_width - 1)
+      call mrsf_nac_xc_adjoint_batch( &
+        infos, solution_batch(:,xc_first:xc_last), &
+        xc_batch(:,:,xc_first:xc_last))
+    end do
     if (profile_enabled) call profile_add(profile_xc, profile_stop)
 
     call infos%dat%remove_records((/ character(len=80) :: tag_z, tag_xc /))

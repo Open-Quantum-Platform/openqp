@@ -72,9 +72,11 @@ def test_driver_batches_one_adjoint_per_unordered_pair():
     assert body.count(
         "call mrsf_nac_rohf_zvector_batch(infos, rhs_batch, solution_batch)"
     ) == 1
-    assert body.count(
-        "call mrsf_nac_xc_adjoint_batch(infos, solution_batch, xc_batch)"
-    ) == 1
+    assert body.count("call mrsf_nac_xc_adjoint_batch(") == 1
+    assert "integer, parameter :: xc_batch_width = 3" in body
+    assert "do xc_first = 1, npair, xc_batch_width" in body
+    assert "solution_batch(:,xc_first:xc_last)" in body
+    assert "xc_batch(:,:,xc_first:xc_last)" in body
     assert body.count("call mrsf_nac_rohf_hf_adjoint(infos)") == 1
     assert "call mrsf_nac_xc_adjoint(infos)" not in body
     assert body.count("call mrsf_nac_pair_accumulate_antisym(") == 1
