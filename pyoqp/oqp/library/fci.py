@@ -373,13 +373,56 @@ def compute_s2(
     return float(s2 + spin_flip)
 
 
+def _lib_spin_square(coeffs, dets, norb, nelec):
+    """Per-root ``<S^2>`` through the liboqp engine, or ``None`` when the
+    symbol is unavailable and the caller should use :func:`compute_s2`.
+
+    The Python reference is O(nroot * ndet * norb^2) with a popcount and a dict
+    lookup per term -- 48 ms per root at CAS(8,8), 843 ms at CAS(10,10) -- and
+    rebuilds the determinant index for every call.
+    """
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "fci_spin_square"):
+        return None
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ndet = len(dets)
+    nvec = int(coeffs.shape[1])
+    if ndet <= 0 or nvec <= 0 or 2 * int(norb) > 62:
+        return None
+    # compute_s2 rejects a zero-norm root; keep that contract rather than let
+    # the engine quietly report the ms-only value.
+    if not np.all(np.linalg.norm(coeffs, axis=0) > 0.0):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(coeffs, dtype=np.float64)
+    s2 = np.zeros(nvec, dtype=np.float64)
+    status = int(lib.fci_spin_square(
+        int(norb), ndet, nvec,
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        int(nalpha) - int(nbeta),
+        ffi.cast("double *", s2.ctypes.data),
+        _fci_lib_threads()))
+    if status != 0:
+        return None
+    return s2
+
+
 def fci_spin_diagnostics(
     ci_vectors: np.ndarray,
     determinants: list[int],
     norb: int,
     nelec: int | tuple[int, int] | list[int],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return per-root ``(<S^2>, multiplicity)`` diagnostics."""
+    """Return per-root ``(<S^2>, multiplicity)`` diagnostics.
+
+    Routed to the liboqp engine (``fci_setup.F90``), which shares one sort of
+    the determinant list across the roots; :func:`compute_s2` stays as the
+    per-root Python reference and the fallback.
+    """
     dets = list(determinants)
     coeffs = _real_array(ci_vectors, "CI vectors")
     if coeffs.ndim == 1:
@@ -387,14 +430,16 @@ def fci_spin_diagnostics(
     if coeffs.ndim != 2 or coeffs.shape[0] != len(dets):
         raise ValueError("CI vectors must have shape (ndet, nroot)")
 
-    det_index = {det: idx for idx, det in enumerate(dets)}
-    s2 = np.array(
-        [
-            compute_s2(coeffs[:, root], dets, norb, nelec, det_index=det_index)
-            for root in range(coeffs.shape[1])
-        ],
-        dtype=np.float64,
-    )
+    s2 = _lib_spin_square(coeffs, dets, norb, nelec)
+    if s2 is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+        s2 = np.array(
+            [
+                compute_s2(coeffs[:, root], dets, norb, nelec, det_index=det_index)
+                for root in range(coeffs.shape[1])
+            ],
+            dtype=np.float64,
+        )
     multiplicity = np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * s2))).astype(np.int64)
     multiplicity = np.maximum(multiplicity, 1)
     return np.ascontiguousarray(s2, dtype=np.float64), np.ascontiguousarray(
@@ -614,11 +659,11 @@ def _spin_orbital_integrals_reference(
     return hspin, gspin
 
 
-def _spin_orbital_integrals(
+def _spin_orbital_integrals_numpy(
     h1e: np.ndarray,
     eri: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Expand spatial ``h1e``/``(pq|rs)`` onto the spin-orbital basis.
+    """Strided-block expansion -- the numpy fallback for :func:`_spin_orbital_integrals`.
 
     ``gspin[p, q, r, s] = (p r | q s)`` whenever ``spin(p) == spin(r)`` and
     ``spin(q) == spin(s)``, and zero otherwise -- i.e. exactly four of the
@@ -627,10 +672,6 @@ def _spin_orbital_integrals(
     slice assignments replaces the ``(2*norb)**4`` Python loop of
     :func:`_spin_orbital_integrals_reference`; the result is bit-identical
     because no arithmetic happens, only a permuted copy.
-
-    The loop was 7.7% of a H2O/cc-pVDZ CAS(6,6) CASSCF wall time (6.5 s of
-    84.1 s over 6185 CI solves).  Measured against the reference: 96x at
-    norb=6, 165x at norb=8, 241x at norb=12.
     """
     norb = h1e.shape[0]
     nspin = 2 * norb
@@ -647,6 +688,40 @@ def _spin_orbital_integrals(
             qs = slice(qs_spin * norb, (qs_spin + 1) * norb)
             gspin[pr, qs, pr, qs] = base
 
+    return hspin, gspin
+
+
+def _spin_orbital_integrals(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Expand spatial ``h1e``/``(pq|rs)`` onto the spin-orbital basis.
+
+    Routed to the liboqp engine (``fci_setup.F90``); the numpy build is the
+    fallback when the symbol is unavailable and
+    :func:`_spin_orbital_integrals_reference` is the element-by-element
+    numerical pin.  All three are bit-identical -- the expansion is a permuted
+    copy with no arithmetic in it.
+    """
+    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
+    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    norb = int(h1e.shape[0])
+    backend = _lib_backend()
+    if backend is None or norb <= 0:
+        return _spin_orbital_integrals_numpy(h1e, eri)
+    lib, ffi = backend
+    if not hasattr(lib, "fci_spin_orbital_integrals"):
+        return _spin_orbital_integrals_numpy(h1e, eri)
+    nspin = 2 * norb
+    hspin = np.zeros((nspin, nspin), dtype=np.float64)
+    gspin = np.zeros((nspin,) * 4, dtype=np.float64)
+    lib.fci_spin_orbital_integrals(
+        norb,
+        ffi.cast("double *", h1e.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data),
+        ffi.cast("double *", hspin.ctypes.data),
+        ffi.cast("double *", gspin.ctypes.data),
+        _fci_lib_threads())
     return hspin, gspin
 
 
@@ -1419,11 +1494,17 @@ def _unpack_lower_triangle(packed: np.ndarray, n: int) -> np.ndarray:
     return matrix
 
 
-def _transform_integrals(
+def _transform_integrals_reference(
     hcore_ao: np.ndarray,
     eri_ao: np.ndarray,
     coeff: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Single-einsum AO -> MO transformation -- the numerical pin.
+
+    Out of the execution path (see :func:`_transform_integrals`) but kept in
+    the tree as the reference the Fortran engine is validated against, and as
+    the fallback when the native symbol is unavailable.
+    """
     h1e = coeff.T @ hcore_ao @ coeff
     eri = np.einsum(
         "up,vq,wr,xs,uvwx->pqrs",
@@ -1434,6 +1515,55 @@ def _transform_integrals(
         eri_ao,
         optimize=True,
     )
+    return h1e, eri
+
+
+def _transform_integrals(
+    hcore_ao: np.ndarray,
+    eri_ao: np.ndarray,
+    coeff: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """AO -> MO transformation of the core Hamiltonian and the ERI tensor.
+
+    Routed to the liboqp engine (``mo_transform.F90``), which does the four
+    quarter transformations as four DGEMMs with transposed output so the index
+    roll between them is free.  :func:`_transform_integrals_reference` is the
+    numpy pin and the fallback.
+
+    Note what this port does and does not buy.  The einsum was never the naive
+    O(nbf^8) contraction -- ``optimize=True`` already reduces it to a GEMM
+    chain running at 46-72 GFlop/s -- so this is an architectural move (compute
+    belongs in liboqp) rather than a rescue.  A *naive* explicit chain in numpy
+    is in fact slower than the einsum (0.48-0.78x at nbf=24..58) because the
+    ``ascontiguousarray`` rolls between steps cost more than the einsum's own
+    bookkeeping; avoiding those copies is what the Fortran formulation is for.
+    """
+    hcore_ao = np.ascontiguousarray(hcore_ao, dtype=np.float64)
+    eri_ao = np.ascontiguousarray(eri_ao, dtype=np.float64)
+    coeff = np.ascontiguousarray(coeff, dtype=np.float64)
+    nbf = int(coeff.shape[0])
+    backend = _lib_backend()
+    if (backend is None or nbf <= 0
+            or not hasattr(backend[0], "mo_transform_eri")):
+        return _transform_integrals_reference(hcore_ao, eri_ao, coeff)
+    lib, ffi = backend
+
+    h1e = np.zeros((nbf, nbf), dtype=np.float64)
+    lib.mo_transform_h1e(
+        nbf,
+        ffi.cast("double *", hcore_ao.ctypes.data),
+        ffi.cast("double *", coeff.ctypes.data),
+        ffi.cast("double *", h1e.ctypes.data))
+
+    eri = np.zeros((nbf,) * 4, dtype=np.float64)
+    status = int(lib.mo_transform_eri(
+        nbf,
+        ffi.cast("double *", eri_ao.ctypes.data),
+        ffi.cast("double *", coeff.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data)))
+    if status != 0:
+        # the engine could not allocate its nbf^4 work buffer
+        return _transform_integrals_reference(hcore_ao, eri_ao, coeff)
     return h1e, eri
 
 
@@ -1754,6 +1884,66 @@ def _active_nelec_from_setting(
     return active_nelec, int(frozen_core)
 
 
+def _fold_core_reference(h1e, eri, active_list, core_list, ecore=0.0):
+    """Frozen-core fold -- the numerical pin.
+
+    Out of the execution path (see :func:`_fold_core`).  The accumulation order
+    here is the contract: the inactive energy is summed into the caller's
+    ``ecore`` in the order (2 h_ii), then (2 (ii|jj) - (ij|ji)), and each
+    exchange-corrected term is formed before it is added.  The engine
+    reproduces that order so the two agree bit for bit.
+    """
+    active = np.asarray(active_list, dtype=int)
+    h_active = h1e[np.ix_(active, active)].copy()
+    ecore_active = float(ecore)
+    if not len(core_list):
+        return h_active, ecore_active
+    for i in core_list:
+        ecore_active += 2.0 * h1e[i, i]
+    for i in core_list:
+        for j in core_list:
+            ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
+    for p, pp in enumerate(active):
+        for q, qq in enumerate(active):
+            for i in core_list:
+                h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
+    return h_active, ecore_active
+
+
+def _fold_core(h1e, eri, active_list, core_list, ecore=0.0):
+    """Folded active one-electron integrals and the inactive energy.
+
+    Routed to the liboqp engine (``fci_setup.F90``); the Python loop of
+    :func:`_fold_core_reference` is the pin and the fallback.  Both index lists
+    are explicit so the sequential and the explicitly selected CAS paths share
+    one implementation.
+    """
+    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
+    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    norb = int(h1e.shape[0])
+    nact = len(active_list)
+    backend = _lib_backend()
+    if (backend is None or nact <= 0
+            or not hasattr(backend[0], "fci_fold_core")):
+        return _fold_core_reference(h1e, eri, active_list, core_list, ecore)
+    lib, ffi = backend
+    active = np.ascontiguousarray(np.asarray(active_list, dtype=np.int32))
+    core = np.ascontiguousarray(np.asarray(core_list, dtype=np.int32))
+    if core.size == 0:                       # cffi will not cast an empty buffer
+        core = np.zeros(1, dtype=np.int32)
+    h_active = np.zeros((nact, nact), dtype=np.float64)
+    energy = np.array([float(ecore)], dtype=np.float64)
+    lib.fci_fold_core(
+        norb, nact, len(core_list),
+        ffi.cast("int32_t *", active.ctypes.data),
+        ffi.cast("int32_t *", core.ctypes.data),
+        ffi.cast("double *", h1e.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data),
+        ffi.cast("double *", h_active.ctypes.data),
+        ffi.cast("double *", energy.ctypes.data))
+    return h_active, float(energy[0])
+
+
 def _active_space(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -1799,20 +1989,9 @@ def _active_space(
             raise ValueError("active_orbital_indices selects too few orbitals for the active electron count")
 
         active = np.array(active_list, dtype=int)
-        core = np.array(core_list, dtype=int)
-        h_active = h1e[np.ix_(active, active)].copy()
         eri_active = eri[np.ix_(active, active, active, active)].copy()
-        ecore_active = float(ecore)
-        if frozen_core:
-            for i in core:
-                ecore_active += 2.0 * h1e[i, i]
-            for i in core:
-                for j in core:
-                    ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
-            for p, pp in enumerate(active):
-                for q, qq in enumerate(active):
-                    for i in core:
-                        h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
+        h_active, ecore_active = _fold_core(
+            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "explicit"
     else:
         frozen_core = settings.frozen_core
@@ -1832,26 +2011,12 @@ def _active_space(
         if frozen_core + active_norb > norb:
             raise ValueError("active_orbitals extends beyond the available MO space")
 
-        core = range(frozen_core)
         active = slice(frozen_core, frozen_core + active_norb)
-        h_active = h1e[active, active].copy()
         eri_active = eri[active, active, active, active].copy()
-        ecore_active = float(ecore)
-
-        if frozen_core:
-            for i in core:
-                ecore_active += 2.0 * h1e[i, i]
-            for i in core:
-                for j in core:
-                    ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
-            for p in range(active_norb):
-                pp = p + frozen_core
-                for q in range(active_norb):
-                    qq = q + frozen_core
-                    for i in core:
-                        h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
         active_list = list(range(frozen_core, frozen_core + active_norb))
         core_list = list(range(frozen_core))
+        h_active, ecore_active = _fold_core(
+            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "sequential"
 
     metadata = {

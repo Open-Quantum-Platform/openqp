@@ -241,6 +241,30 @@ int64_t qdpt2_stream_kernel(int32_t norb, int32_t ncore, int32_t nact,
     const int64_t *sup_a, const int64_t *sup_b, const double *cvec,
     const double *h1e, const double *eri, const double *eps,
     int64_t *out_ka, int64_t *out_kb, double *out_e0, double *out_v);
+/* AO -> MO integral transformation (mo_transform.F90). The four-index
+ * transform is four DGEMMs with transposed output, so the index roll between
+ * quarter transformations is free and no nbf^4 temporary is transposed.
+ * mo_transform_eri returns 0, or -1 when its one internal nbf^4 buffer could
+ * not be allocated (the caller falls back to the Python einsum). */
+void mo_transform_h1e(int32_t nbf, const double *hcore, const double *coeff,
+    double *h1e);
+int64_t mo_transform_eri(int32_t nbf, const double *eri_ao, const double *coeff,
+    double *eri_mo);
+/* Active-space setup (fci_setup.F90): the spin-orbital expansion of the
+ * integrals and the frozen-core fold. Both are exact copies/sums, so they
+ * reproduce the Python references bit for bit. `active` and `core` are 0-based
+ * MO indices; `eref` receives the single inactive-energy scalar. */
+void fci_spin_orbital_integrals(int32_t norb, const double *h1e,
+    const double *eri, double *hspin, double *gspin, int32_t nthreads);
+void fci_fold_core(int32_t norb, int32_t nact, int32_t ncore,
+    const int32_t *active, const int32_t *core, const double *h1e,
+    const double *eri, double *h_act, double *eref);
+/* <S^2> per root from the determinant CI vectors (fci_setup.F90). `dets` is in
+ * CI order, so it is sorted internally with a permutation back to CI position
+ * rather than searched directly. Returns 0, or -1 on allocation failure. */
+int64_t fci_spin_square(int32_t norb, int64_t ndet, int32_t nvec,
+    const int64_t *dets, const double *civec, int32_t ms2, double *s2,
+    int32_t nthreads);
 /* Determinant-CI Fortran engine (fci_hamiltonian.F90): ILP64-safe dense
  * symmetric eigensolver, dense Hamiltonian build, diagonal, and matrix-free
  * block application Y = 0.5(H+H^T) X for the Davidson solver. */
