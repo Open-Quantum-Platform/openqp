@@ -614,6 +614,18 @@ contains
     type(par_env_t) :: pe
 
     nprobe = size(gcomps)
+    ! One shared recurrence can represent only one integral family.  Keep this
+    ! invariant explicit so a future caller cannot silently mix regular and
+    ! attenuated probes, or attenuated probes with different range parameters.
+    do iprobe = 2, nprobe
+      if (gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated .or. &
+          (gcomps(1)%attenuated .and. &
+           gcomps(iprobe)%mu /= gcomps(1)%mu)) then
+        call show_message( &
+          'Batched grd2 probes require uniform attenuation and mu.', &
+          WITH_ABORT)
+      end if
+    end do
     call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     if (gcomps(1)%attenuated) emu2 = gcomps(1)%mu**2
 

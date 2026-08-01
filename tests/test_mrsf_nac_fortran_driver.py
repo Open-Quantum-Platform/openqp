@@ -185,6 +185,10 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
     assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in driver
     assert "dab(1:product(gdat%nbf),iprobe) = 0.0_dp" in driver
     assert driver.count("call grd2_rys_compute_batch(") == 2
+    assert "do iprobe = 2, nprobe" in driver
+    assert "gcomps(iprobe)%attenuated .neqv. gcomps(1)%attenuated" in driver
+    assert "gcomps(iprobe)%mu /= gcomps(1)%mu" in driver
+    assert "uniform attenuation and mu" in driver
 
     rys = GRD2_RYS.read_text()
     recurrence = rys.split(
