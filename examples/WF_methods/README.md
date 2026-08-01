@@ -21,7 +21,7 @@ or a single one with `openqp --nompi <file>.inp` (results land in `<file>.log`).
 | `LiH_CASSCF.inp` | `casscf` | — | state-specific CASSCF (orbital + CI optimization) |
 | `H2O_CASSCF_CAS44.inp` | `casscf` | — | CASSCF, CAS(4,4) (vs PySCF −75.0085688625) |
 | `LiH_SA-CASSCF.inp` | `sa-casscf` | — | state-averaged CASSCF (`[state_average]`) |
-| `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (16 vs 20 macroiterations; 15 vs 376 CI solves) |
+| `H2O_CASSCF_CAS44_AH.inp` | `casscf` | `[casscf] converger=ah, hessian=analytic` | trust-region AH converger + exact orbital Hessian (17 vs 335 CI solves, both at 15 macroiterations) |
 | `H4_CASPT2.inp` | `caspt2` | `h0=fock` | single-state CASPT2 (Fock H0) |
 | `H4_NEVPT2.inp` | `caspt2` | `h0=dyall` | NEVPT2 (Dyall H0), uncontracted |
 | `H4_SC-NEVPT2.inp` | `caspt2` | `h0=dyall, contraction=strong` | strongly-contracted NEVPT2 (vs PySCF, nEh) |
