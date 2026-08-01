@@ -11,6 +11,7 @@ oqp = pytest.importorskip("oqp")
 from oqp.library.state_tracking import maximum_overlap_assignment
 from oqp.library import single_point
 from oqp.molecule.molecule import Molecule
+from oqp.pyoqp import Runner
 
 
 def test_global_assignment_beats_row_greedy_counterexample():
@@ -166,3 +167,35 @@ def test_public_tracking_contract_is_available_to_memory_drivers():
         "matched_overlap": [0.98, 0.97],
         "margin": [0.90, 0.88],
     }
+
+
+def test_runner_results_forwards_public_tracking_contract():
+    tracking = {"schema_version": 1, "phase_initial": [-1.0, 1.0]}
+
+    class DummyMol:
+        energies = [0.0]
+        grads = []
+        dcm = []
+        nac = []
+        soc = []
+
+        @staticmethod
+        def get_atoms():
+            return ["H"]
+
+        @staticmethod
+        def get_system():
+            return [[0.0, 0.0, 0.0]]
+
+        @staticmethod
+        def get_data():
+            return {"OQP::VEC_MO_A": [1.0]}
+
+        @staticmethod
+        def get_state_tracking():
+            return tracking
+
+    runner = Runner.__new__(Runner)
+    runner.mol = DummyMol()
+
+    assert runner.results()["state_tracking"] is tracking
