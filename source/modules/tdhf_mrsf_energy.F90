@@ -105,7 +105,7 @@ contains
     use precision, only: dp
     use dft, only: dft_initialize, dftclean
     use mod_dft_molgrid, only: dft_grid_t
-    use scf_addons, only: fock_jk, get_response_packed
+    use scf_addons, only: get_response_packed
 
     implicit none
 
@@ -129,7 +129,6 @@ contains
     real(kind=dp), allocatable :: dm1(:,:), v1(:,:), vjk(:,:), &
                                   mo_a_work(:,:), mo_b_work(:,:), vmo_packed(:), &
                                   vmo_a(:,:), vmo_b(:,:), mt_response(:,:)
-    real(kind=dp) :: scale_exch
     integer :: nbf, nbf2, nocca, noccb, q
     logical :: dft
 
@@ -156,9 +155,6 @@ contains
     mo_a_work = mo_a
     mo_b_work = mo_b
 
-    scale_exch = 1.0_dp
-    if (dft) scale_exch = infos%dft%HFscale
-    call fock_jk(basis, d=dm1, f=vjk, scale_exch=scale_exch, infos=infos)
     if (dft) then
       ! get_response_packed is a reusable public NAC kernel and may follow a
       ! displaced SCF/DFT worker in the same process.  Reset libxc before
@@ -166,7 +162,11 @@ contains
       call dftclean(infos)
       call dft_initialize(infos, basis, molGrid, verbose=.false.)
     end if
-    call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, mo_b_work)
+    ! Capture the JK-only diagnostic from the response kernel's own integral
+    ! pass.  Calling fock_jk separately here used to evaluate the identical
+    ! pair density twice for every state pair.
+    call get_response_packed(basis, infos, molGrid, mo_a_work, dm1, v1, &
+                             mo_b_work, vjk)
     if (dft) call dftclean(infos)
 
     ! Transform the full response potential to the reference MO basis and
