@@ -13,7 +13,11 @@ solver; the spin-summed 1-/2-RDMs build the full generalized Fock matrix
     F[p,q] = sum_r D[p,r] h[q,r] + sum_rst Gamma[p,r,s,t] (qr|st),
 
 and the orbital-rotation gradient is ``g[p,q] = 2 (F[q,p] - F[p,q])`` over the
-non-redundant inactive-active / inactive-virtual / active-virtual pairs.  The
+non-redundant inactive-active / inactive-virtual / active-virtual pairs.  Both
+are assembled by the Fortran engine in ``casscf_kernel.F90``, which contracts
+the separable part of Gamma through ordinary J/K matrices and so never forms
+the nbf^4 2-RDM the formula above suggests; the Python assembly below stays as
+its numerical pin (see ``tests/test_casscf_gfock.py``).  The
 orbitals are rotated ``C <- C exp(K)`` with a Newton step built from a numerical
 orbital Hessian, made descent-safe by flooring the Hessian eigenvalues.  This is
 robust for the small/medium active spaces this validation-grade path targets.
@@ -45,6 +49,7 @@ from oqp.library.fci import (
     settings_from_casci_config,
     solve_fci,
     _symmetric_eigh,
+    _lib_backend,
 )
 from oqp.library.rdm import (
     make_rdm1_spatial,
@@ -110,13 +115,20 @@ def _log(mol, text: str = "") -> None:
 
 
 # --------------------------------------------------------------------------- RDMs / Fock
-def _full_rdms(gamma, Gamma_act, ncore, nact, nbf):
-    """Full spin-summed 1-/2-RDM (chemist order; E2 = 0.5 sum (pq|rs) G[pqrs])."""
+def _full_rdm1(gamma, ncore, nact, nbf):
+    """Full spin-summed 1-RDM: 2 on the inactive diagonal, gamma on the active block."""
     active = list(range(ncore, ncore + nact))
     D = np.zeros((nbf, nbf))
     for i in range(ncore):
         D[i, i] = 2.0
     D[np.ix_(active, active)] = gamma
+    return D
+
+
+def _full_rdms(gamma, Gamma_act, ncore, nact, nbf):
+    """Full spin-summed 1-/2-RDM (chemist order; E2 = 0.5 sum (pq|rs) G[pqrs])."""
+    active = list(range(ncore, ncore + nact))
+    D = _full_rdm1(gamma, ncore, nact, nbf)
     G = np.einsum("pq,rs->pqrs", D, D) - 0.5 * np.einsum("ps,rq->pqrs", D, D)
     G[np.ix_(active, active, active, active)] = Gamma_act
     return D, G
@@ -124,6 +136,57 @@ def _full_rdms(gamma, Gamma_act, ncore, nact, nbf):
 
 def _generalized_fock(D, G, h1e, eri):
     return D @ h1e + np.einsum("mqrs,nqrs->mn", G, eri)
+
+
+def _averaged_rdm2(gammas, Gammas, weights, ncore, nact, nbf):
+    """Weight-averaged full 2-RDM from the per-root active RDMs."""
+    G = np.zeros((nbf, nbf, nbf, nbf))
+    for w, gamma, Gamma in zip(weights, gammas, Gammas):
+        G += w * _full_rdms(gamma, Gamma, ncore, nact, nbf)[1]
+    return G
+
+
+# --------------------------------------------------------------------------- Fortran Fock/gradient
+def _gfock_backend():
+    """liboqp (lib, ffi) for the Fortran CASSCF Fock/gradient engine, or None."""
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_gfock_grad"):
+        return None
+    return lib, ffi
+
+
+def _lib_gfock_grad(nbf, ncore, nact, weights, gammas, Gammas, h1e, eri, npair):
+    """Weighted generalized Fock and orbital gradient through the Fortran engine.
+
+    The engine reproduces ``_generalized_fock(*_full_rdms(...))`` followed by
+    ``2 (F[q,p] - F[p,q])`` over ``_nonredundant_pairs``, but never forms the
+    nbf^4 2-RDM: the separable part of G contracts through ordinary J/K
+    matrices in O(nbf^4), leaving only an nact^3-sized correction.  Returns
+    ``(F, grad)``, or ``None`` when the engine is unavailable."""
+    backend = _gfock_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    w = np.ascontiguousarray(weights, dtype=np.float64)
+    g1 = np.ascontiguousarray(gammas, dtype=np.float64)
+    g2 = np.ascontiguousarray(Gammas, dtype=np.float64)
+    hh = np.ascontiguousarray(h1e, dtype=np.float64)
+    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    fock = np.zeros((nbf, nbf), dtype=np.float64)
+    grad = np.zeros(npair, dtype=np.float64)
+    lib.casscf_gfock_grad(
+        int(nbf), int(ncore), int(nact), int(w.size),
+        ffi.cast("double *", w.ctypes.data),
+        ffi.cast("double *", g1.ctypes.data),
+        ffi.cast("double *", g2.ctypes.data),
+        ffi.cast("double *", hh.ctypes.data),
+        ffi.cast("double *", vv.ctypes.data),
+        ffi.cast("double *", fock.ctypes.data),
+        ffi.cast("double *", grad.ctypes.data))
+    return fock, grad
 
 
 def _nonredundant_pairs(ncore, nact, nbf):
@@ -145,8 +208,16 @@ def _kappa_matrix(vec, pairs, nbf):
 
 
 # --------------------------------------------------------------------------- CASCI inside CASSCF
-def _solve_active(h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots):
-    """Solve the active CI at the current orbitals; return (energies, averaged D, G)."""
+def _solve_active_rdms(h1e, eri, ncore, nact, active_nelec, enuc, settings,
+                       weights, roots, with_g=True):
+    """Solve the active CI at the current orbitals and collect its RDMs.
+
+    Returns ``(energies, coeffs, dets, D, G, gammas, Gammas)`` where ``D``/``G``
+    are the weight-averaged full 1-/2-RDMs and ``gammas``/``Gammas`` are the
+    per-root *active* RDMs stacked along axis 0.  ``with_g=False`` skips the
+    nbf^4 ``G`` entirely (it returns ``None``), which is what the Fortran
+    Fock/gradient engine wants -- it rebuilds the separable part of G on the
+    fly from the active RDMs instead of being handed it."""
     h_act, eri_act, _nelec, ecore, _meta = _active_space(
         h1e, eri, (ncore + active_nelec[0], ncore + active_nelec[1]), enuc, settings
     )
@@ -161,15 +232,30 @@ def _solve_active(h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, 
     )
     dets = _determinants(nact, active_nelec)
     nbf = h1e.shape[0]
+    gammas = np.zeros((len(roots), nact, nact))
+    Gammas = np.zeros((len(roots),) + (nact,) * 4)
     D = np.zeros((nbf, nbf))
-    G = np.zeros((nbf, nbf, nbf, nbf))
-    for w, r in zip(weights, roots):
+    G = np.zeros((nbf, nbf, nbf, nbf)) if with_g else None
+    for k, (w, r) in enumerate(zip(weights, roots)):
         gamma = make_rdm1_spatial(coeffs[:, r], dets, nact)
         Gamma = make_rdm2_spatial(coeffs[:, r], dets, nact)
-        Dr, Gr = _full_rdms(gamma, Gamma, ncore, nact, nbf)
+        gammas[k] = gamma
+        Gammas[k] = Gamma
+        if with_g:
+            Dr, Gr = _full_rdms(gamma, Gamma, ncore, nact, nbf)
+            G += w * Gr
+        else:
+            Dr = _full_rdm1(gamma, ncore, nact, nbf)
         D += w * Dr
-        G += w * Gr
-    return np.asarray(energies), coeffs, dets, D, G
+    return np.asarray(energies), coeffs, dets, D, G, gammas, Gammas
+
+
+def _solve_active(h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots):
+    """Solve the active CI at the current orbitals; return (energies, averaged D, G)."""
+    energies, coeffs, dets, D, G, _g1, _g2 = _solve_active_rdms(
+        h1e, eri, ncore, nact, active_nelec, enuc, settings, weights, roots
+    )
+    return energies, coeffs, dets, D, G
 
 
 # --------------------------------------------------------------------------- optimizer
@@ -181,14 +267,29 @@ def _optimize(mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
     obj_weights = np.asarray(weights, dtype=float)
     obj_roots = list(roots)
 
+    # The Fortran Fock/gradient engine replaces the O(nbf^5) einsum over the
+    # explicit nbf^4 2-RDM; probing once keeps the per-evaluation path free of
+    # attribute lookups, and `None` falls back to the Python reference.
+    native_gfock = _gfock_backend() is not None
+
     def evaluate(C):
         h1e, eri = _transform_integrals(hcore_ao, eri_ao, C)
-        energies, coeffs, dets, D, G = _solve_active(
-            h1e, eri, ncore, nact, active_nelec, enuc, settings, obj_weights, obj_roots
+        energies, coeffs, dets, D, G, gammas, Gammas = _solve_active_rdms(
+            h1e, eri, ncore, nact, active_nelec, enuc, settings, obj_weights,
+            obj_roots, with_g=not native_gfock,
         )
         objective = float(np.dot(obj_weights, energies[obj_roots]))
-        F = _generalized_fock(D, G, h1e, eri)
-        grad = np.array([2.0 * (F[q, p] - F[p, q]) for (p, q) in pairs])   # sign matches C->C exp(K)
+        built = None
+        if native_gfock:
+            built = _lib_gfock_grad(nbf, ncore, nact, obj_weights, gammas,
+                                    Gammas, h1e, eri, npar)
+        if built is None:
+            if G is None:   # engine went away between the probe and the call
+                G = _averaged_rdm2(gammas, Gammas, obj_weights, ncore, nact, nbf)
+            F = _generalized_fock(D, G, h1e, eri)
+            grad = np.array([2.0 * (F[q, p] - F[p, q]) for (p, q) in pairs])   # sign matches C->C exp(K)
+        else:
+            _F, grad = built
         return objective, grad, energies, coeffs
 
     C = np.array(coeff, dtype=float, copy=True)

@@ -266,6 +266,13 @@ int64_t rdm2_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
 int64_t nevpt2_make_rdms(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, int32_t upto, double *dm1, double *dm2,
     double *dm3, double *dm4);
+/* CASSCF generalized Fock and orbital gradient (casscf_kernel.F90). `gamma`
+ * and `gamma2` carry one active 1-/2-RDM per state-average root; the weighted
+ * sum is accumulated internally. `grad` is filled over the non-redundant
+ * rotation pairs in casscf.py `_nonredundant_pairs` order. */
+void casscf_gfock_grad(int32_t nbf, int32_t ncore, int32_t nact, int32_t nroot,
+    const double *weights, const double *gamma, const double *gamma2,
+    const double *h1e, const double *eri, double *fock, double *grad);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
