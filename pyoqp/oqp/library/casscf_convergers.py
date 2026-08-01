@@ -73,6 +73,60 @@ small/medium active spaces (a guard raises beyond); very large systems still
 need an iterative Hessian-vector product before ``ah`` scales.  With the key
 absent the FD path runs unchanged.
 
+Why this module has no Fortran engine (measured)
+------------------------------------------------
+The two kernels the CASSCF optimizer leans on were moved to Fortran
+(``casscf_kernel.F90``, ``casscf_hess_kernel.F90``); this module was profiled
+afterwards and deliberately left in NumPy.  Everything here is control flow
+around those kernels, and the only real arithmetic it owns is the dense
+eigendecomposition of the augmented-Hessian matrix inside ``_ah_model_step``
+(``solve``).  H2O CAS(6,6), ``converger=ah``, ``hessian=analytic`` -- the
+configuration that gives this module its largest possible share, since the
+analytic Hessian removes the 2*n_par CI solves that otherwise swamp
+everything.  Wall-clock split, measured at the sparse-derivative-slab Hessian:
+
+    basis         n_par   AH model step        hessian builds     model share
+    cc-pVDZ        140    0.066 s / 16 macro   0.876 s / 16 macro     5.1 %
+    aug-cc-pVDZ    276    0.094 s /  4 macro   2.239 s /  4 macro     3.2 %
+
+The share still *falls* as the problem grows, which is the load-bearing
+number: doubling n_par costs the model step 5.7x (its dense eigensolve is
+O(n_par^3)) but costs the Hessian build 10.2x.  On the default FD path the
+same 64 eigensolves are 0.073 s of a 74.8 s run (0.10 %), because 2*n_par CI
+solves per macroiteration dwarf everything else.  The other convergers own
+less still: ``_diis_coefficients`` is 0.004 s of a 3.8 s ``converger=diis``
+run (0.1 %), and ``twophase`` only delegates to ``casscf.py``.
+
+Note how that share moved.  Against the previous Hessian builder the model
+step was 1.1 % / 0.3 % on the same two systems; the two commits that made the
+analytic Hessian 8-22x faster are what lifted it to 5.1 % / 3.2 %.  So the
+trigger for revisiting this is explicit: another ~5-10x off the Hessian build
+makes ``_ah_model_step`` the leading term, and the paragraph below is then the
+place to start.
+
+The obvious replacement was prototyped before it was declined, and it does not
+survive contact with this optimizer.  ``[[0, a g^T], [a g, diag(w)]]`` is an
+*arrowhead* matrix, so its lowest eigenpair is the root of the scalar secular
+equation ``l - a^2 sum_i ge_i^2/(l - w_i) = 0`` below ``min{w_i: ge_i != 0}``,
+with ``x_i = ge_i/(l - w_i)``.  A safeguarded Newton iteration on that root
+replaces the O(n_par^3) eigensolve with O(n_par) per step and benchmarks ~4x
+faster at n_par=140, 50-80x at n_par=300.  Over 720 randomized cases it gets
+``l`` right to 2.7e-15 relative -- and the *step* only to ~3e-4, because
+``x_i`` divides by ``l - w_i``, which is itself ~1e-11: an eigenvalue accurate
+to 1e-15 absolute is not an ``x`` accurate to anything much.  Worse, in the
+regime this optimizer converges into -- small gradient, one deep negative mode
+-- the root lies closer to a Hessian eigenvalue than double precision can
+resolve, so the iteration lands *on* the pole: in 115 of 180 such cases it
+returned a finite, wrong step where the dense path correctly reports no
+reference component and the caller falls back to ``_lowest_mode_step``.  Doing
+this properly needs the LAPACK ``dlaed4`` treatment -- solve for the offset
+``d = l - w_k`` from the nearest pole so the small denominator is never formed
+by cancellation.  That is delicate numerical work, and at this module's
+measured share it buys at most the 5.1 % above -- on a step whose output feeds
+an optimizer whose macroiteration count is already accumulation-order
+sensitive.  So the dense solve stays: it is the correct, better-tested code,
+and it is not what this optimizer is waiting on.
+
 OpenTrustRegion note: the compiled core ships an OTR bridge
 (``source/otr_interface.F90``), but its callbacks are hard-wired to the SCF
 Fock/density machinery (``trah_converger``) and it is not linked in builds
