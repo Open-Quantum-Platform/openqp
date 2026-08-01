@@ -59,9 +59,15 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
     def test_convergence_is_certified_with_the_true_unpreconditioned_residual(self):
         self.assertRegex(
             self.solve,
-            r"(?s)call\s+cphf_apbx_rohf_batch\(ax_batch\(:,1:nrhs\),\s*uvec,\s*cgdata\)"
-            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*ax_batch\(:,irhs\)\)",
+            r"(?s)do\s+irhs\s*=\s*1,\s*nrhs.*?"
+            r"call\s+cphf_apbx_rohf\(ax,\s*uvec\(:,irhs\),\s*c_loc\(cgdata\)\)"
+            r".*?residual_norm\s*=\s*norm2\(bvec\(:,irhs\)\s*-\s*ax\)",
         )
+        certification = self.solve.split(
+            "! krylov iterations deliberately use", 1
+        )[1].split("else", 1)[0]
+        self.assertNotIn("cphf_apbx_rohf_batch", certification)
+        self.assertIn("legacy scalar operator", certification)
         solved = self.solve.split("solved =", 1)[1].split("write(iw", 1)[0]
         self.assertIn("residual_norm <= sqrt(abs(cnv))", solved)
         self.assertNotIn("minres%error", solved)
@@ -87,6 +93,14 @@ class CPHFROHFMinresContractTests(unittest.TestCase):
     def test_callback_data_lifetime_covers_solver_and_true_residual(self):
         self.assertIn("type(cphf_cg_data_rohf), target :: cgdata", self.solve)
         self.assertIn("precond=cphf_precond_rohf_minres, dat=cgdata", self.solve)
+        scalar_cert = self.solve.index(
+            "call cphf_apbx_rohf(ax, uvec(:,irhs), c_loc(cgdata))"
+        )
+        self.assertLess(scalar_cert, self.solve.index("if (dft) call dftclean(infos)"))
+        self.assertLess(
+            scalar_cert,
+            self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),
+        )
         self.assertLess(
             self.solve.index("call minres_batch(irhs)%clean()"),
             self.solve.index("deallocate(famo, fbmo, xminv, fao, w2, w3, ax)"),

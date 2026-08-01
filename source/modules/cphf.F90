@@ -1143,8 +1143,7 @@ contains
         end do
       end do
 
-      ! One final batched action certifies the true, unpreconditioned residual
-      ! of every independent solution.
+      ! Publish every independent solution before strict residual certification.
       do irhs = 1, nrhs
         if (allocated(minres_batch(irhs)%x)) then
           uvec(:,irhs) = minres_batch(irhs)%x
@@ -1152,11 +1151,16 @@ contains
           uvec(:,irhs) = 0.0_dp
         end if
       end do
-      call cphf_apbx_rohf_batch(ax_batch(:,1:nrhs), uvec, cgdata)
 
       do irhs = 1, nrhs
         if (allocated(minres_batch(irhs)%x)) then
-          residual_norm = norm2(bvec(:,irhs) - ax_batch(:,irhs))
+          ! Krylov iterations deliberately use the conservative multi-density
+          ! screening envelope.  Certify with the legacy scalar operator so
+          ! each reported residual uses exactly that RHS's screening bound.
+          ! The scalar callback workspaces and DFT grid remain solver-owned and
+          ! live until after this loop.
+          call cphf_apbx_rohf(ax, uvec(:,irhs), c_loc(cgdata))
+          residual_norm = norm2(bvec(:,irhs) - ax)
         else
           residual_norm = huge(1.0_dp)
         end if
