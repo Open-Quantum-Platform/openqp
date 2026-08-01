@@ -5,6 +5,28 @@
 by git bundles; pushed nowhere). 25+ commits, every claim numeric-gated.
 **Full log:** `MRSF_NAC_DERIVATION.md` (theory Secs. 0–6, campaign 7.1–7.21).
 
+
+## CAMPAIGN STATE AT 2026-08-01 SESSION CLOSE (read 7.44-7.52 first)
+
+THE SINGLE REMAINING ITEM for theory-level closure: the fold-sector
+(~1%-of-channel; ~2e-2 on d for the worst pair) Fock-response term --
+7.52. Derive it ON PAPER from the sigma source's SOCC/spc usage
+(tdhf_mrsf_energy.F90 fa/fb socc combinations, mrsfmntoia/mrsfcbc spc
+channels), then gate with v19_fchan.py (slot-resolved, LR1/socc rows).
+
+THE COMPLETE CERTIFIED ACCOUNTING (all referees frozen):
+  d = ampdir(dX) + gamma:(Sk+U)          [machine, both molecules]
+  U-channel = stagedC [closed 4e-4] + F-channel [dD-model+G, 89%]
+            + fold-sector residual [0.010, THE item]
+  production: T1 engines + direct-injection seam + V-mask + gamma:Sk
+  (v1 rewired & verified); MINRES ytil; G[P] build; all certified.
+
+TWO REAL BUGS FIXED THIS CAMPAIGN: tlf=0 diagonal minors (2242bff, NB
+duplicate fix exists in other sessions -- diff before upstreaming);
+the Sk-record diagonal (7.49: NEVER use overlap_mo_non_orthogonal's
+second-call output for Sk -- rebuild from overlap_ao. One-line fix,
+50x vector-channel improvement).
+
 ## What is PROVEN (do not re-litigate; regression tests enforce)
 
 | Result | Evidence |
