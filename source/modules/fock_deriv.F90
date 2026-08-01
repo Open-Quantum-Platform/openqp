@@ -69,36 +69,13 @@ module fock_deriv_mod
     procedure :: get_density => grd2_fockprobe_os_get_density
   end type
 
-  !> Fused two-spin open-shell contraction.  A single shell-quartet traversal
-  !> evaluates the sum of the alpha and beta derivative-Fock traces,
-  !>
-  !>   Tr[M_a (J^x[P_a+P_b] - c_x K^x[P_a])]
-  !> + Tr[M_b (J^x[P_a+P_b] - c_x K^x[P_b])].
-  !>
-  !> This is algebraically the sum of two grd2_fockprobe_os_data_t objects but
-  !> avoids recomputing derivative ERIs for the second spin channel.
-  type, extends(grd2_compute_data_t) :: grd2_fockprobe_os2_data_t
-    real(kind=dp), pointer :: pcoul(:,:) => null()
-    real(kind=dp), pointer :: pexch_a(:,:) => null()
-    real(kind=dp), pointer :: pexch_b(:,:) => null()
-    real(kind=dp), pointer :: mmat_a(:,:) => null()
-    real(kind=dp), pointer :: mmat_b(:,:) => null()
-    integer :: nbf = 0
-  contains
-    procedure :: init => grd2_fockprobe_os2_init
-    procedure :: clean => grd2_fockprobe_os2_clean
-    procedure :: get_density => grd2_fockprobe_os2_get_density
-  end type
-
   private
   public :: grd2_fockprobe_data_t
   public :: grd2_fockprobe_os_data_t
-  public :: grd2_fockprobe_os2_data_t
   public :: fock_deriv_contract
   public :: fock_deriv_matrix
   public :: fock_deriv_matrix_general
   public :: fock_deriv_contract_os
-  public :: fock_deriv_contract_os2
 
 contains
 
@@ -394,35 +371,6 @@ contains
 
 !###############################################################################
 
-!> @brief Compute the sum of alpha and beta open-shell derivative-Fock traces
-!>        in one derivative-integral traversal.
-  subroutine fock_deriv_contract_os2(infos, basis, pcoul, pexch_a, pexch_b, &
-                                     mmat_a, mmat_b, hfscale, gx)
-    type(information), target, intent(inout) :: infos
-    type(basis_set), intent(in) :: basis
-    real(kind=dp), target, intent(in) :: pcoul(:,:), pexch_a(:,:), pexch_b(:,:)
-    real(kind=dp), target, intent(in) :: mmat_a(:,:), mmat_b(:,:)
-    real(kind=dp), intent(in) :: hfscale
-    real(kind=dp), intent(out) :: gx(:,:)
-
-    type(grd2_fockprobe_os2_data_t) :: gcomp
-
-    gcomp%pcoul => pcoul
-    gcomp%pexch_a => pexch_a
-    gcomp%pexch_b => pexch_b
-    gcomp%mmat_a => mmat_a
-    gcomp%mmat_b => mmat_b
-    gcomp%nbf = basis%nbf
-    gcomp%coulscale = 1.0_dp
-    gcomp%hfscale = hfscale
-    gcomp%hfscale2 = hfscale
-
-    gx = 0.0_dp
-    call grd2_driver(infos, basis, gx, gcomp)
-  end subroutine fock_deriv_contract_os2
-
-!###############################################################################
-
   subroutine grd2_fockprobe_os_init(this)
     class(grd2_fockprobe_os_data_t), target, intent(inout) :: this
     ! densities/probe are full matrices supplied by the caller; nothing to do.
@@ -436,24 +384,6 @@ contains
     this%pexch => null()
     this%mmat => null()
   end subroutine grd2_fockprobe_os_clean
-
-!###############################################################################
-
-  subroutine grd2_fockprobe_os2_init(this)
-    class(grd2_fockprobe_os2_data_t), target, intent(inout) :: this
-    ! Full AO matrices are supplied by the caller; nothing to unpack.
-  end subroutine grd2_fockprobe_os2_init
-
-!###############################################################################
-
-  subroutine grd2_fockprobe_os2_clean(this)
-    class(grd2_fockprobe_os2_data_t), target, intent(inout) :: this
-    this%pcoul => null()
-    this%pexch_a => null()
-    this%pexch_b => null()
-    this%mmat_a => null()
-    this%mmat_b => null()
-  end subroutine grd2_fockprobe_os2_clean
 
 !###############################################################################
 
@@ -527,61 +457,5 @@ contains
       end do
     end do
   end subroutine grd2_fockprobe_os_get_density
-
-!###############################################################################
-
-!> @brief Sum of two open-shell mixed-density products for one shell quartet.
-!>        The expression below is term-by-term identical to adding two calls
-!>        to grd2_fockprobe_os_get_density, with shared Coulomb density.
-  subroutine grd2_fockprobe_os2_get_density(this, basis, id, dab, dabmax)
-    class(grd2_fockprobe_os2_data_t), target, intent(inout) :: this
-    type(basis_set), intent(in) :: basis
-    integer, intent(in) :: id(4)
-    real(kind=dp), target, intent(out) :: dab(*)
-    real(kind=dp), intent(out) :: dabmax
-
-    real(kind=dp) :: ccoef, xcoef, df1, dq1
-    integer :: i, j, k, l, i1, j1, k1, l1
-    integer :: loc(4), nbf(4)
-    real(kind=dp), pointer :: ab(:,:,:,:)
-
-    ccoef = 4*this%coulscale
-    xcoef = 2*this%hfscale
-
-    dabmax = 0.0_dp
-    loc = basis%ao_offset(id)-1
-    nbf = basis%naos(id)
-    ab(1:nbf(4),1:nbf(3),1:nbf(2),1:nbf(1)) => dab(1:product(nbf))
-
-    do i = 1, nbf(1)
-      i1 = loc(1) + i
-      do j = 1, nbf(2)
-        j1 = loc(2) + j
-        do k = 1, nbf(3)
-          k1 = loc(3) + k
-          do l = 1, nbf(4)
-            l1 = loc(4) + l
-            df1 = ccoef*( &
-              (this%mmat_a(i1,j1)+this%mmat_b(i1,j1))*this%pcoul(k1,l1) &
-             +(this%mmat_a(k1,l1)+this%mmat_b(k1,l1))*this%pcoul(i1,j1) )
-            if (xcoef /= 0.0_dp) then
-              dq1 = &
-                this%mmat_a(i1,k1)*this%pexch_a(j1,l1) &
-               +this%mmat_a(i1,l1)*this%pexch_a(j1,k1) &
-               +this%pexch_a(i1,k1)*this%mmat_a(j1,l1) &
-               +this%pexch_a(i1,l1)*this%mmat_a(j1,k1) &
-               +this%mmat_b(i1,k1)*this%pexch_b(j1,l1) &
-               +this%mmat_b(i1,l1)*this%pexch_b(j1,k1) &
-               +this%pexch_b(i1,k1)*this%mmat_b(j1,l1) &
-               +this%pexch_b(i1,l1)*this%mmat_b(j1,k1)
-              df1 = df1 - xcoef*dq1
-            end if
-            dabmax = max(dabmax, abs(df1))
-            ab(l,k,j,i) = df1*product(basis%bfnrm([i1,j1,k1,l1]))
-          end do
-        end do
-      end do
-    end do
-  end subroutine grd2_fockprobe_os2_get_density
 
 end module fock_deriv_mod
