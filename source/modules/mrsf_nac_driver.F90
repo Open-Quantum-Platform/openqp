@@ -46,6 +46,7 @@ contains
     use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     use, intrinsic :: iso_c_binding, only: c_int64_t
     use types, only: information
+    use io_constants, only: iw
     use oqp_tagarray_driver, only: data_has_tags, tagarray_get_data, &
       OQP_td_bvec_mo, OQP_td_energies, TA_TYPE_REAL64
     use messages, only: show_message, WITH_ABORT
@@ -87,11 +88,41 @@ contains
     real(kind=dp), allocatable :: gamma_column(:,:)
     real(kind=dp), allocatable :: gamma_pair(:), z_work(:)
     real(kind=dp) :: gap, gap_floor, energy_scale, cutoff_saved
+    real(kind=dp) :: profile_total, profile_metric, profile_wpair
+    real(kind=dp) :: profile_amp, profile_esum, profile_response
+    real(kind=dp) :: profile_overlap, profile_zvector, profile_hf
+    real(kind=dp) :: profile_xc, profile_accumulate, profile_finalize
     integer(c_int64_t) :: nstate64, natom64, nbf64, noca64, nocb64
     integer(c_int64_t) :: nvirb64, nij64, nbfsq64, ncoord64
     integer(c_int64_t) :: state_pair_size64, default_int_limit64
     integer :: nbf, noca, nocb, nij, nstate, natom
     integer :: istate, jstate, redundant_index
+    integer(c_int64_t) :: profile_start, profile_stop, profile_rate
+    integer :: profile_status
+    character(len=16) :: profile_value
+    logical :: profile_enabled
+
+    profile_value = ''
+    call get_environment_variable('OQP_NAC_PROFILE', profile_value, &
+                                  status=profile_status)
+    profile_enabled = profile_status == 0 .and. &
+      len_trim(profile_value) > 0 .and. trim(profile_value) /= '0'
+    profile_total = 0.0_dp
+    profile_metric = 0.0_dp
+    profile_wpair = 0.0_dp
+    profile_amp = 0.0_dp
+    profile_esum = 0.0_dp
+    profile_response = 0.0_dp
+    profile_overlap = 0.0_dp
+    profile_zvector = 0.0_dp
+    profile_hf = 0.0_dp
+    profile_xc = 0.0_dp
+    profile_accumulate = 0.0_dp
+    profile_finalize = 0.0_dp
+    if (profile_enabled) then
+      call system_clock(profile_start, profile_rate)
+      if (profile_rate <= 0_c_int64_t) profile_enabled = .false.
+    end if
 
     if (infos%control%scftype /= 3) then
       call show_message( &
@@ -223,7 +254,9 @@ contains
       ! Ensure the metric always sees unmodified resident eigenvectors.
       call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
       bvec_mo = bvec_saved
+      if (profile_enabled) call system_clock(profile_stop)
       call mrsf_nac_metric_column(infos, jstate, gamma_column)
+      if (profile_enabled) call profile_add(profile_metric, profile_stop)
 
       do istate = 1, nstate
         if (istate == jstate) cycle
@@ -247,7 +280,9 @@ contains
         call tagarray_get_data(infos%dat, tag_xstate, xstate_tag)
         ytil_tag = ytil
         xstate_tag = bvec_saved(:,jstate)
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_wpair_impl(infos, istate, jstate)
+        if (profile_enabled) call profile_add(profile_wpair, profile_stop)
 
         ! The pair amplitude engine reads the selected left response from its
         ! normal TD slot.  Reacquire the TagArray pointer before injection and
@@ -255,17 +290,27 @@ contains
         call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
         bvec_mo = bvec_saved
         bvec_mo(:,istate) = ytil
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_amp(infos, istate, jstate)
+        if (profile_enabled) call profile_add(profile_amp, profile_stop)
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_esum(infos, istate, jstate)
+        if (profile_enabled) call profile_add(profile_esum, profile_stop)
         call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
         bvec_mo = bvec_saved
 
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_response(infos)
+        if (profile_enabled) call profile_add(profile_response, profile_stop)
         gamma_pair = gamma_column(:,istate)
         call tagarray_get_data(infos%dat, tag_gamma, gamma_tag)
         gamma_tag = gamma_pair
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_rohf_pair_overlap(infos)
+        if (profile_enabled) call profile_add(profile_overlap, profile_stop)
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_rohf_zvector(infos)
+        if (profile_enabled) call profile_add(profile_zvector, profile_stop)
 
         call tagarray_get_data(infos%dat, tag_solution, solution)
         if (.not. allocated(z_work)) allocate(z_work(size(solution)))
@@ -280,19 +325,49 @@ contains
         call tagarray_get_data(infos%dat, tag_z, z_tag)
         z_tag = z_work
 
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_rohf_hf_adjoint(infos)
+        if (profile_enabled) call profile_add(profile_hf, profile_stop)
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_xc_adjoint(infos)
+        if (profile_enabled) call profile_add(profile_xc, profile_stop)
+        if (profile_enabled) call system_clock(profile_stop)
         call mrsf_nac_pair_accumulate(infos, istate, jstate)
+        if (profile_enabled) call profile_add(profile_accumulate, profile_stop)
       end do
     end do
 
     call tagarray_get_data(infos%dat, OQP_td_bvec_mo, bvec_mo)
     bvec_mo = bvec_saved
     infos%control%int2e_cutoff = cutoff_saved
+    if (profile_enabled) call system_clock(profile_stop)
     call mrsf_nac_pair_finalize(infos)
+    if (profile_enabled) then
+      call profile_add(profile_finalize, profile_stop)
+      call system_clock(profile_stop)
+      profile_total = real(profile_stop-profile_start,dp)/real(profile_rate,dp)
+      write(iw,'(A,12(1X,A,"=",F12.6))') 'NAC_PROFILE', &
+        'total', profile_total, 'metric', profile_metric, &
+        'wpair', profile_wpair, 'amp', profile_amp, &
+        'esum', profile_esum, 'response', profile_response, &
+        'overlap', profile_overlap, 'zvector', profile_zvector, &
+        'hf', profile_hf, 'xc', profile_xc, &
+        'accumulate', profile_accumulate, 'finalize', profile_finalize
+      flush(iw)
+    end if
 
     deallocate(bvec_saved, energies_saved, ytil, gamma_column, gamma_pair)
     if (allocated(z_work)) deallocate(z_work)
+  contains
+    subroutine profile_add(accumulator, start_count)
+      real(kind=dp), intent(inout) :: accumulator
+      integer(c_int64_t), intent(in) :: start_count
+      integer(c_int64_t) :: end_count
+
+      call system_clock(end_count)
+      accumulator = accumulator + &
+        real(end_count-start_count,dp)/real(profile_rate,dp)
+    end subroutine profile_add
   end subroutine mrsf_nac_lagrangian
 
 end module mrsf_nac_driver_mod

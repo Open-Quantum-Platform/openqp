@@ -1105,7 +1105,7 @@ contains
 
     real(kind=dp), allocatable :: xa(:,:), xb(:,:), x2a(:,:), x2b(:,:)
     real(kind=dp), allocatable :: work2(:,:), work3(:,:), dm(:,:), v(:,:)
-    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:), kmat(:,:), ck(:,:)
+    real(kind=dp), allocatable :: dm_tri(:,:), pfock(:,:), kmat(:,:)
     integer :: nbf, nbf2, nocca, noccb, nvira, nvirb, offset, i, j, a, s
 
     call c_f_pointer(dat, p)
@@ -1115,7 +1115,7 @@ contains
 
     allocate(xa(nvira,nocca), xb(nvirb,noccb), x2a(nvira,nocca), x2b(nvirb,noccb))
     allocate(work2(nbf,nbf), work3(nbf,nbf), dm(nbf,nbf), v(nbf,nbf))
-    allocate(kmat(nbf,nbf), ck(nbf,nbf))
+    allocate(kmat(nbf,nbf))
     allocate(dm_tri(nbf2,2), pfock(nbf2,2), source=0.0_dp)
 
     call rohf_unpack_trial(x, xa, xb, nbf, nocca, noccb)
@@ -1138,12 +1138,17 @@ contains
         kmat(j, noccb+s) = kmat(j, noccb+s) - xb(s,j)
       end do
     end do
-    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%famo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%famo, nbf, 1.0_dp, ck, nbf)
-    x2a = ck(nocca+1:nbf, 1:nocca)
-    call dgemm('n','n', nbf, nbf, nbf,  1.0_dp, p%fbmo, nbf, kmat, nbf, 0.0_dp, ck, nbf)
-    call dgemm('n','n', nbf, nbf, nbf, -1.0_dp, kmat, nbf, p%fbmo, nbf, 1.0_dp, ck, nbf)
-    x2b = ck(noccb+1:nbf, 1:noccb)
+    ! Only the virtual-occupied block of [F,K] enters the ROHF packing.
+    ! Form that rectangular block directly instead of materializing four full
+    ! nbf-by-nbf products and then discarding most of each result.
+    call dgemm('n','n', nvira, nocca, nbf,  1.0_dp, &
+               p%famo(nocca+1,1), nbf, kmat, nbf, 0.0_dp, x2a, nvira)
+    call dgemm('n','n', nvira, nocca, nbf, -1.0_dp, &
+               kmat(nocca+1,1), nbf, p%famo, nbf, 1.0_dp, x2a, nvira)
+    call dgemm('n','n', nvirb, noccb, nbf,  1.0_dp, &
+               p%fbmo(noccb+1,1), nbf, kmat, nbf, 0.0_dp, x2b, nvirb)
+    call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
+               kmat(noccb+1,1), nbf, p%fbmo, nbf, 1.0_dp, x2b, nvirb)
 
     ! orbital-rotation density (alpha):  dm = Cv xa Co^T + (Cv xa Co^T)^T
     work2 = 0.0_dp
@@ -1182,7 +1187,7 @@ contains
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
-    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat, ck)
+    deallocate(xa, xb, x2a, x2b, work2, work3, dm, v, dm_tri, pfock, kmat)
   end subroutine cphf_apbx_rohf
 
 !###############################################################################
