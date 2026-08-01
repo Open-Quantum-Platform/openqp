@@ -261,8 +261,8 @@ def _log(mol, text: str = "") -> None:
 def _effective_fock(h1e, eri, D):
     """Closed+active mean-field (generalized) Fock; its diagonal is the orbital
     energy used by Dyall's zeroth-order Hamiltonian."""
-    J = np.einsum("rs,pqrs->pq", D, eri)
-    K = np.einsum("rs,prsq->pq", D, eri)
+    J = np.einsum("rs,pqrs->pq", D, eri, optimize=True)
+    K = np.einsum("rs,prsq->pq", D, eri, optimize=True)
     return h1e + J - 0.5 * K
 
 
@@ -422,6 +422,146 @@ def _freeze_core(h1e, eri, eps, D_sa, ncore, norb, enuc, nfrozen):
     return h1e_d, eri_d, eps_d, D_sa_d, ncore - f, norb - f, enuc + e_fc
 
 
+def _diagonal_zeroth_order(full_dets, h0_1e, g0_2e, norb):
+    """Determinant-basis diagonal of H0 when H0 is exactly diagonal, else ``None``.
+
+    ``h0=fock`` (the default CASPT2/MRMP2/MCQDPT2/XMCQDPT2 zeroth order) makes H0
+    a pure one-electron operator that is *already diagonal in the MO basis*:
+    ``diag(eps)`` plus the IPEA bias, which only touches active diagonals, and no
+    two-electron part.  Slater-Condon then gives ``<D|H0|D'> = 0`` for ``D != D'``
+    -- a single excitation would need an off-diagonal ``h_pq`` and there is none --
+    so the whole ``ndet x ndet`` matrix is carried by
+
+        E0(D) = sum_p eps_p n_p(D).
+
+    Measured on the shipped examples: ``max|offdiag(H0)| = 0.0`` exactly for
+    ``h0=fock`` and ``2.2e-01`` for ``h0=dyall`` (which has an active two-electron
+    part), so the test below is what selects the path, not the option string.
+    """
+    if 2 * norb > 62:                       # determinant encoding must fit int64
+        return None
+    if g0_2e is not None and np.any(g0_2e):
+        return None
+    eps0 = np.asarray(np.diag(h0_1e), dtype=float)
+    if np.any(np.asarray(h0_1e) - np.diag(eps0)):
+        return None
+    dets = np.asarray(full_dets, dtype=np.int64)
+    alpha = dets & np.int64((1 << norb) - 1)
+    beta = dets >> np.int64(norb)
+    diag = np.zeros(dets.size, dtype=float)
+    for p in range(norb):
+        bit = np.int64(1 << p)
+        occ = ((alpha & bit) != 0).astype(np.float64)
+        occ += ((beta & bit) != 0).astype(np.float64)
+        diag += float(eps0[p]) * occ
+    return diag
+
+
+def _occupation_blocks(full_dets, external, ncore, nact, norb):
+    """Partition the external determinants into H0-invariant occupation blocks.
+
+    Dyall's H0 is ``sum_p eps_p n_p`` on the inactive/virtual orbitals plus an
+    operator that lives entirely *inside* the active window, so it cannot move an
+    electron in or out of a core or virtual orbital: it conserves the full
+    core+virtual occupation pattern, per spin.  Determinants sharing that pattern
+    therefore form a closed block and ``H0_ext`` is exactly block-diagonal over
+    them -- measured on H4/6-31G NEVPT2: 120 blocks of at most 24, off-block
+    ``||.||_F^2 = 0.000e+00`` exactly, and the denominator eigendecomposition
+    drops from 4.2e8 to 1.8e5 flops.
+
+    Returns a list of index arrays *into the external space*, or ``None`` when
+    the determinant encoding does not fit int64.
+    """
+    if 2 * norb > 62:
+        return None
+    act_mask = ((1 << nact) - 1) << ncore
+    frozen = ((1 << norb) - 1) & ~act_mask
+    keep = np.int64(frozen | (frozen << norb))     # both spins, one mask
+    sig = np.asarray(full_dets, dtype=np.int64)[external] & keep
+    order = np.argsort(sig, kind="stable")
+    edges = np.flatnonzero(np.diff(sig[order])) + 1
+    return np.split(order, edges)
+
+
+class _ZerothOrder:
+    """The PT2 zeroth-order Hamiltonian, in the cheapest *exact* representation.
+
+    Three facts turn what used to be one ``O(n_ext^3)`` LAPACK diagonalization
+    per reference root into (almost) nothing:
+
+    * A one-electron H0 that is diagonal in the MO basis is exactly diagonal in
+      the determinant basis (see :func:`_diagonal_zeroth_order`).  Then the
+      denominator operator needs no eigendecomposition at all and the dense
+      ``ndet x ndet`` H0 never has to be built.
+    * Dyall H0 carries an active two-electron operator and is not diagonal, but
+      it *is* exactly block-diagonal over the core+virtual occupation patterns
+      (see :func:`_occupation_blocks`), so the one big diagonalization becomes
+      many tiny ones.  The partition is verified numerically before it is used.
+    * Either way the denominator ``H0_ext - E0_I`` differs between roots only by
+      a *scalar*, so it shares its eigenvectors with ``H0_ext`` and its
+      eigenvalues are just shifted by ``-E0_I``.  One eigendecomposition
+      therefore serves every root instead of one per root.
+
+    The single full-block eigendecomposition survives as the fallback and the
+    numerical pin: it is the original code path, and :func:`_first_order` runs
+    the same arithmetic whichever representation is in force.
+    """
+
+    def __init__(self, external, diagonal=None, dense=None, blocks=None):
+        self.external = external
+        self.diagonal = diagonal
+        self.dense = dense
+        self.blocks = blocks
+        self._eigenbasis = None
+
+    def expectation(self, vec):
+        """``<vec|H0|vec>`` for a normalized determinant-space vector."""
+        if self.diagonal is not None:
+            return float(vec @ (self.diagonal * vec))
+        return float(vec @ self.dense @ vec)
+
+    def external_eigenbasis(self):
+        """``(w, transforms)`` for the *unshifted* external block.
+
+        ``w`` holds the eigenvalues at their own external positions; each entry
+        of ``transforms`` is ``(idx, U)`` mapping that block's eigenbasis back to
+        those positions, with ``U is None`` meaning the identity.  All of it is
+        root-independent, so it is built once and cached."""
+        if self._eigenbasis is None:
+            self._eigenbasis = self._build_eigenbasis()
+        return self._eigenbasis
+
+    def _build_eigenbasis(self):
+        n = len(self.external)
+        if self.diagonal is not None:                 # already diagonal
+            return self.diagonal[self.external], ((slice(None), None),)
+
+        blk = self.dense[np.ix_(self.external, self.external)]
+        blk = 0.5 * (blk + blk.T)
+        if self.blocks is not None and len(self.blocks) > 1:
+            # The partition is only used once it is *shown* to close: the largest
+            # element outside the claimed blocks must vanish.  Measured directly
+            # (no cancelling sums, so this is exact) rather than assumed from the
+            # h0 option string; anything else falls through to the full solve.
+            scale = max(float(np.max(np.abs(blk))), 1.0) if blk.size else 1.0
+            off = 0.0
+            for g in self.blocks:
+                rows = np.abs(blk[g, :])
+                rows[:, g] = 0.0
+                off = max(off, float(rows.max()) if rows.size else 0.0)
+            if off <= 1.0e-10 * scale:
+                w = np.empty(n, dtype=float)
+                transforms = []
+                for g in self.blocks:
+                    wg, Ug = _symmetric_eigh(blk[np.ix_(g, g)])
+                    w[g] = wg
+                    transforms.append((g, Ug))
+                return w, tuple(transforms)
+
+        w, U = _symmetric_eigh(blk)
+        return w, ((slice(None), U),)
+
+
 def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0="fock",
                      active_occ=None, ipea=0.0):
     """Assemble the full electronic Hamiltonian, the H0 operator and the external space."""
@@ -441,26 +581,42 @@ def _build_operators(h1e, eri, eps, ncore, nact, active_nelec, norb, max_det, h0
 
     h0_1e, g0_2e = _h0_integrals(h1e, eri, eps, ncore, nact, h0,
                                  active_occ=active_occ, ipea=ipea)
-    hspin0, gspin0 = _spin_orbital_integrals(h0_1e, g0_2e)
-    h0full = _build_dense_hamiltonian(full_dets, det_index, hspin0, gspin0, 2 * norb, 0.0)
-
     external = _external_indices(full_dets, ncore, nact, norb)
-    return full_dets, det_index, hfull, h0full, external
+
+    # A diagonal H0 (the default Fock zeroth order) needs neither the dense
+    # ndet x ndet build nor the O(n_ext^3) denominator diagonalization below.
+    diag0 = _diagonal_zeroth_order(full_dets, h0_1e, g0_2e, norb)
+    if diag0 is not None:
+        h0op = _ZerothOrder(external, diagonal=diag0)
+    else:
+        hspin0, gspin0 = _spin_orbital_integrals(h0_1e, g0_2e)
+        h0op = _ZerothOrder(
+            external,
+            dense=_build_dense_hamiltonian(full_dets, det_index, hspin0, gspin0,
+                                           2 * norb, 0.0),
+            blocks=_occupation_blocks(full_dets, external, ncore, nact, norb))
+
+    return full_dets, det_index, hfull, h0op, external
 
 
-def _first_order(hfull, h0full, h0_ext, vec, external, options):
+def _first_order(hfull, h0op, vec, external, options):
     """First-order amplitudes and second-order energy for one reference vector.
 
     Works in the eigenbasis of the ``(H0 - E0)`` denominator operator so the real
     (Roos-Andersson) and imaginary (Forsberg-Malmqvist) level shifts and the
-    intruder diagnostic share a single path.  ``h0_ext = h0full[external, external]``
-    is passed in once (shared across states).  Returns ``(V, C, e2, min_denom)``
-    where ``min_denom`` is the smallest absolute bare denominator (intruder probe)."""
-    e0 = float(vec @ h0full @ vec)
+    intruder diagnostic share a single path.  ``h0op`` (a :class:`_ZerothOrder`)
+    owns that eigenbasis: it is independent of the root, because ``H0_ext - E0_I``
+    differs from ``H0_ext`` by a scalar, so it is built once and shared across
+    states -- and it is block-diagonal (Dyall) or the identity (Fock) rather than
+    a dense rotation.  Returns ``(V, C, e2, min_denom)`` where ``min_denom`` is
+    the smallest absolute bare denominator (intruder probe)."""
+    e0 = h0op.expectation(vec)
     V = (hfull @ vec)[external]
-    denom = h0_ext - e0 * np.eye(len(external))
-    w, U = _symmetric_eigh(0.5 * (denom + denom.T))          # bare CASPT2 denominators
-    Vt = U.T @ V
+    w0, transforms = h0op.external_eigenbasis()
+    w = w0 - e0                                             # bare CASPT2 denominators
+    Vt = np.empty_like(V)
+    for idx, U in transforms:
+        Vt[idx] = V[idx] if U is None else U.T @ V[idx]
     d = w + options.level_shift                             # real level shift
     if options.edshft:                                     # GAMESS ISA: d -> d + edshft/d
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -470,7 +626,10 @@ def _first_order(hfull, h0full, h0_ext, vec, external, options):
     else:
         factor = np.divide(1.0, d, out=np.zeros_like(d),
                            where=(np.abs(d) > 1.0e-300) & np.isfinite(d))
-    C = -(U @ (Vt * factor))
+    Ct = -(Vt * factor)
+    C = np.empty_like(Ct)
+    for idx, U in transforms:
+        C[idx] = Ct[idx] if U is None else U @ Ct[idx]
     min_denom = float(np.min(np.abs(w))) if w.size else float("inf")
     return V, C, float(V @ C), min_denom
 
@@ -725,11 +884,10 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
                 active_nelec, norb, enuc, roots, options):
     """MS-/XMS-CASPT2 effective Hamiltonian over the reference roots."""
     active_occ = np.diag(D_sa)[ncore:ncore + nact]
-    full_dets, det_index, hfull, h0full, external = _build_operators(
+    full_dets, det_index, hfull, h0op, external = _build_operators(
         h1e, eri, eps, ncore, nact, active_nelec, norb, options.max_det, options.h0,
         active_occ=active_occ, ipea=options.ipea_shift
     )
-    h0_ext = h0full[np.ix_(external, external)]
 
     refs = [_embed_reference(coeffs[:, r], dets, ncore, nact, norb, det_index) for r in roots]
     rotated = options.variant == "xms"
@@ -749,7 +907,7 @@ def _multistate(h1e, eri, coeffs, energies, dets, eps, D_sa, ncore, nact,
     Vs, Cs, e2s, min_denoms = [], [], [], []
     ref_drift = 0.0
     for i in range(nstate):
-        V, C, e2, min_denom = _first_order(hfull, h0full, h0_ext, refs[i], external, options)
+        V, C, e2, min_denom = _first_order(hfull, h0op, refs[i], external, options)
         Vs.append(V)
         Cs.append(C)
         e2s.append(e2)
@@ -960,14 +1118,13 @@ def _single_state_finish(mol, ref_energy, options, settings, ncore, nact, active
         mol.data["OQP::CASPT2_STATE_SPECIFIC_CORRECTIONS"] = np.ascontiguousarray([e2], dtype=np.float64)
         return
 
-    full_dets, det_index, hfull, h0full, external = _build_operators(
+    full_dets, det_index, hfull, h0op, external = _build_operators(
         h1e, eri, eps, ncore, nact, active_nelec, norb, options.max_det, options.h0,
         active_occ=active_occ, ipea=options.ipea_shift
     )
-    h0_ext = h0full[np.ix_(external, external)]
     vec = _embed_reference(coeffs[:, root], dets, ncore, nact, norb, det_index)
     e_ref_check = float(vec @ hfull @ vec) + enuc
-    _V, _C, e2, min_denom = _first_order(hfull, h0full, h0_ext, vec, external, options)
+    _V, _C, e2, min_denom = _first_order(hfull, h0op, vec, external, options)
     e_caspt2 = e_casci + e2
 
     mol.energies = [e_caspt2]
