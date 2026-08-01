@@ -13,6 +13,9 @@ METRIC = ROOT / "source" / "modules" / "mrsf_nac_metric_data.F90"
 INTERCHANGE = ROOT / "source" / "modules" / "mrsf_nac_interchange.F90"
 INT2 = ROOT / "source" / "integrals" / "int2.F90"
 SCF_ADDONS = ROOT / "source" / "scf_addons.F90"
+FOCK_DERIV = ROOT / "source" / "modules" / "fock_deriv.F90"
+GRD2 = ROOT / "source" / "integrals" / "grd2.F90"
+GRD2_RYS = ROOT / "source" / "integrals" / "grd2_rys.F90"
 HEADER = ROOT / "include" / "oqp.h"
 PYTHON = ROOT / "pyoqp" / "oqp" / "library" / "nac_analytic.py"
 
@@ -139,6 +142,8 @@ def test_hf_adjoint_batch_shares_pair_independent_work_and_jk_pass():
     assert body.count("call der_nucattr_matrix(") == 1
     assert body.count("call ecp_deriv_ints(") == 1
     assert body.count("call fock_jk(") == 1
+    assert body.count("call fock_deriv_contract_os_batch(") == 1
+    assert "call fock_deriv_contract_os(" not in body
     assert "allocate(dmz(nbf2,2*nrhs), vjkz(nbf2,2*nrhs)" in body
     assert "do irhs = 1, nrhs" in body
 
@@ -151,6 +156,45 @@ def test_hf_adjoint_batch_shares_pair_independent_work_and_jk_pass():
     assert "do ifock = 1, this%nfocks, 2" in update
     assert "sum(this%d(ij,ifock:ifock+1))" in update
     assert scf_addons.count("int2_urohf_data_t(nfocks=size(d,2)") == 2
+
+
+def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
+    fock = FOCK_DERIV.read_text()
+    scalar = fock.split(
+        "subroutine fock_deriv_contract_os(infos, basis, pcoul, pexch, mmat, hfscale, gx)",
+        1,
+    )[1].split("end subroutine fock_deriv_contract_os", 1)[0]
+    assert scalar.count("call grd2_driver(infos, basis, gx, gcomp)") == 1
+    assert "grd2_driver_batch" not in scalar
+    fock_batch = fock.split(
+        "subroutine fock_deriv_contract_os_batch(", 1
+    )[1].split("end subroutine fock_deriv_contract_os_batch", 1)[0]
+    assert fock_batch.count("call grd2_driver_batch(") == 1
+    assert "integer, parameter :: max_rhs = 3" in fock_batch
+    assert "gcomps(ia)%pexch => pexcha" in fock_batch
+    assert "gcomps(ib)%pexch => pexchb" in fock_batch
+    assert "gall(:,:,2*irhs-1) + gall(:,:,2*irhs)" in fock_batch
+
+    grd2 = GRD2.read_text()
+    driver = grd2.split(
+        "subroutine grd2_driver_batch_gen(infos, basis, de, gcomps)", 1
+    )[1].split("end subroutine grd2_driver_batch_gen", 1)[0]
+    assert driver.count("!$omp parallel") == 1
+    assert "reduction(+:skip1, skip2, numint, de)" in driver
+    assert "dab(maxnbf**4,nprobe)" in driver
+    assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in driver
+    assert "dab(1:product(gdat%nbf),iprobe) = 0.0_dp" in driver
+    assert driver.count("call grd2_rys_compute_batch(") == 2
+
+    rys = GRD2_RYS.read_text()
+    recurrence = rys.split(
+        "subroutine compute_grd_ints_batch(", 1
+    )[1].split("end subroutine compute_grd_ints_batch", 1)[0]
+    assert recurrence.count("call compute_rys_rw(") == 1
+    assert recurrence.count("call compute_coefficients(") == 1
+    assert recurrence.count("call compute_der_xyz_ijkl(") == 1
+    assert recurrence.count("call compute_der_ijkl_batch(") == 1
+    assert "!$omp parallel" not in recurrence
 
 
 def test_python_production_call_cannot_enable_forward_cphf(monkeypatch):
