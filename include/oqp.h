@@ -280,6 +280,13 @@ void casscf_gfock_grad(int32_t nbf, int32_t ncore, int32_t nact, int32_t nroot,
 void casscf_hess_amp(int32_t nact, int64_t ndet, int32_t npar,
     const double *stack, const double *fder, const double *gder,
     const double *wmat, const double *vecs, double *amp);
+/* Fixed-CI half of the analytic CASSCF orbital Hessian (casscf_hess_bmat.F90):
+ * the B columns and the folded active derivative integrals, assembled from the
+ * sparse one-index derivative slabs so no nbf^4 temporary is formed. */
+void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
+    const int32_t *pairs, const double *dmat, const double *rdm2,
+    const double *h1e, const double *eri, double *bmat, double *fder,
+    double *gder);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

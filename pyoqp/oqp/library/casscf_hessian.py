@@ -280,6 +280,53 @@ def _apply_active_operator(f, g, stack, wmat):
     return sigma
 
 
+def _hess_bmat_backend():
+    """liboqp (lib, ffi) for the Fortran fixed-CI Hessian engine, or None."""
+    from oqp.library.fci import _lib_backend
+
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_hess_bmat"):
+        return None
+    return lib, ffi
+
+
+def _lib_hess_bmat(nbf, ncore, nact, pairs, D, G, h1e, eri):
+    """Fixed-CI Hessian columns and folded derivative integrals, in Fortran.
+
+    Reproduces the per-pair Python loop -- ``_z_matrix`` over the one-index
+    derivative tensor plus ``_fold_active`` -- but assembles both from the eight
+    sparse slabs of the derivative, so the per-pair cost is O(nbf^4) instead of
+    O(nbf^5) and no nbf^4 temporary is formed.  Returns ``(B, f_der, g_der)``,
+    or ``None`` when the engine is unavailable."""
+    backend = _hess_bmat_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    npar = len(pairs)
+    pr = np.ascontiguousarray(np.asarray(pairs, dtype=np.int32).reshape(npar, 2))
+    dd = np.ascontiguousarray(D, dtype=np.float64)
+    gg = np.ascontiguousarray(G, dtype=np.float64)
+    hh = np.ascontiguousarray(h1e, dtype=np.float64)
+    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    B = np.zeros((npar, npar), dtype=np.float64)
+    f_der = np.zeros((npar, nact, nact), dtype=np.float64)
+    g_der = np.zeros((npar,) + (nact,) * 4, dtype=np.float64)
+    lib.casscf_hess_bmat(
+        int(nbf), int(ncore), int(nact), int(npar),
+        ffi.cast("int32_t *", pr.ctypes.data),
+        ffi.cast("double *", dd.ctypes.data),
+        ffi.cast("double *", gg.ctypes.data),
+        ffi.cast("double *", hh.ctypes.data),
+        ffi.cast("double *", vv.ctypes.data),
+        ffi.cast("double *", B.ctypes.data),
+        ffi.cast("double *", f_der.ctypes.data),
+        ffi.cast("double *", g_der.ctypes.data))
+    return B, f_der, g_der
+
+
 def _hess_amp_backend():
     """liboqp (lib, ffi) for the Fortran CI-relaxation amplitude engine, or None."""
     from oqp.library.fci import _lib_backend
@@ -383,14 +430,18 @@ def analytic_orbital_hessian(h1e, eri, ncore, nact, active_nelec, pairs,
         G += w * Gr
 
     # --- part 1: fixed-CI orbital Hessian + per-pair derivative integrals
-    B = np.empty((npar, npar))
-    f_der = np.empty((npar, nact, nact))
-    g_der = np.empty((npar, nact, nact, nact, nact))
-    for l, (p, q) in enumerate(pairs):
-        t_l = _one_index_derivative_h(h1e, p, q)
-        T_l = _one_index_derivative_g(eri, p, q)
-        B[:, l] = _pair_differences(_z_matrix(D, G, t_l, T_l), pairs)
-        f_der[l], g_der[l] = _fold_active(t_l, T_l, ncore, nact)
+    built = _lib_hess_bmat(nbf, ncore, nact, pairs, D, G, h1e, eri)
+    if built is None:
+        B = np.empty((npar, npar))
+        f_der = np.empty((npar, nact, nact))
+        g_der = np.empty((npar, nact, nact, nact, nact))
+        for l, (p, q) in enumerate(pairs):
+            t_l = _one_index_derivative_h(h1e, p, q)
+            T_l = _one_index_derivative_g(eri, p, q)
+            B[:, l] = _pair_differences(_z_matrix(D, G, t_l, T_l), pairs)
+            f_der[l], g_der[l] = _fold_active(t_l, T_l, ncore, nact)
+    else:
+        B, f_der, g_der = built
     hess = 0.5 * (B + B.T)
 
     # --- part 2: CI relaxation over the complete active spectrum
