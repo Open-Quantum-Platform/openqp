@@ -600,6 +600,7 @@ contains
     class(grd2_compute_data_t), intent(inout) :: gcomps(:)
 
     real(kind=dp), allocatable :: dab(:,:), dabmax(:), fd_batch(:,:,:)
+    real(kind=dp), allocatable :: de_thread(:,:,:)
     logical, allocatable :: probe_active(:)
     real(kind=dp), allocatable :: schwarz_ints(:,:)
     real(kind=dp) :: emu2, cutoff, cutoff2, dabcut, gmax
@@ -661,13 +662,15 @@ contains
     dtol = dtol*dtol
 
 !$omp parallel &
-!$omp   private(gdat, dab, dabmax, fd_batch, probe_active, &
+!$omp   private(gdat, dab, dabmax, fd_batch, de_thread, probe_active, &
 !$omp           i, j, k, l, ij, maxl, kl, &
 !$omp           gmax, iok, mpi_ij, q4, iprobe) &
-!$omp   reduction(+:skip1, skip2, numint, de)
+!$omp   reduction(+:skip1, skip2, numint)
 
     allocate(dab(maxnbf**4,nprobe), dabmax(nprobe), &
              fd_batch(3,4,nprobe), probe_active(nprobe))
+    allocate(de_thread, mold=de)
+    de_thread = 0.0_dp
     call gdat%init(basis%mxam, 1, dtol, dabcut, iok)
 
 !$omp barrier
@@ -733,7 +736,8 @@ contains
                 gdat,ppairs,dab,dabmax,fd_batch)
             end if
             do iprobe = 1, nprobe
-              de(:,gdat%at,iprobe) = de(:,gdat%at,iprobe) + &
+              de_thread(:,gdat%at,iprobe) = &
+                de_thread(:,gdat%at,iprobe) + &
                 real(q4,dp)*fd_batch(:,:,iprobe)
             end do
           end do
@@ -743,7 +747,14 @@ contains
     end do
 
     call gdat%clean()
-    deallocate(dab,dabmax,fd_batch,probe_active)
+    ! Avoid the GCC 15/libgomp failure observed when an assumed-shape rank-3
+    ! dummy is used directly in an OpenMP array reduction.  Merge the small
+    ! thread-private gradient explicitly instead; the expensive quartet loop
+    ! remains fully parallel and no output element is shared there.
+!$omp critical(grd2_batch_de_merge)
+    de = de + de_thread
+!$omp end critical(grd2_batch_de_merge)
+    deallocate(dab,dabmax,fd_batch,de_thread,probe_active)
 !$omp end parallel
 
     call pe%allreduce(skip1,1)

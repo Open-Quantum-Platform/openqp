@@ -180,7 +180,13 @@ def test_hf_derivative_eri_batch_shares_recurrence_without_nested_openmp():
         "subroutine grd2_driver_batch_gen(infos, basis, de, gcomps)", 1
     )[1].split("end subroutine grd2_driver_batch_gen", 1)[0]
     assert driver.count("!$omp parallel") == 1
-    assert "reduction(+:skip1, skip2, numint, de)" in driver
+    assert "reduction(+:skip1, skip2, numint)" in driver
+    assert "reduction(+:skip1, skip2, numint, de)" not in driver
+    assert "private(gdat, dab, dabmax, fd_batch, de_thread" in driver
+    assert "de_thread = 0.0_dp" in driver
+    assert "de_thread(:,gdat%at,iprobe)" in driver
+    assert "!$omp critical(grd2_batch_de_merge)" in driver
+    assert "de = de + de_thread" in driver
     assert "dab(maxnbf**4,nprobe)" in driver
     assert "probe_active = dabmax*gmax*real(q4,dp) >= cutoff2" in driver
     assert "dab(1:product(gdat%nbf),iprobe) = 0.0_dp" in driver
