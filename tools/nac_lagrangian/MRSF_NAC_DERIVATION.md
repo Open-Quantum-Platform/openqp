@@ -1230,3 +1230,21 @@ Offline Delta characterization on H2O:
 => the Delta-structure identification REQUIRES the ethylene dataset.
 Launched: v7o on ETH (full Mt harvest 1444 dirs x 6 pairs + dual-h
 sweeps + all matrices saved) -- the C1 fit basis for the channel hunt.
+
+### 7.41 ETHYLENE Delta fits (C1): no clean single channel; PATCHING CLOSED
+ETH v7o harvest (h-independent deficits confirmed again: (1,2) 0.017,
+(1,3) 0.372, (2,3) 0.541) + phase-anchored ctx (w-probe alignment) +
+offline C1 fits against {gamma:Sk, transposes, d_num, occ/virt Sk- and
+S^x-transport channels}:
+  (1,2): best single cos -0.65; LSQ 14% with degenerate coefficients.
+  (1,3): several candidates all |cos| ~ 0.99 -- the pair's response is
+         single-mode dominated, so even C1 leaves partial collinearity.
+  (2,3): best single sxA (occ-side S^x transport) cos -0.957 (29%).
+sxA recurs suggestively across pairs but with NO universal coefficient.
+VERDICT: the Delta channel is not a simple one-term patch of Mt:U.
+The candidate-patching program is CLOSED. The production completion is
+route (A) of 7.39: the derivative-sigma amp channel built as a WHOLE
+(interstate gradient-type contraction of the (ytil, X_J) pair with full
+relaxation), gated per coordinate against the certified w_ref referee.
+All datasets for that work are frozen: H2O_energy_tlf0_{v7h,v7i,v7o}.npz
+and ETH_energy_{v7o,ctx,dnum}.npz (local + chc3).
