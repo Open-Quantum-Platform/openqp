@@ -1584,3 +1584,112 @@ def test_input_checker_accepts_fci_target_spin_filter(target_spin):
 
     assert report.ok, report.to_text()
     assert not any(d.path == "fci.target_spin" for d in report.diagnostics), report.to_text()
+
+
+@pytest.mark.parametrize("norb", [1, 2, 3, 4, 6, 8])
+def test_spin_orbital_integrals_match_element_reference(norb):
+    """The strided spin-block build is a permuted copy of the same spatial
+    tensor, so it must reproduce the element-by-element reference bit for bit."""
+    _use_real_oqp_package()
+    from oqp.library.fci import (
+        _spin_orbital_integrals,
+        _spin_orbital_integrals_reference,
+    )
+
+    rng = np.random.default_rng(1234 + norb)
+    h1e = rng.standard_normal((norb, norb))
+    h1e = 0.5 * (h1e + h1e.T)
+    eri = rng.standard_normal((norb,) * 4)
+
+    h_ref, g_ref = _spin_orbital_integrals_reference(h1e, eri)
+    h_new, g_new = _spin_orbital_integrals(h1e, eri)
+
+    assert np.array_equal(h_new, h_ref)
+    assert np.array_equal(g_new, g_ref)
+
+
+def test_davidson_reaches_the_requested_residual_tolerance():
+    """A preconditioned correction has norm ~||r||/gap, so the acceptance test
+    on it must be relative.  With an absolute 1e-8 cutoff the iteration used to
+    discard every correction once the residual reached ~1e-8 and returned
+    silently unconverged, three orders of magnitude short of eig_tol."""
+    _use_real_oqp_package()
+    from oqp.library.fci import _davidson, _DenseMatrixOperator
+
+    rng = np.random.default_rng(5)
+    ndet = 400
+    matrix = rng.standard_normal((ndet, ndet)) * 0.02
+    matrix = 0.5 * (matrix + matrix.T) + np.diag(np.arange(ndet) * 0.05)
+
+    tol = 1.0e-11
+    eigvals, eigvecs = _davidson(
+        _DenseMatrixOperator(matrix), np.diag(matrix).copy(), 2,
+        tol=tol, max_iter=200,
+    )
+    residual = np.linalg.norm(
+        matrix @ eigvecs - eigvecs * eigvals[None, :], axis=0)
+    assert np.max(residual) <= tol
+
+    exact = np.linalg.eigvalsh(matrix)[:2]
+    np.testing.assert_allclose(eigvals, exact, atol=1.0e-12)
+
+
+def test_dense_solver_lowest_roots_shortcut_matches_the_full_solve():
+    """solve_fci's dense path extracts only the roots it returns; the result
+    must equal the full ndet-root LAPACK solve in energy and in CI vector."""
+    _use_real_oqp_package()
+    import oqp.library.fci as fci
+
+    rng = np.random.default_rng(41)
+    norb = 6
+    h1e = rng.standard_normal((norb, norb)) * 0.3
+    h1e = h1e + h1e.T - np.diag(np.arange(norb) * 1.5)
+    eri = rng.standard_normal((norb,) * 4) * 0.05
+    eri = eri + eri.transpose(1, 0, 2, 3)
+    eri = eri + eri.transpose(0, 1, 3, 2)
+    eri = eri + eri.transpose(2, 3, 0, 1)
+
+    kwargs = dict(nroot=3, solver="dense", max_det=100000, max_memory=2048)
+    # CAS(6,6) is 400 determinants, comfortably past the shortcut's floor, so
+    # the comparison below is not vacuous.
+    taken = []
+    saved = fci._lowest_dense_roots
+
+    def _spy(*args, **kw):
+        result = saved(*args, **kw)
+        taken.append(result is not None)
+        return result
+
+    fci._lowest_dense_roots = _spy
+    try:
+        e_new, v_new = fci.solve_fci(h1e, eri, (3, 3), **kwargs)
+    finally:
+        fci._lowest_dense_roots = saved
+    assert taken == [True]
+
+    fci._lowest_dense_roots = lambda *args, **kw: None
+    try:
+        e_ref, v_ref = fci.solve_fci(h1e, eri, (3, 3), **kwargs)
+    finally:
+        fci._lowest_dense_roots = saved
+
+    np.testing.assert_allclose(e_new, e_ref, atol=1.0e-11)
+    overlap = np.abs(np.einsum("ij,ij->j", v_new, v_ref))
+    np.testing.assert_allclose(overlap, np.ones(3), atol=1.0e-9)
+
+
+def test_lowest_dense_roots_declines_small_and_wide_windows():
+    """The shortcut is a cost optimization, not a semantic change: below the
+    measured crossover, and when the window is a large fraction of the
+    spectrum, it declines so the caller keeps the full solve."""
+    _use_real_oqp_package()
+    from oqp.library.fci import _lowest_dense_roots
+
+    rng = np.random.default_rng(9)
+    small = rng.standard_normal((100, 100))
+    small = 0.5 * (small + small.T)
+    assert _lowest_dense_roots(small, 1, 1.0e-10, 100) is None
+
+    wide = rng.standard_normal((400, 400))
+    wide = 0.5 * (wide + wide.T)
+    assert _lowest_dense_roots(wide, 60, 1.0e-10, 100) is None

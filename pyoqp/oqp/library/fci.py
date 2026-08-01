@@ -373,13 +373,56 @@ def compute_s2(
     return float(s2 + spin_flip)
 
 
+def _lib_spin_square(coeffs, dets, norb, nelec):
+    """Per-root ``<S^2>`` through the liboqp engine, or ``None`` when the
+    symbol is unavailable and the caller should use :func:`compute_s2`.
+
+    The Python reference is O(nroot * ndet * norb^2) with a popcount and a dict
+    lookup per term -- 48 ms per root at CAS(8,8), 843 ms at CAS(10,10) -- and
+    rebuilds the determinant index for every call.
+    """
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "fci_spin_square"):
+        return None
+    nalpha, nbeta = _as_nelec_pair(nelec)
+    ndet = len(dets)
+    nvec = int(coeffs.shape[1])
+    if ndet <= 0 or nvec <= 0 or 2 * int(norb) > 62:
+        return None
+    # compute_s2 rejects a zero-norm root; keep that contract rather than let
+    # the engine quietly report the ms-only value.
+    if not np.all(np.linalg.norm(coeffs, axis=0) > 0.0):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(coeffs, dtype=np.float64)
+    s2 = np.zeros(nvec, dtype=np.float64)
+    status = int(lib.fci_spin_square(
+        int(norb), ndet, nvec,
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        int(nalpha) - int(nbeta),
+        ffi.cast("double *", s2.ctypes.data),
+        _fci_lib_threads()))
+    if status != 0:
+        return None
+    return s2
+
+
 def fci_spin_diagnostics(
     ci_vectors: np.ndarray,
     determinants: list[int],
     norb: int,
     nelec: int | tuple[int, int] | list[int],
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return per-root ``(<S^2>, multiplicity)`` diagnostics."""
+    """Return per-root ``(<S^2>, multiplicity)`` diagnostics.
+
+    Routed to the liboqp engine (``fci_setup.F90``), which shares one sort of
+    the determinant list across the roots; :func:`compute_s2` stays as the
+    per-root Python reference and the fallback.
+    """
     dets = list(determinants)
     coeffs = _real_array(ci_vectors, "CI vectors")
     if coeffs.ndim == 1:
@@ -387,14 +430,16 @@ def fci_spin_diagnostics(
     if coeffs.ndim != 2 or coeffs.shape[0] != len(dets):
         raise ValueError("CI vectors must have shape (ndet, nroot)")
 
-    det_index = {det: idx for idx, det in enumerate(dets)}
-    s2 = np.array(
-        [
-            compute_s2(coeffs[:, root], dets, norb, nelec, det_index=det_index)
-            for root in range(coeffs.shape[1])
-        ],
-        dtype=np.float64,
-    )
+    s2 = _lib_spin_square(coeffs, dets, norb, nelec)
+    if s2 is None:
+        det_index = {det: idx for idx, det in enumerate(dets)}
+        s2 = np.array(
+            [
+                compute_s2(coeffs[:, root], dets, norb, nelec, det_index=det_index)
+                for root in range(coeffs.shape[1])
+            ],
+            dtype=np.float64,
+        )
     multiplicity = np.rint(np.sqrt(np.maximum(0.0, 1.0 + 4.0 * s2))).astype(np.int64)
     multiplicity = np.maximum(multiplicity, 1)
     return np.ascontiguousarray(s2, dtype=np.float64), np.ascontiguousarray(
@@ -580,10 +625,15 @@ def _as_nelec_pair(nelec: int | tuple[int, int] | list[int]) -> tuple[int, int]:
     return total // 2, total // 2
 
 
-def _spin_orbital_integrals(
+def _spin_orbital_integrals_reference(
     h1e: np.ndarray,
     eri: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Element-by-element spin-orbital expansion -- the numerical pin.
+
+    Kept out of the execution path (see :func:`_spin_orbital_integrals`) and
+    exercised only by the tests, which assert the two agree bit for bit.
+    """
     norb = h1e.shape[0]
     nspin = 2 * norb
     hspin = np.zeros((nspin, nspin), dtype=float)
@@ -606,6 +656,72 @@ def _spin_orbital_integrals(
                     if qs == (0 if s < norb else 1):
                         gspin[p, q, r, s] = eri[pp, rr, qq, s % norb]
 
+    return hspin, gspin
+
+
+def _spin_orbital_integrals_numpy(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Strided-block expansion -- the numpy fallback for :func:`_spin_orbital_integrals`.
+
+    ``gspin[p, q, r, s] = (p r | q s)`` whenever ``spin(p) == spin(r)`` and
+    ``spin(q) == spin(s)``, and zero otherwise -- i.e. exactly four of the
+    sixteen spin blocks are populated, each one the same spatial tensor with
+    its second and third indices swapped.  Writing those four blocks as strided
+    slice assignments replaces the ``(2*norb)**4`` Python loop of
+    :func:`_spin_orbital_integrals_reference`; the result is bit-identical
+    because no arithmetic happens, only a permuted copy.
+    """
+    norb = h1e.shape[0]
+    nspin = 2 * norb
+    hspin = np.zeros((nspin, nspin), dtype=float)
+    hspin[:norb, :norb] = h1e
+    hspin[norb:, norb:] = h1e
+
+    # base[p, q, r, s] = eri[p, r, q, s] over spatial indices
+    base = np.asarray(eri, dtype=float).transpose(0, 2, 1, 3)
+    gspin = np.zeros((nspin, nspin, nspin, nspin), dtype=float)
+    for pr_spin in (0, 1):          # spin shared by p and r
+        pr = slice(pr_spin * norb, (pr_spin + 1) * norb)
+        for qs_spin in (0, 1):      # spin shared by q and s
+            qs = slice(qs_spin * norb, (qs_spin + 1) * norb)
+            gspin[pr, qs, pr, qs] = base
+
+    return hspin, gspin
+
+
+def _spin_orbital_integrals(
+    h1e: np.ndarray,
+    eri: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Expand spatial ``h1e``/``(pq|rs)`` onto the spin-orbital basis.
+
+    Routed to the liboqp engine (``fci_setup.F90``); the numpy build is the
+    fallback when the symbol is unavailable and
+    :func:`_spin_orbital_integrals_reference` is the element-by-element
+    numerical pin.  All three are bit-identical -- the expansion is a permuted
+    copy with no arithmetic in it.
+    """
+    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
+    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    norb = int(h1e.shape[0])
+    backend = _lib_backend()
+    if backend is None or norb <= 0:
+        return _spin_orbital_integrals_numpy(h1e, eri)
+    lib, ffi = backend
+    if not hasattr(lib, "fci_spin_orbital_integrals"):
+        return _spin_orbital_integrals_numpy(h1e, eri)
+    nspin = 2 * norb
+    hspin = np.zeros((nspin, nspin), dtype=np.float64)
+    gspin = np.zeros((nspin,) * 4, dtype=np.float64)
+    lib.fci_spin_orbital_integrals(
+        norb,
+        ffi.cast("double *", h1e.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data),
+        ffi.cast("double *", hspin.ctypes.data),
+        ffi.cast("double *", gspin.ctypes.data),
+        _fci_lib_threads())
     return hspin, gspin
 
 
@@ -751,6 +867,19 @@ def _lib_matvec_available(nspin) -> bool:
     return hasattr(lib, "fci_hamiltonian_matvec") and hasattr(lib, "fci_hamiltonian_diag")
 
 
+def _determinant_index(dets, det_index=None):
+    """Determinant -> row map, built only when a Python enumeration needs it.
+
+    The native builders never look at it, so building it eagerly next to the
+    determinant list was a dict of ``ndet`` entries thrown away on every CI
+    solve -- 0.2 s of an 84 s H2O/cc-pVDZ CAS(6,6) CASSCF over 6185 solves,
+    all of it pure waste.
+    """
+    if det_index is not None:
+        return det_index
+    return {det: idx for idx, det in enumerate(dets)}
+
+
 def _build_dense_hamiltonian(dets, det_index, hspin, gspin, nspin, cutoff):
     """Assemble the explicit dense FCI Hamiltonian (8*ndet**2 bytes)."""
     lib_h = _lib_dense_hamiltonian(dets, hspin, gspin, nspin, cutoff)
@@ -759,7 +888,7 @@ def _build_dense_hamiltonian(dets, det_index, hspin, gspin, nspin, cutoff):
     ndet = len(dets)
     hamiltonian = np.zeros((ndet, ndet), dtype=float)
     for row, col, value in _iter_hamiltonian_elements(
-        dets, det_index, hspin, gspin, nspin, cutoff
+        dets, _determinant_index(dets, det_index), hspin, gspin, nspin, cutoff
     ):
         hamiltonian[row, col] += value
     return 0.5 * (hamiltonian + hamiltonian.T)
@@ -774,7 +903,7 @@ def _build_sparse_hamiltonian(dets, det_index, hspin, gspin, nspin, cutoff):
     cols: list[int] = []
     vals: list[float] = []
     for row, col, value in _iter_hamiltonian_elements(
-        dets, det_index, hspin, gspin, nspin, cutoff
+        dets, _determinant_index(dets, det_index), hspin, gspin, nspin, cutoff
     ):
         rows.append(row)
         cols.append(col)
@@ -980,6 +1109,75 @@ def _symmetric_eigh(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return _symmetric_eigh_jacobi(sym)
 
 
+class _DenseMatrixOperator:
+    """``_davidson``'s operator duck type backed by an explicit dense matrix.
+
+    Unlike :class:`_LibHamiltonianOperator` this does not re-enumerate the
+    determinant Hamiltonian per application -- the matrix is already built, so
+    an application is one BLAS GEMM.
+    """
+
+    __slots__ = ("_h", "shape", "_diag")
+
+    def __init__(self, matrix):
+        self._h = np.ascontiguousarray(matrix, dtype=np.float64)
+        self.shape = self._h.shape
+        self._diag = np.ascontiguousarray(np.diag(self._h))
+
+    def diagonal(self):
+        return self._diag
+
+    def dot(self, x):
+        return self._h @ x
+
+    def toarray(self):
+        return self._h
+
+
+def _lowest_dense_roots(hamiltonian, nroot, tol, max_iter):
+    """Lowest ``nroot`` eigenpairs of an explicit dense symmetric matrix, or
+    ``None`` to let the caller fall back to the full LAPACK solve.
+
+    A full ``dsyevd`` produces all ``ndet`` eigenpairs, which is pure waste when
+    ``nroot << ndet``: it is O(ndet^3) regardless, so a CAS(8,8) CI solve spends
+    ~12 s producing 4900 eigenvectors to return one.  Davidson on the same
+    already-built dense matrix returns that root in 89 ms, agreeing to 6e-14 in
+    the eigenvalue and 1e-15 in the Ritz-vector overlap -- i.e. within LAPACK's
+    own rounding.
+
+    Davidson is converged an order of magnitude tighter than ``eig_tol`` so the
+    caller's residual check has margin, and any failure to reach that (a hard
+    tolerance, a pathological spectrum) returns ``None`` rather than raising.
+    """
+    ndet = int(hamiltonian.shape[0])
+    # Measured crossover for the whole solve_fci dense path (nroot=1): at
+    # ndet=100 the full solve already wins (0.9x), at ndet=400 it is 3.1x, at
+    # 1225 16x, at 4900 62x.  Below the floor, or when the requested window is
+    # a large fraction of the spectrum, take the full solve.
+    if ndet < 256 or 8 * int(nroot) >= ndet:
+        return None
+    try:
+        eigvals, eigvecs = _davidson(
+            _DenseMatrixOperator(hamiltonian),
+            np.ascontiguousarray(np.diag(hamiltonian)),
+            int(nroot),
+            tol=0.1 * float(tol),
+            max_iter=int(max_iter),
+        )
+    except Exception:
+        return None
+    # _davidson can also bail out early (an exhausted correction space returns
+    # the current Ritz pairs), so re-check here rather than let the caller's
+    # eig_tol assertion turn a solvable case into a hard failure.
+    if not (np.all(np.isfinite(eigvals)) and np.all(np.isfinite(eigvecs))):
+        return None
+    worst = float(np.max(np.linalg.norm(
+        hamiltonian @ eigvecs - eigvecs * eigvals[None, :], axis=0)))
+    if worst > float(tol):
+        return None
+    return eigvals, eigvecs
+
+
 def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspace=0):
     """Lowest ``nroot`` eigenpairs of a symmetric operator via block Davidson.
 
@@ -1040,10 +1238,22 @@ def _davidson(hamiltonian, diag, nroot, *, tol=1.0e-10, max_iter=100, max_subspa
         new_cols = []
         current = basis
         for vec in additions:
+            # Normalize BEFORE orthogonalizing so the acceptance test below is
+            # relative.  A preconditioned correction has norm ~||r||/gap, so an
+            # absolute cutoff rejects every correction once the residual gets
+            # small and the iteration silently returns unconverged: with the
+            # default eig_tol=1e-10 it stalled at a residual of 3.7e-8 on a
+            # 400-determinant CAS(6,6) because the correction norm had reached
+            # 3.8e-9.  What matters is whether the direction survives
+            # orthogonalization, which is scale-free.
+            scale = np.linalg.norm(vec)
+            if scale <= 0.0:
+                continue
+            vec = vec / scale
             for _ in range(2):  # orthogonalize twice for numerical stability
                 vec = vec - current @ (current.T @ vec)
             norm = np.linalg.norm(vec)
-            if norm > 1.0e-8:
+            if norm > 1.0e-6:
                 vec = vec / norm
                 current = np.column_stack([current, vec])
                 new_cols.append(vec)
@@ -1161,7 +1371,9 @@ def solve_fci(
         )
 
     dets = _determinants(norb, (nalpha, nbeta))
-    det_index = {det: idx for idx, det in enumerate(dets)}
+    # The determinant -> row map is only consulted by the Python enumeration
+    # fallbacks, so it is left to _determinant_index to build on demand.
+    det_index = None
     nspin = 2 * norb
     hspin, gspin = _spin_orbital_integrals(h1e, eri)
 
@@ -1169,7 +1381,19 @@ def solve_fci(
         hamiltonian = _build_dense_hamiltonian(
             dets, det_index, hspin, gspin, nspin, integral_cutoff
         )
-        eigvals, eigvecs = _symmetric_eigh(hamiltonian)
+        eigvals = eigvecs = None
+        if target_multiplicity is None:
+            # Only the lowest `nroot` are ever consumed here, so a full
+            # ndet-root dsyevd is waste; Davidson on the already-built dense
+            # matrix returns them to LAPACK accuracy for a fraction of the cost
+            # (None falls back to the full solve below).
+            lowest = _lowest_dense_roots(
+                hamiltonian, nroot, eig_tol, davidson_maxiter
+            )
+            if lowest is not None:
+                eigvals, eigvecs = lowest
+        if eigvals is None:
+            eigvals, eigvecs = _symmetric_eigh(hamiltonian)
         if target_multiplicity is None:
             selected_indices = np.arange(nroot, dtype=np.int64)
             selected_eigvals = eigvals[:nroot]
@@ -1285,11 +1509,17 @@ def _unpack_lower_triangle(packed: np.ndarray, n: int) -> np.ndarray:
     return matrix
 
 
-def _transform_integrals(
+def _transform_integrals_reference(
     hcore_ao: np.ndarray,
     eri_ao: np.ndarray,
     coeff: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
+    """Single-einsum AO -> MO transformation -- the numerical pin.
+
+    Out of the execution path (see :func:`_transform_integrals`) but kept in
+    the tree as the reference the Fortran engine is validated against, and as
+    the fallback when the native symbol is unavailable.
+    """
     h1e = coeff.T @ hcore_ao @ coeff
     eri = np.einsum(
         "up,vq,wr,xs,uvwx->pqrs",
@@ -1300,6 +1530,55 @@ def _transform_integrals(
         eri_ao,
         optimize=True,
     )
+    return h1e, eri
+
+
+def _transform_integrals(
+    hcore_ao: np.ndarray,
+    eri_ao: np.ndarray,
+    coeff: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """AO -> MO transformation of the core Hamiltonian and the ERI tensor.
+
+    Routed to the liboqp engine (``mo_transform.F90``), which does the four
+    quarter transformations as four DGEMMs with transposed output so the index
+    roll between them is free.  :func:`_transform_integrals_reference` is the
+    numpy pin and the fallback.
+
+    Note what this port does and does not buy.  The einsum was never the naive
+    O(nbf^8) contraction -- ``optimize=True`` already reduces it to a GEMM
+    chain running at 46-72 GFlop/s -- so this is an architectural move (compute
+    belongs in liboqp) rather than a rescue.  A *naive* explicit chain in numpy
+    is in fact slower than the einsum (0.48-0.78x at nbf=24..58) because the
+    ``ascontiguousarray`` rolls between steps cost more than the einsum's own
+    bookkeeping; avoiding those copies is what the Fortran formulation is for.
+    """
+    hcore_ao = np.ascontiguousarray(hcore_ao, dtype=np.float64)
+    eri_ao = np.ascontiguousarray(eri_ao, dtype=np.float64)
+    coeff = np.ascontiguousarray(coeff, dtype=np.float64)
+    nbf = int(coeff.shape[0])
+    backend = _lib_backend()
+    if (backend is None or nbf <= 0
+            or not hasattr(backend[0], "mo_transform_eri")):
+        return _transform_integrals_reference(hcore_ao, eri_ao, coeff)
+    lib, ffi = backend
+
+    h1e = np.zeros((nbf, nbf), dtype=np.float64)
+    lib.mo_transform_h1e(
+        nbf,
+        ffi.cast("double *", hcore_ao.ctypes.data),
+        ffi.cast("double *", coeff.ctypes.data),
+        ffi.cast("double *", h1e.ctypes.data))
+
+    eri = np.zeros((nbf,) * 4, dtype=np.float64)
+    status = int(lib.mo_transform_eri(
+        nbf,
+        ffi.cast("double *", eri_ao.ctypes.data),
+        ffi.cast("double *", coeff.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data)))
+    if status != 0:
+        # the engine could not allocate its nbf^4 work buffer
+        return _transform_integrals_reference(hcore_ao, eri_ao, coeff)
     return h1e, eri
 
 
@@ -1620,6 +1899,66 @@ def _active_nelec_from_setting(
     return active_nelec, int(frozen_core)
 
 
+def _fold_core_reference(h1e, eri, active_list, core_list, ecore=0.0):
+    """Frozen-core fold -- the numerical pin.
+
+    Out of the execution path (see :func:`_fold_core`).  The accumulation order
+    here is the contract: the inactive energy is summed into the caller's
+    ``ecore`` in the order (2 h_ii), then (2 (ii|jj) - (ij|ji)), and each
+    exchange-corrected term is formed before it is added.  The engine
+    reproduces that order so the two agree bit for bit.
+    """
+    active = np.asarray(active_list, dtype=int)
+    h_active = h1e[np.ix_(active, active)].copy()
+    ecore_active = float(ecore)
+    if not len(core_list):
+        return h_active, ecore_active
+    for i in core_list:
+        ecore_active += 2.0 * h1e[i, i]
+    for i in core_list:
+        for j in core_list:
+            ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
+    for p, pp in enumerate(active):
+        for q, qq in enumerate(active):
+            for i in core_list:
+                h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
+    return h_active, ecore_active
+
+
+def _fold_core(h1e, eri, active_list, core_list, ecore=0.0):
+    """Folded active one-electron integrals and the inactive energy.
+
+    Routed to the liboqp engine (``fci_setup.F90``); the Python loop of
+    :func:`_fold_core_reference` is the pin and the fallback.  Both index lists
+    are explicit so the sequential and the explicitly selected CAS paths share
+    one implementation.
+    """
+    h1e = np.ascontiguousarray(h1e, dtype=np.float64)
+    eri = np.ascontiguousarray(eri, dtype=np.float64)
+    norb = int(h1e.shape[0])
+    nact = len(active_list)
+    backend = _lib_backend()
+    if (backend is None or nact <= 0
+            or not hasattr(backend[0], "fci_fold_core")):
+        return _fold_core_reference(h1e, eri, active_list, core_list, ecore)
+    lib, ffi = backend
+    active = np.ascontiguousarray(np.asarray(active_list, dtype=np.int32))
+    core = np.ascontiguousarray(np.asarray(core_list, dtype=np.int32))
+    if core.size == 0:                       # cffi will not cast an empty buffer
+        core = np.zeros(1, dtype=np.int32)
+    h_active = np.zeros((nact, nact), dtype=np.float64)
+    energy = np.array([float(ecore)], dtype=np.float64)
+    lib.fci_fold_core(
+        norb, nact, len(core_list),
+        ffi.cast("int32_t *", active.ctypes.data),
+        ffi.cast("int32_t *", core.ctypes.data),
+        ffi.cast("double *", h1e.ctypes.data),
+        ffi.cast("double *", eri.ctypes.data),
+        ffi.cast("double *", h_active.ctypes.data),
+        ffi.cast("double *", energy.ctypes.data))
+    return h_active, float(energy[0])
+
+
 def _active_space(
     h1e: np.ndarray,
     eri: np.ndarray,
@@ -1665,20 +2004,9 @@ def _active_space(
             raise ValueError("active_orbital_indices selects too few orbitals for the active electron count")
 
         active = np.array(active_list, dtype=int)
-        core = np.array(core_list, dtype=int)
-        h_active = h1e[np.ix_(active, active)].copy()
         eri_active = eri[np.ix_(active, active, active, active)].copy()
-        ecore_active = float(ecore)
-        if frozen_core:
-            for i in core:
-                ecore_active += 2.0 * h1e[i, i]
-            for i in core:
-                for j in core:
-                    ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
-            for p, pp in enumerate(active):
-                for q, qq in enumerate(active):
-                    for i in core:
-                        h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
+        h_active, ecore_active = _fold_core(
+            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "explicit"
     else:
         frozen_core = settings.frozen_core
@@ -1698,26 +2026,12 @@ def _active_space(
         if frozen_core + active_norb > norb:
             raise ValueError("active_orbitals extends beyond the available MO space")
 
-        core = range(frozen_core)
         active = slice(frozen_core, frozen_core + active_norb)
-        h_active = h1e[active, active].copy()
         eri_active = eri[active, active, active, active].copy()
-        ecore_active = float(ecore)
-
-        if frozen_core:
-            for i in core:
-                ecore_active += 2.0 * h1e[i, i]
-            for i in core:
-                for j in core:
-                    ecore_active += 2.0 * eri[i, i, j, j] - eri[i, j, j, i]
-            for p in range(active_norb):
-                pp = p + frozen_core
-                for q in range(active_norb):
-                    qq = q + frozen_core
-                    for i in core:
-                        h_active[p, q] += 2.0 * eri[pp, qq, i, i] - eri[pp, i, i, qq]
         active_list = list(range(frozen_core, frozen_core + active_norb))
         core_list = list(range(frozen_core))
+        h_active, ecore_active = _fold_core(
+            h1e, eri, active_list, core_list, ecore=float(ecore))
         selection = "sequential"
 
     metadata = {
