@@ -576,10 +576,46 @@ class OQPAutoMECIOpt:
             ]
         return states
 
+    def _uses_response_roots(self):
+        """BaekA addresses states as 1-based response roots.
+
+        The PT2 family has no response vectors -- its states are 0-based PT2
+        root indices carried by the numerical-gradient path -- so BaekA is not
+        a well-defined escalation there and would reject state 0 outright.
+        """
+        from oqp.library.pt2_numgrad import PT2_NUMGRAD_METHODS
+
+        method = str(self.mol.config["input"].get("method", "hf")).strip().lower()
+        return method not in PT2_NUMGRAD_METHODS
+
     def optimize(self):
         optimize_config = self.mol.config["optimize"]
         native_config = self.mol.config.get("oqp", {})
         states = self._selected_states(optimize_config)
+
+        if not self._uses_response_roots():
+            if len(states) > 2:
+                raise ValueError(
+                    "Automatic MECI needs BaekA for %d states, but BaekA "
+                    "requires response roots, which the PT2 family does not "
+                    "have. Use exactly two states, or an explicit "
+                    "[optimize] meci_search=penalty." % len(states)
+                )
+            dump_log(
+                self.mol,
+                title=(
+                    "PyOQP: Automatic MECI stays on the penalty search "
+                    "(BaekA needs response roots, which PT2 methods lack)"
+                ),
+            )
+            optimize_config["meci_search"] = "penalty"
+            try:
+                self.penalty_optimizer = OQPMECIOpt(self.mol)
+                self.penalty_optimizer.optimize()
+                self.metrics = self.penalty_optimizer.metrics
+            finally:
+                optimize_config["meci_search"] = "auto"
+            return
         total_steps = max(1, int(optimize_config.get("maxit", 30)))
         recovery_steps = max(
             1, int(native_config.get("recovery_maxit", 30))
