@@ -287,6 +287,29 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
     const int32_t *pairs, const double *dmat, const double *rdm2,
     const double *h1e, const double *eri, double *bmat, double *fder,
     double *gder);
+/* Determinant-space bookkeeping and mean-field Fock of the PT2 path
+ * (pt2_kernel.F90).  Determinant keys are the fci.py integers, so these need
+ * 2*norb <= 62.  pt2_external_indices returns the number of external
+ * determinants written; pt2_occupation_blocks returns the block count and
+ * fills `starts` with nblock+1 boundaries into the `order` permutation. */
+void pt2_effective_fock(int32_t nbf, const double *h1e, const double *eri,
+    const double *dmat, double *fock);
+void pt2_h0_dyall_active(int32_t nbf, int32_t ncore, int32_t nact,
+    const double *h1e, const double *eri, double *hact);
+int64_t pt2_external_indices(int32_t norb, int32_t ncore, int32_t nact,
+    int64_t ndet, const int64_t *dets, int64_t *ext);
+void pt2_diagonal_h0(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *eps, double *diag);
+int64_t pt2_occupation_blocks(int32_t norb, int32_t ncore, int32_t nact,
+    int64_t next, const int64_t *dets, const int64_t *ext, int64_t *order,
+    int64_t *starts);
+/* Dominant Koopmans intermediates of the strongly contracted NEVPT2
+ * (nevpt2_koopmans.F90).  `h2e` is the physicist-ordered active ERI tensor and
+ * dm3/dm4 the spin-free RDMs in the PySCF make_dm1234 convention. */
+void nevpt2_f3ca_f3ac(int32_t nact, const double *h2e, const double *dm4,
+    double *f3ca, double *f3ac);
+void nevpt2_a16(int32_t nact, const double *h1e, const double *h2e,
+    const double *dm3, const double *f3ca, const double *f3ac, double *a16);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
