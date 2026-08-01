@@ -1467,7 +1467,7 @@ contains
     use messages, only: show_message, with_abort
     use mathlib, only: unpack_matrix, pack_matrix, orthogonal_transform_sym
     use tdhf_mrsf_lib, only: mrsf_interstate_tden
-    use fock_deriv_mod, only: fock_deriv_contract_os
+    use fock_deriv_mod, only: fock_deriv_contract_os2
     use grd1, only: grad_ee_kinetic, grad_en_hellman_feynman, grad_en_pulay, &
                     grad_ee_overlap
     use dft, only: dft_initialize, dftclean
@@ -1631,10 +1631,8 @@ contains
     call unpack_matrix(dmat_b, pb)
     ptot = pa + pb
     g1 = 0.0_dp
-    call fock_deriv_contract_os(infos, basis, ptot, pa, pij_a, hfscale, g1)
-    gx = gx + g1
-    g1 = 0.0_dp
-    call fock_deriv_contract_os(infos, basis, ptot, pb, pij_b, hfscale, g1)
+    call fock_deriv_contract_os2(infos, basis, ptot, pa, pb, &
+                                 pij_a, pij_b, hfscale, g1)
     gx = gx + g1
 
   ! (4b) explicit XC: Tr[P^IJ_a . dV_xc^a/dR] + Tr[P^IJ_b . dV_xc^b/dR] at the

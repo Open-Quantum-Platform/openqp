@@ -612,7 +612,7 @@ contains
     use mathlib, only: unpack_matrix, pack_matrix
     use cphf_mod, only: rohf_unpack_trial
     use grd1, only: der_overlap_matrix, der_kinetic_matrix, der_nucattr_matrix
-    use fock_deriv_mod, only: fock_deriv_contract_os
+    use fock_deriv_mod, only: fock_deriv_contract_os2
     use scf_addons, only: fock_jk
     use ecp_tool, only: ecp_deriv_ints
     use messages, only: show_message, WITH_ABORT
@@ -629,7 +629,7 @@ contains
     real(kind=dp), pointer :: out(:,:)
     real(kind=dp), allocatable :: pa(:,:), pb(:,:), ptot(:,:)
     real(kind=dp), allocatable :: xa(:,:), xb(:,:), pza(:,:), pzb(:,:)
-    real(kind=dp), allocatable :: work(:,:), half(:,:), probe(:,:)
+    real(kind=dp), allocatable :: work(:,:), half(:,:), probe_a(:,:), probe_b(:,:)
     real(kind=dp), allocatable :: fa(:,:), fb(:,:), famo(:,:), fbmo(:,:)
     real(kind=dp), allocatable :: dmz(:,:), vjkz(:,:), vza(:,:), vzb(:,:)
     real(kind=dp), allocatable :: vzamo(:,:), vzbmo(:,:)
@@ -672,7 +672,7 @@ contains
 
     allocate(pa(nbf,nbf), pb(nbf,nbf), ptot(nbf,nbf))
     allocate(xa(nvira,nocca), xb(nvirb,noccb), pza(nbf,nbf), pzb(nbf,nbf))
-    allocate(work(nbf,nbf), half(nbf,nbf), probe(nbf,nbf))
+    allocate(work(nbf,nbf), half(nbf,nbf), probe_a(nbf,nbf), probe_b(nbf,nbf))
     allocate(fa(nbf,nbf), fb(nbf,nbf), famo(nbf,nbf), fbmo(nbf,nbf))
     allocate(dmz(nbf2,2), vjkz(nbf2,2), vza(nbf,nbf), vzb(nbf,nbf), &
              vzamo(nbf,nbf), vzbmo(nbf,nbf))
@@ -708,13 +708,11 @@ contains
     ! forward code's (virtual,occupied) probe sweep.  The factor 1/2 follows
     ! because P_z contains both AO triangles while each forward probe is
     ! 1/2(C_a C_i^T + C_i C_a^T).
-    probe = 0.5_dp*pza
+    probe_a = 0.5_dp*pza
+    probe_b = 0.5_dp*pzb
     gx = 0.0_dp
-    call fock_deriv_contract_os(infos, basis, ptot, pa, probe, hfscale, gx)
-    ghf = ghf - gx
-    probe = 0.5_dp*pzb
-    gx = 0.0_dp
-    call fock_deriv_contract_os(infos, basis, ptot, pb, probe, hfscale, gx)
+    call fock_deriv_contract_os2(infos, basis, ptot, pa, pb, &
+                                 probe_a, probe_b, hfscale, gx)
     ghf = ghf - gx
 
     ! Build the JK response to P_z once.  Kernel symmetry turns the forward
@@ -786,7 +784,7 @@ contains
     call tagarray_get_data(infos%dat, tag_out, out)
     out = ghf
 
-    deallocate(pa, pb, ptot, xa, xb, pza, pzb, work, half, probe, &
+    deallocate(pa, pb, ptot, xa, xb, pza, pzb, work, half, probe_a, probe_b, &
       fa, fb, famo, fbmo, dmz, vjkz, vza, vzb, vzamo, vzbmo, &
       dsa, dta, dva, dvecp, ghf, gx, sxmo, hxmo)
   contains
