@@ -111,6 +111,17 @@ class MRSFNACXCMovingGridTests(unittest.TestCase):
         self.assertIn("part_cells(nat_stride,nthreads)", self.consumer)
         self.assertIn("part_dlog(3,nat,nat_stride,nthreads)", self.consumer)
 
+    def test_batch_gradient_scratch_uses_pruned_ao_extent(self):
+        self.assertIn(
+            "tmpGrad(1:numAOs,1:3,1:nMtx)", self.consumer
+        )
+        self.assertIn(
+            "self%tmpGrad_(1:numAOs*3*nMtx,myThread)", self.consumer
+        )
+        self.assertNotIn(
+            "tmpGrad => self%tmpGrad_(:,:,:,myThread)", self.consumer
+        )
+
     def test_probe_weight_term_is_not_ground_state_xc_energy(self):
         self.assertIn("probe_value", self.consumer)
         self.assertIn("dot_product(d_r, rhoab)", self.consumer)
