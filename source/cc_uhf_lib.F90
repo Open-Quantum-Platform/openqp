@@ -17,8 +17,9 @@
 !>
 !> Memory: <pq||rs> is (2*nmo)^4, sixteen times the spatial tensor.  That is
 !> acceptable for validation-sized systems and for small open-shell cases, but
-!> it is NOT the production layout -- see docs/ccsd_t_open_shell_plan.md for
-!> the spin-integrated blocking that the full implementation should use.
+!> it is NOT the production layout: a full implementation should keep the
+!> spin-integrated blocks (aa, ab, bb) separately and block the ladder over
+!> the virtual index, the way cc_lib does for the closed shell.
 !> cc_uhf_spinorb_gb reports the cost so callers can refuse in advance.
 module cc_uhf_lib
 
@@ -173,7 +174,7 @@ end function cc_uhf_mp2
 !> Straightforward loop form.  This is the correctness reference for the
 !> open-shell path, not the performance path -- it is O(n^6) in scalar loops
 !> against the closed-shell code's DGEMMs, and the spin-orbital tensors are
-!> sixteen times the spatial ones.  See docs/ccsd_t_open_shell_plan.md.
+!> sixteen times the spatial ones.  Use it for small open-shell systems.
 subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
                          e_ccsd, e_t, converged, niter, fov)
 

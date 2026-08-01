@@ -841,7 +841,7 @@ class OpenQP:
 
         reference may be rhf, uhf or rohf.  Open-shell references go through
         the spin-orbital solver, which stores sixteen times the integrals of
-        the closed-shell path -- see docs/ccsd_t_open_shell_plan.md.
+        the closed-shell path, so keep those systems small.
         """
         if runtype is None:
             runtype = "energy"

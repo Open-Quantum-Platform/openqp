@@ -16,7 +16,15 @@
     "difference, not agreement, so the tolerance says so instead of hiding it.",
     "",
     "cartesian=true throughout: OpenQP uses 6d Cartesian shells, so PySCF needs",
-    "gto.M(..., cart=True) or the two codes run different basis sets."
+    "gto.M(..., cart=True) or the two codes run different basis sets.",
+    "",
+    "The fzc1 ROHF cases cover frozen core on a non-canonical reference. The",
+    "frozen orbitals have to be taken out BEFORE semicanonicalisation: the",
+    "occupied rotation mixes core with valence, and alpha and beta rotate",
+    "separately, so freezing afterwards correlates a different space in each",
+    "spin. Doing it in the wrong order still converges and still looks",
+    "plausible -- it was off by 4e-7 to 9e-6 Hartree, which is why these cases",
+    "exist."
   ],
   "tolerance": {
     "scf": 1e-06,
@@ -262,6 +270,99 @@
       "scf_reference": -147.6322746613,
       "e_ccsd": -0.1103618047,
       "e_triples": -0.0007164361,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "OH doublet/STO-3G ROHF fzc1",
+      "atoms": [
+        [
+          8,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.0,
+          0.97
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 1,
+      "scf_type": "rohf",
+      "nfzc": 1,
+      "cartesian": true,
+      "nbf": 6,
+      "scf_reference": -74.3615619579,
+      "e_ccsd": -0.0255889337,
+      "e_triples": -1.456e-07,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "CH2 triplet/STO-3G ROHF fzc1",
+      "atoms": [
+        [
+          6,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.99,
+          0.33
+        ],
+        [
+          1,
+          0.0,
+          -0.99,
+          0.33
+        ]
+      ],
+      "basis": "sto-3g",
+      "spin": 2,
+      "scf_type": "rohf",
+      "nfzc": 1,
+      "cartesian": true,
+      "nbf": 7,
+      "scf_reference": -38.4214590621,
+      "e_ccsd": -0.0423671156,
+      "e_triples": -8.58016e-05,
+      "triples_tolerance": 1e-06
+    },
+    {
+      "name": "NH2 doublet/6-31G ROHF fzc1",
+      "atoms": [
+        [
+          7,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1,
+          0.0,
+          0.8,
+          0.57
+        ],
+        [
+          1,
+          0.0,
+          -0.8,
+          0.57
+        ]
+      ],
+      "basis": "6-31g",
+      "spin": 1,
+      "scf_type": "rohf",
+      "nfzc": 1,
+      "cartesian": true,
+      "nbf": 13,
+      "scf_reference": -55.5292453186,
+      "e_ccsd": -0.0993358314,
+      "e_triples": -0.0008000152,
       "triples_tolerance": 1e-06
     }
   ]

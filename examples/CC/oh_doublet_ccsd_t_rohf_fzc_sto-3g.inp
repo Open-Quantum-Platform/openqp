@@ -1,0 +1,30 @@
+# CCSD(T) on the OH doublet with an ROHF reference and a frozen core.
+#
+# ROHF is not canonical, so the module semicanonicalises before it solves the
+# amplitude equations.  The frozen core is taken out FIRST: the occupied
+# rotation mixes core with valence, and alpha and beta rotate separately, so
+# freezing afterwards would correlate a different space in each spin.  This
+# combination is the one that catches that ordering -- see
+# tests/data/ccsd_t_open_shell_validation.json for the reference energies.
+#
+# Runs in well under a second.
+[input]
+system=
+   8   0.0000   0.0000   0.0000
+   1   0.0000   0.0000   0.9700
+charge=0
+runtype=energy
+basis=sto-3g
+method=ccsd(t)
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=2
+type=rohf
+conv=1.0e-10
+
+[cc]
+nfzc=1
+conv=1.0e-9

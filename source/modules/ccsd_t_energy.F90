@@ -279,11 +279,19 @@ contains
       allocate(ca_sc(nbf,nbf), cb_sc(nbf,nbf), ea_sc(nbf), eb_sc(nbf), stat=ok2)
       if (ok2 /= 0) call show_message('CCSD(T): open-shell MO alloc failed', with_abort)
 
-      ! Semicanonicalise over the FULL orbital space before dropping frozen
-      ! core: the rotation mixes within the occupied block, so it has to see
-      ! every orbital it is allowed to mix with.
-      call semicanonicalize(nbf, int(infos%mol_prop%nelec_a), mo_a, fock_a, ca_sc, ea_sc)
-      call semicanonicalize(nbf, int(infos%mol_prop%nelec_b), mo_b, fock_b, cb_sc, eb_sc)
+      ! Semicanonicalise the CORRELATED window only.  The occupied rotation
+      ! mixes core with valence, so rotating the full space and then dropping
+      ! the first nfzc columns would correlate a different subspace than the
+      ! requested frozen core -- and would drop a different spatial orbital
+      ! from each spin, since alpha and beta rotate separately.  Freezing
+      ! first keeps the correlated space equal to the span of the reference
+      ! orbitals nfzc+1..nbf, which is what frozen-core CC means everywhere
+      ! else; the rotation within that space is what makes the denominators
+      ! well defined and leaves the energy unchanged.
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_a), mo_a, fock_a, ca_sc, ea_sc, &
+                            nfzc=nfzc)
+      call semicanonicalize(nbf, int(infos%mol_prop%nelec_b), mo_b, fock_b, cb_sc, eb_sc, &
+                            nfzc=nfzc)
 
       allocate(eri_aa(nmo,nmo,nmo,nmo), eri_bb(nmo,nmo,nmo,nmo), &
                eri_ab(nmo,nmo,nmo,nmo), stat=ok2)
