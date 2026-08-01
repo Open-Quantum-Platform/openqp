@@ -257,10 +257,50 @@ def _log(mol, text: str = "") -> None:
         handle.write(text + "\n")
 
 
+# --------------------------------------------------------------------------- native engine
+def _pt2_lib():
+    """(lib, ffi) of the loaded native core, or ``None`` when unavailable.
+
+    Every caller below falls back to the NumPy/Python implementation that
+    follows it when this returns ``None`` or the symbol is missing, so the
+    module keeps working against a liboqp built before these kernels existed --
+    and the Python stays the numerical pin.
+    """
+    try:
+        from oqp.library.fci import _lib_backend
+    except Exception:
+        return None
+    return _lib_backend()
+
+
+def _dptr(ffi, arr):
+    return ffi.cast("double *", arr.ctypes.data)
+
+
+def _iptr(ffi, arr):
+    return ffi.cast("int64_t *", arr.ctypes.data)
+
+
 # --------------------------------------------------------------------------- Fock
 def _effective_fock(h1e, eri, D):
     """Closed+active mean-field (generalized) Fock; its diagonal is the orbital
-    energy used by Dyall's zeroth-order Hamiltonian."""
+    energy used by Dyall's zeroth-order Hamiltonian.
+
+    The liboqp engine (``pt2_effective_fock``) evaluates the same
+    ``F = h + J - 1/2 K``; the NumPy einsums below remain as the fallback and
+    the numerical pin."""
+    backend = _pt2_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "pt2_effective_fock"):
+            nbf = int(h1e.shape[0])
+            h = np.ascontiguousarray(h1e, dtype=np.float64)
+            g = np.ascontiguousarray(eri, dtype=np.float64)
+            d = np.ascontiguousarray(D, dtype=np.float64)
+            fock = np.zeros((nbf, nbf), dtype=np.float64)
+            lib.pt2_effective_fock(nbf, _dptr(ffi, h), _dptr(ffi, g),
+                                   _dptr(ffi, d), _dptr(ffi, fock))
+            return fock
     J = np.einsum("rs,pqrs->pq", D, eri, optimize=True)
     K = np.einsum("rs,prsq->pq", D, eri, optimize=True)
     return h1e + J - 0.5 * K
@@ -327,7 +367,20 @@ def _embed_reference(ci, act_dets, ncore, nact, norb, det_index):
 
 def _external_indices(full_dets, ncore, nact, norb):
     """Indices of the external (first-order) determinants: every determinant that
-    is not a pure CAS configuration (core doubly occupied, no virtual occupied)."""
+    is not a pure CAS configuration (core doubly occupied, no virtual occupied).
+
+    The liboqp engine (``pt2_external_indices``) walks the same test over the
+    determinant keys; the Python loop below is the fallback and the pin."""
+    backend = _pt2_lib() if 2 * int(norb) <= 62 else None
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "pt2_external_indices"):
+            dets = np.ascontiguousarray(np.asarray(full_dets, dtype=np.int64))
+            ext = np.zeros(max(dets.size, 1), dtype=np.int64)
+            n = int(lib.pt2_external_indices(
+                int(norb), int(ncore), int(nact), int(dets.size),
+                _iptr(ffi, dets), _iptr(ffi, ext)))
+            return ext[:n].astype(int, copy=False)
     core_mask = sum(1 << i for i in range(ncore))
     virt_mask = sum(1 << i for i in range(ncore + nact, norb))
     full_mask = (1 << norb) - 1
@@ -360,11 +413,24 @@ def _h0_integrals(h1e, eri, eps, ncore, nact, h0, active_occ=None, ipea=0.0):
     g0_2e = np.zeros_like(eri)
     if h0 == "dyall":
         A = list(range(ncore, ncore + nact))
-        h_act = h1e[np.ix_(A, A)].copy()
-        for p, P in enumerate(A):
-            for q, Q in enumerate(A):
-                for i in range(ncore):
-                    h_act[p, q] += 2.0 * eri[P, Q, i, i] - eri[P, i, i, Q]
+        h_act = None
+        backend = _pt2_lib()
+        if backend is not None:
+            lib, ffi = backend
+            if hasattr(lib, "pt2_h0_dyall_active"):
+                nbf = int(h1e.shape[0])
+                h = np.ascontiguousarray(h1e, dtype=np.float64)
+                g = np.ascontiguousarray(eri, dtype=np.float64)
+                h_act = np.zeros((nact, nact), dtype=np.float64)
+                lib.pt2_h0_dyall_active(nbf, int(ncore), int(nact),
+                                        _dptr(ffi, h), _dptr(ffi, g),
+                                        _dptr(ffi, h_act))
+        if h_act is None:               # fallback / numerical pin
+            h_act = h1e[np.ix_(A, A)].copy()
+            for p, P in enumerate(A):
+                for q, Q in enumerate(A):
+                    for i in range(ncore):
+                        h_act[p, q] += 2.0 * eri[P, Q, i, i] - eri[P, i, i, Q]
         h0_1e[np.ix_(A, A)] = h_act
         g0_2e[np.ix_(A, A, A, A)] = eri[np.ix_(A, A, A, A)]
     # IPEA shift (Ghigo-Roos-Malmqvist 2004): bias each active diagonal of H0
@@ -445,7 +511,21 @@ def _diagonal_zeroth_order(full_dets, h0_1e, g0_2e, norb):
     eps0 = np.asarray(np.diag(h0_1e), dtype=float)
     if np.any(np.asarray(h0_1e) - np.diag(eps0)):
         return None
-    dets = np.asarray(full_dets, dtype=np.int64)
+    dets = np.ascontiguousarray(np.asarray(full_dets, dtype=np.int64))
+    # The two exactness guards above are what SELECT this path, and they stay in
+    # Python; only the evaluation of the resulting diagonal moves down.  The
+    # native sum runs over p in the same ascending order and adds eps_p once per
+    # occupied spin, so it is bit-identical to the NumPy accumulation below
+    # (eps+eps and 2*eps agree exactly in IEEE double).
+    backend = _pt2_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "pt2_diagonal_h0"):
+            e0 = np.ascontiguousarray(eps0, dtype=np.float64)
+            diag = np.zeros(max(dets.size, 1), dtype=np.float64)
+            lib.pt2_diagonal_h0(int(norb), int(dets.size), _iptr(ffi, dets),
+                                _dptr(ffi, e0), _dptr(ffi, diag))
+            return diag[:dets.size]
     alpha = dets & np.int64((1 << norb) - 1)
     beta = dets >> np.int64(norb)
     diag = np.zeros(dets.size, dtype=float)
@@ -474,6 +554,25 @@ def _occupation_blocks(full_dets, external, ncore, nact, norb):
     """
     if 2 * norb > 62:
         return None
+    # liboqp engine; the NumPy partition below is the fallback and the pin.  The
+    # native sort compares the COMPOSITE key (signature, original position), so
+    # it reproduces numpy's stable argsort exactly -- the intra-block member
+    # order, and hence each block's eigenproblem, is bit-for-bit identical.
+    backend = _pt2_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "pt2_occupation_blocks"):
+            dets = np.ascontiguousarray(np.asarray(full_dets, dtype=np.int64))
+            ext = np.ascontiguousarray(np.asarray(external, dtype=np.int64))
+            nx = int(ext.size)
+            order = np.zeros(max(nx, 1), dtype=np.int64)
+            starts = np.zeros(nx + 1, dtype=np.int64)
+            nblock = int(lib.pt2_occupation_blocks(
+                int(norb), int(ncore), int(nact), nx, _iptr(ffi, dets),
+                _iptr(ffi, ext), _iptr(ffi, order), _iptr(ffi, starts)))
+            if nx == 0:
+                return [order[:0]]
+            return [order[starts[b]:starts[b + 1]] for b in range(nblock)]
     act_mask = ((1 << nact) - 1) << ncore
     frozen = ((1 << norb) - 1) & ~act_mask
     keep = np.int64(frozen | (frozen << norb))     # both spins, one mask

@@ -233,10 +233,38 @@ def make_rdms(ci, norb, active_nelec, upto=4):
 # ---------------------------------------------------- Koopmans intermediates
 # Ported verbatim from pyscf/mrpt/nevpt2.py.  ``h2e`` is the PHYSICIST-ordered
 # active two-electron tensor (= chemist (pq|rs) transposed (0,2,1,3)).
+def _koopmans_lib():
+    """(lib, ffi) of the loaded native core, or ``None`` when unavailable."""
+    try:
+        from oqp.library.fci import _lib_backend
+    except Exception:
+        return None
+    return _lib_backend()
+
+
 def _f3ca_f3ac(h2e, dm4):
     """The two eri-folded 4-pdm intermediates that PySCF computes via the
     compiled ``NEVPTkern_cedf_aedf`` / ``NEVPTkern_aedf_ecdf`` kernels,
-    reconstructed here from the genuine spin-free 4-RDM (machine precision)."""
+    reconstructed here from the genuine spin-free 4-RDM (machine precision).
+
+    The liboqp engine (``nevpt2_f3ca_f3ac``) evaluates the same two tensors with
+    the einsum transposes folded into the index expression, which turns f3ca into
+    a single DGEMM; the NumPy path below stays as the fallback and the pin."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_f3ca_f3ac"):
+            n = int(h2e.shape[0])
+            g = np.ascontiguousarray(h2e, dtype=np.float64)
+            d4 = np.ascontiguousarray(dm4, dtype=np.float64)
+            f3ca = np.zeros((n,) * 6, dtype=np.float64)
+            f3ac = np.zeros((n,) * 6, dtype=np.float64)
+            lib.nevpt2_f3ca_f3ac(
+                n, ffi.cast("double *", g.ctypes.data),
+                ffi.cast("double *", d4.ctypes.data),
+                ffi.cast("double *", f3ca.ctypes.data),
+                ffi.cast("double *", f3ac.ctypes.data))
+            return f3ca, f3ac
     dm4ca = dm4.transpose(0, 1, 4, 5, 6, 7, 2, 3)
     f3ca = _ein('kbij,rpqjkiac->pqrabc', h2e, dm4ca).transpose(
         np.argsort((1, 4, 0, 2, 5, 3)))
@@ -246,6 +274,26 @@ def _f3ca_f3ac(h2e, dm4):
 
 
 def _a16(h1e, h2e, dm3, f3ca, f3ac):
+    """The a16 intermediate (Sr subspace).
+
+    The liboqp engine (``nevpt2_a16``) evaluates the same thirteen terms
+    block-wise over the spectator triple (r,p,q); the NumPy assembly below stays
+    as the fallback and the pin."""
+    backend = _koopmans_lib()
+    if backend is not None:
+        lib, ffi = backend
+        if hasattr(lib, "nevpt2_a16"):
+            n = int(h1e.shape[0])
+            h1 = np.ascontiguousarray(h1e, dtype=np.float64)
+            g = np.ascontiguousarray(h2e, dtype=np.float64)
+            d3 = np.ascontiguousarray(dm3, dtype=np.float64)
+            ca = np.ascontiguousarray(f3ca, dtype=np.float64)
+            ac = np.ascontiguousarray(f3ac, dtype=np.float64)
+            out = np.zeros((n,) * 6, dtype=np.float64)
+            cast = lambda a: ffi.cast("double *", a.ctypes.data)  # noqa: E731
+            lib.nevpt2_a16(n, cast(h1), cast(g), cast(d3), cast(ca), cast(ac),
+                           cast(out))
+            return out
     a16 = -_ein('ib,rpqiac->pqrabc', h1e, dm3)
     a16 += _ein('ia,rpqbic->pqrabc', h1e, dm3)
     a16 -= _ein('ci,rpqbai->pqrabc', h1e, dm3)
