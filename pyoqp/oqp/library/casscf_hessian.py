@@ -229,13 +229,30 @@ def _fold_active(t, T, ncore, nact):
 
 
 # ----------------------------------------------------------------- determinant machinery
-@lru_cache(maxsize=8)
-def _excitation_matrices(nact, nalpha, nbeta):
-    """Spin-summed excitation matrices ``(E_tu)_{row,col} = <row| E_tu |col>``.
+def _lib_excitation_stack(nact, dets):
+    """Excitation-matrix stack through the Fortran engine, or None."""
+    from oqp.library.fci import _lib_backend
 
-    Same determinant ordering and bit convention (alpha bits low, beta bits
-    high) as ``fci._determinants`` / ``rdm.make_rdm*``.  Cached per active
-    space; the returned stack is read-only."""
+    backend = _lib_backend()
+    if backend is None or 2 * int(nact) > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_excitation_stack"):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    ndet = int(det_arr.size)
+    stack = np.zeros((int(nact), int(nact), ndet, ndet), dtype=np.float64)
+    info = lib.casscf_excitation_stack(
+        int(nact), ndet,
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", stack.ctypes.data))
+    if int(info) != 0:
+        return None
+    return stack
+
+
+def _excitation_matrices_python(nact, nalpha, nbeta):
+    """NumPy/Python reference builder, kept as the pin for the Fortran engine."""
     dets = tuple(_determinants(int(nact), (int(nalpha), int(nbeta))))
     index = {det: i for i, det in enumerate(dets)}
     ndet = len(dets)
@@ -255,6 +272,23 @@ def _excitation_matrices(nact, nalpha, nbeta):
                     row = index.get(det_tu)
                     if row is not None:
                         stack[t, u, row, col] += phase_u * phase_t
+    stack.setflags(write=False)
+    return dets, stack
+
+
+@lru_cache(maxsize=8)
+def _excitation_matrices(nact, nalpha, nbeta):
+    """Spin-summed excitation matrices ``(E_tu)_{row,col} = <row| E_tu |col>``.
+
+    Same determinant ordering and bit convention (alpha bits low, beta bits
+    high) as ``fci._determinants`` / ``rdm.make_rdm*``.  Built by the Fortran
+    engine (``casscf_exc_stack.F90``) with
+    :func:`_excitation_matrices_python` as the fallback and the numerical pin.
+    Cached per active space; the returned stack is read-only."""
+    dets = tuple(_determinants(int(nact), (int(nalpha), int(nbeta))))
+    stack = _lib_excitation_stack(int(nact), dets)
+    if stack is None:
+        return _excitation_matrices_python(nact, nalpha, nbeta)
     stack.setflags(write=False)
     return dets, stack
 

@@ -287,6 +287,11 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
     const int32_t *pairs, const double *dmat, const double *rdm2,
     const double *h1e, const double *eri, double *bmat, double *fder,
     double *gder);
+/* Spin-summed excitation matrices (E_tu)_{row,col} over the determinant list
+ * (casscf_exc_stack.F90). Returns 0, or -1 when 2*nact exceeds the 62-bit
+ * determinant encoding, in which case the caller falls back to Python. */
+int64_t casscf_excitation_stack(int32_t nact, int64_t ndet, const int64_t *dets,
+    double *stack);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);
