@@ -695,8 +695,14 @@ class SinglePoint(Calculator):
 
         # --- Stage 3: stability safeguard ---
         # Applied only when the user opts in with [scf] stability=true.  Covers
-        # ground-state targets (method='hf') and spin-flip excited-state
-        # reference SCFs (method='tdhf' with type sf/mrsf/umrsf).  A
+        # ground-state targets (method='hf', and the coupled-cluster methods
+        # that build on the same ground-state determinant) and spin-flip
+        # excited-state reference SCFs (method='tdhf' with type sf/mrsf/umrsf).
+        # CCSD and CCSD(T) belong with 'hf' here: they correlate the converged
+        # reference, so an unstable UHF/ROHF determinant is exactly as wrong a
+        # starting point for them as it is for the HF energy itself, and
+        # silently ignoring the option the user asked for is the worst of the
+        # available behaviours.  A
         # DIIS-converged but *unstable* open-shell solution is just as wrong a
         # reference for spin-flip TDHF/MRSF as it is a wrong ground state:
         # building MRSF on it makes the reference (and the excited states)
@@ -707,8 +713,9 @@ class SinglePoint(Calculator):
         # is reverted below by restoring the snapshot.
         td_type = str(getattr(self, 'td', '')).lower()
         spin_flip_reference = self.method == 'tdhf' and td_type in ('sf', 'mrsf', 'umrsf')
+        ground_state_target = self.method in ('hf', 'ccsd', 'ccsd(t)')
         if (converged and stability and not rstctmo and primary != 'trah'
-                and (self.method == 'hf' or spin_flip_reference)):
+                and (ground_state_target or spin_flip_reference)):
             e_pre = self.mol.mol_energy.energy
             mol_energy_snapshot = self._snapshot_mol_energy_state()
             # Snapshot the converged orbitals so the safeguard is a true no-op
