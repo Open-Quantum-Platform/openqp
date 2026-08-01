@@ -260,6 +260,13 @@ void rdm1_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *civec, double *d1);
 int64_t rdm2_spinorb(int32_t nspin, int64_t ndet, const int64_t *dets,
     const double *civec, int64_t cap, double *d2, int32_t nthreads);
+/* Spin-summed spatial RDMs. Same build as the spin-orbital pair above, but the
+ * [2n,...] spin-orbital tensor is never materialised: the spin sum is applied
+ * while unpacking, so rdm2_spatial writes n^4 instead of 16 n^4. */
+void rdm1_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, double *d1);
+int64_t rdm2_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, int64_t cap, double *d2, int32_t nthreads);
 /* Spin-free dm1..dm4 (PySCF make_dm1234 convention) from the determinant CI
  * vector; `upto` selects how many are produced and the caller must have
  * allocated every array it requests. Returns 0, or -1 on allocation failure. */
@@ -287,6 +294,31 @@ void casscf_hess_bmat(int32_t nbf, int32_t ncore, int32_t nact, int32_t npar,
     const int32_t *pairs, const double *dmat, const double *rdm2,
     const double *h1e, const double *eri, double *bmat, double *fder,
     double *gder);
+/* Closed+active mean-field Fock h + J - K/2 used to canonicalize the CASSCF
+ * orbitals (casscf_kernel.F90); shares its J/K builder with the generalized
+ * Fock above. */
+void casscf_effective_fock(int32_t nbf, const double *dmat, const double *h1e,
+    const double *eri, double *fout);
+/* CASSCF orbital rotation C <- C exp(K) (casscf_orbrot.F90). `pairs` is the
+ * non-redundant rotation-pair list in casscf.py `_nonredundant_pairs` order;
+ * the antisymmetric K is built from it and exponentiated by scaling-and-
+ * squaring with the degree-13 Pade approximant. Both return 0, or the LAPACK
+ * info of a failed Pade solve. */
+int32_t casscf_orbital_rotate(int32_t nbf, int32_t npar, const int32_t *pairs,
+    const double *vec, const double *cin, double *cout);
+int32_t casscf_expm(int32_t n, const double *kin, double *eout);
+/* CASSCF orbital-optimization convergers (casscf_ah.F90). casscf_ah_model_step
+ * returns 0 on success, 1 when the augmented-Hessian eigenvector has no
+ * reference component (the caller steps along the lowest mode instead), and 2
+ * when LAPACK failed. casscf_diis_coeffs writes `nused` coefficients for the
+ * LAST `nused` stored gradients; nused == 0 means no stable extrapolation. */
+int32_t casscf_ah_model_step(int32_t npar, const double *grad, const double *w,
+    const double *umat, double trust, int32_t max_micro, double v0tol,
+    double *step, double *shift, double *pred, int32_t *nmic);
+void casscf_lowest_mode_step(int32_t npar, const double *grad, const double *w,
+    const double *umat, double trust, double *step, double *pred);
+void casscf_diis_coeffs(int32_t nvec, int32_t npar, const double *gmat,
+    double condmax, double *coef, int32_t *nused);
 void hf_hessian(struct oqp_handle_t *inf);
 void hess1_selftest(struct oqp_handle_t *inf);
 void grd2_hess_selftest(struct oqp_handle_t *inf);

@@ -65,6 +65,56 @@ def _lib_rdm2(coeff, dets, n_spinorb):
     return out
 
 
+def _lib_rdm1_spatial(coeff, dets, norb):
+    """Spin-summed spatial D1 through the Fortran engine, or None.
+
+    The engine never forms the [2n,2n] spin-orbital matrix: only same-spin
+    (p,q) elements survive the spin sum, so it accumulates straight into the
+    spatial result."""
+    backend = _rdm_backend()
+    if backend is None or 2 * norb > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "rdm1_spatial"):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    out = np.zeros((norb, norb), dtype=np.float64)
+    lib.rdm1_spatial(
+        int(norb), int(det_arr.size),
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        ffi.cast("double *", out.ctypes.data))
+    return out
+
+
+def _lib_rdm2_spatial(coeff, dets, norb):
+    """Spin-summed spatial D2 through the Fortran engine, or None.
+
+    Same Gram-matrix build as ``_lib_rdm2``, but the spin sum is applied while
+    unpacking it, so the engine writes nact^4 instead of the 16x larger
+    spin-orbital tensor the NumPy path has to allocate and then transpose."""
+    backend = _rdm_backend()
+    if backend is None or 2 * norb > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "rdm2_spatial"):
+        return None
+    det_arr = np.ascontiguousarray(np.asarray(dets, dtype=np.int64))
+    civec = np.ascontiguousarray(np.asarray(coeff, dtype=np.float64))
+    out = np.zeros((norb,) * 4, dtype=np.float64)
+    # Every determinant contributes at most (2*norb)^2 double annihilations.
+    cap = int(det_arr.size) * (2 * int(norb)) ** 2 + 1
+    info = lib.rdm2_spatial(
+        int(norb), int(det_arr.size),
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        cap, ffi.cast("double *", out.ctypes.data), 0)
+    if int(info) != 0:
+        return None
+    return out
+
+
 def _bit_count(value: int) -> int:
     # Hot path: this is called hundreds of millions of times when building the
     # 3- and 4-particle RDMs, so it goes through int.bit_count where available
@@ -225,7 +275,17 @@ def make_rdm1_spatial(
 ) -> np.ndarray:
     """Return the spin-summed spatial 1-RDM for alpha-then-beta bitstrings."""
     n_spatial_orb = int(n_spatial_orb)
-    spin = make_rdm1_spinorb(ci_vec, determinants, 2 * n_spatial_orb)
+    coeff, dets, _ns = _validate_ci_inputs(ci_vec, determinants, 2 * n_spatial_orb)
+
+    # Fortran engine first; the spin-orbital build plus the NumPy block sum
+    # below stays as the numerical pin and as the complex-CI / no-backend
+    # fallback.
+    if not np.iscomplexobj(coeff):
+        lib_result = _lib_rdm1_spatial(coeff, dets, n_spatial_orb)
+        if lib_result is not None:
+            return _finalize(lib_result)
+
+    spin = make_rdm1_spinorb(coeff, dets, 2 * n_spatial_orb)
     spatial = spin[:n_spatial_orb, :n_spatial_orb] + spin[n_spatial_orb:, n_spatial_orb:]
     return _finalize(spatial)
 
@@ -243,7 +303,16 @@ def make_rdm2_spatial(
     ``0.5 * einsum("pqrs,pqrs", eri, D)`` for ``eri[p,q,r,s] = (pq|rs)``.
     """
     n_spatial_orb = int(n_spatial_orb)
-    spin = make_rdm2_spinorb(ci_vec, determinants, 2 * n_spatial_orb)
+    coeff, dets, _ns = _validate_ci_inputs(ci_vec, determinants, 2 * n_spatial_orb)
+
+    # Fortran engine first; the spin-orbital build plus the NumPy spin-block
+    # sum below is the same reduction and stays as the numerical pin.
+    if not np.iscomplexobj(coeff):
+        lib_result = _lib_rdm2_spatial(coeff, dets, n_spatial_orb)
+        if lib_result is not None:
+            return _finalize(lib_result)
+
+    spin = make_rdm2_spinorb(coeff, dets, 2 * n_spatial_orb)
     spatial = np.zeros(
         (n_spatial_orb, n_spatial_orb, n_spatial_orb, n_spatial_orb),
         dtype=spin.dtype,

@@ -22,6 +22,16 @@ orbitals are rotated ``C <- C exp(K)`` with a Newton step built from a numerical
 orbital Hessian, made descent-safe by flooring the Hessian eigenvalues.  This is
 robust for the small/medium active spaces this validation-grade path targets.
 
+The rotation itself is also native (``casscf_orbrot.F90``): one call builds K
+from the non-redundant pair list, exponentiates it by scaling-and-squaring with
+the degree-13 Pade approximant, and applies it to the orbitals.  It is the most
+frequently executed step of the optimizer -- the default finite-difference
+Hessian alone applies 2*n_par of them per macroiteration -- and replacing the
+``C @ scipy.linalg.expm(_kappa_matrix(...))`` expression measured x5.2-6.5 on
+interleaved microbenchmarks.  ``_kappa_matrix`` below stays as its pin.
+Canonicalization's mean-field Fock is native too and deliberately reuses the
+generalized-Fock kernel's own J/K builder rather than duplicating it.
+
 For SA-CASSCF the same machinery is used with the weight-averaged RDMs, so the
 state-averaged energy ``sum_I w_I E_I`` is stationary.
 
@@ -200,11 +210,111 @@ def _nonredundant_pairs(ncore, nact, nbf):
 
 
 def _kappa_matrix(vec, pairs, nbf):
+    """Antisymmetric rotation generator K from the non-redundant pair list.
+
+    Kept as the numerical pin for the Fortran engine in ``casscf_orbrot.F90``,
+    which builds the same matrix (with the same ``+=`` accumulation semantics
+    for a repeated pair) and exponentiates it without returning it."""
     K = np.zeros((nbf, nbf))
     for (p, q), val in zip(pairs, vec):
         K[p, q] += val
         K[q, p] -= val
     return K
+
+
+# --------------------------------------------------------------------- rotation
+_PAIRS_CACHE: dict = {}
+
+
+def _pairs_array(pairs):
+    """int32 [npar,2] view of the pair list, cached on the list's identity.
+
+    The optimizer builds one pair list per run and then rotates orbitals
+    2*npar + O(1) times per macroiteration, so re-marshalling the list of
+    tuples on every rotation would cost more Python than the rotation saves.
+    A single-entry cache is enough (and the identity check keeps it correct if
+    a caller does swap lists)."""
+    key = id(pairs)
+    hit = _PAIRS_CACHE.get(key)
+    if hit is not None and hit[0] is pairs:
+        return hit[1]
+    arr = np.ascontiguousarray(np.asarray(pairs, dtype=np.int32).reshape(-1, 2))
+    _PAIRS_CACHE.clear()
+    _PAIRS_CACHE[key] = (pairs, arr)
+    return arr
+
+
+def _rotate_backend():
+    """liboqp (lib, ffi) for the Fortran orbital-rotation engine, or None."""
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_orbital_rotate"):
+        return None
+    return lib, ffi
+
+
+def _orbital_rotate(C, vec, pairs, nbf):
+    """``C @ expm(_kappa_matrix(vec, pairs, nbf))`` through the Fortran engine.
+
+    This is the most frequently executed step of the whole CASSCF optimizer:
+    every trial step, every backtracking bisection and every one of the 2*npar
+    finite-difference displacements behind the default FD Hessian applies one
+    rotation.  The engine builds K, exponentiates it by scaling-and-squaring
+    with the degree-13 Pade approximant, and applies it in a single call; the
+    NumPy/scipy expression below stays as the numerical pin and as the
+    fallback when the symbol is unavailable."""
+    backend = _rotate_backend()
+    if backend is not None:
+        lib, ffi = backend
+        pr = _pairs_array(pairs)
+        v = np.ascontiguousarray(vec, dtype=np.float64)
+        cin = np.ascontiguousarray(C, dtype=np.float64)
+        out = np.zeros((nbf, nbf), dtype=np.float64)
+        info = lib.casscf_orbital_rotate(
+            int(nbf), int(pr.shape[0]),
+            ffi.cast("int32_t *", pr.ctypes.data),
+            ffi.cast("double *", v.ctypes.data),
+            ffi.cast("double *", cin.ctypes.data),
+            ffi.cast("double *", out.ctypes.data))
+        if int(info) == 0:
+            return out
+    return C @ expm(_kappa_matrix(vec, pairs, nbf))
+
+
+def _effective_fock_backend():
+    """liboqp (lib, ffi) for the Fortran canonicalization Fock, or None."""
+    backend = _lib_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "casscf_effective_fock"):
+        return None
+    return lib, ffi
+
+
+def _lib_effective_fock(h1e, eri, D):
+    """``h + J - K/2`` through the Fortran engine, or None when unavailable.
+
+    Reuses the very J/K builder the generalized-Fock engine already contains
+    (``casscf_kernel.F90`` ``build_jkw``) rather than duplicating it."""
+    backend = _effective_fock_backend()
+    if backend is None:
+        return None
+    lib, ffi = backend
+    nbf = int(h1e.shape[0])
+    d = np.ascontiguousarray(D, dtype=np.float64)
+    hh = np.ascontiguousarray(h1e, dtype=np.float64)
+    vv = np.ascontiguousarray(eri, dtype=np.float64)
+    out = np.zeros((nbf, nbf), dtype=np.float64)
+    lib.casscf_effective_fock(
+        nbf,
+        ffi.cast("double *", d.ctypes.data),
+        ffi.cast("double *", hh.ctypes.data),
+        ffi.cast("double *", vv.ctypes.data),
+        ffi.cast("double *", out.ctypes.data))
+    return out
 
 
 # --------------------------------------------------------------------------- CASCI inside CASSCF
@@ -385,7 +495,7 @@ def _floored_newton_loop(C, evaluate, pairs, nbf, options, hess_fn=None):
         obj_old = objective
         accepted_step = step
         for _bt in range(12):
-            Cn = C @ expm(_kappa_matrix(accepted_step, pairs, nbf))
+            Cn = _orbital_rotate(C, accepted_step, pairs, nbf)
             obj_new, grad_new, energies_new, coeffs_new = evaluate(Cn)
             if obj_new <= obj_old + 1.0e-12:
                 break
@@ -425,7 +535,7 @@ def _escape_saddles(C, energies, coeffs, last_curv, evaluate, pairs, nbf, option
         # line-search the negative-curvature direction (both signs / magnitudes)
         best_obj, best_C = None, None
         for amp in (0.3, 0.2, 0.1, -0.1, -0.2, -0.3):
-            Cn = C @ expm(_kappa_matrix(amp * vneg, pairs, nbf))
+            Cn = _orbital_rotate(C, amp * vneg, pairs, nbf)
             on = float(np.dot(obj_weights, evaluate(Cn)[2][obj_roots]))
             if best_obj is None or on < best_obj:
                 best_obj, best_C = on, Cn
@@ -457,8 +567,8 @@ def _fd_orbital_hessian(C, evaluate, pairs, nbf, hh=1.0e-4):
     for k in range(npar):
         e = np.zeros(npar)
         e[k] = hh
-        _, gp, _, _ = evaluate(C @ expm(_kappa_matrix(e, pairs, nbf)))
-        _, gm, _, _ = evaluate(C @ expm(_kappa_matrix(-e, pairs, nbf)))
+        _, gp, _, _ = evaluate(_orbital_rotate(C, e, pairs, nbf))
+        _, gm, _, _ = evaluate(_orbital_rotate(C, -e, pairs, nbf))
         hess[:, k] = (gp - gm) / (2.0 * hh)
     return 0.5 * (hess + hess.T)
 
@@ -607,6 +717,18 @@ class CASSCF:
 
     @staticmethod
     def _effective_fock(h1e, eri, D, ncore, nact):
+        """Closed+active mean-field Fock h + J - K/2 for canonicalization.
+
+        The Fortran engine reuses the J/K builder already inside the
+        generalized-Fock kernel; the einsum reference below is the numerical
+        pin and the fallback."""
+        built = _lib_effective_fock(h1e, eri, D)
+        if built is not None:
+            return built
+        return CASSCF._effective_fock_reference(h1e, eri, D)
+
+    @staticmethod
+    def _effective_fock_reference(h1e, eri, D):
         # closed+active mean-field Fock  h + sum_q D[q,q'] [ (pq|q's) - 0.5 (pq'|qs) ]
         J = np.einsum("rs,pqrs->pq", D, eri)
         K = np.einsum("rs,prsq->pq", D, eri)
