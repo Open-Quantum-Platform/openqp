@@ -1412,3 +1412,26 @@ once V's analytic form is identified from the convention fix, the
 Mt-channel closes: Mt:(Ux+V) == exact was verified IMPLICITLY by the
 response attribution. The end of the campaign is one convention-
 identification away.
+
+### 7.49 v16: THE CULPRIT -- the Sk record's DIAGONAL
+Reconstruction from the run's own records:
+  M record == C0^T S_cross Cd to 2.7e-7  (M construction exact).
+  Sk record != C0^T S_cross C0: deviation 1.73e-4, DIAGONAL-
+  CONCENTRATED, and the worst rows are EXACTLY V's dominant rows
+  (17,17), (16,16), (6,6), (5,5)...
+MECHANISM (complete): the spurious O(h)-ish diagonal in Sk =>
+u = (M - Sk)/h carries a spurious O(1) DIAGONAL => e = h*(diag-err
+rows of C0) -- exactly the measured V pattern (rows 16/17/6/5 spread
+over AO columns). The ENTIRE invariant residual (2-13% channel, the
+1.9e-2/8.7e-3/0.21 production gap) traces to THIS single diagonal
+convention gap in the frozen-C cross-overlap.
+REMAINING (one check + one decision): (a) is the Sk-record deviation
+O(h) (a genuine convention error in get_structures' second-call path
+-- then FIX it and u becomes exact) or O(h^2)*large-coefficient
+(<phidot|phidot> ~ 170 for core functions -- then the TRUE Sk-diag
+must use the product C0^T S_cross C0, not the record)? Measure
+D(h) vs D(h/2). (b) Either way the PRODUCTION fix is identical:
+build u from the RAW PRODUCT C0^T S_cross_record C0 (bypassing the
+routine's Sk output), i.e., compute Sk in numpy from overlap_ao --
+one-line change in every sweep/probe -- then re-run v7j/J1: expected
+theory-level closure. THE CAMPAIGN'S LAST STEP IS A ONE-LINE FIX.
