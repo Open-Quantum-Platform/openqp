@@ -48,6 +48,11 @@ module tdhf_mrsf_gradient_mod
     real(kind=dp), pointer :: spcJ(:,:,:) => null()
     integer :: nbf = 0
     integer :: mrst = 1
+    ! Omit the state-independent d2*d2 reference gradient.  The NAC amplitude
+    ! kernel needs G(I,J)-G(SCF), and grd2 is linear in its four-index density,
+    ! so forming that difference before the integral sweep avoids a second,
+    ! identical derivative-integral pass.
+    logical :: subtract_reference = .false.
     real(kind=dp), dimension(3) :: spcscale = [0.0_dp, 0.0_dp, 0.0_dp]
   contains
     procedure :: init => grd2_mrsf_nac_compute_data_t_init
@@ -1005,19 +1010,35 @@ contains
             l1 = loc(4) + l
             ! Coulomb + relaxed/reference: reference (d2) state-independent,
             ! relaxed (p2) already the interstate object -> production form.
-            df1 = (this%d2(i1,j1,1)+this%p2(i1,j1,1))*this%d2(k1,l1,1) &
-                +  this%d2(i1,j1,1)                  *this%p2(k1,l1,1)
+            if (this%subtract_reference) then
+              df1 = this%p2(i1,j1,1)*this%d2(k1,l1,1) &
+                  + this%d2(i1,j1,1)*this%p2(k1,l1,1)
+            else
+              df1 = (this%d2(i1,j1,1)+this%p2(i1,j1,1))*this%d2(k1,l1,1) &
+                  +  this%d2(i1,j1,1)                  *this%p2(k1,l1,1)
+            end if
             df1 = df1 * coulfact
 
             if (xcfact /= 0.0_dp .or. xcfact2 /= 0.0_dp) then
-              dq1 = (this%d2(i1,k1,1)+this%p2(i1,k1,1))*this%d2(j1,l1,1) &
-                  +  this%d2(i1,k1,1)                  *this%p2(j1,l1,1) &
-                  + (this%d2(i1,l1,1)+this%p2(i1,l1,1))*this%d2(j1,k1,1) &
-                  +  this%d2(i1,l1,1)                  *this%p2(j1,k1,1) &
-                  + (this%d2(i1,k1,2)+this%p2(i1,k1,2))*this%d2(j1,l1,2) &
-                  +  this%d2(i1,k1,2)                  *this%p2(j1,l1,2) &
-                  + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
-                  +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
+              if (this%subtract_reference) then
+                dq1 = this%p2(i1,k1,1)*this%d2(j1,l1,1) &
+                    + this%d2(i1,k1,1)*this%p2(j1,l1,1) &
+                    + this%p2(i1,l1,1)*this%d2(j1,k1,1) &
+                    + this%d2(i1,l1,1)*this%p2(j1,k1,1) &
+                    + this%p2(i1,k1,2)*this%d2(j1,l1,2) &
+                    + this%d2(i1,k1,2)*this%p2(j1,l1,2) &
+                    + this%p2(i1,l1,2)*this%d2(j1,k1,2) &
+                    + this%d2(i1,l1,2)*this%p2(j1,k1,2)
+              else
+                dq1 = (this%d2(i1,k1,1)+this%p2(i1,k1,1))*this%d2(j1,l1,1) &
+                    +  this%d2(i1,k1,1)                  *this%p2(j1,l1,1) &
+                    + (this%d2(i1,l1,1)+this%p2(i1,l1,1))*this%d2(j1,k1,1) &
+                    +  this%d2(i1,l1,1)                  *this%p2(j1,k1,1) &
+                    + (this%d2(i1,k1,2)+this%p2(i1,k1,2))*this%d2(j1,l1,2) &
+                    +  this%d2(i1,k1,2)                  *this%p2(j1,l1,2) &
+                    + (this%d2(i1,l1,2)+this%p2(i1,l1,2))*this%d2(j1,k1,2) &
+                    +  this%d2(i1,l1,2)                  *this%p2(j1,k1,2)
+              end if
               ! channel-7 exchange (ball), symmetrised I<->J
               dt2 = 0.5_dp*(ballI(i1,k1)*ballJ(j1,l1) + ballJ(i1,k1)*ballI(j1,l1)) &
                   + 0.5_dp*(ballI(k1,i1)*ballJ(l1,j1) + ballJ(k1,i1)*ballI(l1,j1)) &
@@ -1267,12 +1288,11 @@ contains
       OQP_DM_A, OQP_DM_B, OQP_VEC_MO_A, OQP_td_bvec_mo /)
 
     real(kind=dp), allocatable, target :: d0(:,:,:), pIJ(:,:,:), &
-         spcI(:,:,:), spcJ(:,:,:), zerospc(:,:,:), zerop(:,:,:), &
-         dcopy(:,:,:)
+         spcI(:,:,:), spcJ(:,:,:), dcopy(:,:,:)
     real(kind=dp), allocatable, target :: dmat_a_owned(:), &
          dmat_b_owned(:), mo_a_owned(:,:), bvec_mo_owned(:,:)
-    real(kind=dp), allocatable :: deFull(:,:), deSCF(:,:)
-    class(grd2_compute_data_t), allocatable :: gFull, gSCF
+    real(kind=dp), allocatable :: deFull(:,:)
+    class(grd2_compute_data_t), allocatable :: gFull
     real(kind=dp) :: scale_exch, scale_exch2
     logical :: dft, do_cam
     integer :: nbf, mrst, natom, nstate, ist, jst, c, a, ok
@@ -1346,8 +1366,7 @@ contains
     nac_amp = 0.0_dp
 
     allocate(d0(nbf,nbf,2), dcopy(nbf,nbf,2), pIJ(nbf,nbf,2), &
-             zerop(nbf,nbf,2), spcI(7,nbf,nbf), spcJ(7,nbf,nbf), &
-             zerospc(7,nbf,nbf), deFull(3,natom), deSCF(3,natom), &
+             spcI(7,nbf,nbf), spcJ(7,nbf,nbf), deFull(3,natom), &
              source=0.0_dp, stat=ok)
     if (ok/=0) call show_message('cannot allocate memory', WITH_ABORT)
 
@@ -1365,12 +1384,13 @@ contains
         call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, ist, spcI)
         call mrsf_nac_amp_channels(infos, mo_a, bvec_mo, jst, spcJ)
 
-        ! (a) FULL: reference + per-state channels with an owned zero p2
-        !     (init mutates d2/p2 in place -> fresh copies each time).
+        ! Direct pair channel density with an owned zero p2.  init mutates
+        ! d2/p2 in place, so retain a fresh copy for every requested pair.
         dcopy = d0
         deFull = 0.0_dp
         gFull = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = pIJ, &
                      spcI = spcI, spcJ = spcJ, nbf = nbf, &
+                     subtract_reference = .true., &
                      hfscale = scale_exch, hfscale2 = scale_exch2, &
                      spcscale = [infos%tddft%spc_coco, &
                                  infos%tddft%spc_ovov, &
@@ -1381,31 +1401,18 @@ contains
                          beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
         call gFull%clean()
 
-        ! (b) BASELINE (FIX-1): p2=0, spcI=spcJ=0 -> the d2*d2 ground-SCF 2e grad
-        dcopy = d0
-        deSCF = 0.0_dp
-        gSCF = grd2_mrsf_nac_compute_data_t( d2 = dcopy, p2 = zerop, &
-                     spcI = zerospc, spcJ = zerospc, nbf = nbf, &
-                     hfscale = scale_exch, hfscale2 = scale_exch2, &
-                     spcscale = [infos%tddft%spc_coco, &
-                                 infos%tddft%spc_ovov, &
-                                 infos%tddft%spc_coov], mrst = mrst )
-        call gSCF%init()
-        call grd2_driver(infos, basis, deSCF, gSCF, &
-                         cam = do_cam, alpha = infos%tddft%cam_alpha, &
-                         beta = infos%tddft%cam_beta, mu = infos%tddft%cam_mu)
-        call gSCF%clean()
-
-        ! G_IJ = G_full - G_SCF  (the X-dependent 2e amplitude gradient)
+        ! gFull omits the d2*d2 reference density before the integral sweep,
+        ! hence it is directly G_full-G_SCF without a cancellation-prone
+        ! second derivative-integral pass.
         do a = 1, natom
           do c = 1, 3
-            nac_amp((a-1)*3+c, ist, jst) = deFull(c,a) - deSCF(c,a)
+            nac_amp((a-1)*3+c, ist, jst) = deFull(c,a)
           end do
         end do
       end do
     end do
 
-    deallocate(d0, dcopy, pIJ, zerop, spcI, spcJ, zerospc, deFull, deSCF, &
+    deallocate(d0, dcopy, pIJ, spcI, spcJ, deFull, &
                dmat_a_owned, dmat_b_owned, mo_a_owned, bvec_mo_owned)
   end subroutine mrsf_nac_amp
 

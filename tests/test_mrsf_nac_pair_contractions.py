@@ -66,6 +66,39 @@ def test_response_exports_jk_from_its_existing_integral_pass():
     assert addons.count("if (present(vjk_tri)) vjk_tri = v1_tri") == 2
 
 
+def test_amp_subtracts_the_reference_before_the_integral_sweep():
+    source = GRADIENT.read_text()
+    amp = _body(source, "mrsf_nac_amp")
+    density = _body(source, "grd2_mrsf_nac_compute_data_t_get_density")
+    assert "subtract_reference = .true." in amp
+    assert amp.count("call grd2_driver") == 1
+    assert "deSCF" not in amp
+    assert "if (this%subtract_reference) then" in density
+
+    rng = np.random.default_rng(87)
+    d = rng.standard_normal((2, 8))
+    p = rng.standard_normal((2, 8))
+    # The first four slots represent the (ik,jl) and (il,jk) index pairs
+    # used for the total/spin exchange channels.  Verify the scalar identity
+    # implemented in the shell-quartet callback.
+    full_c = (d[0, 0] + p[0, 0]) * d[0, 1] + d[0, 0] * p[0, 1]
+    base_c = d[0, 0] * d[0, 1]
+    direct_c = p[0, 0] * d[0, 1] + d[0, 0] * p[0, 1]
+    np.testing.assert_allclose(full_c - base_c, direct_c, rtol=0.0, atol=1e-15)
+
+    full_x = 0.0
+    base_x = 0.0
+    direct_x = 0.0
+    for spin in range(2):
+        for left, right in ((2, 3), (4, 5)):
+            full_x += (d[spin, left] + p[spin, left]) * d[spin, right]
+            full_x += d[spin, left] * p[spin, right]
+            base_x += d[spin, left] * d[spin, right]
+            direct_x += p[spin, left] * d[spin, right]
+            direct_x += d[spin, left] * p[spin, right]
+    np.testing.assert_allclose(full_x - base_x, direct_x, rtol=0.0, atol=3e-15)
+
+
 def test_pair_overlap_reverse_transforms_weights_once_per_pair():
     body = _body(INTERCHANGE.read_text(), "mrsf_nac_rohf_pair_overlap")
     coordinate_loop = body.split("do atom = 1, natom", 1)[1]
