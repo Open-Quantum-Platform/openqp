@@ -2603,7 +2603,6 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             penalty_controls = {
                 "pen_sigma": (1.0, "penalty multiplier", False),
                 "pen_alpha": (0.0, "penalty smoothing energy", True),
-                "pen_incre": (1.0, "penalty increment", False),
                 # the objective scales by gap_weight * pen_sigma, so a zero or
                 # negative weight removes or inverts the gap term just as a
                 # bad pen_sigma would
@@ -2629,6 +2628,25 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                         action=("Use pen_alpha=0.02, or 0 to select it."
                                 if allow_zero else "Use a positive value."),
                     )
+            raw_incre = _get(config, "optimize", "pen_incre", 1.0)
+            try:
+                incre_ignored = float(raw_incre) != 1.0
+            except (TypeError, ValueError):
+                incre_ignored = True
+            if incre_ignored:
+                report.add(
+                    "WARNING",
+                    "optimize.pen_incre",
+                    "The MECP penalty holds sigma fixed, so pen_incre is not "
+                    "applied. Every backend evaluates the objective at trial "
+                    "geometries, so a ramp driven from inside it would advance "
+                    "on rejected steps as well.",
+                    value=raw_incre,
+                    expected="1.0",
+                    action="Use mecp_search=auglag, which converges without a "
+                           "ramp, or meci_search=baeka for an adaptive one.",
+                )
+
         elif mecp_search == "quad":
             raw_weight = _get(config, "optimize", "gap_weight", 1.0)
             try:

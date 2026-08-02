@@ -1003,6 +1003,16 @@ class MECPOpt(Optimizer):
              + w * sigma * (D ** 2 + 2 * alpha * D) / (D + alpha) ** 2 * dG
         where D is the non-negative gap and dG the matching gradient difference.
 
+        sigma is fixed here; pen_incre is not applied.  Every backend evaluates
+        this objective at trial geometries as well as accepted ones, so a ramp
+        driven from inside the objective would advance on rejected steps too
+        and leave the optimizer comparing energies and gradients formed at
+        different sigma.  Growing the constraint strength reliably needs the
+        accepted-step signal that BaekA gets from the native engine through
+        rebase_previous_objective.  A fixed sigma is stationary at a finite gap
+        like any plain penalty, which is why auglag rather than this is the
+        default.
+
         reference: J. Phys. Chem. B 2008, 112, 405-413
         """
 
@@ -1020,7 +1030,6 @@ class MECPOpt(Optimizer):
         gap_term = scale * slope * gap_g
         df = mean_g + gap_term
 
-        self.sigma *= self.incre
         self.metrics['sigma'] = self.sigma
 
         return self.record(coordinates, f, df, gap_e, gap_term)
