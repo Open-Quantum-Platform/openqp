@@ -3,7 +3,6 @@ import copy
 import oqp
 import numpy as np
 import scipy as sc
-from oqp.library.baeka import BaekAState
 from oqp.library.single_point import SinglePoint, Gradient, LastStep
 from oqp.utils.file_utils import dump_log, dump_data
 from oqp.utils.state_labels import is_mrsf, public_state_label
@@ -318,6 +317,9 @@ class MECIOpt(Optimizer):
         self.incre = mol.config['optimize']['pen_incre']
         self.weights = mol.config['optimize']['gap_weight']
         self.mu = mol.config['optimize']['gap_sigma']
+        # frozen within an evaluation, refreshed after it (see auglag)
+        self.lagrange = 0.0
+        self.mu_scaled = None
         self.metrics['meci_search'] = self.meci_search
         self.metrics['sigma'] = self.sigma
         self.metrics['alpha'] = self.alpha
@@ -495,24 +497,30 @@ class MECIOpt(Optimizer):
         j = i + 1
 
         The branching plane (x, y) is updated exactly as in ubp, so no
-        derivative coupling is required.  On top of that projection a
-        least-squares multiplier
+        derivative coupling is required.  A least-squares multiplier replaces
+        the projection along the gap direction:
 
-            lam = -[G(j) + G(i)] * 0.5 . [G(j) - G(i)] / |G(j) - G(i)| ** 2
-
-        removes the mean-gradient component along the gap direction, and the
-        remaining gap term is scaled to match:
-
-            mu = 2 * gap_sigma / |G(j) - G(i)|
             F = [E(j) + E(i)] * 0.5 + lam * [E(j) - E(i)]
                 + 0.5 * mu * [E(j) - E(i)] ** 2
-            dF = PE + mu * [E(j) - E(i)] * [G(j) - G(i)]
+            dF = PE + [lam + mu * [E(j) - E(i)]] * [G(j) - G(i)]
 
-        where PE is the branching-plane-projected mean gradient.  The two
-        contributions of dF are orthogonal, so both must vanish separately and
-        the stationary point is a genuine intersection.  Unlike ubp, the
-        reported objective is an augmented Lagrangian value rather than a
-        ratio that diverges as the gradient difference becomes small.
+        where PE is the mean gradient with only the coupling direction y
+        projected out.  lam and mu are constants within one evaluation and are
+        refreshed afterwards from this geometry:
+
+            lam <- -[G(j) + G(i)] * 0.5 . [G(j) - G(i)] / |G(j) - G(i)| ** 2
+            mu  <- 2 * gap_sigma / |G(j) - G(i)|
+
+        Once lam has settled it cancels the gap-direction component of the mean
+        gradient, so dF becomes the ubp gradient: a gap term along x and a
+        branching-plane-projected mean gradient orthogonal to it.  Being
+        orthogonal they cannot cancel, so both must vanish separately and the
+        stationary point is a genuine intersection.
+
+        Unlike ubp the reported value is an augmented Lagrangian rather than a
+        ratio that diverges as the gradient difference becomes small, and dF is
+        its exact gradient except for the y projection, which no scalar
+        constraint function can reproduce.
         """
         # flatten data
         energy_i = energies[self.istate]
@@ -539,7 +547,15 @@ class MECIOpt(Optimizer):
         else:
             y = sum_g * 0.5
             y -= np.sum(y * x) * x
-            y /= np.sum(y ** 2) ** 0.5
+            y_norm = np.sum(y ** 2) ** 0.5
+            if y_norm > 0:
+                y /= y_norm
+            else:
+                # The mean gradient is parallel to the gap direction, so it
+                # cannot seed a second branching vector.  Drop the coupling
+                # direction for this step rather than dividing by zero; the
+                # next geometry reseeds it.
+                y = np.zeros_like(x)
 
         # record x and y
         self.x = x
@@ -549,14 +565,23 @@ class MECIOpt(Optimizer):
         self.metrics['norm'] = np.sum(y * y)
         self.metrics['orth'] = np.sum(x * y)
 
-        # compute function and gradient
+        # compute function and gradient.  lam and mu are constants within one
+        # evaluation, so df is exactly the gradient of f; they are refreshed
+        # afterwards from this geometry.
         mean_g = sum_g * 0.5
-        mu = 2.0 * self.mu / alpha
-        lagrange = -np.sum(mean_g * gap_g) / alpha ** 2
-        df_1 = mean_g - np.sum(mean_g * x) * x - np.sum(mean_g * y) * y
-        df_2 = mu * gap_e * gap_g
+        if self.mu_scaled is None:
+            self.mu_scaled = 2.0 * self.mu / alpha
+        lagrange, mu = self.lagrange, self.mu_scaled
+        df_2 = (lagrange + mu * gap_e) * gap_g
+        # The multiplier accounts for the gap direction.  The coupling
+        # direction has no scalar constraint function, so it is projected out
+        # as in ubp; once lam has settled df is exactly the ubp gradient.
+        df_1 = mean_g - np.sum(mean_g * y) * y
         df = df_1 + df_2
         f = sum_e * 0.5 + lagrange * gap_e + 0.5 * mu * gap_e ** 2
+
+        self.lagrange = -np.sum(mean_g * gap_g) / alpha ** 2
+        self.mu_scaled = 2.0 * self.mu / alpha
 
         # evaluate metrics
         de = f - self.pre_energy
@@ -727,8 +752,6 @@ class MECPOpt(Optimizer):
     ubp      the same objective; at pen_sigma = 1 the multiplier form is the
              Bearpark gradient projection.
     penalty  Levine-Martinez smooth penalty, matching the MECI path.
-    baeka    adaptive additive-sigma penalty, driven by the shared BaekA
-             kernel.
     quad     legacy fixed-weight quadratic penalty.  Its stationary condition
              balances the mean gradient against the gap term, and because the
              two are not orthogonal they cancel at a residual gap of order
@@ -745,8 +768,11 @@ class MECPOpt(Optimizer):
         alpha = mol.config['optimize']['pen_alpha']
         # zero is the historical sentinel for "use the published value"
         self.alpha = 0.02 if alpha == 0 else alpha
-        # augmented-Lagrangian multiplier and penalty parameter
+        # augmented-Lagrangian multiplier and penalty parameter.  Both are held
+        # fixed across one objective evaluation and refreshed afterwards, so
+        # the reported gradient always differentiates the reported value.
         self.lagrange = 0.0
+        self.mu_scaled = None
         self.mu = mol.config['optimize']['gap_sigma']
         self.metrics['mecp_search'] = self.mecp_search
 
@@ -762,7 +788,6 @@ class MECPOpt(Optimizer):
             # at pen_sigma = 1, so ubp names the same objective here
             'ubp': self.auglag,
             'penalty': self.penalty,
-            'baeka': self.baeka,
             'quad': self.quad,
         }
         if self.mecp_search not in func_dict:
@@ -771,18 +796,6 @@ class MECPOpt(Optimizer):
                 f'use one of {", ".join(sorted(func_dict))}'
             )
         self.work_func = func_dict[self.mecp_search]
-
-        if self.mecp_search == 'baeka':
-            self.baeka_state = BaekAState(
-                sigma=self.sigma,
-                alpha=self.alpha,
-                delta_beta=mol.config['optimize']['pen_delta'],
-                beta_schedule=mol.config['optimize']['pen_jump'],
-                gap_tol=self.energy_gap,
-                tol_f=self.energy_shift,
-                tol_g=self.rmsd_grad,
-                gap_weight=self.weights,
-            )
 
     def one_step(self, coordinates):
         # check state multiplicity:
@@ -912,20 +925,26 @@ class MECPOpt(Optimizer):
         """
         augmented Lagrangian optimization
 
-        x   = (G2 - G1) / |G2 - G1|
-        lam = -(0.5 * (G1 + G2) . (G2 - G1)) / |G2 - G1| ** 2
-        mu  = 2 * sigma / |G2 - G1|
-        F   = 0.5 * (E1 + E2) + lam * (E2 - E1) + 0.5 * mu * (E2 - E1) ** 2
-        dF  = [I - x x^T] 0.5 * (G1 + G2) + mu * (E2 - E1) * (G2 - G1)
+        F  = 0.5 * (E1 + E2) + lam * (E2 - E1) + 0.5 * mu * (E2 - E1) ** 2
+        dF = 0.5 * (G1 + G2) + [lam + mu * (E2 - E1)] * (G2 - G1)
+
+        lam and mu are constants within one evaluation, so dF is exactly the
+        gradient of F.  Between evaluations they are refreshed from the current
+        geometry, which is the first-order multiplier update:
+
+            lam <- -(0.5 * (G1 + G2) . (G2 - G1)) / |G2 - G1| ** 2
+            mu  <- 2 * gap_sigma / |G2 - G1|
 
         A plain penalty stalls because 0.5 * (G1 + G2) has a component along
         the branching direction that only an infinite weight can overcome.  The
-        least-squares multiplier lam removes exactly that component, so the two
-        remaining contributions are orthogonal and dF = 0 forces E2 - E1 = 0
-        and a vanishing projected mean gradient separately, for any positive
-        mu.  Scaling mu by 1/|G2 - G1| keeps the gap term dimensionally
-        matched to the projected gradient; at pen_sigma = 1 it reduces to the
-        Bearpark gradient projection 2 (E2 - E1) x.
+        least-squares multiplier removes exactly that component, so once lam has
+        settled dF splits into a gap term along the branching direction and a
+        projected mean gradient orthogonal to it.  Being orthogonal they cannot
+        cancel, so dF = 0 forces E2 - E1 = 0 and a vanishing projected mean
+        gradient separately, for any positive mu.  Scaling mu by 1/|G2 - G1|
+        keeps the gap term dimensionally matched to the projected gradient; at
+        gap_sigma = 1 the converged form is the Bearpark gradient projection
+        2 (E2 - E1) x with x = (G2 - G1)/|G2 - G1|.
 
         reference: Chem. Phys. Lett. 1994, 223, 269-274 (gradient projection);
         Nocedal and Wright, Numerical Optimization, ch. 17 (multiplier form)
@@ -943,15 +962,20 @@ class MECPOpt(Optimizer):
                 'MECP branching direction is undefined: the two states have '
                 'identical gradients'
             )
-        x = gap_g / norm
-        mu = 2.0 * self.mu / norm
-        lagrange = -np.sum(mean_g * gap_g) / norm ** 2
 
-        gap_term = mu * gap_e * gap_g
-        df = (mean_g - np.sum(mean_g * x) * x) + gap_term
+        # lam and mu are held fixed while f is differentiated, so df is exactly
+        # the gradient of the reported f.  They are refreshed afterwards from
+        # this geometry, which is the usual first-order multiplier update.
+        if self.mu_scaled is None:
+            self.mu_scaled = 2.0 * self.mu / norm
+        lagrange, mu = self.lagrange, self.mu_scaled
+
+        gap_term = (lagrange + mu * gap_e) * gap_g
+        df = mean_g + gap_term
         f = (energy_i + energy_j) * 0.5 + lagrange * gap_e + 0.5 * mu * gap_e ** 2
 
-        self.lagrange = lagrange
+        self.lagrange = -np.sum(mean_g * gap_g) / norm ** 2
+        self.mu_scaled = 2.0 * self.mu / norm
         self.metrics['lagrange'] = lagrange
 
         return self.record(coordinates, f, df, gap_e, gap_term)
@@ -984,34 +1008,6 @@ class MECPOpt(Optimizer):
 
         self.sigma *= self.incre
         self.metrics['sigma'] = self.sigma
-
-        return self.record(coordinates, f, df, gap_e, gap_term)
-
-    def baeka(self, coordinates, energies, grads):
-        """
-        adaptive additive-sigma penalty optimization
-
-        Reuses the shared BaekA kernel, which needs only ascending energies and
-        their gradients and makes no reference to spin, so the spin-crossing
-        pair is a valid two-state input.
-
-        reference: Y. S. Baek, S. Lee, M. Filatov, and C. H. Choi,
-        J. Phys. Chem. A 125, 1994-2006 (2021)
-        """
-
-        energy_lo, energy_up, grad_lo, grad_up = self.ordered_pair(energies, grads)
-        energy_i, energy_j, _, _ = self.state_pair(energies, grads)
-
-        gap_e = energy_j - energy_i
-        evaluation = self.baeka_state.evaluate(
-            [energy_lo, energy_up], np.array([grad_lo, grad_up])
-        )
-        data = evaluation.data
-
-        f = data.objective
-        df = data.gradient
-        gap_term = data.effective_sigma * data.penalty_gradient
-        self.metrics['sigma'] = evaluation.next_sigma
 
         return self.record(coordinates, f, df, gap_e, gap_term)
 

@@ -561,7 +561,6 @@ automatically.
       ubp        the same objective; with gap_sigma=1 it is the plain
                  Bearpark gradient projection
       penalty    Levine-Martinez smooth penalty
-      baeka      additive Baek adaptive penalty applied to the crossing pair
       quad       legacy fixed-weight quadratic penalty.  Its stationary point
                  balances the mean gradient against the gap term, leaving a
                  residual gap of order 1/gap_weight, so it generally cannot
@@ -569,8 +568,8 @@ automatically.
 
 - gap_sigma // strength of the gap term in the auglag objectives
 
-      10.0 (default); 1.0 reproduces the plain Bearpark projection, larger
-      values reach the seam faster
+      10.0 (default), must be positive; 1.0 reproduces the plain Bearpark
+      projection, larger values reach the seam faster
 
 - pen_sigma // set the sigma in the penalty function
 

@@ -477,6 +477,8 @@ _MECI_OPTION_ALIASES = {
     "beta_schedule": "pen_jump",
     "gap": "energy_gap",
 }
+_MECP_PUBLIC_OPTIONS = {"algorithm"}
+_MECP_OPTION_ALIASES = {"algorithm": "mecp_search"}
 _TCI_OPTIONS = set(_OPT_OPTIONS) - {
     "meci_search", "mecp_search", "gap_sigma", "pen_delta", "pen_jump",
 }
@@ -485,7 +487,7 @@ DRIVER_OPTIONS = {
     "grad": {"td_prop", "export", "title"},
     "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "mecp": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "mecp": set(_OPT_OPTIONS) | set(_MECP_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
@@ -1189,15 +1191,20 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if driver.name == "prop" and model not in {"mrsf", "mrsf-hf"}:
         raise OQPInputError("prop([STATE]) currently requires MRSF-TDDFT or MRSF-TDHF")
 
-    options = (_normalized_meci_options(driver)
-               if driver.name == "meci" else _driver_options(driver))
+    if driver.name == "meci":
+        options = _normalized_meci_options(driver)
+    elif driver.name == "mecp":
+        options = _normalized_mecp_options(driver)
+    else:
+        options = _driver_options(driver)
     if driver.name == "meci":
         algorithm = str(options.get(
             "meci_search", "baeka" if len(states) > 2 else "auto"
         )).strip().lower()
-        if algorithm not in {"auto", "penalty", "ubp", "hybrid", "baeka"}:
+        if algorithm not in {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}:
             raise OQPInputError(
-                "meci algorithm must be auto, penalty, ubp, hybrid, or baeka"
+                "meci algorithm must be auto, penalty, ubp, auglag, hybrid, "
+                "or baeka"
             )
         if len(states) > 2 and algorithm not in {"auto", "baeka"}:
             raise OQPInputError(
@@ -1955,6 +1962,29 @@ def _normalized_meci_options(driver: CallSpec) -> Dict[str, Any]:
         if target in normalized:
             raise OQPInputError(
                 "MECI option '%s' is specified twice through %s and %s"
+                % (target, sources[target], key)
+            )
+        normalized[target] = value
+        sources[target] = key
+    return normalized
+
+
+def _normalized_mecp_options(driver: CallSpec) -> Dict[str, Any]:
+    """Return MECP options using their configuration key names.
+
+    ``algorithm`` is the public spelling of ``mecp_search``, matching the MECI
+    surface.  Both spellings are accepted, but supplying them together is an
+    error rather than a last-one-wins ambiguity.
+    """
+
+    options = _driver_options(driver)
+    normalized: Dict[str, Any] = {}
+    sources: Dict[str, str] = {}
+    for key, value in options.items():
+        target = _MECP_OPTION_ALIASES.get(key, key)
+        if target in normalized:
+            raise OQPInputError(
+                "MECP option '%s' is specified twice through %s and %s"
                 % (target, sources[target], key)
             )
         normalized[target] = value

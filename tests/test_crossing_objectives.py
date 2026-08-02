@@ -35,41 +35,78 @@ def _load(name, relative_path):
     return module
 
 
-def _install_stubs():
-    """Provide the backend-facing names libscipy imports at module scope."""
-    sys.modules.setdefault("oqp", types.ModuleType("oqp"))
-    library = sys.modules.setdefault("oqp.library", types.ModuleType("oqp.library"))
-    library.__path__ = []
-    utils = sys.modules.setdefault("oqp.utils", types.ModuleType("oqp.utils"))
-    utils.__path__ = []
+# Names this module injects while importing libscipy.  They are removed again
+# immediately afterwards: pytest shares one interpreter across test modules, so
+# leaving a stub (or an emptied __path__) behind would break every later import
+# of the real oqp.utils.* and oqp.library.* submodules.
+_STUBBED = (
+    "oqp",
+    "oqp.library",
+    "oqp.library.single_point",
+    "oqp.library.baeka",
+    "oqp.utils",
+    "oqp.utils.file_utils",
+    "oqp.utils.state_labels",
+    "oqp.utils.qmmm",
+    "oqp.utils.mpi_utils",
+)
 
-    single_point = types.ModuleType("oqp.library.single_point")
+
+def _stub(name, is_package=False):
+    module = types.ModuleType(name)
+    if is_package:
+        module.__path__ = []
+    sys.modules[name] = module
+    return module
+
+
+def _load_isolated(path, extra_module=None):
+    """Import a pyoqp module against stubs, then restore sys.modules."""
+    saved = {name: sys.modules.get(name) for name in _STUBBED}
+
+    _stub("oqp")
+    _stub("oqp.library", is_package=True)
+    _stub("oqp.utils", is_package=True)
+
+    single_point = _stub("oqp.library.single_point")
     for name in ("SinglePoint", "Gradient", "LastStep"):
         setattr(single_point, name, type(name, (), {}))
-    sys.modules["oqp.library.single_point"] = single_point
 
-    file_utils = types.ModuleType("oqp.utils.file_utils")
+    file_utils = _stub("oqp.utils.file_utils")
     file_utils.dump_log = lambda *args, **kwargs: None
     file_utils.dump_data = lambda *args, **kwargs: None
-    sys.modules["oqp.utils.file_utils"] = file_utils
 
-    state_labels = types.ModuleType("oqp.utils.state_labels")
+    state_labels = _stub("oqp.utils.state_labels")
     state_labels.is_mrsf = lambda config: False
     state_labels.public_state_label = lambda *args, **kwargs: ""
-    sys.modules["oqp.utils.state_labels"] = state_labels
 
-    sys.modules["oqp.utils.qmmm"] = types.ModuleType("oqp.utils.qmmm")
-
-    mpi_utils = types.ModuleType("oqp.utils.mpi_utils")
+    _stub("oqp.utils.qmmm")
+    mpi_utils = _stub("oqp.utils.mpi_utils")
     mpi_utils.MPIManager = type("MPIManager", (), {})
-    sys.modules["oqp.utils.mpi_utils"] = mpi_utils
 
-    # baeka is pure NumPy, so the real kernel is loaded
-    _load("oqp.library.baeka", "pyoqp/oqp/library/baeka.py")
+    try:
+        # baeka is pure NumPy, so the real kernel is used
+        baeka = _load("oqp.library.baeka", "pyoqp/oqp/library/baeka.py")
+        loaded = _load("oqp.library.libscipy", path)
+        checker = (_load(extra_module[0], extra_module[1])
+                   if extra_module else None)
+    finally:
+        for name, module in saved.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+        sys.modules.pop("oqp.library.libscipy", None)
+        sys.modules.pop("oqp.utils.input_checker", None)
+
+    return loaded, baeka, checker
 
 
-_install_stubs()
-libscipy = _load("oqp.library.libscipy", "pyoqp/oqp/library/libscipy.py")
+libscipy, baeka_module, input_checker = _load_isolated(
+    "pyoqp/oqp/library/libscipy.py",
+    extra_module=("oqp.utils.input_checker", "pyoqp/oqp/utils/input_checker.py"),
+)
+BaekAState = baeka_module.BaekAState
 
 
 def model(coordinates):
@@ -97,6 +134,7 @@ def make_mecp(search, **attributes):
     opt.alpha = 0.02
     opt.mu = 10.0
     opt.lagrange = 0.0
+    opt.mu_scaled = None
     opt.metrics = {}
     opt.energy_gap = 1.0e-4
     opt.energy_shift = 1.0e-6
@@ -109,14 +147,6 @@ def make_mecp(search, **attributes):
         return f, df
 
     opt.record = _record
-    if search == "baeka":
-        from oqp.library.baeka import BaekAState
-        opt.baeka_state = BaekAState(
-            sigma=opt.sigma, alpha=opt.alpha, delta_beta=0.5,
-            beta_schedule=[10, 25, 100, 1000, 3000],
-            gap_tol=opt.energy_gap, tol_f=opt.energy_shift,
-            tol_g=opt.rmsd_grad,
-        )
     return opt
 
 
@@ -149,8 +179,11 @@ class MECPObjectiveTest(unittest.TestCase):
         e_lo, g_lo, e_up, g_up = model(coordinates)
         energies = np.array([0.0, e_lo, 0.0, e_up])
         grads = np.array([np.zeros(2), g_lo, np.zeros(2), g_up])
-        # pen_sigma = 1 must reproduce the Bearpark projection 2 dE x
+        # gap_sigma = 1 must reproduce the Bearpark projection 2 dE x once the
+        # multiplier has been seeded from this geometry
         opt.mu = 1.0
+        opt.auglag(coordinates, energies, grads)
+        opt.mu_scaled = 2.0 * opt.mu / np.linalg.norm(g_up - g_lo)
         _, df = opt.auglag(coordinates, energies, grads)
         gap_g = g_up - g_lo
         x_hat = gap_g / np.linalg.norm(gap_g)
@@ -159,6 +192,40 @@ class MECPObjectiveTest(unittest.TestCase):
             mean_g - np.dot(mean_g, x_hat) * x_hat
         )
         np.testing.assert_allclose(df, reference, atol=1.0e-12)
+
+    def test_auglag_gradient_matches_a_finite_difference_of_its_value(self):
+        """The multipliers are constants within one evaluation.
+
+        If lam and mu were recomputed from the geometry while f is being
+        differentiated, df would not be the gradient of the reported f and the
+        optimizer's line searches and Hessian updates would see an
+        inconsistent pair.
+        """
+        def value_and_grad(coordinates, lagrange, mu_scaled):
+            opt = make_mecp("auglag", lagrange=lagrange, mu_scaled=mu_scaled)
+            e_lo, g_lo, e_up, g_up = model(coordinates)
+            energies = np.array([0.0, e_lo, 0.0, e_up])
+            grads = np.array([np.zeros(2), g_lo, np.zeros(2), g_up])
+            return opt.auglag(coordinates, energies, grads)
+
+        # freeze the multipliers at the values a previous evaluation would leave
+        seed = make_mecp("auglag")
+        centre = np.array([0.3, 0.4])
+        e_lo, g_lo, e_up, g_up = model(centre)
+        seed.auglag(centre, np.array([0.0, e_lo, 0.0, e_up]),
+                    np.array([np.zeros(2), g_lo, np.zeros(2), g_up]))
+        lagrange, mu_scaled = seed.lagrange, seed.mu_scaled
+
+        _, df = value_and_grad(centre, lagrange, mu_scaled)
+        step = 1.0e-6
+        for axis in (0, 1):
+            plus, minus = centre.copy(), centre.copy()
+            plus[axis] += step
+            minus[axis] -= step
+            f_plus, _ = value_and_grad(plus, lagrange, mu_scaled)
+            f_minus, _ = value_and_grad(minus, lagrange, mu_scaled)
+            numerical = (f_plus - f_minus) / (2.0 * step)
+            self.assertAlmostEqual(df[axis], numerical, places=6)
 
     def test_quad_settles_at_a_residual_gap(self):
         """The legacy objective cannot meet a tight energy_gap criterion."""
@@ -169,33 +236,12 @@ class MECPObjectiveTest(unittest.TestCase):
             self.assertAlmostEqual(exact_gap(final), expected, places=8)
             self.assertGreater(abs(exact_gap(final)), 1.0e-4)
 
-    def test_baeka_orders_the_states_and_matches_the_kernel(self):
-        """The pair may arrive in either energy order; BaekA needs ascending."""
-        from oqp.library.baeka import baeka_objective
-
-        opt = make_mecp("baeka")
-        coordinates = np.array([2.0, 0.4])
-        e_lo, g_lo, e_up, g_up = model(coordinates)
-        self.assertGreater(e_up, e_lo)
-
-        # istate carries the upper state, so the ordering guard must swap them
-        energies = np.array([0.0, e_up, 0.0, e_lo])
-        grads = np.array([np.zeros(2), g_up, np.zeros(2), g_lo])
-        f, df = opt.baeka(coordinates, energies, grads)
-
-        reference = baeka_objective(
-            [e_lo, e_up], np.array([g_lo, g_up]), sigma=1.0, alpha=opt.alpha
-        )
-        self.assertAlmostEqual(f, reference.objective, places=12)
-        np.testing.assert_allclose(df, reference.gradient, atol=1.0e-12)
-        # the reported gap keeps the user-facing j - i sign convention
-        self.assertAlmostEqual(opt.metrics["gap"], e_lo - e_up, places=12)
-
     def test_search_names_are_registered(self):
-        checker = _load("oqp.utils.input_checker", "pyoqp/oqp/utils/input_checker.py")
+        checker = input_checker
         self.assertIn("auglag", checker.MECP_SEARCH)
         self.assertIn("quad", checker.MECP_SEARCH)
         self.assertIn("ubp", checker.MECP_SEARCH)
+        self.assertNotIn("baeka", checker.MECP_SEARCH)
         self.assertNotIn("nonsense", checker.MECP_SEARCH)
         self.assertIn("auglag", checker.MECI_SEARCH)
 
@@ -207,6 +253,8 @@ class MECIObjectiveTest(unittest.TestCase):
         opt.meci_search = "auglag"
         opt.weights = 1.0
         opt.mu = 10.0
+        opt.lagrange = 0.0
+        opt.mu_scaled = None
         opt.x = np.zeros(0)
         opt.y = np.zeros(0)
         opt.metrics = {}

@@ -155,7 +155,7 @@ PCM_BACKEND_MODELS = {
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
-MECP_SEARCH = {"auglag", "penalty", "ubp", "baeka", "quad"}
+MECP_SEARCH = {"auglag", "penalty", "ubp", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2556,6 +2556,25 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             action="Choose different multiplicities for the two crossing states.",
         )
 
+    if runtype in {"meci", "mecp"}:
+        raw_gap_sigma = _get(config, "optimize", "gap_sigma", 10.0)
+        try:
+            gap_sigma = float(raw_gap_sigma)
+            valid_sigma = math.isfinite(gap_sigma) and gap_sigma > 0.0
+        except (TypeError, ValueError):
+            valid_sigma = False
+        if not valid_sigma:
+            report.add(
+                "ERROR",
+                "optimize.gap_sigma",
+                "The auglag gap term must be scaled by a positive factor; zero "
+                "removes the gap term entirely and a negative value drives the "
+                "search away from the seam.",
+                value=raw_gap_sigma,
+                expected="> 0",
+                action="Use gap_sigma=10 (default) or another positive value.",
+            )
+
     if runtype == "mecp":
         mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auglag"))
         if mecp_search not in MECP_SEARCH:
@@ -2565,7 +2584,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECP search algorithm.",
                 value=mecp_search,
                 expected=", ".join(sorted(MECP_SEARCH)),
-                action="Use auglag (recommended), penalty, ubp, baeka, or quad.",
+                action="Use auglag (recommended), penalty, ubp, or quad.",
             )
         elif mecp_search == "quad":
             report.add(
