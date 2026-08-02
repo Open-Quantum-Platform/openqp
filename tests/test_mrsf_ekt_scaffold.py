@@ -225,7 +225,10 @@ class TestMRSFEKTScaffold(unittest.TestCase):
 
         self.assertIn("if self.td in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):", single_point)
         self.assertIn("self.mol.snapshot_mrsf_ekt_results(kind)", single_point)
-        self.assertGreaterEqual(single_point.count("self.mol.write_molden(dyson_file)"), 2)
+        self.assertEqual(
+            single_point.count("self.mol.write_molden(dyson_file, include_dyson=True)"),
+            2,
+        )
 
     def test_ekt_example_exercises_json_and_state_specific_molden_exports(self):
         stem = "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp"

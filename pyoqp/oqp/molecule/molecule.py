@@ -1698,8 +1698,8 @@ class Molecule:
         }
 
     @mpi_dump
-    def write_molden(self, filename, freqs=None, modes=None):
-        """Write SCF MOs, optional MRSF-EKT Dyson states, and frequencies."""
+    def write_molden(self, filename, freqs=None, modes=None, include_dyson=False):
+        """Write SCF MOs, frequencies, and explicitly requested Dyson states."""
 
         with open(filename, mode='w', encoding='ascii') as fout:
             basis = self.data.get_basis()
@@ -1734,19 +1734,20 @@ class Molecule:
                 mdw.write_mo(basis, orbitals, eorbitals,
                              occupancies, spin='Beta', header=False)
 
-            dyson = self._viewer_dyson_data().get('dyson_orbitals', {})
-            states = dyson.get('states', [])
-            if states:
-                mdw.write_mo(
-                    basis,
-                    np.asarray([state['coefficients'] for state in states]),
-                    [state['eigenvalue_hartree'] for state in states],
-                    [state['pole_strength'] for state in states],
-                    spin='Alpha',
-                    header=False,
-                    symmetries=[state['label'].replace(' ', '-') for state in states],
-                    already_reordered=True,
-                )
+            if include_dyson:
+                dyson = self._viewer_dyson_data().get('dyson_orbitals', {})
+                states = dyson.get('states', [])
+                if states:
+                    mdw.write_mo(
+                        basis,
+                        np.asarray([state['coefficients'] for state in states]),
+                        [state['eigenvalue_hartree'] for state in states],
+                        [state['pole_strength'] for state in states],
+                        spin='Alpha',
+                        header=False,
+                        symmetries=[state['label'].replace(' ', '-') for state in states],
+                        already_reordered=True,
+                    )
 
             if freqs is not None and modes is not None:
                 mdw.write_frequency(self, freqs, modes)

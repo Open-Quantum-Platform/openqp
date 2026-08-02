@@ -866,7 +866,7 @@ class SinglePoint(Calculator):
                 self.mol.snapshot_mrsf_ekt_results('ea')
             if self.save_molden:
                 dyson_file = self.pack_molden_name('dyson', self.scf_type, self.functional)
-                self.mol.write_molden(dyson_file)
+                self.mol.write_molden(dyson_file, include_dyson=True)
             return
 
         # check td type
@@ -881,7 +881,7 @@ class SinglePoint(Calculator):
             self.mol.snapshot_mrsf_ekt_results(kind)
             if self.save_molden:
                 dyson_file = self.pack_molden_name('dyson', self.scf_type, self.functional)
-                self.mol.write_molden(dyson_file)
+                self.mol.write_molden(dyson_file, include_dyson=True)
 
 
 class Gradient(Calculator):

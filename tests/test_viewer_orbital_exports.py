@@ -189,3 +189,19 @@ def test_non_ekt_restart_does_not_export_stale_raw_dyson_records():
     molecule.config['tdhf']['type'] = 'mrsf'
 
     assert molecule._viewer_dyson_data() == {}
+
+
+def test_write_molden_requires_explicit_post_kernel_dyson_append(tmp_path):
+    molecule = fake_molecule()
+    molecule.usempi = False
+    molecule.elem = np.array([1])
+    molecule.xyz = np.zeros((1, 3))
+    molecule.data.values['natom'] = 1
+
+    scf_file = tmp_path / 'scf.molden'
+    molecule.write_molden(scf_file)
+    assert 'Dyson-IP-state-1' not in scf_file.read_text()
+
+    dyson_file = tmp_path / 'dyson.molden'
+    molecule.write_molden(dyson_file, include_dyson=True)
+    assert 'Sym= Dyson-IP-state-1' in dyson_file.read_text()
