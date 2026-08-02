@@ -305,7 +305,7 @@ class MECIOpt(Optimizer):
     def __init__(self, mol):
         super().__init__(mol)
 
-        self.meci_search = mol.config['optimize']['meci_search']
+        self.meci_search = str(mol.config['optimize']['meci_search']).strip().lower()
         # ``auto`` is orchestrated by the native OQP backend.  Other backends
         # resolve it to the augmented Lagrangian: the plain penalty is
         # stationary at a finite gap, so on its own it stalls above
@@ -776,7 +776,9 @@ class MECPOpt(Optimizer):
 
     def __init__(self, mol):
         super().__init__(mol)
-        self.mecp_search = mol.config['optimize']['mecp_search']
+        # legacy .inp and the Python API reach here without the concise
+        # parser's normalization, so fold case at the dispatch point
+        self.mecp_search = str(mol.config['optimize']['mecp_search']).strip().lower()
         self.weights = mol.config['optimize']['gap_weight']
         self.sigma = mol.config['optimize']['pen_sigma']
         self.incre = mol.config['optimize']['pen_incre']
