@@ -4,6 +4,8 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 
 MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical linear-response structure of TDDFT while removing the spin contamination that limits conventional spin-flip TDDFT, making it useful for multiconfigurational ground-state surfaces as well as excited-state and photochemical workflows.
 
+**New — a native multireference-wavefunction stack.** Determinant CI (FCI, CASCI), CASSCF and SA-CASSCF, and the second-order perturbation theories built on them: CASPT2 (single-state, MS, XMS), NEVPT2 (uncontracted and strongly contracted), and QDPT2 in the GAMESS convention (MRMP2, MCQDPT2, XMCQDPT2). These run entirely inside OpenQP with no external wavefunction backend, and they feed every gradient-driven runtype — `grad`, `optimize`, `meci`, `mecp`, `ts`, `mep`, `neb`, `irc` — through central-difference gradients. See the table below and [`examples/WF_methods`](examples/WF_methods).
+
 ### Functionality
 
 #### Electronic-Structure Methods
@@ -19,7 +21,7 @@ MRSF-TDDFT is the central scientific feature of OpenQP: it retains the practical
 | UMRSF-TDDFT | MRSF excitation energies from a UHF reference | Energy-only |
 | MRSF-EKT | [IP/EA via Extended Koopmans' Theorem](https://doi.org/10.1021/acs.jpclett.1c02494) | Dyson orbitals and pole strengths (`runtype=ekt`) |
 | Determinant CI | `method=fci`, `method=casci` | Full CI and fixed-orbital active-space CI on an RHF reference; dense or Davidson solver |
-| CASSCF | `method=casscf`, `method=sa-casscf` | Orbital + CI optimization; converger framework (`[casscf] converger = twophase \| ah \| diis \| auto`, trust-region augmented Hessian) and an exact analytic orbital Hessian (`[casscf] hessian=analytic`). State-averaged via `[state_average] enabled=true` |
+| CASSCF | `method=casscf`, `method=sa-casscf` | Orbital + CI optimization; converger framework (`[casscf] converger = twophase \| ah \| diis \| auto \| trah`) and an exact analytic orbital Hessian (`[casscf] hessian=analytic`). `trah` is the shared trust-region augmented-Hessian core (`source/trah_core.F90`) that also backs SCF `converger_type=trah`, and never assembles the orbital Hessian. State-averaged via `[state_average] enabled=true` |
 | CASPT2 | `method=caspt2`, `ms-caspt2`, `xms-caspt2` | Determinant-space PT2 on a CASCI/CASSCF reference; Fock or Dyall H0, IPEA/imaginary/level shifts. Multi-set MS-CASPT2 matches OpenMolcas to µEh |
 | NEVPT2 | `[pt2] h0=dyall` (uncontracted) and `contraction=strong` (SC-NEVPT2) | Strongly contracted NEVPT2 reproduces PySCF/ORCA to nEh |
 | QDPT2 (GAMESS convention) | `method=mrmp2`, `mcqdpt2`, `xmcqdpt2` | Single-state / multistate / Granovsky-extended QDPT with the ISA denominator shift (`[pt2] edshft`), on a matrix-free direct engine |
