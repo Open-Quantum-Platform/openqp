@@ -546,11 +546,16 @@ class MECIOpt(Optimizer):
 
         # compute y, cgv
         seeded = True
+        t2 = 0.0
         if len(self.y) > 0:
             t1 = np.sum(self.x * x) * self.y - np.sum(self.y * x) * self.x
             t2 = np.sum(self.y * x) ** 2 + np.sum(self.x * x) ** 2
+        if t2 > 0:
             y = t1 / t2 ** 0.5
         else:
+            # Either there is no previous plane, or the new gap direction is
+            # orthogonal to all of it, which leaves the rotation undefined.
+            # Reseed from the mean gradient in both cases.
             y = sum_g * 0.5
             y -= np.sum(y * x) * x
             y_norm = np.sum(y ** 2) ** 0.5

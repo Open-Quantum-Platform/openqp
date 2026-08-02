@@ -125,6 +125,26 @@ class _GeometricRunner:
             **optimizer_keywords,
         )
 
+        # geomeTRIC's convergence set has no crossing criterion, so a run can
+        # stop on the geometry tests with the seam still open.  Say so rather
+        # than letting the caller read it as a converged crossing.
+        gap = self.metrics.get("gap")
+        if gap is not None and "gap" in self.metrics:
+            runtype = str(
+                self.mol.config.get("input", {}).get("runtype", "")
+            ).lower()
+            if runtype in {"meci", "mecp"} and abs(float(gap)) > self.energy_gap:
+                dump_log(
+                    self.mol,
+                    title=(
+                        "PyOQP: geomeTRIC met its geometry criteria with an "
+                        "energy gap of %.8f, above the requested %.8f. The "
+                        "crossing is NOT converged; geomeTRIC has no gap "
+                        "criterion, so raise maxit or use lib=oqp."
+                        % (abs(float(gap)), self.energy_gap)
+                    ),
+                )
+
         if getattr(progress, "xyzs", None):
             final_coords = np.asarray(progress.xyzs[-1], dtype=float).reshape((self.natom, 3)) * ANGSTROM_TO_BOHR
             self.mol.update_system(final_coords)
