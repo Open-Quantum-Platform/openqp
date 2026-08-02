@@ -460,6 +460,7 @@ _OPT_OPTIONS = {
 # out of optimize/ts/irc/neb where nothing reads them.
 _CROSSING_OPTIONS = {"gap_sigma"}
 _MECP_ONLY_OPTIONS = {"mecp_search"}
+_MECI_ONLY_OPTIONS = {"meci_search", "pen_delta", "pen_jump"}
 _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
@@ -496,7 +497,10 @@ DRIVER_OPTIONS = {
     "grad": {"td_prop", "export", "title"},
     "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
     "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "mecp": (set(_OPT_OPTIONS) | set(_MECP_PUBLIC_OPTIONS)
+    # MECP reads none of the MECI-only controls, and silently ignoring them
+    # would run a different objective than the input asks for.
+    "mecp": ((set(_OPT_OPTIONS) - _MECI_ONLY_OPTIONS)
+             | set(_MECP_PUBLIC_OPTIONS)
              | set(_MECP_ONLY_OPTIONS) | set(_CROSSING_OPTIONS)
              | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
@@ -2382,8 +2386,13 @@ def lower_to_legacy(
         if name == "mecp":
             put("optimize", "imult", states[0].multiplicity)
             put("optimize", "jmult", states[1].multiplicity)
-            # emit mecp_search rather than the public algorithm spelling
+            # emit mecp_search rather than the public algorithm spelling, and
+            # normalize its case so the objective lookup finds it
             driver_options = _normalized_mecp_options(spec.driver)
+            if "mecp_search" in driver_options:
+                driver_options["mecp_search"] = str(
+                    driver_options["mecp_search"]
+                ).strip().lower()
         if name == "meci":
             driver_options = _normalized_meci_options(spec.driver)
             algorithm = str(driver_options.get(
