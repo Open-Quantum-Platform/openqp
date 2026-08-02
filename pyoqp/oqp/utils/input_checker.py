@@ -154,7 +154,8 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"auto", "penalty", "ubp", "hybrid", "baeka"}
+MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
+MECP_SEARCH = {"auglag", "penalty", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2435,7 +2436,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use auto (recommended), penalty, ubp, hybrid, or baeka.",
+                action="Use auto (recommended), penalty, ubp, auglag, hybrid, or baeka.",
             )
         elif meci_search in {"auto", "baeka"}:
             selected = meci_states or [istate, jstate]
@@ -2554,6 +2555,126 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             expected="imult != jmult",
             action="Choose different multiplicities for the two crossing states.",
         )
+
+    if runtype in {"meci", "mecp"}:
+        # Only auglag consumes gap_sigma, so an inherited or deliberately
+        # disabled value must not block a run that never reads it.
+        if runtype == "mecp":
+            effective_search = _as_lower(
+                _get(config, "optimize", "mecp_search", "auglag"))
+        else:
+            effective_search = _as_lower(
+                _get(config, "optimize", "meci_search", "auto"))
+            if effective_search == "auto":
+                # auto is auglag for two states and BaekA for three or more
+                auto_states = _as_list(_get(config, "optimize", "states", []))
+                effective_search = (
+                    "baeka" if len(auto_states) > 2 else "auglag")
+        raw_gap_sigma = _get(config, "optimize", "gap_sigma", 10.0)
+        try:
+            gap_sigma = float(raw_gap_sigma)
+            valid_sigma = math.isfinite(gap_sigma) and gap_sigma > 0.0
+        except (TypeError, ValueError):
+            valid_sigma = False
+        if effective_search == "auglag" and not valid_sigma:
+            report.add(
+                "ERROR",
+                "optimize.gap_sigma",
+                "The auglag gap term must be scaled by a positive factor; zero "
+                "removes the gap term entirely and a negative value drives the "
+                "search away from the seam.",
+                value=raw_gap_sigma,
+                expected="> 0",
+                action="Use gap_sigma=10 (default) or another positive value.",
+            )
+
+    if runtype == "mecp":
+        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auglag"))
+        if mecp_search not in MECP_SEARCH:
+            report.add(
+                "ERROR",
+                "optimize.mecp_search",
+                "Unknown MECP search algorithm.",
+                value=mecp_search,
+                expected=", ".join(sorted(MECP_SEARCH)),
+                action="Use auglag (recommended), penalty, or quad.",
+            )
+        elif mecp_search == "penalty":
+            penalty_controls = {
+                "pen_sigma": (1.0, "penalty multiplier", False),
+                "pen_alpha": (0.0, "penalty smoothing energy", True),
+                # the objective scales by gap_weight * pen_sigma, so a zero or
+                # negative weight removes or inverts the gap term just as a
+                # bad pen_sigma would
+                "gap_weight": (1.0, "gap weight", False),
+            }
+            for key, (default, label, allow_zero) in penalty_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    ok = math.isfinite(value) and (
+                        value > 0.0 or (allow_zero and value == 0.0)
+                    )
+                except (TypeError, ValueError):
+                    ok = False
+                if not ok:
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        f"The MECP penalty {label} must be positive; a "
+                        "nonpositive value removes or inverts the gap term.",
+                        value=raw,
+                        expected=">= 0" if allow_zero else "> 0",
+                        action=("Use pen_alpha=0.02, or 0 to select it."
+                                if allow_zero else "Use a positive value."),
+                    )
+            raw_incre = _get(config, "optimize", "pen_incre", 1.0)
+            try:
+                incre_ignored = float(raw_incre) != 1.0
+            except (TypeError, ValueError):
+                incre_ignored = True
+            if incre_ignored:
+                report.add(
+                    "WARNING",
+                    "optimize.pen_incre",
+                    "The MECP penalty holds sigma fixed, so pen_incre is not "
+                    "applied. Every backend evaluates the objective at trial "
+                    "geometries, so a ramp driven from inside it would advance "
+                    "on rejected steps as well.",
+                    value=raw_incre,
+                    expected="1.0",
+                    action="Use mecp_search=auglag, which converges without a "
+                           "ramp, or meci_search=baeka for an adaptive one.",
+                )
+
+        elif mecp_search == "quad":
+            raw_weight = _get(config, "optimize", "gap_weight", 1.0)
+            try:
+                weight = float(raw_weight)
+                weight_ok = math.isfinite(weight) and weight > 0.0
+            except (TypeError, ValueError):
+                weight_ok = False
+            if not weight_ok:
+                report.add(
+                    "ERROR",
+                    "optimize.gap_weight",
+                    "The quad objective scales its gap term by gap_weight; a "
+                    "nonpositive value removes or inverts it.",
+                    value=raw_weight,
+                    expected="> 0",
+                    action="Use a positive gap_weight.",
+                )
+            report.add(
+                "WARNING",
+                "optimize.mecp_search",
+                "The quad objective balances the mean gradient against the gap "
+                "term, so it settles at a residual gap of order 1/gap_weight "
+                "and generally cannot reach energy_gap.",
+                value=mecp_search,
+                expected="auglag",
+                action="Use mecp_search=auglag unless you are reproducing an "
+                       "earlier run.",
+            )
 
     if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(

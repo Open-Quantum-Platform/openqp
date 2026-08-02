@@ -198,8 +198,13 @@ def test_route_driver_manifest_matches_public_driver_coverage():
     oqp_input = _load_oqp_input()
     owners = oqp_input.ROUTE_DRIVER_SCHEMA_KEYS
 
+    # gap_sigma and mecp_search are [optimize] schema keys emitted only by the
+    # crossing drivers, so the manifest owns them while DRIVER_OPTIONS keeps
+    # them out of the drivers that never read them.
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
+        | set(oqp_input._CROSSING_OPTIONS)
+        | set(oqp_input._MECP_ONLY_OPTIONS)
         | {"lib", "istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}

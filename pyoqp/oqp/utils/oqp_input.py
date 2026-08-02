@@ -319,8 +319,8 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "properties": _keys("grad"),
     "optimize": _keys("""
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
-        imult jmult energy_shift energy_gap meci_search pen_sigma pen_alpha
-        pen_incre pen_delta pen_jump gap_weight init_scf
+        imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
+        pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -454,6 +454,13 @@ _OPT_OPTIONS = {
     "energy_shift", "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
+# gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
+# mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
+# route-driver manifest still owns them, but the driver option sets keep them
+# out of optimize/ts/irc/neb where nothing reads them.
+_CROSSING_OPTIONS = {"gap_sigma"}
+_MECP_ONLY_OPTIONS = {"mecp_search"}
+_MECI_ONLY_OPTIONS = {"meci_search", "pen_delta", "pen_jump"}
 _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
@@ -477,13 +484,25 @@ _MECI_OPTION_ALIASES = {
     "beta_schedule": "pen_jump",
     "gap": "energy_gap",
 }
+_MECP_PUBLIC_OPTIONS = {"algorithm", "sigma", "alpha", "gap"}
+_MECP_OPTION_ALIASES = {
+    "algorithm": "mecp_search",
+    "sigma": "pen_sigma",
+    "alpha": "pen_alpha",
+    "gap": "energy_gap",
+}
 _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
     "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
-    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "mecp": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    # MECP reads none of the MECI-only controls, and silently ignoring them
+    # would run a different objective than the input asks for.
+    "mecp": ((set(_OPT_OPTIONS) - _MECI_ONLY_OPTIONS)
+             | set(_MECP_PUBLIC_OPTIONS)
+             | set(_MECP_ONLY_OPTIONS) | set(_CROSSING_OPTIONS)
+             | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
@@ -1187,15 +1206,27 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if driver.name == "prop" and model not in {"mrsf", "mrsf-hf"}:
         raise OQPInputError("prop([STATE]) currently requires MRSF-TDDFT or MRSF-TDHF")
 
-    options = (_normalized_meci_options(driver)
-               if driver.name == "meci" else _driver_options(driver))
+    if driver.name == "meci":
+        options = _normalized_meci_options(driver)
+    elif driver.name == "mecp":
+        options = _normalized_mecp_options(driver)
+    else:
+        options = _driver_options(driver)
+    if driver.name == "mecp":
+        algorithm = str(options.get("mecp_search", "auglag")).strip().lower()
+        if algorithm not in {"auglag", "penalty", "quad"}:
+            raise OQPInputError(
+                "mecp algorithm must be auglag, penalty, or quad"
+            )
+
     if driver.name == "meci":
         algorithm = str(options.get(
             "meci_search", "baeka" if len(states) > 2 else "auto"
         )).strip().lower()
-        if algorithm not in {"auto", "penalty", "ubp", "hybrid", "baeka"}:
+        if algorithm not in {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}:
             raise OQPInputError(
-                "meci algorithm must be auto, penalty, ubp, hybrid, or baeka"
+                "meci algorithm must be auto, penalty, ubp, auglag, hybrid, "
+                "or baeka"
             )
         if len(states) > 2 and algorithm not in {"auto", "baeka"}:
             raise OQPInputError(
@@ -1960,6 +1991,29 @@ def _normalized_meci_options(driver: CallSpec) -> Dict[str, Any]:
     return normalized
 
 
+def _normalized_mecp_options(driver: CallSpec) -> Dict[str, Any]:
+    """Return MECP options using their configuration key names.
+
+    ``algorithm`` is the public spelling of ``mecp_search``, matching the MECI
+    surface.  Both spellings are accepted, but supplying them together is an
+    error rather than a last-one-wins ambiguity.
+    """
+
+    options = _driver_options(driver)
+    normalized: Dict[str, Any] = {}
+    sources: Dict[str, str] = {}
+    for key, value in options.items():
+        target = _MECP_OPTION_ALIASES.get(key, key)
+        if target in normalized:
+            raise OQPInputError(
+                "MECP option '%s' is specified twice through %s and %s"
+                % (target, sources[target], key)
+            )
+        normalized[target] = value
+        sources[target] = key
+    return normalized
+
+
 def _validate_freeze_spec(value: Any) -> str:
     """Validate the concise native frozen-distance expression."""
 
@@ -2332,6 +2386,13 @@ def lower_to_legacy(
         if name == "mecp":
             put("optimize", "imult", states[0].multiplicity)
             put("optimize", "jmult", states[1].multiplicity)
+            # emit mecp_search rather than the public algorithm spelling, and
+            # normalize its case so the objective lookup finds it
+            driver_options = _normalized_mecp_options(spec.driver)
+            if "mecp_search" in driver_options:
+                driver_options["mecp_search"] = str(
+                    driver_options["mecp_search"]
+                ).strip().lower()
         if name == "meci":
             driver_options = _normalized_meci_options(spec.driver)
             algorithm = str(driver_options.get(
