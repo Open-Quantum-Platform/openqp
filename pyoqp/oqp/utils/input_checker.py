@@ -2557,13 +2557,26 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         )
 
     if runtype in {"meci", "mecp"}:
+        # Only auglag consumes gap_sigma, so an inherited or deliberately
+        # disabled value must not block a run that never reads it.
+        if runtype == "mecp":
+            effective_search = _as_lower(
+                _get(config, "optimize", "mecp_search", "auglag"))
+        else:
+            effective_search = _as_lower(
+                _get(config, "optimize", "meci_search", "auto"))
+            if effective_search == "auto":
+                # auto is auglag for two states and BaekA for three or more
+                auto_states = _as_list(_get(config, "optimize", "states", []))
+                effective_search = (
+                    "baeka" if len(auto_states) > 2 else "auglag")
         raw_gap_sigma = _get(config, "optimize", "gap_sigma", 10.0)
         try:
             gap_sigma = float(raw_gap_sigma)
             valid_sigma = math.isfinite(gap_sigma) and gap_sigma > 0.0
         except (TypeError, ValueError):
             valid_sigma = False
-        if not valid_sigma:
+        if effective_search == "auglag" and not valid_sigma:
             report.add(
                 "ERROR",
                 "optimize.gap_sigma",
@@ -2591,6 +2604,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "pen_sigma": (1.0, "penalty multiplier", False),
                 "pen_alpha": (0.0, "penalty smoothing energy", True),
                 "pen_incre": (1.0, "penalty increment", False),
+                # the objective scales by gap_weight * pen_sigma, so a zero or
+                # negative weight removes or inverts the gap term just as a
+                # bad pen_sigma would
+                "gap_weight": (1.0, "gap weight", False),
             }
             for key, (default, label, allow_zero) in penalty_controls.items():
                 raw = _get(config, "optimize", key, default)
@@ -2613,6 +2630,22 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                                 if allow_zero else "Use a positive value."),
                     )
         elif mecp_search == "quad":
+            raw_weight = _get(config, "optimize", "gap_weight", 1.0)
+            try:
+                weight = float(raw_weight)
+                weight_ok = math.isfinite(weight) and weight > 0.0
+            except (TypeError, ValueError):
+                weight_ok = False
+            if not weight_ok:
+                report.add(
+                    "ERROR",
+                    "optimize.gap_weight",
+                    "The quad objective scales its gap term by gap_weight; a "
+                    "nonpositive value removes or inverts it.",
+                    value=raw_weight,
+                    expected="> 0",
+                    action="Use a positive gap_weight.",
+                )
             report.add(
                 "WARNING",
                 "optimize.mecp_search",
