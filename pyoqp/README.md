@@ -540,8 +540,10 @@ automatically.
     
 - meci-search // choose the algorithm for conical intersection optimization
 
-      auto       native default: short two-state penalty then BaekA if needed;
-                 multistate searches select BaekA directly
+      auto       default: two-state searches use auglag, with BaekA held back
+                 as a rescue on the recovery budget if auglag does not meet
+                 the criteria; multistate searches select BaekA directly.
+                 Backends other than oqp resolve auto to auglag
       penalty    use the modified penalty method
       ubp        use the update branching plane method
       auglag     use the branching-plane projection with a least-squares

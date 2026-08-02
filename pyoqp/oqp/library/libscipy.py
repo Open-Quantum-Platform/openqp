@@ -308,10 +308,11 @@ class MECIOpt(Optimizer):
 
         self.meci_search = mol.config['optimize']['meci_search']
         # ``auto`` is orchestrated by the native OQP backend.  Other backends
-        # retain their established two-state penalty objective rather than
-        # failing while constructing the shared MECI objective.
+        # resolve it to the augmented Lagrangian: the plain penalty is
+        # stationary at a finite gap, so on its own it stalls above
+        # energy_gap, and those backends have no BaekA escalation to recover.
         if self.meci_search == 'auto':
-            self.meci_search = 'penalty'
+            self.meci_search = 'auglag'
         self.sigma = mol.config['optimize']['pen_sigma']
         self.alpha = mol.config['optimize']['pen_alpha']
         self.incre = mol.config['optimize']['pen_incre']

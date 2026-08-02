@@ -482,7 +482,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['stationary'], info['gap_converged'],
         )
 
-    if section == 'penalty':
+    if section in ('penalty', 'auglag', 'ubp', 'hybrid'):
         state_i = (public_state_label(mol.config, info['istate'])
                    if is_mrsf(mol.config) else info['istate'])
         state_j = (public_state_label(mol.config, info['jstate'])

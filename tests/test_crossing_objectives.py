@@ -217,6 +217,26 @@ class MECIObjectiveTest(unittest.TestCase):
         opt.mol = types.SimpleNamespace(log_path=".")
         return opt
 
+    def descend(self, objective, opt, steps=4000, step=0.05):
+        coordinates = np.array([0.0, 0.6])
+        for _ in range(steps):
+            e_lo, g_lo, e_up, g_up = model(coordinates)
+            _, df = objective(coordinates, np.array([e_lo, e_up]),
+                              np.array([g_lo, g_up]))
+            coordinates = coordinates - step * df
+        return coordinates
+
+    def test_penalty_settles_at_a_residual_gap(self):
+        """Why auto no longer resolves to the plain penalty.
+
+        Its stationary point sits at a finite gap, so on its own it cannot
+        reach energy_gap; only the BaekA escalation used to rescue it.
+        """
+        opt = self.make_meci()
+        opt.sigma, opt.alpha, opt.incre = 1.0, 0.0, 1.0
+        final = self.descend(opt.penalty, opt, steps=2000)
+        self.assertGreater(abs(exact_gap(final)), 1.0e-2)
+
     def test_auglag_reaches_the_exact_crossing(self):
         opt = self.make_meci()
         coordinates = np.array([0.0, 0.6])
