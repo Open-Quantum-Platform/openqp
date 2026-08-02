@@ -1,0 +1,2 @@
+mrsf(nstate=3)/bhhlyp/sto-3g geom="ch2.xyz" energy guess(type=huckel)
+afqmc(trial=mrsf_state,state=1,walkers=16,steps=6,dt=0.005,seed=161803,chol=1e-10,stabilize_every=2,population_control_every=2,estimate_every=2,accumulate_after=2)

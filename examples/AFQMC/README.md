@@ -5,13 +5,34 @@ reference, builds the Cholesky-factorized molecular Hamiltonian in memory, and
 propagates the walkers. There is no separate executable and no
 HAMILTONIAN/FCIDUMP file hand-off.
 
-Both examples are deliberately tiny end-to-end smoke tests on triplet
+The examples are deliberately tiny end-to-end smoke tests on triplet
 CH2/STO-3G: six projection steps with 16 walkers.
 
 ```sh
 openqp CH2_ROHF_STO3G_AFQMC.inp     # single-determinant (mean-field) trial
 openqp CH2_MRSF_STO3G_AFQMC.inp     # MRSF-TDDFT root 1 as the trial
+openqp CH2_MRSF_STO3G_AFQMC.oqp     # the same run in the concise syntax
 ```
+
+## Input forms
+
+Sectioned `.inp` is explicit: `[input] method = afqmc`, plus `[tdhf] type =
+mrsf` when the trial is an MRSF root, plus the `[afqmc]` section.
+
+In the concise `.oqp` syntax an `afqmc(...)` call is what makes the job an
+AFQMC job; the route then only says what is solved first and supplies the
+reference:
+
+```text
+rohf/sto-3g geom="ch2.xyz" mult=3 energy afqmc(trial=mean_field)
+mrsf(nstate=3)/bhhlyp/sto-3g geom="ch2.xyz" energy afqmc(trial=mrsf_state,state=1)
+afqmc/sto-3g geom="ch2.xyz" mult=3 energy afqmc(walkers=256)
+```
+
+The bare `afqmc/basis` route is the mean-field-trial shorthand; it takes no
+functional (the reference is HF) and supports `energy` only. `walkers`,
+`steps`, `dt` and `chol` are accepted as short spellings of `nwalkers`,
+`nsteps`, `timestep` and `chol_tol`.
 
 ## Trial wavefunctions
 

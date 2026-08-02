@@ -26,6 +26,48 @@ def _parse(text, source_dir=None):
     return spec, oqp_input.lower_to_legacy(spec, source_dir=source_dir)
 
 
+def test_afqmc_route_model_is_a_ground_state_energy_method():
+    spec, legacy = _parse(
+        'afqmc/sto-3g geom="ch2.xyz" mult=3 energy afqmc(walkers=16,steps=20)'
+    )
+    assert legacy["input"]["method"] == "afqmc"
+    assert legacy["scf"]["multiplicity"] == "3"
+    assert legacy["afqmc"]["nwalkers"] == "16"
+    assert "afqmc/sto-3g" in oqp_input.render_canonical_oqp(spec)
+
+
+def test_afqmc_route_model_rejects_a_functional_and_non_energy_drivers():
+    with pytest.raises(OQPInputError):
+        _parse('afqmc/bhhlyp/sto-3g geom="ch2.xyz" energy')
+    with pytest.raises(OQPInputError):
+        _parse('afqmc/sto-3g geom="ch2.xyz" grad')
+
+
+def test_afqmc_section_promotes_a_response_route_to_an_afqmc_run():
+    # The route says which trial machinery to solve first; the afqmc(...)
+    # section says the job is an AFQMC job. Without the promotion the method
+    # would stay tdhf and [afqmc] would never be read.
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/sto-3g geom="ch2.xyz" energy '
+        'afqmc(trial=mrsf_state,state=2)'
+    )
+    assert legacy["input"]["method"] == "afqmc"
+    assert legacy["tdhf"]["type"] == "mrsf"
+    assert legacy["scf"]["type"] == "rohf"
+    assert legacy["scf"]["multiplicity"] == "3"
+    assert legacy["afqmc"]["trial"] == "mrsf_state"
+    assert legacy["afqmc"]["state"] == "2"
+
+
+def test_afqmc_section_promotes_a_reference_route_to_an_afqmc_run():
+    _, legacy = _parse(
+        'rohf/sto-3g geom="ch2.xyz" mult=3 energy afqmc(trial=mean_field)'
+    )
+    assert legacy["input"]["method"] == "afqmc"
+    assert legacy["scf"]["type"] == "rohf"
+    assert legacy["afqmc"]["trial"] == "mean_field"
+
+
 def test_afqmc_section_call_and_concise_aliases_lower_to_legacy():
     spec, legacy = _parse(
         'mrsf(nstate=3)/bhhlyp/sto-3g geom="ch2.xyz" energy '

@@ -121,6 +121,7 @@ class CalculationSpec:
             "uhf": "UHF",
             "rohf": "ROHF",
             "mp2": "MP2",
+            "afqmc": "AFQMC",
             "dftb": "DFTB",
             "dftb0": "DFTB0",
             "tddftb": "TD-DFTB (TDA)",
@@ -202,7 +203,7 @@ def _normalize_geometry_owned_section_call(
 
 
 DEFAULT_SINGLET_MODELS = {
-    "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
+    "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2", "afqmc",
     "tddft", "tda", "tdhf", "tda-hf",
 }
 
@@ -428,6 +429,7 @@ MODEL_ALIASES = {
     "uhf": "uhf",
     "rohf": "rohf",
     "mp2": "mp2",
+    "afqmc": "afqmc",
     "dftb": "dftb",
     "dftb0": "dftb0",
     "dftb-noscc": "dftb0",
@@ -849,13 +851,13 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     } and len(parts) != 1:
         raise OQPInputError("%s does not take a functional or basis route component" % alias)
     if model in {
-        "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
+        "hf", "rhf", "uhf", "rohf", "mp2", "afqmc", "tdhf", "mrsf-hf",
         "umrsf-hf", "sf-hf", "tda-hf",
     } and len(parts) == 3:
         raise OQPInputError("%s route is model/basis; it does not take a functional" % alias)
     if len(parts) == 2:
         if model in {
-            "hf", "rhf", "uhf", "rohf", "mp2", "tdhf", "mrsf-hf",
+            "hf", "rhf", "uhf", "rohf", "mp2", "afqmc", "tdhf", "mrsf-hf",
             "umrsf-hf", "sf-hf", "tda-hf", "dftb", "dftb0", "tddftb",
             "tda-dftb", "sf-dftb", "mrsf-dftb",
         }:
@@ -1157,6 +1159,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         raise OQPInputError("rks requires mult=1; use roks or uks for open-shell DFT")
     if model == "roks" and spec.options.get("mult", 1) < 2:
         raise OQPInputError("roks requires an open-shell mult value such as mult=2 or mult=3")
+    if model == "afqmc" and driver.name != "energy":
+        raise OQPInputError("AFQMC provides energies only; use energy")
     if model == "mp2" and driver.name != "energy":
         raise OQPInputError("MP2 currently supports energy() only")
     if model == "mp2" and "reference" in spec.model_options:
@@ -1594,7 +1598,7 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             )
         if model in {
             "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
-            "dftb", "dftb0",
+            "afqmc", "dftb", "dftb0",
         } and state.label != "S0":
             raise OQPInputError("%s only supports the ground-state label S0" % model)
         if model in {
@@ -1930,7 +1934,7 @@ def _default_state(spec: CalculationSpec) -> Optional[StateRef]:
         return StateRef(label="S0")
     ground_models = {
         "dft", "rks", "uks", "roks", "hf", "rhf", "uhf", "rohf", "mp2",
-        "dftb", "dftb0",
+        "afqmc", "dftb", "dftb0",
     }
     if spec.driver.name == "namd" and {
         "active", "init_state"
@@ -2154,6 +2158,13 @@ def lower_to_legacy(
         and spec.driver.name in {"grad", "optimize", "mep", "ts", "irc", "neb", "hess"}
     ):
         method = "hf"
+    # An afqmc(...) section is a request to run AFQMC. The route model then
+    # only selects what is solved first: `rhf/sto-3g ... afqmc(...)` is a
+    # mean-field trial, while `mrsf(nstate=3)/bhhlyp/sto-3g ... afqmc(state=2)`
+    # solves MRSF and hands root 2 over as the trial. Without this, the model
+    # would keep method=tdhf and the [afqmc] section would be inert.
+    if any(call.name == "afqmc" for call in spec.modifiers):
+        method = "afqmc"
     put("input", "method", method)
     # Branching-plane analysis is implemented as a NAC run with nac.bp=True;
     # there is no separate Python run-function dispatch for legacy runtype=bp.
