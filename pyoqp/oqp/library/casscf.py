@@ -1175,3 +1175,24 @@ class CASSCF:
         _log(mol)
         _log(mol, f"   PyOQP timing:                       {wall:.2f} s")
         _log(mol)
+
+        # An exhausted macroiteration budget is a failure, not a result.  The
+        # orbitals have already been committed and the CI re-solved on them,
+        # so everything downstream -- CASPT2/NEVPT2/QDPT2, which take this as
+        # their reference by default, and every gradient-driven runtype --
+        # would otherwise proceed from a NONSTATIONARY point and report
+        # energies that look ordinary.  The full log above is emitted first so
+        # the macroiteration history and final |g_orb| are visible.
+        #
+        # `max_macro_iterations = 0` is the explicitly supported fixed-orbital
+        # scaffold (CASCI on the reference orbitals): nothing was optimized,
+        # so there is nothing to have failed.
+        if not converged and options.max_macro_iterations > 0:
+            raise RuntimeError(
+                f"{label} did not converge: {niter} of "
+                f"{options.max_macro_iterations} macroiterations used, final "
+                f"|g_orb| = {history[-1][3]:.3e} against "
+                f"gradient_norm_tol = {options.gradient_norm_tol:.3e}. "
+                "Raise [casscf] max_macro_iterations, loosen "
+                "gradient_norm_tol, or try another [casscf] converger."
+            )

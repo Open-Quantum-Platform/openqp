@@ -190,6 +190,12 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     swap_flags = []  # (coord index, sign, min adjacent gap, max state shift)
 
     guess_type_saved = mol.config['guess']['type']
+    # Whether the displaced-energy loop below is already unwinding.  The
+    # restore in `finally` must not mask that failure -- but when nothing is
+    # in flight, a failed restore is itself fatal and has to propagate, or
+    # this function would hand back a gradient while `mol` still holds a
+    # displaced geometry.
+    loop_failed = False
     try:
         if guess_mode == 'warm':
             # For the closed-shell RHF references PT2 enforces, guess type
@@ -246,6 +252,9 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
         e_plus = groups.reduce_sum(e_plus)
         e_minus = groups.reduce_sum(e_minus)
         swap_flags = groups.gather_list(swap_flags)
+    except BaseException:
+        loop_failed = True
+        raise
     finally:
         # Restore the user guess and the central geometry, and re-converge the
         # pipeline at the expansion point so mol leaves this function holding
@@ -265,11 +274,19 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
                     're-computed central energies drifted by %.3e Hartree '
                     '(state pipeline is not reproducing itself; the gradient '
                     'may be contaminated)' % drift))
-        except Exception:  # pragma: no cover - keep the original error visible
+        except Exception:
             dump_log(mol, title=(
                 'PyOQP: WARNING PT2 numerical gradient could not restore the '
                 'central geometry state; molecule data corresponds to a '
                 'displaced geometry'))
+            # Only swallow this while another exception is already unwinding,
+            # so the original cause stays visible.  Otherwise the displaced
+            # energies were all fine and the restore is the only thing that
+            # failed -- returning a gradient here would hand a
+            # gradient-driven optimizer a molecule whose central electronic
+            # state was never restored.
+            if not loop_failed:
+                raise
 
     if swap_flags:
         worst = min(swap_flags, key=lambda t: t[2])

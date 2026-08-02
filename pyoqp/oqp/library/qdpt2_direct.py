@@ -35,6 +35,35 @@ import numpy as np
 
 
 # --------------------------------------------------------------------------- bit utilities
+# `np.bitwise_count` is NumPy 2.0 and later.  pyproject declares numpy>=1.20,
+# so using it directly makes every QDPT2 run (mrmp2 / mcqdpt2 / xmcqdpt2) die
+# with AttributeError on an otherwise supported install.  Prefer it when it is
+# there -- it is a single instruction -- and fall back to the standard SWAR
+# population count, which is exact and still fully vectorised over uint64.
+_PC_M1 = np.uint64(0x5555555555555555)
+_PC_M2 = np.uint64(0x3333333333333333)
+_PC_M4 = np.uint64(0x0F0F0F0F0F0F0F0F)
+_PC_H01 = np.uint64(0x0101010101010101)
+
+
+def _popcount_swar(x):
+    """Set bits of each uint64 element, using only NumPy 1.x operations.
+
+    Standard SWAR population count; exact over the whole uint64 range and
+    still fully vectorised.  Defined unconditionally rather than inside the
+    `else` below so the NumPy 1.x path stays reachable -- and testable -- on
+    a NumPy 2.x interpreter."""
+    x = np.asarray(x, dtype=np.uint64)
+    x = x - ((x >> np.uint64(1)) & _PC_M1)
+    x = (x & _PC_M2) + ((x >> np.uint64(2)) & _PC_M2)
+    x = (x + (x >> np.uint64(4))) & _PC_M4
+    return (x * _PC_H01) >> np.uint64(56)
+
+
+# Prefer the intrinsic where it exists -- it is a single instruction.
+_popcount = np.bitwise_count if hasattr(np, 'bitwise_count') else _popcount_swar
+
+
 def _prefix_phase_mask(lo, hi):
     """uint64 mask of bits strictly between positions lo < hi (exclusive)."""
     return ((np.uint64(1) << hi) - np.uint64(1)) ^ ((np.uint64(1) << (lo + np.uint64(1))) - np.uint64(1))
@@ -51,18 +80,18 @@ def _single_phases(word, occ_idx, virt_idx):
     lo = np.minimum(occ, vrt)
     hi = np.maximum(occ, vrt)
     mask = _prefix_phase_mask(lo, hi)
-    nbet = np.bitwise_count(np.uint64(word) & mask)
+    nbet = _popcount(np.uint64(word) & mask)
     return np.where(nbet % 2 == 0, 1.0, -1.0)
 
 
 def _seq_phase_ann(word, pos):
     """Phase of a_pos acting on word (bits below pos), and the new word."""
-    below = np.bitwise_count(np.uint64(word) & ((np.uint64(1) << pos) - np.uint64(1)))
+    below = _popcount(np.uint64(word) & ((np.uint64(1) << pos) - np.uint64(1)))
     return np.where(below % 2 == 0, 1.0, -1.0), np.uint64(word) ^ (np.uint64(1) << pos)
 
 
 def _seq_phase_cre(word, pos):
-    below = np.bitwise_count(np.uint64(word) & ((np.uint64(1) << pos) - np.uint64(1)))
+    below = _popcount(np.uint64(word) & ((np.uint64(1) << pos) - np.uint64(1)))
     return np.where(below % 2 == 0, 1.0, -1.0), np.uint64(word) | (np.uint64(1) << pos)
 
 
@@ -268,8 +297,8 @@ def _stream_fortran(h1e, eri, eps, norb, ncore, nact, sup_a, sup_b, C,
         return None
 
     nsup, nstate = int(sup_a.size), int(C.shape[1])
-    na_occ = int(np.bitwise_count(sup_a[0]))
-    nb_occ = int(np.bitwise_count(sup_b[0]))
+    na_occ = int(_popcount(sup_a[0]))
+    nb_occ = int(_popcount(sup_b[0]))
     total = nsup * _terms_per_reference(norb, na_occ, nb_occ)
     if total > max_terms:
         raise ValueError(
