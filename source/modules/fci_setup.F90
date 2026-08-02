@@ -37,6 +37,24 @@ module fci_setup_mod
 
 contains
 
+  !> Threads for one region, given the caller's request: the request when it
+  !> is positive, otherwise whatever the environment already allows.
+  !>
+  !> This exists so the request can be expressed as a `num_threads` clause.
+  !> The clause is scoped to its own region; omp_set_num_threads is not, and
+  !> using it here leaked the FCI engine's thread cap into every subsequent
+  !> parallel region in the process.
+  function fci_region_threads(nthreads) result(n)
+    ! c_int32_t, not the default integer: both callers take it straight off a
+    ! bind(C) `value` dummy, and OpenQP's default integer is 8 bytes (ILP64).
+    integer(c_int32_t), intent(in) :: nthreads
+    integer :: n
+    n = 1
+!$  n = omp_get_max_threads()
+    if (nthreads > 0) n = int(nthreads)
+    n = max(1, n)
+  end function fci_region_threads
+
   !--------------------------------------------------- determinant lookup
   !> Number of set bits below `pos`, i.e. the fermionic phase counter.
   pure function pop_below(det, pos) result(n)
@@ -189,8 +207,18 @@ contains
     ! gspin[p,q,r,s] = (p r | q s) when spin(p)==spin(r) and spin(q)==spin(s).
     gspin(0:ns4 - 1_i8) = 0.0_dp
 
-!$  if (nthreads > 0) call omp_set_num_threads(int(nthreads))
+    ! `nthreads` applies to THIS region only, through the num_threads clause.
+    ! It used to be applied with omp_set_num_threads and never put back, and
+    ! omp_set_num_threads is process-wide: the FCI caller asks for
+    ! min(8, cpu_count) threads (fci._fci_lib_threads), so on any machine with
+    ! more than eight cores the first CI solve silently pinned EVERY later
+    ! OpenMP region in the process -- the SCF, the integral transforms, the
+    ! analytic Hessian -- to eight threads.  It made a whole-job thread scan
+    ! read as perfectly flat: H2O/cc-pVTZ CAS(6,6) took 12.0 s at
+    ! OMP_NUM_THREADS=1 and 12.0 s at 128, with the Hessian kernel reporting
+    ! nthr=8 in every one of them.
     !$omp parallel do collapse(2) default(shared) if(ns4 >= 1048576_i8) &
+    !$omp   num_threads(fci_region_threads(nthreads)) &
     !$omp   private(p, q, r, s, ps, qs, base_p, base_pq, base_pqr, esrc)
     do p = 0, ns - 1
       do q = 0, ns - 1
@@ -391,8 +419,9 @@ contains
       end if
     end do
 
-!$  if (nthreads > 0) call omp_set_num_threads(int(nthreads))
+    ! Region-local thread count -- see the note at the other call site.
     !$omp parallel do default(shared) if(ndet >= 512_i8) schedule(static) &
+    !$omp   num_threads(fci_region_threads(nthreads)) &
     !$omp   private(root, col, det, det_q, det_aq, det_p, row, &
     !$omp           p, q, phase, mask, c_col, flip)
     do root = 0, nv - 1
