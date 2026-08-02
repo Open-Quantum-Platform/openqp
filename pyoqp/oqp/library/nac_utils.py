@@ -2,7 +2,59 @@
 
 from __future__ import annotations
 
+import json
+import os
+
 import numpy as np
+
+
+# Numerical-NAC scratch files predate the canonical PR #160 convention.  A
+# sidecar marker prevents restart=True from silently mixing those historical
+# files with current workers after a partial restart.
+NUMERICAL_NAC_CACHE_SCHEMA_VERSION = 1
+NUMERICAL_NAC_CACHE_CONVENTION = (
+    "canonical-old-new__s-minus-st-over-2step__central-root-order-v1"
+)
+
+
+def numerical_nac_cache_metadata(step, nstate, worker_index):
+    """Return the complete identity of a reusable numerical-NAC worker file."""
+    return {
+        "schema_version": NUMERICAL_NAC_CACHE_SCHEMA_VERSION,
+        "convention": NUMERICAL_NAC_CACHE_CONVENTION,
+        "step": float(step),
+        "nstate": int(nstate),
+        "worker_index": int(worker_index),
+    }
+
+
+def load_numerical_nac_cache(dat, step, nstate, worker_index):
+    """Load a current, complete numerical-NAC cache entry or return None."""
+    marker = f"{dat}.meta.json"
+    try:
+        with open(marker, "r") as handle:
+            metadata = json.load(handle)
+        if metadata != numerical_nac_cache_metadata(step, nstate, worker_index):
+            return None
+        dcme = np.loadtxt(dat).reshape(-1)
+        if dcme.size != nstate * nstate or not np.all(np.isfinite(dcme)):
+            return None
+        return dcme
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def write_numerical_nac_cache_marker(dat, step, nstate, worker_index):
+    """Atomically mark a successfully read worker file as current."""
+    marker = f"{dat}.meta.json"
+    temporary = f"{marker}.{os.getpid()}.tmp"
+    with open(temporary, "w") as handle:
+        json.dump(
+            numerical_nac_cache_metadata(step, nstate, worker_index), handle,
+            indent=2, sort_keys=True,
+        )
+        handle.write("\n")
+    os.replace(temporary, marker)
 
 
 def canonical_state_overlap(native_overlap):

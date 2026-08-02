@@ -98,6 +98,10 @@ class Molecule:
         self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
         self.symmetry_metadata = {}
         self.mrsf_ekt_results_by_kind = {}
+        # State-tracking tags loaded from a guess are transport history, not a
+        # result of the new calculation.  NACME.align_x sets this only after it
+        # has refreshed the mapping and gauge in the current run.
+        self._state_tracking_fresh = False
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -1431,6 +1435,8 @@ class Molecule:
 
     def get_state_tracking(self):
         """Return the JSON-safe public root/phase transport record, if any."""
+        if not getattr(self, '_state_tracking_fresh', False):
+            return None
         try:
             return {
                 'schema_version': 1,
@@ -1802,6 +1808,9 @@ class Molecule:
 
     def put_data(self, data):
         # convert list to data
+        # Keep loaded tracking arrays available as history for a subsequent
+        # overlap calculation, but never publish them as this run's result.
+        self._state_tracking_fresh = False
         for key in self.tag:
             try:
                 self.data[key] = np.array(data[key])

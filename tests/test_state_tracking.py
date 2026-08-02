@@ -71,6 +71,7 @@ def test_align_x_preserves_lineage_and_records_initial_gauge(monkeypatch):
     tracker.align_x()
 
     data = tracker.mol.data
+    assert tracker.mol._state_tracking_fresh is True
     assert data["OQP::state_tracking_order"].tolist() == [1, 2, 0]
     assert data["OQP::state_tracking_lineage"].tolist() == [11, 12, 10]
     assert data["OQP::state_tracking_phase_step"].tolist() == [-1.0, 1.0, 1.0]
@@ -139,6 +140,7 @@ def test_initial_gauge_sign_is_not_double_counted_across_json_restart(monkeypatc
 
 def test_public_tracking_contract_is_available_to_memory_drivers():
     class DummyMol:
+        _state_tracking_fresh = True
         data = {
             "OQP::state_tracking_order": np.array([1, 0]),
             "OQP::state_tracking_raw_order": np.array([1, 0]),
@@ -167,6 +169,33 @@ def test_public_tracking_contract_is_available_to_memory_drivers():
         "matched_overlap": [0.98, 0.97],
         "margin": [0.90, 0.88],
     }
+
+
+def test_tracking_loaded_from_guess_is_not_republished_as_current_result():
+    tracking_tags = {
+        "OQP::state_tracking_order": [1, 0],
+        "OQP::state_tracking_raw_order": [1, 0],
+        "OQP::state_tracking_output_reordered": [0],
+        "OQP::state_tracking_lineage": [7, 4],
+        "OQP::state_tracking_phase_step": [-1.0, 1.0],
+        "OQP::state_tracking_phase_initial": [-1.0, -1.0],
+        "OQP::state_tracking_previous_phase_initial": [1.0, -1.0],
+        "OQP::state_tracking_overlap": [0.98, 0.97],
+        "OQP::state_tracking_margin": [0.90, 0.88],
+    }
+
+    class DummyMol:
+        tag = list(tracking_tags)
+        config_tag = {}
+        config = {}
+        data = {}
+        _state_tracking_fresh = True
+
+    molecule = DummyMol()
+    Molecule.put_data(molecule, tracking_tags)
+
+    assert molecule._state_tracking_fresh is False
+    assert Molecule.get_state_tracking(molecule) is None
 
 
 def test_runner_results_forwards_public_tracking_contract():

@@ -52,6 +52,8 @@ from oqp.library.nac_utils import (
     canonical_state_overlap,
     hst_derivative_coupling,
     interstate_coupling,
+    load_numerical_nac_cache,
+    write_numerical_nac_cache_marker,
 )
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
@@ -1860,6 +1862,10 @@ class NACME(BasisOverlap):
         self.mol.data['OQP::state_tracking_previous_phase_initial'] = previous_phase
         self.mol.data['OQP::state_tracking_overlap'] = matched
         self.mol.data['OQP::state_tracking_margin'] = margin
+        # Only tracking performed in this calculation may be exposed through
+        # Molecule.get_results()/Runner.results().  Guess JSON tags remain
+        # available above as transport history, but are not current results.
+        self.mol._state_tracking_fresh = True
 
         # update x in Fortran data shape
         self.mol.data['OQP::td_bvec_mo'] = current_x.reshape((x_shape[0], x_shape[1]))
@@ -2117,6 +2123,9 @@ class NAC(Calculator):
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
+        # Every worker .dcme is the derivative coupling d_ij exported by
+        # NACME.nacme, never the energy-weighted h_ij.  The central difference
+        # is formed here before interstate_coupling applies (E_j-E_i).
         dcm = (forward - backward) / 2
         # reshape matrix -> (nstate x nstate, natom x 3) -> (nstate, nstate, natom, 3)
         dcv = dcm.T.reshape((self.nstate, self.nstate, self.natom, 3))
@@ -2153,8 +2162,13 @@ def nacme_wrapper(key_dict):
     dat = f'{dir_nacv}/{project_name}.{idx}.dcme'
     log = f'{dir_nacv}/{project_name}.{idx}.tmp.log'
 
-    # attempt to read computed data
-    if restart and os.path.exists(dat):
+    # Reuse only a file explicitly marked with the current PR #160 overlap,
+    # factor, sign, and root-order convention.  Unmarked historical files and
+    # partially upgraded scratch directories are recomputed worker by worker.
+    dcme = load_numerical_nac_cache(
+        dat, dx, nstate, idx
+    ) if restart else None
+    if dcme is not None:
         status = 'loaded'
     else:
         status = 'computed'
@@ -2203,12 +2217,14 @@ def nacme_wrapper(key_dict):
             NACME(mol).nacme(reorder_x=True)
             dump_log(mol, title='', section='end')
 
-    try:
-        dcme = np.loadtxt(dat).reshape(-1)
-
-    except FileNotFoundError:
-        dcme = np.zeros_like(nstate * nstate)
-        status = 'failed'
+        try:
+            dcme = np.loadtxt(dat).reshape(-1)
+            if dcme.size != nstate * nstate or not np.all(np.isfinite(dcme)):
+                raise ValueError('incomplete numerical-NAC worker output')
+            write_numerical_nac_cache_marker(dat, dx, nstate, idx)
+        except (OSError, ValueError):
+            dcme = np.zeros(nstate * nstate, dtype=float)
+            status = 'failed'
 
     end_time = time.time()
 

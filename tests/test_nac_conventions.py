@@ -70,3 +70,28 @@ def test_state_gauge_covariance_is_joint_not_pairwise():
 def test_canonical_overlap_rejects_non_square_matrices(shape):
     with pytest.raises(ValueError, match="square matrix"):
         NAC_UTILS.canonical_state_overlap(np.zeros(shape))
+
+
+def test_num_nac_restart_requires_current_convention_marker(tmp_path):
+    dat = tmp_path / "worker.0.dcme"
+    np.savetxt(dat, np.arange(4, dtype=float).reshape(2, 2))
+
+    # Historical PR #160 caches have no marker and must never be reused.
+    assert NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 2, 0) is None
+
+    NAC_UTILS.write_numerical_nac_cache_marker(dat, 1.0e-3, 2, 0)
+    loaded = NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 2, 0)
+    assert loaded.tolist() == pytest.approx([0.0, 1.0, 2.0, 3.0])
+
+    # Any convention-defining input mismatch invalidates only this worker.
+    assert NAC_UTILS.load_numerical_nac_cache(dat, 2.0e-3, 2, 0) is None
+    assert NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 3, 0) is None
+    assert NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 2, 1) is None
+
+
+def test_num_nac_restart_rejects_incomplete_marked_worker(tmp_path):
+    dat = tmp_path / "worker.0.dcme"
+    np.savetxt(dat, [1.0, 2.0, 3.0])
+    NAC_UTILS.write_numerical_nac_cache_marker(dat, 1.0e-3, 2, 0)
+
+    assert NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 2, 0) is None
