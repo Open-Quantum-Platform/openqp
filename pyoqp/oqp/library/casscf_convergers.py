@@ -54,6 +54,24 @@ Convergers
     gradient closure already carries the state-average weights, so the scheme
     works unchanged for SA-CASSCF.
 
+``trah``
+    Trust-region augmented Hessian, matrix-free.  Runs the SAME optimizer core
+    the SCF ``converger_type=trah`` uses (``source/trah_core.F90``): the macro
+    trust-region loop, the Steihaug-Toint preconditioned CG and the stability
+    check are written once, and each method supplies a gradient and a
+    Hessian-vector product.  CASSCF's product is the central difference of the
+    ANALYTIC orbital gradient along the requested direction -- two CI solves,
+    against the ``2*n_par`` an assembled FD Hessian costs and against the
+    ``casscf_hess_bmat`` contraction an assembled analytic one costs -- with the
+    Baker-Campbell-Hausdorff (frame) term subtracted in closed form so the
+    product is the true symmetric Hessian.  The CI is re-solved at both
+    displaced points, so CI relaxation is exact.  ``hessian=analytic`` switches
+    it to an assembled Hessian with free matrix-vector products instead, which
+    is the cheaper choice only while ``n_par`` stays small.
+
+    Note: ``trah`` used to be an accepted *alias* for ``ah``.  It is now its own
+    converger; ``ah`` keeps every other spelling it had.
+
 ``diis``
     Orbital-gradient DIIS (Pulay) acceleration over the existing quasi-Newton
     (or Powell, following ``[casscf] optimizer``) step.  Accumulated-rotation /
@@ -183,7 +201,7 @@ later, it can replace ``_ah_model_step``/``_ah_inner`` behind the same
 
 ``[casscf]`` keys read here (all optional, ``dict.get`` defaults)
 -----------------------------------------------------------------
-converger              twophase | ah | diis | auto        (default twophase)
+converger              twophase | ah | trah | diis | auto (default twophase)
 hessian                fd | analytic (read in casscf.py)  (default fd)
 ah_start_trust_radius  initial trust radius               (default 0.2)
 ah_max_trust_radius    trust-radius ceiling               (default max_rotation_norm)
@@ -192,6 +210,8 @@ ah_max_micro           AH scale-bisection microiterations (default 32)
 ah_max_rejects         uphill-step rejections per macro   (default 6)
 ah_saddle_curv_tol     deep-negative-curvature threshold  (default 2.5e-2)
 ah_saddle_egain_tol    strict gain to accept an escape    (default 1.0e-3)
+                       (`trah` reuses ah_start_trust_radius, ah_max_trust_radius
+                        and ah_max_micro rather than spelling them twice)
 diis_space             stored rotation/gradient pairs     (default 8)
 diis_start             pairs required before extrapolating (default 2)
 auto_stagnation        stalled macroiterations before falling back (default 3)
@@ -213,6 +233,8 @@ from oqp.library.casscf import (
     _escape_saddles,
     _fd_orbital_hessian,
     _floored_newton_loop,
+    _kappa_matrix,
+    _lib_effective_fock,
     _newton_step,
     _orbital_rotate,
     _powell_step,
@@ -234,9 +256,10 @@ _MAX_ESCAPES = 8
 _CONV_ALIASES = {
     "twophase": "twophase", "two-phase": "twophase", "2phase": "twophase",
     "default": "twophase", "": "twophase",
-    "ah": "ah", "trah": "ah", "augmented-hessian": "ah", "augmentedhessian": "ah",
+    "ah": "ah", "augmented-hessian": "ah", "augmentedhessian": "ah",
     "diis": "diis",
     "auto": "auto",
+    "trah": "trah",
 }
 
 
@@ -271,7 +294,7 @@ def run_converger(name, mol, C, evaluate, pairs, nbf, options, obj_weights, obj_
     if canonical is None:
         raise ValueError(
             f"[casscf] converger '{name}' is not recognized; "
-            "choose twophase (default), ah, diis, or auto")
+            "choose twophase (default), ah, trah, diis, or auto")
 
     cfg = {}
     if mol is not None and isinstance(getattr(mol, "config", None), dict):
@@ -304,6 +327,9 @@ def run_converger(name, mol, C, evaluate, pairs, nbf, options, obj_weights, obj_
         result, _stagnated = _ah_converge(C, counted, pairs, nbf, options,
                                           _ah_params(cfg, options), trace,
                                           hess_fn=counted_hess)
+    elif canonical == "trah":
+        result = _trah_optimize(C, evaluate, counted, pairs, nbf, options,
+                                _ah_params(cfg, options), trace)
     elif canonical == "diis":
         result = _diis_optimize(C, counted, pairs, nbf, options, cfg,
                                 obj_weights, obj_roots, trace,
@@ -678,6 +704,277 @@ def _ah_converge(C, evaluate, pairs, nbf, options, params, trace, stagnation_bre
 
 # --------------------------------------------------------------------------- DIIS
 _DIIS_CONDMAX = 1.0e14         # bordered-B conditioning ceiling
+
+
+# --------------------------------------------------------------------------- trah
+# Guards of the shared TRAH core (source/trah_core.F90); fixed constants there,
+# so fixed constants here.
+_TRAH_STAB_EIG_TOL = 1.0e-4    # Hessian eigenvalue below -this = unstable point
+_TRAH_PRED_FLOOR = 1.0e-11     # model decrease below this is FP noise
+_TRAH_DELTA_MIN = 1.0e-4       # trust radius below this = collapsed
+_TRAH_GTOL_FP = 1.0e-4         # |g| below this at a collapse counts as converged
+_TRAH_STAB_STEP = 1.0e-3       # step above this at small |g| = saddle escape
+_TRAH_FD_STEP = 1.0e-4         # displacement norm of the Hessian-vector product
+
+
+def _trah_hess_vec(C, ev, pairs, nbf, v, gmat, fd_step=_TRAH_FD_STEP):
+    """``H.v`` without ever assembling H.
+
+    The central difference of the ANALYTIC orbital gradient along ``v`` -- the
+    same object ``_fd_orbital_hessian`` builds column by column, taken along one
+    direction instead of all ``npar`` of them, so it costs 2 CI solves rather
+    than ``2*npar``.  The CI is re-solved at both displaced points, so the CI
+    relaxation is in there exactly.
+
+    ``g`` is the gradient in the DISPLACED frame, so ``dg/dkappa`` is the second
+    derivative only up to the Baker-Campbell-Hausdorff term of
+    ``exp(K(kappa)) exp(K(delta))``.  That term is exactly antisymmetric in the
+    two directions and of order ``|g|`` -- it is why ``_fd_orbital_hessian``
+    symmetrizes at all.  Matrix-free there is no transpose to average with, so
+    it is subtracted in closed form with ``R = K(v) G - G K(v)`` and the FULL
+    antisymmetric gradient matrix ``G`` (the commutator leaks into the
+    active-active block, whose gradient is non-zero for SA-CASSCF)."""
+    nv = float(np.linalg.norm(v))
+    if nv <= 0.0:
+        return np.zeros_like(v)
+    t = fd_step / nv
+    _, gp, _, _ = ev(_orbital_rotate(C, t * v, pairs, nbf))
+    _, gm, _, _ = ev(_orbital_rotate(C, -t * v, pairs, nbf))
+    jv = (gp - gm) / (2.0 * t)
+    K = _kappa_matrix(v, pairs, nbf)
+    R = K @ gmat - gmat @ K
+    corr = np.array([R[q, p] - R[p, q] for (p, q) in pairs])
+    return jv - 0.25 * corr
+
+
+def _trah_gradient_matrix(F):
+    """Full antisymmetric orbital-gradient matrix ``G[p,q] = 2(F[q,p]-F[p,q])``."""
+    return 2.0 * (np.asarray(F).T - np.asarray(F))
+
+
+def _trah_hdiag(state, pairs):
+    """Preconditioner diagonal ``2 (n_q - n_p) (eps_p - eps_q)``.
+
+    ``eps`` is the diagonal of the closed+active mean-field Fock (the matrix
+    canonicalization already uses) and ``n`` the state-averaged occupations; for
+    a virtual/inactive rotation this is the familiar ``4(eps_a - eps_i)``.  It
+    only sets the CG's metric, so an approximation costs iterations and never
+    accuracy -- the exact diagonal would cost an assembled Hessian, which is the
+    whole thing this converger avoids."""
+    D = state["D"]
+    feff = _lib_effective_fock(state["h1e"], state["eri"], D)
+    if feff is None:                      # engine unavailable: unit metric
+        return np.ones(len(pairs))
+    eps = np.diag(feff)
+    occ = np.diag(D)
+    h = np.array([2.0 * (occ[q] - occ[p]) * (eps[p] - eps[q]) for (p, q) in pairs])
+    return np.maximum(h, 1.0e-3)
+
+
+def _trah_boundary(p, d, delta):
+    """Positive root ``tau`` of ``|p + tau d| = delta``."""
+    a = float(d @ d)
+    b = 2.0 * float(p @ d)
+    c = float(p @ p) - delta * delta
+    disc = max(b * b - 4.0 * a * c, 0.0)
+    return (-b + math.sqrt(disc)) / (2.0 * a)
+
+
+def _trah_steihaug(hv_fn, g, hdiag, delta, nmic):
+    """Steihaug-Toint preconditioned CG for the trust-region subproblem."""
+    n = g.size
+    p = np.zeros(n)
+    hp = np.zeros(n)
+    r = g.copy()
+    m = np.maximum(hdiag, 1.0e-6)
+    y = r / m
+    d = -y
+    ry = float(r @ y)
+    rnorm0 = float(np.linalg.norm(r))
+    used = 0
+    for k in range(1, max(1, nmic) + 1):
+        used = k
+        hd = hv_fn(d)
+        curv = float(d @ hd)
+        if curv <= 0.0:                        # negative curvature -> boundary
+            tau = _trah_boundary(p, d, delta)
+            p = p + tau * d
+            hp = hp + tau * hd
+            break
+        alpha = ry / curv
+        if float(p @ p) + 2.0 * alpha * float(p @ d) \
+                + alpha * alpha * float(d @ d) >= delta * delta:
+            tau = _trah_boundary(p, d, delta)
+            p = p + tau * d
+            hp = hp + tau * hd
+            break
+        p = p + alpha * d
+        hp = hp + alpha * hd
+        r = r + alpha * hd
+        rnorm = float(np.linalg.norm(r))
+        if rnorm <= min(0.1, math.sqrt(rnorm0)) * rnorm0 or rnorm < 1.0e-10:
+            break
+        y = r / m
+        ry_new = float(r @ y)
+        beta = ry_new / ry
+        d = -y + beta * d
+        ry = ry_new
+    pred = -(float(g @ p) + 0.5 * float(p @ hp))
+    return p, pred, used
+
+
+def _trah_lowest_eig(hv_fn, hdiag, n, nmic, seed=987654321):
+    """Lowest eigenpair of the orbital Hessian by matrix-free Davidson.
+
+    The stability check: at a point where |g| ~ 0 a negative eigenvalue means a
+    saddle, and its mode is the escape direction.  Random starts (fixed seed, so
+    the run is reproducible) so a symmetry-breaking mode is found even where the
+    gradient cannot see it."""
+    mmax = min(max(int(nmic), 8), 40)
+    rng = np.random.RandomState(seed)
+    V = np.zeros((n, mmax))
+    W = np.zeros((n, mmax))
+    m = 0
+    for _ in range(min(4, mmax)):
+        tc = 2.0 * rng.random_sample(n) - 1.0
+        for kk in range(m):
+            tc = tc - float(V[:, kk] @ tc) * V[:, kk]
+        nv = float(np.linalg.norm(tc))
+        if nv > 1.0e-8:
+            V[:, m] = tc / nv
+            m += 1
+    theta = 0.0
+    u = np.zeros(n)
+    mw = 0
+    for _ in range(mmax):
+        while mw < m:
+            W[:, mw] = hv_fn(V[:, mw])
+            mw += 1
+        Tm = V[:, :m].T @ W[:, :m]
+        w, Z = _symmetric_eigh(Tm)
+        theta = float(w[0])
+        u = V[:, :m] @ Z[:, 0]
+        r = W[:, :m] @ Z[:, 0] - theta * u
+        if float(np.linalg.norm(r)) < 1.0e-5 or m == mmax:
+            break
+        den = hdiag - theta
+        den = np.where(np.abs(den) < 1.0e-6, np.sign(den) * 1.0e-6 + 1.0e-12, den)
+        tc = r / den
+        for i in range(m):
+            tc = tc - float(V[:, i] @ tc) * V[:, i]
+        nv = float(np.linalg.norm(tc))
+        if nv < 1.0e-8:
+            break
+        V[:, m] = tc / nv
+        m += 1
+    nu = float(np.linalg.norm(u))
+    if nu > 0.0:
+        u = u / nu
+    return theta, u
+
+
+def _trah_optimize(C, raw_evaluate, evaluate, pairs, nbf, options, params, trace):
+    """``[casscf] converger = trah``: matrix-free trust-region augmented Hessian.
+
+    The NumPy pin for, and fallback of, ``casscf_driver.F90``'s ``trah_optimize``
+    over the shared core in ``source/trah_core.F90``: the same macro loop, the
+    same Steihaug-Toint CG, the same stability check and the same
+    Hessian-vector product.  The orbital Hessian is never assembled, so
+    ``casscf_hess_bmat`` -- the dominant cost of an assembled-Hessian run -- is
+    never called; each CG iteration costs two CI solves instead."""
+    tol_g = options.gradient_norm_tol
+    npar = len(pairs)
+    nmic = max(1, params.max_micro)
+    delta = params.start_trust
+    # the core's ceiling, not `max_rotation_norm`; see the note in
+    # casscf_driver.F90::trah_optimize
+    dmax = max(4.0, 8.0 * delta)
+
+    objective, grad, energies, coeffs = evaluate(C)
+    state = raw_evaluate.state
+    gmat = _trah_gradient_matrix(state["F"])
+    hdiag = _trah_hdiag(state, pairs)
+    history = [(0, objective, 0.0, float(np.linalg.norm(grad)), 0.0)]
+    converged = False
+    nmatvec = [0]
+    it = 0
+
+    def hv(v):
+        nmatvec[0] += 1
+        return _trah_hess_vec(C, evaluate, pairs, nbf, v, gmat)
+
+    for it in range(1, options.max_macro_iterations + 1):
+        gnorm = float(np.linalg.norm(grad))
+        step, pred, _used = _trah_steihaug(hv, grad, hdiag, delta, nmic)
+        snorm = float(np.linalg.norm(step))
+
+        # converged only at a genuine minimum: small gradient AND no escape step
+        if gnorm < tol_g and snorm < _TRAH_STAB_STEP:
+            lam, vmin = _trah_lowest_eig(hv, hdiag, npar, nmic)
+            if lam < -_TRAH_STAB_EIG_TOL:
+                # A saddle escape is a step, not a converger event: the native
+                # driver returns only the history rows and the counters, so the
+                # trace must stay identical between the two arms.
+                C = _orbital_rotate(C, 0.1 * vmin, pairs, nbf)
+                objective, grad, energies, coeffs = evaluate(C)
+                state = raw_evaluate.state
+                gmat = _trah_gradient_matrix(state["F"])
+                hdiag = _trah_hdiag(state, pairs)
+                delta = params.start_trust
+                continue
+            converged = True
+            break
+
+        # The model can no longer predict a meaningful energy reduction: near a
+        # minimum pred ~ 0.5 g.p ~ gnorm^2, so it underflows the floor while
+        # gnorm is still ~1e-7.  The energy is converged and the orbitals are as
+        # tight as floating point allows.  (The Fortran core keeps stepping here
+        # to tighten the gradient quadratically before it stops; this reference
+        # pins the ENERGY, not the trajectory, so it simply stops.)
+        if pred <= _TRAH_PRED_FLOOR and gnorm < _TRAH_GTOL_FP \
+                and snorm < _TRAH_STAB_STEP:
+            converged = True
+            break
+
+        obj_old = objective
+        Cn = _orbital_rotate(C, step, pairs, nbf)
+        obj_new, grad_new, en_new, co_new = evaluate(Cn)
+        rho = (obj_old - obj_new) / pred if pred > 0.0 else -1.0
+        accepted = rho > 0.1
+
+        # halving line search along the rejected direction
+        if not accepted and pred > _TRAH_PRED_FLOOR:
+            fac = 0.5
+            for _ls in range(5):
+                Ct = _orbital_rotate(C, fac * step, pairs, nbf)
+                o2, g2, e2, c2 = evaluate(Ct)
+                if o2 < obj_old - 1.0e-12:
+                    step = fac * step
+                    snorm = fac * snorm
+                    Cn, obj_new, grad_new, en_new, co_new = Ct, o2, g2, e2, c2
+                    rho = (obj_old - obj_new) / (pred * fac)
+                    accepted = True
+                    break
+                fac *= 0.5
+
+        if accepted:
+            C, objective, grad, energies, coeffs = Cn, obj_new, grad_new, en_new, co_new
+            state = raw_evaluate.state
+            gmat = _trah_gradient_matrix(state["F"])
+            hdiag = _trah_hdiag(state, pairs)
+            history.append((it, objective, objective - obj_old,
+                            float(np.linalg.norm(grad)), snorm))
+
+        if rho < _RHO_SHRINK:
+            delta = 0.25 * delta
+        elif rho > _RHO_GROW and snorm > 0.8 * delta:
+            delta = min(_GROW_FACTOR * delta, dmax)
+
+        if delta < _TRAH_DELTA_MIN:
+            converged = gnorm < _TRAH_GTOL_FP
+            break
+
+    return C, energies, coeffs, history, converged, it
 
 
 def _diis_coefficients(gradients):

@@ -125,6 +125,7 @@ module casscf_driver_mod
                                cas_anhess_build, CAS_HESS_ERR_DEGEN, &
                                CAS_HESS_ERR_STACK
   use rdm_kernel_mod, only: rdm1_spatial, rdm2_spatial
+  use trah_core_mod, only: trah_provider_t, trah_params_t, trah_result_t, trah_run
   ! DGEMM/DGEMV through the ILP64 wrapper layer (AGENTS.md rule 1); see the
   ! same note in fci_driver.F90 for why `only:` cannot be used here.
   use oqp_linalg
@@ -284,6 +285,83 @@ module casscf_driver_mod
     real(dp), allocatable :: h1e_h(:), eri_h(:)
   end type cas_ctx_t
 
+  !> `[casscf] converger = trah`: CASSCF's half of the shared trust-region
+  !> augmented-Hessian optimizer in `source/trah_core.F90`.
+  !>
+  !> The core needs four things from a method; this supplies them out of
+  !> `cas_evaluate` and `cas_rotate`, so the whole converger is the trust-region
+  !> machinery SCF already uses driven by CASSCF energies and gradients.
+  !>
+  !> The Hessian-vector product (`mode = 0`, the default) never assembles the
+  !> orbital Hessian: it is the central difference of the ANALYTIC orbital
+  !> gradient along the requested direction,
+  !>
+  !>     J.v = [ g(C exp(K(t v))) - g(C exp(-K(t v))) ] / 2t,   |t v| = fd_step
+  !>
+  !> i.e. exactly the object `fd_orbital_hessian` builds column by column, taken
+  !> along one direction instead of along all `npar` of them.  Two CI solves per
+  !> product rather than `2*npar` per Hessian, no `npar^2` matrix is ever
+  !> stored, and `casscf_hess_bmat` is never called at all.  Because the CI is
+  !> re-solved at each displaced point, the CI relaxation is included exactly;
+  !> nothing is held fixed.
+  !>
+  !> What this does and does not buy (measured, macOS/ARM/Accelerate, GCC 15):
+  !> against the DEFAULT finite-difference Hessian -- what `twophase` and `ah`
+  !> run unless the user opts in -- it is 3.4x to 12x fewer CI evaluations and
+  !> 4x to 23x faster.  Against the ASSEMBLED ANALYTIC Hessian it is currently
+  !> SLOWER at every size reachable here (H2O/cc-pVTZ CAS(6,6): 25.6 s
+  !> matrix-free vs 9.2 s assembled), because each product is two full
+  !> energy/gradient evaluations and each of those contains an O(nbf^5) AO->MO
+  !> transform, and CG asks for ~18 products per macroiteration.  The
+  !> matrix-free cost per macroiteration is independent of `npar` while the
+  !> assembled one is `npar * O(nbf^4)`, so the crossover moves with the size of
+  !> the rotation space, not with the basis alone.  Both arms are kept.
+  !>
+  !> One correction is needed and it is not optional.  `g` is the gradient in
+  !> the DISPLACED frame -- the derivative with respect to a *further* rotation
+  !> -- so `J = dg/dkappa` is the second derivative of E only up to the
+  !> Baker-Campbell-Hausdorff term of `exp(K(kappa)) exp(K(delta))`.  That term
+  !> is exactly antisymmetric in the two directions and of order |g|, which is
+  !> why `fd_orbital_hessian` and the analytic builder both symmetrize
+  !> explicitly.  Matrix-free there is no transpose to average with, so the
+  !> antisymmetric part is subtracted in closed form:
+  !>
+  !>     H.v = J.v - 1/4 ( R[q_l,p_l] - R[p_l,q_l] ),   R = K(v) G - G K(v)
+  !>
+  !> with G the FULL antisymmetric gradient matrix `G[p,q] = 2(F[q,p]-F[p,q])`
+  !> from the generalized Fock -- full, not just the non-redundant pairs, since
+  !> the commutator leaks into the active-active block, whose gradient is
+  !> non-zero for SA-CASSCF.  One nbf^3 commutator per product; pinned against
+  !> the assembled Hessian in tests/test_casscf_trah.py.
+  !>
+  !> `mode = 1` (`[casscf] hessian = analytic`) instead assembles the exact
+  !> Hessian once per macroiteration and multiplies against it.  That is the
+  !> "keep the Hessian" option, kept so the two can be compared in one binary.
+  type, extends(trah_provider_t) :: cas_trah_provider_t
+    type(cas_ctx_t), pointer :: ctx => null()
+    real(dp), allocatable :: cbuf(:,:)    !< current orbitals, C-order [n,n]
+    real(dp), allocatable :: ctry(:,:)    !< trial orbitals
+    real(dp), allocatable :: gcur(:)      !< gradient at the current point
+    real(dp), allocatable :: gp(:), gm(:) !< displaced gradients / scratch
+    real(dp), allocatable :: sv(:)        !< scaled displacement
+    real(dp), allocatable :: gam(:,:)     !< full antisymmetric gradient matrix
+    real(dp), allocatable :: kap(:,:), w1(:,:), w2(:,:)
+    real(dp), allocatable :: hess(:,:)    !< assembled Hessian (mode 1 only)
+    real(dp), allocatable :: dscr(:), fscr(:)  !< 1-RDM / effective Fock scratch
+    real(dp) :: fdstep = 1.0e-4_dp
+    real(dp) :: e_init = 0.0_dp           !< objective at the starting point
+    real(dp) :: g_init = 0.0_dp           !< |g| at the starting point
+    integer  :: mode = 0                  !< 0 matrix-free, 1 assembled
+    integer  :: nmatvec = 0
+    logical  :: seeded = .false.
+    integer(i8) :: status = 0_i8
+  contains
+    procedure :: grad_hdiag   => cas_trah_grad_hdiag
+    procedure :: hess_vec     => cas_trah_hess_vec
+    procedure :: trial_energy => cas_trah_trial_energy
+    procedure :: apply_step   => cas_trah_apply_step
+  end type cas_trah_provider_t
+
 contains
 
   !> C-bound entry point: one call per CASSCF run.
@@ -339,7 +417,7 @@ contains
     integer(c_int32_t), intent(inout) :: stats(0:*)
     integer(i8) :: status
 
-    type(cas_ctx_t) :: ctx
+    type(cas_ctx_t), target :: ctx
     real(dp), contiguous, pointer :: hcore_p(:) => null()
     real(dp), contiguous, pointer :: eri_p(:) => null()
     real(dp), contiguous, pointer :: mo_p(:,:) => null()
@@ -405,11 +483,11 @@ contains
       status = CAS_ERR_INPUT
       return
     end if
-    if (converger < 0 .or. converger > 3 .or. hessmode < 0 .or. hessmode > 1) then
+    if (converger < 0 .or. converger > 4 .or. hessmode < 0 .or. hessmode > 1) then
       status = CAS_ERR_INPUT
       return
     end if
-    if (converger == 1 .or. converger == 3) then
+    if (converger == 1 .or. converger == 3 .or. converger == 4) then
       if (ahpar%start_trust <= 0.0_dp .or. ahpar%max_trust <= 0.0_dp .or. &
           ahpar%min_trust <= 0.0_dp) then
         status = CAS_ERR_INPUT
@@ -607,6 +685,12 @@ contains
                          auto_code, auto_it, stagnated, status)
       if (status < 0_i8) return
 
+    case (4)          ! trah: matrix-free trust-region augmented Hessian
+      call trah_optimize(ctx, cbuf, maxmacro, gradtol, fdstep, ahpar, hessmode, &
+                         history, maxhist, nhist, converged, niter, objective, &
+                         status)
+      if (status < 0_i8) return
+
     case default      ! twophase: damped Newton, then the saddle escape
       call newton_loop(ctx, cbuf, maxmacro, optimizer, gradtol, enertol, &
                        steptol, maxrot, shift, fdstep, history, maxhist, &
@@ -768,6 +852,321 @@ contains
                                  cin, cout)
     ierr = merge(0_i8, CAS_ERR_ROTATE, info == 0_c_int32_t)
   end subroutine cas_rotate
+
+  ! ==================================================================== trah
+  !> `[casscf] converger = trah`: run the shared TRAH core over CASSCF.
+  !>
+  !> The history table is filled the way `newton_loop` fills it -- a seed row at
+  !> iteration 0 and one row per accepted macroiteration -- so `_write_log`
+  !> formats it unchanged.
+  subroutine trah_optimize(ctx, cbuf, maxmacro, gradtol, fdstep, par_ah, &
+                           hessmode, history, maxhist, nhist, converged, niter, &
+                           objective, status)
+    type(cas_ctx_t), target, intent(inout) :: ctx
+    real(dp), contiguous, intent(inout) :: cbuf(0:,0:)
+    integer, intent(in) :: maxmacro, maxhist, hessmode
+    real(dp), intent(in) :: gradtol, fdstep
+    type(cas_ah_par_t), intent(in) :: par_ah
+    real(dp), intent(inout) :: history(0:*)
+    integer, intent(inout) :: nhist
+    logical, intent(out) :: converged
+    integer, intent(out) :: niter
+    real(dp), intent(out) :: objective
+    integer(i8), intent(inout) :: status
+
+    type(cas_trah_provider_t) :: prov
+    type(trah_params_t) :: par
+    type(trah_result_t) :: tres
+    integer, allocatable :: hit(:)
+    real(dp), allocatable :: he(:), hde(:), hg(:), hs(:)
+    integer :: n, npar, ierr, nh, r
+
+    n = ctx%n
+    npar = ctx%npar
+    converged = .false.
+    niter = 0
+    objective = 0.0_dp
+
+    prov%nparam = npar
+    prov%ctx => ctx
+    prov%mode = hessmode
+    prov%fdstep = fdstep
+    allocate(prov%cbuf(0:n-1, 0:n-1), prov%ctry(0:n-1, 0:n-1), &
+             prov%gcur(0:npar-1), prov%gp(0:npar-1), prov%gm(0:npar-1), &
+             prov%sv(0:npar-1), prov%gam(0:n-1, 0:n-1), prov%kap(0:n-1, 0:n-1), &
+             prov%w1(0:n-1, 0:n-1), prov%w2(0:n-1, 0:n-1), &
+             prov%dscr(0:int(n, i8)**2 - 1_i8), &
+             prov%fscr(0:int(n, i8)**2 - 1_i8), stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+    if (hessmode == 1) then
+      allocate(prov%hess(npar, npar), stat=ierr)
+      if (ierr /= 0) then
+        status = CAS_ERR_ALLOC
+        return
+      end if
+    end if
+    prov%cbuf = cbuf
+
+    allocate(hit(maxhist), he(maxhist), hde(maxhist), hg(maxhist), hs(maxhist), &
+             stat=ierr)
+    if (ierr /= 0) then
+      status = CAS_ERR_ALLOC
+      return
+    end if
+
+    ! The micro-solver is the Steihaug-Toint truncated CG rather than the
+    ! augmented-Hessian Davidson the SCF path defaults to.  Both live in the
+    ! core; the choice follows the cost of one Hessian-vector product.  For SCF
+    ! that product is one Fock-like contraction, so the Davidson can afford ~40
+    ! of them per macroiteration; here it is two CI solves, and CG's relative
+    ! residual test stops after a handful.  Negative curvature is still handled
+    ! head-on -- CG walks to the trust boundary along it -- and the core's
+    ! stability check (a Davidson for the lowest Hessian eigenpair) still runs
+    ! at apparent convergence, which is what catches the spurious CASSCF saddles
+    ! the two-phase converger needs a whole escape phase for.
+    par%nmac = maxmacro
+    par%nmic = par_ah%max_micro
+    par%conv_tol = gradtol
+    par%r0 = par_ah%start_trust
+    ! Trust-radius ceiling: the core default max(4, 8*r0), NOT
+    ! `max_rotation_norm`.  `max_rotation_norm` is a FIXED cap designed for the
+    ! level-shifted Newton step of the two-phase and `ah` convergers, which have
+    ! no other way to keep a step sane; a trust region does that job adaptively
+    ! from the actual/predicted energy ratio, and clamping it to 0.2 costs
+    ! roughly twice the macroiterations for nothing -- measured 12 -> 30 on
+    ! H2O/cc-pVDZ CAS(6,6) and 14 -> 28 on stretched H2O/6-31G CAS(6,6), at the
+    ! same energy.  Set `ah_start_trust_radius` to control it.
+    par%dmax = 0.0_dp
+    par%sub_solver = 2
+    par%nrtv = 1
+    par%deterministic = .false.
+    par%rms_gnorm = .false.        ! [casscf] gradient_norm_tol is a 2-norm
+    par%verbose = .false.          ! Python owns the CASSCF log
+    par%want_history = .true.
+
+    call trah_run(prov, par, tres, hit, he, hde, hg, hs, nh)
+    if (tres%ierr < 0) then
+      status = prov%status
+      if (status >= 0_i8) status = CAS_ERR_INPUT
+      return
+    end if
+
+    cbuf = prov%cbuf
+    objective = tres%energy
+    converged = tres%converged
+    niter = tres%iter
+
+    call push_history(history, maxhist, nhist, 0, prov%e_init, 0.0_dp, &
+                      prov%g_init, 0.0_dp)
+    do r = 1, nh
+      call push_history(history, maxhist, nhist, hit(r), he(r), hde(r), hg(r), hs(r))
+    end do
+  end subroutine trah_optimize
+
+  !> Gradient, preconditioner diagonal and objective at the provider's orbitals.
+  subroutine cas_trah_grad_hdiag(this, g, hdiag, e, ierr)
+    class(cas_trah_provider_t), intent(inout) :: this
+    real(dp), intent(out) :: g(:), hdiag(:), e
+    integer,  intent(out) :: ierr
+    integer(i8) :: rc
+    integer :: n, p, q
+
+    ierr = 0
+    n = this%ctx%n
+    call cas_evaluate(this%ctx, this%cbuf, e, g, rc)
+    if (rc < 0_i8) then
+      this%status = rc
+      ierr = -1
+      return
+    end if
+    call cas_snap_ci(this%ctx)
+    this%gcur = g
+    if (.not. this%seeded) then
+      this%e_init = e
+      this%g_init = sqrt(sum(g*g))
+      this%seeded = .true.
+    end if
+
+    ! Full antisymmetric gradient matrix from the generalized Fock, in the same
+    ! convention `casscf_gfock_grad` uses for the non-redundant components:
+    ! G[p,q] = 2 (F[q,p] - F[p,q]).  The active-active block is NOT redundant
+    ! for a state-averaged objective, and the BCH correction in `hess_vec`
+    ! contracts against it, so the whole matrix is formed.
+    do p = 0, n - 1
+      do q = 0, n - 1
+        this%gam(p, q) = 2.0_dp * (this%ctx%fock(int(q, i8)*int(n, i8) + int(p, i8)) &
+                                 - this%ctx%fock(int(p, i8)*int(n, i8) + int(q, i8)))
+      end do
+    end do
+
+    call cas_trah_precond(this, hdiag)
+
+    if (this%mode == 1) then
+      call build_hessian(this%ctx, this%cbuf, this%fdstep, this%hess, this%status)
+      if (this%status < 0_i8) ierr = -1
+    end if
+  end subroutine cas_trah_grad_hdiag
+
+  !> Preconditioner diagonal: the orbital-energy-difference approximation to
+  !> the orbital Hessian diagonal,
+  !>
+  !>     hdiag[p,q] ~ 2 (n_q - n_p) (eps_p - eps_q),
+  !>
+  !> with `eps` the diagonal of the closed+active mean-field Fock
+  !> (`casscf_effective_fock`, the same matrix canonicalization uses) and `n`
+  !> the state-averaged occupations.  For a virtual/inactive rotation this is
+  !> the familiar 4(eps_a - eps_i).
+  !>
+  !> This is a PRECONDITIONER, not a Hessian: it only sets the CG's metric, so
+  !> an approximation costs iterations and never accuracy.  Building the exact
+  !> diagonal would cost an assembled Hessian, which is the whole thing this
+  !> converger exists to avoid.
+  subroutine cas_trah_precond(this, hdiag)
+    class(cas_trah_provider_t), intent(inout) :: this
+    real(dp), intent(out) :: hdiag(:)
+    integer :: n, nc, na, i, j, k, l, p, q
+    real(dp) :: val
+
+    n = this%ctx%n
+    nc = this%ctx%nc
+    na = this%ctx%na
+
+    this%dscr = 0.0_dp
+    do i = 0, nc - 1
+      this%dscr(int(i, i8)*int(n, i8) + int(i, i8)) = 2.0_dp
+    end do
+    do k = 0, this%ctx%nstate - 1
+      do i = 0, na - 1
+        do j = 0, na - 1
+          this%dscr(int(nc + i, i8)*int(n, i8) + int(nc + j, i8)) = &
+              this%dscr(int(nc + i, i8)*int(n, i8) + int(nc + j, i8)) &
+              + this%ctx%weights(k) &
+                * this%ctx%g1(int(k, i8)*int(na, i8)**2 + int(i, i8)*int(na, i8) &
+                              + int(j, i8))
+        end do
+      end do
+    end do
+
+    call casscf_effective_fock(int(n, c_int32_t), this%dscr, this%ctx%h1e, &
+                               this%ctx%eri, this%fscr)
+
+    do l = 0, this%ctx%npar - 1
+      p = int(this%ctx%pairs(2*l))
+      q = int(this%ctx%pairs(2*l + 1))
+      val = 2.0_dp &
+          * (this%dscr(int(q, i8)*int(n, i8) + int(q, i8)) &
+           - this%dscr(int(p, i8)*int(n, i8) + int(p, i8))) &
+          * (this%fscr(int(p, i8)*int(n, i8) + int(p, i8)) &
+           - this%fscr(int(q, i8)*int(n, i8) + int(q, i8)))
+      hdiag(l + 1) = max(val, 1.0e-3_dp)
+    end do
+  end subroutine cas_trah_precond
+
+  !> hv = H.v.  See the type's documentation for the derivation of the BCH
+  !> correction that makes the matrix-free product symmetric.
+  subroutine cas_trah_hess_vec(this, v, hv, ierr)
+    class(cas_trah_provider_t), intent(inout) :: this
+    real(dp), intent(in)  :: v(:)
+    real(dp), intent(out) :: hv(:)
+    integer,  intent(out) :: ierr
+    integer(i8) :: rc
+    integer :: n, npar, l, p, q
+    real(dp) :: nv, t, obj
+
+    ierr = 0
+    n = this%ctx%n
+    npar = this%ctx%npar
+
+    if (this%mode == 1) then
+      ! the assembled Hessian is symmetric, so its C-order buffer and its
+      ! column-major view are the same matrix
+      call dgemv('N', npar, npar, 1.0_dp, this%hess, npar, v, 1, 0.0_dp, hv, 1)
+      return
+    end if
+
+    nv = sqrt(sum(v*v))
+    if (nv <= 0.0_dp) then
+      hv = 0.0_dp
+      return
+    end if
+    t = this%fdstep / nv
+    this%sv = t * v
+
+    call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
+    if (rc >= 0_i8) call cas_evaluate(this%ctx, this%ctry, obj, this%gp, rc)
+    if (rc < 0_i8) then
+      this%status = rc
+      ierr = -1
+      return
+    end if
+    this%sv = -this%sv
+    call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
+    if (rc >= 0_i8) call cas_evaluate(this%ctx, this%ctry, obj, this%gm, rc)
+    if (rc < 0_i8) then
+      this%status = rc
+      ierr = -1
+      return
+    end if
+    this%nmatvec = this%nmatvec + 1
+
+    do l = 0, npar - 1
+      hv(l + 1) = (this%gp(l) - this%gm(l)) / (2.0_dp * t)
+    end do
+
+    ! R = K(v) G - G K(v); subtract the antisymmetric BCH part.
+    this%kap = 0.0_dp
+    do l = 0, npar - 1
+      p = int(this%ctx%pairs(2*l))
+      q = int(this%ctx%pairs(2*l + 1))
+      this%kap(p, q) = this%kap(p, q) + v(l + 1)
+      this%kap(q, p) = this%kap(q, p) - v(l + 1)
+    end do
+    call dgemm('N', 'N', n, n, n, 1.0_dp, this%kap, n, this%gam, n, 0.0_dp, this%w1, n)
+    call dgemm('N', 'N', n, n, n, 1.0_dp, this%gam, n, this%kap, n, 0.0_dp, this%w2, n)
+    do l = 0, npar - 1
+      p = int(this%ctx%pairs(2*l))
+      q = int(this%ctx%pairs(2*l + 1))
+      hv(l + 1) = hv(l + 1) - 0.25_dp * ((this%w1(q, p) - this%w2(q, p)) &
+                                       - (this%w1(p, q) - this%w2(p, q)))
+    end do
+  end subroutine cas_trah_hess_vec
+
+  !> Objective at (current orbitals rotated by p); the current point is unchanged.
+  subroutine cas_trah_trial_energy(this, p, e, ierr)
+    class(cas_trah_provider_t), intent(inout) :: this
+    real(dp), intent(in)  :: p(:)
+    real(dp), intent(out) :: e
+    integer,  intent(out) :: ierr
+    integer(i8) :: rc
+    ierr = 0
+    this%sv = p
+    call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
+    if (rc >= 0_i8) call cas_evaluate(this%ctx, this%ctry, e, this%gp, rc)
+    if (rc < 0_i8) then
+      this%status = rc
+      ierr = -1
+    end if
+  end subroutine cas_trah_trial_energy
+
+  !> Commit the rotation.
+  subroutine cas_trah_apply_step(this, p, ierr)
+    class(cas_trah_provider_t), intent(inout) :: this
+    real(dp), intent(in) :: p(:)
+    integer,  intent(out) :: ierr
+    integer(i8) :: rc
+    ierr = 0
+    this%sv = p
+    call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
+    if (rc < 0_i8) then
+      this%status = rc
+      ierr = -1
+      return
+    end if
+    this%cbuf = this%ctry
+  end subroutine cas_trah_apply_step
 
   ! ============================================================ Newton loop
   !> `casscf.py::_floored_newton_loop`, including the finite-difference

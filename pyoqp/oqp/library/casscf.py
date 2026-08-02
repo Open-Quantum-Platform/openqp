@@ -46,8 +46,12 @@ finite-difference Hessian -- is one crossing: measured 43,317 -> 1 for
 H2O/cc-pVDZ CAS(6,6) and 3,188 -> 1 for the H2O/STO-3G CAS(4,4) example, at an
 identical converged energy.
 
-Every ``[casscf] converger`` (``twophase``, ``ah``, ``diis``, ``auto``) and
-both orbital-Hessian builders (``hessian = fd | analytic``) are covered.  The
+Every ``[casscf] converger`` (``twophase``, ``ah``, ``trah``, ``diis``,
+``auto``) and both orbital-Hessian builders (``hessian = fd | analytic``) are
+covered.  ``trah`` is the odd one out: it runs the shared trust-region core of
+``source/trah_core.F90`` -- the same optimizer the SCF ``converger_type=trah``
+uses -- over a Hessian-vector product that never assembles the orbital
+Hessian.  The
 ``ah`` + ``analytic`` combination is the one that used to cost most: the
 converger's own control flow, the augmented-Hessian model step and the whole
 analytic-Hessian assembly each crossed the boundary per macroiteration.
@@ -375,12 +379,16 @@ _CAS_OPTIMIZER_CODE = {"newton": 0, "powell": 1}
 # ``_hessian_provider``'s -- anything else must come back as ``None`` so the
 # Python path runs and raises the established message.  Note ``analytical`` is
 # deliberately absent: ``_hessian_provider`` rejects it too.
+# ``trah`` used to be a loose alias for ``ah``.  It is now its own converger --
+# the shared trust-region core of ``source/trah_core.F90`` over a matrix-free
+# CASSCF Hessian-vector product -- and ``ah`` (dense Hessian, augmented-Hessian
+# eigenproblem) keeps every spelling it had except that one.
 _CAS_CONVERGER_CODE = {
     "": 0, "twophase": 0, "two-phase": 0, "2phase": 0, "default": 0,
-    "ah": 1, "trah": 1, "augmented-hessian": 1, "augmentedhessian": 1,
-    "diis": 2, "auto": 3,
+    "ah": 1, "augmented-hessian": 1, "augmentedhessian": 1,
+    "diis": 2, "auto": 3, "trah": 4,
 }
-_CAS_CONVERGER_NAME = {0: "twophase", 1: "ah", 2: "diis", 3: "auto"}
+_CAS_CONVERGER_NAME = {0: "twophase", 1: "ah", 2: "diis", 3: "auto", 4: "trah"}
 _CAS_HESSIAN_CODE = {
     "": 0, "fd": 0, "finite-difference": 0, "finite_difference": 0,
     "numerical": 0, "default": 0, "analytic": 1, "exact": 1,
@@ -600,7 +608,11 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     # for the converger that reads them, so `[casscf] diis_space = nonsense`
     # keeps being ignored under `converger=ah` exactly as it is today.
     cfg = cfg or {}
-    if converger in (1, 3):
+    if converger in (1, 3, 4):
+        # `trah` reuses the trust-region keys (`ah_start_trust_radius`,
+        # `ah_max_micro`) rather than introducing a second spelling for the
+        # same two numbers; the parser stays the single one in
+        # `casscf_convergers._ah_params`.
         from oqp.library.casscf_convergers import _ah_params
         par = _ah_params(cfg, options)
         iopt[_CAS_IOPT_INDEX["ah_micro"]] = par.max_micro
@@ -741,7 +753,13 @@ def _optimize(mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
             F = _generalized_fock(D, G, h1e, eri)
             grad = np.array([2.0 * (F[q, p] - F[p, q]) for (p, q) in pairs])   # sign matches C->C exp(K)
         else:
-            _F, grad = built
+            F, grad = built
+        # Everything an orbital converger may need beyond (objective, grad) that
+        # this closure already has in hand.  Only ``converger = trah`` reads it
+        # (for the full-space gradient matrix behind its matrix-free
+        # Hessian-vector product and for its preconditioner); attaching it to
+        # the closure keeps every other converger's call signature unchanged.
+        evaluate.state = {"F": F, "D": D, "h1e": h1e, "eri": eri}
         return objective, grad, energies, coeffs
 
     C = np.array(coeff, dtype=float, copy=True)

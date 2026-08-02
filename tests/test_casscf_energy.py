@@ -109,7 +109,9 @@ def test_ci_schema_is_imported_not_redeclared():
     ({"converger": "default"}, (0, 0, False)),
     ({"hessian": "fd"}, (0, 0, False)),
     ({"converger": "ah"}, (1, 0, True)),
-    ({"converger": "trah"}, (1, 0, True)),
+    # `trah` is its own converger now (the shared trust-region core over a
+    # matrix-free Hessian-vector product), not an alias for `ah`.
+    ({"converger": "trah"}, (4, 0, True)),
     ({"converger": "diis"}, (2, 0, True)),
     ({"converger": "auto"}, (3, 0, True)),
     ({"hessian": "analytic"}, (0, 1, False)),

@@ -3129,10 +3129,12 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
             "casscf.converger",
             "Unknown CASSCF orbital converger.",
             value=converger,
-            expected="twophase, ah (trah), diis, or auto",
+            expected="twophase, ah, trah, diis, or auto",
             action="Use converger=twophase (default), ah for the trust-region "
-                   "augmented Hessian, diis for orbital-gradient DIIS, or auto "
-                   "for ah with a two-phase fallback.",
+                   "augmented Hessian over an assembled orbital Hessian, trah "
+                   "for the matrix-free trust-region solver (no Hessian is "
+                   "built), diis for orbital-gradient DIIS, or auto for ah "
+                   "with a two-phase fallback.",
         )
     hessian_mode = str(_get(config, "casscf", "hessian", "fd") or "fd").strip().lower()
     if hessian_mode not in {"fd", "finite-difference", "finite_difference",
