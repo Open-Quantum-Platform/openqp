@@ -537,6 +537,11 @@ class MECIOpt(Optimizer):
 
         # compute x, dgv
         alpha = np.sum(gap_g ** 2) ** 0.5
+        if alpha == 0:
+            raise ValueError(
+                'MECI branching direction is undefined: the two states have '
+                'identical gradients'
+            )
         x = gap_g / alpha
 
         # compute y, cgv

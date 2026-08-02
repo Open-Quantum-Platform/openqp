@@ -451,9 +451,15 @@ TOP_OPTION_ALIASES = {
 # workflow options that may live directly in the primary call.
 _OPT_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "mecp_search", "gap_sigma", "pen_sigma",
+    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
+# gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
+# mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
+# route-driver manifest still owns them, but the driver option sets keep them
+# out of optimize/ts/irc/neb where nothing reads them.
+_CROSSING_OPTIONS = {"gap_sigma"}
+_MECP_ONLY_OPTIONS = {"mecp_search"}
 _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
@@ -477,17 +483,22 @@ _MECI_OPTION_ALIASES = {
     "beta_schedule": "pen_jump",
     "gap": "energy_gap",
 }
-_MECP_PUBLIC_OPTIONS = {"algorithm"}
-_MECP_OPTION_ALIASES = {"algorithm": "mecp_search"}
-_TCI_OPTIONS = set(_OPT_OPTIONS) - {
-    "meci_search", "mecp_search", "gap_sigma", "pen_delta", "pen_jump",
+_MECP_PUBLIC_OPTIONS = {"algorithm", "sigma", "alpha", "gap"}
+_MECP_OPTION_ALIASES = {
+    "algorithm": "mecp_search",
+    "sigma": "pen_sigma",
+    "alpha": "pen_alpha",
+    "gap": "energy_gap",
 }
+_TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
     "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
-    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "mecp": set(_OPT_OPTIONS) | set(_MECP_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "mecp": (set(_OPT_OPTIONS) | set(_MECP_PUBLIC_OPTIONS)
+             | set(_MECP_ONLY_OPTIONS) | set(_CROSSING_OPTIONS)
+             | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},

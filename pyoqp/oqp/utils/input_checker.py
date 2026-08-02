@@ -2586,6 +2586,32 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 expected=", ".join(sorted(MECP_SEARCH)),
                 action="Use auglag (recommended), penalty, or quad.",
             )
+        elif mecp_search == "penalty":
+            penalty_controls = {
+                "pen_sigma": (1.0, "penalty multiplier", False),
+                "pen_alpha": (0.0, "penalty smoothing energy", True),
+                "pen_incre": (1.0, "penalty increment", False),
+            }
+            for key, (default, label, allow_zero) in penalty_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    ok = math.isfinite(value) and (
+                        value > 0.0 or (allow_zero and value == 0.0)
+                    )
+                except (TypeError, ValueError):
+                    ok = False
+                if not ok:
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        f"The MECP penalty {label} must be positive; a "
+                        "nonpositive value removes or inverts the gap term.",
+                        value=raw,
+                        expected=">= 0" if allow_zero else "> 0",
+                        action=("Use pen_alpha=0.02, or 0 to select it."
+                                if allow_zero else "Use a positive value."),
+                    )
         elif mecp_search == "quad":
             report.add(
                 "WARNING",
