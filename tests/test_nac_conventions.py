@@ -13,6 +13,10 @@ MODULE = (
     Path(__file__).resolve().parents[1]
     / "pyoqp" / "oqp" / "library" / "nac_utils.py"
 )
+FORTRAN_OVERLAP = (
+    Path(__file__).resolve().parents[1]
+    / "source" / "modules" / "get_states_overlap.F90"
+)
 SPEC = importlib.util.spec_from_file_location("nac_utils_under_test", MODULE)
 assert SPEC is not None and SPEC.loader is not None
 NAC_UTILS = importlib.util.module_from_spec(SPEC)
@@ -95,3 +99,10 @@ def test_num_nac_restart_rejects_incomplete_marked_worker(tmp_path):
     NAC_UTILS.write_numerical_nac_cache_marker(dat, 1.0e-3, 2, 0)
 
     assert NAC_UTILS.load_numerical_nac_cache(dat, 1.0e-3, 2, 0) is None
+
+
+def test_mrsf_tlf_overlap_preserves_raw_finite_state_projection():
+    """Do not silently turn omitted-root leakage into retained-root amplitude."""
+    source = FORTRAN_OVERLAP.read_text()
+    assert "s_st(:,i) = s_st(:,i) / norm2(s_st(:,i))" not in source
+    assert "Keep the raw finite-state TLF projection" in source
