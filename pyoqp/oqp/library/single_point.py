@@ -864,6 +864,9 @@ class SinglePoint(Calculator):
             if ekt_ea:
                 self.energy_func['mrsf_ekt_ea'](self.mol)
                 self.mol.snapshot_mrsf_ekt_results('ea')
+            if self.save_molden:
+                dyson_file = self.pack_molden_name('dyson', self.scf_type, self.functional)
+                self.mol.write_molden(dyson_file, include_dyson=True)
             return
 
         # check td type
@@ -873,6 +876,12 @@ class SinglePoint(Calculator):
         # do TDDFT
         dump_log(self.mol, title='PyOQP: TDDFT steps', section='tdhf')
         self.energy_func[self.td](self.mol)
+        if self.td in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):
+            kind = 'ea' if self.td.endswith('_ea') else 'ip'
+            self.mol.snapshot_mrsf_ekt_results(kind)
+            if self.save_molden:
+                dyson_file = self.pack_molden_name('dyson', self.scf_type, self.functional)
+                self.mol.write_molden(dyson_file, include_dyson=True)
 
 
 class Gradient(Calculator):
