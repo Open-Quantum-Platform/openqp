@@ -12,6 +12,8 @@ module eigen
   public :: diag_symm_packed
   public :: diag_symm_full
   public :: schmd
+  public :: eigen_blas_scope_enter
+  public :: eigen_blas_scope_exit
   real(dp), parameter :: zero = 0.0_dp, two = 2.0_dp
 
 !>  Rows of the matrix required before a dense eigensolve asks for one more
@@ -88,6 +90,43 @@ contains
     nuse = max(1_c_int64_t, min(navail, int(n, c_int64_t) / int(rows, c_int64_t)))
   end function eigen_blas_threads
 
+!>  @brief Enter a thread-capped scope around a dense eigensolve of order `n`
+!>
+!>  Returns the value to hand back to `eigen_blas_scope_exit`, or -1 when
+!>  nothing was changed and nothing has to be restored.
+!>
+!>  Nothing is CHANGED unless the count actually differs, which is what keeps
+!>  this safe: `blas_thread_set` mutates process-global state, so calling it at
+!>  all from inside an OpenMP parallel region would race even when every worker
+!>  writes the same value.  `eigen_blas_threads` returns `navail` unchanged in
+!>  a parallel region, so the comparison below collapses to "no call at all"
+!>  there.  The same short-circuit also spares the common case where the policy
+!>  asks for exactly what the caller already had.
+  function eigen_blas_scope_enter(n) result(nsaved)
+    integer, intent(in) :: n
+    integer(c_int64_t) :: nsaved, nuse
+
+    nsaved = blas_thread_count()
+    if (nsaved <= 0) then          ! unknown BLAS: setter is a no-op anyway
+      nsaved = -1_c_int64_t
+      return
+    end if
+
+    nuse = eigen_blas_threads(n, nsaved)
+    if (nuse == nsaved) then       ! nothing to change, hence nothing to undo
+      nsaved = -1_c_int64_t
+      return
+    end if
+
+    call blas_thread_set(nuse)
+  end function eigen_blas_scope_enter
+
+!>  @brief Leave a scope opened by `eigen_blas_scope_enter`
+  subroutine eigen_blas_scope_exit(nsaved)
+    integer(c_int64_t), intent(in) :: nsaved
+    if (nsaved > 0) call blas_thread_set(nsaved)
+  end subroutine eigen_blas_scope_exit
+
 !>  @brief Find eigenvalues and eigenvectors of symmetric matrix
 !>         in packed format
 !>  @param[in]     mode   algorithm of diagonalization (not used now)
@@ -134,8 +173,7 @@ contains
 
 !   Same reasoning as diag_symm_full: the packed drivers are, if anything,
 !   less able to use a wide thread team than DSYEVD is.
-    nBlasSaved = blas_thread_count()
-    if (nBlasSaved > 0) call blas_thread_set(eigen_blas_threads(n, nBlasSaved))
+    nBlasSaved = eigen_blas_scope_enter(n)
 
     if (nvect == n .and. ldvect >= n) then
       driver = 'DSPEV'
@@ -148,7 +186,7 @@ contains
             eig, vector, nvect_, work, iwork, ifail, info)
     end if
 
-    if (nBlasSaved > 0) call blas_thread_set(nBlasSaved)
+    call eigen_blas_scope_exit(nBlasSaved)
 
     if (present(ierr)) ierr = info
 
@@ -194,8 +232,7 @@ contains
     if (present(ierr)) fatal = WITHOUT_ABORT
 
 !   Size the BLAS thread count to the eigenproblem; see eigen_blas_threads.
-    nBlasSaved = blas_thread_count()
-    if (nBlasSaved > 0) call blas_thread_set(eigen_blas_threads(n, nBlasSaved))
+    nBlasSaved = eigen_blas_scope_enter(n)
 
 !   Divide-and-conquer driver: much faster than the QR-based DSYEV
 !   for large matrices (it does most of its work in blocked level-3
@@ -207,14 +244,14 @@ contains
     liwork = irwork(1)
     allocate (work(lwork), iwork(liwork), stat=iok)
     if (iok /= 0) then
-      if (nBlasSaved > 0) call blas_thread_set(nBlasSaved)
+      call eigen_blas_scope_exit(nBlasSaved)
       if (present(ierr)) ierr = iok
       call show_message('Cannot allocate memory', fatal)
       return
     end if
     call dsyevd('V', 'U', n_, a, lda_, eival, work, lwork, iwork, liwork, info)
 
-    if (nBlasSaved > 0) call blas_thread_set(nBlasSaved)
+    call eigen_blas_scope_exit(nBlasSaved)
 
     if (present(ierr)) ierr = info
 

@@ -88,6 +88,7 @@ Python API.
 | DFT grids | Lebedev plus SG-0/SG-1/SG-2/SG-3 pruned grids with per-element DE2 radial quadrature; OpenMP-parallel XC kernels |
 | Excited-state robustness | Davidson auto-restart; MINRES/AUTO Z-vector fallbacks |
 | Parallelism & deployment | OpenMP and MPI; BLAS/LAPACK optimization; pip install and Docker images |
+| BLAS/LAPACK threading | Parallel regions declare their own width, so a global BLAS setter cannot serialize them; dense eigensolves size their thread count to the matrix, since LAPACK's eigensolvers do not thread the way GEMM does — see [docs/blas_threading.md](docs/blas_threading.md) |
 
 **Tutorials:** [SCF convergence & guesses](https://open-quantum-platform.github.io/openqp-tutorials/scf-convergence/) · [Effective core potentials](https://open-quantum-platform.github.io/openqp-tutorials/effective-core-potentials/)
 
@@ -154,6 +155,7 @@ Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_t
 - [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/)
 - [API guide](https://open-quantum-platform.github.io/openqp-docs/api/)
 - [Example inputs](examples)
+- [BLAS/LAPACK threading](docs/blas_threading.md) — how OpenQP's OpenMP regions and a threaded BLAS are kept out of each other's way, and how to check which BLAS you actually linked
 
 ### Graphic Web Tools
 

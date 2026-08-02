@@ -30,6 +30,8 @@ module trah_native
   use guess,            only: get_ab_initio_density
   use basis_tools,      only: basis_set
   use io_constants,     only: IW
+  use, intrinsic :: iso_c_binding, only: c_int64_t
+  use eigen,            only: eigen_blas_scope_enter, eigen_blas_scope_exit
 
   implicit none
   private
@@ -603,7 +605,15 @@ contains
       ! Rayleigh matrix Tm = V^T W  (m x m, symmetric); BLAS over the large nn dim
       allocate(Tm(m,m))
       call dgemm('T','N', m, m, nn, 1.0_dp, V, nn, W, nn, 0.0_dp, Tm, m)
-      call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+      ! Tm is the m x m Rayleigh matrix of a Krylov subspace -- tens of rows at
+      ! most, re-solved every iteration.  Exactly the regime where a wide BLAS
+      ! thread team costs more than the eigensolve; see eigen_blas_threads.
+      block
+        integer(c_int64_t) :: nb
+        nb = eigen_blas_scope_enter(m)
+        call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+        call eigen_blas_scope_exit(nb)
+      end block
       theta = eig(1)                       ! lowest eigenvalue
       call dgemv('N', nn, m, 1.0_dp, V, nn, Tm(:,1), 1, 0.0_dp, u, 1)   ! Ritz vector
       call dgemv('N', nn, m, 1.0_dp, W, nn, Tm(:,1), 1, 0.0_dp, au, 1)  ! A u
@@ -677,7 +687,15 @@ contains
       end do
       allocate(Tm(m,m))
       call dgemm('T','N', m, m, n, 1.0_dp, V, n, W, n, 0.0_dp, Tm, m)
-      call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+      ! Tm is the m x m Rayleigh matrix of a Krylov subspace -- tens of rows at
+      ! most, re-solved every iteration.  Exactly the regime where a wide BLAS
+      ! thread team costs more than the eigensolve; see eigen_blas_threads.
+      block
+        integer(c_int64_t) :: nb
+        nb = eigen_blas_scope_enter(m)
+        call dsyev('V','U', m, Tm, m, eig(:m), work, lwork, info)
+        call eigen_blas_scope_exit(nb)
+      end block
       theta = eig(1)
       call dgemv('N', n, m, 1.0_dp, V, n, Tm(:,1), 1, 0.0_dp, u, 1)
       call dgemv('N', n, m, 1.0_dp, W, n, Tm(:,1), 1, 0.0_dp, r, 1)
