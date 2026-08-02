@@ -3,6 +3,8 @@ Molden compatibility module
 writer class
 """
 
+from io import StringIO
+
 import numpy as np
 
 from oqp.periodic_table import ELEMENTS_NAME, SYMBOL_MAP
@@ -105,22 +107,27 @@ class MoldenWriter:
             id_prim0 += sh_nc
 
         for (i, atom) in enumerate(molden_bas):
-            print(i + 1, file=self.file)
+            # Keep the legacy placeholders documented by the Molden format.
+            # They are optional to Molden itself, but stricter third-party
+            # readers (including GUI importers) expect both fields.
+            print(f'{i + 1} 0', file=self.file)
             for shell in atom:
-                print(f'{shell["typ"]} {shell["nc"]}', file=self.file)
+                print(f'{shell["typ"]} {shell["nc"]} 1.00', file=self.file)
                 ang = shell['ang']
-                norm = MoldenWriter.NORMS[ang]
                 for (alpha, coef) in zip(shell['alpha'], shell['coef']):
-                    coef *= norm * (2 * alpha) ** -(ang / 2.0 + 0.75)
+                    coef = MoldenWriter.molden_primitive_coefficient(ang, alpha, coef)
                     print(f'{alpha:22.12e} {coef:22.12e}', file=self.file)
             print("", file=self.file)
 
-    def write_mo(self, basis, orbitals, energies, occupancies, spin, header=True):
-        """Write molecular orbitals section"""
+    @staticmethod
+    def molden_primitive_coefficient(angular_momentum, exponent, coefficient):
+        """Return a primitive coefficient in the convention written to Molden."""
+        norm = MoldenWriter.NORMS[int(angular_momentum)]
+        return float(coefficient) * norm * (2 * float(exponent)) ** -(float(angular_momentum) / 2.0 + 0.75)
 
-        if header:
-            print('[MO]', file=self.file)
-
+    @staticmethod
+    def orbital_reorder(basis):
+        """Map OpenQP AO ordering to the ordering required by Molden."""
         spherical = MoldenWriter._is_spherical(basis)
         orders = MoldenWriter.SPH_ORDERS if spherical else MoldenWriter.ORDERS
         nbfs = MoldenWriter.SPH_NBFS if spherical else MoldenWriter.NBFS
@@ -128,51 +135,74 @@ class MoldenWriter:
         reorder = []
         cur_bf = 0
         for i in range(basis['nsh']):
-            ang = basis['angs'][i]
-            neword = list(j + cur_bf for j in orders[ang])
-            reorder += neword
+            ang = int(basis['angs'][i])
+            reorder.extend(j + cur_bf for j in orders[ang])
             cur_bf += nbfs[ang]
+        return reorder
 
-        for (eorb, orb, occup) in zip(energies, orbitals, occupancies):
+    def write_mo(self, basis, orbitals, energies, occupancies, spin, header=True,
+                 symmetries=None, already_reordered=False):
+        """Write molecular orbitals section"""
+
+        if header:
+            print('[MO]', file=self.file)
+
+        reorder = MoldenWriter.orbital_reorder(basis)
+
+        if symmetries is None:
+            # C1 is the portable fallback when no point-group labels were
+            # requested.  Emit a Sym record for every MO so strict readers do
+            # not see a ragged orbital metadata table when Dyson states follow.
+            symmetries = ('A' for _ in energies)
+
+        for (eorb, orb, occup, symmetry) in zip(energies, orbitals, occupancies, symmetries):
+            if symmetry:
+                print(f'Sym= {symmetry}', file=self.file)
             print(f'Ene= {eorb:15.8f}', file=self.file)
             print(f'Spin= {spin}', file=self.file)
             print(f'Occup= {occup:15.8f}', file=self.file)
-            for (i, coef) in enumerate(orb[reorder]):
+            coefficients = np.asarray(orb) if already_reordered else np.asarray(orb)[reorder]
+            for (i, coef) in enumerate(coefficients):
                 print(f'{i + 1} {coef:15.8f}', file=self.file)
+
+    def write_frequency(self, mol, freqs, modes):
+        """Append Molden frequency and normal-coordinate sections."""
+        atoms = np.asarray(mol.get_atoms()).reshape(-1)
+        natom = len(atoms)
+        xyz = np.asarray(mol.get_system()).reshape((natom, 3))
+        freqs = np.asarray(freqs).reshape(-1)
+        modes = np.asarray(modes).reshape((len(freqs), natom, 3))
+
+        print('[FREQ]', file=self.file)
+        for frequency in freqs:
+            print(f'{frequency:10.2f}', file=self.file)
+
+        infrared = np.asarray(
+            getattr(mol, 'infrared_intensities', np.zeros(0)), dtype=float).reshape(-1)
+        raman = np.asarray(
+            getattr(mol, 'raman_activities', np.zeros(0)), dtype=float).reshape(-1)
+        if len(infrared) >= len(freqs):
+            print('[INT]', file=self.file)
+            for index in range(len(freqs)):
+                if index < len(raman):
+                    print(f'{infrared[index]:16.8f} {raman[index]:16.8f}', file=self.file)
+                else:
+                    print(f'{infrared[index]:16.8f}', file=self.file)
+
+        print('[FR-COORD]', file=self.file)
+        for atom, coord in zip(atoms, xyz):
+            symbol = ELEMENTS_NAME[SYMBOL_MAP[int(atom)]]
+            print(f'{symbol:<5s} {coord[0]:24.8f} {coord[1]:24.8f} {coord[2]:24.8f}', file=self.file)
+
+        print('[FR-NORM-COORD]', file=self.file)
+        for index, vectors in enumerate(modes, start=1):
+            print(f'  vibration  {index:5d}', file=self.file)
+            for vector in vectors:
+                print(' '.join(f'{component:24.8f}' for component in vector), file=self.file)
 
 
 def write_frequency(mol, freqs, modes):
-    atoms = mol.get_atoms()
-    natom = len(atoms)
-    xyz = mol.get_system().reshape((natom, 3))
-    nmode = len(modes)
-    modes = modes.reshape((nmode, natom, 3))
-    freqs = freqs.reshape(-1)
-
-    frequency = '\n'.join(['%10.2f' % x for x in freqs])
-    coord = ''
-    for n, c in enumerate(xyz):
-        x, y, z = c
-        s = atoms[n]
-        coord += '%-5s %24.8f %24.8f %24.8f\n' % (ELEMENTS_NAME[SYMBOL_MAP[int(s)]], x, y, z)
-
-    vibs = ''
-    for i in range(nmode):
-        vibs += '  vibration  %5s\n%s\n' % (
-            i + 1, '\n'.join([' '.join(['%24.8f' % y for y in x]) for x in modes[i]]))
-
-    molden = """ [MOLDEN FORMAT]
- [N_FREQ]
-%s
- [NATOM]
-%s
- [FREQ]
-%s
- [FR-COORD]
-%s
- [FR-NORM-COORD]
-%s
-
-""" % (nmode, natom, frequency, coord, vibs)
-
-    return molden
+    output = StringIO()
+    writer = MoldenWriter(output)
+    writer.write_frequency(mol, freqs, modes)
+    return output.getvalue()

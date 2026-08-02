@@ -864,6 +864,9 @@ class SinglePoint(Calculator):
             if ekt_ea:
                 self.energy_func['mrsf_ekt_ea'](self.mol)
                 self.mol.snapshot_mrsf_ekt_results('ea')
+            if self.save_molden:
+                dyson_file = self.pack_molden_name('dyson', self.scf_type, self.functional)
+                self.mol.write_molden(dyson_file)
             return
 
         # check td type

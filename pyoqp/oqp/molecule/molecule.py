@@ -1513,9 +1513,175 @@ class Molecule:
             scf_conv=self.config.get("scf", {}).get("conv"),
             zv_conv=self.config.get("tdhf", {}).get("zvconv"))
 
+    def has_molden_orbitals(self):
+        """Return whether the current molecule has an AO basis and SCF MOs."""
+        try:
+            basis = self.data.get_basis()
+            nbf = int(basis['nbf'])
+            return np.asarray(self.data['OQP::VEC_MO_A']).size == nbf * nbf
+        except (AttributeError, KeyError, TypeError, ValueError):
+            return False
+
+    def _viewer_basis_data(self):
+        """Portable AO basis metadata used by OpenqpView JSON readers."""
+        basis = self.data.get_basis()
+        shells = []
+        primitive_offset = 0
+        for center, angular_momentum, nprimitive in zip(
+                basis['centers'], basis['angs'], basis['ncontr']):
+            angular_momentum = int(angular_momentum)
+            nprimitive = int(nprimitive)
+            exponents = np.asarray(
+                basis['alpha'][primitive_offset:primitive_offset + nprimitive], dtype=float)
+            coefficients = np.asarray(
+                basis['coef'][primitive_offset:primitive_offset + nprimitive], dtype=float)
+            shells.append({
+                'atom_index': int(center),
+                'angular_momentum': angular_momentum,
+                'shell': MoldenWriter.SHELL_TYPES[angular_momentum],
+                'exponents': exponents.tolist(),
+                'coefficients': [
+                    MoldenWriter.molden_primitive_coefficient(
+                        angular_momentum, exponent, coefficient)
+                    for exponent, coefficient in zip(exponents, coefficients)
+                ],
+            })
+            primitive_offset += nprimitive
+
+        return {
+            'format': 'OpenQP portable basis v1',
+            'coefficient_convention': 'molden',
+            'basis_function_order': 'molden',
+            'spherical_harmonics': MoldenWriter._is_spherical(basis),
+            'nbf': int(basis['nbf']),
+            'shells': shells,
+        }
+
+    def _viewer_orbital_data(self):
+        """Portable, renderer-ready SCF orbitals in Molden AO ordering."""
+        if not self.has_molden_orbitals():
+            return {}
+
+        basis = self.data.get_basis()
+        nbf = int(basis['nbf'])
+        reorder = MoldenWriter.orbital_reorder(basis)
+        scf_type = self.config['scf']['type']
+
+        def spin_data(suffix, noccupied, occupancy):
+            orbitals = np.asarray(
+                self.data[f'OQP::VEC_MO_{suffix}'], dtype=float).reshape((nbf, nbf))
+            energies = np.asarray(self.data[f'OQP::E_MO_{suffix}'], dtype=float).reshape(-1)
+            return {
+                'energies_hartree': energies.tolist(),
+                'occupancies': [occupancy if index < int(noccupied) else 0.0
+                                for index in range(nbf)],
+                'coefficients': orbitals[:, reorder].tolist(),
+            }
+
+        orbitals = {
+            'format': 'OpenQP portable orbitals v1',
+            'basis_function_order': 'molden',
+        }
+        if scf_type == 'rhf':
+            orbitals['alpha'] = spin_data('A', self.data['nocc'], 2.0)
+        else:
+            orbitals['alpha'] = spin_data('A', self.data['nelec_A'], 1.0)
+            orbitals['beta'] = spin_data('B', self.data['nelec_B'], 1.0)
+
+        return {
+            'basis_set': self._viewer_basis_data(),
+            'molecular_orbitals': orbitals,
+        }
+
+    @staticmethod
+    def _dyson_mo_state_rows(records, nbf):
+        """Normalize saved EKT coefficients to ``(state, SCF MO)``."""
+        orbitals = np.asarray(records.get('dyson_orbitals_mo', []), dtype=float)
+        if orbitals.ndim != 2:
+            return np.zeros((0, nbf), dtype=float)
+        if orbitals.shape[1] == nbf:
+            return orbitals
+        if orbitals.shape[0] == nbf:
+            return orbitals.T
+        return np.zeros((0, nbf), dtype=float)
+
+    def _viewer_dyson_data(self):
+        """State-specific MRSF-EKT Dyson orbitals in renderer-ready AO form."""
+        if not self.has_molden_orbitals():
+            return {}
+
+        records_by_kind = dict(self.mrsf_ekt_results_by_kind)
+        if not records_by_kind:
+            records = self._read_mrsf_ekt_records()
+            if records is None:
+                return {}
+            ekt = self.config.get('ekt', {})
+            kind = 'ea' if ekt.get('ea') else 'ip'
+            records_by_kind[kind] = records
+
+        basis = self.data.get_basis()
+        nbf = int(basis['nbf'])
+        reorder = MoldenWriter.orbital_reorder(basis)
+        scf_orbitals = np.asarray(
+            self.data['OQP::VEC_MO_A'], dtype=float).reshape((nbf, nbf))
+        target_state = self.config.get('tdhf', {}).get('target')
+        states = []
+
+        for kind in ('ip', 'ea'):
+            records = records_by_kind.get(kind)
+            if not records:
+                continue
+            dyson_mo = self._dyson_mo_state_rows(records, nbf)
+            eigenvalues = np.asarray(records.get('eigenvalues_hartree', []), dtype=float)
+            ebe = np.asarray(records.get('ebe_ev', []), dtype=float)
+            strengths = np.asarray(records.get('pole_strengths', []), dtype=float)
+            nstate = min(len(dyson_mo), len(eigenvalues), len(strengths))
+            dyson_ao = np.matmul(dyson_mo[:nstate], scf_orbitals)[:, reorder]
+            for index in range(nstate):
+                state_number = index + 1
+                state = {
+                    'kind': kind.upper(),
+                    'state_index': state_number,
+                    'label': f'Dyson {kind.upper()} state {state_number}',
+                    'parent_state': target_state,
+                    'eigenvalue_hartree': float(eigenvalues[index]),
+                    'pole_strength': float(strengths[index]),
+                    'coefficients': dyson_ao[index].tolist(),
+                }
+                if index < len(ebe):
+                    state['electron_binding_energy_ev'] = float(ebe[index])
+                states.append(state)
+
+        if not states:
+            return {}
+        return {
+            'dyson_orbitals': {
+                'format': 'OpenQP MRSF-EKT Dyson orbitals v1',
+                'basis_function_order': 'molden',
+                'states': states,
+            }
+        }
+
+    def _viewer_frequency_data(self):
+        """Portable normal modes shared by normal and Hessian JSON files."""
+        frequencies = np.asarray(self.freqs, dtype=float).reshape(-1)
+        if frequencies.size == 0:
+            return {}
+        modes = np.asarray(self.modes, dtype=float).reshape((len(frequencies), -1))
+        return {
+            'frequency_modes': {
+                'format': 'OpenQP normal modes v1',
+                'frequencies_cm-1': frequencies.tolist(),
+                'normal_mode_eigenvectors': modes.tolist(),
+                'normal_mode_eigenvectors_units': (
+                    'Cartesian displacement, mass-unweighted, row-major by vibrational mode'
+                ),
+            }
+        }
+
     @mpi_dump
-    def write_molden(self, filename):
-        """Write calculation results in Molden format"""
+    def write_molden(self, filename, freqs=None, modes=None):
+        """Write SCF MOs, optional MRSF-EKT Dyson states, and frequencies."""
 
         with open(filename, mode='w', encoding='ascii') as fout:
             basis = self.data.get_basis()
@@ -1549,6 +1715,23 @@ class Molecule:
                 occupancies = (1.0 if i < nocc else 0.0 for i in range(nbf))
                 mdw.write_mo(basis, orbitals, eorbitals,
                              occupancies, spin='Beta', header=False)
+
+            dyson = self._viewer_dyson_data().get('dyson_orbitals', {})
+            states = dyson.get('states', [])
+            if states:
+                mdw.write_mo(
+                    basis,
+                    np.asarray([state['coefficients'] for state in states]),
+                    [state['eigenvalue_hartree'] for state in states],
+                    [state['pole_strength'] for state in states],
+                    spin='Alpha',
+                    header=False,
+                    symmetries=[state['label'].replace(' ', '-') for state in states],
+                    already_reordered=True,
+                )
+
+            if freqs is not None and modes is not None:
+                mdw.write_frequency(self, freqs, modes)
 
     def set_log(self):
         """
@@ -1621,6 +1804,9 @@ class Molecule:
         data = {key: json_array(key, value) for key, value in data.items()}
         data.update(self.get_results())
         data.update(self.set_config_json())
+        data.update(self._viewer_orbital_data())
+        data.update(self._viewer_dyson_data())
+        data.update(self._viewer_frequency_data())
 
         if lean is None:
             lean = _env_wants_lean_json()
@@ -1692,6 +1878,7 @@ class Molecule:
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
             'frequency_modes': {
+                'format': 'OpenQP normal modes v1',
                 'frequencies_cm-1': self.freqs.tolist(),
                 'normal_mode_eigenvectors': self.modes.tolist(),
                 'normal_mode_eigenvectors_units': 'Cartesian displacement, mass-unweighted, row-major by vibrational mode',
@@ -1704,6 +1891,8 @@ class Molecule:
             'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
             'symmetry_metadata': self.symmetry_metadata,
         }
+        data.update(self._viewer_orbital_data())
+        data.update(self._viewer_dyson_data())
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)

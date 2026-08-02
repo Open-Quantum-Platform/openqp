@@ -100,7 +100,7 @@ Python API.
 | [libecpint](https://github.com/robashaw/libecpint) | Effective Core Potentials |
 | [DFT-D4](https://dftd4.readthedocs.io/en/latest/) | Dispersion correction |
 | [PyRAI2MD](https://github.com/mlcclab/PyRAI2MD-hiam) | AI-driven ab initio molecular dynamics |
-| [Molden](https://www.theochem.ru.nl/molden/) format | Visualization compatible with common graphics tools |
+| [Molden](https://www.theochem.ru.nl/molden/) format | Standards-oriented geometry, basis, SCF/Dyson orbitals, and optional frequency sections for common graphics tools |
 | [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) | Browser-based inspection of log, JSON, Molden, cube, and XYZ outputs |
 | Optional [DFTB+](https://dftbplus.org/) backend | Ground-state energy, gradient, and geometry optimization |
 | Optional [MOKIT](https://github.com/1234zou/MOKIT) | Broader external wavefunction conversion workflows |
@@ -160,6 +160,8 @@ Control OpenMP threads per process or MPI rank with `--omp 16` or `[input] omp_t
 - [OpenQP Web](https://app.openqp.org/) — prepare inputs and preview structures locally in the browser.
 - [OpenQP Input Generator](https://open-quantum-platform.github.io/OpenQP_Input_Generator/) — browser-based input builder.
 - [OpenqpView](https://open-quantum-platform.github.io/OpenqpView/) — inspect OpenQP log, JSON, Molden, cube, and XYZ outputs in the browser; files are processed locally and never uploaded.
+
+Current full JSON output includes a portable Molden-ordered AO basis and SCF orbital block. Hessian JSON adds the same orbital data beside frequencies and normal modes, and MRSF-EKT JSON adds state-specific IP/EA Dyson orbitals transformed to the AO basis. Frequency Molden output combines `[Atoms]`, `[GTO]`, `[MO]`, `[FREQ]`, `[INT]`, `[FR-COORD]`, and `[FR-NORM-COORD]` in one file. EKT runs with `save_molden=True` also write a `dyson` Molden file whose labeled orbital records correspond to individual IP/EA roots.
 
 ### Citing OpenQP
 If you use OpenQP in your research, please cite the OpenQP platform paper:

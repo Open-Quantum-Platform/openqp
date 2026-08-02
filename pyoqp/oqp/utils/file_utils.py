@@ -1101,10 +1101,13 @@ def dump_data(mol, data, title=None, fpath='.'):
 
     if title == 'FREQ':
         mol, freqs, modes = data
-        molden = write_frequency(mol, freqs, modes)
-
-        with open(f'{fpath}/{mol.project_name}.freq.molden', 'w') as out:
-            out.write(molden)
+        filename = f'{fpath}/{mol.project_name}.freq.molden'
+        if mol.has_molden_orbitals():
+            mol.write_molden(filename, freqs=freqs, modes=modes)
+        else:
+            molden = write_frequency(mol, freqs, modes)
+            with open(filename, 'w') as out:
+                out.write(molden)
 
 
 def write_xyz(atoms, coord, info):
