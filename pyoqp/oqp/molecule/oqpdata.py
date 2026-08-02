@@ -547,7 +547,10 @@ OQP_CONFIG_SCHEMA = {
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
         'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
         'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
-        'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
+        # Opt in only: an overlap-triggered root relabel is a method-specific
+        # heuristic, not part of standard FSSH, and can otherwise be mistaken
+        # for a stochastic hop at a genuine conical intersection.
+        'trivial': {'type': bool, 'default': 'False'},      # trivial-crossing diabatic following
         'trivial_thresh': {'type': float, 'default': '0.5'},
         'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>

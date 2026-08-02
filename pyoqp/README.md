@@ -189,7 +189,7 @@ will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
     decoherence=edc
     thrshe=1.0e9
     tdc=fd
-    trivial=True
+    trivial=False
     init_temp=300.0
     velocity=maxwell
     seed=1
