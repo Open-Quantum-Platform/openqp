@@ -319,8 +319,8 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "properties": _keys("grad"),
     "optimize": _keys("""
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
-        imult jmult energy_shift energy_gap meci_search pen_sigma pen_alpha
-        pen_incre pen_delta pen_jump gap_weight init_scf
+        imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
+        pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -451,7 +451,7 @@ TOP_OPTION_ALIASES = {
 # workflow options that may live directly in the primary call.
 _OPT_OPTIONS = {
     "maxit", "rmsd_grad", "rmsd_step", "max_grad", "max_step",
-    "energy_shift", "energy_gap", "meci_search", "pen_sigma",
+    "energy_shift", "energy_gap", "meci_search", "mecp_search", "gap_sigma", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
 _NATIVE_ENGINE_OPTIONS = {
@@ -477,7 +477,9 @@ _MECI_OPTION_ALIASES = {
     "beta_schedule": "pen_jump",
     "gap": "energy_gap",
 }
-_TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
+_TCI_OPTIONS = set(_OPT_OPTIONS) - {
+    "meci_search", "mecp_search", "gap_sigma", "pen_delta", "pen_jump",
+}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},

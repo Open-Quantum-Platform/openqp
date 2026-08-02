@@ -541,7 +541,7 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
             info['max_grad'], info['target_max_grad'], info['max_grad'] <= info['target_max_grad'],
         )
 
-    if section == 'quad':
+    if section == 'mecp':
         state_i = (public_state_label(
             mol.config, info['istate'], mol.config['optimize']['imult'])
             if is_mrsf(mol.config) else info['istate'])

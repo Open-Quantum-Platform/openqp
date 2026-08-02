@@ -165,6 +165,8 @@ will be stored in the current path in the `oqp_test_tmp_{date}_{time}` folder.
     energy_shift=1e-6
     energy_gap=1e-5
     meci_search=auto
+    mecp_search=auglag
+    gap_sigma=10.0
     pen_sigma=1.0
     pen_alpha=0.0
     pen_incre=1.0
@@ -542,9 +544,32 @@ automatically.
                  multistate searches select BaekA directly
       penalty    use the modified penalty method
       ubp        use the update branching plane method
+      auglag     use the branching-plane projection with a least-squares
+                 Lagrange multiplier; the reported objective is an augmented
+                 Lagrangian value rather than the ratio used by ubp
       hybrid     use the penalty function then swith to ubp after energy gap is lower than the threshold
       baeka      use the additive Baek adaptive penalty for two or more states
-    
+
+- mecp-search // choose the algorithm for spin-crossing (MECP) optimization
+
+      auglag     (default) least-squares multiplier plus gradient projection.
+                 The gap term and the projected mean gradient are orthogonal,
+                 so both must vanish separately and the stationary point is a
+                 true crossing
+      ubp        the same objective; with gap_sigma=1 it is the plain
+                 Bearpark gradient projection
+      penalty    Levine-Martinez smooth penalty
+      baeka      additive Baek adaptive penalty applied to the crossing pair
+      quad       legacy fixed-weight quadratic penalty.  Its stationary point
+                 balances the mean gradient against the gap term, leaving a
+                 residual gap of order 1/gap_weight, so it generally cannot
+                 satisfy energy_gap.  Kept only to reproduce earlier runs
+
+- gap_sigma // strength of the gap term in the auglag objectives
+
+      10.0 (default); 1.0 reproduces the plain Bearpark projection, larger
+      values reach the seam faster
+
 - pen_sigma // set the sigma in the penalty function
 
       1.0 (defaut)

@@ -154,7 +154,8 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"auto", "penalty", "ubp", "hybrid", "baeka"}
+MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
+MECP_SEARCH = {"auglag", "penalty", "ubp", "baeka", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2435,7 +2436,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use auto (recommended), penalty, ubp, hybrid, or baeka.",
+                action="Use auto (recommended), penalty, ubp, auglag, hybrid, or baeka.",
             )
         elif meci_search in {"auto", "baeka"}:
             selected = meci_states or [istate, jstate]
@@ -2554,6 +2555,30 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             expected="imult != jmult",
             action="Choose different multiplicities for the two crossing states.",
         )
+
+    if runtype == "mecp":
+        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auglag"))
+        if mecp_search not in MECP_SEARCH:
+            report.add(
+                "ERROR",
+                "optimize.mecp_search",
+                "Unknown MECP search algorithm.",
+                value=mecp_search,
+                expected=", ".join(sorted(MECP_SEARCH)),
+                action="Use auglag (recommended), penalty, ubp, baeka, or quad.",
+            )
+        elif mecp_search == "quad":
+            report.add(
+                "WARNING",
+                "optimize.mecp_search",
+                "The quad objective balances the mean gradient against the gap "
+                "term, so it settles at a residual gap of order 1/gap_weight "
+                "and generally cannot reach energy_gap.",
+                value=mecp_search,
+                expected="auglag",
+                action="Use mecp_search=auglag unless you are reproducing an "
+                       "earlier run.",
+            )
 
     if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(
