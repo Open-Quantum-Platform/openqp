@@ -39,3 +39,34 @@ def maximum_overlap_assignment(overlap):
     if info != 0:
         raise ValueError(f"native maximum-overlap assignment failed (info={info})")
     return assignment, signs, matched, margins
+
+
+def diagonal_phase_tracking(overlap):
+    """Return native phase signs while preserving the adiabatic root order.
+
+    This is intentionally *not* an assignment algorithm.  It is used when
+    state permutation is not propagated through every NAMD quantity; applying
+    a sign selected from another root in that situation corrupts the HST
+    antisymmetric overlap.
+    """
+    matrix = np.ascontiguousarray(overlap, dtype=np.float64)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError(f"tracking overlap must be square, got {matrix.shape}")
+    n = matrix.shape[0]
+    if n == 0:
+        empty = np.empty(0, dtype=np.float64)
+        return empty.copy(), empty.copy(), empty.copy()
+
+    signs = np.empty(n, dtype=np.float64)
+    matched = np.empty(n, dtype=np.float64)
+    margins = np.empty(n, dtype=np.float64)
+    info = oqp.lib.oqp_diagonal_phase_tracking(
+        n,
+        oqp.ffi.cast("double *", matrix.ctypes.data),
+        oqp.ffi.cast("double *", signs.ctypes.data),
+        oqp.ffi.cast("double *", matched.ctypes.data),
+        oqp.ffi.cast("double *", margins.ctypes.data),
+    )
+    if info != 0:
+        raise ValueError(f"native diagonal phase tracking failed (info={info})")
+    return signs, matched, margins

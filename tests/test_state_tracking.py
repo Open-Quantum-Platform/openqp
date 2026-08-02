@@ -8,7 +8,10 @@ import pytest
 
 oqp = pytest.importorskip("oqp")
 
-from oqp.library.state_tracking import maximum_overlap_assignment
+from oqp.library.state_tracking import (
+    diagonal_phase_tracking,
+    maximum_overlap_assignment,
+)
 from oqp.library import single_point
 from oqp.molecule.molecule import Molecule
 from oqp.pyoqp import Runner
@@ -50,7 +53,22 @@ def test_zero_selected_overlap_has_deterministic_positive_phase():
     assert matched.tolist() == [0.0, 0.0]
 
 
-def test_align_x_preserves_lineage_and_records_initial_gauge(monkeypatch):
+def test_diagonal_phase_preserves_adiabatic_order_at_root_exchange():
+    overlap = np.array([
+        [0.10, -0.90],
+        [0.95, 0.20],
+    ])
+
+    signs, matched, margins = diagonal_phase_tracking(overlap)
+
+    # A global assignment would exchange the roots here.  Phase-only NAMD
+    # must not borrow that permutation unless it transports every state label.
+    assert signs.tolist() == [1.0, 1.0]
+    assert matched.tolist() == pytest.approx([0.10, 0.20])
+    assert margins.tolist() == pytest.approx([-0.80, -0.75])
+
+
+def test_namd_align_x_preserves_energy_root_order_and_records_phase(monkeypatch):
     class DummyMol:
         def __init__(self):
             self.data = {
@@ -72,13 +90,13 @@ def test_align_x_preserves_lineage_and_records_initial_gauge(monkeypatch):
 
     data = tracker.mol.data
     assert tracker.mol._state_tracking_fresh is True
-    assert data["OQP::state_tracking_order"].tolist() == [1, 2, 0]
-    assert data["OQP::state_tracking_lineage"].tolist() == [11, 12, 10]
-    assert data["OQP::state_tracking_phase_step"].tolist() == [-1.0, 1.0, 1.0]
-    assert data["OQP::state_tracking_phase_initial"].tolist() == [-1.0, 1.0, 1.0]
-    assert data["OQP::state_tracking_previous_phase_initial"].tolist() == [-1.0, 1.0, 1.0]
+    assert data["OQP::state_tracking_order"].tolist() == [0, 1, 2]
+    assert data["OQP::state_tracking_lineage"].tolist() == [10, 11, 12]
+    assert data["OQP::state_tracking_phase_step"].tolist() == [1.0, 1.0, 1.0]
+    assert data["OQP::state_tracking_phase_initial"].tolist() == [1.0, 1.0, 1.0]
+    assert data["OQP::state_tracking_previous_phase_initial"].tolist() == [1.0, -1.0, 1.0]
     assert np.allclose(data["OQP::td_bvec_mo"], np.array([
-        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
         [0.0, 0.0, 1.0],
         [1.0, 0.0, 0.0],
     ]))

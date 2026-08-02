@@ -49,7 +49,7 @@ for attr_name in dir(lib):
     if callable(attr_value):
         if attr_name not in (
             'oqp_init', 'oqp_clean', 'oqp_set_atoms',
-            'oqp_maximum_overlap_assignment',
+            'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
         else:

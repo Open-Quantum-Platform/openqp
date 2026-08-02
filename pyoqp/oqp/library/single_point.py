@@ -12,7 +12,10 @@ import numpy as np
 from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
-from oqp.library.state_tracking import maximum_overlap_assignment
+from oqp.library.state_tracking import (
+    diagonal_phase_tracking,
+    maximum_overlap_assignment,
+)
 
 # DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
 # exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
@@ -1790,8 +1793,19 @@ class NACME(BasisOverlap):
 
         # current x in row, previous x in column
         x_overlap_matrix = np.matmul(current_x, previous_x.T)
-        x_order, x_sign, x_match, x_margin = self.find_vec_order(
-            x_overlap_matrix, diagnostics=True)
+        if reorder:
+            # Numerical-NAC displacement workers restore the complete state
+            # permutation to the central ordering below, so global assignment
+            # is coherent in that workflow.
+            x_order, x_sign, x_match, x_margin = self.find_vec_order(
+                x_overlap_matrix, diagnostics=True)
+        else:
+            # NAMD remains in energy-root order.  A global assignment would
+            # choose the phase of root j from a different old root without
+            # transporting that permutation through c, E, active, and forces.
+            # Preserve the index and apply only the native diagonal phase.
+            x_sign, x_match, x_margin = diagonal_phase_tracking(x_overlap_matrix)
+            x_order = np.arange(len(x_sign), dtype=np.int32)
 
         # Carry the physical-state identity through root exchanges.  Every
         # mapping is current energy root -> previous energy root (zero-based).
