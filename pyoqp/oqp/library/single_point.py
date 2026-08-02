@@ -1604,11 +1604,11 @@ class BasisOverlap(Calculator):
         current_energy = copy.deepcopy(np.asarray(data["OQP::E_MO_A"]))
         nocc = noca
 
-        occ_order, occ_sign, occ_match, occ_margin = self.find_vec_order(
+        occ_order, occ_sign, occ_match, occ_margin = self.find_mo_order(
             s_mo[:nocc - 2, : nocc - 2], diagnostics=True)
-        somo_order, somo_sign, somo_match, somo_margin = self.find_vec_order(
+        somo_order, somo_sign, somo_match, somo_margin = self.find_mo_order(
             s_mo[nocc - 2: nocc, nocc - 2: nocc], diagnostics=True)
-        vir_order, vir_sign, vir_match, vir_margin = self.find_vec_order(
+        vir_order, vir_sign, vir_match, vir_margin = self.find_mo_order(
             s_mo[nocc:, nocc:], diagnostics=True)
 
         mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
@@ -1714,11 +1714,11 @@ class BasisOverlap(Calculator):
         mo_overlap_matrix = self.mol.data["OQP::overlap_mo_non_orthogonal"]
 
         # current MO in row, previous MO in column
-        occ_order, occ_sign, occ_match, occ_margin = self.find_vec_order(
+        occ_order, occ_sign, occ_match, occ_margin = self.find_mo_order(
             mo_overlap_matrix[:nocc - 2, : nocc - 2], diagnostics=True)
-        somo_order, somo_sign, somo_match, somo_margin = self.find_vec_order(
+        somo_order, somo_sign, somo_match, somo_margin = self.find_mo_order(
             mo_overlap_matrix[nocc - 2: nocc, nocc - 2: nocc], diagnostics=True)
-        vir_order, vir_sign, vir_match, vir_margin = self.find_vec_order(
+        vir_order, vir_sign, vir_match, vir_margin = self.find_mo_order(
             mo_overlap_matrix[nocc:, nocc:], diagnostics=True)
 
         mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
@@ -1762,6 +1762,22 @@ class BasisOverlap(Calculator):
         if diagnostics:
             return result
         return result[0], result[1]
+
+    def find_mo_order(self, overlap_matrix, diagnostics=False):
+        """Track MOs coherently with the requested NAMD alignment mode.
+
+        ``align=phase`` retains SCF orbital labels, so it must not borrow a
+        phase selected from a different old orbital by global assignment.
+        ``align=reorder`` restores the complete permutation below and can use
+        the native global assignment.
+        """
+        if self.align_type == 'phase':
+            signs, matched, margins = diagonal_phase_tracking(overlap_matrix)
+            order = np.arange(len(signs), dtype=np.int32)
+            if diagnostics:
+                return order, signs, matched, margins
+            return order, signs
+        return self.find_vec_order(overlap_matrix, diagnostics=diagnostics)
 
 
 class NACME(BasisOverlap):

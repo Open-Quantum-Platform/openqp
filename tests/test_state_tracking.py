@@ -68,6 +68,22 @@ def test_diagonal_phase_preserves_adiabatic_order_at_root_exchange():
     assert margins.tolist() == pytest.approx([-0.80, -0.75])
 
 
+def test_phase_mode_mo_tracking_preserves_orbital_order_at_exchange():
+    tracker = single_point.BasisOverlap.__new__(single_point.BasisOverlap)
+    tracker.align_type = "phase"
+    overlap = np.array([
+        [0.10, -0.90],
+        [0.95, 0.20],
+    ])
+
+    order, signs, matched, margins = tracker.find_mo_order(overlap, diagnostics=True)
+
+    assert order.tolist() == [0, 1]
+    assert signs.tolist() == [1.0, 1.0]
+    assert matched.tolist() == pytest.approx([0.10, 0.20])
+    assert margins.tolist() == pytest.approx([-0.80, -0.75])
+
+
 def test_namd_align_x_preserves_energy_root_order_and_records_phase(monkeypatch):
     class DummyMol:
         def __init__(self):
