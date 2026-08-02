@@ -15,6 +15,7 @@ source-only checkout.
 """
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -103,3 +104,38 @@ def test_molecule_write_molden_clears_stale_output(tmp_path):
 
     assert not stale.exists(), "stale Molden file must be removed when skipping"
     assert any("Skipping Molden output" in str(w.message) for w in caught)
+
+
+def test_molecule_write_molden_survives_unremovable_stale_output(tmp_path, monkeypatch):
+    """An undeletable stale file must not take the calculation down with it.
+
+    Skipping exists so a by-product cannot cost the user the energy; an
+    os.remove that raises (viewer holding the file open, read-only directory)
+    would have propagated straight out of the SCF driver.
+    """
+    import types
+    import warnings as _warnings
+    from oqp.molecule.molecule import Molecule
+
+    stale = tmp_path / "orbitals.molden"
+    stale.write_text("[Molden Format]\nstale\n")
+
+    def refuse(path):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "remove", refuse)
+
+    mol = Molecule.__new__(Molecule)
+    mol.usempi = False
+    mol.data = types.SimpleNamespace(get_basis=lambda: _basis([0, 5]))
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        Molecule.write_molden.__wrapped__(mol, str(stale)) \
+            if hasattr(Molecule.write_molden, "__wrapped__") \
+            else Molecule.write_molden(mol, str(stale))
+
+    messages = [str(w.message) for w in caught]
+    assert any("Skipping Molden output" in m for m in messages)
+    assert any("Could not remove the stale Molden file" in m for m in messages)
+    assert stale.exists(), "the file we could not remove is still there"

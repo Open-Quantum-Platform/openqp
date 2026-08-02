@@ -1539,9 +1539,18 @@ class Molecule:
                    MoldenWriter.MAX_ANG, bad_l)
             )
             # A stale file from an earlier run would otherwise survive and look
-            # like valid output for this one.
+            # like valid output for this one.  Failing to remove it must not
+            # abort the run either: the whole point of skipping is that a
+            # by-product should not cost the user the energy they computed.
             if os.path.exists(filename):
-                os.remove(filename)
+                try:
+                    os.remove(filename)
+                except OSError as err:
+                    warnings.warn(
+                        'Could not remove the stale Molden file %s (%s). It is '
+                        'left in place and does NOT describe this calculation.'
+                        % (filename, err)
+                    )
             return
 
         with open(filename, mode='w', encoding='ascii') as fout:
