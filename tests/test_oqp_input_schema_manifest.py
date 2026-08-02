@@ -165,7 +165,9 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 208
+    # 208 before the coupled-cluster Cholesky controls (cholesky, cholesky_tol,
+    # cholesky_direct) joined the [cc] manifest.
+    assert len(checked) == 211
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():
