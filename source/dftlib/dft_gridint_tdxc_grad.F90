@@ -86,6 +86,10 @@ contains
       , self%probe_value(xce%maxPts, self%nMtx, nthreads) &
       , self%rrho(nspin, xce%maxPts, self%nMtx, nthreads) &
       , self%drrho(3, nspin, xce%maxPts, self%nMtx, nthreads) &
+      ! The update kernels associate rtau unconditionally and read it only for
+      ! meta-GGA functionals.  Keep a zero scratch slab for LDA/GGA as well so
+      ! that association is defined under bounds/runtime checking.
+      , self%rtau(nSpin, xce%maxPts, self%nMtx, nthreads) &
       , self%grad_d(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
       , self%grad_p(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
 !   Temporary storage
@@ -99,12 +103,6 @@ contains
       allocate( &
           self%grad_x(xce%maxPts, nterms, nspin, self%nMtx, nthreads) &
         , source=0.0d0)
-    end if
-
-    if (xce%funTyp == OQP_FUNTYP_MGGA) then
-        allocate( &
-            self%rtau(nSpin, xce%maxPts, self%nMtx, nthreads) &
-          , source=0.0d0)
     end if
 
     if (self%do_weight_derivative) then
@@ -309,7 +307,6 @@ contains
     associate ( bfgrad => self%bfgrad(:,:,:,mythread) &
               , grad_d => self%grad_d(:,:,:,:,mythread) &
               , grad_p => self%grad_p(:,:,:,:,mythread) &
-              , grad_x => self%grad_x(:,:,:,:,mythread) &
               , aoV    => xce%aoV &
               , aoG1   => xce%aoG1 &
               , aoG2   => xce%aoG2 &
@@ -413,11 +410,13 @@ contains
 
         ! d F_xc / dR_i
         if (self%do_fxc) then
-          call compAtGradAll(tmpGrad(:,:,j), grad_X(:,:,1,j), xce%funTyp, &
+          call compAtGradAll(tmpGrad(:,:,j), &
+                             self%grad_x(:,:,1,j,mythread), xce%funTyp, &
                              tmpV(:,:,j,1,2), tmpG1(:,:,:,j,1,2), &
                              aoG1, aoG2, numPts)
           if (xce%hasBeta) &
-            call compAtGradAll(tmpGrad(:,:,j), grad_X(:,:,2,j), xce%funTyp, &
+            call compAtGradAll(tmpGrad(:,:,j), &
+                               self%grad_x(:,:,2,j,mythread), xce%funTyp, &
                                tmpV(:,:,j,2,2), tmpG1(:,:,:,j,2,2), &
                                aoG1, aoG2, numPts)
         end if

@@ -67,7 +67,14 @@ contains
         self%focks(xce%numAOs, xce%numAOs, self%nMtx, nSpin, nThreads) &
       , self%mo(xce%numAOs, xce%maxPts, self%nMtx, nSpin, nThreads) &
       , self%rRho(nSpin, xce%maxPts, self%nMtx, nThreads) &
-      , self%drRho(4, nSpin, xce%maxPts, self%nMtx, nThreads) &
+      ! compRDRho supplies the Cartesian x/y/z density gradient.  Consumers
+      ! contract it with three-component XC gradients, so the leading extent
+      ! must be three (the stale fourth slot made DOT_PRODUCT nonconforming).
+      , self%drRho(3, nSpin, xce%maxPts, self%nMtx, nThreads) &
+      ! Several update kernels associate rTau unconditionally and inspect it
+      ! only in the meta-GGA branch.  A zero slab keeps that association valid
+      ! for LDA/GGA under runtime checking.
+      , self%rTau(nSpin, xce%maxPts, self%nMtx, nThreads) &
 !       Temporary storage
       , self%focks_(xce%numAOs * xce%numAOs * self%nMtx * nSpin, nThreads) &
       , self%tmpMO_(xce%numAOs * xce%maxPts * self%nMtx * nSpin, nThreads) &
@@ -77,9 +84,7 @@ contains
 
     if (xce%funTyp == OQP_FUNTYP_MGGA) then
         allocate( &
-            self%rTau(nSpin, xce%maxPts, self%nMtx, nThreads) &
-!       Temporary storage
-          , self%moG1_(xce%numAOs*xce%maxPts*3*self%nMtx, nThreads) &
+            self%moG1_(xce%numAOs*xce%maxPts*3*self%nMtx, nThreads) &
           , source=0.0d0)
     end if
   end subroutine

@@ -187,10 +187,10 @@ contains
                         WITH_ABORT)
     end if
     if (nbf64 < 1_c_int64_t .or. noca64 < 1_c_int64_t .or. &
-        nocb64 < 1_c_int64_t .or. nocb64 >= noca64 .or. &
+        nocb64 < 0_c_int64_t .or. nocb64 >= noca64 .or. &
         noca64 > nbf64 .or. noca64-nocb64 /= 2_c_int64_t) then
       call show_message( &
-        'Analytic MRSF NAC requires 1 <= nocb < noca <= nbf and two SOMOs.', &
+        'Analytic MRSF NAC requires 0 <= nocb < noca <= nbf and two SOMOs.', &
         WITH_ABORT)
     end if
     if (natom64 > default_int_limit64/3_c_int64_t) then

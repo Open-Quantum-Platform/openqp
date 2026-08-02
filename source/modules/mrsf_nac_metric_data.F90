@@ -120,10 +120,8 @@ contains
         'mrsf_nac_metric_data requires the two-SOMO MRSF reference.', &
         WITH_ABORT)
     end if
-    if (nocb < 1) then
-      call show_message( &
-        'Exact MRSF s_ia minors require at least one doubly occupied orbital.', &
-        WITH_ABORT)
+    if (nocb < 0) then
+      call show_message('Invalid negative MRSF closed-shell count.', WITH_ABORT)
     end if
     if (infos%tddft%mult /= 1 .and. infos%tddft%mult /= 3) then
       call show_message( &
@@ -278,9 +276,9 @@ contains
     if (jstate < 1 .or. jstate > nstate) then
       call show_message('Invalid state in MRSF NAC metric column.', WITH_ABORT)
     end if
-    if (noca - nocb /= 2 .or. nocb < 1) then
+    if (noca - nocb /= 2 .or. nocb < 0) then
       call show_message( &
-        'MRSF NAC metric column requires a two-SOMO reference with a core.', &
+        'MRSF NAC metric column requires a two-SOMO reference.', &
         WITH_ABORT)
     end if
     if (infos%tddft%mult /= 1 .and. infos%tddft%mult /= 3) then
@@ -526,6 +524,17 @@ contains
     integer :: k, noc, orbital
 
     noc = noca - 1
+    ! For a two-electron MRSF reference noc=1.  In the literal ov_exact
+    ! case(3) write order, the sole determinant element is the final (4,4)
+    ! assignment M(noc+1,nocb+j1); the preceding nominal (3,*) blocks address
+    ! row zero and are an F77-era out-of-bounds artifact.  State the resulting
+    ! 1x1 minor explicitly so the resident cofactor kernel has the same
+    ! well-defined limiting semantics without invalid indices.
+    if (noc == 1) then
+      rows(1) = noc + 1
+      cols(1) = nocb + j1
+      return
+    end if
     do k = 1, noc - 2
       orbital = k
       if (k > i1 - 1) orbital = k + 1

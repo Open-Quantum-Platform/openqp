@@ -757,6 +757,15 @@ contains
        return
 
     case (3)
+       ! A two-electron MRSF reference leaves a 1x1 alpha determinant.
+       ! The generic four-block layout below degenerates at noc=1 and writes
+       ! ddet(0) before its final (4,4) assignment.  That final assignment is
+       ! the only in-bounds element and therefore defines the literal legacy
+       ! result; make it explicit and avoid the inherited F77 memory error.
+       if (noc == 1) then
+          temp1 = s_mo(noc+1,ia1)
+          return
+       end if
     !  (1,1) block
        do i = 1, i1-1
           do ipp = 1, i1-1

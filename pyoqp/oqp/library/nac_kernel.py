@@ -90,6 +90,10 @@ def _ia_maps(ctx, i1, j1):
     """NET row/col index maps of the LITERAL ov_exact case(3) layout
     (blocks 3/4 always win ddet rows noc-1, noc; block2 shifts +1 past i1)."""
     noc, nocb = ctx['noc'], ctx['nocb']
+    if noc == 1:
+        # Literal ov_exact case(3): for the coreless 1x1 determinant, the
+        # final in-bounds (4,4) write is M[noc+1, nocb+j1] (1-based).
+        return [noc], [nocb + j1]
     rows = [((r if r <= i1 - 1 else r + 1) - 1) for r in range(1, noc - 1)]
     rows += [noc - 1, noc]                # 0-based of s_mo rows noc, noc+1
     cols = [((c if c <= i1 - 1 else c + 1) - 1) for c in range(1, noc - 1)]

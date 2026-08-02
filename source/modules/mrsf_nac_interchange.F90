@@ -853,12 +853,16 @@ contains
     call dgemm('n','t', nbf, nbf, nocca, 1.0_dp, half, nbf, &
                mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
     pza = work + transpose(work)
-    half = 0.0_dp
-    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
-               mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
-    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
-               mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
-    pzb = work + transpose(work)
+    if (noccb > 0) then
+      half = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+      pzb = work + transpose(work)
+    else
+      pzb = 0.0_dp
+    end if
 
     ! One analytic two-electron derivative contraction per spin replaces the
     ! forward code's (virtual,occupied) probe sweep.  The factor 1/2 follows
@@ -1066,13 +1070,17 @@ contains
                  mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
       pza(:,:,irhs) = work + transpose(work)
 
-      half = 0.0_dp
-      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
-                 mo(:,noccb+1:nbf), nbf, xb(:,:,irhs), nvirb, &
-                 0.0_dp, half, nbf)
-      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
-                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
-      pzb(:,:,irhs) = work + transpose(work)
+      if (noccb > 0) then
+        half = 0.0_dp
+        call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                   mo(:,noccb+1:nbf), nbf, xb(:,:,irhs), nvirb, &
+                   0.0_dp, half, nbf)
+        call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                   mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+        pzb(:,:,irhs) = work + transpose(work)
+      else
+        pzb(:,:,irhs) = 0.0_dp
+      end if
 
       call pack_matrix(pza(:,:,irhs), dmz(:,2*irhs-1))
       call pack_matrix(pzb(:,:,irhs), dmz(:,2*irhs))
@@ -1292,12 +1300,16 @@ contains
 
     ! delta P_beta = C_(socc+virt) xb C_docc^T + transpose.  The first
     ! offset rows of xb are the socc-docc block; the remaining rows are vd.
-    half = 0.0_dp
-    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
-               mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
-    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
-               mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
-    pzb = work + transpose(work)
+    if (noccb > 0) then
+      half = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, half, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+      pzb = work + transpose(work)
+    else
+      pzb = 0.0_dp
+    end if
 
     if (infos%control%hamilton == 20) then
       ! This public entry may be called independently of the Z solver.  Make
@@ -1497,13 +1509,17 @@ contains
                  mo(:,1:nocca), nbf, 0.0_dp, work, nbf)
       pza(:,:,irhs) = work + transpose(work)
 
-      half = 0.0_dp
-      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
-                 mo(:,noccb+1:nbf), nbf, xb, nvirb, &
-                 0.0_dp, half, nbf)
-      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
-                 mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
-      pzb(:,:,irhs) = work + transpose(work)
+      if (noccb > 0) then
+        half = 0.0_dp
+        call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                   mo(:,noccb+1:nbf), nbf, xb, nvirb, &
+                   0.0_dp, half, nbf)
+        call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, half, nbf, &
+                   mo(:,1:noccb), nbf, 0.0_dp, work, nbf)
+        pzb(:,:,irhs) = work + transpose(work)
+      else
+        pzb(:,:,irhs) = 0.0_dp
+      end if
     end do
 
     gxc_vectors = 0.0_dp
@@ -1587,6 +1603,7 @@ contains
       real(kind=dp), intent(in) :: ao(:,:)
       integer, intent(in) :: nocc
       real(kind=dp), intent(out) :: transformed(:,:)
+      if (nocc == 0) return
       half = 0.0_dp
       call dgemm('t','n', nocc, nbf, nbf, 1.0_dp, mo, nbf, ao, nbf, &
                  0.0_dp, half, nbf)

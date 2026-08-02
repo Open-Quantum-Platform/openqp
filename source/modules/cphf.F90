@@ -1288,10 +1288,12 @@ contains
                p%famo(nocca+1,1), nbf, kmat, nbf, 0.0_dp, x2a, nvira)
     call dgemm('n','n', nvira, nocca, nbf, -1.0_dp, &
                kmat(nocca+1,1), nbf, p%famo, nbf, 1.0_dp, x2a, nvira)
-    call dgemm('n','n', nvirb, noccb, nbf,  1.0_dp, &
-               p%fbmo(noccb+1,1), nbf, kmat, nbf, 0.0_dp, x2b, nvirb)
-    call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
-               kmat(noccb+1,1), nbf, p%fbmo, nbf, 1.0_dp, x2b, nvirb)
+    if (noccb > 0) then
+      call dgemm('n','n', nvirb, noccb, nbf,  1.0_dp, &
+                 p%fbmo(noccb+1,1), nbf, kmat, nbf, 0.0_dp, x2b, nvirb)
+      call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
+                 kmat(noccb+1,1), nbf, p%fbmo, nbf, 1.0_dp, x2b, nvirb)
+    end if
 
     ! orbital-rotation density (alpha):  dm = Cv xa Co^T + (Cv xa Co^T)^T
     work2 = 0.0_dp
@@ -1304,14 +1306,21 @@ contains
     end do
     call pack_matrix(dm, dm_tri(:,1))
     ! beta
-    work2 = 0.0_dp
-    call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, p%mo(:,noccb+1:nbf), nbf, xb, nvirb, 0.0_dp, work2, nbf)
-    call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, work2, nbf, p%mo(:,1:noccb), nbf, 0.0_dp, work3, nbf)
-    do i = 1, nbf
-      do j = 1, nbf
-        dm(i,j) = work3(i,j) + work3(j,i)
+    if (noccb > 0) then
+      work2 = 0.0_dp
+      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                 p%mo(:,noccb+1:nbf), nbf, xb, nvirb, &
+                 0.0_dp, work2, nbf)
+      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, work2, nbf, &
+                 p%mo(:,1:noccb), nbf, 0.0_dp, work3, nbf)
+      do i = 1, nbf
+        do j = 1, nbf
+          dm(i,j) = work3(i,j) + work3(j,i)
+        end do
       end do
-    end do
+    else
+      dm = 0.0_dp
+    end if
     call pack_matrix(dm, dm_tri(:,2))
 
     ! response Fock from the trial density (open-shell: J[dPa+dPb] - cx K[dP^s])
@@ -1326,11 +1335,13 @@ contains
     call dgemm('t','n', nvira, nocca, nbf, 1.0_dp, &
                p%mo(1,nocca+1), nbf, work2, nbf, 1.0_dp, x2a, nvira)
     ! beta
-    call unpack_matrix(pfock(:,2), v)
-    call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, v, nbf, &
-               p%mo, nbf, 0.0_dp, work2, nbf)
-    call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
-               p%mo(1,noccb+1), nbf, work2, nbf, 1.0_dp, x2b, nvirb)
+    if (noccb > 0) then
+      call unpack_matrix(pfock(:,2), v)
+      call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, v, nbf, &
+                 p%mo, nbf, 0.0_dp, work2, nbf)
+      call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
+                 p%mo(1,noccb+1), nbf, work2, nbf, 1.0_dp, x2b, nvirb)
+    end if
 
     call rohf_pack_trial(y, x2a, x2b, nbf, nocca, noccb)
 
@@ -1393,12 +1404,15 @@ contains
       call dgemm('n','n', nvira, nocca, nbf, -1.0_dp, &
                  p%kmat_batch(nocca+1,1,ivec), nbf, p%famo, nbf, &
                  1.0_dp, p%x2a_batch(1,1,ivec), nvira)
-      call dgemm('n','n', nvirb, noccb, nbf, 1.0_dp, &
-                 p%fbmo(noccb+1,1), nbf, p%kmat_batch(1,1,ivec), nbf, &
-                 0.0_dp, p%x2b_batch(1,1,ivec), nvirb)
-      call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
-                 p%kmat_batch(noccb+1,1,ivec), nbf, p%fbmo, nbf, &
-                 1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      if (noccb > 0) then
+        call dgemm('n','n', nvirb, noccb, nbf, 1.0_dp, &
+                   p%fbmo(noccb+1,1), nbf, &
+                   p%kmat_batch(1,1,ivec), nbf, &
+                   0.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+        call dgemm('n','n', nvirb, noccb, nbf, -1.0_dp, &
+                   p%kmat_batch(noccb+1,1,ivec), nbf, p%fbmo, nbf, &
+                   1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      end if
 
       ! Trial alpha density.
       call dgemm('n','n', nbf, nocca, nvira, 1.0_dp, &
@@ -1415,18 +1429,22 @@ contains
       end do
 
       ! Trial beta density.
-      call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
-                 p%mo(1,noccb+1), nbf, p%xb_batch(1,1,ivec), nvirb, &
-                 0.0_dp, p%work2_batch(1,1,ivec), nbf)
-      call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, &
-                 p%work2_batch(1,1,ivec), nbf, p%mo, nbf, &
-                 0.0_dp, p%work3_batch(1,1,ivec), nbf)
-      do i = 1, nbf
-        do j = 1, nbf
-          p%dxb_batch(i,j,ivec) = p%work3_batch(i,j,ivec) + &
-                                   p%work3_batch(j,i,ivec)
+      if (noccb > 0) then
+        call dgemm('n','n', nbf, noccb, nvirb, 1.0_dp, &
+                   p%mo(1,noccb+1), nbf, p%xb_batch(1,1,ivec), nvirb, &
+                   0.0_dp, p%work2_batch(1,1,ivec), nbf)
+        call dgemm('n','t', nbf, nbf, noccb, 1.0_dp, &
+                   p%work2_batch(1,1,ivec), nbf, p%mo, nbf, &
+                   0.0_dp, p%work3_batch(1,1,ivec), nbf)
+        do i = 1, nbf
+          do j = 1, nbf
+            p%dxb_batch(i,j,ivec) = p%work3_batch(i,j,ivec) + &
+                                     p%work3_batch(j,i,ivec)
+          end do
         end do
-      end do
+      else
+        p%dxb_batch(:,:,ivec) = 0.0_dp
+      end if
 
       ca = 2*ivec - 1; cb = ca + 1
       call pack_matrix(p%dxa_batch(:,:,ivec), p%dm_tri_batch(:,ca))
@@ -1486,12 +1504,15 @@ contains
       call dgemm('t','n', nvira, nocca, nbf, 1.0_dp, &
                  p%mo(1,nocca+1), nbf, p%work2_batch(1,1,ivec), nbf, &
                  1.0_dp, p%x2a_batch(1,1,ivec), nvira)
-      call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, &
-                 p%fxb_batch(1,1,ivec), nbf, p%mo, nbf, &
-                 0.0_dp, p%work2_batch(1,1,ivec), nbf)
-      call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
-                 p%mo(1,noccb+1), nbf, p%work2_batch(1,1,ivec), nbf, &
-                 1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      if (noccb > 0) then
+        call dgemm('n','n', nbf, noccb, nbf, 1.0_dp, &
+                   p%fxb_batch(1,1,ivec), nbf, p%mo, nbf, &
+                   0.0_dp, p%work2_batch(1,1,ivec), nbf)
+        call dgemm('t','n', nvirb, noccb, nbf, 1.0_dp, &
+                   p%mo(1,noccb+1), nbf, &
+                   p%work2_batch(1,1,ivec), nbf, &
+                   1.0_dp, p%x2b_batch(1,1,ivec), nvirb)
+      end if
       call rohf_pack_trial(y(:,ivec), p%x2a_batch(:,:,ivec), &
                            p%x2b_batch(:,:,ivec), nbf, nocca, noccb)
     end do
