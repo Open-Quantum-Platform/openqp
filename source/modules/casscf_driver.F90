@@ -307,15 +307,20 @@ module casscf_driver_mod
   !>
   !> What this does and does not buy (measured, macOS/ARM/Accelerate, GCC 15):
   !> against the DEFAULT finite-difference Hessian -- what `twophase` and `ah`
-  !> run unless the user opts in -- it is 3.4x to 12x fewer CI evaluations and
-  !> 4x to 23x faster.  Against the ASSEMBLED ANALYTIC Hessian it is currently
-  !> SLOWER at every size reachable here (H2O/cc-pVTZ CAS(6,6): 25.6 s
-  !> matrix-free vs 9.2 s assembled), because each product is two full
-  !> energy/gradient evaluations and each of those contains an O(nbf^5) AO->MO
-  !> transform, and CG asks for ~18 products per macroiteration.  The
-  !> matrix-free cost per macroiteration is independent of `npar` while the
-  !> assembled one is `npar * O(nbf^4)`, so the crossover moves with the size of
-  !> the rotation space, not with the basis alone.  Both arms are kept.
+  !> run unless the user opts in -- it is an order of magnitude fewer CI
+  !> evaluations and correspondingly faster.  Against the ASSEMBLED ANALYTIC
+  !> Hessian it is still SLOWER at every size reachable here (H2O/cc-pVTZ
+  !> CAS(6,6): 13.0 s matrix-free vs 6.6 s assembled), because each product is
+  !> two full energy/gradient evaluations and each of those contains an
+  !> O(nbf^5) AO->MO transform.  CG now asks for 4-5 products per
+  !> macroiteration rather than the 14 it once did (see `cas_trah_precond` and
+  !> `trah_optimize`), but the remaining budget is close to irreducible: at
+  !> cc-pVTZ the run spends 72 products in CG and another 32 in the one
+  !> stability check, and 104 products is 208 evaluations against the assembled
+  !> arm's 29.  The matrix-free cost per macroiteration is independent of
+  !> `npar` while the assembled one is `npar * O(nbf^4)`, so the crossover moves
+  !> with the size of the rotation space, not with the basis alone.  Both arms
+  !> are kept.
   !>
   !> One correction is needed and it is not optional.  `g` is the gradient in
   !> the DISPLACED frame -- the derivative with respect to a *further* rotation
@@ -946,6 +951,12 @@ contains
     par%rms_gnorm = .false.        ! [casscf] gradient_norm_tol is a 2-norm
     par%verbose = .false.          ! Python owns the CASSCF log
     par%want_history = .true.
+    ! Two settings the SCF path deliberately does NOT take (its Hessian-vector
+    ! product is one Fock-like contraction; this one is two CI solves, so the
+    ! trade is the other way round here).  Both are measured in the comment on
+    ! `cas_trah_precond`.
+    par%cg_res_floor = gradtol     ! never solve tighter than |g| has to be
+    par%stab_seed_diag = .true.    ! start the stability check at the soft modes
 
     call trah_run(prov, par, tres, hit, he, hde, hg, hs, nh)
     if (tres%ierr < 0) then
@@ -1024,11 +1035,43 @@ contains
   !> an approximation costs iterations and never accuracy.  Building the exact
   !> diagonal would cost an assembled Hessian, which is the whole thing this
   !> converger exists to avoid.
+  !>
+  !> Regularization, and why it is not optional
+  !> ------------------------------------------
+  !> The approximation is worst exactly where it is used hardest.  For an
+  !> active/virtual rotation the occupation factor is `n_t`, so a weakly
+  !> occupied active orbital (n_t ~ 3e-3 in H2O/cc-pVDZ CAS(6,6)) produces a
+  !> diagonal of ~5e-3 while the true Hessian diagonal there is ~1e-3 and
+  !> sometimes NEGATIVE -- measured against the assembled analytic Hessian, the
+  !> ratio reaches 13.  Those are 96 of the 140 rotations at cc-pVDZ and 300 of
+  !> 412 at cc-pVTZ, and dividing the residual by a near-zero denominator is
+  !> what makes CG grind.  A Levenberg-style shift `sigma = 1e-4 max(hdiag)`
+  !> damps them; it is relative, so it carries across systems, and it changes
+  !> only the metric, never the fixed point.
+  !>
+  !> Measured together with the CG residual floor of `trah_optimize`, on an
+  !> idle Xeon 8368 (Linux/OpenBLAS/GCC 11), best of 3 alternating runs, CG
+  !> products per macroiteration and CI evaluations before -> after:
+  !>
+  !>   H2O/cc-pVDZ CAS(6,6)        10.6 -> 4.4   382 -> 176   3.93 -> 1.70 s
+  !>   H2O/cc-pVTZ CAS(6,6)        14.3 -> 5.1   488 -> 237  26.44 -> 13.01 s
+  !>   H2O 1.5x /6-31G CAS(6,6)    11.6 -> 6.6   468 -> 244   7.30 -> 3.29 s
+  !>
+  !> at converged energies identical to the last printed digit in all three.
+  !>
+  !> The size of the shift matters and is not a free parameter: at
+  !> `5e-4 max(hdiag)` and above the run converges to a DIFFERENT, higher
+  !> CASSCF solution (-76.0833 instead of -76.1134 on cc-pVDZ), and at 2e-4 it
+  !> still finds the right one but takes more macroiterations than it saves.
+  !> What did NOT work, and was measured rather than assumed: the exact
+  !> diagonal frozen from one analytic Hessian build at the starting geometry
+  !> is WORSE than this approximation (135 vs 120 CG products) -- the diagonal
+  !> has to track the orbitals, a stale exact one is not an improvement.
   subroutine cas_trah_precond(this, hdiag)
     class(cas_trah_provider_t), intent(inout) :: this
     real(dp), intent(out) :: hdiag(:)
     integer :: n, nc, na, i, j, k, l, p, q
-    real(dp) :: val
+    real(dp) :: val, shift
 
     n = this%ctx%n
     nc = this%ctx%nc
@@ -1063,6 +1106,9 @@ contains
            - this%fscr(int(q, i8)*int(n, i8) + int(q, i8)))
       hdiag(l + 1) = max(val, 1.0e-3_dp)
     end do
+
+    shift = 1.0e-4_dp * maxval(hdiag(1:this%ctx%npar))
+    hdiag(1:this%ctx%npar) = hdiag(1:this%ctx%npar) + shift
   end subroutine cas_trah_precond
 
   !> hv = H.v.  See the type's documentation for the derivation of the BCH
