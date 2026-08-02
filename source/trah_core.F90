@@ -131,6 +131,16 @@ module trah_core_mod
     !> Optional history callback context: the CASSCF driver records one row per
     !> accepted macroiteration, the SCF driver does not.
     logical  :: want_history = .false.
+    !> ABSOLUTE floor on the Steihaug-CG residual, on top of the relative
+    !> inexact-Newton forcing sequence.  0 (the SCF default) leaves the solver
+    !> exactly as it was; a method whose Hessian-vector product is expensive
+    !> sets it to its own gradient tolerance, which is the accuracy below which
+    !> a better step cannot change the answer.  See `steihaug_cg`.
+    real(dp) :: cg_res_floor = 0.0_dp
+    !> Seed the stability check's Davidson from the smallest preconditioner
+    !> diagonals rather than from random vectors.  Off by default: SCF keeps the
+    !> random start bit for bit.  See `trah_lowest_hessian_eig`.
+    logical  :: stab_seed_diag = .false.
   end type trah_params_t
 
   !> What the macro loop reports back.
@@ -214,7 +224,7 @@ contains
       ! converged only at a genuine minimum: small gradient AND no escape step.
       if (gnorm < par%conv_tol .and. snorm < stab_step) then
         if (.not. par%deterministic) then
-          call trah_lowest_hessian_eig(prov, hdiag, n, par%nmic, lam, vmin, ierr)
+          call trah_lowest_hessian_eig(prov, hdiag, n, par%nmic, lam, vmin, ierr, par)
           if (ierr /= 0) then
             res%ierr = ierr
             return
@@ -409,7 +419,7 @@ contains
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used, ierr
     if (par%sub_solver == 2 .or. par%deterministic) then
-      call steihaug_cg(prov, g, hdiag, delta, n, par%nmic, p, pred, used, ierr)
+      call steihaug_cg(prov, par, g, hdiag, delta, n, par%nmic, p, pred, used, ierr)
     else
       call aughess_step(prov, par, g, hdiag, delta, n, par%nmic, p, pred, used, ierr)
     end if
@@ -418,14 +428,16 @@ contains
   !> @brief Steihaug-Toint preconditioned CG for the trust-region subproblem.
   !>        Minimises m(p)=g.p+1/2 p.H p with |p|<=delta.  Preconditioner
   !>        M=diag(hdiag).  H.x via the provider.  Returns p and pred = -m(p).
-  subroutine steihaug_cg(prov, g, hdiag, delta, n, nmic, p, pred, used, ierr)
+  subroutine steihaug_cg(prov, par, g, hdiag, delta, n, nmic, p, pred, used, ierr)
     class(trah_provider_t), intent(inout) :: prov
+    type(trah_params_t),    intent(in)    :: par
     real(dp), intent(in)  :: g(:), hdiag(:), delta
     integer,  intent(in)  :: n, nmic
     real(dp), intent(out) :: p(:), pred
     integer,  intent(out) :: used, ierr
     real(dp), allocatable :: r(:), y(:), d(:), hd(:), hp(:)
     real(dp) :: ry, ry_new, curv, alpha, beta, tau, pd, dd, pp, gp, php, rnorm0, rnorm
+    real(dp) :: rtol
     integer  :: k
 
     ierr = 0
@@ -437,7 +449,28 @@ contains
     d = -y
     ry = dot_product(r, y)
     rnorm0 = sqrt(dot_product(r, r))
+
+    ! Forcing sequence.  The relative part, min(0.1, sqrt(|r0|)), is the
+    ! inexact-Newton one and is what drives the quadratic tail; `cg_res_floor`
+    ! adds an ABSOLUTE floor.  Without it the relative test keeps tightening as
+    ! |g| falls and the last few macroiterations solve the Newton system to an
+    ! accuracy the caller cannot use -- |g_{k+1}| ~ eta |g_k|, so once
+    ! eta |g_k| is below the gradient tolerance the extra digits are discarded
+    ! at the convergence test.  Worse, they are not even attainable when H.v is
+    ! a finite difference: the product carries a noise floor and the residual
+    ! simply stalls until the iteration cap.
+    rtol = min(0.1_dp, sqrt(rnorm0))*rnorm0
+    rtol = max(rtol, par%cg_res_floor)
     used = 0
+
+    ! |g| is already below the floor: p = 0 is the answer and not one
+    ! Hessian-vector product is spent confirming it.  The macro loop reads
+    ! pred = 0 with |step| = 0 as "converged", which it is.
+    if (rnorm0 <= rtol) then
+      pred = 0.0_dp
+      deallocate(r, y, d, hd, hp)
+      return
+    end if
 
     do k = 1, nmic
       used = k
@@ -462,7 +495,7 @@ contains
       hp = hp + alpha*hd
       r = r + alpha*hd
       rnorm = sqrt(dot_product(r, r))
-      if (rnorm <= min(0.1_dp, sqrt(rnorm0))*rnorm0 .or. rnorm < 1.0e-10_dp) exit
+      if (rnorm <= rtol .or. rnorm < 1.0e-10_dp) exit
       call precond(hdiag, r, y)
       ry_new = dot_product(r, y)
       beta = ry_new / ry
@@ -626,33 +659,66 @@ contains
   end subroutine aughess_step
 
   !> @brief Lowest eigenpair of the orbital Hessian H (n x n, NOT bordered), by
-  !>        Davidson with several random starts (so it reliably finds a negative
+  !>        Davidson with several starts (so it reliably finds a negative
   !>        symmetry-breaking mode at a converged point, where the gradient is
-  !>        ~0 and the bordered form degenerates).  Matrix-free.
-  subroutine trah_lowest_hessian_eig(prov, hdiag, n, nmic, lam, vmin, ierr)
+  !>        ~0 and the bordered form degenerates).  Matrix-free.  The starts are
+  !>        random by default and, under `stab_seed_diag`, the unit vectors of
+  !>        the smallest Hessian-diagonal entries instead.
+  subroutine trah_lowest_hessian_eig(prov, hdiag, n, nmic, lam, vmin, ierr, par)
     class(trah_provider_t), intent(inout) :: prov
     real(dp), intent(in)  :: hdiag(:)
     integer,  intent(in)  :: n, nmic
     real(dp), intent(out) :: lam, vmin(:)
     integer,  intent(out) :: ierr
-    integer :: mmax, m, i, k, info, lwork, mw, ssz
+    !> Optional, and only `stab_seed_diag` is read: absent (or false) keeps the
+    !> random start the SCF path has always used.
+    type(trah_params_t), intent(in), optional :: par
+    integer :: mmax, m, i, k, info, lwork, mw, ssz, j, jmin
     real(dp) :: rnorm, di, nv, theta
+    logical  :: seed_diag
     real(dp), allocatable :: V(:,:), W(:,:), Tm(:,:), u(:), r(:), tc(:), eig(:), work(:)
+    real(dp), allocatable :: hleft(:)
     integer,  allocatable :: seed(:)
 
     ierr = 0
+    seed_diag = .false.
+    if (present(par)) seed_diag = par%stab_seed_diag
     mmax = min(max(int(nmic), 8), 40)
     allocate(V(n,mmax), W(n,mmax), u(n), r(n), tc(n))
     allocate(eig(mmax), work(8*mmax + 2*mmax*mmax)); lwork = size(work)
 
-    call random_seed(size=ssz); allocate(seed(ssz)); seed = 987654321; call random_seed(put=seed)
     m = 0
-    do i = 1, min(4, mmax)                 ! a few random trial vectors
-      call random_number(tc); tc = 2.0_dp*tc - 1.0_dp
-      do k = 1, m; tc = tc - dot_product(V(:,k), tc)*V(:,k); end do
-      nv = norm2(tc); if (nv > 1.0e-8_dp) then; m = m + 1; V(:,m) = tc/nv; end if
-    end do
-    deallocate(seed)
+    if (seed_diag) then
+      ! The Rayleigh quotient of unit vector i IS H_ii, so the smallest entries
+      ! of the Hessian diagonal are the best rank-one guesses at the lowest
+      ! eigenvector.  A random vector in n dimensions has only O(1/sqrt(n))
+      ! overlap with it, and Davidson pays for the difference: on H2O/cc-pVTZ
+      ! CAS(6,6) the random start ran its full 32 iterations and settled on
+      ! 1.908, an INTERIOR eigenvalue, while the diagonal-seeded start was
+      ! below 0.07 on its first Rayleigh-Ritz.  Both call the point stable
+      ! here, but only one of them was actually looking at the bottom of the
+      ! spectrum.
+      allocate(hleft(n)); hleft = hdiag
+      do i = 1, min(4, mmax)
+        jmin = 1
+        do j = 2, n
+          if (hleft(j) < hleft(jmin)) jmin = j
+        end do
+        hleft(jmin) = huge(1.0_dp)
+        tc = 0.0_dp; tc(jmin) = 1.0_dp
+        do k = 1, m; tc = tc - dot_product(V(:,k), tc)*V(:,k); end do
+        nv = norm2(tc); if (nv > 1.0e-8_dp) then; m = m + 1; V(:,m) = tc/nv; end if
+      end do
+      deallocate(hleft)
+    else
+      call random_seed(size=ssz); allocate(seed(ssz)); seed = 987654321; call random_seed(put=seed)
+      do i = 1, min(4, mmax)                 ! a few random trial vectors
+        call random_number(tc); tc = 2.0_dp*tc - 1.0_dp
+        do k = 1, m; tc = tc - dot_product(V(:,k), tc)*V(:,k); end do
+        nv = norm2(tc); if (nv > 1.0e-8_dp) then; m = m + 1; V(:,m) = tc/nv; end if
+      end do
+      deallocate(seed)
+    end if
 
     theta = 0.0_dp; mw = 0
     do k = 1, mmax

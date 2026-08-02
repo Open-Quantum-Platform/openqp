@@ -14,20 +14,20 @@
 # re-solved at both displaced points, so CI relaxation is exact.
 #
 # Same CASSCF solution as the default two-phase converger and as `ah`
-# (-76.0370420631, all three agreeing to 1e-13), reached in 13 macroiterations
-# instead of 23 / 19 and at 303 CI evaluations instead of 1963 for `ah` on the
-# same default FD Hessian: 6.5x fewer, 6.5x faster wall clock here.
+# (-76.0370420631, all three agreeing to 1e-13), reached in ~14 macroiterations
+# instead of 23 / 19 and at ~190 CI evaluations instead of 1963 for `ah` on the
+# same default FD Hessian: an order of magnitude fewer, and as much faster.
 #
 # Honest caveat.  `[casscf] hessian=analytic` switches this converger to an
 # ASSEMBLED Hessian with free matrix-vector products, and at the sizes reachable
-# in an example that is still the faster arm (24 CI evaluations, 0.07 s here;
-# H2O/cc-pVTZ CAS(6,6) 9.2 s vs 25.6 s matrix-free).  Each matrix-free product
-# costs two full energy/gradient evaluations, and each of those contains an
-# O(nbf^5) AO->MO transform, so ~18 CG products per macroiteration outweigh one
-# Hessian build until n_par grows well past this.  What the matrix-free path
-# buys is the scaling and the memory: its cost per macroiteration does not
-# depend on n_par at all, it never stores an n_par^2 matrix, and it never meets
-# the analytic builder's dense-spectrum guard.
+# in an example that is still the faster arm (H2O/cc-pVTZ CAS(6,6) 6.6 s vs
+# 13.0 s matrix-free).  Each matrix-free product costs two full
+# energy/gradient evaluations, and each of those contains an O(nbf^5) AO->MO
+# transform, so even at the 4-5 CG products per macroiteration this converger
+# now needs it outweighs one Hessian build until n_par grows well past this.
+# What the matrix-free path buys is the scaling and the memory: its cost per
+# macroiteration does not depend on n_par at all, it never stores an n_par^2
+# matrix, and it never meets the analytic builder's dense-spectrum guard.
 [input]
 system=
    O   0.000000000   0.000000000   0.117300000
