@@ -45,6 +45,33 @@ these rows still runs on the documented defaults)
   against independent single points.
 * ``grad_gap_warn`` (float, default 1.0e-5 Hartree): root-swap warning floor,
   see below.
+* ``grad_ranks_per_group`` (int, default 0 = automatic): under MPI, how many
+  ranks cooperate on ONE displaced energy.  See "MPI" below.  0 gives every
+  displacement its own rank (``ngroup = min(world_size, 2*ncoord)``), which
+  is the right choice whenever there are at least as many displacements as
+  ranks; raise it when the world is much larger than ``2*ncoord`` or when one
+  energy does not fit in one rank's memory.  Ignored without mpi4py, on one
+  rank, and when the molecule was built with ``usempi=False``.
+
+MPI
+---
+The displaced energies are independent, but they are NOT independent *ranks*
+of work: OpenQP already parallelises the inside of a single energy evaluation
+(the native layer receives a communicator through ``MPIManager.set_mpi_comm``
+and decomposes the SCF, the integrals and the DFT grid collectively over it).
+Handing rank r a different geometry therefore leaves every rank waiting in a
+collective the others never enter; an earlier attempt at exactly that
+returned a silently ZERO gradient on 4 ranks.
+
+So the fan-out is one level up: ``MPIManager.task_groups`` splits COMM_WORLD
+into per-displacement groups and installs the sub-communicator as the
+manager's communicator (and as ``infos%mpiinfo%comm`` inside liboqp) for the
+duration of the loop.  A group runs whole displacements by itself and MPI
+inside one evaluation still works, over the group.  Reassembly zeroes the
+non-root ranks of each group before the world reduction, because every rank
+of a group holds the same energies and a plain sum would count each of them
+``ranks_per_group`` times.  The log is written by world rank 0 only, so under
+a split it reports the displacements of group 0 and not the others.
 
 Root tracking (honest limitation)
 ---------------------------------
@@ -65,6 +92,7 @@ recommended way to approach degeneracies with these gradients.
 import numpy as np
 
 from oqp.utils.file_utils import dump_log
+from oqp.utils.mpi_utils import MPIManager
 
 # Method labels dispatched to numerical PT2 gradients (normalized, lower-case;
 # mirrors the PT2 branch of SinglePoint.energy in single_point.py).
@@ -116,6 +144,7 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
     if guess_mode not in ('cold', 'warm'):
         raise ValueError(f"[pt2] grad_guess must be 'cold' or 'warm', got '{guess_mode}'")
     gap_warn = float(_pt2_option(mol, 'grad_gap_warn', DEFAULT_GAP_WARN))
+    ranks_per_group = int(_pt2_option(mol, 'grad_ranks_per_group', 0))
 
     if sp is None:
         sp = SinglePoint(mol)
@@ -143,25 +172,22 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
                 '[pt2] target_roots / nroot.'
             )
 
-    dump_log(mol, title=(
-        'PyOQP: PT2 numerical gradient (central differences, '
-        'step=%.3e Bohr, %d displaced energies, %s restarts)'
-        % (step, 2 * ncoord, guess_mode)))
+    # The 2*ncoord displaced energies are independent, but they cannot be
+    # dealt out to individual ranks of COMM_WORLD: OpenQP runs MPI *inside* a
+    # single energy evaluation, so a rank given its own geometry sits in a
+    # collective the rest of the world never enters (an earlier attempt at
+    # that returned a silently ZERO gradient on 4 ranks).  MPIManager.
+    # task_groups splits COMM_WORLD into per-displacement groups and installs
+    # the sub-communicator both here and in liboqp, so the SCF decomposes
+    # WITHIN a group.  See the MPI section of the module docstring.
+    tasks = [(i, sign) for i in range(ncoord) for sign in (1.0, -1.0)]
+
+    mpi = MPIManager()
+    fanout = bool(getattr(mol, 'usempi', True)) and bool(mpi.use_mpi)
 
     e_plus = np.zeros((ncoord, nstate))
     e_minus = np.zeros((ncoord, nstate))
     swap_flags = []  # (coord index, sign, min adjacent gap, max state shift)
-
-    # NOTE on parallelism: the 2*ncoord displaced energies are independent and
-    # look like an obvious MPI fan-out, but they are NOT safe to split across
-    # COMM_WORLD ranks here.  OpenQP already uses MPI *inside* a single energy
-    # evaluation (the native layer receives COMM_WORLD via set_mpi_comm and
-    # decomposes the SCF collectively), so giving each rank a different
-    # geometry breaks that collective contract -- measured on 4 ranks, it
-    # silently returns a zero gradient.  Distributing displacements requires
-    # splitting COMM_WORLD into per-displacement sub-communicators and handing
-    # each group its own communicator, which is a separate change.
-    tasks = [(i, sign) for i in range(ncoord) for sign in (1.0, -1.0)]
 
     guess_type_saved = mol.config['guess']['type']
     try:
@@ -171,27 +197,55 @@ def pt2_numerical_gradient(mol, grad_list, sp=None):
             # start (see oqp.library.guess); no file is read.
             mol.config['guess']['type'] = 'json'
 
-        for i, sign in tasks:
-            store = e_plus if sign > 0 else e_minus
-            x = x0.copy()
-            x[i] += sign * step
-            mol.update_system(x)
-            energies = sp.energy(do_init_scf=False)
-            if len(energies) != nstate:
-                raise RuntimeError(
-                    'PT2 numerical gradient: displaced geometry '
-                    f'(coord {i}, {"+" if sign > 0 else "-"}{step:.1e} Bohr) '
-                    f'returned {len(energies)} PT2 states, expected {nstate}. '
-                    'The reference/active space changed across the '
-                    'displacement; the FD gradient is not well defined here.'
-                )
-            arr = np.asarray([float(e) for e in energies], dtype=float)
-            store[i, :] = arr
-            if nstate > 1:
-                min_gap = float(np.min(np.diff(arr)))
-                max_shift = float(np.max(np.abs(arr - central)))
-                if min_gap < max(gap_warn, 2.0 * max_shift):
-                    swap_flags.append((i, sign, min_gap, max_shift))
+        with mpi.task_groups(len(tasks), ranks_per_group=ranks_per_group,
+                             enabled=fanout,
+                             on_switch=lambda: mpi.set_mpi_comm(mol.data)) as groups:
+            dump_log(mol, title=(
+                'PyOQP: PT2 numerical gradient (central differences, '
+                'step=%.3e Bohr, %d displaced energies, %s restarts, '
+                '%d MPI rank group(s))'
+                % (step, 2 * ncoord, guess_mode, groups.ngroup)))
+
+            for task in groups.indices:
+                i, sign = tasks[task]
+                store = e_plus if sign > 0 else e_minus
+                x = x0.copy()
+                x[i] += sign * step
+                mol.update_system(x)
+                energies = sp.energy(do_init_scf=False)
+                if len(energies) != nstate:
+                    raise RuntimeError(
+                        'PT2 numerical gradient: displaced geometry '
+                        f'(coord {i}, {"+" if sign > 0 else "-"}{step:.1e} Bohr) '
+                        f'returned {len(energies)} PT2 states, expected {nstate}. '
+                        'The reference/active space changed across the '
+                        'displacement; the FD gradient is not well defined here.'
+                    )
+                arr = np.asarray([float(e) for e in energies], dtype=float)
+                store[i, :] = arr
+                if nstate > 1:
+                    min_gap = float(np.min(np.diff(arr)))
+                    max_shift = float(np.max(np.abs(arr - central)))
+                    if min_gap < max(gap_warn, 2.0 * max_shift):
+                        swap_flags.append((i, sign, min_gap, max_shift))
+
+        # Record what the split actually did.  Tests and callers need to be
+        # able to assert that the work really was spread (a run that quietly
+        # evaluated every displacement on every rank produces the right
+        # numbers and no speed-up at all).
+        mol.pt2_numgrad_layout = {
+            'ntask': len(tasks),
+            'ngroup': groups.ngroup,
+            'group': groups.group,
+            'ntask_local': len(list(groups.indices)),
+            'is_group_root': groups.is_group_root,
+        }
+
+        # Outside the split: COMM_WORLD is back, and reduce_sum drops the
+        # duplicate copies the non-root ranks of each group are holding.
+        e_plus = groups.reduce_sum(e_plus)
+        e_minus = groups.reduce_sum(e_minus)
+        swap_flags = groups.gather_list(swap_flags)
     finally:
         # Restore the user guess and the central geometry, and re-converge the
         # pipeline at the expansion point so mol leaves this function holding

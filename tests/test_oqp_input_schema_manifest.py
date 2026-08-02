@@ -127,7 +127,7 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 315,
+        "generic": 316,
         "route_driver": 108,
         "legacy_only": 20,
         "intentional_forbidden": 1,
@@ -186,7 +186,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 315
+    assert len(checked) == 316
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

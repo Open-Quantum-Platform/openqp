@@ -2744,6 +2744,23 @@ def _check_casci(config: dict[str, Any], report: CheckReport) -> None:
             )
         _check_float_literal(_get(config, "pt2", "grad_gap_warn", 1.0e-5),
                              "pt2.grad_gap_warn", report)
+        rpg = _get(config, "pt2", "grad_ranks_per_group", 0)
+        try:
+            rpg_val = int(str(rpg).strip() or 0)
+        except (TypeError, ValueError):
+            rpg_val = -1
+        if rpg_val < 0:
+            report.add(
+                "ERROR",
+                "pt2.grad_ranks_per_group",
+                "The MPI rank-group size for displaced energies must be a "
+                "non-negative integer.",
+                value=rpg,
+                expected=">= 0 (0 = one rank group per displacement)",
+                action="Leave [pt2] grad_ranks_per_group at 0 for automatic "
+                       "fan-out, or set the number of ranks that should "
+                       "cooperate on one displaced energy.",
+            )
     elif runtype != "energy":
         report.add(
             "ERROR",

@@ -513,6 +513,7 @@ OQP_CONFIG_SCHEMA = {
         'grad_step': {'type': float, 'default': '1.0e-3'},
         'grad_guess': {'type': string, 'default': 'cold'},
         'grad_gap_warn': {'type': float, 'default': '1.0e-5'},
+        'grad_ranks_per_group': {'type': int, 'default': '0'},
         'denominator_cutoff': {'type': float, 'default': '1.0e-10'},
         'intruder_threshold': {'type': float, 'default': '1.0e-6'},
         'nroot': {'type': int, 'default': '0'},
