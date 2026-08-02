@@ -127,7 +127,7 @@ Phaseless AFQMC is built in — it needs no extra checkout and no separate
 executable. Select it with `[input] method = afqmc`; the trial wavefunction can
 be the SCF determinant, an imported SF/MRSF-CIS expansion, or an MRSF-TDDFT root
 that OpenQP computes in the same job. See
-[`examples/AFQMC`](examples/AFQMC/README.md).
+[`examples/AFQMC`](examples/AFQMC/README.md) and [`docs/afqmc.md`](docs/afqmc.md).
 
 ```bash
 openqp examples/AFQMC/CH2_MRSF_STO3G_AFQMC.inp

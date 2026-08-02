@@ -60,3 +60,6 @@ check that the requested root is in the spin sector you wanted.
 `oo_orbitals`/`oo_file` import an OO-DFT, ROKS, MOM or SGM orbital rotation;
 `nlow`/`low_file` deflate lower roots and monitor excited-state collapse. Both
 are documented in the AFQMC repository's `MRSFCIS_FORMAT.md`.
+
+Full keyword reference, Hamiltonian construction, threading guidance and
+limitations: [`docs/afqmc.md`](../../docs/afqmc.md).
