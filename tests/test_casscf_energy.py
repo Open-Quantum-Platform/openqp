@@ -173,9 +173,17 @@ _CASES = {
                                    "nstate": "2", "target_roots": "0,1",
                                    "equal_weights": "true"}),
     # option branches the examples do not reach
-    "powell": _case("\nLi 0 0 0\nH 0 0 1.6", _CAS22,
+    # `powell` is a scaled-gradient fallback: it reaches the right CASSCF
+    # solution but needs hundreds of macroiterations to do it.  Budgeted and
+    # toleranced so it genuinely CONVERGES (759 iterations, |g_orb| 9.1e-06,
+    # about a second on this system) rather than being cut off -- an
+    # unconverged CASSCF is now an error, and comparing two runs that both
+    # stopped early tested less anyway.  It lands on -7.88104526, the same
+    # solution as examples/WF_methods/LiH_CASSCF.
+    "powell": _case("\nLi 0 0 0\nH 0 0 1.6", _CAS22, budget=800,
                     casscf={"optimizer": "powell",
-                            "max_macro_iterations": "60"}),
+                            "max_macro_iterations": "800",
+                            "gradient_norm_tol": "1.0e-5"}),
     "no_canonicalize": _case(_H2O, _CAS44, casscf={"canonicalize": "false"}),
     "excited_root": _case("\nLi 0 0 0\nH 0 0 1.6", _CAS22, nroot="2",
                           casscf={"root": "1"}),
@@ -261,9 +269,6 @@ def test_native_run_reproduces_the_python_optimizer(tmp_path, monkeypatch, name)
     monkeypatch.setattr(casscf, "_casscf_energy_backend", lambda: None)
     e_python, it_python, conv_python, _ = _run(tmp_path, f"{name}_python", case)
 
-    # `powell` is a scaled-gradient fallback and does not reach the gradient
-    # tolerance in the iteration budget on either arm; what is compared is
-    # still the energy the two arms arrive at.
     assert conv_native == conv_python
     assert e_native.shape == e_python.shape
     assert np.max(np.abs(e_native - e_python)) < _AGREEMENT_TOL, (
