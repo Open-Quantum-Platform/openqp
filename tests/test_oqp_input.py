@@ -1643,7 +1643,9 @@ def _atom_table(text):
 
 
 def test_every_wf_methods_example_has_a_committed_oqp_twin():
-    assert len(WF_EXAMPLES) == 15
+    # 16 since H2O_CASSCF_CAS44_TRAH.inp added the matrix-free trust-region
+    # converger ([casscf] converger=trah).
+    assert len(WF_EXAMPLES) == 16
     missing = [
         name for name in WF_EXAMPLES
         if not (WF_EXAMPLE_DIR / name).with_suffix(".oqp").is_file()
