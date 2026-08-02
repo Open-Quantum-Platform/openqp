@@ -155,7 +155,7 @@ PCM_BACKEND_MODELS = {
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
-MECP_SEARCH = {"auglag", "penalty", "ubp", "quad"}
+MECP_SEARCH = {"auglag", "penalty", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2584,7 +2584,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECP search algorithm.",
                 value=mecp_search,
                 expected=", ".join(sorted(MECP_SEARCH)),
-                action="Use auglag (recommended), penalty, ubp, or quad.",
+                action="Use auglag (recommended), penalty, or quad.",
             )
         elif mecp_search == "quad":
             report.add(

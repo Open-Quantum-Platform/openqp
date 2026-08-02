@@ -554,12 +554,12 @@ automatically.
 
 - mecp-search // choose the algorithm for spin-crossing (MECP) optimization
 
-      auglag     (default) least-squares multiplier plus gradient projection.
+      auglag     (default) least-squares multiplier plus gradient projection;
+                 with gap_sigma=1 the converged form is the plain Bearpark
+                 gradient projection.
                  The gap term and the projected mean gradient are orthogonal,
                  so both must vanish separately and the stationary point is a
                  true crossing
-      ubp        the same objective; with gap_sigma=1 it is the plain
-                 Bearpark gradient projection
       penalty    Levine-Martinez smooth penalty
       quad       legacy fixed-weight quadratic penalty.  Its stationary point
                  balances the mean gradient against the gap term, leaving a

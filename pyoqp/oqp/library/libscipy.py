@@ -540,6 +540,7 @@ class MECIOpt(Optimizer):
         x = gap_g / alpha
 
         # compute y, cgv
+        seeded = True
         if len(self.y) > 0:
             t1 = np.sum(self.x * x) * self.y - np.sum(self.y * x) * self.x
             t2 = np.sum(self.y * x) ** 2 + np.sum(self.x * x) ** 2
@@ -553,13 +554,19 @@ class MECIOpt(Optimizer):
             else:
                 # The mean gradient is parallel to the gap direction, so it
                 # cannot seed a second branching vector.  Drop the coupling
-                # direction for this step rather than dividing by zero; the
-                # next geometry reseeds it.
+                # direction for this step rather than dividing by zero, and
+                # leave the record empty so the next geometry reseeds it: a
+                # stored zero vector would satisfy the len() test below and
+                # never recover.
                 y = np.zeros_like(x)
+                self.x = x
+                self.y = np.zeros(0)
+                seeded = False
 
         # record x and y
-        self.x = x
-        self.y = y
+        if seeded:
+            self.x = x
+            self.y = y
 
         # check orthonormal
         self.metrics['norm'] = np.sum(y * y)
@@ -749,8 +756,6 @@ class MECPOpt(Optimizer):
              direction, leaving a gap term and a projected mean gradient that
              are orthogonal, so a vanishing total gradient forces both to
              vanish separately and the stationary point is the true crossing.
-    ubp      the same objective; at pen_sigma = 1 the multiplier form is the
-             Bearpark gradient projection.
     penalty  Levine-Martinez smooth penalty, matching the MECI path.
     quad     legacy fixed-weight quadratic penalty.  Its stationary condition
              balances the mean gradient against the gap term, and because the
@@ -784,9 +789,6 @@ class MECPOpt(Optimizer):
         # choose mecp search method
         func_dict = {
             'auglag': self.auglag,
-            # the multiplier form reduces to the Bearpark gradient projection
-            # at pen_sigma = 1, so ubp names the same objective here
-            'ubp': self.auglag,
             'penalty': self.penalty,
             'quad': self.quad,
         }

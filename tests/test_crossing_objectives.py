@@ -240,7 +240,7 @@ class MECPObjectiveTest(unittest.TestCase):
         checker = input_checker
         self.assertIn("auglag", checker.MECP_SEARCH)
         self.assertIn("quad", checker.MECP_SEARCH)
-        self.assertIn("ubp", checker.MECP_SEARCH)
+        self.assertNotIn("ubp", checker.MECP_SEARCH)
         self.assertNotIn("baeka", checker.MECP_SEARCH)
         self.assertNotIn("nonsense", checker.MECP_SEARCH)
         self.assertIn("auglag", checker.MECI_SEARCH)

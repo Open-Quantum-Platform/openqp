@@ -2364,6 +2364,8 @@ def lower_to_legacy(
         if name == "mecp":
             put("optimize", "imult", states[0].multiplicity)
             put("optimize", "jmult", states[1].multiplicity)
+            # emit mecp_search rather than the public algorithm spelling
+            driver_options = _normalized_mecp_options(spec.driver)
         if name == "meci":
             driver_options = _normalized_meci_options(spec.driver)
             algorithm = str(driver_options.get(
