@@ -1,17 +1,16 @@
-!> UMRSF-TDDFT analytic nuclear gradient — clean-room implementation (branch uhf-grad-plan).
+!> UMRSF-TDDFT analytic nuclear gradient.
 !>
-!> VALIDATED SCOPE (2026-06-28, post-MILESTONE-A): PURE-HF response gradient (no XC). S1 gate PASS
-!> (≤1e-5, RULES §11) EVERYWHERE — CH2(eq) 1.4e-7, SiH2 2.5e-8, H2CO 5.6e-7, C2H4-MEP(diradical) 4.6e-7,
-!> stretched-CH2 5.7e-8. S3 also passes (CH2 1.5e-7). MILESTONE A (RULES §17) DONE: the energy's
-!> get_jacobi (tdhf_mrsf_lib.F90) was unified onto the SAME cyclic+converged algorithm as umrsf_jacobi_smooth
-!> (max|btt|<1e-12), so energy and analytic share ONE basin by construction (|δ vs td|→1e-15, smooth polish
-!> a no-op). This CLOSED the distorted/diradical geometries that were gauge-limited (C2H4 1.19e-5→4.6e-7,
-!> stretched-CH2 1.89e-4→5.7e-8) with NO regression (GAMESS-cross-checked; SCF ref unchanged). S2 remains
-!> 1.3e-2 — NOT a gauge issue (analytic internally EXACT ≤1e-11): a confirmed STATE-TRACKING root-flip
-!> (FD energy-rank vs analytic amplitude; sign-flip on the symmetry-breaking component) ⇒ §9-EXCLUDED,
-!> pending the §11 character-following FD harness (independent of A/B). KNOWN-OPEN: DFT/XC response
-!> terms are wired but still show a small H2O/BHHLYP finite-difference residual; treat the HF limit as
-!> validated and DFT gradients as experimental until that residual is closed.
+!> IMPLEMENTED SCOPE: HF and full-range LDA/GGA functionals, including conventional global hybrids.
+!> Current reproducible DFT regressions use C1-distorted H2CO/6-31G*, a UHF-triplet reference, singlet
+!> target root 1, a 96x302 unpruned grid with AO pruning disabled, and dx=1e-3 Bohr: maximum Cartesian-
+!> component errors are 1.39e-5 Ha/Bohr (BHHLYP) and 2.52e-5 Ha/Bohr (BLYP). These representative cases
+!> do not establish support for every LibXC functional in those classes.
+!> The SOMO-corrected P_eff=sym(d omega_orb/d F_tilde) closed the former S2 structural error;
+!> character-followed S1/S2/S3 checks pass. Higher-root energy-index finite differences require
+!> overlap/character following near crossings, so the supplied DFT regressions check separated root 1.
+!> LIMITATIONS: CAM/LRC, meta-GGA, double-hybrid, and nondefault or functional-specific SPC
+!> parameterizations are rejected before gradient assembly. XC atom-partition moving-grid weight
+!> derivatives are not included, leaving a grid-dependent analytic-versus-FD floor.
 !>
 !> The z-vector entry computes and caches the UMRSF response contribution:
 !> full-block Z-vector (oo+ov+vv) + full G^f (re-align, carries the dV/dC alignment Jacobian) +
@@ -61,7 +60,10 @@ module tdhf_umrsf_gradient_mod
   !> Emits, per shell-quartet, the certified (B_k,D_k) channel 2-PDM (G1) with the
   !> grd2 factor convention (verified to reduce to grd2_uhf in the degenerate case):
   !>   Coulomb (k=1..8): + 4*sc*s_k*(B_k(ij)D_k(kl)+D_k(ij)B_k(kl))
-  !>   exchange (all k): - 2*sx*s_k*(B_k(ik)D_k(jl)+B_k(il)D_k(jk)+D_k(ik)B_k(jl)+D_k(il)B_k(jk))
+  !>   exchange (k=1:8,11):
+  !>     - 2*sx*s_k*(B_k(ik)D_k(jl)+B_k(il)D_k(jk)+D_k(ik)B_k(jl)+D_k(il)B_k(jk))
+  !>   mixed exchange (k=9:10): the same contraction with D_k transposed, matching
+  !>     the GAMESS-compatible K[D_k^T] permutation in int2_umrsf_data_t_update.
   !> s_k = mrst sign (k<=10 negated for mrst=3) * spin-pair-coupling scale. NEVER reuse grd2_uhf
   !> (that gives D(x)D — the wrong 2-PDM). See DERIVATIONS/G1_response_2pdm.md.
   type, extends(grd2_compute_data_t) :: grd2_umrsf_resp_t
@@ -73,6 +75,7 @@ module tdhf_umrsf_gradient_mod
     real(kind=dp), allocatable :: dden_s(:,:,:) ! (nchan,nbf,nbf) sym(D_k)      (Coulomb only)
     real(kind=dp), allocatable :: sgn(:)        ! (nchan) s_k
     logical,       allocatable :: has_coul(:)   ! (nchan) channel carries Coulomb
+    logical,       allocatable :: transpose_exchange(:) ! (nchan) K[D^T] for mixed channels 9:10
     integer :: n_coul = 0, n_exch = 0
     integer, allocatable :: coul_ch(:), exch_ch(:)
     real(kind=dp), allocatable :: coul_coef(:), exch_coef(:)
@@ -85,7 +88,8 @@ module tdhf_umrsf_gradient_mod
   end type
 
   !> ------- ov-block Z-vector context (for the reusable pcg_optimize / minres_optimize) -------
-  !> The matrix-free SPD solve of the ov–ov orbital Hessian A_{V,V} reuses OQP's stock solvers
+  !> The matrix-free solve of the symmetric, potentially indefinite ov–ov orbital Hessian A_{V,V}
+  !> reuses OQP's stock solvers
   !> (source/pcg.F90 / source/minres.F90), whose matvec/precond callbacks take a single c_ptr `dat`
   !> context. This type carries everything umrsf_zov_matvec/umrsf_zov_precond need to apply A_{V,V}
   !> (= one umrsf_genfock_z over the ov DOFs) and the Jacobi preconditioner (ε_a−ε_i)⁻¹. The work
@@ -112,6 +116,25 @@ module tdhf_umrsf_gradient_mod
   end type
 
 contains
+
+  function umrsf_z_requested_tolerance(infos) result(rtol)
+    implicit none
+    type(information), intent(in) :: infos
+    real(kind=dp) :: rtol
+    character(len=24) :: env_value
+    integer :: ios
+
+    rtol = infos%tddft%zvconv
+    if (rtol <= 0.0_dp) rtol = 1.0e-6_dp
+    call get_environment_variable("UMRSF_ZTOL", env_value, status=ios)
+    if (ios == 0) then
+      read(env_value, *, iostat=ios) rtol
+      if (ios /= 0 .or. rtol <= 0.0_dp) then
+        rtol = infos%tddft%zvconv
+        if (rtol <= 0.0_dp) rtol = 1.0e-6_dp
+      end if
+    end if
+  end function umrsf_z_requested_tolerance
 
   subroutine umrsf_clock_start(w0, c0)
     implicit none
@@ -252,6 +275,7 @@ contains
     use dft, only: dft_initialize, dftclean
     use mod_dft_gridint_tdxc_grad, only: utddft_xc_gradient
     use iso_c_binding, only: c_int, c_f_pointer
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
 
     implicit none
 
@@ -334,6 +358,25 @@ contains
     spc_coco = infos%tddft%spc_coco ; if (spc_coco == -1.0_dp) spc_coco = hfs
     spc_ovov = infos%tddft%spc_ovov ; if (spc_ovov == -1.0_dp) spc_ovov = hfs
     spc_coov = infos%tddft%spc_coov ; if (spc_coov == -1.0_dp) spc_coov = hfs
+
+    ! Resolve scientific scope from the native functional metadata, not only from Python input names.
+    ! This protects direct C/Fortran callers and catches LibXC aliases (plus functional-owned SPC values
+    ! such as STG1X) after the energy path has initialized the actual response parameters.
+    if (infos%control%hamilton == 20) then
+      if (infos%dft%cam_flag) then
+        call show_message('UMRSF analytic gradients do not support range-separated CAM/LRC response.', WITH_ABORT)
+      end if
+      if (infos%functional%needTau) then
+        call show_message('UMRSF analytic gradients do not support meta-GGA response.', WITH_ABORT)
+      end if
+      if (infos%dft%dh_flag) then
+        call show_message('UMRSF analytic gradients do not support double-hybrid response.', WITH_ABORT)
+      end if
+    end if
+    if (max(abs(spc_coco-hfs), abs(spc_ovov-hfs), abs(spc_coov-hfs)) > 1.0e-12_dp) then
+      call show_message('UMRSF analytic gradients require spin-pair scales equal to the response HF scale.', &
+                        WITH_ABORT)
+    end if
 
     call tagarray_get_data(infos%dat, OQP_SM, smat, status)
     if (status /= 0) return               ! data not present (e.g. fresh call): silently skip gate
@@ -829,8 +872,11 @@ contains
       real(kind=dp), allocatable :: gta(:,:), gtb(:,:), g2e(:,:), g2ea(:,:), g2eb(:,:)
       real(kind=dp), allocatable :: gfa(:,:), gfb(:,:), gza(:,:), gzb(:,:), wao(:,:), wpack(:)
       real(kind=dp) :: zrms, statio, tolw, wsa, wsb, tcpu, tcpu_response
-      integer :: ij, ii, si, sj, twall, twall_response
+      real(kind=dp) :: z_bnorm2, z_rnorm2, z_full_rel, z_rtol, z_bra, z_brb, z_ra, z_rb
+      integer :: ij, ii, si, sj, pp, qq, twall, twall_response
+      logical :: used_iterative_z, keep_a, keep_b
       tolw = tol_int*log(10.0_dp)
+      used_iterative_z = .false.
       allocate(famoa(nbf,nbf), famob(nbf,nbf), ya(nbf,nbf), yb(nbf,nbf), tmp(nbf,nbf), &
                gta(nbf,nbf), gtb(nbf,nbf), g2e(nbf,nbf), g2ea(nbf,nbf), g2eb(nbf,nbf), &
                gfa(nbf,nbf), gfb(nbf,nbf), tbar_shared(nbf,nbf), &
@@ -910,6 +956,9 @@ contains
       call umrsf_timing_log(iw, 'aligned-to-canonical generalized Fock', twall, tcpu)
 
       ! ---- FULL-BLOCK Z-vector: M z = -R, R = antisym(G^f) over all p>q (l_zov: ov-only ablation) ----
+      ! With G_pq=d f/d eta_pq for C_q += eta_pq C_p and the orthogonal-angle convention used here,
+      ! g_theta=-R and M=-H^T, where H is the forward canonicality Jacobian. Thus this is exactly the
+      ! Lagrangian adjoint equation H^T z=-g_theta; M is already adjoint-oriented and is not transposed.
       ! The unknown is one coupled super-vector, but its entries are independent alpha and beta
       ! MO-rotation amplitudes. The Fock/XC response couples the two spin blocks, so solving them
       ! as two uncoupled equations would miss cross-spin response.
@@ -920,6 +969,7 @@ contains
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
       if (l_zcmp) then
+        used_iterative_z = .true.
         block
           real(kind=dp), allocatable :: pzad(:,:), pzbd(:,:), zmad(:,:), zmbd(:,:)
           real(kind=dp) :: zrd, std, dza, dzb
@@ -937,6 +987,7 @@ contains
         call umrsf_zvector_fullblock(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                      hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio)
       else
+        used_iterative_z = .true.
         call umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                 hfscale_ref, l_zov, pza, pzb, zmata, zmatb, zrms, statio, skip_check=.true.)
       end if
@@ -947,6 +998,37 @@ contains
       call flush(iw)
       call umrsf_clock_start(twall, tcpu)
       call umrsf_genfock_z(infos, basis, cac, cbc, epsca, epscb, zmata, zmatb, hfscale_ref, gza, gzb)
+      ! Authoritative convergence gate for M z = -R. It reuses the G^z needed by W, combines alpha
+      ! and beta in one norm, and includes every kept oo/ov/vv row. Thus a regularized diagonal
+      ! denominator or a failed reduced solve cannot be hidden by the ov-only residual.
+      z_bnorm2 = 0.0_dp ; z_rnorm2 = 0.0_dp
+      do pp = 1, nbf ; do qq = 1, pp-1
+        keep_a = (.not. l_zov) .or. (pp > nocca .and. qq <= nocca)
+        keep_b = (.not. l_zov) .or. (pp > noccb .and. qq <= noccb)
+        if (keep_a) then
+          z_bra = gfa(pp,qq) - gfa(qq,pp)
+          z_ra = z_bra + gza(pp,qq) - gza(qq,pp)
+          z_bnorm2 = z_bnorm2 + z_bra*z_bra
+          z_rnorm2 = z_rnorm2 + z_ra*z_ra
+        end if
+        if (keep_b) then
+          z_brb = gfb(pp,qq) - gfb(qq,pp)
+          z_rb = z_brb + gzb(pp,qq) - gzb(qq,pp)
+          z_bnorm2 = z_bnorm2 + z_brb*z_brb
+          z_rnorm2 = z_rnorm2 + z_rb*z_rb
+        end if
+      end do ; end do
+      if (sqrt(z_bnorm2) > tiny(1.0_dp)) then
+        z_full_rel = sqrt(z_rnorm2/z_bnorm2)
+      else
+        z_full_rel = sqrt(z_rnorm2)
+      end if
+      z_rtol = umrsf_z_requested_tolerance(infos)
+      write(iw,'(2x,a,es12.3,a,es12.3)') 'full coupled Z relative residual = ', z_full_rel, &
+                                         '   requested = ', z_rtol
+      if (used_iterative_z .and. (.not. ieee_is_finite(z_full_rel) .or. z_full_rel > z_rtol)) then
+        call show_message('UMRSF coupled Z-vector did not reach the requested relative residual.', WITH_ABORT)
+      end if
       wao = matmul(cac, matmul(0.25_dp*(gfa+transpose(gfa)), transpose(cac))) &
           + matmul(cbc, matmul(0.25_dp*(gfb+transpose(gfb)), transpose(cbc))) &
           + matmul(cac, matmul(0.25_dp*(gza+transpose(gza)), transpose(cac))) &
@@ -1497,7 +1579,7 @@ contains
 !>                       with G_σ[P]=J[Pα+Pβ]−hfscale_ref·K[Pσ]  (the reference mean field, ONE fock_jk build)
 !>     2e       W_2e,σ = ½ C_σ G^2e_sym,σ C_σ^T , G^2e_sym = ∂ω_2e/∂U via SYMMETRIC variation of the CLEAN
 !>                       explicit-bra ω_2e (umrsf_omega2e_explicit — valid under non-orthonormal variation;
-!>                       no get_jacobi ⇒ smooth). [TODO task5: replace with the analytic channel-adjoint.]
+!>                       no get_jacobi ⇒ smooth), evaluated by the analytic channel-adjoint below.
 !>   P_eff = P^Δ,u + ½ P_z (AO). M1 (two-reference get_jacobi response) is added separately. The frozen
 !>   z-coupling and the refrelax z density are folded via P_eff (½ P_z) — see c04 derivation.
 !>   Gradient piece = −Tr(W S^x) via grd1 grad_ee_overlap (eijden: negate + half-diagonal pack).
@@ -1838,7 +1920,7 @@ contains
     call idrv%run(ud)
     fmrst2 => ud%f3(:,:,:,:,1)
     if (mrst == 3) fmrst2(:,1:10,:,:) = -fmrst2(:,1:10,:,:)
-    ! (SPC scaling spc==hfs==1 in the HF limit; add for Stage-2 hybrids — see fmrst2 handling above.)
+    ! Gradient scope requires spc==hfs; the native entry rejects nondefault or functional-owned scales.
     call umrsf_bra_density(infos, vva, vvb, xmat, brad)
     omega2e = 0.0_dp
     do k = 1, 11
@@ -3587,8 +3669,11 @@ contains
 !> rotations p>q (oo + ov + vv, both spins), not just ov. Alpha and beta MOs are enumerated as
 !> independent unknowns in one spin-coupled super-vector. The aligned 11-channel ω is NOT stationary
 !> to oo/vv rotations (canonical-C G^f antisym: α-oo, β-vv ≠ 0), so the standard ov-only Z-vector
-!> leaves the ~1e-3 wall. R = antisym(G^f) over the p>q pairs. M = the spin-coupled orbital Hessian =
-!> the antisym of the z-coupling gen-Fock (umrsf_genfock_z), built DENSE column-by-column and solved
+!> leaves the ~1e-3 wall. R = antisym(G^f) over the p>q pairs. If H is the forward Jacobian of the
+!> canonicality constraints with respect to the orthogonal rotation angles, the one-sided-column sign
+!> convention gives g_theta=-R and the operator built from antisym(G^z) is M=-H^T. Consequently
+!> M z=-R is exactly the Lagrangian adjoint equation H^T z=-g_theta; transposing M again would be wrong.
+!> M is built DENSE column-by-column from the z-coupling gen-Fock (umrsf_genfock_z) and solved
 !> by dgelss (SVD least-squares: M is indefinite over oo/vv, and RANK-DEFICIENT for SOMO-degenerate
 !> systems like linear molecules' π_x/π_y ⇒ min-norm; reduces to the exact dgesv solve when full-rank).
 !> ovonly=.true. restricts the DOFs to ov pairs
@@ -3645,7 +3730,7 @@ contains
       else                  ; rhs(k,1) = -(gfb(dpr(k),dqr(k)) - gfb(dqr(k),dpr(k))) ; end if
     end do
 
-    ! ---- dense Hessian M: column k = antisym of the z-coupling gen-Fock for unit z at DOF k ----
+    ! ---- dense adjoint operator M=-H^T: column k = antisym(G^z[e_k]) ----
     do k = 1, ndof
       za1 = 0.0_dp ; zb1 = 0.0_dp
       if (dsp(k) == 1) then ; za1(dpr(k),dqr(k)) = 1.0_dp ; za1(dqr(k),dpr(k)) = 1.0_dp
@@ -3711,13 +3796,14 @@ contains
 !###############################################################################
 !> MATRIX-FREE iterative full-block Z-vector — the perf replacement for umrsf_zvector_fullblock,
 !> REUSING OQP's stock matrix-free linear solvers (source/pcg.F90, source/minres.F90) instead of a
-!> bespoke GMRES. Solves the IDENTICAL alpha/beta spin-coupled system M z = -R
-!> (M = the spin-coupled orbital Hessian = antisym
+!> bespoke GMRES. Solves the IDENTICAL alpha/beta spin-coupled adjoint system M z = -R
+!> (M=-H^T in the one-sided-column/orthogonal-angle convention, applied as antisym
 !> of the z-coupling gen-Fock umrsf_genfock_z over the p>q DOFs; R = antisym(G^f)) but WITHOUT forming
 !> M densely — the dense path needs ndof (~5112 at nbf=72, ~21462 at thymine) Fock builds, ONE per
 !> column. M z is applied MATRIX-FREE via a single umrsf_genfock_z (one fock_jk + one f_xc grid pass
 !> for DFT).
-!>   STRUCTURE — M is BLOCK LOWER-TRIANGULAR. tmp = C^T G[1/2 P_z] C is symmetric (ya symmetric, same
+!>   STRUCTURE — the adjoint-oriented M=-H^T is BLOCK LOWER-TRIANGULAR. tmp = C^T G[1/2 P_z] C is
+!>   symmetric (ya symmetric, same
 !>   C both sides), so the refrelax (occ-column) part contributes ZERO antisym on the oo/vv readouts
 !>   => the oo/vv DOF rows of M are PURE DIAGONAL eps_p-eps_q (M_{D,D}=diag, M_{D,V}=0, D=oo+vv); the
 !>   ov rows DO couple to D via the density (M_{V,D}!=0) and the ov-ov block A_{V,V} is SYMMETRIC (but
@@ -3735,15 +3821,21 @@ contains
 !> Returns IDENTICAL outputs to umrsf_zvector_fullblock (pza/pzb, zmata/zmatb, zrms, statio =
 !> ||antisym(G^f+G^z(z))|| = the M z = -R residual). For the SOMO-degenerate rank-deficient case
 !> (linear diradicals: eps_p-eps_q -> 0 on a symmetry pair) the dense SVD min-norm path (UMRSF_ZDENSE=1)
-!> is still preferred. Tunables: UMRSF_ZTOL (relative residual, default 1e-6), UMRSF_ZMAXIT (max iters),
-!> UMRSF_ZCG_TRIAL (default 64), UMRSF_ZMINRES (1 => skip CG), UMRSF_ZPCG (1 => force pure PCG).
+!> is still preferred. The relative residual and iteration limit default to infos%tddft%zvconv and
+!> infos%control%maxit_zv; failure to reach the requested residual aborts instead of caching an
+!> unconverged response. UMRSF_ZTOL / UMRSF_ZMAXIT can override them for diagnostics.
+!> Other tunables:
+!> UMRSF_ZCG_TRIAL (default min(64,maxit_zv/2)), UMRSF_ZMINRES (1 => skip CG),
+!> UMRSF_ZPCG (1 => force pure PCG).
   subroutine umrsf_zvector_iter(infos, basis, cac, cbc, epsca, epscb, gfa, gfb, &
                                 hfscale_ref, ovonly, pza, pzb, zmata, zmatb, zrms, statio, skip_check)
     use io_constants, only: iw
+    use iso_c_binding, only: c_loc
     use zvector_common, only: sanitize_zvector_preconditioner
     use pcg_mod, only: pcg_t, PCG_OK, PCG_CONVERGED
     use minres_mod, only: minres_optimize
     use messages, only: show_message, WITH_ABORT
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
     implicit none
     type(information), target, intent(inout) :: infos
     type(basis_set), target, intent(inout) :: basis
@@ -3756,11 +3848,12 @@ contains
     type(umrsf_zov_ctx_t), target :: ctx
     integer, allocatable :: dsp(:), dpr(:), dqr(:)
     logical, allocatable :: isov(:)
-    real(kind=dp), allocatable :: bvec(:), zvec(:), diagm(:), pcinv(:), rhsov(:), rhsov0(:)
+    real(kind=dp), allocatable :: bvec(:), zvec(:), diagm(:), pcinv(:), rhsov(:), rhsov0(:), resov(:), ztrial(:)
     real(kind=dp), allocatable :: za1(:,:), zb1(:,:), gza(:,:), gzb(:,:)
     integer :: nbf, nocca, noccb, ndof, ndofov, ndofa, ndofb, ndofova, ndofovb
-    integer :: k, p, q, sp, nocc, kk, mxit, iters, pcg_limit, pcg_iters, minres_iters
-    logical :: keep, force_minres, force_pcg, pcg_done, pcg_bad, did_fallback, do_check
+    integer :: k, p, q, sp, nocc, kk, mxit, iters, pcg_limit, pcg_iters, minres_iters, remaining, extra_iters
+    logical :: keep, force_minres, force_pcg, pcg_done, pcg_bad, did_fallback, do_check, solver_converged
+    logical :: used_minres
     real(kind=dp) :: rtol, bnorm, errout, relres, rr, pcg_trial_rel
     character(len=24) :: sname
     type(pcg_t) :: pcg
@@ -3822,7 +3915,8 @@ contains
     allocate(ctx%dsp(ndofov), ctx%dpr(ndofov), ctx%dqr(ndofov), source=0)
     allocate(ctx%pcinv(ndofov), source=0.0_dp)
     allocate(ctx%za1(nbf,nbf), ctx%zb1(nbf,nbf), ctx%gza(nbf,nbf), ctx%gzb(nbf,nbf), source=0.0_dp)
-    allocate(rhsov(max(ndofov,1)), rhsov0(max(ndofov,1)), source=0.0_dp)
+    allocate(rhsov(max(ndofov,1)), rhsov0(max(ndofov,1)), resov(max(ndofov,1)), &
+             ztrial(max(ndofov,1)), source=0.0_dp)
     kk = 0
     do k = 1, ndof
       if (isov(k)) then
@@ -3835,11 +3929,13 @@ contains
     ! ---- (2) ov solve  A_{V,V} z_V = b_V - M_{V,D} z_D  via PCG -> MINRES fallback ----
     ! At the practical gradient tolerance, CG is much faster on the tested UMRSF cases.  MINRES remains
     ! the robust fallback for genuinely indefinite or stalled cases.
-    rtol = 1.0e-6_dp ; mxit = min(ndofov, 5000)
+    rtol = umrsf_z_requested_tolerance(infos)
+    mxit = min(ndofov, max(1, int(infos%control%maxit_zv)))
     force_minres = .false. ; force_pcg = .false.
-    pcg_limit = min(mxit, 64)
+    pcg_limit = min(max(1, mxit/2), 64)
     iters = 0 ; relres = 0.0_dp ; bnorm = 0.0_dp ; errout = 0.0_dp
-    pcg_trial_rel = 0.0_dp ; did_fallback = .false.
+    pcg_iters = 0 ; minres_iters = 0 ; remaining = 0 ; extra_iters = 0
+    pcg_trial_rel = 0.0_dp ; did_fallback = .false. ; used_minres = .false.
     if (ndofov > 0) then
       ! correction M_{V,D} z_D = ov-antisym readout of umrsf_genfock_z applied to the oo/vv solution
       za1 = 0.0_dp ; zb1 = 0.0_dp
@@ -3860,9 +3956,7 @@ contains
       end do
 
       block
-        character(len=24) :: e ; integer :: ios ; real(kind=dp) :: rv ; integer :: iv
-        call get_environment_variable("UMRSF_ZTOL", e, status=ios)
-        if (ios==0) then ; read(e,*,iostat=ios) rv ; if (ios==0 .and. rv>0.0_dp) rtol = rv ; end if
+        character(len=24) :: e ; integer :: ios, iv
         call get_environment_variable("UMRSF_ZMAXIT", e, status=ios)
         if (ios==0) then ; read(e,*,iostat=ios) iv ; if (ios==0 .and. iv>0) mxit = iv ; end if
         call get_environment_variable("UMRSF_ZCG_TRIAL", e, status=ios)
@@ -3880,6 +3974,7 @@ contains
         rhsov0 = rhsov
         ! pcg/minres tol is on the residual NORM (absolute); target the relative tolerance rtol.
         if (force_minres) then
+          used_minres = .true.
           call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
                                tol=rtol*bnorm, err=errout, iters=minres_iters)
           iters = minres_iters
@@ -3924,16 +4019,43 @@ contains
             call pcg%clean()
           else
             pcg_trial_rel = pcg%error / bnorm
+            remaining = max(0, mxit-pcg_iters)
+            ztrial(1:ndofov) = pcg%x(1:ndofov)
             call pcg%clean()
-            rhsov = rhsov0
-            call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, mxit, &
-                                 tol=rtol*bnorm, err=errout, iters=minres_iters)
+            if (remaining > 0) then
+              used_minres = .true.
+              rhsov = rhsov0
+              call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
+                                   x0=ztrial, tol=rtol*bnorm, err=errout, iters=minres_iters)
+            else
+              rhsov(1:ndofov) = ztrial(1:ndofov)
+            end if
             iters = pcg_iters + minres_iters
             sname = 'AUTO(CG->MINRES)'
             did_fallback = .true.
           end if
         end if
+        ! MINRES reports a preconditioned Lanczos norm, whereas zvconv is a tolerance on the
+        ! physical equation. Re-apply A and accept only the explicit Euclidean residual.
+        call umrsf_zov_matvec(resov, rhsov, c_loc(ctx))
+        resov(1:ndofov) = resov(1:ndofov) - rhsov0(1:ndofov)
+        errout = sqrt(sum(resov(1:ndofov)**2))
         relres = errout / bnorm
+        ! If MINRES stopped on its preconditioned Lanczos norm before satisfying the physical
+        ! Euclidean criterion, use the unspent aggregate budget from the current candidate.
+        if (used_minres .and. relres > rtol .and. iters < mxit) then
+          remaining = mxit-iters
+          ztrial(1:ndofov) = rhsov(1:ndofov)
+          rhsov = rhsov0
+          call minres_optimize(rhsov, umrsf_zov_matvec, umrsf_zov_precond, ctx, remaining, &
+                               x0=ztrial, tol=0.0_dp, err=errout, iters=extra_iters)
+          iters = iters + extra_iters
+          minres_iters = minres_iters + extra_iters
+          call umrsf_zov_matvec(resov, rhsov, c_loc(ctx))
+          resov(1:ndofov) = resov(1:ndofov) - rhsov0(1:ndofov)
+          errout = sqrt(sum(resov(1:ndofov)**2))
+          relres = errout / bnorm
+        end if
       end if
       ! scatter z_V back into the full z
       kk = 0
@@ -3973,19 +4095,28 @@ contains
     end if
     if (bnorm <= tiny(1.0_dp)) sname = 'ZERO-RHS'
     if (did_fallback) then
-      write(iw,'(2x,a,i0,a,es10.2,a,i0)') 'iterative Z auto fallback: PCG trial matvecs = ', &
-        pcg_iters, ', trial rel-resid = ', pcg_trial_rel, ', MINRES matvecs = ', minres_iters
+      write(iw,'(2x,a,i0,a,es10.2,a,i0)') 'iterative Z auto fallback: PCG trial iterations = ', &
+        pcg_iters, ', trial rel-resid = ', pcg_trial_rel, ', MINRES iterations = ', minres_iters
     end if
     write(iw,'(2x,3a,i0,a,i0,a,i0,a,es10.2)') 'iterative Z (', trim(sname), &
-      '): ndof = ', ndof, ', ov-DOFs = ', ndofov, ', matvecs = ', iters, ', final rel-resid = ', relres
+      '): ndof = ', ndof, ', ov-DOFs = ', ndofov, ', iterations = ', iters, ', final rel-resid = ', relres
     write(iw,'(2x,a,i0,a,i0,a,i0,a,i0)') 'iterative Z spin DOFs: alpha = ', ndofa, ', beta = ', ndofb, &
       ', ov-alpha = ', ndofova, ', ov-beta = ', ndofovb
 
-    deallocate(dsp, dpr, dqr, isov, bvec, zvec, diagm, pcinv, rhsov, rhsov0, za1, zb1, gza, gzb)
+    solver_converged = ieee_is_finite(relres) .and. &
+      ((bnorm <= tiny(1.0_dp) .and. errout <= rtol) .or. &
+       (bnorm > tiny(1.0_dp) .and. relres <= rtol))
+    deallocate(dsp, dpr, dqr, isov, bvec, zvec, diagm, pcinv, rhsov, rhsov0, resov, ztrial, &
+               za1, zb1, gza, gzb)
+    if (.not. solver_converged) then
+      write(iw,'(2x,a,2es12.3)') 'UMRSF iterative Z failed: achieved/requested relative residual = ', &
+        relres, rtol
+      call show_message('UMRSF Z-vector did not reach the requested relative residual.', WITH_ABORT)
+    end if
   end subroutine umrsf_zvector_iter
 
 !###############################################################################
-!> ov-block matvec for the reduced SPD Z-vector solve (pcg_optimize / minres_optimize `update`
+!> ov-block matvec for the reduced symmetric Z-vector solve (pcg_optimize / minres_optimize `update`
 !> callback). y = A_{V,V} x : embed x into the ov entries of a symmetric MO z, apply ONE
 !> umrsf_genfock_z, read the ov antisym back = (eps_a-eps_i) x + 2 (C^T G[C z_V C^T] C)_{ai}. The
 !> umrsf_zov_ctx_t is recovered from the solver's c_ptr `dat`. NB: no intent on the dummies — the
@@ -4012,7 +4143,7 @@ contains
   end subroutine umrsf_zov_matvec
 
 !###############################################################################
-!> Jacobi preconditioner for the ov SPD solve: y = (eps_a - eps_i)^-1 x (floored). pcg/minres
+!> Jacobi preconditioner for the ov solve: y = (eps_a - eps_i)^-1 x (floored). pcg/minres
 !> `precond` callback (no intent on the dummies — must match the abstract interface).
   subroutine umrsf_zov_precond(y, x, dat)
     use iso_c_binding, only: c_ptr, c_f_pointer
@@ -4096,6 +4227,7 @@ contains
     if (allocated(this%dden_s)) deallocate(this%dden_s)
     if (allocated(this%sgn)) deallocate(this%sgn)
     if (allocated(this%has_coul)) deallocate(this%has_coul)
+    if (allocated(this%transpose_exchange)) deallocate(this%transpose_exchange)
     if (allocated(this%coul_ch)) deallocate(this%coul_ch)
     if (allocated(this%exch_ch)) deallocate(this%exch_ch)
     if (allocated(this%coul_coef)) deallocate(this%coul_coef)
@@ -4145,17 +4277,29 @@ contains
             do idx = 1, this%n_exch
               ch = this%exch_ch(idx)
               c = this%exch_coef(idx)
-              ! Exchange (all channels): full 8-fold symmetrization of Γ^X(ijkl)=B(ik)D(jl)
-              ! with RAW densities (K is NOT symmetrization-invariant). Coeff -s*sx.
-              df1 = df1 - c*( &
-                      this%bden(ch,i1,k1)*this%dden(ch,j1,l1) &
-                    + this%bden(ch,j1,k1)*this%dden(ch,i1,l1) &
-                    + this%bden(ch,i1,l1)*this%dden(ch,j1,k1) &
-                    + this%bden(ch,j1,l1)*this%dden(ch,i1,k1) &
-                    + this%bden(ch,k1,i1)*this%dden(ch,l1,j1) &
-                    + this%bden(ch,l1,i1)*this%dden(ch,k1,j1) &
-                    + this%bden(ch,k1,j1)*this%dden(ch,l1,i1) &
-                    + this%bden(ch,l1,j1)*this%dden(ch,k1,i1) )
+              ! Exchange: full 8-fold symmetrization with RAW densities. Channels 1:8,11 use
+              ! K[D]; mixed alpha/beta channels 9:10 use K[D^T], exactly as the energy kernel.
+              if (this%transpose_exchange(ch)) then
+                df1 = df1 - c*( &
+                        this%bden(ch,i1,k1)*this%dden(ch,l1,j1) &
+                      + this%bden(ch,j1,k1)*this%dden(ch,l1,i1) &
+                      + this%bden(ch,i1,l1)*this%dden(ch,k1,j1) &
+                      + this%bden(ch,j1,l1)*this%dden(ch,k1,i1) &
+                      + this%bden(ch,k1,i1)*this%dden(ch,j1,l1) &
+                      + this%bden(ch,l1,i1)*this%dden(ch,j1,k1) &
+                      + this%bden(ch,k1,j1)*this%dden(ch,i1,l1) &
+                      + this%bden(ch,l1,j1)*this%dden(ch,i1,k1) )
+              else
+                df1 = df1 - c*( &
+                        this%bden(ch,i1,k1)*this%dden(ch,j1,l1) &
+                      + this%bden(ch,j1,k1)*this%dden(ch,i1,l1) &
+                      + this%bden(ch,i1,l1)*this%dden(ch,j1,k1) &
+                      + this%bden(ch,j1,l1)*this%dden(ch,i1,k1) &
+                      + this%bden(ch,k1,i1)*this%dden(ch,l1,j1) &
+                      + this%bden(ch,l1,i1)*this%dden(ch,k1,j1) &
+                      + this%bden(ch,k1,j1)*this%dden(ch,l1,i1) &
+                      + this%bden(ch,l1,j1)*this%dden(ch,k1,i1) )
+              end if
             end do
             dabmax = max(dabmax, abs(df1))
             ab(l,k,j,i) = df1*(nrmijk*basis%bfnrm(l1))
@@ -4182,7 +4326,7 @@ contains
     gcomp%sx = scale_exch
     allocate(gcomp%bden(11,nbf,nbf), gcomp%dden(11,nbf,nbf), &
              gcomp%bden_s(11,nbf,nbf), gcomp%dden_s(11,nbf,nbf), &
-             gcomp%sgn(11), gcomp%has_coul(11))
+             gcomp%sgn(11), gcomp%has_coul(11), gcomp%transpose_exchange(11))
     ! RAW densities (exchange + energy); symmetrized copies (Coulomb only — J is symmetrization-
     ! invariant but K is NOT, so exchange MUST use the raw channel densities).
     do ch = 1, 11
@@ -4193,6 +4337,8 @@ contains
     end do
     gcomp%has_coul = (/ .true.,.true.,.true.,.true.,.true.,.true.,.true.,.true., &
                         .false.,.false.,.false. /)
+    gcomp%transpose_exchange = .false.
+    gcomp%transpose_exchange(9:10) = .true.
     ! s_k = mrst sign * spin-pair-coupling scale (matches the energy fmrst2 handling)
     gcomp%sgn = 1.0_dp
     if (mrst == 3) gcomp%sgn(1:10) = -1.0_dp
@@ -4254,13 +4400,14 @@ contains
       one%sx = gcomp%sx
       allocate(one%bden(1,gcomp%nbf,gcomp%nbf), one%dden(1,gcomp%nbf,gcomp%nbf), &
                one%bden_s(1,gcomp%nbf,gcomp%nbf), one%dden_s(1,gcomp%nbf,gcomp%nbf), &
-               one%sgn(1), one%has_coul(1))
+               one%sgn(1), one%has_coul(1), one%transpose_exchange(1))
       one%bden(1,:,:) = gcomp%bden(ch,:,:)
       one%dden(1,:,:) = gcomp%dden(ch,:,:)
       one%bden_s(1,:,:) = gcomp%bden_s(ch,:,:)
       one%dden_s(1,:,:) = gcomp%dden_s(ch,:,:)
       one%sgn(1) = gcomp%sgn(ch)
       one%has_coul(1) = gcomp%has_coul(ch)
+      one%transpose_exchange(1) = gcomp%transpose_exchange(ch)
       call umrsf_resp_2pdm_refresh_active(one)
       dtmp = 0.0_dp
       call grd2_driver(infos, basis, dtmp, one)

@@ -13,12 +13,14 @@ structure method that provides gradients:
     * TDDFT      (linear-response TDDFT)              -- excited states 1..N
     * SF-TDDFT   (spin-flip TDDFT)                    -- states 1..N
     * MRSF-TDDFT (mixed-reference spin-flip TDDFT)    -- states 1..N
+    * UMRSF-TDDFT (unrestricted-reference MRSF)       -- states 1..N
 
-For the excited-state methods every requested state (default: the first 10)
-is validated, since the gradient of each root has its own analytical
+For the general excited-state methods every requested state (default: the
+first 10) is validated, since the gradient of each root has its own analytical
 implementation (Z-vector + response density).  All state energies come from a
 single energy evaluation per displaced geometry, so the cost is 6N energy
-evaluations regardless of how many states are checked.
+evaluations regardless of how many states are checked. The UMRSF fixtures are
+deliberately root-1-only until the validator has overlap-based root following.
 
 The numerical reference is the central finite difference
 
@@ -55,11 +57,13 @@ from oqp.library.single_point import SinglePoint
 # Repository root (this file lives in <root>/tools/)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXAMPLES = os.path.join(ROOT, "examples")
+VALIDATION_INPUTS = os.path.join(ROOT, "tools", "validation_inputs")
 
 
 # key -> (label, example input file, kind)
 #   kind == "hf"  : ground-state gradient only (state 0)
-#   kind == "td"  : excited-state gradients (states 1..nstate)
+#   kind == "td"       : excited-state gradients (states 1..nstate)
+#   kind == "td-root1" : separated root 1 only (compute three roots)
 METHODS = {
     "rhf": ("RHF", os.path.join(EXAMPLES, "HF", "H2O_RHF-HF_GRADIENT.inp"), "hf"),
     "uhf": ("UHF", os.path.join(EXAMPLES, "HF", "H2O_UHF-HF_GRADIENT.inp"), "hf"),
@@ -67,6 +71,8 @@ METHODS = {
     "tddft": ("TDDFT", os.path.join(EXAMPLES, "TDDFT", "H2O_B3LYP5-TDDFT_GRADIENT.inp"), "td"),
     "sf-tddft": ("SF-TDDFT", os.path.join(EXAMPLES, "SF-TDDFT", "H2O_BHHLYP-SFTDDFT_GRADIENT.inp"), "td"),
     "mrsf-tddft": ("MRSF-TDDFT", os.path.join(EXAMPLES, "MRSF-TDDFT", "H2O_BHHLYP-MRSFTDDFT_GRADIENT.inp"), "td"),
+    "umrsf-bhhlyp": ("UMRSF/BHHLYP", os.path.join(VALIDATION_INPUTS, "H2CO_BHHLYP_UMRSF_GRADIENT.inp"), "td-root1"),
+    "umrsf-blyp": ("UMRSF/BLYP", os.path.join(VALIDATION_INPUTS, "H2CO_BLYP_UMRSF_GRADIENT.inp"), "td-root1"),
 }
 
 
@@ -115,18 +121,18 @@ def _write_input(src_inp, dst_inp, runtype, grad_list, nstate=None):
                 has["properties"] = True
             continue
         low = stripped.lower()
+        key = low.split("=", 1)[0].strip()
         # Drop pre-existing keys we are overriding (only inside their section).
-        if section == "input" and low.startswith("runtype"):
+        if section == "input" and key == "runtype":
             out.append(f"runtype={runtype}")
             continue
-        if section == "scf" and low.startswith("conv"):
+        if section == "scf" and key == "conv":
             continue
-        if section == "tdhf" and (low.startswith("conv")
-                                  or low.startswith("zvconv")):
+        if section == "tdhf" and key in {"conv", "zvconv"}:
             continue
-        if section == "tdhf" and low.startswith("nstate"):
+        if section == "tdhf" and key == "nstate":
             continue  # already injected after the header
-        if section == "properties" and low.startswith("grad"):
+        if section == "properties" and key == "grad":
             out.append(f"grad={grad_str}")
             has["grad"] = True
             continue
@@ -159,6 +165,10 @@ def analytical_gradients(key, workdir, nstate, compute_nstate):
         states = [0]
         grad_list = [0]
         ns = None
+    elif kind == "td-root1":
+        states = [1]
+        grad_list = [1]
+        ns = compute_nstate
     else:
         states = list(range(1, nstate + 1))
         grad_list = states
@@ -218,7 +228,10 @@ def validate(key, dx, nstate, workdir):
 
     # Compute a couple of extra excited states so the highest *checked* root is
     # not the last Davidson/Z-vector root (improves Z-vector convergence).
-    compute_nstate = nstate + 2 if kind == "td" else None
+    if kind == "td-root1":
+        compute_nstate = 3
+    else:
+        compute_nstate = nstate + 2 if kind == "td" else None
 
     t0 = time.time()
     try:
@@ -285,7 +298,8 @@ def main():
     print("=" * 80)
     print("OpenQP analytical vs. numerical gradient validation")
     print(f"  dx = {args.dx:g} Bohr   tol = {args.tol:g} Hartree/Bohr   "
-          f"excited states checked = 1..{args.nstate}")
+          f"excited-state request = 1..{args.nstate} "
+          "(root-1 fixtures remain state 1)")
     print("=" * 80)
 
     results = []

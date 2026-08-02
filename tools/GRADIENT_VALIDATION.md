@@ -4,7 +4,7 @@ This directory contains tooling to validate OpenQP's analytical nuclear
 gradients against numerical (finite-difference) gradients, for
 
 * RHF, UHF, ROHF (Hartree-Fock)
-* TDDFT, SF-TDDFT, MRSF-TDDFT (excited states)
+* TDDFT, SF-TDDFT, MRSF-TDDFT, UMRSF-TDDFT (excited states)
 
 and the investigation that this validation triggered.
 
@@ -20,8 +20,17 @@ and the investigation that this validation triggered.
   export PYTHONPATH=$OPENQP_ROOT/pyoqp:$PYTHONPATH
   python tools/validate_gradients.py                 # all methods
   python tools/validate_gradients.py rhf uhf rohf     # subset
+  python tools/validate_gradients.py umrsf-bhhlyp umrsf-blyp --nstate 1
   python tools/validate_gradients.py --nstate 10 --verbose
   ```
+
+  The two UMRSF cases use the same C1-distorted formaldehyde
+  geometry with a UHF-triplet reference. BHHLYP covers global-hybrid exchange plus XC response;
+  BLYP covers the zero-exact-exchange pure-GGA limit. Response root 1 is the
+  reproducible finite-difference regression target; higher roots still require
+  overlap-based root following near crossings. These fixtures leave
+  `tdhf.z_solver` at its default because the dedicated UMRSF gradient solver
+  always uses its own PCG-to-MINRES policy.
 
 * `crosscheck_pyscf.py` — independent cross-check of the HF ground-state
   gradients against PySCF (requires `pip install pyscf`).  OpenQP uses

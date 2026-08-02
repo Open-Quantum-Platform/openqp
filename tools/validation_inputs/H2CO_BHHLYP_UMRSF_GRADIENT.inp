@@ -1,0 +1,48 @@
+# C1-distorted H2CO UMRSF singlet-gradient validation from a UHF triplet
+# reference. The small out-of-plane offsets keep every Cartesian component
+# active in the finite-difference comparison.
+# Use tools/validate_gradients.py umrsf-bhhlyp --nstate 1 for the
+# analytic-versus-finite-difference check.
+[input]
+system=
+ H   0.037000000   0.925023000  -0.585394000
+ H  -0.021000000  -0.925030000  -0.585430000
+ C   0.008000000  -0.000017000   0.019259000
+ O  -0.014000000   0.000024000   1.196513000
+charge=0
+runtype=grad
+method=tdhf
+functional=bhhlyp
+basis=6-31g*
+omp_threads=1
+
+[guess]
+type=huckel
+save_mol=false
+
+[scf]
+type=uhf
+multiplicity=3
+converger_type=diis
+maxit=200
+conv=1e-10
+save_molden=false
+
+[dftgrid]
+rad_npts=96
+ang_npts=302
+pruned=
+grid_ao_pruned=false
+
+[tdhf]
+type=umrsf
+nstate=3
+target=1
+multiplicity=1
+maxit=100
+maxit_zv=100
+conv=1e-9
+zvconv=1e-9
+
+[properties]
+grad=1

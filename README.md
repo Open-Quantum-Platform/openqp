@@ -7,7 +7,7 @@ Open Quantum Platform ([OpenQP](https://pubs.acs.org/doi/10.1021/acs.jctc.4c0111
 **Electronic structure**
 - HF and DFT (LibXC functionals) with RHF, ROHF, and UHF references
 - TDHF/TDDFT, SF-TDDFT, and **MRSF-TDDFT** including the DTCAM-series functionals
-- **UMRSF-TDDFT** excitation energies from a UHF reference (energy-only)
+- **UMRSF-TDDFT** excitation energies and analytic nuclear gradients from a UHF reference (HF and full-range LDA/GGA, including conventional global hybrids)
 - **MRSF-EKT** ionization potentials and electron affinities with Dyson orbitals and pole strengths
 
 **Properties & spectroscopy**
