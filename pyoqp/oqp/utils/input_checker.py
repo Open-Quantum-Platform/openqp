@@ -3138,7 +3138,7 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
-    converger = str(_get(config, "casscf", "converger", "twophase") or "twophase").strip().lower()
+    converger = str(_get(config, "casscf", "converger", "trah") or "trah").strip().lower()
     if converger not in {"twophase", "two-phase", "default", "", "ah", "trah",
                          "augmented-hessian", "diis", "auto"}:
         report.add(
@@ -3146,7 +3146,7 @@ def _check_casscf(config: dict[str, Any], report: CheckReport) -> None:
             "casscf.converger",
             "Unknown CASSCF orbital converger.",
             value=converger,
-            expected="twophase, ah, trah, diis, or auto",
+            expected="trah, twophase, ah, diis, or auto",
             action="Use converger=twophase (default), ah for the trust-region "
                    "augmented Hessian over an assembled orbital Hessian, trah "
                    "for the matrix-free trust-region solver (no Hessian is "

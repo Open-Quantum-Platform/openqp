@@ -325,8 +325,8 @@ def test_sa_ah_analytic_matches_fd_ah(tmp_path):
 
 
 def test_default_newton_path_accepts_analytic_hessian(tmp_path):
-    """No converger key (two-phase default) + hessian=analytic: the default
-    Newton loop consumes the analytic Hessian and lands on the same solution."""
+    """No converger key + hessian=analytic: the default converger consumes the
+    analytic Hessian and lands on the same solution as with the FD one."""
     if not _backend_available():
         pytest.skip("native OQP backend not built; build liboqp to run CASSCF Hessian tests")
     spec = dict(_SYSTEMS["lih"])
@@ -334,8 +334,10 @@ def test_default_newton_path_accepts_analytic_hessian(tmp_path):
     ana = _run(tmp_path, "lih_default_analytic", inject={"hessian": "analytic"}, **spec)
     assert re.search(r"CASSCF converged:\s+yes", _log_text(ana))
     assert _energy(ana) == pytest.approx(_energy(ref), abs=_ENERGY_TOL)
-    # the default two-phase log carries no converger/hessian trace either way
-    assert "PyOQP converger:" not in _log_text(ana)
+    # The default is `trah`, which goes through the converger framework, so it
+    # announces itself and which Hessian it was handed.
+    assert re.search(r"PyOQP converger:\s+trah", _log_text(ana))
+    assert re.search(r"PyOQP orbital hessian:\s+analytic", _log_text(ana))
 
 
 def test_hessian_fd_explicit_is_default_path(tmp_path):

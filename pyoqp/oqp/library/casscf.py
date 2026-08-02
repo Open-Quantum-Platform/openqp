@@ -384,9 +384,9 @@ _CAS_OPTIMIZER_CODE = {"newton": 0, "powell": 1}
 # CASSCF Hessian-vector product -- and ``ah`` (dense Hessian, augmented-Hessian
 # eigenproblem) keeps every spelling it had except that one.
 _CAS_CONVERGER_CODE = {
-    "": 0, "twophase": 0, "two-phase": 0, "2phase": 0, "default": 0,
+    "twophase": 0, "two-phase": 0, "2phase": 0,
     "ah": 1, "augmented-hessian": 1, "augmentedhessian": 1,
-    "diis": 2, "auto": 3, "trah": 4,
+    "diis": 2, "auto": 3, "trah": 4, "": 4, "default": 4,
 }
 _CAS_CONVERGER_NAME = {0: "twophase", 1: "ah", 2: "diis", 3: "auto", 4: "trah"}
 _CAS_HESSIAN_CODE = {
@@ -398,7 +398,10 @@ _CAS_HESSIAN_CODE = {
 # more spellings than this (``2phase`` runs the same two-phase code but through
 # ``run_converger``, and therefore does print a trace), so the test is on the
 # raw string, not on the resolved code.
-_CAS_NO_FRAMEWORK = ("", "twophase", "two-phase", "default")
+# Spellings whose run does NOT go through the converger framework, and for
+# which therefore no converger trace is printed.  `""`/`"default"` are absent
+# on purpose: they now mean `trah`, which always goes through the framework.
+_CAS_NO_FRAMEWORK = ("twophase", "two-phase")
 # Length of the driver's `stats` block (CAS_NSTATS in casscf_driver.F90).
 _CAS_NSTATS = 10
 
@@ -434,7 +437,7 @@ def _native_converger_codes(cfg):
 
     Read with ``dict.get`` defaults, exactly as the optimizer reads them, so an
     input without the keys takes the native default path."""
-    raw_conv = str(cfg.get("converger", "twophase")).strip().lower()
+    raw_conv = str(cfg.get("converger", "trah")).strip().lower()
     raw_hess = str(cfg.get("hessian", "fd")).strip().lower()
     converger = _CAS_CONVERGER_CODE.get(raw_conv)
     hessian = _CAS_HESSIAN_CODE.get(raw_hess)
@@ -770,11 +773,31 @@ def _optimize(mol, hcore_ao, eri_ao, enuc, coeff, ncore, nact, active_nelec,
     if hasattr(mol, "_casscf_converger_trace"):
         del mol._casscf_converger_trace   # stale trace from a previous run on this mol
     cfg = mol.config.get("casscf", {}) or {}
-    converger = str(cfg.get("converger", "twophase")).strip().lower()
+    converger = str(cfg.get("converger", "trah")).strip().lower()
     # Orbital-Hessian backend ([casscf] hessian = fd | analytic, dict-get
     # default): None keeps the FD builder (byte-identical default behaviour).
     hess_fn = _hessian_provider(cfg, hcore_ao, eri_ao, ncore, nact, active_nelec,
                                 pairs, obj_weights, obj_roots, settings)
+    # An active space with no inactive and no virtual orbitals -- H4/STO-3G
+    # CAS(4,4) with frozen_core=0 is the shipped example -- has NO non-redundant
+    # rotations at all.  There is nothing to optimize: CASSCF is CASCI at these
+    # orbitals, and the orbital gradient is the empty vector, hence converged.
+    # Handled here, before any converger sees it, because it is a property of
+    # the active space rather than of the optimizer; `trah` in particular
+    # divides by |d|^2 in its trust-boundary root and would raise
+    # ZeroDivisionError on the empty direction.  The native driver reaches the
+    # same conclusion its own way, declining with CAS_ERR_INPUT
+    # (casscf_driver.F90, `ctx%npar <= 0`), which is what routes these runs
+    # here in the first place.
+    if npar == 0:
+        energies, coeffs, _dets, _D, _G, _gam, _Gam = _solve_active_rdms(
+            *_transform_integrals(hcore_ao, eri_ao, C), ncore, nact,
+            active_nelec, enuc, settings, obj_weights, obj_roots, with_g=False,
+        )
+        objective = float(np.dot(obj_weights, energies[obj_roots]))
+        history = [(0, objective, 0.0, 0.0, 0.0)]
+        return C, energies, coeffs, history, True, 0
+
     if converger not in ("", "twophase", "two-phase", "default"):
         from oqp.library.casscf_convergers import run_converger
         return run_converger(converger, mol, C, evaluate, pairs, nbf, options,

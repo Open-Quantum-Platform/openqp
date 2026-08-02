@@ -104,17 +104,19 @@ def test_ci_schema_is_imported_not_redeclared():
 
 # -------------------------------------------------------------- dispatch
 @pytest.mark.parametrize("cfg,expected", [
-    ({}, (0, 0, False)),
+    # An unset `converger` -- and the explicit spelling `default` -- now mean
+    # `trah`, so these go through the converger framework and print a trace.
+    ({}, (4, 0, True)),
     ({"converger": "twophase"}, (0, 0, False)),
-    ({"converger": "default"}, (0, 0, False)),
-    ({"hessian": "fd"}, (0, 0, False)),
+    ({"converger": "default"}, (4, 0, True)),
+    ({"hessian": "fd"}, (4, 0, True)),
     ({"converger": "ah"}, (1, 0, True)),
     # `trah` is its own converger now (the shared trust-region core over a
     # matrix-free Hessian-vector product), not an alias for `ah`.
     ({"converger": "trah"}, (4, 0, True)),
     ({"converger": "diis"}, (2, 0, True)),
     ({"converger": "auto"}, (3, 0, True)),
-    ({"hessian": "analytic"}, (0, 1, False)),
+    ({"hessian": "analytic"}, (4, 1, True)),
     ({"converger": "twophase", "hessian": "analytic"}, (0, 1, False)),
     ({"converger": "ah", "hessian": "analytic"}, (1, 1, True)),
     # `2phase` resolves to the two-phase code but DOES go through the Python
@@ -184,6 +186,9 @@ _CASES = {
                     casscf={"optimizer": "powell",
                             "max_macro_iterations": "800",
                             "gradient_norm_tol": "1.0e-5"}),
+    # the two-phase path, now reachable only by asking for it: it is the one
+    # converger that does NOT go through the framework, so it prints no trace
+    "twophase": _case(_H2O, _CAS44, casscf={"converger": "twophase"}),
     "no_canonicalize": _case(_H2O, _CAS44, casscf={"canonicalize": "false"}),
     "excited_root": _case("\nLi 0 0 0\nH 0 0 1.6", _CAS22, nroot="2",
                           casscf={"root": "1"}),
@@ -214,7 +219,20 @@ _CASES = {
                                     "hessian": "analytic"}),
 }
 
-_AGREEMENT_TOL = 1.0e-9
+# How closely the native and the Python arm must land on the same energy.
+#
+# Both stop when the orbital gradient falls below `gradient_norm_tol` (1e-6 by
+# default), so they stop at slightly DIFFERENT points inside that ball.  Near a
+# stationary point the energy is quadratic, so the two energies differ by about
+# |g|^2 / lambda -- with the smallest orbital curvatures of these active spaces
+# (lambda ~ 5e-2) that is a few times 1e-8, and lih_sa measures 2e-8.
+#
+# The old 1e-9 was not a principled figure: it held because the two-phase
+# converger, which used to be the default, happened to stop at very nearly the
+# same point on both arms.  It is not the right yardstick for a converger that
+# stops on a gradient norm.  1e-7 is the quadratic estimate with room, and is
+# still two orders below chemical accuracy.
+_AGREEMENT_TOL = 1.0e-7
 
 
 def _run(workdir, project, case):
@@ -338,8 +356,10 @@ def test_converger_trace_survives_the_round_trip(tmp_path):
                            text).group(1))
     assert builds >= 1
 
-    # ... and the default path still carries no trace at all
-    _e, _n, _c, plain = _run(tmp_path, "h2o_notrace", _CASES["h2o"])
+    # ... and the two-phase path, which does not go through the framework,
+    # still carries no trace at all.  (It is no longer the default: an unset
+    # `converger` means `trah`, which does print one.)
+    _e, _n, _c, plain = _run(tmp_path, "h2o_notrace", _CASES["twophase"])
     assert "PyOQP converger:" not in plain
 
 

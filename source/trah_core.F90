@@ -534,6 +534,17 @@ contains
     real(dp), intent(out) :: tau
     real(dp) :: a, b, c, disc
     a = dot_product(d, d)
+    ! A zero direction has no boundary to reach, and dividing by |d|^2 below
+    ! would be a division by zero.  It happens for real: a parameter vector of
+    ! length zero (an active space with neither inactive nor virtual orbitals,
+    ! so no non-redundant rotations) makes every direction empty.  Callers are
+    ! expected to notice that case earlier -- casscf_driver.F90 declines on
+    ! `npar <= 0` -- but this core is shared with the SCF converger, so it
+    ! should not depend on every caller having done so.
+    if (a <= 0.0_dp) then
+      tau = 0.0_dp
+      return
+    end if
     b = 2.0_dp*dot_product(p, d)
     c = dot_product(p, p) - delta*delta
     disc = max(b*b - 4.0_dp*a*c, 0.0_dp)

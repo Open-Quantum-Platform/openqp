@@ -201,7 +201,7 @@ later, it can replace ``_ah_model_step``/``_ah_inner`` behind the same
 
 ``[casscf]`` keys read here (all optional, ``dict.get`` defaults)
 -----------------------------------------------------------------
-converger              twophase | ah | trah | diis | auto (default twophase)
+converger              twophase | ah | trah | diis | auto (default trah)
 hessian                fd | analytic (read in casscf.py)  (default fd)
 ah_start_trust_radius  initial trust radius               (default 0.2)
 ah_max_trust_radius    trust-radius ceiling               (default max_rotation_norm)
@@ -255,7 +255,7 @@ _MAX_ESCAPES = 8
 
 _CONV_ALIASES = {
     "twophase": "twophase", "two-phase": "twophase", "2phase": "twophase",
-    "default": "twophase", "": "twophase",
+    "default": "trah", "": "trah",
     "ah": "ah", "augmented-hessian": "ah", "augmentedhessian": "ah",
     "diis": "diis",
     "auto": "auto",
@@ -294,7 +294,7 @@ def run_converger(name, mol, C, evaluate, pairs, nbf, options, obj_weights, obj_
     if canonical is None:
         raise ValueError(
             f"[casscf] converger '{name}' is not recognized; "
-            "choose twophase (default), ah, trah, diis, or auto")
+            "choose trah (default), twophase, ah, diis, or auto")
 
     cfg = {}
     if mol is not None and isinstance(getattr(mol, "config", None), dict):

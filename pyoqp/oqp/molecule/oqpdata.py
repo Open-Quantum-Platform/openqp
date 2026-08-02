@@ -453,7 +453,7 @@ OQP_CONFIG_SCHEMA = {
         'root': {'type': int, 'default': '0'},
         # orbital-converger framework (casscf_convergers.py):
         # twophase (default) | ah/trah | diis | auto
-        'converger': {'type': string, 'default': 'twophase'},
+        'converger': {'type': string, 'default': 'trah'},
         # orbital-Hessian builder for the Newton/AH steps (casscf_hessian.py):
         # fd (default, finite-difference) | analytic (exact, ~1 CI solve/iter)
         'hessian': {'type': string, 'default': 'fd'},
