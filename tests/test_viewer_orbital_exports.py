@@ -141,6 +141,42 @@ def test_portable_json_omits_unsupported_h_shells_without_aborting_save():
     molecule.data.values['OQP::E_MO_A'] = np.arange(nbf, dtype=float)
     molecule.data.values['nocc'] = 1
 
+    assert molecule.has_molden_orbitals() is False
     assert molecule._viewer_basis_data() == {}
     assert molecule._viewer_orbital_data() == {}
     assert molecule._viewer_dyson_data() == {}
+
+
+def test_portable_json_omits_mixed_cartesian_spherical_basis_without_bad_indices():
+    molecule = fake_molecule()
+    nbf = 11  # one Cartesian D shell (6) plus one pure D shell (5)
+    molecule.data.basis = {
+        'centers': np.array([0, 0]),
+        'angs': np.array([2, 2]),
+        'ncontr': np.array([1, 1]),
+        'alpha': np.array([1.0, 0.5]),
+        'coef': np.array([1.0, 0.8]),
+        'nsh': 2,
+        'nbf': nbf,
+    }
+    molecule.data.values['OQP::VEC_MO_A'] = np.eye(nbf).reshape(-1)
+    molecule.data.values['OQP::E_MO_A'] = np.arange(nbf, dtype=float)
+    molecule.data.values['nocc'] = 1
+
+    assert MoldenWriter._harmonic_representation(molecule.data.basis) is None
+    assert molecule.has_molden_orbitals() is False
+    assert molecule._viewer_orbital_data() == {}
+
+
+def test_legacy_direct_ekt_uses_tdhf_type_for_dyson_kind():
+    molecule = fake_molecule()
+    records = molecule.mrsf_ekt_results_by_kind['ip']
+    molecule.mrsf_ekt_results_by_kind = {}
+    molecule._read_mrsf_ekt_records = lambda: records
+    molecule.config['tdhf']['type'] = 'mrsf_ekt_ea'
+    # Preserve the normal [ekt] defaults that previously misclassified EA as IP.
+    molecule.config['ekt'] = {'ip': True, 'ea': False}
+
+    states = molecule._viewer_dyson_data()['dyson_orbitals']['states']
+    assert states[0]['kind'] == 'EA'
+    assert states[0]['label'] == 'Dyson EA state 1'

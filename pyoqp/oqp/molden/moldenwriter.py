@@ -48,20 +48,29 @@ class MoldenWriter:
     SPH_NBFS = list(2 * x + 1 for x in range(5))
 
     @staticmethod
-    def _is_spherical(basis):
-        """Infer whether the basis uses pure spherical shells, from the total
-        basis-function count (auto-selection is uniform per basis set)."""
+    def _harmonic_representation(basis):
+        """Return ``cartesian``, ``spherical``, or ``None`` for a mixed basis."""
         angs = basis['angs']
         ncart = int(sum(int((a + 1) * (a + 2) // 2) for a in angs))
         nsph = int(sum(2 * int(a) + 1 for a in angs))
         nbf = int(basis['nbf'])
         if nbf == nsph and nsph != ncart:
-            return True
-        return False
+            return 'spherical'
+        if nbf == ncart:
+            return 'cartesian'
+        return None
+
+    @staticmethod
+    def _is_spherical(basis):
+        """Infer whether every higher-angular-momentum shell is spherical."""
+        return MoldenWriter._harmonic_representation(basis) == 'spherical'
 
     @staticmethod
     def supports_portable_ordering(basis):
         """Return whether this writer can represent every shell safely."""
+        representation = MoldenWriter._harmonic_representation(basis)
+        if representation is None:
+            return False
         orders = MoldenWriter.SPH_ORDERS if MoldenWriter._is_spherical(basis) else MoldenWriter.ORDERS
         return all(
             int(angular_momentum) in orders
@@ -139,6 +148,8 @@ class MoldenWriter:
     @staticmethod
     def orbital_reorder(basis):
         """Map OpenQP AO ordering to the ordering required by Molden."""
+        if not MoldenWriter.supports_portable_ordering(basis):
+            raise ValueError('Molden export does not support mixed or H/I shell ordering')
         spherical = MoldenWriter._is_spherical(basis)
         orders = MoldenWriter.SPH_ORDERS if spherical else MoldenWriter.ORDERS
         nbfs = MoldenWriter.SPH_NBFS if spherical else MoldenWriter.NBFS

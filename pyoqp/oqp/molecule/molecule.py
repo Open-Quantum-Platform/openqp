@@ -1518,7 +1518,10 @@ class Molecule:
         try:
             basis = self.data.get_basis()
             nbf = int(basis['nbf'])
-            return np.asarray(self.data['OQP::VEC_MO_A']).size == nbf * nbf
+            return (
+                MoldenWriter.supports_portable_ordering(basis)
+                and np.asarray(self.data['OQP::VEC_MO_A']).size == nbf * nbf
+            )
         except (AttributeError, KeyError, TypeError, ValueError):
             return False
 
@@ -1619,8 +1622,14 @@ class Molecule:
             records = self._read_mrsf_ekt_records()
             if records is None:
                 return {}
-            ekt = self.config.get('ekt', {})
-            kind = 'ea' if ekt.get('ea') else 'ip'
+            tdhf_type = str(self.config.get('tdhf', {}).get('type', '')).strip().lower()
+            if tdhf_type == 'mrsf_ekt_ea':
+                kind = 'ea'
+            elif tdhf_type == 'mrsf_ekt_ip':
+                kind = 'ip'
+            else:
+                ekt = self.config.get('ekt', {})
+                kind = 'ea' if ekt.get('ea') else 'ip'
             records_by_kind[kind] = records
 
         basis = self.data.get_basis()
