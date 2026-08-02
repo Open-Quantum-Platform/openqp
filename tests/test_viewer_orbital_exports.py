@@ -50,6 +50,8 @@ def fake_molecule():
     }
     molecule.freqs = np.array([1234.5])
     molecule.modes = np.array([[0.1, 0.2, 0.3]])
+    molecule.infrared_intensities = np.array([12.5])
+    molecule.raman_activities = np.array([34.75])
     return molecule
 
 
@@ -93,6 +95,9 @@ def test_molden_writer_combines_mo_dyson_labels_and_frequency_sections():
     assert 'Sym= Dyson-IP-state-1' in text
     assert '[GTO]' in text and '[MO]' in text
     assert '[FREQ]' in text and '[FR-NORM-COORD]' in text
+    assert '[INT]\n     12.50000000\n' in text
+    assert '[RAMAN]\n     34.75000000\n' in text
+    assert '12.50000000      34.75000000' not in text
 
 
 def test_basis_writer_does_not_mutate_openqp_primitive_coefficients():
@@ -118,3 +123,24 @@ def test_frequency_only_writer_keeps_one_canonical_molden_header():
     text = write_frequency(molecule, molecule.freqs, molecule.modes)
     assert text.startswith('[Molden Format]\n')
     assert text.count('[Molden Format]') == 1
+
+
+def test_portable_json_omits_unsupported_h_shells_without_aborting_save():
+    molecule = fake_molecule()
+    nbf = 21
+    molecule.data.basis = {
+        'centers': np.array([0]),
+        'angs': np.array([5]),
+        'ncontr': np.array([1]),
+        'alpha': np.array([1.0]),
+        'coef': np.array([1.0]),
+        'nsh': 1,
+        'nbf': nbf,
+    }
+    molecule.data.values['OQP::VEC_MO_A'] = np.eye(nbf).reshape(-1)
+    molecule.data.values['OQP::E_MO_A'] = np.arange(nbf, dtype=float)
+    molecule.data.values['nocc'] = 1
+
+    assert molecule._viewer_basis_data() == {}
+    assert molecule._viewer_orbital_data() == {}
+    assert molecule._viewer_dyson_data() == {}

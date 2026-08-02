@@ -59,6 +59,17 @@ class MoldenWriter:
             return True
         return False
 
+    @staticmethod
+    def supports_portable_ordering(basis):
+        """Return whether this writer can represent every shell safely."""
+        orders = MoldenWriter.SPH_ORDERS if MoldenWriter._is_spherical(basis) else MoldenWriter.ORDERS
+        return all(
+            int(angular_momentum) in orders
+            and int(angular_momentum) < len(MoldenWriter.SHELL_TYPES)
+            and int(angular_momentum) < len(MoldenWriter.NORMS)
+            for angular_momentum in basis['angs']
+        )
+
     def write_spherical_markers(self, basis):
         """Emit Molden [5D]/[7F]/[9G] markers when the basis is spherical."""
         if not MoldenWriter._is_spherical(basis):
@@ -184,10 +195,14 @@ class MoldenWriter:
         if len(infrared) >= len(freqs):
             print('[INT]', file=self.file)
             for index in range(len(freqs)):
-                if index < len(raman):
-                    print(f'{infrared[index]:16.8f} {raman[index]:16.8f}', file=self.file)
-                else:
-                    print(f'{infrared[index]:16.8f}', file=self.file)
+                print(f'{infrared[index]:16.8f}', file=self.file)
+        if len(raman) >= len(freqs):
+            # Raman activities are not part of the standard one-value-per-mode
+            # Molden [INT] section.  Keep them in a separate extension so
+            # strict readers can consume [INT] without shifting mode indices.
+            print('[RAMAN]', file=self.file)
+            for index in range(len(freqs)):
+                print(f'{raman[index]:16.8f}', file=self.file)
 
         print('[FR-COORD]', file=self.file)
         for atom, coord in zip(atoms, xyz):

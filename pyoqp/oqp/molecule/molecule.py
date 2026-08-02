@@ -1525,6 +1525,8 @@ class Molecule:
     def _viewer_basis_data(self):
         """Portable AO basis metadata used by OpenqpView JSON readers."""
         basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
         shells = []
         primitive_offset = 0
         for center, angular_momentum, nprimitive in zip(
@@ -1563,6 +1565,8 @@ class Molecule:
             return {}
 
         basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
         nbf = int(basis['nbf'])
         reorder = MoldenWriter.orbital_reorder(basis)
         scf_type = self.config['scf']['type']
@@ -1620,6 +1624,8 @@ class Molecule:
             records_by_kind[kind] = records
 
         basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
         nbf = int(basis['nbf'])
         reorder = MoldenWriter.orbital_reorder(basis)
         scf_orbitals = np.asarray(
