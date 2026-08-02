@@ -1964,6 +1964,28 @@ def _check_cc(config: dict[str, Any], report: CheckReport) -> None:
             wiki=WIKI_HELP["input.method"],
         )
 
+    # The Cholesky decomposition stops when the largest remaining diagonal
+    # falls below the tolerance.  Zero or negative never stops it, so it runs
+    # to the vector cap dividing by the square root of a diagonal that has
+    # reached zero; infinite stops it immediately at zero vectors, which is
+    # quieter and worse -- every assembled MO block would be zero.
+    chol_tol = _get(config, "cc", "cholesky_tol", 1e-10)
+    try:
+        chol_value = float(chol_tol)
+        bad_chol = not math.isfinite(chol_value) or chol_value <= 0.0
+    except (TypeError, ValueError):
+        bad_chol = True
+    if bad_chol:
+        report.add(
+            "ERROR",
+            "cc.cholesky_tol",
+            "The Cholesky decomposition tolerance must be a positive number.",
+            value=str(chol_tol),
+            expected="a positive value such as 1e-10",
+            action="Set [cc] cholesky_tol to a positive threshold.",
+            wiki=WIKI_HELP["input.method"],
+        )
+
 
 def _check_properties(config: dict[str, Any], report: CheckReport) -> None:
     method = _as_lower(_get(config, "input", "method", "hf"))

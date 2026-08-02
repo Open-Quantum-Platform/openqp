@@ -152,6 +152,28 @@ class TestCCSDTInputChecker(unittest.TestCase):
 
         self.assertTrue(report.ok)
 
+    def test_cc_rejects_a_non_positive_cholesky_tolerance(self):
+        """The decomposition stops at `vmax < tol`.  Zero or negative never
+        stops it -- it runs to the vector cap dividing by sqrt of a diagonal
+        that has reached zero.  Infinite stops it at zero vectors, which is
+        quieter and worse: every assembled MO block would be zero."""
+        for bad in ("0", "0.0", "-1e-10", "inf", "nan", "nonsense"):
+            config = {"input": {"method": "ccsd(t)", "functional": ""},
+                      "scf": {"type": "rhf"}, "cc": {"cholesky_tol": bad}}
+            report = self._report()
+            self.checker._check_cc(config, report)
+
+            self.assertFalse(report.ok, bad)
+            self.assertIn("cc.cholesky_tol", report.to_text(), bad)
+
+    def test_cc_accepts_a_positive_cholesky_tolerance(self):
+        config = {"input": {"method": "ccsd(t)", "functional": ""},
+                  "scf": {"type": "rhf"}, "cc": {"cholesky_tol": "1e-8"}}
+        report = self._report()
+        self.checker._check_cc(config, report)
+
+        self.assertTrue(report.ok)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,7 +85,7 @@ contains
     real(kind=dp) :: packed_gb
     integer :: nthr_est
     real(kind=dp) :: lad_blk
-    integer :: nthr, niter
+    integer :: nthr, niter, nrank_local
     logical :: open_shell
     logical :: converged, do_t
 
@@ -121,13 +121,67 @@ contains
       call show_message('CCSD(T): no correlated occupied or virtual orbitals', with_abort)
     end if
 
+    ! The parallel environment is needed by the memory guard below, which has
+    ! to know how many ranks share this node before it can compare a per-rank
+    ! estimate against a node-wide limit.
+    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
+
+    ! ---- factorisation route -----------------------------------------------
+    ! Decided BEFORE the memory guard, because it changes what the guard is
+    ! measuring.  With Cholesky every MO block comes from the vectors, so the
+    ! packed store exists only to produce them.  The direct factorisation
+    ! produces the same vectors without it, but sweeps the shell-pair list once
+    ! per pivot block and is measurably slower wherever both fit -- so it is
+    ! chosen on memory, never on speed.
+    !
+    ! Deciding this after the guard made auto-direct unreachable: the guard
+    ! charged for a packed store the direct path never allocates, so exactly
+    ! the jobs the direct route exists to rescue were refused before reaching
+    ! it.
+    use_chol = infos%control%cc_cholesky /= 0
+    chol_tol = infos%control%cc_cholesky_tol
+    if (use_chol) then
+      ! A non-positive tolerance never satisfies the `vmax < tol` stop, so the
+      ! decomposition would run to the vector cap dividing by sqrt(vmax) as the
+      ! diagonal reaches zero -- NaNs and an expensive way to get nothing.  An
+      ! infinite one is worse because it is quiet: it stops at nchol = 0 and
+      ! every assembled MO block is zero.  `> 0` also rejects NaN.
+      if (.not. (chol_tol > 0.0_dp) .or. .not. (chol_tol < huge(chol_tol))) then
+        close(iw)
+        call show_message('CCSD(T): [cc] cholesky_tol must be a positive number', &
+                          with_abort)
+      end if
+    end if
+    packed_gb = real(cc_packed_length(nbf), dp)*8.0_dp/1.073741824e9_dp
+    use_direct = .false.
+    if (use_chol .and. .not. open_shell) then
+      select case (int(infos%control%cc_cholesky_direct))
+      case (1); use_direct = .true.
+      case (2); use_direct = .false.
+      case default
+        if (oqp_available_memory_gb() > 0.0_dp) then
+          use_direct = packed_gb > &
+              OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
+        end if
+      end select
+      if (use_direct) then
+        write(iw,'(2X,A)') 'CCSD(T): the packed AO store ('// &
+            trim(oqp_mem_str(packed_gb))//') would not fit; factorising directly.'
+      end if
+    end if
+
     ! ---- memory guard ------------------------------------------------------
     ! Common to both paths: the packed AO integrals (nbf^4/8) and the
     ! half-transformed intermediate that lives alongside them (nbf^4/4 at
     ! nmo ~ nbf).  The open-shell path has its own, larger accounting below,
-    ! so it is charged only for what it actually builds here.
-    mem_ao = real(cc_packed_length(nbf),dp) &
-             + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+    ! so it is charged only for what it actually builds here.  The direct
+    ! route allocates neither, so it is charged for neither.
+    if (use_direct) then
+      mem_ao = 0.0_dp
+    else
+      mem_ao = real(cc_packed_length(nbf),dp) &
+               + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+    end if
 
     if (open_shell) then
       mem_gb = mem_ao * 8.0_dp / 1.073741824e9_dp
@@ -183,9 +237,23 @@ contains
     ! Refuse against what this machine can actually give, not a constant.
     ! A fixed cap is wrong twice over: it lets a laptop start a job that dies
     ! in the allocator, and it refuses a 500 GB node that had the memory.
+    !
+    ! mem_gb is what ONE rank allocates, and the closed-shell path replicates
+    ! the AO/MO stores and the solver intermediates on every rank -- only parts
+    ! of the ladder and the triples are partitioned.  Available memory, on the
+    ! other hand, is reported per node.  Comparing the two directly lets every
+    ! rank on a node pass its own check while their sum is what actually gets
+    ! OOM-killed, so charge the node for all the ranks sitting on it.
     if (.not. open_shell) then
-      call oqp_memory_check(mem_gb, 'CCSD(T)', &
-          'use a smaller basis or freeze more core orbitals', iw)
+      nrank_local = pe%local_size()
+      if (nrank_local > 1) then
+        write(iw,'(2X,A,I0,A,A,A)') 'CCSD(T): ', nrank_local, &
+            ' MPI ranks share this node; each needs ', &
+            trim(oqp_mem_str(mem_gb)), ' and the estimate is charged for all.'
+      end if
+      call oqp_memory_check(mem_gb*real(nrank_local, dp), 'CCSD(T)', &
+          'use a smaller basis, freeze more core orbitals, or place fewer ' // &
+          'ranks per node', iw)
     end if
 
     ! ---- reference orbitals ------------------------------------------------
@@ -207,31 +275,8 @@ contains
     end do
 
     ! ---- AO integrals ------------------------------------------------------
-    ! With Cholesky every MO block comes from the vectors, so the packed store
-    ! exists only to produce them.  The direct factorisation produces the same
-    ! vectors without it, but sweeps the shell-pair list once per pivot block
-    ! and is measurably slower wherever both fit -- so it is chosen on memory,
-    ! never on speed.
-    use_chol = infos%control%cc_cholesky /= 0
-    chol_tol = infos%control%cc_cholesky_tol
-    packed_gb = real(cc_packed_length(nbf), dp)*8.0_dp/1.073741824e9_dp
-    use_direct = .false.
-    if (use_chol .and. .not. open_shell) then
-      select case (int(infos%control%cc_cholesky_direct))
-      case (1); use_direct = .true.
-      case (2); use_direct = .false.
-      case default
-        if (oqp_available_memory_gb() > 0.0_dp) then
-          use_direct = packed_gb > &
-              OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
-        end if
-      end select
-      if (use_direct) then
-        write(iw,'(2X,A)') 'CCSD(T): the packed AO store ('// &
-            trim(oqp_mem_str(packed_gb))//') would not fit; factorising directly.'
-      end if
-    end if
-
+    ! Skipped entirely on the direct route, which is why the guard above did
+    ! not charge for it.
     if (.not. use_direct) then
     allocate(gao(cc_packed_length(nbf)), stat=ok)
     if (ok /= 0) call show_message('CCSD(T): cannot allocate the AO integral &
@@ -259,8 +304,6 @@ contains
     opts%iw         = iw
 
     e_ref = infos%mol_energy%energy
-
-    call pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
 
     ! Report the decomposition actually in force.  A silent fallback to one
     ! rank looks exactly like a slow run, so make the parallel width visible.
@@ -376,6 +419,11 @@ contains
     deallocate(cmo, eo, ev)
 
     ! ---- report ------------------------------------------------------------
+    ! Every rank has the same energies by now, and every rank has the same
+    ! log file open in append mode.  Letting them all write the final table
+    ! would repeat it once per rank and interleave the lines, which is the one
+    ! part of this output that downstream tooling parses.  Emit it once.
+    if (pe%rank == 0) then
     write(iw,'(/,2X,60("="))')
     if (do_t) then
       write(iw,'(2X,A)') 'CCSD(T)  (coupled cluster, ground state)'
@@ -395,6 +443,7 @@ contains
     write(iw,'(2X,A,F14.2,A)') 'CCSD iterations        = ', t_ccsd, ' s'
     if (do_t) write(iw,'(2X,A,F14.2,A)') '(T) correction         = ', t_trip, ' s'
     write(iw,'(2X,60("="),/)')
+    end if
 
     if (.not. converged) then
       close(iw)
@@ -446,7 +495,8 @@ contains
       ! intermediates and the DIIS history are the same order of magnitude, and
       ! a guard that ignores them waves jobs through that then die allocating.
       so_gb = cc_uhf_spinorb_gb(nmo)
-      peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis))
+      peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis), &
+                               nthreads=nthr)
       write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
       call oqp_memory_check(peak_gb, 'CCSD(T) open shell', &
           'freeze more core orbitals or use a smaller basis', iw)

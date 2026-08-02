@@ -70,21 +70,25 @@ end function cc_uhf_spinorb_gb
 !>     panels the ring and Wmbej contractions are grouped into, and a DIIS
 !>     history of 2*ndiis vectors of no*nv + no^2 nv^2 each;
 !>   * triples -- the tensor plus the four reordered panels build_q reads,
-!>     the largest being nv^3 no.
+!>     the largest being nv^3 no, PLUS one Q(nv,nv,nv) panel per OpenMP
+!>     thread.  That last term is the only one that grows with the machine
+!>     rather than with the problem, and on a virtual-heavy case run wide it
+!>     is not a rounding error: at nv = 200 and 64 threads it is 3.8 GB.
+!>     Leaving it out let a job pass the guard and still be OOM-killed once
+!>     the triples opened their parallel region.
 !>
 !> Reporting only nso^4 understated the real requirement by roughly a factor
 !> of three, which is worse than useless in a guard: it waves through jobs
 !> that then die in the allocator.
-!>
-!> Not counted: the (T) loop's per-thread Q(nv,nv,nv,3).  That is 3 nv^3 per
-!> thread and can rival the tensor itself at high thread counts on a large
-!> case -- worth remembering before running this wide.
-pure function cc_uhf_peak_gb(nmo, nocc, ndiis) result(gb)
+pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads) result(gb)
   integer, intent(in) :: nmo    !< correlated spatial MOs
   integer, intent(in) :: nocc   !< occupied spin orbitals
   integer, intent(in) :: ndiis  !< DIIS subspace size (0 = no DIIS)
+  !> OpenMP threads the (T) loop will run with; each takes its own nv^3 panel.
+  integer, intent(in), optional :: nthreads
   real(dp) :: gb
   real(dp) :: nso, no, nv, assembly, solve, trip, amp
+  integer :: nthr
 
   nso = 2.0_dp*real(nmo,dp)
   no  = real(nocc,dp)
@@ -97,7 +101,10 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis) result(gb)
         + 7.0_dp*no**2*nv**2 + 10.0_dp*no**2*nv**2 &
         + 2.0_dp*real(max(ndiis,0),dp)*amp
 
-  trip = nso**4 + nv**3*no + no**2*nv**2 + no**2*nv**2 + no**3*nv
+  nthr = 1
+  if (present(nthreads)) nthr = max(1, nthreads)
+  trip = nso**4 + nv**3*no + no**2*nv**2 + no**2*nv**2 + no**3*nv &
+       + real(nthr,dp)*nv**3
 
   gb = max(assembly, max(solve, trip)) * 8.0_dp / 1.073741824e9_dp
 end function cc_uhf_peak_gb

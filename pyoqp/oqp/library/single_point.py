@@ -434,8 +434,24 @@ class SinglePoint(Calculator):
             # compute reference
             ref_energy = self.reference(do_init_scf=do_init_scf)
 
-            # ixcore
-            self.ixcore_shift()
+            # ixcore.  The shift overwrites the unselected occupied orbital
+            # energies with -100000 so the TD trial vectors leave the requested
+            # core available.  Coupled cluster reads those same energies as its
+            # amplitude denominators, so applying it there would not restrict
+            # anything -- it would silently return a meaningless correlation
+            # energy.  Skip it, and say so rather than ignoring the keyword
+            # quietly.
+            if self.method in ('ccsd', 'ccsd(t)'):
+                if str(self.mol.config['tdhf']['ixcore']) != '-1':
+                    dump_log(
+                        self.mol,
+                        title='PyOQP: ignoring [tdhf] ixcore for %s; it shifts '
+                              'the orbital energies the CC denominators are '
+                              'built from' % self.method,
+                        section='input',
+                    )
+            else:
+                self.ixcore_shift()
 
             # compute excitations
             if self.method == 'tdhf':

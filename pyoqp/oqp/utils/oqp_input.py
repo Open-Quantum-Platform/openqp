@@ -261,7 +261,7 @@ GENERIC_SCHEMA_KEYS = {
     """),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
-    "cc": _keys("maxit conv ndiis nfzc"),
+    "cc": _keys("maxit conv ndiis nfzc cholesky cholesky_tol cholesky_direct"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
     "pcm": _keys("enabled backend mode model solvent epsilon radii"),
     "dftb": _keys("""

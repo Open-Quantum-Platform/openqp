@@ -1598,6 +1598,23 @@ def test_coupled_cluster_route_selects_method_and_lowers_cc_section(tmp_path):
     assert legacy["scf"]["type"] == "rhf"
     assert legacy["cc"] == {"nfzc": "1", "conv": "1e-08"}
 
+
+def test_coupled_cluster_route_lowers_the_cholesky_controls(tmp_path):
+    """The factorisation controls are documented `.oqp` options too; leaving
+    them out of the cc manifest made the parser reject the syntax it advertises
+    and left semantic input unable to turn Cholesky off or pick the direct
+    route."""
+    spec, legacy = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() '
+        'cc(cholesky=false,cholesky_tol=1e-8,cholesky_direct=true)',
+        tmp_path,
+    )
+
+    assert spec.physical_method == "CCSD(T)"
+    assert legacy["cc"]["cholesky"] == "False"
+    assert legacy["cc"]["cholesky_tol"] == "1e-08"
+    assert legacy["cc"]["cholesky_direct"] == "True"
+
     _, plain = _parse('ccsd/6-31g geom="h2o.xyz" energy()', tmp_path)
     assert plain["input"]["method"] == "ccsd"
     assert spec.physical_method == "CCSD(T)"
