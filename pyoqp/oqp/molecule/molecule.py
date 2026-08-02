@@ -1619,10 +1619,13 @@ class Molecule:
 
         records_by_kind = dict(self.mrsf_ekt_results_by_kind)
         if not records_by_kind:
+            tdhf_type = str(self.config.get('tdhf', {}).get('type', '')).strip().lower()
+            runtype = str(self.config.get('input', {}).get('runtype', '')).strip().lower()
+            if runtype != 'ekt' and tdhf_type not in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):
+                return {}
             records = self._read_mrsf_ekt_records()
             if records is None:
                 return {}
-            tdhf_type = str(self.config.get('tdhf', {}).get('type', '')).strip().lower()
             if tdhf_type == 'mrsf_ekt_ea':
                 kind = 'ea'
             elif tdhf_type == 'mrsf_ekt_ip':

@@ -220,6 +220,27 @@ class TestMRSFEKTScaffold(unittest.TestCase):
         self.assertIn("runtypes=frozenset({'ekt'}), required=True", regression)
         self.assertIn("skip_sub=('orbitals_mo', 'dyson_orbitals_mo')", regression)
 
+    def test_legacy_direct_ekt_exports_post_kernel_dyson_molden(self):
+        single_point = read("pyoqp/oqp/library/single_point.py")
+
+        self.assertIn("if self.td in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):", single_point)
+        self.assertIn("self.mol.snapshot_mrsf_ekt_results(kind)", single_point)
+        self.assertGreaterEqual(single_point.count("self.mol.write_molden(dyson_file)"), 2)
+
+    def test_ekt_example_exercises_json_and_state_specific_molden_exports(self):
+        stem = "examples/other/h2o_rohf_mrsf_ekt_ip_6-31g_bhhlyp"
+        inp = read(f"{stem}.inp")
+        oqp = read(f"{stem}.oqp")
+        dyson = read(f"{stem}_dyson_rohf_bhhlyp_6-31g.molden")
+
+        self.assertIn("save_mol=True", inp)
+        self.assertIn("save_molden=True", inp)
+        self.assertIn("save_mol=true", oqp)
+        self.assertIn("save_molden=true", oqp)
+        self.assertIn("[Molden Format]", dyson)
+        self.assertIn("Sym= Dyson-IP-state-1", dyson)
+        self.assertIn("Sym= Dyson-IP-state-5", dyson)
+
 
 if __name__ == "__main__":
     unittest.main()

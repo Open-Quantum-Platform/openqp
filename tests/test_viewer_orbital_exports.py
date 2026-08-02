@@ -180,3 +180,12 @@ def test_legacy_direct_ekt_uses_tdhf_type_for_dyson_kind():
     states = molecule._viewer_dyson_data()['dyson_orbitals']['states']
     assert states[0]['kind'] == 'EA'
     assert states[0]['label'] == 'Dyson EA state 1'
+
+
+def test_non_ekt_restart_does_not_export_stale_raw_dyson_records():
+    molecule = fake_molecule()
+    molecule.mrsf_ekt_results_by_kind = {}
+    molecule.config['input'] = {'runtype': 'energy'}
+    molecule.config['tdhf']['type'] = 'mrsf'
+
+    assert molecule._viewer_dyson_data() == {}
