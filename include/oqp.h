@@ -266,6 +266,8 @@ void tdhf_mrsf_gradient(struct oqp_handle_t *inf);
 
 void mp2_energy(struct oqp_handle_t *inf);
 
+void afqmc(struct oqp_handle_t *inf);
+
 void electric_moments(struct oqp_handle_t *inf);
 void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);

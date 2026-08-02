@@ -152,11 +152,9 @@ def _normalize_default_section_call(call: CallSpec) -> Optional[CallSpec]:
 
     if call.name == "afqmc":
         aliases = {
-            "output": "output_dir",
             "walkers": "nwalkers",
             "steps": "nsteps",
             "dt": "timestep",
-            "threads": "omp_threads",
             "chol": "chol_tol",
         }
         kwargs = {}
@@ -266,9 +264,10 @@ def _keys(words: str) -> frozenset[str]:
 # schema keyword is added without an explicit owner here.
 GENERIC_SCHEMA_KEYS = {
     "afqmc": _keys("""
-        output_dir chol_tol trial trial_file nwalkers nsteps timestep seed
-        omp_threads stabilize_every population_control_every estimate_every
-        accumulate_after force_bias_bound
+        trial trial_file state trial_threshold chol_tol nwalkers nsteps
+        timestep seed stabilize_every population_control_every estimate_every
+        accumulate_after force_bias_bound oo_orbitals oo_file nlow low_file
+        low_max low_cap low_start
     """),
     "qmmm": _keys("""
         forcefield nonbondedmethod constraints rigidwater nsteps n_steps
@@ -2131,6 +2130,8 @@ def lower_to_legacy(
         method = "hf"
     elif spec.model == "mp2":
         method = "mp2"
+    elif spec.model == "afqmc":
+        method = "afqmc"
     elif spec.model in {
         "dftb", "dftb0", "tddftb", "tda-dftb", "sf-dftb", "mrsf-dftb"
     }:

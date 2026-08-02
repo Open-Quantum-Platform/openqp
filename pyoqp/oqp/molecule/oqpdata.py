@@ -91,20 +91,32 @@ def _perf_parse_float(v):
 
 OQP_CONFIG_SCHEMA = {
     'afqmc': {
-        'output_dir': {'type': str, 'default': ''},
-        'chol_tol': {'type': float, 'default': '1.0e-10'},
-        'trial': {'type': string, 'default': 'mean_field'},
+        # trial: mean_field | sf | mrsf | mrsf_state
+        #   sf/mrsf read a determinant expansion from trial_file; mrsf_state
+        #   uses an MRSF-TDDFT root computed by OpenQP itself (see `state`).
+        'trial': {'type': str, 'default': 'mean_field'},
         'trial_file': {'type': str, 'default': ''},
+        'state': {'type': int, 'default': '1'},
+        'trial_threshold': {'type': float, 'default': '1.0e-8'},
+        'chol_tol': {'type': float, 'default': '1.0e-10'},
         'nwalkers': {'type': int, 'default': '640'},
         'nsteps': {'type': int, 'default': '1000'},
         'timestep': {'type': float, 'default': '0.005'},
         'seed': {'type': int, 'default': '1'},
-        'omp_threads': {'type': int, 'default': '1'},
         'stabilize_every': {'type': int, 'default': '5'},
         'population_control_every': {'type': int, 'default': '5'},
         'estimate_every': {'type': int, 'default': '25'},
         'accumulate_after': {'type': int, 'default': '100'},
         'force_bias_bound': {'type': float, 'default': '1.0'},
+        # state-specific orbital rotation (OO-DFT / ROKS / MOM / SGM)
+        'oo_orbitals': {'type': bool, 'default': 'False'},
+        'oo_file': {'type': str, 'default': ''},
+        # lower-state deflation and collapse monitoring
+        'nlow': {'type': int, 'default': '0'},
+        'low_file': {'type': str, 'default': ''},
+        'low_max': {'type': float, 'default': '0.0'},
+        'low_cap': {'type': float, 'default': '10.0'},
+        'low_start': {'type': int, 'default': '0'},
     },
     'qmmm': {
         'forcefield': {'type': sarray, 'default': 'amber14-all.xml,amber14/tip3p.xml'},
@@ -600,7 +612,7 @@ class OQPData:
     _scftypes = {"rhf": 1, "uhf": 2, "rohf": 3}
     _guesses = {"huckel": 1, "hcore": 2}
     _dft_switch = {False: 10, True: 20}
-    _methods = ('hf', 'tdhf', 'mp2')
+    _methods = ('hf', 'tdhf', 'mp2', 'afqmc')
     _td_types = ('rpa', 'tda', 'sf', 'mrsf', 'umrsf', 'mrsf_ekt_ip', 'mrsf_ekt_ea')
     _rad_grid_types = {'mhl': 0, 'log3': 1, 'ta': 2, 'becke': 3}
     _diis_types = {'none': 1, 'cdiis': 2, 'ediis': 3, 'adiis': 4, 'vdiis': 5}

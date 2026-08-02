@@ -28,18 +28,18 @@ def _parse(text, source_dir=None):
 
 def test_afqmc_section_call_and_concise_aliases_lower_to_legacy():
     spec, legacy = _parse(
-        'rohf/sto-3g geom="ch2.xyz" mult=3 energy '
-        'afqmc(output=prepared,trial=mean_field,walkers=32,steps=20,'
-        'dt=0.01,threads=2,chol=1e-9,accumulate_after=4)'
+        'mrsf(nstate=3)/bhhlyp/sto-3g geom="ch2.xyz" energy '
+        'afqmc(trial=mrsf_state,state=2,walkers=32,steps=20,'
+        'dt=0.01,chol=1e-9,accumulate_after=4)'
     )
-    assert legacy["afqmc"]["output_dir"] == "prepared"
+    assert legacy["afqmc"]["trial"] == "mrsf_state"
+    assert legacy["afqmc"]["state"] == "2"
     assert legacy["afqmc"]["nwalkers"] == "32"
     assert legacy["afqmc"]["nsteps"] == "20"
     assert legacy["afqmc"]["timestep"] == "0.01"
-    assert legacy["afqmc"]["omp_threads"] == "2"
     assert legacy["afqmc"]["chol_tol"] == "1e-09"
     canonical = oqp_input.render_canonical_oqp(spec)
-    assert "afqmc(output_dir=prepared" in canonical
+    assert "afqmc(trial=mrsf_state" in canonical
 
 
 def test_mrsf_s1_opt_hides_reference_and_root_bookkeeping(tmp_path):

@@ -1,0 +1,45 @@
+# Phaseless AFQMC using an OpenQP MRSF-TDDFT root as the trial wavefunction.
+# The MRSF step runs first in the same job; its response vector is expanded
+# into its spin-complete determinant basis in memory and handed to AFQMC, so
+# no external MRSFDAT file is involved.
+#
+#    group   keyword     value
+#  --------------------------------
+#    input   method      afqmc
+#    tdhf    type        mrsf
+#    afqmc   trial       mrsf_state
+#    afqmc   state       1
+[input]
+system=
+   6   0.000000000   0.000000000   0.000000000
+   1   1.008934663   0.000000000   0.438260975
+   1  -1.008934663   0.000000000   0.438260975
+charge=0
+runtype=energy
+basis=sto-3g
+functional=
+method=afqmc
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=3
+
+[tdhf]
+type=mrsf
+nstate=3
+
+[afqmc]
+trial=mrsf_state
+state=1
+nwalkers=16
+nsteps=6
+timestep=0.005
+seed=161803
+chol_tol=1e-10
+stabilize_every=2
+population_control_every=2
+estimate_every=2
+accumulate_after=2

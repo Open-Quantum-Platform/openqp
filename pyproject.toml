@@ -31,7 +31,6 @@ geometric = ["geometric>=1.0"]
 
 [project.scripts]
 openqp = "oqp.pyoqp:main"
-openqp-afqmc = "oqp.afqmc:installed_main"
 
 [tool.scikit-build]
 minimum-version = "0.10"

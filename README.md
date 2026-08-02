@@ -123,22 +123,15 @@ cd openqp
 pip install .
 ```
 
-To include the private AFQMC implementation in the same build, check it out
-either as `external/afqmc` inside OpenQP or as a sibling directory named
-`afqmc`, then use the same install command:
+Phaseless AFQMC is built in — it needs no extra checkout and no separate
+executable. Select it with `[input] method = afqmc`; the trial wavefunction can
+be the SCF determinant, an imported SF/MRSF-CIS expansion, or an MRSF-TDDFT root
+that OpenQP computes in the same job. See
+[`examples/AFQMC`](examples/AFQMC/README.md).
 
 ```bash
-git clone https://github.com/Open-Quantum-Platform/openqp.git
-git clone git@github.com:Open-Quantum-Platform/AFQMC.git openqp/external/afqmc
-cd openqp
-pip install .
-openqp-afqmc examples/AFQMC/CH2_ROHF_STO3G_AFQMC.oqp
+openqp examples/AFQMC/CH2_MRSF_STO3G_AFQMC.inp
 ```
-
-For a checkout elsewhere, set
-`-C cmake.define.OPENQP_AFQMC_SOURCE_DIR=/absolute/path/to/afqmc` on the
-`pip install .` command. The combined wheel contains the OpenQP Python API,
-native OpenQP library, OpenQP–AFQMC adapter, and OpenMP AFQMC executable.
 
 The package install keeps the Python wrapper, native library, headers, and data files together for normal `openqp` command-line use. A ready-to-use [Docker image](https://github.com/Open-Quantum-Platform/openqp/wiki/OpenQP_Docker_Image) is also available. Build options (MPI, LibXC/ERI backends, BLAS/LAPACK selection) are documented in the [Build options](https://open-quantum-platform.github.io/openqp-docs/build-options/) guide.
 

@@ -117,6 +117,13 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_td_dip_ao_comment = &
     "AO electric-dipole integrals (a.u.) at center of mass; packed L-triangle (nbf*(nbf+1)/2,3)"
 
+  ! AFQMC controls. One packed real64 vector rather than a key per option: the
+  ! layout is defined once in source/afqmc/afqmc_oqp.F90 and mirrored in
+  ! pyoqp/oqp/library/afqmc_driver.py.
+  character(len=*), parameter, public :: OQP_afqmc_options = OQP_prefix // "afqmc_options"
+  character(len=*), parameter, public :: OQP_afqmc_options_comment = &
+    "packed [afqmc] controls; layout in source/afqmc/afqmc_oqp.F90"
+
   ! Symmetry petite-list metadata (written by pyoqp when use_integral_symmetry
   ! is enabled)
   character(len=*), parameter, public :: OQP_sym_petite = OQP_prefix // "sym_petite_enable"

@@ -231,6 +231,7 @@ class SinglePoint(Calculator):
             'mrsf_ekt_ip': oqp.tdhf_mrsf_ekt_ip,
             'mrsf_ekt_ea': oqp.tdhf_mrsf_ekt_ea,
             'mp2': oqp.mp2_energy,
+            'afqmc': oqp.afqmc,
         }
 
         # initialize state sign
@@ -409,7 +410,7 @@ class SinglePoint(Calculator):
         # check method
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).energy()
-        if self.method not in ['hf', 'tdhf', 'mp2']:
+        if self.method not in ['hf', 'tdhf', 'mp2', 'afqmc']:
             raise ValueError(f'Unknown method type {self.method}')
 
         target_converger = self.mol.config['scf']['converger_type']
@@ -425,6 +426,8 @@ class SinglePoint(Calculator):
                 energies = self.excitation(ref_energy)
             elif self.method == 'mp2':
                 energies = self.correlation(ref_energy)
+            elif self.method == 'afqmc':
+                energies = self.afqmc(ref_energy)
             else:
                 energies = ref_energy
         finally:
@@ -438,6 +441,38 @@ class SinglePoint(Calculator):
         # mol_energy.energy in place to the correlated total.
         dump_log(self.mol, title='PyOQP: MP2 correlation steps', section='')
         self.energy_func['mp2'](self.mol)
+        energies = [self.mol.mol_energy.energy]
+        self.mol.energies = energies
+
+        return energies
+
+    def afqmc(self, ref_energy):
+        """Phaseless AFQMC on the converged reference.
+
+        The whole propagation runs inside liboqp; this only resolves the trial,
+        runs the MRSF step first when the trial is one of its roots, and hands
+        the packed [afqmc] controls across.
+        """
+        from oqp.library.afqmc_driver import (
+            TRIAL_KINDS, pack_afqmc_options, stage_trial_files, trial_kind)
+
+        config = self.mol.config['afqmc']
+        kind = trial_kind(config)
+
+        if kind == TRIAL_KINDS['mrsf_state']:
+            # The trial is an MRSF root, so MRSF has to be solved first. It
+            # writes OQP::td_bvec_mo, which the Fortran trial builder reads.
+            if self.td not in ('mrsf', 'umrsf'):
+                raise ValueError(
+                    '[afqmc] trial = mrsf_state requires [tdhf] type = mrsf (or umrsf)')
+            dump_log(self.mol, title='PyOQP: MRSF trial for AFQMC', section='')
+            self.energy_func[self.td](self.mol)
+
+        stage_trial_files(config)
+        self.mol.data['OQP::afqmc_options'] = pack_afqmc_options(config)
+
+        dump_log(self.mol, title='PyOQP: AFQMC propagation', section='')
+        self.energy_func['afqmc'](self.mol)
         energies = [self.mol.mol_energy.energy]
         self.mol.energies = energies
 

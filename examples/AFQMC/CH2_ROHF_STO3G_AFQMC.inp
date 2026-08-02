@@ -1,0 +1,37 @@
+# Phaseless AFQMC with the single-determinant (mean-field) trial.
+# Triplet ROHF/STO-3G CH2, six projection steps with 16 walkers: an end-to-end
+# smoke test, not a converged calculation.
+#
+#    group   keyword     value
+#  --------------------------------
+#    input   method      afqmc
+#    afqmc   trial       mean_field
+[input]
+system=
+   6   0.000000000   0.000000000   0.000000000
+   1   1.008934663   0.000000000   0.438260975
+   1  -1.008934663   0.000000000   0.438260975
+charge=0
+runtype=energy
+basis=sto-3g
+functional=
+method=afqmc
+
+[guess]
+type=huckel
+
+[scf]
+type=rohf
+multiplicity=3
+
+[afqmc]
+trial=mean_field
+nwalkers=16
+nsteps=6
+timestep=0.005
+seed=161803
+chol_tol=1e-10
+stabilize_every=2
+population_control_every=2
+estimate_every=2
+accumulate_after=2

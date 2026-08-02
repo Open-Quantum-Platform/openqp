@@ -72,17 +72,6 @@ set(CMAKE_Fortran_STANDARD 2003)
 include(FortranCInterface)
 
 option(ENABLE_MPI "Enable MPI support" OFF)
-set(OPENQP_AFQMC_SOURCE_DIR "" CACHE PATH
-    "Path to the Open-Quantum-Platform/AFQMC source checkout")
-set(_oqp_afqmc_default OFF)
-if(EXISTS "${OPENQP_AFQMC_SOURCE_DIR}/CMakeLists.txt" OR
-   EXISTS "${CMAKE_SOURCE_DIR}/external/afqmc/CMakeLists.txt" OR
-   EXISTS "${CMAKE_SOURCE_DIR}/../afqmc/CMakeLists.txt")
-  set(_oqp_afqmc_default ON)
-endif()
-option(ENABLE_AFQMC "Build and install the OpenQP-AFQMC standalone workflow"
-       ${_oqp_afqmc_default})
-unset(_oqp_afqmc_default)
 option(ENABLE_DDX "Enable optional ddX continuum-solvation backend" OFF)
 option(ENABLE_OPENQP_DFTB
     "Convenience hook: also build openqp-dftb and stage its libopenqp_dftb_c shared library (never linked into liboqp)" OFF)
@@ -332,28 +321,6 @@ add_subdirectory(external)
 
 add_definitions(-DOQP)
 add_subdirectory(source)
-
-if(ENABLE_AFQMC)
-  if(NOT OPENQP_AFQMC_SOURCE_DIR)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/external/afqmc/CMakeLists.txt")
-      set(OPENQP_AFQMC_SOURCE_DIR "${CMAKE_SOURCE_DIR}/external/afqmc")
-    elseif(EXISTS "${CMAKE_SOURCE_DIR}/../afqmc/CMakeLists.txt")
-      get_filename_component(OPENQP_AFQMC_SOURCE_DIR
-          "${CMAKE_SOURCE_DIR}/../afqmc" ABSOLUTE)
-    endif()
-  endif()
-  if(NOT EXISTS "${OPENQP_AFQMC_SOURCE_DIR}/CMakeLists.txt")
-    message(FATAL_ERROR
-      "ENABLE_AFQMC=ON requires an AFQMC checkout. Set "
-      "-DOPENQP_AFQMC_SOURCE_DIR=/absolute/path/to/afqmc")
-  endif()
-  add_subdirectory("${OPENQP_AFQMC_SOURCE_DIR}"
-                   "${CMAKE_BINARY_DIR}/openqp-afqmc")
-  install(FILES
-      "${OPENQP_AFQMC_SOURCE_DIR}/interfaces/openqp/openqp_to_afqmc.py"
-      DESTINATION .
-      RENAME afqmc.py)
-endif()
 
 if(BUILD_TESTING)
   enable_testing()

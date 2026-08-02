@@ -11,6 +11,7 @@ endif()
 
 add_subdirectory(io)
 add_subdirectory(mathlib)
+add_subdirectory(afqmc)
 add_subdirectory(modules)
 add_subdirectory(integrals)
 add_subdirectory(dftlib)
