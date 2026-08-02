@@ -64,8 +64,10 @@ class _GeometricRunner:
         self.tmax = self.geometric_config.get("tmax", 0.3)
         self.convergence_set = self.geometric_config.get("convergence_set", "GAU")
         # geomeTRIC cannot test the crossing criterion; optimize() records the
-        # verdict here so a caller does not have to parse the log.
+        # verdict here, and on the molecule, so a caller does not have to parse
+        # the log.
         self.crossing_converged = True
+        self.mol.crossing_converged = True
         self.prefix = self.geometric_config.get("prefix", "geometric")
         if self.prefix == "geometric":
             project_name = getattr(mol, "project_name", "")
@@ -150,6 +152,9 @@ class _GeometricRunner:
         )
         if crossing_open:
             self.crossing_converged = False
+            # compute_geom() discards the optimizer, so the verdict has to
+            # travel on the molecule for OpenQP.run()/Runner to see it.
+            self.mol.crossing_converged = False
             dump_log(
                 self.mol,
                 title=(
