@@ -1,6 +1,7 @@
 """Small contract tests for user-facing NAMD diagnostic tools."""
 
 import importlib.util
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -84,3 +85,40 @@ def test_hop_tracer_records_the_row_before_preserving_an_nve_abort(tmp_path):
     assert len(rows) == 2
     assert rows[0].startswith("step,t_fs,kernel_called")
     assert rows[1].startswith("1,0.5,1,1,1,0.25")
+
+
+def test_hop_tracer_protects_input_replay_and_log_paths(tmp_path):
+    path = ROOT / "tools" / "diagnostics" / "trace_namd_hop.py"
+    spec = importlib.util.spec_from_file_location("trace_namd_hop_paths", path)
+    assert spec is not None and spec.loader is not None
+    tracer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tracer)
+
+    input_path = tmp_path / "job.inp"
+    random_file = tmp_path / "random.txt"
+    log_path = tmp_path / "job.log"
+    for protected in (input_path, random_file, log_path):
+        protected.write_text("protected", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="input deck"):
+        tracer.validate_trace_output(
+            input_path, input_path=input_path, random_file=random_file,
+            log_path=log_path)
+
+    random_alias = tmp_path / "random-alias.csv"
+    random_alias.symlink_to(random_file)
+    with pytest.raises(ValueError, match="random replay file"):
+        tracer.validate_trace_output(
+            random_alias, input_path=input_path, random_file=random_file,
+            log_path=log_path)
+
+    log_alias = tmp_path / "log-alias.csv"
+    os.link(log_path, log_alias)
+    with pytest.raises(ValueError, match="job log"):
+        tracer.validate_trace_output(
+            log_alias, input_path=input_path, random_file=random_file,
+            log_path=log_path)
+    assert all(
+        protected.read_text(encoding="utf-8") == "protected"
+        for protected in (input_path, random_file, log_path)
+    )

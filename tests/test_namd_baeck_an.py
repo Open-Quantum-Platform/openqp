@@ -131,6 +131,7 @@ def test_dense_trajectory_is_appendable_and_restart_manifest_is_runnable(tmp_pat
     script = r"""
 import json
 import os
+import shutil
 from types import SimpleNamespace
 import numpy as np
 import oqp.library.namd as namd_module
@@ -262,6 +263,48 @@ d2._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 d2.nacme_audit_file = d.nacme_audit_file
 loaded = d2._load_restart()
+corrupt_trajectory = os.path.join(root, 'corrupt-prefix.namd.trj')
+shutil.copyfile(d.trajectory_file, corrupt_trajectory)
+with open(corrupt_trajectory, 'r+b') as stream:
+    stream.seek(-1, os.SEEK_END)
+    original = stream.read(1)
+    stream.seek(-1, os.SEEK_END)
+    stream.write(bytes([original[0] ^ 1]))
+d_corrupt = NAMD.__new__(NAMD); d_corrupt.mol = Mol()
+d_corrupt.nstate = 2; d_corrupt.dt_fs = 0.5
+d_corrupt.seed = 1; d_corrupt.rng_stream = 2
+d_corrupt.restart_requested = True
+d_corrupt._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_corrupt.restart_file = d.restart_file
+d_corrupt.trajectory_file = corrupt_trajectory
+d_corrupt.nacme_audit_file = d.nacme_audit_file
+try:
+    d_corrupt._load_restart()
+except ValueError as error:
+    trajectory_content_mismatch = 'committed-prefix SHA-256 mismatch' in str(error)
+else:
+    trajectory_content_mismatch = False
+corrupt_audit = os.path.join(root, 'corrupt-audit.tsv')
+shutil.copyfile(d.nacme_audit_file, corrupt_audit)
+with open(corrupt_audit, 'r+b') as stream:
+    stream.seek(-1, os.SEEK_END)
+    original = stream.read(1)
+    stream.seek(-1, os.SEEK_END)
+    stream.write(bytes([original[0] ^ 1]))
+d_audit = NAMD.__new__(NAMD); d_audit.mol = Mol()
+d_audit.nstate = 2; d_audit.dt_fs = 0.5
+d_audit.seed = 1; d_audit.rng_stream = 2
+d_audit.restart_requested = True
+d_audit._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_audit.restart_file = d.restart_file
+d_audit.trajectory_file = d.trajectory_file
+d_audit.nacme_audit_file = corrupt_audit
+try:
+    d_audit._load_restart()
+except ValueError as error:
+    audit_content_mismatch = 'committed-prefix SHA-256 mismatch' in str(error)
+else:
+    audit_content_mismatch = False
 d_missing = NAMD.__new__(NAMD); d_missing.mol = Mol()
 d_missing.nstate = 2; d_missing.dt_fs = 0.5
 d_missing.seed = 1; d_missing.rng_stream = 2
@@ -450,6 +493,8 @@ print('DENSE=' + json.dumps({
     'pcm_mismatch': pcm_mismatch,
     'gate_mismatch': gate_mismatch,
     'missing_trajectory_rejected': missing_trajectory_rejected,
+    'trajectory_content_mismatch': trajectory_content_mismatch,
+    'audit_content_mismatch': audit_content_mismatch,
     'output_collision_rejected': output_collision_rejected,
     'input_alias_rejected': input_alias_rejected,
     'input_hardlink_alias_rejected': input_hardlink_alias_rejected,
@@ -516,6 +561,8 @@ print('DENSE=' + json.dumps({
         'pcm_mismatch': True,
         'gate_mismatch': True,
         'missing_trajectory_rejected': True,
+        'trajectory_content_mismatch': True,
+        'audit_content_mismatch': True,
         'output_collision_rejected': True,
         'input_alias_rejected': True,
         'input_hardlink_alias_rejected': True,

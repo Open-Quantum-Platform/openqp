@@ -441,6 +441,17 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     selection = slice(discard, None, stride)
     for window in sorted(window_segments):
         segments = window_segments[window]
+        previous_last_step = None
+        for _segment_xi, _segment_perpendicular, segment_steps in segments:
+            if (segment_steps.size == 0
+                    or np.any(np.diff(segment_steps) <= 0)
+                    or (previous_last_step is not None
+                        and segment_steps[0] <= previous_last_step)):
+                raise ValueError(
+                    f"ODP WHAM window {window} continuation segments must "
+                    "contain strictly increasing, non-overlapping steps in "
+                    "caller-supplied order")
+            previous_last_step = int(segment_steps[-1])
         xi = np.concatenate([segment[0] for segment in segments])[selection]
         perpendicular_norm = np.concatenate(
             [segment[1] for segment in segments])[selection]

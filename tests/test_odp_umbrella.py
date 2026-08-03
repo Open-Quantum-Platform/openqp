@@ -482,6 +482,19 @@ for name, payload in (
 segment_result = odp_wham(
     segment_paths, temperature, bins=100, discard=100, stride=3)
 segment_steps = segment_result["sample_step"]
+overlap_path = os.path.join(root, "copied-and-extended-window.namd.trj")
+shutil.copyfile(paths[0], overlap_path)
+extra_record = np.frombuffer(
+    segment_payload[-dtype.itemsize:], dtype=dtype, count=1).copy()
+extra_record["step"] = 12000
+with open(overlap_path, "ab") as stream:
+    stream.write(extra_record.tobytes(order="C"))
+try:
+    odp_wham([paths[0], overlap_path], temperature, bins=100)
+except ValueError as error:
+    overlapping_segments_rejected = "non-overlapping steps" in str(error)
+else:
+    overlapping_segments_rejected = False
 try:
     odp_wham([paths[0]], temperature, bins=[-0.1, 0.0, 0.1])
 except ValueError as error:
@@ -645,6 +658,7 @@ print("ODP_WHAM=" + json.dumps({
     "segment_first_step_after_boundary": int(
         segment_steps[np.searchsorted(segment_steps, segment_record_count)]),
     "incomplete_bins_rejected": incomplete_bins_rejected,
+    "overlapping_segments_rejected": overlapping_segments_rejected,
 }))
 '''
     env = os.environ.copy()
@@ -714,6 +728,7 @@ print("ODP_WHAM=" + json.dumps({
     assert values["segment_first_step"] == 100
     assert values["segment_first_step_after_boundary"] == 6001
     assert values["incomplete_bins_rejected"] is True
+    assert values["overlapping_segments_rejected"] is True
 
 
 def test_odp_restart_example_runs_generated_manifest(tmp_path):

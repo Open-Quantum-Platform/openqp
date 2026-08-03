@@ -11,12 +11,40 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from pathlib import Path
 
 import numpy as np
 
 from oqp.library import namd as namd_module
 from oqp.pyoqp import Runner
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    """Return whether two path spellings designate the same filesystem object."""
+    if os.path.normcase(os.path.realpath(left)) == os.path.normcase(
+            os.path.realpath(right)):
+        return True
+    try:
+        return os.path.samefile(left, right)
+    except (FileNotFoundError, OSError):
+        return False
+
+
+def validate_trace_output(
+    trace: Path,
+    *,
+    input_path: Path,
+    random_file: Path | None,
+    log_path: Path,
+) -> None:
+    """Protect every diagnostic input before the trace is unlinked or opened."""
+    protected = [("input deck", input_path), ("job log", log_path)]
+    if random_file is not None:
+        protected.append(("random replay file", random_file))
+    for label, protected_path in protected:
+        if _paths_alias(trace, protected_path):
+            raise ValueError(f"--trace must not alias the {label}")
 
 
 class SequenceRNG:
@@ -146,16 +174,24 @@ def main() -> None:
         help="one prescribed uniform random value per effective hop interval",
     )
     args = parser.parse_args()
+    project = args.input.stem
+    trace = Path(args.trace)
+    log = Path(f"{project}.log")
+    try:
+        validate_trace_output(
+            trace, input_path=args.input, random_file=args.random_file,
+            log_path=log)
+    except ValueError as error:
+        parser.error(str(error))
     random_values = None
     if args.random_file is not None:
         random_values = np.atleast_1d(np.loadtxt(args.random_file, dtype=float))
         if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
             raise ValueError("Prescribed random values must lie in [0, 1)")
-    project = args.input.stem
     runner = Runner(
         project=project,
         input_file=str(args.input),
-        log=f"{project}.log",
+        log=str(log),
         silent=1,
         usempi=False,
     )
@@ -170,7 +206,6 @@ def main() -> None:
         parser.error("hop tracing currently supports gas-phase NAMD only; QM/MM is rejected")
     if enabled(config.get("md", {}).get("soc", False)):
         parser.error("hop tracing currently supports same-spin NAMD only; SOC is rejected")
-    trace = Path(args.trace)
     trace.unlink(missing_ok=True)
     sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
     runner.run()

@@ -58,7 +58,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 4
+NAMD_RESTART_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
@@ -588,6 +588,8 @@ class NAMD:
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
         self._restart_system_identity = self._qm_restart_system_identity()
         self._wham_system_identity = self._qm_wham_system_identity()
+        self._trajectory_digest_state = None
+        self._nacme_audit_digest_state = None
         self._rng_step = 0
         self._last_hop_random = np.nan
         self._ba_energy_left = None
@@ -715,6 +717,8 @@ class NAMD:
             for path in (self.trajectory_file, self.nacme_audit_file):
                 with open(path, 'w', encoding='utf-8'):
                     pass
+            self._trajectory_digest_state = None
+            self._nacme_audit_digest_state = None
 
     def _odp_provenance(self):
         if getattr(self, 'odp', None) is None:
@@ -1546,6 +1550,42 @@ class NAMD:
             payload[f'has_{name}'] = np.array([1], dtype=np.int8)
             payload[name] = np.asarray(value)
 
+    def _cached_prefix_sha256(self, path, byte_count, cache_attribute,
+                              *, reset=False):
+        """Hash an exact file prefix, extending a per-run digest incrementally."""
+        byte_count = int(byte_count)
+        if byte_count < 0:
+            raise ValueError('cannot hash a negative NAMD output prefix')
+        real_path = os.path.realpath(os.fspath(path))
+        if byte_count == 0 and not os.path.exists(path):
+            identity = (real_path, None, None)
+        else:
+            stat = os.stat(path)
+            if stat.st_size < byte_count:
+                raise ValueError(
+                    f'NAMD output was truncated while hashing: {path}')
+            identity = (real_path, int(stat.st_dev), int(stat.st_ino))
+        state = getattr(self, cache_attribute, None)
+        if (reset or state is None or state['identity'] != identity
+                or state['bytes'] > byte_count):
+            state = {
+                'identity': identity, 'bytes': 0, 'digest': hashlib.sha256(),
+            }
+        remaining = byte_count - state['bytes']
+        if remaining:
+            with open(path, 'rb') as stream:
+                stream.seek(state['bytes'])
+                while remaining:
+                    block = stream.read(min(1024*1024, remaining))
+                    if not block:
+                        raise ValueError(
+                            f'NAMD output was truncated while hashing: {path}')
+                    state['digest'].update(block)
+                    state['bytes'] += len(block)
+                    remaining -= len(block)
+        setattr(self, cache_attribute, state)
+        return state['digest'].copy().hexdigest()
+
     def _save_restart(self, istep, coordinates, velocities, acceleration):
         """Atomically save all state needed for phase-continuous continuation."""
         if istep % self.restart_interval != 0:
@@ -1572,6 +1612,17 @@ class NAMD:
             raise RuntimeError(
                 'refusing to save a NAMD restart without its committed '
                 'packed trajectory')
+        trajectory_bytes = os.path.getsize(self.trajectory_file)
+        nacme_audit_bytes = (
+            os.path.getsize(self.nacme_audit_file)
+            if os.path.isfile(self.nacme_audit_file) else 0
+        )
+        trajectory_sha256 = self._cached_prefix_sha256(
+            self.trajectory_file, trajectory_bytes,
+            '_trajectory_digest_state')
+        nacme_audit_sha256 = self._cached_prefix_sha256(
+            self.nacme_audit_file, nacme_audit_bytes,
+            '_nacme_audit_digest_state')
         prev_keys = sorted(self.prev_data)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
@@ -1589,13 +1640,10 @@ class NAMD:
             'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
-            'trajectory_bytes': np.array([
-                os.path.getsize(self.trajectory_file)
-            ], dtype=np.int64),
-            'nacme_audit_bytes': np.array([
-                os.path.getsize(self.nacme_audit_file)
-                if os.path.isfile(self.nacme_audit_file) else 0
-            ], dtype=np.int64),
+            'trajectory_bytes': np.array([trajectory_bytes], dtype=np.int64),
+            'trajectory_sha256': np.array([trajectory_sha256]),
+            'nacme_audit_bytes': np.array([nacme_audit_bytes], dtype=np.int64),
+            'nacme_audit_sha256': np.array([nacme_audit_sha256]),
             'odp_provenance': np.array([
                 json.dumps(self._odp_provenance(), sort_keys=True,
                            separators=(',', ':'))
@@ -1730,12 +1778,16 @@ class NAMD:
                 'velocities': np.array(saved['velocities'], copy=True),
                 'acceleration': np.array(saved['acceleration'], copy=True),
                 'trajectory_bytes': int(saved['trajectory_bytes'][0]),
+                'trajectory_sha256': str(saved['trajectory_sha256'][0]),
                 'nacme_audit_bytes': int(saved['nacme_audit_bytes'][0]),
+                'nacme_audit_sha256': str(saved['nacme_audit_sha256'][0]),
             }
         self._reconcile_trajectory_with_restart(
-            result['step'], result['trajectory_bytes'])
+            result['step'], result['trajectory_bytes'],
+            result['trajectory_sha256'])
         self._reconcile_nacme_audit_with_restart(
-            result['step'], result['nacme_audit_bytes'])
+            result['step'], result['nacme_audit_bytes'],
+            result['nacme_audit_sha256'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={result["step"]} '
@@ -1745,15 +1797,17 @@ class NAMD:
         return result
 
     def _reconcile_trajectory_with_restart(self, checkpoint_step,
-                                           checkpoint_bytes):
+                                           checkpoint_bytes,
+                                           checkpoint_sha256):
         """Restore the exact committed packed-trajectory checkpoint prefix."""
         return self._run_io_rank(
             lambda: self._reconcile_trajectory_with_restart_io(
-                checkpoint_step, checkpoint_bytes),
+                checkpoint_step, checkpoint_bytes, checkpoint_sha256),
             'NAMD restart trajectory reconciliation')
 
     def _reconcile_trajectory_with_restart_io(self, checkpoint_step,
-                                              checkpoint_bytes):
+                                              checkpoint_bytes,
+                                              checkpoint_sha256):
         checkpoint_bytes = int(checkpoint_bytes)
         if checkpoint_bytes <= 0:
             raise ValueError('restart checkpoint has an invalid trajectory size')
@@ -1764,6 +1818,12 @@ class NAMD:
         if current_bytes < checkpoint_bytes:
             raise ValueError(
                 'NAMD restart trajectory is missing committed checkpoint data')
+        actual_sha256 = self._cached_prefix_sha256(
+            self.trajectory_file, checkpoint_bytes,
+            '_trajectory_digest_state', reset=True)
+        if actual_sha256 != str(checkpoint_sha256):
+            raise ValueError(
+                'NAMD restart trajectory committed-prefix SHA-256 mismatch')
         with open(self.trajectory_file, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
@@ -1810,15 +1870,17 @@ class NAMD:
             )
 
     def _reconcile_nacme_audit_with_restart(self, checkpoint_step,
-                                            checkpoint_bytes):
+                                            checkpoint_bytes,
+                                            checkpoint_sha256):
         """Restore the exact machine-readable audit prefix at a checkpoint."""
         return self._run_io_rank(
             lambda: self._reconcile_nacme_audit_with_restart_io(
-                checkpoint_step, checkpoint_bytes),
+                checkpoint_step, checkpoint_bytes, checkpoint_sha256),
             'NAMD restart NACME audit reconciliation')
 
     def _reconcile_nacme_audit_with_restart_io(self, checkpoint_step,
-                                               checkpoint_bytes):
+                                               checkpoint_bytes,
+                                               checkpoint_sha256):
         checkpoint_bytes = int(checkpoint_bytes)
         if checkpoint_bytes < 0:
             raise ValueError('restart checkpoint has an invalid NACME audit size')
@@ -1829,6 +1891,12 @@ class NAMD:
         if current_bytes < checkpoint_bytes:
             raise ValueError(
                 'NAMD restart NACME audit is missing committed checkpoint data')
+        actual_sha256 = self._cached_prefix_sha256(
+            self.nacme_audit_file, checkpoint_bytes,
+            '_nacme_audit_digest_state', reset=True)
+        if actual_sha256 != str(checkpoint_sha256):
+            raise ValueError(
+                'NAMD restart NACME audit committed-prefix SHA-256 mismatch')
         if current_bytes > checkpoint_bytes:
             with open(self.nacme_audit_file, 'r+b') as stream:
                 stream.truncate(checkpoint_bytes)
