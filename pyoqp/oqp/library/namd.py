@@ -441,6 +441,9 @@ class NAMD:
             if not is_builtin:
                 inputs[f'qmmm_forcefield_file_{index}'] = candidate
 
+        for name, path in self._resolved_tight_binding_artifacts().items():
+            inputs[f'tight_binding_{name}'] = path
+
         resolved = {}
         for name, path in outputs.items():
             canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
@@ -455,6 +458,17 @@ class NAMD:
                 raise ValueError(
                     f'[md] {resolved[canonical]} aliases simulation input '
                     f'{name}: {path}')
+            if os.path.isdir(canonical):
+                for output_path, output_name in resolved.items():
+                    try:
+                        inside = os.path.commonpath(
+                            (canonical, output_path)) == canonical
+                    except ValueError:
+                        inside = False
+                    if inside:
+                        raise ValueError(
+                            f'[md] {output_name} lies inside simulation input '
+                            f'directory {name}: {path}')
 
     def _is_io_rank(self):
         manager = getattr(self.mol, 'mpi_manager', None)
@@ -675,6 +689,7 @@ class NAMD:
             self._nacme_reference_tdc = None
             self._nacme_reference_mask = None
             self._nacme_reference_source = 0
+            self._nacme_gate_failures = 0
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -1163,19 +1178,26 @@ class NAMD:
                 identity.append({'builtin': item, 'sha256': digest})
         return identity
 
-    def _tight_binding_identity(self):
-        """Bind a restart to the active DFTB/xTB Hamiltonian definition."""
-        cached = getattr(self, '_restart_tb_identity', None)
-        if cached is not None:
-            return cached
+    def _effective_tight_binding_settings(self):
+        """Return TB settings after non-mutating default-model resolution."""
         method = str(self.mol.config['input'].get('method', '')).lower()
         if method not in ('dftb', 'xtb'):
-            return None
-        settings = dict(self.mol.config.get(method, {}))
-        source = (getattr(self.mol, 'oqp_input_source', None)
-                  or getattr(self.mol, 'input_file', None))
-        source_dir = (os.path.dirname(os.path.abspath(source))
-                      if source else os.getcwd())
+            return method, {}
+        config = self.mol.config
+        if method == 'dftb':
+            config = copy.deepcopy(config)
+            from oqp.utils.input_checker import apply_dftb_model_default
+            apply_dftb_model_default(config)
+        return method, dict(config.get(method, {}))
+
+    def _resolved_tight_binding_artifacts(self, settings=None):
+        """Resolve the parameter and executable artifacts used at runtime."""
+        config = getattr(self.mol, 'config', {})
+        method = str(config.get('input', {}).get('method', '')).lower()
+        if method not in ('dftb', 'xtb'):
+            return {}
+        if settings is None:
+            _method, settings = self._effective_tight_binding_settings()
         # Resolve defaults through the same adapter methods used by the
         # calculation. This binds environment, installed-wheel, staged-lib,
         # and PATH fallbacks even when the input leaves these fields blank.
@@ -1189,12 +1211,26 @@ class NAMD:
         adapter.mol = self.mol
         adapter.dftb = settings
         backend = str(settings.get('backend', 'native')).strip().lower()
-        resolved_defaults = {'parameter_path': adapter._parameter_path()}
+        artifacts = {'parameter_path': adapter._parameter_path()}
         if backend in ('native', 'auto'):
-            resolved_defaults['library_path'] = str(
-                adapter._native_library_path())
+            artifacts['library_path'] = str(adapter._native_library_path())
         elif backend == 'probe':
-            resolved_defaults['executable'] = adapter._probe_executable()
+            artifacts['executable'] = adapter._probe_executable()
+        return artifacts
+
+    def _tight_binding_identity(self):
+        """Bind a restart to the active DFTB/xTB Hamiltonian definition."""
+        cached = getattr(self, '_restart_tb_identity', None)
+        if cached is not None:
+            return cached
+        method, settings = self._effective_tight_binding_settings()
+        if method not in ('dftb', 'xtb'):
+            return None
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        resolved_defaults = self._resolved_tight_binding_artifacts(settings)
 
         for key in ('parameter_path', 'library_path', 'executable'):
             value = settings.get(key, '')

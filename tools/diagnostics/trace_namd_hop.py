@@ -132,6 +132,14 @@ def main() -> None:
         help="one prescribed uniform random value per effective hop interval",
     )
     args = parser.parse_args()
+    runner = Runner(
+        project="thymine", input_file=args.input, log="thymine.log",
+        silent=1, usempi=False)
+    soc = runner.mol.config.get("md", {}).get("soc", False)
+    if soc is True or str(soc).strip().lower() in {"true", "1", "on", "yes"}:
+        raise ValueError(
+            "trace_namd_hop does not support SOC NAMD logging paths"
+        )
     trace = Path(args.trace)
     trace.unlink(missing_ok=True)
     random_values = None
@@ -140,7 +148,7 @@ def main() -> None:
         if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
             raise ValueError("Prescribed random values must lie in [0, 1)")
     sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
-    Runner(project="thymine", input_file=args.input, log="thymine.log", silent=1, usempi=False).run()
+    runner.run()
     if sequence_rng is not None and sequence_rng.index != sequence_rng.values.size:
         raise RuntimeError(
             "Prescribed NAMD hop RNG consumed "

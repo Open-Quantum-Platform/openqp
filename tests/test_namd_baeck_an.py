@@ -33,6 +33,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
+    assert "does not support SOC NAMD logging paths" in tracer
     example_inp = (
         ROOT / "examples" / "QMMM" /
         "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp"
@@ -250,6 +251,10 @@ os.makedirs(input_root)
 for filename in ('h2o.xyz', 'vel.dat', 'water.pdb', 'local.xml'):
     with open(os.path.join(input_root, filename), 'w', encoding='utf-8') as stream:
         stream.write('test\n')
+os.makedirs(os.path.join(input_root, 'parameters'))
+with open(os.path.join(input_root, 'parameters', 'H-H.skf'),
+          'w', encoding='utf-8') as stream:
+    stream.write('parameter\n')
 class Mol:
     log = os.path.join(root, 'job.log')
     oqp_input_source = os.path.join(input_root, 'request.oqp')
@@ -371,6 +376,29 @@ default_tb_artifact_bound = (
     default_tb_signature1 != d_tb_default2._restart_signature())
 os.environ.pop('OPENQP_DFTB_PARAMETER_PATH')
 os.environ.pop('OPENQP_DFTB_LIBRARY')
+
+# The pre-calculation empty DFTB model and the runtime-materialized default
+# must describe one restart identity.
+tb_model_default = Mol(); tb_model_default.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+tb_model_default.config['input']['method'] = 'dftb'
+tb_model_default.config['dftb'] = {
+    'backend': 'native', 'type': 'mrsf', 'model': '',
+    'parameter_path': 'local.xml', 'library_path': 'local.xml'}
+d_tb_model_default = NAMD.__new__(NAMD); d_tb_model_default.mol = tb_model_default
+d_tb_model_default.nstate = 2; d_tb_model_default.dt_fs = 0.5
+d_tb_model_default.seed = 1; d_tb_model_default.rng_stream = 2
+default_model_signature = d_tb_model_default._restart_signature()
+default_model_not_mutated = tb_model_default.config['dftb']['model'] == ''
+tb_model_resolved = Mol(); tb_model_resolved.config = {
+    section: dict(settings) for section, settings in tb_model_default.config.items()}
+tb_model_resolved.config['dftb']['model'] = 'dtcam'
+d_tb_model_resolved = NAMD.__new__(NAMD); d_tb_model_resolved.mol = tb_model_resolved
+d_tb_model_resolved.nstate = 2; d_tb_model_resolved.dt_fs = 0.5
+d_tb_model_resolved.seed = 1; d_tb_model_resolved.rng_stream = 2
+default_tb_model_stable = (
+    default_model_not_mutated
+    and default_model_signature == d_tb_model_resolved._restart_signature())
 
 # Electronic arrays must retain their exact vector shape, and tracking
 # histories must remain one entry per state.
@@ -697,12 +725,13 @@ except ValueError:
 else:
     log_collision_rejected = False
 
-def input_collision(candidate, *, velocity='zero', qmmm=None):
+def input_collision(candidate, *, velocity='zero', qmmm=None, config=None):
     probe = NAMD.__new__(NAMD)
     probe.mol = SimpleNamespace(
         log=os.path.join(root, 'input-collision.log'),
         oqp_input_source=os.path.join(input_root, 'request.oqp'),
-        config={'qmmm': qmmm or {}})
+        config=(config or {
+            'input': {'method': 'tdhf'}, 'qmmm': qmmm or {}}))
     probe.velocity_source = velocity
     probe.trajectory_file = candidate
     probe.nacme_audit_file = os.path.join(root, 'input-collision.tsv')
@@ -723,6 +752,18 @@ input_collisions_rejected = all((
     input_collision(
         os.path.join(input_root, 'local.xml'),
         qmmm={'forcefield_files': 'local.xml tip3p.xml'}),
+    input_collision(
+        os.path.join(input_root, 'local.xml'), config={
+            'input': {'method': 'dftb'},
+            'dftb': {'backend': 'native', 'type': 'mrsf', 'model': 'mio',
+                     'parameter_path': 'local.xml',
+                     'library_path': 'local.xml'}}),
+    input_collision(
+        os.path.join(input_root, 'parameters', 'H-H.skf'), config={
+            'input': {'method': 'dftb'},
+            'dftb': {'backend': 'native', 'type': 'mrsf', 'model': 'mio',
+                     'parameter_path': 'parameters',
+                     'library_path': 'local.xml'}}),
 ))
 
 # A discontinuity invalidates the previous gate result before the current
@@ -731,6 +772,7 @@ d_ba = NAMD.__new__(NAMD); d_ba.nacme_check = 'baeck_an'; d_ba.nstate = 2
 d_ba.dt = 1.0; d_ba._ba_energy_left = np.array([0.0, 0.1])
 d_ba._ba_energy_center = np.array([0.0, 0.2]); d_ba._ba_tdc_left = np.eye(2)
 d_ba._ba_dt_left = 1.0; d_ba._ba_last = {'stale': True}
+d_ba._nacme_gate_failures = 2
 d_ba._nacme_gate_last = {'stale': True}; d_ba._nacme_reference_tdc = np.eye(2)
 d_ba._nacme_reference_mask = np.ones((2, 2)); d_ba._nacme_reference_source = 1
 d_ba._compute_tdc = lambda _overlap: np.zeros((2, 2))
@@ -743,7 +785,8 @@ stale_gate_cleared = (
     d_ba._ba_last is None and d_ba._nacme_gate_last is None
     and d_ba._nacme_reference_tdc is None
     and d_ba._nacme_reference_mask is None
-    and d_ba._nacme_reference_source == 0)
+    and d_ba._nacme_reference_source == 0
+    and d_ba._nacme_gate_failures == 0)
 bad_live = NAMD.__new__(NAMD); bad_live.nacme_check = 'baeck_an'
 bad_live.nstate = 2; bad_live.mol = SimpleNamespace(data={
     'OQP::td_energies_old': np.array([0.0]),
@@ -831,6 +874,7 @@ print('DENSE=' + json.dumps({
         'hop_energy_rejected': hop_energy_rejected,
         'tight_binding_bound': tight_binding_bound,
         'default_tb_artifact_bound': default_tb_artifact_bound,
+        'default_tb_model_stable': default_tb_model_stable,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -892,6 +936,7 @@ print('DENSE=' + json.dumps({
         'hop_energy_rejected': True,
         'tight_binding_bound': True,
         'default_tb_artifact_bound': True, 'scf_settings_bound': True,
+        'default_tb_model_stable': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
