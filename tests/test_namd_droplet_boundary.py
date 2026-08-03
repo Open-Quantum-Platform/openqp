@@ -418,7 +418,8 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
         log = (tmp_path / f"{ensemble}.log").read_text(encoding="utf-8")
         assert "drop_n=5" in log
         assert "droplet(enabled=true" in (
-            tmp_path / f"{ensemble}.restart.oqp").read_text(encoding="utf-8")
+            tmp_path / f"{ensemble}.namd.restart.oqp").read_text(
+                encoding="utf-8")
         if ensemble == "nve":
             assert trajectory["nve_verdict"] == 1
             assert thermostat_exchange == 0.0
@@ -426,5 +427,5 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
             assert trajectory["nve_verdict"] == -1
             assert abs(thermostat_exchange) > 1.0e-12
 
-    assert (tmp_path / "nve.restart.oqp").exists()
-    assert (tmp_path / "nvt.restart.oqp").exists()
+    assert (tmp_path / "nve.namd.restart.oqp").exists()
+    assert (tmp_path / "nvt.namd.restart.oqp").exists()

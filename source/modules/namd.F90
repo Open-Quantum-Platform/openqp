@@ -529,7 +529,8 @@ contains
     real(kind=dp) :: curvature, radicand, sigma
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. dt_right <= 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. &
+        dt_right <= 0.0_dp .or. .not. ieee_is_finite(gap_max)) return
     n = int(nstate)
     denominator = dt_left*dt_right*(dt_left + dt_right)
     if (.not. ieee_is_finite(denominator) .or. denominator <= 0.0_dp) return
@@ -593,8 +594,12 @@ contains
     logical :: pair_valid
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. invariant_tol < 0.0_dp .or. &
-        abs_tol < 0.0_dp .or. rel_tol < 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. &
+        .not. ieee_is_finite(invariant_tol) .or. &
+        .not. ieee_is_finite(abs_tol) .or. &
+        .not. ieee_is_finite(rel_tol) .or. &
+        invariant_tol < 0.0_dp .or. abs_tol < 0.0_dp .or. &
+        rel_tol < 0.0_dp) return
     if (compare_mode /= 0_c_int .and. compare_mode /= 1_c_int) return
     n = int(nstate)
     metrics(1:7) = 0.0_dp
@@ -633,8 +638,12 @@ contains
         if (abs(cand_i + cand_j) > invariant_tol) &
           counts(2) = counts(2) + 1_c_int64_t
 
-        pair_valid = reference_mask(ij) /= 0_c_int .or. &
-                     reference_mask(ji) /= 0_c_int
+        if ((reference_mask(ij) /= 0_c_int) .neqv. &
+            (reference_mask(ji) /= 0_c_int)) then
+          info = -4_c_int
+          return
+        end if
+        pair_valid = reference_mask(ij) /= 0_c_int
         if (.not. pair_valid) cycle
         ref_i = reference(ij)
         ref_j = reference(ji)

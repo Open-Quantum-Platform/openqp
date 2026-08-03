@@ -35,6 +35,7 @@ import json
 import re
 import struct
 import tempfile
+from importlib import resources
 import numpy as np
 
 import oqp
@@ -62,30 +63,9 @@ KCALMOLANG2_TO_HARTREEBOHR2 = (
 )
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 2
-NAMD_TRAJECTORY_SCHEMA_VERSION = 3
+NAMD_RESTART_SCHEMA_VERSION = 7
+NAMD_TRAJECTORY_SCHEMA_VERSION = 6
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
-
-
-def _restart_file_identity(path, source_directory=''):
-    """Return a portable name/content identity for a restart input file."""
-    configured = '' if path is None else os.fspath(path)
-    identity = {'configured': configured}
-    if not configured:
-        return identity
-    candidates = [configured]
-    if source_directory and not os.path.isabs(configured):
-        candidates.append(os.path.join(source_directory, configured))
-    resolved = next((candidate for candidate in candidates
-                     if os.path.isfile(candidate)), None)
-    if resolved is None:
-        return identity
-    digest = hashlib.sha256()
-    with open(resolved, 'rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    identity['sha256'] = digest.hexdigest()
-    return identity
 
 
 def _validate_gate_tolerances(label, *values):
@@ -105,68 +85,6 @@ def _validate_thermostat_parameters(temperature, friction, enabled):
     if enabled and friction <= 0.0:
         raise ValueError(
             '[md] thermostat_friction must be positive for Langevin NVT')
-
-
-def _validate_namd_sidecar_paths(**paths):
-    """Require binary, text, and checkpoint sidecars to have distinct paths."""
-    normalized = {}
-    for name, path in paths.items():
-        canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
-        if canonical in normalized:
-            raise ValueError(
-                f'[md] {name} and {normalized[canonical]} must use distinct paths')
-        normalized[canonical] = name
-
-
-def _validate_soc_control_compatibility(soc_requested, nve_gate,
-                                        dense_controls):
-    """Reject same-spin-only validation and persistence controls for SOC."""
-    if not soc_requested:
-        return
-    if nve_gate != 'off':
-        raise NotImplementedError(
-            '[md] nve_gate currently supports same-spin NAMD only')
-    if any(dense_controls):
-        raise NotImplementedError(
-            '[md] dense trajectory/restart controls currently support '
-            'same-spin NAMD only')
-
-
-def _restart_asset_path(value, source_directory, *, filelike_only=False):
-    """Resolve one canonical-input asset without altering inline geometry."""
-    if (not source_directory or not isinstance(value, str)
-            or not value.strip() or '\n' in value):
-        return value
-    stripped = value.strip()
-    pdb_end = stripped.lower().find('.pdb')
-    suffix = ''
-    if pdb_end >= 0:
-        pdb_end += len('.pdb')
-        suffix = stripped[pdb_end:]
-        stripped = stripped[:pdb_end]
-    elif filelike_only and not stripped.lower().endswith(('.xyz', '.pdb')):
-        return value
-    candidate = os.path.expanduser(stripped)
-    if not os.path.isabs(candidate):
-        candidate = os.path.join(source_directory, candidate)
-    return os.path.abspath(candidate) + suffix
-
-
-def _restart_search_path_list(value, source_directory):
-    """Resolve local force fields while retaining OpenMM package identifiers."""
-    if not source_directory or not isinstance(value, str):
-        return value
-    resolved = []
-    for item in re.split(r'[,\s]+', value.strip()):
-        if not item:
-            continue
-        candidate = os.path.expanduser(item)
-        local = (candidate if os.path.isabs(candidate)
-                 else os.path.join(source_directory, candidate))
-        explicit = item.startswith(('./', '../', '~')) or os.path.isabs(candidate)
-        resolved.append(os.path.abspath(local) if explicit or os.path.isfile(local)
-                        else item)
-    return ' '.join(resolved)
 
 
 def _namd_trajectory_dtype(nstate, natom):
@@ -193,14 +111,21 @@ def _namd_trajectory_dtype(nstate, natom):
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
         ('velocities_au', '<f8', vectors), ('state_overlap', '<f8', matrix),
-        ('overlap_tdc_au', '<f8', matrix), ('reference_tdc_au', '<f8', matrix),
+        ('overlap_tdc_au', '<f8', matrix),
+        ('gate_candidate_tdc_au', '<f8', matrix),
+        ('reference_tdc_au', '<f8', matrix),
         ('reference_mask', 'u1', matrix), ('reference_source', 'i1'),
         ('gate_center_step', '<i8'), ('gate_verdict', 'i1'),
-        ('gate_counts', '<i8', (3,)), ('gate_metrics', '<f8', (7,)),
+        ('gate_counts', '<i8', (3,)), ('gate_streak', '<i8'),
+        ('gate_metrics', '<f8', (7,)),
         ('nve_verdict', 'i1'), ('nve_streak', '<i8'),
         ('nve_metrics', '<f8', (4,)),
         ('tracking_valid', 'i1'), ('tracking_order', '<i8', (nstate,)),
+        ('tracking_raw_order', '<i8', (nstate,)),
+        ('tracking_lineage', '<i8', (nstate,)),
         ('tracking_phase', '<f8', (nstate,)),
+        ('tracking_phase_initial', '<f8', (nstate,)),
+        ('tracking_previous_phase_initial', '<f8', (nstate,)),
         ('tracking_overlap', '<f8', (nstate,)),
         ('tracking_margin', '<f8', (nstate,)),
     ], align=False)
@@ -225,6 +150,8 @@ def read_namd_trajectory(path, mmap_mode='r'):
     if payload_size < 0 or payload_size % dtype.itemsize:
         raise ValueError('truncated OpenQP NAMD trajectory record')
     count = payload_size // dtype.itemsize
+    if count == 0:
+        return header, np.empty(0, dtype=dtype)
     records = np.memmap(path, dtype=dtype, mode=mmap_mode,
                         offset=offset, shape=(count,))
     return header, records
@@ -335,7 +262,7 @@ class NAMD:
         self.init_temp = float(md['init_temp'])
         self.seed = int(md['seed'])
         self.rng_stream = int(md.get('rng_stream', 0))
-        self.first_hop_step = int(md.get('first_hop_step', 2))
+        self.first_hop_step = int(md.get('first_hop_step', 1))
         self.nacme_check = str(md.get('nacme_check', 'off')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
@@ -352,9 +279,13 @@ class NAMD:
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
         self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
         self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
-        _validate_gate_tolerances(
-            'NACME gate', self.nacme_gate_invariant_tol,
-            self.nacme_gate_abs_tol, self.nacme_gate_rel_tol)
+        nacme_tolerances = (
+            self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
+            self.nacme_gate_rel_tol)
+        if (not all(np.isfinite(value) for value in nacme_tolerances)
+                or min(nacme_tolerances) < 0.0):
+            raise ValueError(
+                "[md] NACME gate tolerances must be finite and non-negative")
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
         self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
@@ -392,35 +323,31 @@ class NAMD:
         _validate_thermostat_parameters(
             self.thermostat_temperature, self.thermostat_friction,
             self.thermostat == 'langevin')
-        self.trajectory_interval = int(md.get('trajectory_interval', 1))
-        self.restart_interval = int(md.get('restart_interval', 1))
-        if self.trajectory_interval < 1 or self.restart_interval < 1:
-            raise ValueError("[md] trajectory/restart intervals must be at least 1")
+        self.trajectory_interval_input = int(md.get('trajectory_interval', 0))
+        self.restart_interval_input = int(md.get('restart_interval', 0))
+        self.trajectory_interval = self._output_interval_steps(
+            self.trajectory_interval_input, self.dt_fs)
+        self.restart_interval = self._output_interval_steps(
+            self.restart_interval_input, self.dt_fs)
         self.restart_requested = self._as_bool(md.get('restart', False))
         self.trajectory_file = self._md_output_path(
             md.get('trajectory_file', ''), '.namd.trj')
-        self.nacme_audit_file = self._md_output_path(
-            md.get('nacme_audit_file', ''), '.namd.nacme.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
-        self.restart_manifest_file = self._md_output_path('', '.restart.oqp')
-        _validate_namd_sidecar_paths(
-            trajectory_file=self.trajectory_file,
-            nacme_audit_file=self.nacme_audit_file,
-            restart_file=self.restart_file,
-            restart_manifest_file=self.restart_manifest_file,
-        )
+        self.restart_manifest_file = self._restart_manifest_path()
+        self._restart_manifest_written = False
+        self.velocity_source = str(md['velocity'])
+        self._validate_sidecar_paths()
+        # Capture external guess inputs before the first electronic step.  A
+        # save_mol target can be the same JSON path and is rewritten at every
+        # geometry, but that output mutation must not change the trajectory or
+        # checkpoint identity after step zero.
+        self._restart_guess_identity = self._guess_settings_identity()
         _soc = md.get('soc', False)
-        soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
-        soc_dense_controls = (
-            bool(str(md.get('trajectory_file', '') or '').strip()),
-            bool(str(md.get('nacme_audit_file', '') or '').strip()),
-            bool(str(md.get('restart_file', '') or '').strip()),
-            self.trajectory_interval != 1,
-            self.restart_interval != 1,
-        )
-        _validate_soc_control_compatibility(
-            soc_requested, self.nve_gate, soc_dense_controls)
+        # Keep this guard identical to compute_namd's ``if soc:`` dispatch.
+        # Programmatic callers are not necessarily constrained by the input
+        # schema and may supply another truthy value.
+        soc_requested = bool(_soc)
         if soc_requested and self.nacme_check != 'off':
             raise NotImplementedError(
                 "[md] nacme_check currently supports same-spin NAMD only"
@@ -428,6 +355,23 @@ class NAMD:
         if soc_requested and self.restart_requested:
             raise NotImplementedError(
                 "[md] restart currently supports same-spin NAMD only"
+            )
+        if soc_requested and self.nve_gate != 'off':
+            raise NotImplementedError(
+                "[md] nve_gate currently supports same-spin NAMD only"
+            )
+        if self.dt_adaptive and not soc_requested:
+            raise NotImplementedError(
+                "[md] dt_adaptive currently supports SOC-NAMD only"
+            )
+        if soc_requested and (
+                str(md.get('trajectory_file', '') or '').strip()
+                or self.trajectory_interval_input != 0
+                or str(md.get('restart_file', '') or '').strip()
+                or self.restart_interval_input != 0):
+            raise NotImplementedError(
+                "[md] trajectory/checkpoint record controls currently support "
+                "same-spin NAMD only"
             )
         if not INT64_MIN <= self.seed <= INT64_MAX:
             raise ValueError("[md] seed must fit in a signed 64-bit integer")
@@ -437,8 +381,6 @@ class NAMD:
             )
         if self.first_hop_step < 1:
             raise ValueError("[md] first_hop_step must be at least 1")
-        self.velocity_source = str(md['velocity'])
-
         self.natom = mol.data['natom']
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
@@ -462,6 +404,7 @@ class NAMD:
         self._ba_last = None
         self._nacme_gate_failures = 0
         self._nacme_gate_last = None
+        self._nacme_candidate_tdc = None
         self._nacme_reference_tdc = None
         self._nacme_reference_mask = None
         self._nacme_reference_source = 0
@@ -474,6 +417,11 @@ class NAMD:
         self._pending_nve_gate_error = None
         self._thermostat_exchange = 0.0
         self._thermostat_exchange_cumulative = 0.0
+        self._pending_nacme_gate_error = None
+        self._trajectory_prefix_hasher = None
+        self._trajectory_prefix_bytes = 0
+        self._trajectory_prefix_last_step = None
+        self._trajectory_prefix_stat = None
 
         # electronic amplitudes (complex), one per excited state. For SOC-NAMD
         # the active index runs over the larger spin-adiabatic manifold and the
@@ -485,7 +433,10 @@ class NAMD:
             self.coef[0] = 1.0 + 0.0j
 
         # velocities (natom, 3) in atomic units
-        self.vel = self._init_velocities()
+        # A checkpoint is the authoritative velocity state.  Do not retain a
+        # transport-time dependency on the original velocity input file.
+        self.vel = (np.zeros((self.natom, 3), dtype=float)
+                    if self.restart_requested else self._init_velocities())
 
         # previous-step payload for the overlap (back_door carry)
         self.prev_xyz = None
@@ -496,6 +447,18 @@ class NAMD:
         cfg['properties']['back_door'] = True
         # NACME needs a dt; reuse the MD step (atomic units) for the TDC scale
         cfg['nac']['dt'] = self.dt
+
+    @staticmethod
+    def _output_interval_steps(configured, dt_fs):
+        """Resolve zero to an approximately 10 fs fixed-step output cadence."""
+        configured = int(configured)
+        dt_fs = float(dt_fs)
+        if configured < 0:
+            raise ValueError(
+                "[md] trajectory/restart intervals must be zero or positive")
+        if not np.isfinite(dt_fs) or dt_fs <= 0.0:
+            raise ValueError("[md] dt must be finite and positive")
+        return configured or max(1, int(round(10.0 / dt_fs)))
 
     @staticmethod
     def _as_bool(value):
@@ -838,37 +801,244 @@ class NAMD:
         stem = os.path.splitext(os.path.basename(self.mol.log))[0]
         return os.path.join(log_dir, stem + suffix)
 
+    def _restart_manifest_path(self):
+        """Return a per-job manifest path that cannot collide in an ensemble."""
+        log_dir = os.path.dirname(os.path.abspath(self.mol.log))
+        stem = os.path.splitext(os.path.basename(self.mol.log))[0]
+        return os.path.join(log_dir, stem + '.namd.restart.oqp')
+
+    def _resolved_velocity_file(self):
+        """Resolve a file velocity source exactly as the runtime consumes it."""
+        velocity = str(getattr(self, 'velocity_source', '') or '').strip()
+        if velocity.lower() in (
+                'zero', 'none', '0', 'maxwell', 'boltzmann', 'random'):
+            return None
+        # Relative velocity paths have historically been interpreted from the
+        # process working directory by _init_velocities, not from the input
+        # file directory. Keep validation and loading on one resolver.
+        return os.path.abspath(os.path.expanduser(velocity))
+
+    def _resolve_qmmm_aux_file(self, name):
+        """Resolve a QM/MM auxiliary path exactly as NAMD_QMMM does."""
+        value = str(name or '')
+        input_file = getattr(self.mol, 'input_file', None)
+        input_dir = (os.path.dirname(os.path.abspath(input_file))
+                     if input_file else '')
+        if (value and input_dir and not os.path.isabs(value)
+                and not os.path.exists(value)):
+            candidate = os.path.join(input_dir, value)
+            if os.path.exists(candidate):
+                return candidate
+        return value
+
+    def _resolved_basis_definition_file(self, value):
+        """Resolve a ``file:`` basis exactly as BasisData.read_basis_fmt."""
+        if not isinstance(value, str) or not value.startswith('file:'):
+            return None
+        filename = value[len('file:'):]
+        input_file = getattr(self.mol, 'input_file', None)
+        directory = os.path.dirname(input_file) if input_file else ''
+        return os.path.join(directory, filename)
+
+    def _validate_sidecar_paths(self):
+        """Reject aliases between NAMD sidecars and simulation inputs."""
+        outputs = {
+            'log_file': self.mol.log,
+            'trajectory_file': self.trajectory_file,
+            'restart_file': self.restart_file,
+            'restart_manifest_file': self.restart_manifest_file,
+        }
+        inputs = {}
+        original_source = getattr(self.mol, 'oqp_input_source', None)
+        resolved_input = getattr(self.mol, 'input_file', None)
+        source = original_source or resolved_input
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        if original_source:
+            inputs['input_source'] = original_source
+        if resolved_input:
+            inputs['input_file'] = resolved_input
+
+        input_config = getattr(self.mol, 'config', {}).get('input', {})
+        for key in ('system', 'system2'):
+            geometry = input_config.get(key, '')
+            if not isinstance(geometry, str) or not geometry.strip():
+                continue
+            candidate = geometry.strip()
+            if ('\n' in candidate or '\r' in candidate):
+                continue
+            expanded = os.path.expanduser(candidate)
+            path = (expanded if os.path.isabs(expanded)
+                    else os.path.join(source_dir, expanded))
+            if (os.path.isfile(path)
+                    or os.path.splitext(candidate)[1].lower() in ('.xyz', '.pdb')):
+                inputs[f'input_{key}'] = path
+
+        basis_inputs = {
+            'input_basis': input_config.get('basis', ''),
+            'scf_init_basis': getattr(self.mol, 'config', {}).get(
+                'scf', {}).get('init_basis', 'none'),
+        }
+        for name, value in basis_inputs.items():
+            path = self._resolved_basis_definition_file(value)
+            if path is not None:
+                inputs[name] = path
+
+        guess = getattr(self.mol, 'config', {}).get('guess', {})
+        for key in ('file', 'file2'):
+            value = str(guess.get(key, '') or '').strip()
+            if value:
+                inputs[f'guess_{key}'] = os.path.abspath(
+                    os.path.expanduser(value))
+
+        velocity_file = self._resolved_velocity_file()
+        if velocity_file is not None:
+            inputs['velocity_file'] = velocity_file
+
+        qmmm = getattr(self.mol, 'config', {}).get('qmmm', {})
+        pdb_file = str(qmmm.get('pdb_file', '') or '').strip()
+        if pdb_file:
+            inputs['qmmm_pdb_file'] = self._resolve_qmmm_aux_file(pdb_file)
+        qm_atoms_xyz = str(qmmm.get('qm_atoms_xyz', '') or '').strip()
+        if qm_atoms_xyz:
+            expanded = os.path.expanduser(qm_atoms_xyz)
+            inputs['qmmm_qm_atoms_xyz'] = (
+                expanded if os.path.isabs(expanded)
+                else os.path.join(source_dir, expanded))
+        forcefields = str(qmmm.get('forcefield_files', '')
+                          or qmmm.get('forcefield', '') or '')
+        for index, item in enumerate(forcefields.replace(',', ' ').split()):
+            candidate = self._resolve_qmmm_aux_file(os.path.expanduser(item))
+            is_builtin = False
+            if not os.path.isfile(candidate):
+                try:
+                    resource = resources.files('openmm.app').joinpath(
+                        'data', *item.split('/'))
+                    is_builtin = resource.is_file()
+                except (ImportError, ModuleNotFoundError):
+                    pass
+            # Existing OpenMM resources are package-owned. Any other token is
+            # a local input path (including a currently missing input, which a
+            # destructive sidecar open must never manufacture accidentally).
+            if not is_builtin:
+                inputs[f'qmmm_forcefield_file_{index}'] = candidate
+
+        for name, path in self._resolved_tight_binding_artifacts().items():
+            inputs[f'tight_binding_{name}'] = path
+
+        resolved = {}
+        for name, path in outputs.items():
+            canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+            if canonical in resolved:
+                raise ValueError(
+                    f'[md] {name} and {resolved[canonical]} resolve to the '
+                    f'same NAMD sidecar path: {path}')
+            resolved[canonical] = name
+        for name, path in inputs.items():
+            canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+            if canonical in resolved:
+                raise ValueError(
+                    f'[md] {resolved[canonical]} aliases simulation input '
+                    f'{name}: {path}')
+            if os.path.isdir(canonical):
+                for output_path, output_name in resolved.items():
+                    try:
+                        inside = os.path.commonpath(
+                            (canonical, output_path)) == canonical
+                    except ValueError:
+                        inside = False
+                    if inside:
+                        raise ValueError(
+                            f'[md] {output_name} lies inside simulation input '
+                            f'directory {name}: {path}')
+
     def _is_io_rank(self):
         manager = getattr(self.mol, 'mpi_manager', None)
         return manager is None or int(getattr(manager, 'rank', 0)) == 0
 
-    def _io_barrier(self):
+    def _run_io_collective(self, operation):
+        """Run rank-zero I/O and propagate any failure to every MPI rank."""
         manager = getattr(self.mol, 'mpi_manager', None)
-        if manager is not None and hasattr(manager, 'barrier'):
-            manager.barrier()
+        if manager is None or not bool(getattr(manager, 'use_mpi', False)):
+            return operation() if self._is_io_rank() else None
+
+        status = None
+        result = None
+        if self._is_io_rank():
+            try:
+                result = operation()
+                status = (True, '', '')
+            except Exception as error:  # broadcast before raising on rank zero
+                status = (False, type(error).__name__, str(error))
+        status = manager.bcast(status, root=0)
+        if not status[0]:
+            exception_type = {
+                'FileNotFoundError': FileNotFoundError,
+                'OSError': OSError,
+                'RuntimeError': RuntimeError,
+                'TypeError': TypeError,
+                'ValueError': ValueError,
+            }.get(status[1], RuntimeError)
+            raise exception_type(status[2])
+        return result
+
+    def _run_io_collective_result(self, operation):
+        """Run rank-zero I/O and broadcast its validated result or failure."""
+        manager = getattr(self.mol, 'mpi_manager', None)
+        if manager is None or not bool(getattr(manager, 'use_mpi', False)):
+            return operation() if self._is_io_rank() else None
+
+        message = None
+        if self._is_io_rank():
+            try:
+                message = (True, operation(), '', '')
+            except Exception as error:
+                message = (False, None, type(error).__name__, str(error))
+        message = manager.bcast(message, root=0)
+        if not message[0]:
+            exception_type = {
+                'FileNotFoundError': FileNotFoundError,
+                'OSError': OSError,
+                'RuntimeError': RuntimeError,
+                'TypeError': TypeError,
+                'ValueError': ValueError,
+            }.get(message[2], RuntimeError)
+            raise exception_type(message[3])
+        return message[1]
 
     def _prepare_md_outputs(self):
         """Start fresh sidecars or preserve them when explicitly restarting."""
-        if self._is_io_rank() and not self.restart_requested:
-            for path in (self.trajectory_file, self.nacme_audit_file):
-                with open(path, 'w', encoding='utf-8'):
-                    pass
-        self._io_barrier()
+        self._run_io_collective(self._prepare_md_outputs_on_io_rank)
         dump_log(
             self.mol,
             title=(f'NAMD files: trajectory={self.trajectory_file} '
-                   f'nacme_audit={self.nacme_audit_file} '
+                   f'trajectory_interval={self.trajectory_interval}step '
                    f'restart={self.restart_file} '
+                   f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
         )
+
+    def _prepare_md_outputs_on_io_rank(self):
+        if self.restart_requested:
+            return
+        # Invalidate the runnable stale manifest first.  A failed fresh start
+        # must never leave a launchable checkpoint from an older trajectory.
+        for path in (self.restart_manifest_file, self.restart_file):
+            if os.path.lexists(path):
+                os.unlink(path)
+        with open(self.trajectory_file, 'w', encoding='utf-8'):
+            pass
+        self._trajectory_prefix_hasher = None
+        self._trajectory_prefix_bytes = 0
+        self._trajectory_prefix_last_step = None
+        self._trajectory_prefix_stat = None
 
     def _prepare_hop_step(self, istep):
         """Bind the physical MD step to the stateless hop RNG.
 
         Returning ``False`` suppresses both electronic propagation and the
-        stochastic FSSH decision.  The default first_hop_step=2 reproduces the
-        KNU-GAMESS/TLF2 initialisation convention without consuming a random
-        value at the skipped first interval.
+        stochastic FSSH decision.  The compatibility default is step 1; use
+        step 2 explicitly for the KNU-GAMESS/TLF2 initialisation convention.
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
@@ -922,8 +1092,9 @@ class NAMD:
             v = self._counter_normals((self.natom, 3)) * sigma[:, None]
             return self._remove_com_motion(v)
         # otherwise treat as a file path: "vx vy vz" per atom (atomic units)
-        if os.path.isfile(self.velocity_source):
-            v = np.loadtxt(self.velocity_source).reshape((self.natom, 3))
+        velocity_file = self._resolved_velocity_file()
+        if velocity_file is not None and os.path.isfile(velocity_file):
+            v = np.loadtxt(velocity_file).reshape((self.natom, 3))
             return self._remove_com_motion(v)
         raise ValueError(f"[md] velocity='{self.velocity_source}' is not zero/maxwell or a readable file")
 
@@ -975,6 +1146,15 @@ class NAMD:
         self._update_baeck_an_check(istep, state_overlap)
         return state_overlap
 
+    def _validated_td_energies(self, tag):
+        """Return an exact finite nstate vector safe for native pointer use."""
+        energies = np.asarray(self.mol.data[tag], dtype=np.float64).reshape(-1)
+        if (energies.shape != (self.nstate,)
+                or not np.all(np.isfinite(energies))):
+            raise RuntimeError(
+                f'{tag} must be an exact finite nstate TD-energy vector')
+        return np.ascontiguousarray(energies)
+
     def _update_baeck_an_check(self, istep, state_overlap):
         """Compare overlap TDC magnitudes with a centred TD-Baeck-An estimate.
 
@@ -986,12 +1166,8 @@ class NAMD:
 
         n = self.nstate
         data = self.mol.data
-        energies_old = np.ascontiguousarray(
-            np.asarray(data["OQP::td_energies_old"], dtype=np.float64).reshape(-1)[:n]
-        )
-        energies_current = np.ascontiguousarray(
-            np.asarray(data["OQP::td_energies"], dtype=np.float64).reshape(-1)[:n]
-        )
+        energies_old = self._validated_td_energies("OQP::td_energies_old")
+        energies_current = self._validated_td_energies("OQP::td_energies")
         tdc_current = np.ascontiguousarray(
             self._compute_tdc(state_overlap), dtype=np.float64
         )
@@ -1016,6 +1192,14 @@ class NAMD:
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
             self._ba_dt_left = dt_right
+            self._ba_last = None
+            self._nacme_gate_last = None
+            self._nacme_candidate_tdc = None
+            self._nacme_reference_tdc = None
+            self._nacme_reference_mask = None
+            self._nacme_reference_source = 0
+            self._nacme_gate_failures = 0
+            self._pending_nacme_gate_error = None
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -1094,6 +1278,7 @@ class NAMD:
         gauge.  Thus the invariant and policy machinery is shared without
         treating the approximate TD-BA sign as physical.
         """
+        self._pending_nacme_gate_error = None
         n = self.nstate
         candidate = np.ascontiguousarray(
             np.asarray(candidate_tdc, dtype=np.float64).reshape((n, n)))
@@ -1157,7 +1342,18 @@ class NAMD:
             'pair_max_error': float(metrics[5]),
             'max_tolerance_ratio': float(metrics[6]),
         }
+        if self.nacme_gate == 'off':
+            result['verdict'] = 'off'
+            self._nacme_gate_failures = 0
+            self._nacme_gate_last = None
+            self._nacme_candidate_tdc = None
+            self._nacme_reference_tdc = None
+            self._nacme_reference_mask = None
+            self._nacme_reference_source = 0
+            self._pending_nacme_gate_error = None
+            return result
         self._nacme_gate_last = result
+        self._nacme_candidate_tdc = candidate.copy()
         self._nacme_reference_tdc = reference.copy()
         self._nacme_reference_mask = mask.copy()
         self._nacme_reference_source = {
@@ -1181,48 +1377,24 @@ class NAMD:
             section='text',
             info={'text': table},
         )
-        self._write_nacme_audit_row(result)
-
         if self.nacme_gate == 'error':
             if invariant_failures:
-                raise RuntimeError(
+                self._pending_nacme_gate_error = RuntimeError(
                     f"NACME invariant gate failed for {source} at step {center_step}"
                 )
-            if self._nacme_gate_failures >= self.nacme_gate_consecutive:
-                raise RuntimeError(
+            elif self._nacme_gate_failures >= self.nacme_gate_consecutive:
+                self._pending_nacme_gate_error = RuntimeError(
                     f"NACME reference gate failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
         return result
 
-    def _write_nacme_audit_row(self, result):
-        """Append one machine-readable gate row for ensemble/post-MD audits."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
-        path = self.nacme_audit_file
-        needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
-        columns = (
-            'evaluation_step', 'center_step', 'source', 'verdict', 'signed',
-            'compared_pairs',
-            'invariant_failures', 'reference_failures',
-            'consecutive_reference_failures', 'candidate_diagonal_max',
-            'candidate_antisymmetry_max', 'reference_diagonal_max',
-            'reference_antisymmetry_max', 'pair_rms_error', 'pair_max_error',
-            'max_tolerance_ratio',
-        )
-        values = [
-            result.get('signed_comparison', '') if name == 'signed'
-            else result.get(name, '')
-            for name in columns
-        ]
-        with open(path, 'a', encoding='utf-8') as stream:
-            if needs_header:
-                stream.write('\t'.join(columns) + '\n')
-            stream.write('\t'.join(str(value) for value in values) + '\n')
-            stream.flush()
-            os.fsync(stream.fileno())
-        self._io_barrier()
+    def _enforce_nacme_gate(self):
+        """Stop only after the failing NACME point reaches the dense TRJ."""
+        error = getattr(self, '_pending_nacme_gate_error', None)
+        self._pending_nacme_gate_error = None
+        if error is not None:
+            raise error
 
     def _update_nve_gate(self, istep, epot, ekin, transition_energy_jump=np.nan):
         """Audit microcanonical energy conservation for same-spin FSSH."""
@@ -1320,19 +1492,34 @@ class NAMD:
 
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
-        gate_failure = getattr(self, '_pending_nve_gate_error', None) is not None
-        if istep % self.trajectory_interval != 0 and not gate_failure:
+        last_nve = getattr(self, '_nve_gate_last', None)
+        last_nacme = getattr(self, '_nacme_gate_last', None)
+        gate_failure = (
+            getattr(self, '_pending_nve_gate_error', None) is not None
+            or getattr(self, '_pending_nacme_gate_error', None) is not None
+            or (isinstance(last_nve, dict)
+                and last_nve.get('verdict') == 'fail')
+            or (isinstance(last_nacme, dict)
+                and last_nacme.get('verdict') == 'fail'))
+        if (istep % self.trajectory_interval != 0
+                and istep != self.nstep and not gate_failure):
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(
+            lambda: self._write_md_trajectory_on_io_rank(
+                istep, coordinates, epot, ekin, hopped))
+
+    def _write_md_trajectory_on_io_rank(self, istep, coordinates, epot, ekin,
+                                        hopped):
+        """Append one packed trajectory record on rank zero."""
         coords = np.asarray(coordinates, dtype=np.float64).reshape((-1, 3))
         if hasattr(self, 'r_all') and len(coords) == len(self.r_all):
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape(coords.shape)
         else:
             velocities = np.asarray(self.vel, dtype=np.float64).reshape(coords.shape)
         dtype = _namd_trajectory_dtype(self.nstate, len(coords))
-        if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
+        new_file = (not os.path.exists(self.trajectory_file)
+                    or os.path.getsize(self.trajectory_file) == 0)
+        if new_file:
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': self.nstate,
@@ -1366,13 +1553,26 @@ class NAMD:
                 'nve_verdict': {'-1': 'off', '1': 'pass', '2': 'fail'},
             }
             encoded = json.dumps(header, sort_keys=True).encode('utf-8')
+            header_record = (NAMD_TRAJECTORY_MAGIC
+                             + struct.pack('<Q', len(encoded)) + encoded)
             with open(self.trajectory_file, 'wb') as stream:
-                stream.write(NAMD_TRAJECTORY_MAGIC)
-                stream.write(struct.pack('<Q', len(encoded)))
-                stream.write(encoded)
+                stream.write(header_record)
                 stream.flush()
                 os.fsync(stream.fileno())
+            self._trajectory_prefix_hasher = hashlib.sha256(header_record)
+            self._trajectory_prefix_bytes = len(header_record)
+            self._trajectory_prefix_last_step = None
+            self._trajectory_prefix_stat = self._trajectory_stat_identity()
         else:
+            cached_hasher = getattr(self, '_trajectory_prefix_hasher', None)
+            if cached_hasher is None:
+                scanned = self._scan_trajectory_prefix(INT64_MAX)
+                if scanned['partial_bytes'] or scanned['removed_records']:
+                    raise ValueError(
+                        'NAMD trajectory has an incomplete append history')
+                self._remember_trajectory_prefix(scanned)
+            else:
+                self._require_unchanged_trajectory_prefix()
             header, existing = read_namd_trajectory(self.trajectory_file)
             del existing
             if (int(header['nstate']) != self.nstate
@@ -1394,13 +1594,19 @@ class NAMD:
                 'thermostat_adjusted_energy_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
-                'overlap_tdc_au', 'reference_tdc_au', 'gate_metrics',
+                'overlap_tdc_au', 'gate_candidate_tdc_au',
+                'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
-                'tracking_phase', 'tracking_overlap', 'tracking_margin'):
+                'tracking_phase', 'tracking_phase_initial',
+                'tracking_previous_phase_initial', 'tracking_overlap',
+                'tracking_margin'):
             record[field] = np.nan
         record['tracking_order'] = -1
+        record['tracking_raw_order'] = -1
+        record['tracking_lineage'] = -1
         record['gate_center_step'] = -1
         record['gate_verdict'] = -1
+        record['gate_streak'] = -1
         record['nve_verdict'] = -1
         gate = self._nacme_gate_last or {}
         time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
@@ -1451,6 +1657,9 @@ class NAMD:
             record['state_overlap'] = self._last_state_overlap
         if self._last_overlap_tdc is not None:
             record['overlap_tdc_au'] = self._last_overlap_tdc
+        candidate_tdc = getattr(self, '_nacme_candidate_tdc', None)
+        if candidate_tdc is not None:
+            record['gate_candidate_tdc_au'] = candidate_tdc
         if self._nacme_reference_tdc is not None:
             record['reference_tdc_au'] = self._nacme_reference_tdc
             record['reference_mask'] = self._nacme_reference_mask
@@ -1465,6 +1674,8 @@ class NAMD:
                 gate.get('compared_pairs', 0), gate.get('invariant_failures', 0),
                 gate.get('reference_failures', 0),
             )
+            record['gate_streak'] = gate.get(
+                'consecutive_reference_failures', 0)
             record['gate_metrics'] = (
                 gate.get('candidate_diagonal_max', np.nan),
                 gate.get('candidate_antisymmetry_max', np.nan),
@@ -1489,24 +1700,373 @@ class NAMD:
         if tracking is not None:
             record['tracking_valid'] = 1
             record['tracking_order'] = np.asarray(tracking['order'], dtype=np.int64)
+            record['tracking_raw_order'] = np.asarray(
+                tracking.get('raw_order', tracking['order']), dtype=np.int64)
+            record['tracking_lineage'] = np.asarray(
+                tracking.get('lineage', tracking['order']), dtype=np.int64)
             record['tracking_phase'] = np.asarray(tracking['phase_step'], dtype=float)
+            record['tracking_phase_initial'] = np.asarray(
+                tracking.get('phase_initial', tracking['phase_step']), dtype=float)
+            record['tracking_previous_phase_initial'] = np.asarray(
+                tracking.get('previous_phase_initial',
+                             tracking.get('phase_initial', tracking['phase_step'])),
+                dtype=float)
             record['tracking_overlap'] = np.asarray(tracking['matched_overlap'], dtype=float)
             record['tracking_margin'] = np.asarray(tracking['margin'], dtype=float)
 
+        record_bytes = record.tobytes(order='C')
         with open(self.trajectory_file, 'ab') as stream:
-            stream.write(record.tobytes(order='C'))
+            stream.write(record_bytes)
             stream.flush()
             os.fsync(stream.fileno())
-        self._io_barrier()
+        self._trajectory_prefix_hasher.update(record_bytes)
+        self._trajectory_prefix_bytes += len(record_bytes)
+        self._trajectory_prefix_last_step = int(istep)
+        self._trajectory_prefix_stat = self._trajectory_stat_identity()
+
+    def _qmmm_forcefield_identity(self, value):
+        """Canonicalize local force fields across relocated restart manifests."""
+        if not isinstance(value, str):
+            return value
+        identity = []
+        for item in value.replace(',', ' ').split():
+            candidate = self._resolve_qmmm_aux_file(os.path.expanduser(item))
+            if os.path.isfile(candidate):
+                digest = hashlib.sha256()
+                with open(candidate, 'rb') as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+                identity.append({
+                    'path': os.path.realpath(candidate),
+                    'sha256': digest.hexdigest(),
+                })
+            else:
+                try:
+                    resource = resources.files('openmm.app').joinpath(
+                        'data', *item.split('/'))
+                    if not resource.is_file():
+                        raise FileNotFoundError(item)
+                    digest = hashlib.sha256(resource.read_bytes()).hexdigest()
+                except (ImportError, FileNotFoundError, ModuleNotFoundError):
+                    raise RuntimeError(
+                        f'cannot fingerprint OpenMM force-field resource {item!r}')
+                identity.append({'builtin': item, 'sha256': digest})
+        return identity
+
+    def _basis_definition_identity(self, value):
+        """Fingerprint the file-backed basis definition used by BasisData."""
+        path = self._resolved_basis_definition_file(value)
+        if path is None:
+            return value
+        if not os.path.isfile(path):
+            return {'path': os.path.realpath(path)}
+        digest = hashlib.sha256()
+        with open(path, 'rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return {
+            'path': os.path.realpath(path),
+            'sha256': digest.hexdigest(),
+        }
+
+    @staticmethod
+    def _external_file_identity(value):
+        """Fingerprint a runtime file whose contents influence a trajectory."""
+        if not isinstance(value, str) or not value.strip():
+            return value
+        path = os.path.realpath(os.path.abspath(
+            os.path.expanduser(value.strip())))
+        if not os.path.isfile(path):
+            return {'path': path}
+        digest = hashlib.sha256()
+        with open(path, 'rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return {'path': path, 'sha256': digest.hexdigest()}
+
+    def _guess_settings_identity(self):
+        """Return the immutable, pre-propagation guess configuration."""
+        cached = getattr(self, '_restart_guess_identity', None)
+        if cached is not None:
+            return cached
+        settings = dict(getattr(self.mol, 'config', {}).get('guess', {}))
+        for key in ('file', 'file2'):
+            if key in settings:
+                settings[key] = self._external_file_identity(settings[key])
+        self._restart_guess_identity = settings
+        return settings
+
+    def _restart_signature_matches(self, saved_signature):
+        """Validate a saved identity, allowing only a mutable save_mol file."""
+        try:
+            saved = json.loads(saved_signature)
+            current = json.loads(self._restart_signature())
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(
+                'NAMD restart checkpoint has invalid signature metadata'
+            ) from error
+        if not isinstance(saved, dict) or not isinstance(current, dict):
+            raise RuntimeError(
+                'NAMD restart checkpoint has invalid signature metadata'
+            )
+        if saved == current:
+            return True
+
+        saved_guess = saved.get('guess_settings')
+        current_guess = current.get('guess_settings')
+        if not isinstance(saved_guess, dict) or not isinstance(current_guess, dict):
+            return False
+        if not self._as_bool(saved_guess.get('save_mol', False)):
+            return False
+
+        # save_mol rewrites guess.file, but never file2.  The configured path
+        # must remain identical; only its live digest/existence may differ.
+        saved_file = saved_guess.get('file')
+        current_file = current_guess.get('file')
+        if not (isinstance(saved_file, dict)
+                and isinstance(current_file, dict)
+                and saved_file.get('path') == current_file.get('path')):
+            return False
+        current_guess['file'] = saved_file
+        if current != saved:
+            return False
+
+        # Subsequent trajectory reconciliation must reproduce the exact saved
+        # signature rather than re-hashing the mutable result file.
+        self._restart_guess_identity = copy.deepcopy(saved_guess)
+        return True
+
+    @staticmethod
+    def _espf_environment_identity():
+        """Return effective ESPF environment controls that alter QM/MM forces."""
+        def enabled(name):
+            return os.environ.get(name, '').strip() in ('1', 'on')
+
+        def enabled_by_default(name):
+            return os.environ.get(name, '').strip() not in ('0', 'off')
+
+        def real_value(name, default):
+            value = os.environ.get(name, '').strip()
+            if not value:
+                return float(default)
+            # Fortran list-directed input accepts D exponents; normalize them
+            # before producing the equivalent numeric restart identity.
+            return float(value.replace('d', 'e').replace('D', 'E'))
+
+        return {
+            'rohf': enabled('ESPF_ROHF'),
+            'legacy_gradient': enabled('ESPF_LEGACY'),
+            'hard_grid': enabled('ESPF_HARD_GRID'),
+            'keep_all': enabled('ESPF_KEEPALL'),
+            'smooth': enabled_by_default('ESPF_SMOOTH'),
+            'weight_derivative': enabled_by_default('ESPF_WDERIV'),
+            'weight_scale': real_value('ESPF_WSCALE', 1.0),
+            'switch_delta': real_value('ESPF_SWDELTA', 0.7),
+            'switch_scale': real_value('ESPF_SWSCALE', 1.8),
+        }
+
+    def _effective_tight_binding_settings(self):
+        """Return TB settings after non-mutating default-model resolution."""
+        method = str(self.mol.config['input'].get('method', '')).lower()
+        if method not in ('dftb', 'xtb'):
+            return method, {}
+        config = self.mol.config
+        if method == 'dftb':
+            config = copy.deepcopy(config)
+            from oqp.utils.input_checker import apply_dftb_model_default
+            apply_dftb_model_default(config)
+        return method, dict(config.get(method, {}))
+
+    def _resolved_tight_binding_artifacts(self, settings=None):
+        """Resolve the parameter and executable artifacts used at runtime."""
+        config = getattr(self.mol, 'config', {})
+        method = str(config.get('input', {}).get('method', '')).lower()
+        if method not in ('dftb', 'xtb'):
+            return {}
+        if settings is None:
+            _method, settings = self._effective_tight_binding_settings()
+        # Resolve defaults through the same adapter methods used by the
+        # calculation. This binds environment, installed-wheel, staged-lib,
+        # and PATH fallbacks even when the input leaves these fields blank.
+        if method == 'xtb':
+            from oqp.library.openqp_xtb import OpenQPXTBAdapter
+            adapter_class = OpenQPXTBAdapter
+        else:
+            from oqp.library.openqp_dftb import OpenQPDFTBAdapter
+            adapter_class = OpenQPDFTBAdapter
+        adapter = adapter_class.__new__(adapter_class)
+        adapter.mol = self.mol
+        adapter.dftb = settings
+        backend = str(settings.get('backend', 'native')).strip().lower()
+        artifacts = {'parameter_path': adapter._parameter_path()}
+        if backend in ('native', 'auto'):
+            artifacts['library_path'] = str(adapter._native_library_path())
+        elif backend == 'probe':
+            artifacts['executable'] = adapter._probe_executable()
+        return artifacts
+
+    def _tight_binding_identity(self):
+        """Bind a restart to the active DFTB/xTB Hamiltonian definition."""
+        cached = getattr(self, '_restart_tb_identity', None)
+        if cached is not None:
+            return cached
+        method, settings = self._effective_tight_binding_settings()
+        if method not in ('dftb', 'xtb'):
+            return None
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        resolved_defaults = self._resolved_tight_binding_artifacts(settings)
+
+        for key in ('parameter_path', 'library_path', 'executable'):
+            value = settings.get(key, '')
+            resolved_value = resolved_defaults.get(key)
+            if resolved_value is None and (
+                    not isinstance(value, str) or not value.strip()):
+                continue
+            raw_value = str(resolved_value if resolved_value is not None
+                            else value).strip()
+            expanded = os.path.expanduser(raw_value)
+            path = (expanded if os.path.isabs(expanded)
+                    else os.path.join(source_dir, expanded))
+            if not os.path.exists(path):
+                settings[key] = {'configured': value, 'resolved': raw_value}
+                continue
+            digest = hashlib.sha256()
+            real_path = os.path.realpath(path)
+            files = ([real_path] if os.path.isfile(real_path) else [
+                os.path.join(root, filename)
+                for root, _dirs, names in os.walk(real_path)
+                for filename in sorted(names)
+            ])
+            for filename in sorted(files):
+                relative = os.path.relpath(filename, real_path)
+                digest.update(relative.encode('utf-8') + b'\0')
+                with open(filename, 'rb') as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+            settings[key] = {'path': real_path, 'sha256': digest.hexdigest()}
+        self._restart_tb_identity = {'section': method, 'settings': settings}
+        return self._restart_tb_identity
+
+    def _molecular_identity(self):
+        """Return stable nuclear and QM/MM topology identity for sidecars."""
+        cached = getattr(self, '_restart_molecular_identity', None)
+        if cached is not None:
+            return cached
+        atoms = np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
+        masses = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        if (atoms.size == 0 or masses.shape != atoms.shape
+                or not np.all(np.isfinite(masses)) or np.any(masses <= 0.0)):
+            raise RuntimeError('cannot identify NAMD molecule: invalid atoms/masses')
+        identity = {
+            'atomic_numbers': atoms.tolist(),
+            'masses_amu': masses.tolist(),
+        }
+        if hasattr(self, 'qm_atoms'):
+            identity['qm_atoms'] = np.asarray(
+                self.qm_atoms, dtype=np.int64).reshape(-1).tolist()
+        if hasattr(self, 'pdb'):
+            topology = self.pdb.topology
+            topology_atoms = []
+            for atom in topology.atoms():
+                element = getattr(atom, 'element', None)
+                residue = getattr(atom, 'residue', None)
+                topology_atoms.append({
+                    'index': int(atom.index),
+                    'atomic_number': int(getattr(element, 'atomic_number', 0) or 0),
+                    'name': str(getattr(atom, 'name', '')),
+                    'residue_index': int(getattr(residue, 'index', -1)),
+                    'residue_name': str(getattr(residue, 'name', '')),
+                })
+            bonds = []
+            for bond in topology.bonds():
+                if hasattr(bond, 'atom1'):
+                    atom1, atom2 = bond.atom1, bond.atom2
+                else:
+                    atom1, atom2 = bond[0], bond[1]
+                bonds.append(sorted((int(atom1.index), int(atom2.index))))
+            identity['qmmm_topology'] = {
+                'atoms': topology_atoms,
+                'bonds': sorted(bonds),
+                'masses_amu': (
+                    np.asarray(self.m_all, dtype=float).reshape(-1) / AMU_TO_AU
+                ).tolist() if hasattr(self, 'm_all') else [],
+            }
+            box_getter = getattr(topology, 'getPeriodicBoxVectors', None)
+            box = box_getter() if box_getter is not None else None
+            if box is not None and hasattr(box, 'value_in_unit'):
+                try:
+                    from openmm import unit as openmm_unit
+                except ImportError:
+                    from simtk import unit as openmm_unit
+                box = box.value_in_unit(openmm_unit.nanometer)
+            identity['qmmm_topology']['periodic_box_vectors'] = (
+                None if box is None else [
+                    [float(component) for component in vector]
+                    for vector in box
+                ])
+            qmmm = self.mol.config.get('qmmm', {})
+            identity['qmmm_model'] = {
+                key: str(qmmm.get(key, ''))
+                for key in ('cutoff', 'embedding', 'frontier_scheme')
+            }
+            # These environment controls change the QM/MM charge, grid, or
+            # gradient model in Python/Fortran.  Store effective values so a
+            # checkpointed acceleration cannot cross a force-model boundary.
+            identity['qmmm_model']['espf'] = (
+                self._espf_environment_identity())
+            forcefields = (qmmm.get('forcefield_files', '')
+                           or qmmm.get('forcefield', ''))
+            identity['qmmm_model']['forcefields'] = (
+                self._qmmm_forcefield_identity(forcefields))
+        self._restart_molecular_identity = identity
+        return identity
 
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
+        scf_settings = dict(cfg.get('scf', {}))
+        if 'init_basis' in scf_settings:
+            scf_settings['init_basis'] = self._basis_definition_identity(
+                scf_settings['init_basis'])
+        guess_settings = self._guess_settings_identity()
         identity = {
+            'molecule': self._molecular_identity(),
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
-            'basis': cfg['input'].get('basis', ''),
+            'basis': self._basis_definition_identity(
+                cfg['input'].get('basis', '')),
+            'basis_library': cfg['input'].get('library', ''),
+            'basis_ispher': cfg['input'].get('ispher', ''),
+            'd4': cfg['input'].get('d4', False),
+            'charge': cfg['input'].get('charge', ''),
+            'input_multiplicity': cfg['input'].get('multiplicity', ''),
+            'scf_type': cfg.get('scf', {}).get('type', ''),
+            'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
+            'scf_settings': scf_settings,
+            'scf_init_basis': self._basis_definition_identity(
+                cfg.get('scf', {}).get('init_basis', 'none')),
+            'guess_settings': guess_settings,
             'tdhf_type': cfg['tdhf'].get('type', ''),
+            'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
+            'tdhf_settings': dict(cfg['tdhf']),
+            'dftgrid_settings': dict(cfg.get('dftgrid', {})),
+            'pcm_settings': dict(cfg.get('pcm', {})),
+            # Bind the stable, effective symmetry controls but not the
+            # geometry-dependent detected group, which may evolve during MD.
+            'symmetry_input': dict(cfg.get('symmetry', {})),
+            'symmetry_settings': {
+                key: getattr(self.mol, 'symmetry_metadata', {}).get(
+                    key, cfg.get('symmetry', {}).get(key, ''))
+                for key in (
+                    'status', 'enabled', 'requested_point_group',
+                    'requested_subgroup', 'label_mo', 'label_states',
+                    'label_modes', 'use_integral_symmetry',
+                    'use_response_symmetry', 'strict', 'tolerance')
+            },
+            'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
             'dt_fs': self.dt_fs, 'seed': self.seed,
@@ -1517,87 +2077,95 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
-            'molecular_system': self._molecular_restart_identity(),
-            'qmmm': self._qmmm_restart_identity(),
             'independent_controls': self._independent_settings_record(),
+            'nac_align': cfg.get('nac', {}).get('align', ''),
+            'gate_policy': {
+                key: md.get(key, '') for key in (
+                    'nacme_check', 'ba_gap_max', 'nacme_gate',
+                    'nacme_gate_invariant_tol', 'nacme_gate_abs_tol',
+                    'nacme_gate_rel_tol', 'nacme_gate_consecutive',
+                    'nve_gate', 'nve_gate_abs_tol', 'nve_gate_step_tol',
+                    'nve_gate_transition_tol', 'nve_gate_consecutive')
+            },
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
-    def _molecular_restart_identity(self):
-        """Fingerprint the all-QM atom sequence, charge, spin, and input system."""
-        cached = getattr(self, '_molecular_restart_identity_cache', None)
-        if cached is not None:
-            return cached
-        cfg = self.mol.config
-        input_cfg = cfg.get('input', {})
-        scf_cfg = cfg.get('scf', {})
-        system = input_cfg.get('system', '')
-        system_digest = hashlib.sha256(
-            str(system).encode('utf-8')).hexdigest() if system else ''
-        identity = {
-            'charge': input_cfg.get('charge', ''),
-            'multiplicity': scf_cfg.get('multiplicity', ''),
-            'system_sha256': system_digest,
-        }
-        try:
-            identity['atomic_numbers'] = np.asarray(
-                self.mol.get_atoms(), dtype=int).reshape(-1).tolist()
-        except (AttributeError, TypeError, ValueError):
-            pass
-        try:
-            identity['masses_amu'] = np.asarray(
-                self.mol.get_mass(), dtype=float).reshape(-1).tolist()
-        except (AttributeError, TypeError, ValueError):
-            pass
-        self._molecular_restart_identity_cache = identity
-        return identity
+    def _validate_restart_state(self, nuclear_state, coef, active, prev_xyz,
+                                prev_data, *, context):
+        """Reject invalid nuclear/electronic state before checkpoint use."""
+        coordinates, velocities, acceleration = (
+            np.asarray(value, dtype=float) for value in nuclear_state)
+        if (coordinates.ndim != 2 or coordinates.shape[1:] != (3,)
+                or coordinates.shape != velocities.shape
+                or coordinates.shape != acceleration.shape
+                or coordinates.size == 0
+                or not all(np.all(np.isfinite(value)) for value in (
+                    coordinates, velocities, acceleration))):
+            raise RuntimeError(
+                f'{context} contains an invalid NAMD nuclear state')
+        expected_natom = int(getattr(
+            self, 'natom_all', len(self._molecular_identity()['atomic_numbers'])))
+        if coordinates.shape[0] != expected_natom:
+            raise RuntimeError(
+                f'{context} nuclear atom count {coordinates.shape[0]} does not '
+                f'match the current system ({expected_natom})')
 
-    def _qmmm_restart_identity(self):
-        """Fingerprint the QM/MM model and topology used by this trajectory."""
-        cached = getattr(self, '_qmmm_restart_identity_cache', None)
-        if cached is not None:
-            return cached
-        cfg = self.mol.config
-        input_cfg = cfg.get('input', {})
-        if not bool(input_cfg.get('qmmm_flag', False)):
-            identity = {'enabled': False}
-            self._qmmm_restart_identity_cache = identity
-            return identity
-        qmmm = cfg.get('qmmm', {})
-        input_file = getattr(self.mol, 'input_file', '')
-        source_directory = (os.path.dirname(os.path.abspath(input_file))
-                            if input_file else '')
-        pdb_file = getattr(self, '_qmmm_pdb_file', qmmm.get('pdb_file', ''))
-        forcefield_files = getattr(
-            self, '_qmmm_forcefield_files',
-            [item for item in str(qmmm.get('forcefield_files', '')).
-             replace(',', ' ').split() if item],
-        )
-        qm_atoms = getattr(self, 'qm_atoms', None)
-        if qm_atoms is None:
-            qm_atoms = _parse_int_list(qmmm.get('qm_atoms', ''))
-        identity = {
-            'enabled': True,
-            'pdb': _restart_file_identity(pdb_file, source_directory),
-            'forcefields': [
-                _restart_file_identity(path, source_directory)
-                for path in forcefield_files
-            ],
-            'qm_atoms_zero_based': np.asarray(qm_atoms, dtype=int).tolist(),
-            'cutoff': str(qmmm.get('cutoff', '')).strip().lower(),
-            'embedding': str(qmmm.get('embedding', '')).strip().lower(),
-            'rigidwater': bool(qmmm.get('rigidwater', False)),
-            'frontier_scheme': str(
-                qmmm.get('frontier_scheme', 'none')).strip().lower(),
-        }
-        mm_module = getattr(self, '_mm', None)
-        if mm_module is not None:
-            try:
-                identity['openmm_version'] = mm_module.Platform.getOpenMMVersion()
-            except (AttributeError, RuntimeError):
-                pass
-        self._qmmm_restart_identity_cache = identity
-        return identity
+        coef = np.asarray(coef, dtype=np.complex128)
+        if (coef.shape != (self.nstate,)
+                or not np.all(np.isfinite(coef.real))
+                or not np.all(np.isfinite(coef.imag))):
+            raise RuntimeError(f'{context} contains invalid electronic coefficients')
+        norm = float(np.vdot(coef, coef).real)
+        if not np.isfinite(norm) or abs(norm - 1.0) > 1.0e-6:
+            raise RuntimeError(
+                f'{context} electronic coefficient norm is {norm!r}, not 1')
+        if not 1 <= int(active) <= self.nstate:
+            raise RuntimeError(
+                f'{context} active state {active} is outside 1..{self.nstate}')
+
+        prev_xyz = np.asarray(prev_xyz, dtype=float).reshape(-1)
+        expected_qm_size = 3 * len(self._molecular_identity()['atomic_numbers'])
+        if (prev_xyz.size != expected_qm_size
+                or not np.all(np.isfinite(prev_xyz))):
+            raise RuntimeError(f'{context} contains invalid previous QM coordinates')
+        for key, raw_value in prev_data.items():
+            value = np.asarray(raw_value)
+            if value.dtype == object:
+                raise TypeError(f'NAMD restart cannot serialize ragged tag {key!r}')
+            if value.dtype.kind in 'biufc' and not np.all(np.isfinite(value)):
+                raise RuntimeError(
+                    f'{context} contains non-finite previous-state tag {key!r}')
+            if key.startswith('OQP::state_tracking_'):
+                scalar_tags = {'OQP::state_tracking_output_reordered'}
+                expected_shape = ((1,) if key in scalar_tags
+                                  else (self.nstate,))
+                if value.shape != expected_shape:
+                    raise RuntimeError(
+                        f'{context} contains invalid tracking tag {key!r} '
+                        f'shape {value.shape}; expected {expected_shape}')
+                if key in {
+                        'OQP::state_tracking_order',
+                        'OQP::state_tracking_raw_order'}:
+                    order = np.asarray(value, dtype=np.int64)
+                    if not np.array_equal(
+                            np.sort(order), np.arange(self.nstate)):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking permutation '
+                            f'{key!r}')
+                if key == 'OQP::state_tracking_lineage':
+                    if (value.dtype.kind not in 'iu'
+                            or np.unique(value).size != self.nstate):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking lineage IDs')
+                if key in {
+                        'OQP::state_tracking_phase_step',
+                        'OQP::state_tracking_phase_initial',
+                        'OQP::state_tracking_previous_phase_initial'}:
+                    if not np.allclose(np.abs(value), 1.0, atol=1.0e-12,
+                                       rtol=0.0):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking phase {key!r}')
+        return coordinates, velocities, acceleration, coef, prev_xyz
 
     @staticmethod
     def _checkpoint_optional(payload, name, value):
@@ -1608,53 +2176,72 @@ class NAMD:
             payload[f'has_{name}'] = np.array([1], dtype=np.int8)
             payload[name] = np.asarray(value)
 
+    def _validate_restart_histories(self, histories, *, context):
+        """Validate optional Baeck-An and NVE state without reshaping it."""
+        shapes = {
+            'ba_energy_left': (self.nstate,),
+            'ba_energy_center': (self.nstate,),
+            'ba_tdc_left': (self.nstate, self.nstate),
+            'ba_dt_left': (),
+            'nve_reference_energy': (),
+            'nve_previous_energy': (),
+        }
+        validated = {}
+        for name, expected in shapes.items():
+            value = histories.get(name)
+            if value is None:
+                validated[name] = None
+                continue
+            array = np.asarray(value)
+            if array.shape != expected or not np.all(np.isfinite(array)):
+                raise RuntimeError(f'{context} contains invalid {name}')
+            if name == 'ba_dt_left' and float(array) <= 0.0:
+                raise RuntimeError(f'{context} contains invalid ba_dt_left')
+            validated[name] = float(array) if expected == () else array.copy()
+        ba_names = (
+            'ba_energy_left', 'ba_energy_center', 'ba_tdc_left', 'ba_dt_left')
+        ba_present = [validated[name] is not None for name in ba_names]
+        if any(ba_present) and not all(ba_present):
+            raise RuntimeError(
+                f'{context} contains incomplete Baeck-An history')
+        nve_names = ('nve_reference_energy', 'nve_previous_energy')
+        nve_present = [validated[name] is not None for name in nve_names]
+        if any(nve_present) and not all(nve_present):
+            raise RuntimeError(f'{context} contains incomplete NVE history')
+        return validated
+
     def _save_restart(self, istep, coordinates, velocities, acceleration):
         """Atomically save all state needed for phase-continuous continuation."""
-        if istep % self.restart_interval != 0:
+        if istep % self.restart_interval != 0 and istep != self.nstep:
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(lambda: self._save_restart_on_io_rank(
+            istep, coordinates, velocities, acceleration))
+
+    def _save_restart_on_io_rank(self, istep, coordinates, velocities,
+                                 acceleration):
+        """Validate and atomically write a checkpoint on rank zero."""
         if self.prev_data is None or self.prev_xyz is None:
-            self._io_barrier()
             return
-        nuclear_state = tuple(np.asarray(value, dtype=float) for value in (
-            coordinates, velocities, acceleration))
-        if (nuclear_state[0].shape != nuclear_state[1].shape
-                or nuclear_state[0].shape != nuclear_state[2].shape
-                or nuclear_state[0].size == 0
-                or not all(np.all(np.isfinite(value)) for value in nuclear_state)):
-            raise RuntimeError(
-                f'refusing to overwrite the last-good NAMD restart with an '
-                f'invalid nuclear state at step {istep}')
-        critical_state = {
-            'coef': self.coef,
-            'prev_xyz': self.prev_xyz,
+        nuclear_state = (coordinates, velocities, acceleration)
+        coordinates, velocities, acceleration, coef, prev_xyz = (
+            self._validate_restart_state(
+                nuclear_state, self.coef, self.active, self.prev_xyz,
+                self.prev_data,
+                context=(f'refusing to overwrite the last-good NAMD restart '
+                         f'at step {istep}: state'),
+            )
+        )
+        prev_keys = sorted(self.prev_data)
+        histories = self._validate_restart_histories({
             'ba_energy_left': self._ba_energy_left,
             'ba_energy_center': self._ba_energy_center,
             'ba_tdc_left': self._ba_tdc_left,
-            'last_state_overlap': self._last_state_overlap,
-            'last_overlap_tdc': self._last_overlap_tdc,
-            'nacme_reference_tdc': self._nacme_reference_tdc,
-        }
-        invalid = []
-        for name, value in critical_state.items():
-            if value is None:
-                continue
-            array = np.asarray(value)
-            if array.dtype.kind in 'biufc' and not np.all(np.isfinite(array)):
-                invalid.append(name)
-        if np.asarray(self.coef).reshape(-1).size != self.nstate:
-            invalid.append('coef_shape')
-        for key, value in self.prev_data.items():
-            array = np.asarray(value)
-            if array.dtype.kind in 'biufc' and not np.all(np.isfinite(array)):
-                invalid.append(f'prev_data[{key!r}]')
-        if invalid:
-            raise RuntimeError(
-                f'refusing to overwrite the last-good NAMD restart with an '
-                f'invalid electronic state at step {istep}: {", ".join(invalid)}')
-        prev_keys = sorted(self.prev_data)
+            'ba_dt_left': self._ba_dt_left,
+            'nve_reference_energy': self._nve_reference_energy,
+            'nve_previous_energy': self._nve_previous_energy,
+        }, context=(f'refusing to overwrite the last-good NAMD restart at '
+                    f'step {istep}: history'))
+        trajectory_prefix = self._trajectory_checkpoint_identity(istep)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
             'signature': np.array([self._restart_signature()]),
@@ -1688,23 +2275,19 @@ class NAMD:
             'coordinates': np.asarray(coordinates, dtype=np.float64),
             'velocities': np.asarray(velocities, dtype=np.float64),
             'acceleration': np.asarray(acceleration, dtype=np.float64),
-            'coef_real': np.asarray(self.coef.real, dtype=np.float64),
-            'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
-            'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
+            'coef_real': np.asarray(coef.real, dtype=np.float64),
+            'coef_imag': np.asarray(coef.imag, dtype=np.float64),
+            'prev_xyz': np.asarray(prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
+            'trajectory_prefix_bytes': np.array(
+                [trajectory_prefix['bytes']], dtype=np.int64),
+            'trajectory_prefix_sha256': np.array(
+                [trajectory_prefix['sha256']]),
         }
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
-            if value.dtype == object:
-                raise TypeError(f'NAMD restart cannot serialize ragged tag {key!r}')
             payload[f'prev_{index}'] = value
-        for name, value in (
-                ('ba_energy_left', self._ba_energy_left),
-                ('ba_energy_center', self._ba_energy_center),
-                ('ba_tdc_left', self._ba_tdc_left),
-                ('ba_dt_left', self._ba_dt_left),
-                ('nve_reference_energy', self._nve_reference_energy),
-                ('nve_previous_energy', self._nve_previous_energy)):
+        for name, value in histories.items():
             self._checkpoint_optional(payload, name, value)
 
         directory = os.path.dirname(self.restart_file) or '.'
@@ -1720,40 +2303,77 @@ class NAMD:
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-        self._io_barrier()
 
-    def _write_restart_manifest(self):
-        """Write a directly runnable ``restart.oqp`` beside the checkpoint."""
-        canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
-        if not canonical:
-            source = getattr(self.mol, 'oqp_input_source', None)
-            if source and str(source).lower().endswith('.oqp') and os.path.isfile(source):
-                with open(source, 'r', encoding='utf-8') as stream:
-                    canonical = stream.read().strip()
-        if not canonical:
-            dump_log(
-                self.mol,
-                title=('NAMD checkpoint saved, but restart.oqp was not generated: '
-                       'the run did not originate from canonical .oqp input'),
-            )
-            return
-        from oqp.utils.oqp_input import (
-            CallSpec, CalculationSpec, parse_canonical_oqp, render_canonical_oqp,
-        )
-        spec = parse_canonical_oqp(canonical)
-        if spec.driver.name != 'namd':
-            raise ValueError('cannot create restart.oqp from a non-NAMD request')
-        directory = os.path.dirname(self.restart_manifest_file) or '.'
-        source = getattr(self.mol, 'oqp_input_source', None)
-        source_directory = (os.path.dirname(os.path.abspath(source))
-                            if isinstance(source, str) and source.strip()
-                            else '')
+    def _rebase_restart_spec_paths(self, spec, source_dir):
+        """Make input-owned paths stable when the manifest moves to log_dir."""
+        from oqp.utils.oqp_input import CallSpec, CalculationSpec
+
+        def absolute_path(value):
+            if not isinstance(value, str) or not value.strip():
+                return value
+            expanded = os.path.expanduser(value.strip())
+            if os.path.isabs(expanded):
+                return os.path.normpath(expanded)
+            return os.path.normpath(os.path.abspath(os.path.join(
+                source_dir, expanded)))
+
+        def runtime_path(value):
+            """Resolve paths exactly as the live guess readers do."""
+            if not isinstance(value, str) or not value.strip():
+                return value
+            return os.path.realpath(os.path.abspath(
+                os.path.expanduser(value.strip())))
+
+        def geometry_path(value):
+            if not isinstance(value, str) or '\n' in value or '\r' in value:
+                return value
+            candidate = value.strip()
+            if (os.path.splitext(candidate)[1].lower() in ('.xyz', '.pdb')
+                    or os.path.isfile(os.path.join(source_dir, candidate))):
+                return absolute_path(value)
+            return value
+
+        def search_path_list(value):
+            if not isinstance(value, str):
+                return value
+            entries = [item for item in value.replace(',', ' ').split() if item]
+            resolved = []
+            for item in entries:
+                candidate = self._resolve_qmmm_aux_file(
+                    os.path.expanduser(item))
+                # Preserve OpenMM built-in force-field names; only local files
+                # are made absolute.  The shared resolver preserves the
+                # runtime's existing-CWD-file precedence over input_dir.
+                resolved.append(os.path.abspath(candidate)
+                                if os.path.isfile(candidate) else item)
+            return ' '.join(resolved)
+
+        def basis_path(value):
+            if not isinstance(value, str) or not value.startswith('file:'):
+                return value
+            return 'file:' + absolute_path(value[len('file:'):])
+
         options = dict(spec.options)
-        for name in ('geom', 'geom2'):
-            if name in options:
-                options[name] = _restart_asset_path(
-                    options[name], source_directory, filelike_only=True)
-        path_options = {
+        for key in ('geom', 'geom2'):
+            if key in options:
+                options[key] = geometry_path(options[key])
+
+        model_options = dict(spec.model_options)
+        for key in ('parameter_path', 'library_path'):
+            if key in model_options:
+                model_options[key] = absolute_path(model_options[key])
+
+        driver_kwargs = dict(spec.driver.kwargs)
+        velocity = driver_kwargs.get('velocity')
+        if (isinstance(velocity, str)
+                and velocity.strip().lower() not in ('maxwell', 'zero')):
+            driver_kwargs['velocity'] = absolute_path(velocity)
+        driver = CallSpec(
+            spec.driver.name, spec.driver.args, driver_kwargs,
+            spec.driver.explicit)
+
+        single_path_keys = {
+            'input': {'system', 'system2'},
             'neb': {'product'},
             'guess': {'file', 'file2'},
             'dftb': {'parameter_path', 'library_path'},
@@ -1766,30 +2386,69 @@ class NAMD:
         }
         modifiers = []
         for call in spec.modifiers:
-            call_kwargs = dict(call.kwargs)
-            for name in path_options.get(call.name, set()):
-                if name in call_kwargs:
-                    call_kwargs[name] = _restart_asset_path(
-                        call_kwargs[name], source_directory)
+            kwargs = dict(call.kwargs)
+            for key in single_path_keys.get(call.name, set()):
+                if key in kwargs:
+                    kwargs[key] = (runtime_path(kwargs[key])
+                                   if call.name == 'guess'
+                                   else absolute_path(kwargs[key]))
             if call.name == 'qmmm':
-                for name in ('forcefield', 'forcefield_files'):
-                    if name in call_kwargs:
-                        call_kwargs[name] = _restart_search_path_list(
-                            call_kwargs[name], source_directory)
+                for key in ('forcefield', 'forcefield_files'):
+                    if key in kwargs:
+                        kwargs[key] = search_path_list(kwargs[key])
+            if call.name == 'scf' and 'init_basis' in kwargs:
+                kwargs['init_basis'] = basis_path(kwargs['init_basis'])
             modifiers.append(CallSpec(
-                call.name, call.args, call_kwargs, call.explicit))
+                call.name, call.args, kwargs, call.explicit))
+
+        return CalculationSpec(
+            spec.model, spec.functional, basis_path(spec.basis),
+            model_options, options,
+            driver, tuple(modifiers), spec.source_text)
+
+    def _write_restart_manifest(self):
+        """Write a directly runnable per-job restart manifest."""
+        if getattr(self, '_restart_manifest_written', False):
+            return
+        canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
+        if not canonical:
+            source = getattr(self.mol, 'oqp_input_source', None)
+            if source and str(source).lower().endswith('.oqp') and os.path.isfile(source):
+                with open(source, 'r', encoding='utf-8') as stream:
+                    canonical = stream.read().strip()
+        if not canonical:
+            if not getattr(self, '_manifest_notice_logged', False):
+                dump_log(
+                    self.mol,
+                    title=(
+                        'NAMD checkpoint saved, but restart.oqp was not generated: '
+                        'the run did not originate from canonical .oqp input'),
+                )
+                self._manifest_notice_logged = True
+            return
+        from oqp.utils.oqp_input import (
+            CallSpec, CalculationSpec, parse_canonical_oqp, render_canonical_oqp,
+        )
+        spec = parse_canonical_oqp(canonical)
+        if spec.driver.name != 'namd':
+            raise ValueError('cannot create restart.oqp from a non-NAMD request')
+        directory = os.path.dirname(self.restart_manifest_file) or '.'
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        spec = self._rebase_restart_spec_paths(spec, source_dir)
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
             'restart': True,
             'restart_file': os.path.relpath(self.restart_file, directory),
             'trajectory_file': os.path.relpath(self.trajectory_file, directory),
-            'nacme_audit_file': os.path.relpath(self.nacme_audit_file, directory),
         })
         driver = CallSpec(
             spec.driver.name, spec.driver.args, kwargs, spec.driver.explicit)
         restart_spec = CalculationSpec(
             spec.model, spec.functional, spec.basis, spec.model_options,
-            options, driver, tuple(modifiers), spec.source_text)
+            spec.options, driver, spec.modifiers, spec.source_text)
         rendered = render_canonical_oqp(restart_spec)
         descriptor, temporary = tempfile.mkstemp(
             prefix='.restart-oqp-', suffix='.tmp', dir=directory)
@@ -1799,190 +2458,352 @@ class NAMD:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.restart_manifest_file)
+            self._restart_manifest_written = True
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
 
     def _load_restart(self):
-        """Load and validate a same-spin NAMD restart without pickle data."""
+        """Collectively load and restore a same-spin NAMD checkpoint."""
         if not self.restart_requested:
             return None
-        if not os.path.isfile(self.restart_file):
-            raise FileNotFoundError(f'NAMD restart file not found: {self.restart_file}')
-        with np.load(self.restart_file, allow_pickle=False) as saved:
-            version = int(saved['schema_version'][0])
-            if version != NAMD_RESTART_SCHEMA_VERSION:
-                raise ValueError(f'unsupported NAMD restart schema {version}')
-            signature = str(saved['signature'][0])
-            if signature != self._restart_signature():
-                raise ValueError(
-                    'NAMD restart model/topology/RNG/time-step mismatch')
-            settings_json = str(saved['independent_controls_json'][0])
-            expected_settings = json.dumps(
-                self._independent_settings_record(), sort_keys=True,
-                separators=(',', ':'))
-            if settings_json != expected_settings:
-                raise ValueError('NAMD restart droplet/restraint/thermostat mismatch')
-            keys = [str(key) for key in saved['prev_keys']]
-            self.prev_data = {
-                key: np.array(saved[f'prev_{index}'], copy=True)
-                for index, key in enumerate(keys)
-            }
-            self.prev_xyz = np.array(saved['prev_xyz'], copy=True)
-            self.mol.put_data(self.prev_data)
-            self.active = int(saved['active'][0])
-            self.coef = (np.array(saved['coef_real'], copy=True)
-                         + 1j*np.array(saved['coef_imag'], copy=True))
-            self._rng_step = int(saved['rng_step'][0])
-            self._last_hop_random = np.nan
-            self._nacme_gate_failures = int(saved['gate_failures'][0])
-            self._nve_gate_failures = int(saved['nve_failures'][0])
-            self._t_fs = float(saved['time_fs'][0])
-            self._droplet_energy = float(saved['droplet_energy'][0])
-            self._droplet_max_penetration = float(
-                saved['droplet_max_penetration'][0])
-            self._droplet_active_count = int(saved['droplet_active_count'][0])
-            self._solute_com_energy = float(saved['solute_com_energy'][0])
-            self._solute_com_displacement = float(
-                saved['solute_com_displacement'][0])
-            self._conservative_restraint_energy = (
-                self._droplet_energy + self._solute_com_energy)
-            self._thermostat_exchange = float(
-                saved['thermostat_exchange'][0])
-            self._thermostat_exchange_cumulative = float(
-                saved['thermostat_exchange_cumulative'][0])
-            for name in ('ba_energy_left', 'ba_energy_center', 'ba_tdc_left',
-                         'ba_dt_left', 'nve_reference_energy',
-                         'nve_previous_energy'):
-                value = (np.array(saved[name], copy=True)
-                         if int(saved[f'has_{name}'][0]) else None)
-                if name in ('ba_dt_left', 'nve_reference_energy',
-                            'nve_previous_energy') and value is not None:
-                    value = float(value.reshape(-1)[0])
-                setattr(self, f'_{name}', value)
-            result = {
-                'step': int(saved['step'][0]),
-                'coordinates': np.array(saved['coordinates'], copy=True),
-                'velocities': np.array(saved['velocities'], copy=True),
-                'acceleration': np.array(saved['acceleration'], copy=True),
-            }
-        self._reconcile_trajectory_with_restart(result['step'])
-        self._reconcile_nacme_audit_with_restart(result['step'])
+        payload = self._run_io_collective_result(
+            self._load_restart_on_io_rank)
+        self.prev_data = payload['prev_data']
+        self.prev_xyz = payload['prev_xyz']
+        self.mol.put_data(self.prev_data)
+        self.active = payload['active']
+        self.coef = payload['coef']
+        self._rng_step = payload['rng_step']
+        self._last_hop_random = np.nan
+        self._nacme_gate_failures = payload['gate_failures']
+        self._nve_gate_failures = payload['nve_failures']
+        self._t_fs = payload['time_fs']
+        for name, value in payload['optional'].items():
+            setattr(self, f'_{name}', value)
+        for name, value in payload['independent_state'].items():
+            setattr(self, f'_{name}', value)
+        self._conservative_restraint_energy = (
+            self._droplet_energy + self._solute_com_energy)
+        self._reconcile_trajectory_with_restart(
+            payload['step'], payload['trajectory_prefix'])
         dump_log(
             self.mol,
-            title=(f'NAMD restart loaded: step={result["step"]} '
+            title=(f'NAMD restart loaded: step={payload["step"]} '
                    f'file={self.restart_file} phase_history=restored '
                    f'rng=({self.seed},{self.rng_stream},step)'),
         )
+        return {
+            key: payload[key] for key in (
+                'step', 'coordinates', 'velocities', 'acceleration')
+        }
+
+    def _load_restart_on_io_rank(self):
+        """Read and validate a checkpoint on rank zero without pickle data."""
+        if not os.path.isfile(self.restart_file):
+            raise FileNotFoundError(f'NAMD restart file not found: {self.restart_file}')
+        with np.load(self.restart_file, allow_pickle=False) as saved:
+            version = self._restart_integer(saved, 'schema_version')
+            if version != NAMD_RESTART_SCHEMA_VERSION:
+                raise ValueError(f'unsupported NAMD restart schema {version}')
+            signature_array = np.asarray(saved['signature'])
+            if signature_array.shape != (1,) or signature_array.dtype.kind not in 'SU':
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid signature metadata')
+            signature = str(signature_array[0])
+            if not self._restart_signature_matches(signature):
+                raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+            step = self._restart_integer(saved, 'step')
+            active = self._restart_integer(saved, 'active', minimum=1)
+            rng_step = self._restart_integer(saved, 'rng_step')
+            gate_failures = self._restart_integer(saved, 'gate_failures')
+            nve_failures = self._restart_integer(saved, 'nve_failures')
+            time_fs = self._restart_float(saved, 'time_fs', minimum=0.0)
+            trajectory_prefix_bytes = self._restart_integer(
+                saved, 'trajectory_prefix_bytes')
+            trajectory_digest_array = np.asarray(
+                saved['trajectory_prefix_sha256'])
+            if (trajectory_digest_array.shape != (1,)
+                    or trajectory_digest_array.dtype.kind not in 'SU'):
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid dense trajectory '
+                    'prefix metadata')
+            trajectory_prefix_sha256 = str(
+                trajectory_digest_array[0]).lower()
+            if not re.fullmatch(r'[0-9a-f]{64}', trajectory_prefix_sha256):
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid dense trajectory '
+                    'prefix metadata')
+            if rng_step > step:
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid rng_step metadata')
+            if gate_failures > step + 1 or nve_failures > step + 1:
+                raise RuntimeError(
+                    'NAMD restart checkpoint has implausible gate failure streak')
+            keys = [str(key) for key in saved['prev_keys']]
+            prev_data = {
+                key: np.array(saved[f'prev_{index}'], copy=True)
+                for index, key in enumerate(keys)
+            }
+            prev_xyz = np.array(saved['prev_xyz'], copy=True)
+            coef_real = np.array(saved['coef_real'], copy=True)
+            coef_imag = np.array(saved['coef_imag'], copy=True)
+            if (coef_real.shape != (self.nstate,)
+                    or coef_imag.shape != (self.nstate,)
+                    or not np.all(np.isfinite(coef_real))
+                    or not np.all(np.isfinite(coef_imag))):
+                raise RuntimeError(
+                    'NAMD restart checkpoint contains invalid serialized '
+                    'electronic coefficient vectors')
+            coef = coef_real + 1j*coef_imag
+            nuclear_state = tuple(np.array(saved[name], copy=True) for name in (
+                'coordinates', 'velocities', 'acceleration'))
+            coordinates, velocities, acceleration, coef, prev_xyz = (
+                self._validate_restart_state(
+                    nuclear_state, coef, active, prev_xyz, prev_data,
+                    context='NAMD restart checkpoint',
+                )
+            )
+            optional = {}
+            for name in ('ba_energy_left', 'ba_energy_center', 'ba_tdc_left',
+                         'ba_dt_left', 'nve_reference_energy',
+                         'nve_previous_energy'):
+                present = np.asarray(saved[f'has_{name}'])
+                if (present.shape != (1,) or int(present[0]) not in (0, 1)):
+                    raise RuntimeError(
+                        f'NAMD restart checkpoint has invalid {name} marker')
+                value = (np.array(saved[name], copy=True)
+                         if int(present[0]) else None)
+                optional[name] = value
+            optional = self._validate_restart_histories(
+                optional, context='NAMD restart checkpoint')
+            settings = np.asarray(saved['independent_controls_json'])
+            if (settings.shape != (1,) or settings.dtype.kind not in 'SU'
+                    or str(settings[0]) != json.dumps(
+                        self._independent_settings_record(), sort_keys=True,
+                        separators=(',', ':'))):
+                raise ValueError(
+                    'NAMD restart droplet/restraint/thermostat mismatch')
+            independent_state = {
+                'droplet_energy': self._restart_float(
+                    saved, 'droplet_energy', minimum=0.0),
+                'droplet_max_penetration': self._restart_float(
+                    saved, 'droplet_max_penetration', minimum=0.0),
+                'droplet_active_count': self._restart_integer(
+                    saved, 'droplet_active_count'),
+                'solute_com_energy': self._restart_float(
+                    saved, 'solute_com_energy', minimum=0.0),
+                'solute_com_displacement': self._restart_float(
+                    saved, 'solute_com_displacement', minimum=0.0),
+                'thermostat_exchange': self._restart_float(
+                    saved, 'thermostat_exchange'),
+                'thermostat_exchange_cumulative': self._restart_float(
+                    saved, 'thermostat_exchange_cumulative'),
+            }
+            result = {
+                'step': step,
+                'coordinates': coordinates,
+                'velocities': velocities,
+                'acceleration': acceleration,
+                'prev_data': prev_data,
+                'prev_xyz': prev_xyz,
+                'active': active,
+                'coef': coef,
+                'rng_step': rng_step,
+                'gate_failures': gate_failures,
+                'nve_failures': nve_failures,
+                'time_fs': time_fs,
+                'trajectory_prefix': {
+                    'bytes': trajectory_prefix_bytes,
+                    'sha256': trajectory_prefix_sha256,
+                },
+                'optional': optional,
+                'independent_state': independent_state,
+            }
         return result
 
-    def _reconcile_trajectory_with_restart(self, checkpoint_step):
-        """Discard only uncommitted TRJ tail records newer than checkpoint."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
-        if not os.path.isfile(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
-            self._io_barrier()
-            return
-        with open(self.trajectory_file, 'rb') as stream:
+    @staticmethod
+    def _restart_integer(saved, name, *, minimum=0):
+        """Read one exact integer checkpoint field without coercion."""
+        value = np.asarray(saved[name])
+        if (value.shape != (1,) or value.dtype.kind not in 'iu'
+                or int(value[0]) < minimum):
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        return int(value[0])
+
+    @staticmethod
+    def _restart_float(saved, name, *, minimum=None):
+        """Read one finite scalar checkpoint field without broadcasting."""
+        value = np.asarray(saved[name])
+        if value.shape != (1,) or value.dtype.kind not in 'fiu':
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        scalar = float(value[0])
+        if not np.isfinite(scalar) or (minimum is not None and scalar < minimum):
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        return scalar
+
+    def _trajectory_stat_identity(self):
+        """Return cheap metadata that detects sidecar replacement/mutation."""
+        try:
+            status = os.stat(self.trajectory_file)
+        except OSError as error:
+            raise RuntimeError(
+                'NAMD dense trajectory disappeared before checkpoint') from error
+        return (
+            int(status.st_dev), int(status.st_ino), int(status.st_size),
+            int(status.st_mtime_ns),
+        )
+
+    def _require_unchanged_trajectory_prefix(self):
+        """Reject external sidecar changes before using the cached digest."""
+        expected = getattr(self, '_trajectory_prefix_stat', None)
+        if expected is None or self._trajectory_stat_identity() != expected:
+            raise RuntimeError(
+                'NAMD dense trajectory changed outside the active writer')
+
+    def _remember_trajectory_prefix(self, scanned):
+        """Install a validated incremental digest after start or restart."""
+        self._trajectory_prefix_hasher = scanned['hasher']
+        self._trajectory_prefix_bytes = scanned['bytes']
+        self._trajectory_prefix_last_step = scanned['last_step']
+        self._trajectory_prefix_stat = self._trajectory_stat_identity()
+
+    def _scan_trajectory_prefix(self, checkpoint_step):
+        """Scan one committed prefix without retaining its trajectory bytes."""
+        path = self.trajectory_file
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            return {
+                'hasher': hashlib.sha256(), 'bytes': 0, 'sha256':
+                hashlib.sha256(b'').hexdigest(), 'records': 0,
+                'last_step': None, 'removed_records': 0,
+                'partial_bytes': 0,
+            }
+        with open(path, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
-            header_size = struct.unpack('<Q', stream.read(8))[0]
-            header = json.loads(stream.read(header_size).decode('utf-8'))
+            size_bytes = stream.read(8)
+            if len(size_bytes) != 8:
+                raise ValueError('restart trajectory has a truncated header')
+            header_size = struct.unpack('<Q', size_bytes)[0]
+            header_bytes = stream.read(header_size)
+            if len(header_bytes) != header_size:
+                raise ValueError('restart trajectory has a truncated header')
+            try:
+                header = json.loads(header_bytes.decode('utf-8'))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError(
+                    'restart trajectory has an invalid header') from error
         offset = 16 + header_size
-        dtype = _namd_trajectory_dtype(
-            int(header['nstate']), int(header['natom']))
-        payload_size = os.path.getsize(self.trajectory_file) - offset
-        if payload_size < 0:
-            raise ValueError('restart trajectory header exceeds file size')
-        partial_bytes = payload_size % dtype.itemsize
-        if partial_bytes:
-            with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(os.path.getsize(self.trajectory_file)
-                                - partial_bytes)
-                stream.flush()
-                os.fsync(stream.fileno())
-            dump_log(
-                self.mol,
-                title=(f'NAMD restart removed {partial_bytes} incomplete '
-                       f'trajectory byte(s) after the last full record'),
-            )
-        header, records = read_namd_trajectory(self.trajectory_file)
+        if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
+            raise ValueError('unsupported OpenQP NAMD trajectory schema')
         if header.get('signature') != self._restart_signature():
             raise ValueError('restart trajectory and checkpoint model mismatch')
-        steps = np.array(records['step'], copy=True)
-        keep = int(np.count_nonzero(steps <= int(checkpoint_step)))
-        if keep < len(records):
+        try:
+            dtype = _namd_trajectory_dtype(
+                int(header['nstate']), int(header['natom']))
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                'restart trajectory has invalid dimensions') from error
+        if int(header.get('record_bytes', -1)) != dtype.itemsize:
+            raise ValueError('restart trajectory record layout mismatch')
+        payload_size = os.path.getsize(path) - offset
+        if payload_size < 0:
+            raise ValueError('restart trajectory has an invalid header size')
+        partial_bytes = payload_size % dtype.itemsize
+        count = payload_size // dtype.itemsize
+        if count:
+            records = np.memmap(
+                path, dtype=dtype, mode='r', offset=offset, shape=(count,))
+            steps = np.array(records['step'], copy=True)
             del records
+            if (np.any(steps < 0)
+                    or (len(steps) > 1 and np.any(np.diff(steps) <= 0))):
+                raise ValueError(
+                    'restart trajectory contains non-monotonic step records')
+            keep = int(np.searchsorted(
+                steps, int(checkpoint_step), side='right'))
+            last_step = int(steps[keep - 1]) if keep else None
+        else:
+            keep = 0
+            last_step = None
+        prefix_bytes = offset + keep*dtype.itemsize
+        digest = hashlib.sha256()
+        remaining = prefix_bytes
+        with open(path, 'rb') as stream:
+            while remaining:
+                block = stream.read(min(1024 * 1024, remaining))
+                if not block:
+                    raise ValueError(
+                        'restart trajectory changed while being validated')
+                digest.update(block)
+                remaining -= len(block)
+        return {
+            'hasher': digest, 'bytes': prefix_bytes,
+            'sha256': digest.hexdigest(), 'records': keep,
+            'last_step': last_step, 'removed_records': count - keep,
+            'partial_bytes': partial_bytes,
+        }
+
+    def _trajectory_checkpoint_identity(self, checkpoint_step):
+        """Return a checkpoint prefix digest in O(1) during normal MD."""
+        cached = getattr(self, '_trajectory_prefix_hasher', None)
+        if cached is not None:
+            self._require_unchanged_trajectory_prefix()
+            last_step = getattr(self, '_trajectory_prefix_last_step', None)
+            if last_step is not None and last_step <= int(checkpoint_step):
+                return {
+                    'bytes': int(self._trajectory_prefix_bytes),
+                    'sha256': cached.hexdigest(),
+                }
+
+        scanned = self._scan_trajectory_prefix(checkpoint_step)
+        if scanned['records'] == 0:
+            raise RuntimeError(
+                'refusing to checkpoint without the committed dense '
+                'trajectory record')
+        if not scanned['removed_records'] and not scanned['partial_bytes']:
+            self._remember_trajectory_prefix(scanned)
+        return {'bytes': scanned['bytes'], 'sha256': scanned['sha256']}
+
+    def _reconcile_trajectory_with_restart(self, checkpoint_step,
+                                           expected_prefix):
+        """Verify the committed TRJ prefix, then discard later bytes."""
+        return self._run_io_collective(
+            lambda: self._reconcile_trajectory_on_io_rank(
+                checkpoint_step, expected_prefix))
+
+    def _reconcile_trajectory_on_io_rank(self, checkpoint_step,
+                                         expected_prefix):
+        """Perform packed-trajectory reconciliation on rank zero."""
+        scanned = self._scan_trajectory_prefix(checkpoint_step)
+        if scanned['records'] == 0:
+            raise ValueError(
+                'restart checkpoint requires its committed dense trajectory')
+        observed = {
+            'bytes': scanned['bytes'],
+            'sha256': scanned['sha256'],
+        }
+        if observed != expected_prefix:
+            raise ValueError(
+                'restart dense trajectory does not match the checkpoint '
+                'committed prefix')
+        if scanned['removed_records'] or scanned['partial_bytes']:
             with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(offset + keep*dtype.itemsize)
+                stream.truncate(scanned['bytes'])
                 stream.flush()
                 os.fsync(stream.fileno())
             dump_log(
                 self.mol,
-                title=(f'NAMD restart removed {len(steps) - keep} uncommitted '
-                       f'trajectory record(s) after step {checkpoint_step}'),
+                title=(f'NAMD restart removed '
+                       f'{scanned["removed_records"]} uncommitted '
+                       f'trajectory record(s) and '
+                       f'{scanned["partial_bytes"]} incomplete '
+                       f'byte(s) after step {checkpoint_step}'),
             )
-        else:
-            del records
-        self._io_barrier()
-
-    def _reconcile_nacme_audit_with_restart(self, checkpoint_step):
-        """Atomically remove NACME audit rows newer than the checkpoint."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
-        path = getattr(self, 'nacme_audit_file', '')
-        if not path or not os.path.isfile(path) or os.path.getsize(path) == 0:
-            self._io_barrier()
-            return
-        with open(path, 'r', encoding='utf-8') as stream:
-            lines = stream.readlines()
-        columns = lines[0].rstrip('\n').split('\t')
-        if 'evaluation_step' in columns:
-            step_index = columns.index('evaluation_step')
-            inclusive = True
-        elif 'center_step' in columns:
-            # Legacy rows were emitted while evaluating center_step + 1.
-            step_index = columns.index('center_step')
-            inclusive = False
-        else:
-            raise ValueError('NACME audit header has no restart step column')
-        kept = [lines[0]]
-        removed = 0
-        for line in lines[1:]:
-            if not line.strip():
-                continue
-            fields = line.rstrip('\n').split('\t')
-            try:
-                row_step = int(fields[step_index])
-            except (IndexError, ValueError) as exc:
-                raise ValueError('malformed NACME audit row during restart') from exc
-            committed = (row_step <= int(checkpoint_step) if inclusive
-                         else row_step < int(checkpoint_step))
-            if committed:
-                kept.append(line if line.endswith('\n') else line + '\n')
-            else:
-                removed += 1
-        if removed:
-            directory = os.path.dirname(path) or '.'
-            descriptor, temporary = tempfile.mkstemp(
-                prefix='.namd-nacme-audit-', suffix='.tmp', dir=directory)
-            try:
-                with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                    stream.writelines(kept)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, path)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
-            dump_log(
-                self.mol,
-                title=(f'NAMD restart removed {removed} uncommitted NACME '
-                       f'audit row(s) after step {checkpoint_step}'),
-            )
-        self._io_barrier()
+        self._remember_trajectory_prefix(scanned)
 
     # ------------------------------------------------------------------ #
     # time-derivative couplings
@@ -2047,7 +2868,8 @@ class NAMD:
         tdc = self._compute_tdc(s)
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
         mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
-        mol.data["OQP::namd_eabs"] = np.array(mol.data["OQP::td_energies"]).reshape(-1)[:n].copy()
+        mol.data["OQP::namd_eabs"] = self._validated_td_energies(
+            "OQP::td_energies").copy()
 
         oqp.mrsf_namd_hop(mol)
 
@@ -2176,6 +2998,7 @@ class NAMD:
                    f'pop={np.array2string(pops, precision=4)}'),
         )
         self._write_md_trajectory(istep, r, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 
@@ -2223,20 +3046,9 @@ class NAMD_QMMM(NAMD):
         # any CWD (e.g. `openqp --run_tests`, which executes each example by its
         # full path). OpenMM built-in force fields (amber14-all.xml, ...) are left
         # untouched: the join is only used when it actually points at a file.
-        inp_dir = os.path.dirname(os.path.abspath(mol.input_file)) \
-            if getattr(mol, 'input_file', None) else ''
-
-        def _resolve_aux(name):
-            if name and inp_dir and not os.path.isabs(name) \
-                    and not os.path.exists(name):
-                cand = os.path.join(inp_dir, name)
-                if os.path.exists(cand):
-                    return cand
-            return name
-
         q = mol.config['qmmm']
-        pdb_file = _resolve_aux(q['pdb_file'])
-        ff_files = [_resolve_aux(s) for s in
+        pdb_file = self._resolve_qmmm_aux_file(q['pdb_file'])
+        ff_files = [self._resolve_qmmm_aux_file(s) for s in
                     str(q['forcefield_files']).replace(',', ' ').split() if s]
         self._qmmm_pdb_file = pdb_file
         self._qmmm_forcefield_files = ff_files
@@ -2720,6 +3532,7 @@ class NAMD_QMMM(NAMD):
         )
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 

@@ -4,10 +4,11 @@
 #       ROHF reference.
 # MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
 #
-# This is a *minimal* finite-droplet demonstration: two nuclear steps execute
-# the centered Baeck-An check while the independent water boundary and solute
-# COM restraint contribute conservative forces to the NVE energy audit.
-# Requires the optional OpenMM backend and the companion files
+# This is a *minimal* finite-droplet demonstration: nstep=2 reaches the second
+# overlap interval, where the three-point TD-Baeck-An estimate and NACME gate
+# are first invoked. The independent water boundary and solute-COM restraint
+# contribute conservative forces to the NVE energy audit. Requires the optional
+# OpenMM backend and the companion files
 # formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read relative to this
 # file).  It is part of `openqp --run_tests all`, and is reported SKIPPED when
 # OpenMM is not installed.
@@ -52,7 +53,19 @@ first_hop_step=1
 nacme_check=baeck_an
 ba_gap_max=0.0734986443513
 nacme_gate=warn
+nacme_gate_invariant_tol=1.0e-9
+nacme_gate_abs_tol=2.0e-4
+nacme_gate_rel_tol=0.8
+nacme_gate_consecutive=2
 nve_gate=warn
+nve_gate_abs_tol=4.0e-3
+nve_gate_step_tol=8.0e-4
+nve_gate_transition_tol=2.0e-6
+nve_gate_consecutive=2
+trajectory_interval=2
+restart_interval=2
+trajectory_file=H2CO-water.namd.trj
+restart_file=H2CO-water.namd.restart.npz
 decoherence=edc
 trivial=True
 soc=False

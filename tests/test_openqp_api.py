@@ -64,7 +64,7 @@ SCHEMA = {
         "init_temp": {"type": float, "default": "300.0"},
         "seed": {"type": int, "default": "1"},
         "rng_stream": {"type": int, "default": "0"},
-        "first_hop_step": {"type": int, "default": "2"},
+        "first_hop_step": {"type": int, "default": "1"},
         "nacme_check": {"type": _string, "default": "off"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
         "nacme_gate": {"type": _string, "default": "warn"},
@@ -77,10 +77,9 @@ SCHEMA = {
         "nve_gate_step_tol": {"type": float, "default": "1.0e-3"},
         "nve_gate_transition_tol": {"type": float, "default": "1.0e-6"},
         "nve_gate_consecutive": {"type": int, "default": "3"},
-        "trajectory_interval": {"type": int, "default": "1"},
-        "restart_interval": {"type": int, "default": "1"},
+        "trajectory_interval": {"type": int, "default": "0"},
+        "restart_interval": {"type": int, "default": "0"},
         "trajectory_file": {"type": _string, "default": ""},
-        "nacme_audit_file": {"type": _string, "default": ""},
         "restart_file": {"type": _string, "default": ""},
     },
     "scf": {
@@ -950,8 +949,9 @@ $$$$
         self.assertEqual(config["md"]["seed"], "20260803")
         self.assertEqual(config["md"]["rng_stream"], "9")
         self.assertEqual(config["md"]["first_hop_step"], "2")
+        self.assertEqual(config["md"]["nacme_check"], "off")
 
-    def test_namd_droplet_restraint_and_nacme_controls_are_pythonic(self):
+    def test_namd_droplet_restraint_controls_are_pythonic(self):
         openqp = load_openqp_module()
         job = (
             openqp.OpenQP(project="droplet_namd_qmmm")
@@ -974,6 +974,23 @@ $$$$
                 atoms="0-4",
             )
         )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["droplet"]["enabled"], "True")
+        self.assertEqual(config["droplet"]["radius"], "12.0")
+        self.assertEqual(config["droplet"]["target"], "water_com")
+        self.assertEqual(config["solute_com"]["enabled"], "True")
+        self.assertEqual(config["solute_com"]["atoms"], "0-4")
+
+    def test_workflow_namd_rejects_soc_nacme_and_builds_same_spin_gate(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_gate")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        with self.assertRaisesRegex(ValueError, "does not support nacme_check"):
+            job.workflow.namd(soc=True, nacme_check="baeck_an")
         job.workflow.namd(
             soc=False,
             nacme_check="baeck_an",
@@ -984,12 +1001,7 @@ $$$$
             nacme_gate_consecutive=4,
         )
         config = job.to_input_dict()
-
-        self.assertEqual(config["droplet"]["enabled"], "True")
-        self.assertEqual(config["droplet"]["radius"], "12.0")
-        self.assertEqual(config["droplet"]["target"], "water_com")
-        self.assertEqual(config["solute_com"]["enabled"], "True")
-        self.assertEqual(config["solute_com"]["atoms"], "0-4")
+        self.assertEqual(config["md"]["soc"], "False")
         self.assertEqual(config["md"]["nacme_check"], "baeck_an")
         self.assertEqual(config["md"]["ba_gap_max"], "0.05")
         self.assertEqual(config["md"]["nacme_gate"], "error")

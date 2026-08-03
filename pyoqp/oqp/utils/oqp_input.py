@@ -344,7 +344,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
         nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
         nve_gate_consecutive
-        trajectory_interval restart_interval trajectory_file nacme_audit_file
+        trajectory_interval restart_interval trajectory_file
         restart_file restart ensemble thermostat thermostat_temperature
         thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
@@ -543,7 +543,7 @@ DRIVER_OPTIONS = {
         "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
         "nve_gate_transition_tol", "nve_gate_consecutive",
         "trajectory_interval", "restart_interval", "trajectory_file",
-        "nacme_audit_file", "restart_file", "restart", "soc", "soc_basis",
+        "restart_file", "restart", "soc", "soc_basis",
         "ensemble", "thermostat", "thermostat_temperature",
         "thermostat_friction",
         "soc_du_dt_corr", "soc_tdc_grad_corr", "grad_wthr", "init_state",
@@ -822,6 +822,13 @@ def _parse_call(text: str) -> CallSpec:
     return CallSpec(name=name, args=tuple(args), kwargs=kwargs)
 
 
+def _normalize_basis_value(value: str) -> str:
+    """Normalize a basis name while preserving file-path case."""
+    if value.lower().startswith('file:'):
+        return 'file:' + value[len('file:'):]
+    return value.lower()
+
+
 def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     parts = _split_top_level(route, "/")
     if not parts or len(parts) > 3:
@@ -886,7 +893,8 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
         functional, basis = parts[1], parts[2]
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
-    return model, model_options, functional.lower(), basis.lower()
+    normalized_basis = _normalize_basis_value(basis)
+    return model, model_options, functional.lower(), normalized_basis
 
 
 def looks_canonical(text: str) -> bool:
@@ -1002,7 +1010,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             raise OQPInputError("Conflicting functional values in route and options")
         functional = flat
     if "basis" in options:
-        flat = str(options.pop("basis")).lower()
+        flat = _normalize_basis_value(str(options.pop("basis")))
         if basis and flat != basis:
             raise OQPInputError("Conflicting basis values in route and options")
         basis = flat
@@ -1234,10 +1242,10 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     else:
         options = _driver_options(driver)
     if driver.name == "mecp":
-        algorithm = str(options.get("mecp_search", "auglag")).strip().lower()
-        if algorithm not in {"auglag", "penalty", "quad"}:
+        algorithm = str(options.get("mecp_search", "auto")).strip().lower()
+        if algorithm not in {"auto", "auglag", "sqp", "penalty", "quad"}:
             raise OQPInputError(
-                "mecp algorithm must be auglag, penalty, or quad"
+                "mecp algorithm must be auto, sqp, auglag, penalty, or quad"
             )
 
     if driver.name == "meci":
@@ -2545,12 +2553,16 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         "umrsf-hf": "umrsf-tdhf", "sf-hf": "sf-tdhf", "tda-hf": "tda-tdhf",
     }.get(spec.model, spec.model)
     route = display_model + (("(" + model_args + ")") if model_args else "")
+    basis_as_option = (
+        spec.basis.lower().startswith('file:')
+        and re.fullmatch(r'[A-Za-z0-9_.:+-]+', spec.basis) is None)
+    route_basis = "" if basis_as_option else spec.basis
     if spec.functional:
         route += "/" + spec.functional
-        if spec.basis:
-            route += "/" + spec.basis
-    elif spec.basis:
-        route += "/" + spec.basis
+        if route_basis:
+            route += "/" + route_basis
+    elif route_basis:
+        route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
         "omp_threads",
@@ -2571,6 +2583,8 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
             and spec.options[key] == 1
         )
     ]
+    if basis_as_option:
+        option_parts.insert(0, "basis=%s" % _render_value(spec.basis))
     extra = sorted(set(spec.options) - set(option_order) - {"geom", "geom2"})
     option_parts.extend("%s=%s" % (key, _render_value(spec.options[key])) for key in extra)
     driver = _normalize_driver_defaults(spec.model, spec.driver)
