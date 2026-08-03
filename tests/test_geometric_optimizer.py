@@ -864,6 +864,8 @@ class TestOQPTesterCollection(unittest.TestCase):
                 cmd, kwargs = calls[0]
                 isolated_index = cmd.index("--isolated") + 1
                 self.assertEqual(Path(cmd[isolated_index]), input_file.resolve())
+                caller_index = cmd.index("--caller-cwd") + 1
+                self.assertEqual(Path(cmd[caller_index]), Path.cwd())
                 self.assertEqual(Path(kwargs["cwd"]), expected_dir)
                 self.assertTrue(expected_dir.is_dir())
                 child_pythonpath = kwargs["env"]["PYTHONPATH"].split(os.pathsep)
@@ -875,6 +877,50 @@ class TestOQPTesterCollection(unittest.TestCase):
                         str((root / "absolute-package").resolve()),
                     ],
                 )
+
+    def test_isolated_worker_preserves_caller_relative_runtime_inputs(self):
+        calls = []
+
+        class RecordingRunner:
+            def __init__(self, **kwargs):
+                self.mol = types.SimpleNamespace(config={
+                    "guess": {"file": "guess.json", "file2": "old.json"},
+                    "md": {"velocity": "velocity.dat"},
+                })
+                calls.append(("init", Path.cwd(), self.mol))
+
+            def run(self, test_mod=False):
+                calls.append(("run", Path.cwd(), self.mol))
+
+            def test(self):
+                return "matched", 0.0
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_file = root / "case.oqp"
+            self._write(input_file)
+            worker_cwd = Path.cwd()
+
+            with load_oqp_tester(
+                RecordingRunner, "oqp_tester_caller_paths_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(root / "output")
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+                result = tester.run_single_test(
+                    str(input_file), caller_cwd=str(root))
+
+            self.assertEqual(result["status"], "PASSED")
+            self.assertEqual(calls[0][0:2], ("init", root.resolve()))
+            self.assertEqual(calls[1][0:2], ("run", worker_cwd))
+            config = calls[1][2].config
+            self.assertEqual(
+                config["guess"]["file"], str((root / "guess.json").resolve()))
+            self.assertEqual(
+                config["guess"]["file2"], str((root / "old.json").resolve()))
+            self.assertEqual(
+                config["md"]["velocity"], str((root / "velocity.dat").resolve()))
+            self.assertEqual(calls[1][2].oqp_runtime_cwd, str(root.resolve()))
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):
         class NoopRunner:

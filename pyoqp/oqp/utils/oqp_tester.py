@@ -222,7 +222,33 @@ class OQPTester:
         digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
         return os.path.join(self.output_dir, f"{project_name}__{digest}")
 
-    def run_single_test(self, input_file: str) -> Dict[str, Any]:
+    @staticmethod
+    def _absolutize_caller_relative_inputs(mol, caller_cwd):
+        """Preserve caller-CWD path semantics inside an isolated worker."""
+        caller_cwd = os.path.realpath(os.path.abspath(caller_cwd))
+
+        def runtime_path(value):
+            if not isinstance(value, str) or not value.strip():
+                return value
+            expanded = os.path.expanduser(value.strip())
+            if os.path.isabs(expanded):
+                return os.path.realpath(expanded)
+            return os.path.realpath(os.path.join(caller_cwd, expanded))
+
+        guess = mol.config.get("guess", {})
+        for key in ("file", "file2"):
+            if key in guess:
+                guess[key] = runtime_path(guess[key])
+        md = mol.config.get("md", {})
+        velocity = str(md.get("velocity", "") or "").strip()
+        if velocity.lower() not in {
+            "", "zero", "none", "0", "maxwell", "boltzmann", "random"
+        }:
+            md["velocity"] = runtime_path(velocity)
+        mol.oqp_runtime_cwd = caller_cwd
+
+    def run_single_test(self, input_file: str,
+                        caller_cwd: str = None) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
 
@@ -257,11 +283,21 @@ class OQPTester:
 
         start_time = time.perf_counter()
         try:
-            runner = Runner(project=project_name,
-                            input_file=input_file,
-                            log=log,
-                            silent=1,
-                            usempi=usempi)
+            worker_cwd = os.getcwd()
+            try:
+                if caller_cwd is not None:
+                    os.chdir(caller_cwd)
+                runner = Runner(project=project_name,
+                                input_file=input_file,
+                                log=log,
+                                silent=1,
+                                usempi=usempi)
+                if caller_cwd is not None:
+                    self._absolutize_caller_relative_inputs(
+                        runner.mol, caller_cwd)
+            finally:
+                if caller_cwd is not None:
+                    os.chdir(worker_cwd)
             runner.run(test_mod=True)
             if self.mpi_manager.rank == 0:
                 message, diff = runner.test()
@@ -359,16 +395,17 @@ class OQPTester:
         log = os.path.join(case_output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
+        parent_cwd = os.getcwd()
         cmd = [
             sys.executable, "-m", "oqp.utils.oqp_tester",
             "--isolated", input_file,
             "--output-dir", self.output_dir,
             "--omp", str(self.omp_threads),
+            "--caller-cwd", parent_cwd,
         ]
         child_env = os.environ.copy()
         inherited_pythonpath = child_env.get("PYTHONPATH")
         if inherited_pythonpath is not None:
-            parent_cwd = os.getcwd()
             child_env["PYTHONPATH"] = os.pathsep.join(
                 os.path.realpath(os.path.abspath(os.path.expanduser(entry)))
                 if entry else parent_cwd
@@ -783,6 +820,10 @@ def _run_isolated_main(argv=None):
     parser.add_argument("--isolated", required=True, help="input .inp or .oqp file")
     parser.add_argument("--output-dir", required=True, help="shared output dir")
     parser.add_argument("--omp", type=int, default=1, help="OMP threads")
+    parser.add_argument(
+        "--caller-cwd", required=True,
+        help="working directory used to resolve caller-relative input files",
+    )
     args = parser.parse_args(argv)
 
     os.environ["OMP_NUM_THREADS"] = str(args.omp)
@@ -793,7 +834,7 @@ def _run_isolated_main(argv=None):
     tester.output_dir = args.output_dir
     tester.mpi_manager = MPIManager()
 
-    result = tester.run_single_test(args.isolated)
+    result = tester.run_single_test(args.isolated, caller_cwd=args.caller_cwd)
     sys.stdout.flush()
     print(_RESULT_MARKER + json.dumps(result))
     return 0

@@ -1639,6 +1639,18 @@ class NAMD:
             'tdhf_settings': dict(cfg['tdhf']),
             'dftgrid_settings': dict(cfg.get('dftgrid', {})),
             'pcm_settings': dict(cfg.get('pcm', {})),
+            # Bind the stable, effective symmetry controls but not the
+            # geometry-dependent detected group, which may evolve during MD.
+            'symmetry_input': dict(cfg.get('symmetry', {})),
+            'symmetry_settings': {
+                key: getattr(self.mol, 'symmetry_metadata', {}).get(
+                    key, cfg.get('symmetry', {}).get(key, ''))
+                for key in (
+                    'status', 'enabled', 'requested_point_group',
+                    'requested_subgroup', 'label_mo', 'label_states',
+                    'label_modes', 'use_integral_symmetry',
+                    'use_response_symmetry', 'strict', 'tolerance')
+            },
             'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),

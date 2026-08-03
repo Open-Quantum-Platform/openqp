@@ -327,8 +327,12 @@ contains
         if (abs(cand_i + cand_j) > invariant_tol) &
           counts(2) = counts(2) + 1_c_int64_t
 
-        pair_valid = reference_mask(ij) /= 0_c_int .or. &
-                     reference_mask(ji) /= 0_c_int
+        if ((reference_mask(ij) /= 0_c_int) .neqv. &
+            (reference_mask(ji) /= 0_c_int)) then
+          info = -4_c_int
+          return
+        end if
+        pair_valid = reference_mask(ij) /= 0_c_int
         if (.not. pair_valid) cycle
         ref_i = reference(ij)
         ref_j = reference(ji)

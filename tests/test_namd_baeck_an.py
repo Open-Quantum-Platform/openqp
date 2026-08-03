@@ -6,12 +6,51 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_restart_namd_uses_checkpoint_before_mutable_guess_file():
+    from oqp.pyoqp import Runner
+    from oqp.utils.input_checker import CheckReport, _check_guess
+
+    loads = []
+    runner = Runner.__new__(Runner)
+    runner.mol = SimpleNamespace(
+        config={
+            'input': {'runtype': 'namd'},
+            'md': {'restart': True},
+            'guess': {'type': 'json', 'file': 'mutable.json'},
+        },
+        load_data=lambda: loads.append('loaded'),
+    )
+    runner.reload()
+    assert loads == []
+
+    missing_guess_config = {
+        'input': {'runtype': 'namd'},
+        'md': {'restart': True},
+        'guess': {
+            'type': 'json', 'file': 'missing-mutable.json',
+            'save_mol': True,
+        },
+    }
+    report = CheckReport()
+    _check_guess(missing_guess_config, report)
+    assert report.ok
+    missing_guess_config['md']['restart'] = False
+    report = CheckReport()
+    _check_guess(missing_guess_config, report)
+    assert not report.ok
+
+    runner.mol.config['md']['restart'] = False
+    runner.reload()
+    assert loads == ['loaded']
 
 
 def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
@@ -92,12 +131,15 @@ def run(old, center, current, dt_left=1.0, dt_right=1.0, gap_max=1.0):
     return status, out.tolist()
 
 def gate(candidate, reference, signed=False,
-         tolerances=(1.0e-12, 1.0e-8, 0.01)):
+         tolerances=(1.0e-12, 1.0e-8, 0.01), reference_mask=None):
     candidate = np.ascontiguousarray(candidate, dtype=np.float64)
     reference = np.ascontiguousarray(reference, dtype=np.float64)
     n = candidate.shape[0]
-    mask = np.ones((n, n), dtype=np.int32)
-    np.fill_diagonal(mask, 0)
+    if reference_mask is None:
+        mask = np.ones((n, n), dtype=np.int32)
+        np.fill_diagonal(mask, 0)
+    else:
+        mask = np.ascontiguousarray(reference_mask, dtype=np.int32)
     metrics = np.zeros(7, dtype=np.float64)
     counts = np.zeros(3, dtype=np.int64)
     status = oqp.oqp_namd_nacme_gate(
@@ -128,6 +170,9 @@ result = {
                         [[0.0, -0.5], [0.5, 0.0]], signed=True),
     'gate_invariant': gate([[0.0, -0.5], [0.4, 0.0]],
                            [[0.0, -0.5], [0.5, 0.0]]),
+    'gate_asymmetric_mask': gate(
+        [[0.0, -0.5], [0.5, 0.0]], [[0.0, -0.5], [0.5, 0.0]],
+        reference_mask=[[0, 0], [1, 0]]),
     'gate_nan_invariant_tol': gate(
         [[0.0, -0.5], [0.5, 0.0]], [[0.0, -0.5], [0.5, 0.0]],
         tolerances=(float('nan'), 1.0e-8, 0.01)),
@@ -183,6 +228,8 @@ print('BAECK_AN=' + json.dumps(result))
     assert status == 0
     assert counts[1] == 1
     assert metrics[1] == pytest.approx(0.1)
+    status, _metrics, _counts = values['gate_asymmetric_mask']
+    assert status != 0
     for key in ('gate_nan_invariant_tol', 'gate_inf_abs_tol',
                 'gate_nan_rel_tol'):
         status, _metrics, _counts = values[key]
@@ -921,6 +968,14 @@ scf_mol.config['scf']['scal_rel'] = 'x2c'
 d_scf = NAMD.__new__(NAMD); d_scf.mol = scf_mol; d_scf.nstate = 2
 d_scf.dt_fs = 0.5; d_scf.seed = 1; d_scf.rng_stream = 2
 scf_settings_bound = d_charge._restart_signature() != d_scf._restart_signature()
+symmetry_mol = Mol(); symmetry_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+symmetry_mol.config.setdefault('symmetry', {})['use_integral_symmetry'] = 'full'
+d_symmetry = NAMD.__new__(NAMD); d_symmetry.mol = symmetry_mol
+d_symmetry.nstate = 2; d_symmetry.dt_fs = 0.5
+d_symmetry.seed = 1; d_symmetry.rng_stream = 2
+symmetry_settings_bound = (
+    d_charge._restart_signature() != d_symmetry._restart_signature())
 
 # File-backed target and initial basis definitions are part of the actual AO
 # model; changing either file must invalidate the electronic restart history.
@@ -1479,6 +1534,7 @@ print('DENSE=' + json.dumps({
             forcefield_rebase_runtime_precedence,
         'guess_rebase_runtime_precedence': guess_rebase_runtime_precedence,
         'scf_settings_bound': scf_settings_bound,
+        'symmetry_settings_bound': symmetry_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
         'builtin_forcefield_fingerprinted': builtin_forcefield_fingerprinted,
@@ -1545,6 +1601,7 @@ print('DENSE=' + json.dumps({
         'hop_energy_rejected': True,
         'tight_binding_bound': True,
         'default_tb_artifact_bound': True, 'scf_settings_bound': True,
+        'symmetry_settings_bound': True,
         'default_tb_model_stable': True,
         'espf_modes_bound': True,
         'target_basis_file_bound': True, 'initial_basis_file_bound': True,
