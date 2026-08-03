@@ -774,9 +774,11 @@ class NAMD:
 
     def _write_nacme_audit_row(self, result):
         """Append one machine-readable gate row for ensemble/post-MD audits."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(
+            lambda: self._write_nacme_audit_row_on_io_rank(result))
+
+    def _write_nacme_audit_row_on_io_rank(self, result):
+        """Append one audit row on rank zero."""
         path = self.nacme_audit_file
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         columns = (
@@ -798,7 +800,6 @@ class NAMD:
             stream.write('\t'.join(str(value) for value in values) + '\n')
             stream.flush()
             os.fsync(stream.fileno())
-        self._io_barrier()
 
     def _update_nve_gate(self, istep, epot, ekin, transition_energy_jump=np.nan):
         """Audit microcanonical energy conservation for same-spin FSSH."""
@@ -888,9 +889,13 @@ class NAMD:
         gate_failure = getattr(self, '_pending_nve_gate_error', None) is not None
         if istep % self.trajectory_interval != 0 and not gate_failure:
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(
+            lambda: self._write_md_trajectory_on_io_rank(
+                istep, coordinates, epot, ekin, hopped))
+
+    def _write_md_trajectory_on_io_rank(self, istep, coordinates, epot, ekin,
+                                        hopped):
+        """Append one packed trajectory record on rank zero."""
         coords = np.asarray(coordinates, dtype=np.float64).reshape((-1, 3))
         if hasattr(self, 'r_all') and len(coords) == len(self.r_all):
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape(coords.shape)
@@ -1026,7 +1031,6 @@ class NAMD:
             stream.write(record.tobytes(order='C'))
             stream.flush()
             os.fsync(stream.fileno())
-        self._io_barrier()
 
     def _qmmm_forcefield_identity(self, value):
         """Canonicalize local force fields across relocated restart manifests."""
