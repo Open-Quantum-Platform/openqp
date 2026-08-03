@@ -401,6 +401,7 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     namd.restart_manifest_file = str(manifest)
     namd.restart_file = str(tmp_path / "new.restart.npz")
     namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.seed = 20260804
     namd.mol = SimpleNamespace(
         oqp_canonical_input=(
             'mrsf(nstate=2)/bhhlyp/6-31g*\n'
@@ -412,6 +413,7 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     refreshed = manifest.read_text(encoding="utf-8")
     assert "existing manifest" not in refreshed
     assert "nstep=40" in refreshed
+    assert "seed=20260804" in refreshed
     assert 'restart_file="new.restart.npz"' in refreshed
     assert namd._restart_manifest_written
     namd.mol.oqp_canonical_input = "invalid if rendered twice"
@@ -461,6 +463,10 @@ class Mol:
         }
     def get_mass(self):
         return np.array([1.0])
+    def get_atoms(self):
+        return np.array([1])
+    def get_system(self):
+        return np.zeros((1, 3))
 
 def rejected(**overrides):
     try:
@@ -483,13 +489,16 @@ def invalid(**overrides):
         return True
     return False
 
+def contextual_nacme_off(**overrides):
+    return NAMD(Mol(**overrides)).nacme_check == 'off'
+
 print('SOC_GATES=' + json.dumps({
     'nve': accepted(nve_gate='warn'),
     'truthy_integer': accepted(soc=2, nve_gate='warn'),
     'truthy_string': accepted(soc='false', nve_gate='warn'),
     'trajectory_file': accepted(trajectory_file='soc.trj'),
     'trajectory_interval': accepted(trajectory_interval=2),
-    'nacme_check': rejected(nacme_check='baeck_an'),
+    'nacme_check': contextual_nacme_off(nacme_check='baeck_an'),
     'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
     'nacme_nan': invalid(nacme_gate_abs_tol=float('nan')),

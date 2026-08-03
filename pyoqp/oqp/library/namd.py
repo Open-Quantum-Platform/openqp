@@ -1333,7 +1333,7 @@ class NAMD:
                    f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
         )
-        if self.odp is not None:
+        if getattr(self, 'odp', None) is not None:
             dump_log(
                 self.mol,
                 title=('ODP umbrella: '
@@ -2543,6 +2543,33 @@ class NAMD:
             self, '_electronic_config_identity', None)
         if electronic_config is None:
             electronic_config = _electronic_config_identity(cfg)
+        else:
+            electronic_config = copy.deepcopy(electronic_config)
+        # The detailed electronic snapshot must use the same canonical
+        # identities as the dedicated restart fields below.  Keeping raw
+        # ``file:relative`` spellings or the pre-resolution empty DFTB model
+        # here would make two physically identical runs fail restart matching
+        # even though their basis contents and effective Hamiltonian agree.
+        electronic_input = electronic_config.setdefault('input', {})
+        electronic_input['basis'] = self._basis_definition_identity(
+            electronic_input.get('basis', ''))
+        electronic_scf = electronic_config.setdefault('scf', {})
+        if 'init_basis' in electronic_scf:
+            electronic_scf['init_basis'] = self._basis_definition_identity(
+                electronic_scf['init_basis'])
+        method = str(electronic_input.get('method', '')).lower()
+        if method in ('dftb', 'xtb'):
+            if method == 'dftb':
+                from oqp.utils.input_checker import apply_dftb_model_default
+                apply_dftb_model_default(electronic_config)
+            electronic_tb = dict(electronic_config.get(method, {}))
+            # External artifacts are content-addressed by
+            # ``_tight_binding_identity``; retaining path spellings here
+            # would duplicate that identity non-canonically.
+            for key in ('parameter_path', 'library_path', 'executable'):
+                electronic_tb.pop(key, None)
+            electronic_config[method] = electronic_tb
+        electronic_config = _normalize_identity_value(electronic_config)
         scf_settings = dict(cfg.get('scf', {}))
         if 'init_basis' in scf_settings:
             scf_settings['init_basis'] = self._basis_definition_identity(
