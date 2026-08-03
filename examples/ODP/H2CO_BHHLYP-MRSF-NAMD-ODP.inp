@@ -44,6 +44,9 @@ nve_gate_abs_tol=0.01
 nve_gate_step_tol=0.01
 trajectory_interval=1
 restart_interval=1
+trajectory_file=odp-window-01.namd.trj
+nacme_audit_file=odp-window-01.nacme.tsv
+restart_file=odp-window-01.restart.npz
 decoherence=off
 trivial=False
 

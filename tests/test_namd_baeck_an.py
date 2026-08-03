@@ -199,8 +199,6 @@ d._nve_previous_energy = None; d._nve_gate_failures = 0; d._nve_gate_last = None
 d._update_nve_gate(0, -1.0, 0.1)
 d._update_nve_gate(1, -1.0, 0.1)
 d._write_md_trajectory(1, np.zeros((3, 3)), -1.0, 0.1, False)
-d._update_nve_gate(2, -0.9, 0.1, 0.002)
-d._write_md_trajectory(2, np.ones((3, 3)), -0.9, 0.1, True)
 d.restart_interval = 1; d.prev_xyz = np.arange(9.0)
 d.prev_data = {
     'OQP::VEC_MO_A': np.arange(6.0).reshape(2, 3),
@@ -215,6 +213,8 @@ d._write_nacme_audit_row({
     'signed_comparison': False, 'compared_pairs': 1,
 })
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
+d._update_nve_gate(2, -0.9, 0.1, 0.002)
+d._write_md_trajectory(2, np.ones((3, 3)), -0.9, 0.1, True)
 d._write_nacme_audit_row({
     'center_step': 1, 'source': 'baeck_an', 'verdict': 'fail',
     'signed_comparison': True, 'compared_pairs': 1,
@@ -226,6 +226,20 @@ d2._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 d2.nacme_audit_file = d.nacme_audit_file
 loaded = d2._load_restart()
+d_missing = NAMD.__new__(NAMD); d_missing.mol = Mol()
+d_missing.nstate = 2; d_missing.dt_fs = 0.5
+d_missing.seed = 1; d_missing.rng_stream = 2
+d_missing.restart_requested = True
+d_missing._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_missing.restart_file = d.restart_file
+d_missing.trajectory_file = os.path.join(root, 'missing.namd.trj')
+d_missing.nacme_audit_file = d.nacme_audit_file
+try:
+    d_missing._load_restart()
+except FileNotFoundError as error:
+    missing_trajectory_rejected = 'trajectory not found' in str(error)
+else:
+    missing_trajectory_rejected = False
 d3 = NAMD.__new__(NAMD); d3.mol = Mol(); d3.nstate = 2; d3.dt_fs = 0.5
 d3.seed = 1; d3.rng_stream = 2; d3.restart_requested = True
 d3._restart_system_identity = {'kind': 'test', 'sha256': 'system-b'}
@@ -303,6 +317,7 @@ print('DENSE=' + json.dumps({
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
     'electronic_mismatch': electronic_mismatch,
+    'missing_trajectory_rejected': missing_trajectory_rejected,
     'output_collision_rejected': output_collision_rejected,
     'reseed_cleared': reseed_cleared,
     'audit_steps': [int(row[0]) for row in audit_lines[1:]],
@@ -344,9 +359,10 @@ print('DENSE=' + json.dumps({
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,
+        'missing_trajectory_rejected': True,
         'output_collision_rejected': True, 'audit_steps': [0],
         'invariant_without_pairs': 'fail',
-        'nve_failures': 1, 'nve_verdict': [1],
+        'nve_failures': 0, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],
     }

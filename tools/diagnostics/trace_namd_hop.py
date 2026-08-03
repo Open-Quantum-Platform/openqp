@@ -116,7 +116,7 @@ def install_trace(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="thymine.inp")
+    parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--trace", default="hop_trace.csv")
     parser.add_argument("--skip-first-hop", action="store_true")
     parser.add_argument(
@@ -133,7 +133,14 @@ def main() -> None:
         if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
             raise ValueError("Prescribed random values must lie in [0, 1)")
     sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
-    Runner(project="thymine", input_file=args.input, log="thymine.log", silent=1, usempi=False).run()
+    project = args.input.stem
+    Runner(
+        project=project,
+        input_file=str(args.input),
+        log=f"{project}.log",
+        silent=1,
+        usempi=False,
+    ).run()
     if sequence_rng is not None and sequence_rng.index != sequence_rng.values.size:
         raise RuntimeError(
             "Prescribed NAMD hop RNG consumed "

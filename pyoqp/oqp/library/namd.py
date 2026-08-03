@@ -58,7 +58,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 3
+NAMD_RESTART_SCHEMA_VERSION = 4
 NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
@@ -1300,6 +1300,11 @@ class NAMD:
             raise RuntimeError(
                 f'refusing to overwrite the last-good NAMD restart with an '
                 f'invalid nuclear state at step {istep}')
+        if (not os.path.isfile(self.trajectory_file)
+                or os.path.getsize(self.trajectory_file) == 0):
+            raise RuntimeError(
+                'refusing to save a NAMD restart without its committed '
+                'packed trajectory')
         prev_keys = sorted(self.prev_data)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
@@ -1317,6 +1322,9 @@ class NAMD:
             'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
+            'trajectory_bytes': np.array([
+                os.path.getsize(self.trajectory_file)
+            ], dtype=np.int64),
             'nacme_audit_bytes': np.array([
                 os.path.getsize(self.nacme_audit_file)
                 if os.path.isfile(self.nacme_audit_file) else 0
@@ -1451,9 +1459,11 @@ class NAMD:
                 'coordinates': np.array(saved['coordinates'], copy=True),
                 'velocities': np.array(saved['velocities'], copy=True),
                 'acceleration': np.array(saved['acceleration'], copy=True),
+                'trajectory_bytes': int(saved['trajectory_bytes'][0]),
                 'nacme_audit_bytes': int(saved['nacme_audit_bytes'][0]),
             }
-        self._reconcile_trajectory_with_restart(result['step'])
+        self._reconcile_trajectory_with_restart(
+            result['step'], result['trajectory_bytes'])
         self._reconcile_nacme_audit_with_restart(
             result['step'], result['nacme_audit_bytes'])
         dump_log(
@@ -1464,40 +1474,66 @@ class NAMD:
         )
         return result
 
-    def _reconcile_trajectory_with_restart(self, checkpoint_step):
-        """Discard only uncommitted TRJ tail records newer than checkpoint."""
+    def _reconcile_trajectory_with_restart(self, checkpoint_step,
+                                           checkpoint_bytes):
+        """Restore the exact committed packed-trajectory checkpoint prefix."""
         if not self._is_io_rank():
             self._io_barrier()
             return
-        if not os.path.isfile(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
-            self._io_barrier()
-            return
+        checkpoint_bytes = int(checkpoint_bytes)
+        if checkpoint_bytes <= 0:
+            raise ValueError('restart checkpoint has an invalid trajectory size')
+        if not os.path.isfile(self.trajectory_file):
+            raise FileNotFoundError(
+                f'NAMD restart trajectory not found: {self.trajectory_file}')
+        current_bytes = os.path.getsize(self.trajectory_file)
+        if current_bytes < checkpoint_bytes:
+            raise ValueError(
+                'NAMD restart trajectory is missing committed checkpoint data')
         with open(self.trajectory_file, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
-            header_size = struct.unpack('<Q', stream.read(8))[0]
+            encoded_size = stream.read(8)
+            if len(encoded_size) != 8:
+                raise ValueError('restart trajectory has a truncated header')
+            header_size = struct.unpack('<Q', encoded_size)[0]
+            encoded = stream.read(header_size)
+            if len(encoded) != header_size:
+                raise ValueError('restart trajectory has a truncated header')
+        header = json.loads(encoded.decode('utf-8'))
         offset = 16 + header_size
-        header, records = read_namd_trajectory(self.trajectory_file)
+        if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
+            raise ValueError('unsupported OpenQP NAMD trajectory schema')
         if header.get('signature') != self._restart_signature():
             raise ValueError('restart trajectory and checkpoint model mismatch')
+        dtype = _namd_trajectory_dtype(
+            int(header['nstate']), int(header['natom']),
+            int(header.get('ncv', 0)))
+        committed_payload = checkpoint_bytes - offset
+        if committed_payload < dtype.itemsize or committed_payload % dtype.itemsize:
+            raise ValueError(
+                'restart checkpoint trajectory boundary is not record-aligned')
+        committed_records = committed_payload // dtype.itemsize
+        records = np.memmap(
+            self.trajectory_file, dtype=dtype, mode='r', offset=offset,
+            shape=(committed_records,))
         steps = np.array(records['step'], copy=True)
-        keep = int(np.count_nonzero(steps <= int(checkpoint_step)))
-        if keep < len(records):
-            del records
-            dtype = _namd_trajectory_dtype(
-                int(header['nstate']), int(header['natom']),
-                int(header.get('ncv', 0)))
+        del records
+        if np.any(steps > int(checkpoint_step)):
+            raise ValueError(
+                'restart checkpoint trajectory prefix contains future records')
+        if current_bytes > checkpoint_bytes:
             with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(offset + keep*dtype.itemsize)
+                stream.truncate(checkpoint_bytes)
                 stream.flush()
                 os.fsync(stream.fileno())
             dump_log(
                 self.mol,
-                title=(f'NAMD restart removed {len(steps) - keep} uncommitted '
-                       f'trajectory record(s) after step {checkpoint_step}'),
+                title=(f'NAMD restart removed '
+                       f'{current_bytes - checkpoint_bytes} uncommitted '
+                       f'trajectory byte(s) after checkpoint step '
+                       f'{checkpoint_step}'),
             )
-        else:
-            del records
         self._io_barrier()
 
     def _reconcile_nacme_audit_with_restart(self, checkpoint_step,
