@@ -161,11 +161,14 @@ def load_namd_with_stubs():
     setattr(tb_backends, "is_tb_method", lambda *_args, **_kwargs: False)
     setattr(tb_backends, "make_tb_adapter", lambda *_args, **_kwargs: None)
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
+    odp = types.ModuleType("oqp.library.odp")
+    setattr(odp, "odp_from_config", lambda *_args, **_kwargs: None)
 
     modules = {
         "oqp": oqp,
         "oqp.library": library,
         "oqp.library.nac_utils": nac_utils,
+        "oqp.library.odp": odp,
         "oqp.library.single_point": single_point,
         "oqp.utils": utils,
         "oqp.utils.file_utils": file_utils,
@@ -443,6 +446,22 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("seed must fit in a signed 64-bit integer", src)
         self.assertIn("rng_stream must be a non-negative signed 64-bit integer", src)
         self.assertIn("first_hop_step must be at least 1", src)
+
+    def test_gate_tolerances_reject_nan_inf_and_negative_values(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            namd._validate_gate_tolerances("NVE", (0.0, 1.0e-6, 2.0))
+            for invalid in (np.nan, np.inf, -np.inf, -1.0e-6):
+                with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+                    namd._validate_gate_tolerances("NVE", (0.0, invalid, 1.0))
+        finally:
+            cleanup()
+
+    def test_soc_nve_gate_is_explicitly_rejected(self):
+        src = NAMD.read_text()
+
+        self.assertIn("if soc_requested and self.nve_gate != 'off':", src)
+        self.assertIn("nve_gate currently supports same-spin NAMD only", src)
 
     def test_qmmm_single_point_inputs_stay_on_runner_path(self):
         src = PYOQP.read_text()

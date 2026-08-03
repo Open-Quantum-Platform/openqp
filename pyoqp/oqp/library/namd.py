@@ -30,6 +30,7 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import hashlib
 import json
 import re
 import struct
@@ -60,6 +61,36 @@ INT64_MAX = (1 << 63) - 1
 NAMD_RESTART_SCHEMA_VERSION = 2
 NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
+
+
+def _restart_identity_digest(array_parts=(), text_parts=()):
+    """Return a stable digest for static molecular and topology identity."""
+    digest = hashlib.sha256()
+    for label, value, dtype in array_parts:
+        name = str(label).encode('utf-8')
+        array = np.ascontiguousarray(np.asarray(value, dtype=dtype))
+        digest.update(struct.pack('<Q', len(name)))
+        digest.update(name)
+        shape = json.dumps(array.shape, separators=(',', ':')).encode('ascii')
+        digest.update(struct.pack('<Q', len(shape)))
+        digest.update(shape)
+        digest.update(array.dtype.str.encode('ascii'))
+        digest.update(array.tobytes(order='C'))
+    for label, value in text_parts:
+        name = str(label).encode('utf-8')
+        payload = str(value).encode('utf-8')
+        digest.update(struct.pack('<Q', len(name)))
+        digest.update(name)
+        digest.update(struct.pack('<Q', len(payload)))
+        digest.update(payload)
+    return digest.hexdigest()
+
+
+def _validate_gate_tolerances(label, values):
+    """Reject NaN/Inf as well as negative validation tolerances."""
+    if not all(np.isfinite(value) and value >= 0.0 for value in values):
+        raise ValueError(
+            f"[md] {label} gate tolerances must be finite and non-negative")
 
 
 def _namd_trajectory_dtype(nstate, natom, ncv=0):
@@ -344,8 +375,8 @@ class NAMD:
         if self.nacme_check not in ('off', 'baeck_an'):
             raise ValueError("[md] nacme_check must be off or baeck_an")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
-        if self.ba_gap_max <= 0.0:
-            raise ValueError("[md] ba_gap_max must be positive")
+        if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
+            raise ValueError("[md] ba_gap_max must be positive and finite")
         self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nacme_gate must be off, warn, or error")
@@ -354,9 +385,10 @@ class NAMD:
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
         self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
         self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
-        if min(self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
-               self.nacme_gate_rel_tol) < 0.0:
-            raise ValueError("[md] NACME gate tolerances must be non-negative")
+        _validate_gate_tolerances('NACME', (
+            self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
+            self.nacme_gate_rel_tol,
+        ))
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
         self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
@@ -367,9 +399,10 @@ class NAMD:
         self.nve_gate_transition_tol = float(
             md.get('nve_gate_transition_tol', 1.0e-6))
         self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
-        if min(self.nve_gate_abs_tol, self.nve_gate_step_tol,
-               self.nve_gate_transition_tol) < 0.0:
-            raise ValueError("[md] NVE gate tolerances must be non-negative")
+        _validate_gate_tolerances('NVE', (
+            self.nve_gate_abs_tol, self.nve_gate_step_tol,
+            self.nve_gate_transition_tol,
+        ))
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
         self.trajectory_interval = int(md.get('trajectory_interval', 1))
@@ -398,6 +431,10 @@ class NAMD:
             raise NotImplementedError(
                 "[md] restart currently supports same-spin NAMD only"
             )
+        if soc_requested and self.nve_gate != 'off':
+            raise NotImplementedError(
+                "[md] nve_gate currently supports same-spin NAMD only"
+            )
         if soc_requested and self.odp is not None:
             raise NotImplementedError(
                 "[odp] currently supports same-spin NVE NAMD only"
@@ -419,6 +456,7 @@ class NAMD:
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
+        self._restart_system_identity = self._qm_restart_system_identity()
         self._rng_step = 0
         self._last_hop_random = np.nan
         self._ba_energy_left = None
@@ -464,6 +502,15 @@ class NAMD:
     @staticmethod
     def _as_bool(value):
         return (value is True) or (str(value).lower() in ('true', '1', 'on', 'yes'))
+
+    def _qm_restart_system_identity(self):
+        """Bind restarts to the ordered atoms, masses, and starting geometry."""
+        digest = _restart_identity_digest(array_parts=(
+            ('atomic_numbers', self.mol.get_atoms(), '<i8'),
+            ('masses_electron', self.mass, '<f8'),
+            ('initial_coordinates_bohr', self.mol.get_system(), '<f8'),
+        ))
+        return {'kind': 'qm', 'natom': int(self.natom), 'sha256': digest}
 
     def _md_output_path(self, configured, suffix):
         """Resolve NAMD sidecars beside the main log, not the process CWD."""
@@ -850,7 +897,8 @@ class NAMD:
         path = self.nacme_audit_file
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         columns = (
-            'center_step', 'source', 'verdict', 'signed', 'compared_pairs',
+            'center_step', 'source', 'verdict', 'signed_comparison',
+            'compared_pairs',
             'invariant_failures', 'reference_failures',
             'consecutive_reference_failures', 'candidate_diagonal_max',
             'candidate_antisymmetry_max', 'reference_diagonal_max',
@@ -1150,6 +1198,8 @@ class NAMD:
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
             'odp': self._odp_provenance(),
+            'system': getattr(
+                self, '_restart_system_identity', {'kind': 'unavailable'}),
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
@@ -1291,7 +1341,9 @@ class NAMD:
                 raise ValueError(f'unsupported NAMD restart schema {version}')
             signature = str(saved['signature'][0])
             if signature != self._restart_signature():
-                raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+                raise ValueError(
+                    'NAMD restart configuration/system identity does not '
+                    'match the current run')
             saved_odp = str(saved['odp_provenance'][0])
             current_odp = json.dumps(
                 self._odp_provenance(), sort_keys=True, separators=(',', ':'))
@@ -1644,6 +1696,8 @@ class NAMD_QMMM(NAMD):
         self.m_all = np.array([
             sys0.getParticleMass(i).value_in_unit(u.dalton) for i in range(self.natom_all)
         ]) * AMU_TO_AU                                          # electron masses
+        self._restart_system_identity = self._qmmm_restart_system_identity(
+            sys0, q)
 
         # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
         sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
@@ -1657,6 +1711,46 @@ class NAMD_QMMM(NAMD):
         self.qm_mass = self.mass.copy()
         # rigid-water (SHAKE/RATTLE) constraints for the MM region
         self._build_constraints()
+
+    # ------------------------------------------------------------------ #
+    def _qmmm_restart_system_identity(self, system, qmmm_config):
+        """Bind QM/MM restarts to atoms, topology, selection, and force field."""
+        atoms = list(self.pdb.topology.atoms())
+        atomic_numbers = [
+            0 if atom.element is None else atom.element.atomic_number
+            for atom in atoms
+        ]
+        atom_metadata = [
+            (atom.name, atom.residue.name, atom.residue.index,
+             atom.residue.chain.id)
+            for atom in atoms
+        ]
+        bonds = np.asarray(sorted(
+            (min(atom1.index, atom2.index), max(atom1.index, atom2.index))
+            for atom1, atom2 in self.pdb.topology.bonds()
+        ), dtype='<i8').reshape((-1, 2))
+        system_xml = self._mm.XmlSerializer.serialize(system)
+        digest = _restart_identity_digest(
+            array_parts=(
+                ('atomic_numbers', atomic_numbers, '<i8'),
+                ('masses_electron', self.m_all, '<f8'),
+                ('initial_coordinates_bohr', self.r_all, '<f8'),
+                ('qm_atoms', self.qm_atoms, '<i8'),
+                ('bonds', bonds, '<i8'),
+            ),
+            text_parts=(
+                ('atom_metadata', json.dumps(
+                    atom_metadata, separators=(',', ':'))),
+                ('qmmm_config', json.dumps(
+                    qmmm_config, sort_keys=True, separators=(',', ':'),
+                    default=str)),
+                ('openmm_system', system_xml),
+            ),
+        )
+        return {
+            'kind': 'qmmm', 'natom': int(self.natom_all),
+            'nqm': int(len(self.qm_atoms)), 'sha256': digest,
+        }
 
     # ------------------------------------------------------------------ #
     def _build_constraints(self):

@@ -1587,7 +1587,8 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if odp_section is not None:
         if odp_section.args:
             raise OQPInputError("odp accepts keyword arguments only")
-        if driver.name != "namd":
+        if (driver.name != "namd"
+                and requested(odp_section.kwargs.get("enabled", False))):
             raise OQPInputError(
                 "odp(...) currently requires the NVE namd(...) workflow"
             )

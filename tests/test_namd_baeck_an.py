@@ -163,6 +163,7 @@ d.trajectory_file = os.path.join(root, 'job.namd.trj')
 d.restart_file = os.path.join(root, 'job.namd.restart.npz')
 d.nacme_audit_file = os.path.join(root, 'job.namd.nacme.tsv')
 d.restart_manifest_file = os.path.join(root, 'restart.oqp')
+d._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d.active = 1; d._last_hop_random = 0.25; d.coef = np.array([1+0j, 0+0j])
 d.vel = np.ones((3, 3))*0.01; d._last_state_overlap = np.eye(2)
 d._last_overlap_tdc = np.array([[0.0, 0.1], [-0.1, 0.0]])
@@ -199,10 +200,28 @@ d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
 
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
+d2._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 loaded = d2._load_restart()
+d3 = NAMD.__new__(NAMD); d3.mol = Mol(); d3.nstate = 2; d3.dt_fs = 0.5
+d3.seed = 1; d3.rng_stream = 2; d3.restart_requested = True
+d3._restart_system_identity = {'kind': 'test', 'sha256': 'system-b'}
+d3.restart_file = d.restart_file; d3.trajectory_file = d.trajectory_file
+try:
+    d3._load_restart()
+except ValueError as error:
+    system_mismatch = 'does not match the current run' in str(error)
+else:
+    system_mismatch = False
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
+d._write_nacme_audit_row({
+    'center_step': 1, 'source': 'baeck_an', 'verdict': 'pass',
+    'signed_comparison': False, 'compared_pairs': 1,
+})
+with open(d.nacme_audit_file, encoding='utf-8') as stream:
+    audit_header, audit_row = [line.rstrip('\n').split('\t') for line in stream]
+audit = dict(zip(audit_header, audit_row))
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
 d._nve_reference_energy = -0.9; d._nve_previous_energy = -0.9
 d._nve_gate_failures = 0
@@ -225,6 +244,8 @@ print('DENSE=' + json.dumps({
     'natom': header['natom'], 'restart': 'restart=true' in manifest,
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
     'loaded_step': loaded['step'],
+    'system_mismatch': system_mismatch,
+    'audit_signed_comparison': audit['signed_comparison'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
         'gate_failures': d2._nacme_gate_failures,
         'nve_failures': d2._nve_gate_failures,
@@ -259,6 +280,7 @@ print('DENSE=' + json.dumps({
         'phase': [[1.0, -1.0]],
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
+        'system_mismatch': True, 'audit_signed_comparison': 'False',
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],

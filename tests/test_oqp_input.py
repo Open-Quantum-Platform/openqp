@@ -1657,3 +1657,10 @@ def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
             'dft/pbe0/def2-svp geom="h2o.xyz" energy '
             'odp(enabled=true,k_parallel=0.1)'
         )
+
+    _, disabled = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+        'odp(enabled=false,k_parallel=0.1)'
+    )
+    assert disabled["input"]["runtype"] == "energy"
+    assert disabled["odp"]["enabled"] == "False"
