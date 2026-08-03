@@ -402,6 +402,10 @@ def read_odp_wham_series(path):
         'provenance': provenance,
         'system_identity': system_identity,
         'ensemble': header.get('ensemble'),
+        'thermostat_temperature_kelvin': (
+            header.get('independent_controls', {})
+            .get('thermostat', {}).get('temperature_kelvin')
+        ),
         'snapshot_bytes': snapshot_bytes,
         'step': np.array(records['step'], copy=True),
         'time_fs': np.array(records['time_fs'], copy=True),
@@ -628,6 +632,10 @@ class NAMD:
                 "[md] nve_gate currently supports same-spin NAMD only"
             )
         if soc_requested and self.odp is not None:
+            raise NotImplementedError(
+                "[odp] currently supports same-spin NVE NAMD only"
+            )
+        if self.odp is not None and self.ensemble != 'nve':
             raise NotImplementedError(
                 "[odp] currently supports same-spin NVE NAMD only"
             )

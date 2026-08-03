@@ -374,10 +374,33 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     coordinate_provenance = None
     system_identity = None
     ensembles = []
+    sampled_temperatures = []
     window_definitions = {}
     window_segments = {}
     for path in paths:
         series = read_odp_wham_series(path)
+        ensemble = str(series.get("ensemble") or "unknown").upper()
+        sampled_temperature = series.get("thermostat_temperature_kelvin")
+        if ensemble == "NVT":
+            try:
+                sampled_temperature = float(sampled_temperature)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"ODP WHAM NVT trajectory {path!r} lacks a valid "
+                    "thermostat temperature") from exc
+            if (not math.isfinite(sampled_temperature)
+                    or sampled_temperature <= 0.0):
+                raise ValueError(
+                    f"ODP WHAM NVT trajectory {path!r} lacks a valid "
+                    "thermostat temperature")
+            if not math.isclose(
+                    sampled_temperature, temperature,
+                    rel_tol=1.0e-10, abs_tol=1.0e-8):
+                raise ValueError(
+                    f"ODP WHAM temperature {temperature:g} K does not match "
+                    f"trajectory {path!r} sampled at "
+                    f"{sampled_temperature:g} K")
+            sampled_temperatures.append(sampled_temperature)
         snapshot_bytes = int(series['snapshot_bytes'])
         digest = _file_sha256(path, snapshot_bytes)
         if digest in hashed_paths:
@@ -429,7 +452,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
             raise ValueError(
                 f"ODP WHAM trajectory {path!r} bias records disagree with provenance"
             )
-        ensembles.append(series.get("ensemble"))
+        ensembles.append(ensemble)
         window_segments.setdefault(window, []).append(
             (xi, perpendicular_norm, steps))
 
@@ -602,6 +625,8 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         "tolerance": tolerance,
         "max_iterations": max_iterations,
         "ensemble_metadata": normalized_ensembles,
+        "sampled_thermostat_temperatures_kelvin": sorted(
+            set(sampled_temperatures)),
         "ensemble_warning": ensemble_warning,
     }
     if output is not None:

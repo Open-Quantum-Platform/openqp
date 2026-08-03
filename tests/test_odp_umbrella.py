@@ -77,6 +77,46 @@ def test_runtime_checker_rejects_enabled_odp_outside_namd():
     assert not any(item.path == "odp.enabled" for item in report.errors)
 
 
+def test_odp_rejects_nvt_in_legacy_and_semantic_inputs():
+    from oqp.utils.input_checker import CheckReport, _check_runtype
+    from oqp.utils.oqp_input import OQPInputError, parse_canonical_oqp
+
+    config = {
+        "input": {"method": "tdhf", "runtype": "namd"},
+        "md": {"ensemble": "nvt"},
+        "odp": {"enabled": True},
+    }
+    report = CheckReport()
+    _check_runtype(config, report)
+    assert any(item.path == "md.ensemble" for item in report.errors)
+
+    with pytest.raises(OQPInputError, match="ensemble=nve"):
+        parse_canonical_oqp(
+            'mrsf(nstate=2)/bhhlyp/sto-3g '
+            'namd(S1,nstep=2,ensemble=nvt,thermostat=langevin) '
+            'odp(enabled=true,cv="distance(1,2)",scale="1",'
+            'reference_r="1",reference_p="2",k_parallel=0.1) '
+            'geom="h2.xyz"'
+        )
+
+
+def test_wham_rejects_mismatched_nvt_sampling_temperature(tmp_path, monkeypatch):
+    from oqp.library import namd as namd_module
+    from oqp.library.odp import odp_wham
+
+    trajectory = tmp_path / "window.namd.trj"
+    trajectory.write_bytes(b"temperature-provenance")
+    monkeypatch.setattr(
+        namd_module, "read_odp_wham_series",
+        lambda _path: {
+            "ensemble": "NVT",
+            "thermostat_temperature_kelvin": 310.0,
+        },
+    )
+    with pytest.raises(ValueError, match="sampled at 310 K"):
+        odp_wham([trajectory], 300.0)
+
+
 def test_built_odp_randomized_fd_invariance_signed_progress_and_singularities():
     script = r'''
 import json
@@ -459,6 +499,13 @@ for window, center in enumerate(centers):
         "signature": json.dumps(restart_identity, sort_keys=True),
         "wham_system_identity": system_identity["system"],
         "ensemble": "NVT", "odp": provenance,
+        "independent_controls": {
+            "thermostat": {
+                "ensemble": "nvt", "type": "langevin",
+                "temperature_kelvin": temperature,
+                "friction_ps_inverse": 1.0,
+            },
+        },
     }
     encoded = json.dumps(header, sort_keys=True).encode("utf-8")
     path = os.path.join(root, f"window-{window}.namd.trj")
