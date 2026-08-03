@@ -136,7 +136,7 @@ def main() -> None:
         project="thymine", input_file=args.input, log="thymine.log",
         silent=1, usempi=False)
     soc = runner.mol.config.get("md", {}).get("soc", False)
-    if soc is True or str(soc).strip().lower() in {"true", "1", "on", "yes"}:
+    if soc:
         raise ValueError(
             "trace_namd_hop does not support SOC NAMD logging paths"
         )
