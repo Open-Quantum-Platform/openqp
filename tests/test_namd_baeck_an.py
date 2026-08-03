@@ -339,7 +339,8 @@ tb1 = Mol(); tb1.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 tb1.config['input']['method'] = 'dftb'
 tb1.config['dftb'] = {'backend': 'native', 'model': 'mio',
-                      'parameter_path': 'local.xml', 'scc_mixing': 0.35}
+                      'parameter_path': 'local.xml',
+                      'library_path': 'local.xml', 'scc_mixing': 0.35}
 tb2 = Mol(); tb2.config = {
     section: dict(settings) for section, settings in tb1.config.items()}
 tb2.config['dftb']['model'] = '3ob'
@@ -348,6 +349,28 @@ d_tb1.dt_fs = 0.5; d_tb1.seed = 1; d_tb1.rng_stream = 2
 d_tb2 = NAMD.__new__(NAMD); d_tb2.mol = tb2; d_tb2.nstate = 2
 d_tb2.dt_fs = 0.5; d_tb2.seed = 1; d_tb2.rng_stream = 2
 tight_binding_bound = d_tb1._restart_signature() != d_tb2._restart_signature()
+
+# Empty TB paths must fingerprint the environment/wheel artifacts that the
+# runtime resolver actually selects, not merely the empty input strings.
+os.environ['OPENQP_DFTB_PARAMETER_PATH'] = os.path.join(input_root, 'local.xml')
+os.environ['OPENQP_DFTB_LIBRARY'] = os.path.join(input_root, 'local.xml')
+tb_default = Mol(); tb_default.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+tb_default.config['input']['method'] = 'dftb'
+tb_default.config['dftb'] = {'backend': 'native', 'model': 'mio'}
+d_tb_default1 = NAMD.__new__(NAMD); d_tb_default1.mol = tb_default
+d_tb_default1.nstate = 2; d_tb_default1.dt_fs = 0.5
+d_tb_default1.seed = 1; d_tb_default1.rng_stream = 2
+default_tb_signature1 = d_tb_default1._restart_signature()
+with open(os.path.join(input_root, 'local.xml'), 'a', encoding='utf-8') as stream:
+    stream.write('changed\n')
+d_tb_default2 = NAMD.__new__(NAMD); d_tb_default2.mol = tb_default
+d_tb_default2.nstate = 2; d_tb_default2.dt_fs = 0.5
+d_tb_default2.seed = 1; d_tb_default2.rng_stream = 2
+default_tb_artifact_bound = (
+    default_tb_signature1 != d_tb_default2._restart_signature())
+os.environ.pop('OPENQP_DFTB_PARAMETER_PATH')
+os.environ.pop('OPENQP_DFTB_LIBRARY')
 
 # Electronic arrays must retain their exact vector shape, and tracking
 # histories must remain one entry per state.
@@ -470,6 +493,32 @@ except RuntimeError:
 else:
     history_load_rejected = False
 
+# Gate streaks are control-flow state: malformed, negative, or impossible
+# values must not silently disable or prematurely trigger a restarted gate.
+streak_rejections = []
+for index, replacement in enumerate((
+        np.array([-1], dtype=np.int64),
+        np.array([[1]], dtype=np.int64),
+        np.array([99], dtype=np.int64))):
+    with np.load(d.restart_file, allow_pickle=False) as saved:
+        streak_corrupt = {
+            key: np.array(saved[key], copy=True) for key in saved.files}
+    streak_corrupt['gate_failures' if index != 1 else 'nve_failures'] = replacement
+    streak_restart = os.path.join(root, f'streak-{index}.namd.restart.npz')
+    np.savez_compressed(streak_restart, **streak_corrupt)
+    d_streak = NAMD.__new__(NAMD); d_streak.mol = Mol(); d_streak.nstate = 2
+    d_streak.dt_fs = 0.5; d_streak.seed = 1; d_streak.rng_stream = 2
+    d_streak.restart_requested = True; d_streak.restart_file = streak_restart
+    d_streak.trajectory_file = d.trajectory_file
+    d_streak.nacme_audit_file = d.nacme_audit_file
+    try:
+        d_streak._load_restart()
+    except RuntimeError:
+        streak_rejections.append(True)
+    else:
+        streak_rejections.append(False)
+gate_streak_metadata_rejected = all(streak_rejections)
+
 # Same method/count but different atom identities must not accept the file.
 wrong_mol = Mol(); wrong_mol.atoms = np.array([7, 1, 2])
 d_wrong = NAMD.__new__(NAMD); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
@@ -551,6 +600,12 @@ policy_mol.config['md'] = {'nacme_gate': 'error',
 d_policy = NAMD.__new__(NAMD); d_policy.mol = policy_mol; d_policy.nstate = 2
 d_policy.dt_fs = 0.5; d_policy.seed = 1; d_policy.rng_stream = 2
 gate_policy_bound = d_charge._restart_signature() != d_policy._restart_signature()
+scf_mol = Mol(); scf_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+scf_mol.config['scf']['scal_rel'] = 'x2c'
+d_scf = NAMD.__new__(NAMD); d_scf.mol = scf_mol; d_scf.nstate = 2
+d_scf.dt_fs = 0.5; d_scf.seed = 1; d_scf.rng_stream = 2
+scf_settings_bound = d_charge._restart_signature() != d_scf._restart_signature()
 
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
@@ -642,6 +697,34 @@ except ValueError:
 else:
     log_collision_rejected = False
 
+def input_collision(candidate, *, velocity='zero', qmmm=None):
+    probe = NAMD.__new__(NAMD)
+    probe.mol = SimpleNamespace(
+        log=os.path.join(root, 'input-collision.log'),
+        oqp_input_source=os.path.join(input_root, 'request.oqp'),
+        config={'qmmm': qmmm or {}})
+    probe.velocity_source = velocity
+    probe.trajectory_file = candidate
+    probe.nacme_audit_file = os.path.join(root, 'input-collision.tsv')
+    probe.restart_file = os.path.join(root, 'input-collision.npz')
+    probe.restart_manifest_file = os.path.join(root, 'input-collision.oqp')
+    try:
+        probe._validate_sidecar_paths()
+    except ValueError:
+        return True
+    return False
+
+input_collisions_rejected = all((
+    input_collision(os.path.join(input_root, 'request.oqp')),
+    input_collision(os.path.join(input_root, 'vel.dat'), velocity='vel.dat'),
+    input_collision(
+        os.path.join(input_root, 'water.pdb'),
+        qmmm={'pdb_file': 'water.pdb'}),
+    input_collision(
+        os.path.join(input_root, 'local.xml'),
+        qmmm={'forcefield_files': 'local.xml tip3p.xml'}),
+))
+
 # A discontinuity invalidates the previous gate result before the current
 # dense record is written.
 d_ba = NAMD.__new__(NAMD); d_ba.nacme_check = 'baeck_an'; d_ba.nstate = 2
@@ -730,6 +813,7 @@ print('DENSE=' + json.dumps({
         'corrupt_load_rejected': corrupt_load_rejected,
         'broadcast_load_rejected': broadcast_load_rejected,
         'history_load_rejected': history_load_rejected,
+        'gate_streak_metadata_rejected': gate_streak_metadata_rejected,
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
@@ -741,10 +825,13 @@ print('DENSE=' + json.dumps({
         'fresh_outputs_invalidated': fresh_outputs_invalidated,
         'sidecar_collision_rejected': sidecar_collision_rejected,
         'log_collision_rejected': log_collision_rejected,
+        'input_collisions_rejected': input_collisions_rejected,
         'stale_gate_cleared': stale_gate_cleared,
         'short_live_energy_rejected': short_live_energy_rejected,
         'hop_energy_rejected': hop_energy_rejected,
         'tight_binding_bound': tight_binding_bound,
+        'default_tb_artifact_bound': default_tb_artifact_bound,
+        'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
         'builtin_forcefield_fingerprinted': builtin_forcefield_fingerprinted,
@@ -792,6 +879,7 @@ print('DENSE=' + json.dumps({
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'broadcast_load_rejected': True,
         'history_load_rejected': True,
+        'gate_streak_metadata_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
         'basis_definition_bound': True,
         'pcm_bound': True, 'tdhf_operator_bound': True,
@@ -800,8 +888,10 @@ print('DENSE=' + json.dumps({
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
         'sidecar_collision_rejected': True, 'stale_gate_cleared': True,
         'log_collision_rejected': True, 'short_live_energy_rejected': True,
+        'input_collisions_rejected': True,
         'hop_energy_rejected': True,
         'tight_binding_bound': True,
+        'default_tb_artifact_bound': True, 'scf_settings_bound': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,

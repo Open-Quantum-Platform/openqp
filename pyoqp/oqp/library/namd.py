@@ -279,6 +279,7 @@ class NAMD:
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = self._restart_manifest_path()
+        self.velocity_source = str(md['velocity'])
         self._validate_sidecar_paths()
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
@@ -312,8 +313,6 @@ class NAMD:
             )
         if self.first_hop_step < 1:
             raise ValueError("[md] first_hop_step must be at least 1")
-        self.velocity_source = str(md['velocity'])
-
         self.natom = mol.data['natom']
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
@@ -383,22 +382,79 @@ class NAMD:
         return os.path.join(log_dir, stem + '.namd.restart.oqp')
 
     def _validate_sidecar_paths(self):
-        """Reject aliases that would let one NAMD sidecar corrupt another."""
-        paths = {
+        """Reject aliases between NAMD sidecars and simulation inputs."""
+        outputs = {
             'log_file': self.mol.log,
             'trajectory_file': self.trajectory_file,
             'nacme_audit_file': self.nacme_audit_file,
             'restart_file': self.restart_file,
             'restart_manifest_file': self.restart_manifest_file,
         }
+        inputs = {}
+        original_source = getattr(self.mol, 'oqp_input_source', None)
+        resolved_input = getattr(self.mol, 'input_file', None)
+        source = original_source or resolved_input
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        if original_source:
+            inputs['input_source'] = original_source
+        if resolved_input:
+            inputs['input_file'] = resolved_input
+
+        velocity = str(getattr(self, 'velocity_source', '') or '').strip()
+        if velocity and velocity.lower() not in ('maxwell', 'zero'):
+            expanded = os.path.expanduser(velocity)
+            inputs['velocity_file'] = (
+                expanded if os.path.isabs(expanded)
+                else os.path.join(source_dir, expanded))
+
+        qmmm = getattr(self.mol, 'config', {}).get('qmmm', {})
+        pdb_file = str(qmmm.get('pdb_file', '') or '').strip()
+        if pdb_file:
+            expanded = os.path.expanduser(pdb_file)
+            inputs['qmmm_pdb_file'] = (
+                expanded if os.path.isabs(expanded)
+                else os.path.join(source_dir, expanded))
+        qm_atoms_xyz = str(qmmm.get('qm_atoms_xyz', '') or '').strip()
+        if qm_atoms_xyz:
+            expanded = os.path.expanduser(qm_atoms_xyz)
+            inputs['qmmm_qm_atoms_xyz'] = (
+                expanded if os.path.isabs(expanded)
+                else os.path.join(source_dir, expanded))
+        forcefields = str(qmmm.get('forcefield_files', '')
+                          or qmmm.get('forcefield', '') or '')
+        for index, item in enumerate(forcefields.replace(',', ' ').split()):
+            expanded = os.path.expanduser(item)
+            candidate = (expanded if os.path.isabs(expanded)
+                         else os.path.join(source_dir, expanded))
+            is_builtin = False
+            if not os.path.isfile(candidate):
+                try:
+                    resource = resources.files('openmm.app').joinpath(
+                        'data', *item.split('/'))
+                    is_builtin = resource.is_file()
+                except (ImportError, ModuleNotFoundError):
+                    pass
+            # Existing OpenMM resources are package-owned. Any other token is
+            # a local input path (including a currently missing input, which a
+            # destructive sidecar open must never manufacture accidentally).
+            if not is_builtin:
+                inputs[f'qmmm_forcefield_file_{index}'] = candidate
+
         resolved = {}
-        for name, path in paths.items():
+        for name, path in outputs.items():
             canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
             if canonical in resolved:
                 raise ValueError(
                     f'[md] {name} and {resolved[canonical]} resolve to the '
                     f'same NAMD sidecar path: {path}')
             resolved[canonical] = name
+        for name, path in inputs.items():
+            canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+            if canonical in resolved:
+                raise ValueError(
+                    f'[md] {resolved[canonical]} aliases simulation input '
+                    f'{name}: {path}')
 
     def _is_io_rank(self):
         manager = getattr(self.mol, 'mpi_manager', None)
@@ -1120,15 +1176,39 @@ class NAMD:
                   or getattr(self.mol, 'input_file', None))
         source_dir = (os.path.dirname(os.path.abspath(source))
                       if source else os.getcwd())
+        # Resolve defaults through the same adapter methods used by the
+        # calculation. This binds environment, installed-wheel, staged-lib,
+        # and PATH fallbacks even when the input leaves these fields blank.
+        if method == 'xtb':
+            from oqp.library.openqp_xtb import OpenQPXTBAdapter
+            adapter_class = OpenQPXTBAdapter
+        else:
+            from oqp.library.openqp_dftb import OpenQPDFTBAdapter
+            adapter_class = OpenQPDFTBAdapter
+        adapter = adapter_class.__new__(adapter_class)
+        adapter.mol = self.mol
+        adapter.dftb = settings
+        backend = str(settings.get('backend', 'native')).strip().lower()
+        resolved_defaults = {'parameter_path': adapter._parameter_path()}
+        if backend in ('native', 'auto'):
+            resolved_defaults['library_path'] = str(
+                adapter._native_library_path())
+        elif backend == 'probe':
+            resolved_defaults['executable'] = adapter._probe_executable()
+
         for key in ('parameter_path', 'library_path', 'executable'):
             value = settings.get(key, '')
-            if not isinstance(value, str) or not value.strip():
+            resolved_value = resolved_defaults.get(key)
+            if resolved_value is None and (
+                    not isinstance(value, str) or not value.strip()):
                 continue
-            expanded = os.path.expanduser(value.strip())
+            raw_value = str(resolved_value if resolved_value is not None
+                            else value).strip()
+            expanded = os.path.expanduser(raw_value)
             path = (expanded if os.path.isabs(expanded)
                     else os.path.join(source_dir, expanded))
             if not os.path.exists(path):
-                settings[key] = {'configured': value}
+                settings[key] = {'configured': value, 'resolved': raw_value}
                 continue
             digest = hashlib.sha256()
             real_path = os.path.realpath(path)
@@ -1231,6 +1311,7 @@ class NAMD:
             'input_multiplicity': cfg['input'].get('multiplicity', ''),
             'scf_type': cfg.get('scf', {}).get('type', ''),
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
+            'scf_settings': dict(cfg.get('scf', {})),
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'tdhf_settings': dict(cfg['tdhf']),
@@ -1578,19 +1659,34 @@ class NAMD:
         if not os.path.isfile(self.restart_file):
             raise FileNotFoundError(f'NAMD restart file not found: {self.restart_file}')
         with np.load(self.restart_file, allow_pickle=False) as saved:
-            version = int(saved['schema_version'][0])
+            version = self._restart_integer(saved, 'schema_version')
             if version != NAMD_RESTART_SCHEMA_VERSION:
                 raise ValueError(f'unsupported NAMD restart schema {version}')
-            signature = str(saved['signature'][0])
+            signature_array = np.asarray(saved['signature'])
+            if signature_array.shape != (1,) or signature_array.dtype.kind not in 'SU':
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid signature metadata')
+            signature = str(signature_array[0])
             if signature != self._restart_signature():
                 raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+            step = self._restart_integer(saved, 'step')
+            active = self._restart_integer(saved, 'active', minimum=1)
+            rng_step = self._restart_integer(saved, 'rng_step')
+            gate_failures = self._restart_integer(saved, 'gate_failures')
+            nve_failures = self._restart_integer(saved, 'nve_failures')
+            time_fs = self._restart_float(saved, 'time_fs', minimum=0.0)
+            if rng_step > step:
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid rng_step metadata')
+            if gate_failures > step + 1 or nve_failures > step + 1:
+                raise RuntimeError(
+                    'NAMD restart checkpoint has implausible gate failure streak')
             keys = [str(key) for key in saved['prev_keys']]
             prev_data = {
                 key: np.array(saved[f'prev_{index}'], copy=True)
                 for index, key in enumerate(keys)
             }
             prev_xyz = np.array(saved['prev_xyz'], copy=True)
-            active = int(saved['active'][0])
             coef_real = np.array(saved['coef_real'], copy=True)
             coef_imag = np.array(saved['coef_imag'], copy=True)
             if (coef_real.shape != (self.nstate,)
@@ -1627,15 +1723,15 @@ class NAMD:
             self.mol.put_data(self.prev_data)
             self.active = active
             self.coef = coef
-            self._rng_step = int(saved['rng_step'][0])
+            self._rng_step = rng_step
             self._last_hop_random = np.nan
-            self._nacme_gate_failures = int(saved['gate_failures'][0])
-            self._nve_gate_failures = int(saved['nve_failures'][0])
-            self._t_fs = float(saved['time_fs'][0])
+            self._nacme_gate_failures = gate_failures
+            self._nve_gate_failures = nve_failures
+            self._t_fs = time_fs
             for name, value in optional.items():
                 setattr(self, f'_{name}', value)
             result = {
-                'step': int(saved['step'][0]),
+                'step': step,
                 'coordinates': coordinates,
                 'velocities': velocities,
                 'acceleration': acceleration,
@@ -1649,6 +1745,29 @@ class NAMD:
                    f'rng=({self.seed},{self.rng_stream},step)'),
         )
         return result
+
+    @staticmethod
+    def _restart_integer(saved, name, *, minimum=0):
+        """Read one exact integer checkpoint field without coercion."""
+        value = np.asarray(saved[name])
+        if (value.shape != (1,) or value.dtype.kind not in 'iu'
+                or int(value[0]) < minimum):
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        return int(value[0])
+
+    @staticmethod
+    def _restart_float(saved, name, *, minimum=None):
+        """Read one finite scalar checkpoint field without broadcasting."""
+        value = np.asarray(saved[name])
+        if value.shape != (1,) or value.dtype.kind not in 'fiu':
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        scalar = float(value[0])
+        if not np.isfinite(scalar) or (minimum is not None and scalar < minimum):
+            raise RuntimeError(
+                f'NAMD restart checkpoint has invalid {name} metadata')
+        return scalar
 
     def _reconcile_trajectory_with_restart(self, checkpoint_step):
         """Repair a partial record and discard TRJ state after checkpoint."""

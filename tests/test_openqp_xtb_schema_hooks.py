@@ -6,9 +6,12 @@ halogen_bond, third_order, spin_scale, and the 'ok' lc_gamma kind).
 """
 
 import importlib
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -353,6 +356,22 @@ lc_gamma = ok
         self.assertEqual("OPENQP_XTB_LIBRARY", cls.ENV_LIBRARY)
         self.assertEqual("OPENQP_XTB_PARAMETER_PATH", cls.ENV_PARAMETER)
         self.assertEqual("openqp_xtb", cls.PIP_LOCATOR)
+
+    def test_xtb_default_paths_use_xtb_environment(self):
+        openqp_xtb = _import_or_skip("oqp.library.openqp_xtb")
+        with tempfile.TemporaryDirectory() as directory:
+            parameter = Path(directory) / "gfn1.opxtb"
+            library = Path(directory) / "libopenqp_xtb_c.so"
+            parameter.write_text("parameter", encoding="ascii")
+            library.write_bytes(b"library")
+            environment = {
+                "OPENQP_XTB_PARAMETER_PATH": str(parameter),
+                "OPENQP_XTB_LIBRARY": str(library),
+            }
+            with mock.patch.dict(os.environ, environment, clear=False):
+                adapter = openqp_xtb.OpenQPXTBAdapter(_FakeMol("xtb"))
+                self.assertEqual(str(parameter), adapter._parameter_path())
+                self.assertEqual(library, adapter._native_library_path())
 
     def test_xtb_adapter_lc_gamma_codes_and_probe_rejection(self):
         openqp_xtb = _import_or_skip("oqp.library.openqp_xtb")
