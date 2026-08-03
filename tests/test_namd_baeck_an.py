@@ -585,6 +585,25 @@ except RuntimeError:
 else:
     history_load_rejected = False
 
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    partial_history = {
+        key: np.array(saved[key], copy=True) for key in saved.files}
+partial_history['has_ba_dt_left'] = np.array([0], dtype=np.int8)
+partial_history['ba_dt_left'] = np.empty(0, dtype=np.float64)
+partial_history_restart = os.path.join(root, 'partial-history.restart.npz')
+np.savez_compressed(partial_history_restart, **partial_history)
+d_partial = NAMD.__new__(NAMD); d_partial.mol = Mol(); d_partial.nstate = 2
+d_partial.dt_fs = 0.5; d_partial.seed = 1; d_partial.rng_stream = 2
+d_partial.restart_requested = True; d_partial.restart_file = partial_history_restart
+d_partial.trajectory_file = d.trajectory_file
+d_partial.nacme_audit_file = d.nacme_audit_file
+try:
+    d_partial._load_restart()
+except RuntimeError:
+    partial_history_rejected = True
+else:
+    partial_history_rejected = False
+
 # Gate streaks are control-flow state: malformed, negative, or impossible
 # values must not silently disable or prematurely trigger a restarted gate.
 streak_rejections = []
@@ -692,6 +711,15 @@ policy_mol.config['md'] = {'nacme_gate': 'error',
 d_policy = NAMD.__new__(NAMD); d_policy.mol = policy_mol; d_policy.nstate = 2
 d_policy.dt_fs = 0.5; d_policy.seed = 1; d_policy.rng_stream = 2
 gate_policy_bound = d_charge._restart_signature() != d_policy._restart_signature()
+nac_align_signatures = []
+for align in ('no', 'phase', 'reorder'):
+    align_mol = Mol(); align_mol.config = {
+        section: dict(settings) for section, settings in Mol.config.items()}
+    align_mol.config['nac'] = {'align': align}
+    d_align = NAMD.__new__(NAMD); d_align.mol = align_mol; d_align.nstate = 2
+    d_align.dt_fs = 0.5; d_align.seed = 1; d_align.rng_stream = 2
+    nac_align_signatures.append(d_align._restart_signature())
+nac_alignment_bound = len(set(nac_align_signatures)) == 3
 scf_mol = Mol(); scf_mol.config = {
     section: dict(settings) for section, settings in Mol.config.items()}
 scf_mol.config['scf']['scal_rel'] = 'x2c'
@@ -733,6 +761,23 @@ d_init_basis2.nstate = 2; d_init_basis2.dt_fs = 0.5
 d_init_basis2.seed = 1; d_init_basis2.rng_stream = 2
 initial_basis_file_bound = (
     init_basis_signature1 != d_init_basis2._restart_signature())
+
+from oqp.utils.oqp_input import parse_canonical_oqp, render_canonical_oqp
+file_basis_spec = parse_canonical_oqp(
+    'mrsf(nstate=2)/bhhlyp/file:custom-basis.json\n'
+    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'scf(init_basis="file:custom-basis.json")\n'
+    'geom="h2o.xyz"\n')
+rebased_basis_spec = d._rebase_restart_spec_paths(file_basis_spec, input_root)
+rebased_basis_text = render_canonical_oqp(rebased_basis_spec)
+reparsed_basis_spec = parse_canonical_oqp(rebased_basis_text)
+reparsed_init_basis = next(
+    call.kwargs['init_basis'] for call in reparsed_basis_spec.modifiers
+    if call.name == 'scf')
+basis_paths_rebased = (
+    rebased_basis_text.count('file:' + os.path.abspath(basis_path)) == 2
+    and reparsed_basis_spec.basis == 'file:' + os.path.abspath(basis_path)
+    and reparsed_init_basis == 'file:' + os.path.abspath(basis_path))
 
 # Environment-selected ESPF modes alter the QM/MM Hamiltonian/forces and must
 # therefore invalidate checkpoints made with another effective mode.
@@ -893,6 +938,12 @@ input_collisions_rejected = all((
     cwd_velocity_collision,
     input_collision(os.path.join(input_root, 'h2o.xyz'), config={
         'input': {'method': 'tdhf', 'system': 'h2o.xyz'}, 'qmmm': {}}),
+    input_collision(basis_path, config={
+        'input': {'method': 'tdhf', 'basis': 'file:custom-basis.json'},
+        'scf': {'init_basis': 'none'}, 'qmmm': {}}),
+    input_collision(basis_path, config={
+        'input': {'method': 'tdhf', 'basis': '6-31g*'},
+        'scf': {'init_basis': 'file:custom-basis.json'}, 'qmmm': {}}),
     input_collision(
         os.path.join(input_root, 'water.pdb'),
         qmmm={'pdb_file': 'water.pdb'}),
@@ -1027,6 +1078,7 @@ print('DENSE=' + json.dumps({
         'corrupt_load_rejected': corrupt_load_rejected,
         'broadcast_load_rejected': broadcast_load_rejected,
         'history_load_rejected': history_load_rejected,
+        'partial_history_rejected': partial_history_rejected,
         'gate_streak_metadata_rejected': gate_streak_metadata_rejected,
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
@@ -1034,6 +1086,7 @@ print('DENSE=' + json.dumps({
         'basis_definition_bound': basis_definition_bound,
         'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
         'dftgrid_bound': dftgrid_bound, 'gate_policy_bound': gate_policy_bound,
+        'nac_alignment_bound': nac_alignment_bound,
         'collective_error_propagated': collective_error_propagated,
         'collective_load_broadcast': collective_load_broadcast,
         'collective_save_error': collective_save_error,
@@ -1050,6 +1103,7 @@ print('DENSE=' + json.dumps({
         'espf_modes_bound': espf_modes_bound,
         'target_basis_file_bound': target_basis_file_bound,
         'initial_basis_file_bound': initial_basis_file_bound,
+        'basis_paths_rebased': basis_paths_rebased,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
@@ -1102,11 +1156,13 @@ print('DENSE=' + json.dumps({
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'broadcast_load_rejected': True,
         'history_load_rejected': True,
+        'partial_history_rejected': True,
         'gate_streak_metadata_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
         'basis_definition_bound': True,
         'pcm_bound': True, 'tdhf_operator_bound': True,
         'dftgrid_bound': True, 'gate_policy_bound': True,
+        'nac_alignment_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
         'collective_load_broadcast': True,
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
@@ -1119,6 +1175,7 @@ print('DENSE=' + json.dumps({
         'default_tb_model_stable': True,
         'espf_modes_bound': True,
         'target_basis_file_bound': True, 'initial_basis_file_bound': True,
+        'basis_paths_rebased': True,
         'runtime_forcefield_bound': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,

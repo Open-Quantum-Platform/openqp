@@ -877,7 +877,9 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
         functional, basis = parts[1], parts[2]
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
-    return model, model_options, functional.lower(), basis.lower()
+    normalized_basis = (
+        basis if basis.lower().startswith('file:') else basis.lower())
+    return model, model_options, functional.lower(), normalized_basis
 
 
 def looks_canonical(text: str) -> bool:
@@ -993,7 +995,9 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             raise OQPInputError("Conflicting functional values in route and options")
         functional = flat
     if "basis" in options:
-        flat = str(options.pop("basis")).lower()
+        flat = str(options.pop("basis"))
+        if not flat.lower().startswith('file:'):
+            flat = flat.lower()
         if basis and flat != basis:
             raise OQPInputError("Conflicting basis values in route and options")
         basis = flat
@@ -2526,12 +2530,17 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         "umrsf-hf": "umrsf-tdhf", "sf-hf": "sf-tdhf", "tda-hf": "tda-tdhf",
     }.get(spec.model, spec.model)
     route = display_model + (("(" + model_args + ")") if model_args else "")
+    basis_as_option = (
+        spec.basis.lower().startswith('file:')
+        and ('/' in spec.basis[len('file:'):]
+             or '\\' in spec.basis[len('file:'):]))
+    route_basis = "" if basis_as_option else spec.basis
     if spec.functional:
         route += "/" + spec.functional
-        if spec.basis:
-            route += "/" + spec.basis
-    elif spec.basis:
-        route += "/" + spec.basis
+        if route_basis:
+            route += "/" + route_basis
+    elif route_basis:
+        route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
         "omp_threads",
@@ -2552,6 +2561,8 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
             and spec.options[key] == 1
         )
     ]
+    if basis_as_option:
+        option_parts.insert(0, "basis=%s" % _render_value(spec.basis))
     extra = sorted(set(spec.options) - set(option_order) - {"geom", "geom2"})
     option_parts.extend("%s=%s" % (key, _render_value(spec.options[key])) for key in extra)
     driver = _normalize_driver_defaults(spec.model, spec.driver)

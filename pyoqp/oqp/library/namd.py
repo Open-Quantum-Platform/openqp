@@ -412,6 +412,15 @@ class NAMD:
                 return candidate
         return value
 
+    def _resolved_basis_definition_file(self, value):
+        """Resolve a ``file:`` basis exactly as BasisData.read_basis_fmt."""
+        if not isinstance(value, str) or not value.startswith('file:'):
+            return None
+        filename = value[len('file:'):]
+        input_file = getattr(self.mol, 'input_file', None)
+        directory = os.path.dirname(input_file) if input_file else ''
+        return os.path.join(directory, filename)
+
     def _validate_sidecar_paths(self):
         """Reject aliases between NAMD sidecars and simulation inputs."""
         outputs = {
@@ -446,6 +455,16 @@ class NAMD:
             if (os.path.isfile(path)
                     or os.path.splitext(candidate)[1].lower() in ('.xyz', '.pdb')):
                 inputs[f'input_{key}'] = path
+
+        basis_inputs = {
+            'input_basis': input_config.get('basis', ''),
+            'scf_init_basis': getattr(self.mol, 'config', {}).get(
+                'scf', {}).get('init_basis', 'none'),
+        }
+        for name, value in basis_inputs.items():
+            path = self._resolved_basis_definition_file(value)
+            if path is not None:
+                inputs[name] = path
 
         velocity_file = self._resolved_velocity_file()
         if velocity_file is not None:
@@ -1256,12 +1275,9 @@ class NAMD:
 
     def _basis_definition_identity(self, value):
         """Fingerprint the file-backed basis definition used by BasisData."""
-        if not isinstance(value, str) or not value.startswith('file:'):
+        path = self._resolved_basis_definition_file(value)
+        if path is None:
             return value
-        filename = value[len('file:'):]
-        input_file = getattr(self.mol, 'input_file', None)
-        directory = os.path.dirname(input_file) if input_file else ''
-        path = os.path.join(directory, filename)
         if not os.path.isfile(path):
             return {'configured': value, 'resolved': os.path.realpath(path)}
         digest = hashlib.sha256()
@@ -1470,6 +1486,7 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'nac_align': cfg.get('nac', {}).get('align', ''),
             'gate_policy': {
                 key: md.get(key, '') for key in (
                     'nacme_check', 'ba_gap_max', 'nacme_gate',
@@ -1589,6 +1606,16 @@ class NAMD:
             if name == 'ba_dt_left' and float(array) <= 0.0:
                 raise RuntimeError(f'{context} contains invalid ba_dt_left')
             validated[name] = float(array) if expected == () else array.copy()
+        ba_names = (
+            'ba_energy_left', 'ba_energy_center', 'ba_tdc_left', 'ba_dt_left')
+        ba_present = [validated[name] is not None for name in ba_names]
+        if any(ba_present) and not all(ba_present):
+            raise RuntimeError(
+                f'{context} contains incomplete Baeck-An history')
+        nve_names = ('nve_reference_energy', 'nve_previous_energy')
+        nve_present = [validated[name] is not None for name in nve_names]
+        if any(nve_present) and not all(nve_present):
+            raise RuntimeError(f'{context} contains incomplete NVE history')
         return validated
 
     def _save_restart(self, istep, coordinates, velocities, acceleration):
@@ -1694,6 +1721,11 @@ class NAMD:
                                 else item)
             return ' '.join(resolved)
 
+        def basis_path(value):
+            if not isinstance(value, str) or not value.startswith('file:'):
+                return value
+            return 'file:' + absolute_path(value[len('file:'):])
+
         options = dict(spec.options)
         for key in ('geom', 'geom2'):
             if key in options:
@@ -1735,11 +1767,14 @@ class NAMD:
                 for key in ('forcefield', 'forcefield_files'):
                     if key in kwargs:
                         kwargs[key] = search_path_list(kwargs[key])
+            if call.name == 'scf' and 'init_basis' in kwargs:
+                kwargs['init_basis'] = basis_path(kwargs['init_basis'])
             modifiers.append(CallSpec(
                 call.name, call.args, kwargs, call.explicit))
 
         return CalculationSpec(
-            spec.model, spec.functional, spec.basis, model_options, options,
+            spec.model, spec.functional, basis_path(spec.basis),
+            model_options, options,
             driver, tuple(modifiers), spec.source_text)
 
     def _write_restart_manifest(self):
