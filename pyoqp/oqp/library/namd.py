@@ -56,7 +56,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 1
+NAMD_RESTART_SCHEMA_VERSION = 2
 NAMD_TRAJECTORY_SCHEMA_VERSION = 2
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
@@ -105,6 +105,8 @@ def read_namd_trajectory(path, mmap_mode='r'):
     if payload_size < 0 or payload_size % dtype.itemsize:
         raise ValueError('truncated OpenQP NAMD trajectory record')
     count = payload_size // dtype.itemsize
+    if count == 0:
+        return header, np.empty(0, dtype=dtype)
     records = np.memmap(path, dtype=dtype, mode=mmap_mode,
                         offset=offset, shape=(count,))
     return header, records
@@ -261,8 +263,7 @@ class NAMD:
             md.get('nacme_audit_file', ''), '.namd.nacme.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
-        self.restart_manifest_file = os.path.join(
-            os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        self.restart_manifest_file = self._restart_manifest_path()
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
         if soc_requested and self.nacme_check != 'off':
@@ -272,6 +273,20 @@ class NAMD:
         if soc_requested and self.restart_requested:
             raise NotImplementedError(
                 "[md] restart currently supports same-spin NAMD only"
+            )
+        if soc_requested and self.nve_gate != 'off':
+            raise NotImplementedError(
+                "[md] nve_gate currently supports same-spin NAMD only"
+            )
+        if soc_requested and (
+                str(md.get('trajectory_file', '') or '').strip()
+                or self.trajectory_interval != 1
+                or str(md.get('restart_file', '') or '').strip()
+                or self.restart_interval != 1
+                or str(md.get('nacme_audit_file', '') or '').strip()):
+            raise NotImplementedError(
+                "[md] trajectory/checkpoint record controls currently support "
+                "same-spin NAMD only"
             )
         if not INT64_MIN <= self.seed <= INT64_MAX:
             raise ValueError("[md] seed must fit in a signed 64-bit integer")
@@ -341,6 +356,12 @@ class NAMD:
             return value if os.path.isabs(value) else os.path.join(log_dir, value)
         stem = os.path.splitext(os.path.basename(self.mol.log))[0]
         return os.path.join(log_dir, stem + suffix)
+
+    def _restart_manifest_path(self):
+        """Return a per-job manifest path that cannot collide in an ensemble."""
+        log_dir = os.path.dirname(os.path.abspath(self.mol.log))
+        stem = os.path.splitext(os.path.basename(self.mol.log))[0]
+        return os.path.join(log_dir, stem + '.namd.restart.oqp')
 
     def _is_io_rank(self):
         manager = getattr(self.mol, 'mpi_manager', None)
@@ -700,7 +721,11 @@ class NAMD:
             'reference_antisymmetry_max', 'pair_rms_error', 'pair_max_error',
             'max_tolerance_ratio',
         )
-        values = [result.get(name, '') for name in columns]
+        values = [
+            result.get('signed_comparison', '') if name == 'signed'
+            else result.get(name, '')
+            for name in columns
+        ]
         with open(path, 'a', encoding='utf-8') as stream:
             if needs_header:
                 stream.write('\t'.join(columns) + '\n')
@@ -937,10 +962,64 @@ class NAMD:
             os.fsync(stream.fileno())
         self._io_barrier()
 
+    def _molecular_identity(self):
+        """Return stable nuclear and QM/MM topology identity for sidecars."""
+        cached = getattr(self, '_restart_molecular_identity', None)
+        if cached is not None:
+            return cached
+        atoms = np.asarray(self.mol.get_atoms(), dtype=np.int64).reshape(-1)
+        masses = np.asarray(self.mol.get_mass(), dtype=float).reshape(-1)
+        if (atoms.size == 0 or masses.shape != atoms.shape
+                or not np.all(np.isfinite(masses)) or np.any(masses <= 0.0)):
+            raise RuntimeError('cannot identify NAMD molecule: invalid atoms/masses')
+        identity = {
+            'atomic_numbers': atoms.tolist(),
+            'masses_amu': masses.tolist(),
+        }
+        if hasattr(self, 'qm_atoms'):
+            identity['qm_atoms'] = np.asarray(
+                self.qm_atoms, dtype=np.int64).reshape(-1).tolist()
+        if hasattr(self, 'pdb'):
+            topology = self.pdb.topology
+            topology_atoms = []
+            for atom in topology.atoms():
+                element = getattr(atom, 'element', None)
+                residue = getattr(atom, 'residue', None)
+                topology_atoms.append({
+                    'index': int(atom.index),
+                    'atomic_number': int(getattr(element, 'atomic_number', 0) or 0),
+                    'name': str(getattr(atom, 'name', '')),
+                    'residue_index': int(getattr(residue, 'index', -1)),
+                    'residue_name': str(getattr(residue, 'name', '')),
+                })
+            bonds = []
+            for bond in topology.bonds():
+                if hasattr(bond, 'atom1'):
+                    atom1, atom2 = bond.atom1, bond.atom2
+                else:
+                    atom1, atom2 = bond[0], bond[1]
+                bonds.append(sorted((int(atom1.index), int(atom2.index))))
+            identity['qmmm_topology'] = {
+                'atoms': topology_atoms,
+                'bonds': sorted(bonds),
+                'masses_amu': (
+                    np.asarray(self.m_all, dtype=float).reshape(-1) / AMU_TO_AU
+                ).tolist() if hasattr(self, 'm_all') else [],
+            }
+            qmmm = self.mol.config.get('qmmm', {})
+            identity['qmmm_model'] = {
+                key: str(qmmm.get(key, ''))
+                for key in ('forcefield_files', 'cutoff', 'embedding',
+                            'frontier_scheme')
+            }
+        self._restart_molecular_identity = identity
+        return identity
+
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
         identity = {
+            'molecule': self._molecular_identity(),
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
@@ -957,6 +1036,53 @@ class NAMD:
             'first_hop_step': md.get('first_hop_step', ''),
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
+
+    def _validate_restart_state(self, nuclear_state, coef, active, prev_xyz,
+                                prev_data, *, context):
+        """Reject invalid nuclear/electronic state before checkpoint use."""
+        coordinates, velocities, acceleration = (
+            np.asarray(value, dtype=float) for value in nuclear_state)
+        if (coordinates.ndim != 2 or coordinates.shape[1:] != (3,)
+                or coordinates.shape != velocities.shape
+                or coordinates.shape != acceleration.shape
+                or coordinates.size == 0
+                or not all(np.all(np.isfinite(value)) for value in (
+                    coordinates, velocities, acceleration))):
+            raise RuntimeError(
+                f'{context} contains an invalid NAMD nuclear state')
+        expected_natom = int(getattr(
+            self, 'natom_all', len(self._molecular_identity()['atomic_numbers'])))
+        if coordinates.shape[0] != expected_natom:
+            raise RuntimeError(
+                f'{context} nuclear atom count {coordinates.shape[0]} does not '
+                f'match the current system ({expected_natom})')
+
+        coef = np.asarray(coef, dtype=np.complex128).reshape(-1)
+        if (coef.shape != (self.nstate,)
+                or not np.all(np.isfinite(coef.real))
+                or not np.all(np.isfinite(coef.imag))):
+            raise RuntimeError(f'{context} contains invalid electronic coefficients')
+        norm = float(np.vdot(coef, coef).real)
+        if not np.isfinite(norm) or abs(norm - 1.0) > 1.0e-6:
+            raise RuntimeError(
+                f'{context} electronic coefficient norm is {norm!r}, not 1')
+        if not 1 <= int(active) <= self.nstate:
+            raise RuntimeError(
+                f'{context} active state {active} is outside 1..{self.nstate}')
+
+        prev_xyz = np.asarray(prev_xyz, dtype=float).reshape(-1)
+        expected_qm_size = 3 * len(self._molecular_identity()['atomic_numbers'])
+        if (prev_xyz.size != expected_qm_size
+                or not np.all(np.isfinite(prev_xyz))):
+            raise RuntimeError(f'{context} contains invalid previous QM coordinates')
+        for key, raw_value in prev_data.items():
+            value = np.asarray(raw_value)
+            if value.dtype == object:
+                raise TypeError(f'NAMD restart cannot serialize ragged tag {key!r}')
+            if value.dtype.kind in 'biufc' and not np.all(np.isfinite(value)):
+                raise RuntimeError(
+                    f'{context} contains non-finite previous-state tag {key!r}')
+        return coordinates, velocities, acceleration, coef, prev_xyz
 
     @staticmethod
     def _checkpoint_optional(payload, name, value):
@@ -977,15 +1103,15 @@ class NAMD:
         if self.prev_data is None or self.prev_xyz is None:
             self._io_barrier()
             return
-        nuclear_state = tuple(np.asarray(value, dtype=float) for value in (
-            coordinates, velocities, acceleration))
-        if (nuclear_state[0].shape != nuclear_state[1].shape
-                or nuclear_state[0].shape != nuclear_state[2].shape
-                or nuclear_state[0].size == 0
-                or not all(np.all(np.isfinite(value)) for value in nuclear_state)):
-            raise RuntimeError(
-                f'refusing to overwrite the last-good NAMD restart with an '
-                f'invalid nuclear state at step {istep}')
+        nuclear_state = (coordinates, velocities, acceleration)
+        coordinates, velocities, acceleration, coef, prev_xyz = (
+            self._validate_restart_state(
+                nuclear_state, self.coef, self.active, self.prev_xyz,
+                self.prev_data,
+                context=(f'refusing to overwrite the last-good NAMD restart '
+                         f'at step {istep}: state'),
+            )
+        )
         prev_keys = sorted(self.prev_data)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
@@ -999,15 +1125,13 @@ class NAMD:
             'coordinates': np.asarray(coordinates, dtype=np.float64),
             'velocities': np.asarray(velocities, dtype=np.float64),
             'acceleration': np.asarray(acceleration, dtype=np.float64),
-            'coef_real': np.asarray(self.coef.real, dtype=np.float64),
-            'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
-            'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
+            'coef_real': np.asarray(coef.real, dtype=np.float64),
+            'coef_imag': np.asarray(coef.imag, dtype=np.float64),
+            'prev_xyz': np.asarray(prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
         }
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
-            if value.dtype == object:
-                raise TypeError(f'NAMD restart cannot serialize ragged tag {key!r}')
             payload[f'prev_{index}'] = value
         for name, value in (
                 ('ba_energy_left', self._ba_energy_left),
@@ -1033,8 +1157,91 @@ class NAMD:
                 os.unlink(temporary)
         self._io_barrier()
 
+    def _rebase_restart_spec_paths(self, spec, source_dir):
+        """Make input-owned paths stable when the manifest moves to log_dir."""
+        from oqp.utils.oqp_input import CallSpec, CalculationSpec
+
+        def absolute_path(value):
+            if not isinstance(value, str) or not value.strip():
+                return value
+            expanded = os.path.expanduser(value.strip())
+            if os.path.isabs(expanded):
+                return os.path.normpath(expanded)
+            return os.path.normpath(os.path.abspath(os.path.join(
+                source_dir, expanded)))
+
+        def geometry_path(value):
+            if not isinstance(value, str) or '\n' in value or '\r' in value:
+                return value
+            candidate = value.strip()
+            if (os.path.splitext(candidate)[1].lower() in ('.xyz', '.pdb')
+                    or os.path.isfile(os.path.join(source_dir, candidate))):
+                return absolute_path(value)
+            return value
+
+        def search_path_list(value):
+            if not isinstance(value, str):
+                return value
+            entries = [item for item in value.replace(',', ' ').split() if item]
+            resolved = []
+            for item in entries:
+                candidate = os.path.join(source_dir, os.path.expanduser(item))
+                # Preserve OpenMM built-in force-field names; only local files
+                # inherit the original input directory.
+                resolved.append(absolute_path(item) if os.path.isfile(candidate)
+                                else item)
+            return ' '.join(resolved)
+
+        options = dict(spec.options)
+        for key in ('geom', 'geom2'):
+            if key in options:
+                options[key] = geometry_path(options[key])
+
+        model_options = dict(spec.model_options)
+        for key in ('parameter_path', 'library_path'):
+            if key in model_options:
+                model_options[key] = absolute_path(model_options[key])
+
+        driver_kwargs = dict(spec.driver.kwargs)
+        velocity = driver_kwargs.get('velocity')
+        if (isinstance(velocity, str)
+                and velocity.strip().lower() not in ('maxwell', 'zero')):
+            driver_kwargs['velocity'] = absolute_path(velocity)
+        driver = CallSpec(
+            spec.driver.name, spec.driver.args, driver_kwargs,
+            spec.driver.explicit)
+
+        single_path_keys = {
+            'input': {'system', 'system2'},
+            'neb': {'product'},
+            'guess': {'file', 'file2'},
+            'dftb': {'parameter_path', 'library_path'},
+            'geometric': {'constraints_file'},
+            'oqp': {'neb_output'},
+            'qmmm': {
+                'pdb_file', 'qm_atoms_xyz', 'trajectory_file', 'log_file',
+                'energy_file',
+            },
+        }
+        modifiers = []
+        for call in spec.modifiers:
+            kwargs = dict(call.kwargs)
+            for key in single_path_keys.get(call.name, set()):
+                if key in kwargs:
+                    kwargs[key] = absolute_path(kwargs[key])
+            if call.name == 'qmmm':
+                for key in ('forcefield', 'forcefield_files'):
+                    if key in kwargs:
+                        kwargs[key] = search_path_list(kwargs[key])
+            modifiers.append(CallSpec(
+                call.name, call.args, kwargs, call.explicit))
+
+        return CalculationSpec(
+            spec.model, spec.functional, spec.basis, model_options, options,
+            driver, tuple(modifiers), spec.source_text)
+
     def _write_restart_manifest(self):
-        """Write a directly runnable ``restart.oqp`` beside the checkpoint."""
+        """Write a directly runnable per-job restart manifest."""
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
             source = getattr(self.mol, 'oqp_input_source', None)
@@ -1055,6 +1262,11 @@ class NAMD:
         if spec.driver.name != 'namd':
             raise ValueError('cannot create restart.oqp from a non-NAMD request')
         directory = os.path.dirname(self.restart_manifest_file) or '.'
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        spec = self._rebase_restart_spec_paths(spec, source_dir)
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
             'restart': True,
@@ -1094,15 +1306,27 @@ class NAMD:
             if signature != self._restart_signature():
                 raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
             keys = [str(key) for key in saved['prev_keys']]
-            self.prev_data = {
+            prev_data = {
                 key: np.array(saved[f'prev_{index}'], copy=True)
                 for index, key in enumerate(keys)
             }
-            self.prev_xyz = np.array(saved['prev_xyz'], copy=True)
+            prev_xyz = np.array(saved['prev_xyz'], copy=True)
+            active = int(saved['active'][0])
+            coef = (np.array(saved['coef_real'], copy=True)
+                    + 1j*np.array(saved['coef_imag'], copy=True))
+            nuclear_state = tuple(np.array(saved[name], copy=True) for name in (
+                'coordinates', 'velocities', 'acceleration'))
+            coordinates, velocities, acceleration, coef, prev_xyz = (
+                self._validate_restart_state(
+                    nuclear_state, coef, active, prev_xyz, prev_data,
+                    context='NAMD restart checkpoint',
+                )
+            )
+            self.prev_data = prev_data
+            self.prev_xyz = prev_xyz
             self.mol.put_data(self.prev_data)
-            self.active = int(saved['active'][0])
-            self.coef = (np.array(saved['coef_real'], copy=True)
-                         + 1j*np.array(saved['coef_imag'], copy=True))
+            self.active = active
+            self.coef = coef
             self._rng_step = int(saved['rng_step'][0])
             self._last_hop_random = np.nan
             self._nacme_gate_failures = int(saved['gate_failures'][0])
@@ -1119,11 +1343,12 @@ class NAMD:
                 setattr(self, f'_{name}', value)
             result = {
                 'step': int(saved['step'][0]),
-                'coordinates': np.array(saved['coordinates'], copy=True),
-                'velocities': np.array(saved['velocities'], copy=True),
-                'acceleration': np.array(saved['acceleration'], copy=True),
+                'coordinates': coordinates,
+                'velocities': velocities,
+                'acceleration': acceleration,
             }
         self._reconcile_trajectory_with_restart(result['step'])
+        self._reconcile_nacme_audit_with_restart(result['step'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={result["step"]} '
@@ -1133,7 +1358,7 @@ class NAMD:
         return result
 
     def _reconcile_trajectory_with_restart(self, checkpoint_step):
-        """Discard only uncommitted TRJ tail records newer than checkpoint."""
+        """Repair a partial record and discard TRJ state after checkpoint."""
         if not self._is_io_rank():
             self._io_barrier()
             return
@@ -1143,11 +1368,37 @@ class NAMD:
         with open(self.trajectory_file, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
-            header_size = struct.unpack('<Q', stream.read(8))[0]
+            size_bytes = stream.read(8)
+            if len(size_bytes) != 8:
+                raise ValueError('restart trajectory has a truncated header')
+            header_size = struct.unpack('<Q', size_bytes)[0]
+            header_bytes = stream.read(header_size)
+            if len(header_bytes) != header_size:
+                raise ValueError('restart trajectory has a truncated header')
+            header = json.loads(header_bytes.decode('utf-8'))
         offset = 16 + header_size
-        header, records = read_namd_trajectory(self.trajectory_file)
         if header.get('signature') != self._restart_signature():
             raise ValueError('restart trajectory and checkpoint model mismatch')
+        dtype = _namd_trajectory_dtype(
+            int(header['nstate']), int(header['natom']))
+        if int(header.get('record_bytes', -1)) != dtype.itemsize:
+            raise ValueError('restart trajectory record layout mismatch')
+        payload_size = os.path.getsize(self.trajectory_file) - offset
+        if payload_size < 0:
+            raise ValueError('restart trajectory has an invalid header size')
+        partial_bytes = payload_size % dtype.itemsize
+        if partial_bytes:
+            with open(self.trajectory_file, 'r+b') as stream:
+                stream.truncate(os.path.getsize(self.trajectory_file)
+                                - partial_bytes)
+                stream.flush()
+                os.fsync(stream.fileno())
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {partial_bytes} byte(s) from an '
+                       f'incomplete final trajectory record'),
+            )
+        header, records = read_namd_trajectory(self.trajectory_file)
         steps = np.array(records['step'], copy=True)
         keep = int(np.count_nonzero(steps <= int(checkpoint_step)))
         if keep < len(records):
@@ -1165,6 +1416,58 @@ class NAMD:
             )
         else:
             del records
+        self._io_barrier()
+
+    def _reconcile_nacme_audit_with_restart(self, checkpoint_step):
+        """Atomically discard incomplete or uncommitted NACME TSV rows."""
+        if not self._is_io_rank():
+            self._io_barrier()
+            return
+        path = self.nacme_audit_file
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            self._io_barrier()
+            return
+        with open(path, 'r', encoding='utf-8') as stream:
+            lines = stream.readlines()
+        if not lines:
+            self._io_barrier()
+            return
+        columns = lines[0].rstrip('\r\n').split('\t')
+        if 'center_step' not in columns:
+            raise ValueError('restart NACME audit is missing center_step')
+        step_index = columns.index('center_step')
+        kept = [lines[0] if lines[0].endswith('\n') else lines[0] + '\n']
+        removed = 0
+        for line in lines[1:]:
+            fields = line.rstrip('\r\n').split('\t')
+            try:
+                complete = line.endswith('\n') and len(fields) == len(columns)
+                center_step = int(fields[step_index]) if complete else None
+            except (IndexError, ValueError):
+                center_step = None
+            if center_step is None or center_step > int(checkpoint_step):
+                removed += 1
+            else:
+                kept.append(line)
+        if removed:
+            directory = os.path.dirname(path) or '.'
+            descriptor, temporary = tempfile.mkstemp(
+                prefix='.namd-audit-', suffix='.tmp', dir=directory)
+            try:
+                with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                    stream.writelines(kept)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, path)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {removed} incomplete or '
+                       f'uncommitted NACME audit row(s) after step '
+                       f'{checkpoint_step}'),
+            )
         self._io_barrier()
 
     # ------------------------------------------------------------------ #

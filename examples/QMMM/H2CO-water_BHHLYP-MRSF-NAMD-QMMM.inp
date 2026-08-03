@@ -4,9 +4,9 @@
 #       ROHF reference.
 # MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
 #
-# This is a *minimal* demonstration: nstep=1 runs a single nuclear step (one
-# embedded MRSF electronic-structure + gradient evaluation) so it finishes
-# quickly.  Requires the optional OpenMM backend and the companion files
+# This is a *minimal* demonstration: nstep=2 reaches the second overlap
+# interval, where the three-point TD-Baeck-An estimate and NACME gate are first
+# invoked. Requires the optional OpenMM backend and the companion files
 # formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read relative to this
 # file).  It is part of `openqp --run_tests all`, and is reported SKIPPED when
 # OpenMM is not installed.
@@ -39,7 +39,7 @@ multiplicity=3
 grad=1
 
 [md]
-nstep=1
+nstep=2
 dt=0.5
 active=1
 substep=50
