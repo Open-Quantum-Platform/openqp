@@ -12,6 +12,10 @@ import numpy as np
 from numpy import linalg as la
 from oqp.molecule import Molecule
 from oqp.utils.mpi_utils import MPIManager, MPIPool
+from oqp.library.state_tracking import (
+    diagonal_phase_tracking,
+    maximum_overlap_assignment,
+)
 
 # DFT-D4 is now linked natively into liboqp (source/dftd4_interface.F90),
 # exposed as oqp.lib.oqp_dftd4_disp. No Python `dftd4` package is needed, so
@@ -47,6 +51,13 @@ def dftd4_native_disp(atoms, coordinates, functional, do_grad):
 
 
 from oqp.library.frequency import normal_mode, thermal_analysis
+from oqp.library.nac_utils import (
+    canonical_state_overlap,
+    hst_derivative_coupling,
+    interstate_coupling,
+    load_numerical_nac_cache,
+    write_numerical_nac_cache_marker,
+)
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_config
 from oqp.utils.file_utils import dump_log, dump_data, write_config, write_xyz
 from oqp.utils.state_labels import is_mrsf, public_state_label
@@ -1439,7 +1450,7 @@ class Hessian(Calculator):
         return hessian, flags
 
 
-def _run_oqp_external(inp):
+def _run_oqp_external(inp, env_overrides=None):
     # Run a calculation in a fresh process. Prefer the installed `openqp`
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
@@ -1449,7 +1460,10 @@ def _run_oqp_external(inp):
         cmd = [openqp_exe, inp, '--silent']
     else:
         cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
-    subprocess.run(cmd)
+    env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
+    subprocess.run(cmd, env=env)
 
 
 def grad_wrapper(key_dict):
@@ -1599,12 +1613,21 @@ class BasisOverlap(Calculator):
         current_energy = copy.deepcopy(np.asarray(data["OQP::E_MO_A"]))
         nocc = noca
 
-        occ_order, occ_sign = self.find_vec_order(s_mo[:nocc - 2, : nocc - 2])
-        somo_order, somo_sign = self.find_vec_order(s_mo[nocc - 2: nocc, nocc - 2: nocc])
-        vir_order, vir_sign = self.find_vec_order(s_mo[nocc:, nocc:])
+        occ_order, occ_sign, occ_match, occ_margin = self.find_mo_order(
+            s_mo[:nocc - 2, : nocc - 2], diagnostics=True)
+        somo_order, somo_sign, somo_match, somo_margin = self.find_mo_order(
+            s_mo[nocc - 2: nocc, nocc - 2: nocc], diagnostics=True)
+        vir_order, vir_sign, vir_match, vir_margin = self.find_mo_order(
+            s_mo[nocc:, nocc:], diagnostics=True)
 
         mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
         mo_sign = np.concatenate((occ_sign, somo_sign, vir_sign)).reshape((-1, 1))
+        data["OQP::mo_tracking_order"] = mo_order.copy()
+        data["OQP::mo_tracking_phase"] = mo_sign.reshape(-1).copy()
+        data["OQP::mo_tracking_overlap"] = np.concatenate(
+            (occ_match, somo_match, vir_match))
+        data["OQP::mo_tracking_margin"] = np.concatenate(
+            (occ_margin, somo_margin, vir_margin))
 
         current_mo = current_mo * mo_sign
         if self.align_type == 'reorder':
@@ -1680,6 +1703,15 @@ class BasisOverlap(Calculator):
             self.mol.data["OQP::td_energies_old"] = previous_data["OQP::td_energies"]
         except KeyError:
             pass
+        try:
+            self.mol.data["OQP::state_tracking_lineage_old"] = previous_data[
+                "OQP::state_tracking_lineage"
+            ]
+            self.mol.data["OQP::state_tracking_phase_initial_old"] = previous_data[
+                "OQP::state_tracking_phase_initial"
+            ]
+        except KeyError:
+            pass
 
     def align_mo(self):
         dump_log(self.mol, title='PyOQP: Entering Overlap Calculation', section='basis_overlap')
@@ -1691,12 +1723,21 @@ class BasisOverlap(Calculator):
         mo_overlap_matrix = self.mol.data["OQP::overlap_mo_non_orthogonal"]
 
         # current MO in row, previous MO in column
-        occ_order, occ_sign = self.find_vec_order(mo_overlap_matrix[:nocc - 2, : nocc - 2])
-        somo_order, somo_sign = self.find_vec_order(mo_overlap_matrix[nocc - 2: nocc, nocc - 2: nocc])
-        vir_order, vir_sign = self.find_vec_order(mo_overlap_matrix[nocc:, nocc:])
+        occ_order, occ_sign, occ_match, occ_margin = self.find_mo_order(
+            mo_overlap_matrix[:nocc - 2, : nocc - 2], diagnostics=True)
+        somo_order, somo_sign, somo_match, somo_margin = self.find_mo_order(
+            mo_overlap_matrix[nocc - 2: nocc, nocc - 2: nocc], diagnostics=True)
+        vir_order, vir_sign, vir_match, vir_margin = self.find_mo_order(
+            mo_overlap_matrix[nocc:, nocc:], diagnostics=True)
 
         mo_order = np.concatenate((occ_order, somo_order + nocc - 2, vir_order + nocc))
         mo_sign = np.concatenate((occ_sign, somo_sign, vir_sign)).reshape((-1, 1))
+        self.mol.data["OQP::mo_tracking_order"] = mo_order.copy()
+        self.mol.data["OQP::mo_tracking_phase"] = mo_sign.reshape(-1).copy()
+        self.mol.data["OQP::mo_tracking_overlap"] = np.concatenate(
+            (occ_match, somo_match, vir_match))
+        self.mol.data["OQP::mo_tracking_margin"] = np.concatenate(
+            (occ_margin, somo_margin, vir_margin))
 
         # apply sign correction
         current_mo *= mo_sign
@@ -1718,23 +1759,34 @@ class BasisOverlap(Calculator):
         self.overlap_func(self.mol)
 
     @staticmethod
-    def find_vec_order(overlap_matrix):
-        overlap_matrix = copy.deepcopy(overlap_matrix)
-        vec_order = []
-        vec_sign = []
-        for s_i in overlap_matrix:
-            # find the matched vec and sign
-            n_i = np.argmax(np.abs(s_i))
-            p_i = np.sign(s_i)[n_i]
+    def find_vec_order(overlap_matrix, diagnostics=False):
+        """Globally match current rows to previous columns by absolute overlap.
 
-            # record the vec index and sign
-            vec_order.append(n_i)
-            vec_sign.append(p_i)
+        The resident Fortran assignment is one-to-one and maximises the total
+        overlap, unlike the former row-wise greedy loop.  Zero overlaps use a
+        deterministic +1 phase.  The optional diagnostics expose matched
+        overlap and row margin so callers can record ambiguous crossings.
+        """
+        result = maximum_overlap_assignment(overlap_matrix)
+        if diagnostics:
+            return result
+        return result[0], result[1]
 
-            # remove the matched vec
-            overlap_matrix[:, n_i] = 0
+    def find_mo_order(self, overlap_matrix, diagnostics=False):
+        """Track MOs coherently with the requested NAMD alignment mode.
 
-        return np.array(vec_order), np.array(vec_sign)
+        ``align=phase`` retains SCF orbital labels, so it must not borrow a
+        phase selected from a different old orbital by global assignment.
+        ``align=reorder`` restores the complete permutation below and can use
+        the native global assignment.
+        """
+        if self.align_type == 'phase':
+            signs, matched, margins = diagonal_phase_tracking(overlap_matrix)
+            order = np.arange(len(signs), dtype=np.int32)
+            if diagnostics:
+                return order, signs, matched, margins
+            return order, signs
+        return self.find_vec_order(overlap_matrix, diagnostics=diagnostics)
 
 
 class NACME(BasisOverlap):
@@ -1748,11 +1800,11 @@ class NACME(BasisOverlap):
         self.dt = mol.config['nac']['dt']
         self.nac_dim = self.nstate
 
-    def align_x(self):
+    def align_x(self, reorder=False):
         # use current td data if previous td data is unavailable
         try:
             self.mol.data["OQP::td_bvec_mo_old"]
-        except AttributeError:
+        except (AttributeError, KeyError):
             self.mol.data["OQP::td_bvec_mo_old"] = self.mol.data["OQP::td_bvec_mo"]
             self.mol.data["OQP::td_energies_old"] = self.mol.data["OQP::td_energies"]
 
@@ -1766,10 +1818,93 @@ class NACME(BasisOverlap):
 
         # current x in row, previous x in column
         x_overlap_matrix = np.matmul(current_x, previous_x.T)
-        x_order, x_sign = self.find_vec_order(x_overlap_matrix)
+        if reorder:
+            # Numerical-NAC displacement workers restore the complete state
+            # permutation to the central ordering below, so global assignment
+            # is coherent in that workflow.
+            x_order, x_sign, x_match, x_margin = self.find_vec_order(
+                x_overlap_matrix, diagnostics=True)
+        else:
+            # NAMD remains in energy-root order.  A global assignment would
+            # choose the phase of root j from a different old root without
+            # transporting that permutation through c, E, active, and forces.
+            # Preserve the index and apply only the native diagonal phase.
+            x_sign, x_match, x_margin = diagonal_phase_tracking(x_overlap_matrix)
+            x_order = np.arange(len(x_sign), dtype=np.int32)
 
-        # apply sign correction
+        # Carry the physical-state identity through root exchanges.  Every
+        # mapping is current energy root -> previous energy root (zero-based).
+        try:
+            previous_lineage = np.asarray(
+                self.mol.data['OQP::state_tracking_lineage_old'], dtype=np.int32
+            ).reshape(-1)
+            if previous_lineage.size != len(x_order):
+                raise ValueError
+        except (AttributeError, KeyError, TypeError, ValueError):
+            try:
+                previous_lineage = np.asarray(
+                    self.mol.data['OQP::state_tracking_lineage'], dtype=np.int32
+                ).reshape(-1)
+                if previous_lineage.size != len(x_order):
+                    raise ValueError
+            except (AttributeError, KeyError, TypeError, ValueError):
+                previous_lineage = np.arange(len(x_order), dtype=np.int32)
+
+        try:
+            previous_initial_phase = np.asarray(
+                self.mol.data['OQP::state_tracking_phase_initial_old'], dtype=float
+            ).reshape(-1)
+            if previous_initial_phase.size != len(x_order):
+                raise ValueError
+        except (AttributeError, KeyError, TypeError, ValueError):
+            try:
+                previous_initial_phase = np.asarray(
+                    self.mol.data['OQP::state_tracking_phase_initial'], dtype=float
+                ).reshape(-1)
+                if previous_initial_phase.size != len(x_order):
+                    raise ValueError
+            except (AttributeError, KeyError, TypeError, ValueError):
+                previous_initial_phase = np.ones(len(x_order), dtype=float)
+
+        raw_order = x_order.copy()
+        lineage = previous_lineage[x_order]
+        previous_phase = previous_initial_phase[x_order]
+        phase_step = x_sign.copy()
+        matched = x_match.copy()
+        margin = x_margin.copy()
+
+        # Phase-fix first in the raw current energy-root order.  A numerical
+        # NAC displacement worker then restores previous/central root order so
+        # +dx and -dx finite differences refer to the same physical states.
         current_x *= x_sign.reshape((-1, 1))
+        if reorder:
+            inverse = np.argsort(x_order)
+            current_x = current_x[inverse]
+            x_order = x_order[inverse]
+            lineage = lineage[inverse]
+            previous_phase = previous_phase[inverse]
+            phase_step = phase_step[inverse]
+            matched = matched[inverse]
+            margin = margin[inverse]
+
+        self.mol.data['OQP::state_tracking_raw_order'] = raw_order
+        self.mol.data['OQP::state_tracking_output_reordered'] = np.array(
+            [int(reorder)], dtype=np.int32)
+        self.mol.data['OQP::state_tracking_order'] = x_order.copy()
+        self.mol.data['OQP::state_tracking_lineage'] = lineage
+        self.mol.data['OQP::state_tracking_phase_step'] = phase_step
+        # The previous response vectors have already been phase transported.
+        # Therefore the sign that aligns the raw current vector to them is
+        # directly its correction relative to the initial transported gauge;
+        # multiplying by the previous correction again would double count it.
+        self.mol.data['OQP::state_tracking_phase_initial'] = phase_step.copy()
+        self.mol.data['OQP::state_tracking_previous_phase_initial'] = previous_phase
+        self.mol.data['OQP::state_tracking_overlap'] = matched
+        self.mol.data['OQP::state_tracking_margin'] = margin
+        # Only tracking performed in this calculation may be exposed through
+        # Molecule.get_results()/Runner.results().  Guess JSON tags remain
+        # available above as transport history, but are not current results.
+        self.mol._state_tracking_fresh = True
 
         # update x in Fortran data shape
         self.mol.data['OQP::td_bvec_mo'] = current_x.reshape((x_shape[0], x_shape[1]))
@@ -1796,7 +1931,7 @@ class NACME(BasisOverlap):
             noca=noca, nocb=nocb, multiplicity=mult, tlf_order=tlf)
         data["OQP::td_states_overlap"] = s_st
 
-    def nacme(self):
+    def nacme(self, align=True, reorder_x=False):
         """
         Calculates the non-adiabatic coupling (NAC) matrix elements
         between the two geometries.
@@ -1806,21 +1941,27 @@ class NACME(BasisOverlap):
         dump_log(self.mol, title='PyOQP: Entering State Overlap Calculation')
 
         # align X amplitudes
-        self.align_x()
+        if align:
+            self.align_x(reorder=reorder_x)
 
         # compute state overlap
         if is_tb_method(self.mol.config['input']['method']):
             self.dftb_states_overlap()
         else:
             oqp.get_states_overlap(self.mol)
-        state_overlap = self.mol.data["OQP::td_states_overlap"]
+        # Two-dimensional native tags are exposed as the transpose of their
+        # Fortran matrices.  Convert once at the storage boundary so the
+        # Python indices retain the documented convention
+        # S[i,j] = <old i | new j>.  DFTB/xTB deliberately use the same tag
+        # layout, so this conversion applies to every overlap backend.
+        state_overlap = canonical_state_overlap(
+            self.mol.data["OQP::td_states_overlap"]
+        )
 
         # compute time-derivative nac
-        dc_matrix = (state_overlap - state_overlap.T) / self.dt
-        e_i = np.array(self.mol.energies[1:]).reshape((-1, 1))
-        e_j = np.array(self.mol.energies[1:]).reshape((1, -1))
-        gap = e_j - e_i
-        nac_matrix = dc_matrix * gap
+        dc_matrix = hst_derivative_coupling(state_overlap, self.dt)
+        state_energies = np.asarray(self.mol.energies[1:], dtype=float)
+        nac_matrix = interstate_coupling(dc_matrix, state_energies)
         nac_matrix = nac_matrix[0:self.nac_dim, 0:self.nac_dim]
         self.mol.data["OQP::dc_matrix"] = dc_matrix
         self.mol.data["OQP::nac_matrix"] = nac_matrix
@@ -1828,6 +1969,8 @@ class NACME(BasisOverlap):
         dump_log(self.mol, title='PyOQP: Non-Adiabatic Coupling Matrix Calculation', section='nacme')
         dump_log(self.mol, title='PyOQP: phase corrected state overlap (s_ij)', section='nacm', info=state_overlap)
         dump_log(self.mol, title='PyOQP: phase corrected derivative coupling (d_ij)', section='nacm', info=dc_matrix)
+        gap = (state_energies.reshape((1, -1))
+               - state_energies.reshape((-1, 1)))
         dump_log(self.mol, title='PyOQP: state energy gap (e_ji)', section='nacm', info=gap)
         dump_log(self.mol, title='PyOQP: phase corrected non-adiabatic coupling (h_ij)', section='nacm',
                  info=nac_matrix)
@@ -2019,17 +2162,14 @@ class NAC(Calculator):
         # compute nacv (natom x 3, nstate x nstate)
         forward = np.array(dcm[0:ncoord])
         backward = np.array(dcm[ncoord:])
+        # Every worker .dcme is the derivative coupling d_ij exported by
+        # NACME.nacme, never the energy-weighted h_ij.  The central difference
+        # is formed here before interstate_coupling applies (E_j-E_i).
         dcm = (forward - backward) / 2
-        e_i = np.array(self.mol.energies[1:]).reshape((1, -1))
-        e_j = np.array(self.mol.energies[1:]).reshape((-1, 1))
-        gap = e_j - e_i
-        np.fill_diagonal(gap, 1)
-        gap = gap.reshape((1, -1))
-        nacm = dcm * gap
-
         # reshape matrix -> (nstate x nstate, natom x 3) -> (nstate, nstate, natom, 3)
         dcv = dcm.T.reshape((self.nstate, self.nstate, self.natom, 3))
-        nacv = nacm.T.reshape((self.nstate, self.nstate, self.natom, 3))
+        state_energies = np.asarray(self.mol.energies[1:], dtype=float)
+        nacv = interstate_coupling(dcv, state_energies)
 
         # delete scratch folder
         if 'failed' not in flags and self.clean and self.mpi_manager.rank == 0:
@@ -2061,8 +2201,13 @@ def nacme_wrapper(key_dict):
     dat = f'{dir_nacv}/{project_name}.{idx}.dcme'
     log = f'{dir_nacv}/{project_name}.{idx}.tmp.log'
 
-    # attempt to read computed data
-    if restart and os.path.exists(dat):
+    # Reuse only a file explicitly marked with the current PR #160 overlap,
+    # factor, sign, and root-order convention.  Unmarked historical files and
+    # partially upgraded scratch directories are recomputed worker by worker.
+    dcme = load_numerical_nac_cache(
+        dat, dx, nstate, idx
+    ) if restart else None
+    if dcme is not None:
         status = 'loaded'
     else:
         status = 'computed'
@@ -2091,7 +2236,7 @@ def nacme_wrapper(key_dict):
 
         if not MPIManager().use_mpi:
             # run nac calculation externally
-            _run_oqp_external(inp)
+            _run_oqp_external(inp, {'OQP_NUM_NAC_WORKER': '1'})
         else:
             # run nac calculation internally
             start_time = time.time()
@@ -2108,15 +2253,17 @@ def nacme_wrapper(key_dict):
             BasisOverlap(mol).overlap()
             sp.excitation(ref_energy)
             LastStep(mol).compute(mol)
-            NACME(mol).nacme()
+            NACME(mol).nacme(reorder_x=True)
             dump_log(mol, title='', section='end')
 
-    try:
-        dcme = np.loadtxt(dat).reshape(-1)
-
-    except FileNotFoundError:
-        dcme = np.zeros_like(nstate * nstate)
-        status = 'failed'
+        try:
+            dcme = np.loadtxt(dat).reshape(-1)
+            if dcme.size != nstate * nstate or not np.all(np.isfinite(dcme)):
+                raise ValueError('incomplete numerical-NAC worker output')
+            write_numerical_nac_cache_marker(dat, dx, nstate, idx)
+        except (OSError, ValueError):
+            dcme = np.zeros(nstate * nstate, dtype=float)
+            status = 'failed'
 
     end_time = time.time()
 

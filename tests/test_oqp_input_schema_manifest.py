@@ -105,6 +105,12 @@ def _generic_input(section, key, value_text):
     return "%s %s(%s=%s)" % (route, section, key, value_text)
 
 
+def test_trivial_crossing_following_is_opt_in():
+    """Standard FSSH must not relabel the active root without an explicit opt-in."""
+
+    assert _schema_defaults_from_ast()["md"]["trivial"] == ("False", "bool")
+
+
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
     oqp_input = _load_oqp_input()
     schema = _schema_keys_from_ast()

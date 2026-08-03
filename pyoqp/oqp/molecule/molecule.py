@@ -98,6 +98,10 @@ class Molecule:
         self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
         self.symmetry_metadata = {}
         self.mrsf_ekt_results_by_kind = {}
+        # State-tracking tags loaded from a guess are transport history, not a
+        # result of the new calculation.  NACME.align_x sets this only after it
+        # has refreshed the mapping and gauge in the current run.
+        self._state_tracking_fresh = False
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -116,6 +120,13 @@ class Molecule:
             'OQP::namd_tdc', 'OQP::namd_eabs', 'OQP::namd_stas',
             'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
             'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::mo_tracking_order', 'OQP::mo_tracking_phase',
+            'OQP::mo_tracking_overlap', 'OQP::mo_tracking_margin',
+            'OQP::state_tracking_order', 'OQP::state_tracking_lineage',
+            'OQP::state_tracking_raw_order', 'OQP::state_tracking_output_reordered',
+            'OQP::state_tracking_phase_step', 'OQP::state_tracking_phase_initial',
+            'OQP::state_tracking_previous_phase_initial',
+            'OQP::state_tracking_overlap', 'OQP::state_tracking_margin',
             'OQP::soc_eval',
             'OQP::soc_evec_re', 'OQP::soc_evec_im',
             'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
@@ -1392,6 +1403,14 @@ class Molecule:
         data['hess'] = np.array(self.get_hess()).tolist()
         data.update(self.get_mrsf_ekt_results())
 
+        # Keep the programmatic API and the on-disk JSON on the same public
+        # state-tracking contract.  External dynamics drivers (notably
+        # PyRAI2MD) must be able to tell that root/phase transport has already
+        # been applied without depending on the chosen I/O mode.
+        state_tracking = self.get_state_tracking()
+        if state_tracking is not None:
+            data['state_tracking'] = state_tracking
+
         # OpenQP-DFTB backend results.  The DFTB adapter is pure Python, so
         # liboqp's mol_energy struct (the 'energy' scalar above) is never
         # populated on this path; surface the adapter results explicitly:
@@ -1413,6 +1432,46 @@ class Molecule:
                     data[key] = value
 
         return data
+
+    def get_state_tracking(self):
+        """Return the JSON-safe public root/phase transport record, if any."""
+        if not getattr(self, '_state_tracking_fresh', False):
+            return None
+        try:
+            return {
+                'schema_version': 1,
+                'index_base': 0,
+                'order_semantics': 'current_root_to_previous_root',
+                'order': np.asarray(
+                    self.data['OQP::state_tracking_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'raw_order': np.asarray(
+                    self.data['OQP::state_tracking_raw_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'output_reordered': bool(np.asarray(
+                    self.data['OQP::state_tracking_output_reordered'], dtype=int
+                ).reshape(-1)[0]),
+                'lineage': np.asarray(
+                    self.data['OQP::state_tracking_lineage'], dtype=int
+                ).reshape(-1).tolist(),
+                'phase_step': np.asarray(
+                    self.data['OQP::state_tracking_phase_step'], dtype=float
+                ).reshape(-1).tolist(),
+                'phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'previous_phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_previous_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'matched_overlap': np.asarray(
+                    self.data['OQP::state_tracking_overlap'], dtype=float
+                ).reshape(-1).tolist(),
+                'margin': np.asarray(
+                    self.data['OQP::state_tracking_margin'], dtype=float
+                ).reshape(-1).tolist(),
+            }
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+            return None
 
     @mpi_get_attr
     def get_coord(self, coordinates):
@@ -1957,6 +2016,9 @@ class Molecule:
 
     def put_data(self, data):
         # convert list to data
+        # Keep loaded tracking arrays available as history for a subsequent
+        # overlap calculation, but never publish them as this run's result.
+        self._state_tracking_fresh = False
         for key in self.tag:
             try:
                 self.data[key] = np.array(data[key])

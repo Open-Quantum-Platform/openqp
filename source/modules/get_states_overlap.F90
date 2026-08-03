@@ -356,9 +356,12 @@ contains
 !$OMP END DO
 !$OMP END PARALLEL
 
-    do i = 1, nstates
-      s_st(:,i) = s_st(:,i) / norm2(s_st(:,i))
-    end do
+    ! Keep the raw finite-state TLF projection.  A retained root window is
+    ! generally not closed under a nuclear step, so a column norm below one
+    ! can represent genuine amplitude outside the requested states.  Per-column
+    ! normalisation would fold that leakage back into the retained manifold and
+    ! changes the HST/FSSH coupling.  Any future norm-preserving propagation
+    ! must instead make an explicit full-matrix (e.g. polar/NPI) choice.
 
   end subroutine compute_states_overlap
 
