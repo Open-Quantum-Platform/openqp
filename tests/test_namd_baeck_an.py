@@ -134,7 +134,10 @@ import os
 from types import SimpleNamespace
 import numpy as np
 import oqp.library.namd as namd_module
-from oqp.library.namd import NAMD, read_namd_trajectory
+from oqp.library.namd import (
+    NAMD, read_namd_trajectory, _validate_gate_tolerances,
+    _validate_namd_sidecar_paths,
+)
 namd_module.dump_log = lambda *_args, **_kwargs: None
 
 root = os.environ['OQP_NAMD_TEST_ROOT']
@@ -246,6 +249,60 @@ with open(pdb_path, 'a', encoding='utf-8') as stream:
     stream.write('REMARK topology changed\n')
 q._qmmm_restart_identity_cache = None
 signature_after = q._restart_signature()
+
+rejected_tolerances = []
+for name, values in (
+        ('nan', (1.0e-10, np.nan, 1.0)),
+        ('inf', (np.inf, 1.0e-4, 1.0))):
+    try:
+        _validate_gate_tolerances('test gate', *values)
+    except ValueError:
+        rejected_tolerances.append(name)
+try:
+    _validate_namd_sidecar_paths(
+        trajectory_file=os.path.join(root, 'collision.dat'),
+        nacme_audit_file=os.path.join(root, '.', 'collision.dat'),
+        restart_file=os.path.join(root, 'checkpoint.npz'),
+    )
+except ValueError:
+    sidecar_collision_rejected = True
+else:
+    sidecar_collision_rejected = False
+
+asset_dir = os.path.join(root, 'assets')
+output_dir = os.path.join(root, 'outputs')
+os.makedirs(asset_dir); os.makedirs(output_dir)
+geom_path = os.path.join(asset_dir, 'geom.xyz')
+topology_path = os.path.join(asset_dir, 'system.pdb')
+local_ff_path = os.path.join(asset_dir, 'local.xml')
+for path, contents in (
+        (geom_path, '1\n\nH 0 0 0\n'),
+        (topology_path, 'MODEL 1\nENDMDL\n'),
+        (local_ff_path, '<ForceField/>\n')):
+    with open(path, 'w', encoding='utf-8') as stream:
+        stream.write(contents)
+source_input = os.path.join(asset_dir, 'source.oqp')
+canonical_manifest_input = (
+    'mrsf(nstate=2)/bhhlyp/6-31g*\n'
+    'namd(T0,nstep=2,dt=0.5)\n'
+    'qmmm(pdb_file="system.pdb",forcefield_files="local.xml amber14-all.xml",'
+    'qm_atoms="0-3",cutoff=NoCutoff)\n'
+    'geom="geom.xyz"\n'
+)
+with open(source_input, 'w', encoding='utf-8') as stream:
+    stream.write(canonical_manifest_input)
+class ManifestMol:
+    log = os.path.join(output_dir, 'job.log')
+    oqp_input_source = source_input
+    oqp_canonical_input = canonical_manifest_input
+manifest_driver = NAMD.__new__(NAMD); manifest_driver.mol = ManifestMol()
+manifest_driver.restart_file = os.path.join(output_dir, 'job.restart.npz')
+manifest_driver.trajectory_file = os.path.join(output_dir, 'job.trj')
+manifest_driver.nacme_audit_file = os.path.join(output_dir, 'job.tsv')
+manifest_driver.restart_manifest_file = os.path.join(output_dir, 'restart.oqp')
+manifest_driver._write_restart_manifest()
+rebased_manifest = open(
+    manifest_driver.restart_manifest_file, encoding='utf-8').read()
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
 d._nve_reference_energy = -0.9; d._nve_previous_energy = -0.9
 d._nve_gate_failures = 0
@@ -277,6 +334,12 @@ print('DENSE=' + json.dumps({
     'audit_rows': len(audit_lines) - 1,
     'audit_signed': audit_row['signed'],
     'qmmm_signature_changed': signature_before != signature_after,
+    'rejected_tolerances': rejected_tolerances,
+    'sidecar_collision_rejected': sidecar_collision_rejected,
+    'manifest_geom_rebased': geom_path in rebased_manifest,
+    'manifest_topology_rebased': topology_path in rebased_manifest,
+    'manifest_forcefield_rebased': local_ff_path in rebased_manifest,
+    'manifest_builtin_forcefield': 'amber14-all.xml' in rebased_manifest,
     'loaded_step': loaded['step'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
         'gate_failures': d2._nacme_gate_failures,
@@ -317,6 +380,11 @@ print('DENSE=' + json.dumps({
         'loaded_droplet': 0.02, 'loaded_thermostat_cumulative': 0.003,
         'audit_rows': 1, 'audit_signed': 'True',
         'qmmm_signature_changed': True,
+        'rejected_tolerances': ['nan', 'inf'],
+        'sidecar_collision_rejected': True,
+        'manifest_geom_rebased': True, 'manifest_topology_rebased': True,
+        'manifest_forcefield_rebased': True,
+        'manifest_builtin_forcefield': True,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,

@@ -88,6 +88,61 @@ def _restart_file_identity(path, source_directory=''):
     return identity
 
 
+def _validate_gate_tolerances(label, *values):
+    """Reject validation thresholds that silently disable comparisons."""
+    tolerances = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(tolerances)) or np.any(tolerances < 0.0):
+        raise ValueError(f'[md] {label} tolerances must be finite and non-negative')
+
+
+def _validate_namd_sidecar_paths(**paths):
+    """Require binary, text, and checkpoint sidecars to have distinct paths."""
+    normalized = {}
+    for name, path in paths.items():
+        canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+        if canonical in normalized:
+            raise ValueError(
+                f'[md] {name} and {normalized[canonical]} must use distinct paths')
+        normalized[canonical] = name
+
+
+def _restart_asset_path(value, source_directory, *, filelike_only=False):
+    """Resolve one canonical-input asset without altering inline geometry."""
+    if (not source_directory or not isinstance(value, str)
+            or not value.strip() or '\n' in value):
+        return value
+    stripped = value.strip()
+    pdb_end = stripped.lower().find('.pdb')
+    suffix = ''
+    if pdb_end >= 0:
+        pdb_end += len('.pdb')
+        suffix = stripped[pdb_end:]
+        stripped = stripped[:pdb_end]
+    elif filelike_only and not stripped.lower().endswith(('.xyz', '.pdb')):
+        return value
+    candidate = os.path.expanduser(stripped)
+    if not os.path.isabs(candidate):
+        candidate = os.path.join(source_directory, candidate)
+    return os.path.abspath(candidate) + suffix
+
+
+def _restart_search_path_list(value, source_directory):
+    """Resolve local force fields while retaining OpenMM package identifiers."""
+    if not source_directory or not isinstance(value, str):
+        return value
+    resolved = []
+    for item in re.split(r'[,\s]+', value.strip()):
+        if not item:
+            continue
+        candidate = os.path.expanduser(item)
+        local = (candidate if os.path.isabs(candidate)
+                 else os.path.join(source_directory, candidate))
+        explicit = item.startswith(('./', '../', '~')) or os.path.isabs(candidate)
+        resolved.append(os.path.abspath(local) if explicit or os.path.isfile(local)
+                        else item)
+    return ' '.join(resolved)
+
+
 def _namd_trajectory_dtype(nstate, natom):
     """Fixed-width, appendable binary record used by ``*.namd.trj``."""
     matrix = (nstate, nstate)
@@ -261,8 +316,8 @@ class NAMD:
         if self.nacme_check not in ('off', 'baeck_an'):
             raise ValueError("[md] nacme_check must be off or baeck_an")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
-        if self.ba_gap_max <= 0.0:
-            raise ValueError("[md] ba_gap_max must be positive")
+        if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
+            raise ValueError("[md] ba_gap_max must be finite and positive")
         self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nacme_gate must be off, warn, or error")
@@ -271,9 +326,9 @@ class NAMD:
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
         self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
         self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
-        if min(self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
-               self.nacme_gate_rel_tol) < 0.0:
-            raise ValueError("[md] NACME gate tolerances must be non-negative")
+        _validate_gate_tolerances(
+            'NACME gate', self.nacme_gate_invariant_tol,
+            self.nacme_gate_abs_tol, self.nacme_gate_rel_tol)
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
         self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
@@ -284,9 +339,9 @@ class NAMD:
         self.nve_gate_transition_tol = float(
             md.get('nve_gate_transition_tol', 1.0e-6))
         self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
-        if min(self.nve_gate_abs_tol, self.nve_gate_step_tol,
-               self.nve_gate_transition_tol) < 0.0:
-            raise ValueError("[md] NVE gate tolerances must be non-negative")
+        _validate_gate_tolerances(
+            'NVE gate', self.nve_gate_abs_tol, self.nve_gate_step_tol,
+            self.nve_gate_transition_tol)
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
         self.ensemble = str(md.get('ensemble', 'nve')).strip().lower()
@@ -329,6 +384,12 @@ class NAMD:
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = os.path.join(
             os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        _validate_namd_sidecar_paths(
+            trajectory_file=self.trajectory_file,
+            nacme_audit_file=self.nacme_audit_file,
+            restart_file=self.restart_file,
+            restart_manifest_file=self.restart_manifest_file,
+        )
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
         if soc_requested and self.nacme_check != 'off':
@@ -1584,6 +1645,40 @@ class NAMD:
         if spec.driver.name != 'namd':
             raise ValueError('cannot create restart.oqp from a non-NAMD request')
         directory = os.path.dirname(self.restart_manifest_file) or '.'
+        source = getattr(self.mol, 'oqp_input_source', None)
+        source_directory = (os.path.dirname(os.path.abspath(source))
+                            if isinstance(source, str) and source.strip()
+                            else '')
+        options = dict(spec.options)
+        for name in ('geom', 'geom2'):
+            if name in options:
+                options[name] = _restart_asset_path(
+                    options[name], source_directory, filelike_only=True)
+        path_options = {
+            'neb': {'product'},
+            'guess': {'file', 'file2'},
+            'dftb': {'parameter_path', 'library_path'},
+            'geometric': {'constraints_file'},
+            'oqp': {'neb_output'},
+            'qmmm': {
+                'pdb_file', 'qm_atoms_xyz', 'trajectory_file', 'log_file',
+                'energy_file',
+            },
+        }
+        modifiers = []
+        for call in spec.modifiers:
+            call_kwargs = dict(call.kwargs)
+            for name in path_options.get(call.name, set()):
+                if name in call_kwargs:
+                    call_kwargs[name] = _restart_asset_path(
+                        call_kwargs[name], source_directory)
+            if call.name == 'qmmm':
+                for name in ('forcefield', 'forcefield_files'):
+                    if name in call_kwargs:
+                        call_kwargs[name] = _restart_search_path_list(
+                            call_kwargs[name], source_directory)
+            modifiers.append(CallSpec(
+                call.name, call.args, call_kwargs, call.explicit))
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
             'restart': True,
@@ -1595,7 +1690,7 @@ class NAMD:
             spec.driver.name, spec.driver.args, kwargs, spec.driver.explicit)
         restart_spec = CalculationSpec(
             spec.model, spec.functional, spec.basis, spec.model_options,
-            spec.options, driver, spec.modifiers, spec.source_text)
+            options, driver, tuple(modifiers), spec.source_text)
         rendered = render_canonical_oqp(restart_spec)
         descriptor, temporary = tempfile.mkstemp(
             prefix='.restart-oqp-', suffix='.tmp', dir=directory)

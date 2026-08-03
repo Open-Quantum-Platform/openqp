@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import inspect
 from pathlib import Path
 
 import numpy as np
@@ -73,11 +74,12 @@ def install_trace(
     output: Path,
     skip_first_hop: bool,
     random_values: np.ndarray | None = None,
+    namd_module=None,
 ) -> SequenceRNG | None:
-    from oqp.library import namd as namd_module
+    if namd_module is None:
+        from oqp.library import namd as namd_module
 
     original_prepare = namd_module.NAMD._prepare_hop_step
-    original_log = namd_module.NAMD._log_step
     sequence_rng = None if random_values is None else SequenceRNG(random_values)
 
     def traced_prepare(self, istep):
@@ -88,23 +90,10 @@ def install_trace(
             self._hop_random_override = sequence_rng
         return enabled
 
-    def traced_log(
-        self,
-        istep,
-        r,
-        hopped=False,
-        transition_energy_jump=np.nan,
-    ):
-        original_log(
-            self,
-            istep,
-            r,
-            hopped=hopped,
-            transition_energy_jump=transition_energy_jump,
-        )
+    def record(self, istep, hopped):
         if istep == 0:
             return
-        nstate = self.nstate
+        nstate = np.asarray(self.coef).size
         try:
             params = np.asarray(self.mol.data["OQP::namd_params"], dtype=float)
         except (AttributeError, KeyError):
@@ -113,8 +102,15 @@ def install_trace(
             results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
         except (AttributeError, KeyError):
             results = np.empty(0)
-        overlap = np.asarray(self.mol.data["OQP::td_states_overlap"], dtype=float).reshape(nstate, nstate).T
-        tdc = self._compute_tdc(overlap)
+        try:
+            overlap = np.asarray(
+                self.mol.data["OQP::td_states_overlap"], dtype=float
+            ).reshape(nstate, nstate).T
+            tdc = self._compute_tdc(overlap)
+        except (AttributeError, KeyError, ValueError):
+            # SOC variants assemble their propagator from manifold-specific
+            # overlaps, so a single same-spin overlap matrix may not exist.
+            tdc = np.full((nstate, nstate), np.nan)
         cmhp = np.full((nstate, nstate), np.nan)
         if results.size >= nstate * nstate:
             # The native record is a Fortran column-major flattening.
@@ -131,8 +127,36 @@ def install_trace(
                 writer.writeheader()
             writer.writerow(row)
 
+    def traced_logger(original):
+        signature = inspect.signature(original)
+
+        def traced(self, *args, **kwargs):
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            result = original(self, *args, **kwargs)
+            record(
+                self,
+                int(bound.arguments["istep"]),
+                bool(bound.arguments.get("hopped", False)),
+            )
+            return result
+
+        return traced
+
     namd_module.NAMD._prepare_hop_step = traced_prepare
-    namd_module.NAMD._log_step = traced_log
+    logger_specs = (
+        ("NAMD", "_log_step"),
+        ("NAMD_QMMM", "_log_qmmm"),
+        ("NAMD_SOC", "_log_soc"),
+        ("NAMD_SOC_MCH", "_log_mch"),
+        ("NAMD_SOC_QMMM", "_log_soc_qmmm"),
+        ("NAMD_SOC_MCH_QMMM", "_log_mch_qmmm"),
+    )
+    for class_name, method_name in logger_specs:
+        cls = getattr(namd_module, class_name, None)
+        if cls is None or method_name not in cls.__dict__:
+            continue
+        setattr(cls, method_name, traced_logger(cls.__dict__[method_name]))
     return sequence_rng
 
 
