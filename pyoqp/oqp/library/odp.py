@@ -351,6 +351,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
 
     loaded = []
     coordinate_provenance = None
+    system_identity = None
     ensembles = []
     window_definitions = {}
     for path in paths:
@@ -361,6 +362,13 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         elif not _same_odp_coordinate(coordinate_provenance, provenance):
             raise ValueError(
                 "ODP WHAM trajectories use incompatible CV ordering, metric, or R/P references"
+            )
+        if system_identity is None:
+            system_identity = series["system_identity"]
+        elif system_identity != series["system_identity"]:
+            raise ValueError(
+                "ODP WHAM trajectories come from different molecular systems "
+                "or electronic Hamiltonians"
             )
         window = int(provenance["window"])
         definition = (
@@ -524,6 +532,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
                         "reference_r", "reference_p", "scaled_path_length",
                         "projection")
         },
+        "system_identity": system_identity,
         "trajectory_paths": paths,
         "trajectory_sha256": trajectory_hashes,
         "discard": discard,

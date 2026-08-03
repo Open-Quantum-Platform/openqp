@@ -278,6 +278,9 @@ d.restart_file = os.path.join(root, "odp.restart.npz")
 d.restart_manifest_file = os.path.join(root, "restart.oqp")
 d.restart_interval = 1; d.restart_requested = False
 d.seed = 1; d.rng_stream = 0; d.init_temp = 300.0; d._rng_step = 1
+d._restart_system_identity = {
+    "kind": "test", "natom": 2, "sha256": "odp-system"
+}
 d._last_hop_random = 0.25; d._last_state_overlap = None
 d._last_overlap_tdc = None; d._nacme_reference_tdc = None
 d._nacme_reference_mask = None; d._nacme_reference_source = 0
@@ -303,6 +306,7 @@ with np.load(d.restart_file, allow_pickle=False) as saved:
 d2 = NAMD.__new__(NAMD)
 d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
+d2._restart_system_identity = d._restart_system_identity
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 d2.nacme_audit_file = d.nacme_audit_file
 d2.odp = ODPUmbrella({
@@ -390,6 +394,13 @@ centers = [-1.2, -0.6, 0.0, 0.6, 1.2]
 rng = np.random.default_rng(24681357)
 paths = []
 dtype = _namd_trajectory_dtype(1, 1, 1)
+system_identity = {
+    "method": "synthetic", "charge": 0, "functional": "", "basis": "none",
+    "scf_type": "rhf", "scf_multiplicity": 1,
+    "tdhf_type": "rpa", "tdhf_multiplicity": 1, "nstate": 1, "tlf": 2,
+    "trajectory_representation": "same_spin_adiabatic",
+    "system": {"kind": "synthetic", "natom": 1, "sha256": "system-a"},
+}
 for window, center in enumerate(centers):
     mean = k_umbrella*center/(k_unbiased + k_umbrella)
     sigma = np.sqrt(1.0/(beta*(k_unbiased + k_umbrella)))
@@ -424,7 +435,8 @@ for window, center in enumerate(centers):
     header = {
         "schema_version": NAMD_TRAJECTORY_SCHEMA_VERSION,
         "nstate": 1, "natom": 1, "ncv": 1,
-        "record_bytes": dtype.itemsize, "signature": "synthetic",
+        "record_bytes": dtype.itemsize,
+        "signature": json.dumps(system_identity, sort_keys=True),
         "ensemble": "NVT", "odp": provenance,
     }
     encoded = json.dumps(header, sort_keys=True).encode("utf-8")
@@ -455,6 +467,27 @@ except ValueError as error:
     duplicate_hash_rejected = "duplicate trajectory content" in str(error)
 else:
     duplicate_hash_rejected = False
+with open(paths[0], "rb") as stream:
+    magic = stream.read(8)
+    header_size = struct.unpack("<Q", stream.read(8))[0]
+    other_header = json.loads(stream.read(header_size).decode("utf-8"))
+    other_payload = stream.read()
+other_identity = json.loads(other_header["signature"])
+other_identity["system"]["sha256"] = "system-b"
+other_header["signature"] = json.dumps(other_identity, sort_keys=True)
+other_encoded = json.dumps(other_header, sort_keys=True).encode("utf-8")
+other_system = os.path.join(root, "other-system.namd.trj")
+with open(other_system, "wb") as stream:
+    stream.write(magic)
+    stream.write(struct.pack("<Q", len(other_encoded)))
+    stream.write(other_encoded)
+    stream.write(other_payload)
+try:
+    odp_wham([paths[0], other_system], temperature)
+except ValueError as error:
+    other_system_rejected = "different molecular systems" in str(error)
+else:
+    other_system_rejected = False
 mean = np.sum(result["sample_weights"]*result["sample_xi"])
 variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
 with np.load(output, allow_pickle=False) as saved:
@@ -475,6 +508,8 @@ print("ODP_WHAM=" + json.dumps({
     "saved_centers": saved_centers,
     "duplicate_path_rejected": duplicate_path_rejected,
     "duplicate_hash_rejected": duplicate_hash_rejected,
+    "other_system_rejected": other_system_rejected,
+    "system_identity": result["system_identity"],
 }))
 '''
     env = os.environ.copy()
@@ -527,3 +562,5 @@ print("ODP_WHAM=" + json.dumps({
         [-1.2, -0.6, 0.0, 0.6, 1.2])
     assert values["duplicate_path_rejected"] is True
     assert values["duplicate_hash_rejected"] is True
+    assert values["other_system_rejected"] is True
+    assert values["system_identity"]["system"]["sha256"] == "system-a"

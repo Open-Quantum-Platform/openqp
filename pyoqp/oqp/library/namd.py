@@ -185,6 +185,24 @@ def read_odp_wham_series(path):
     provenance = header.get('odp', {})
     if not provenance.get('enabled', False):
         raise ValueError('trajectory does not contain an enabled ODP umbrella')
+    try:
+        restart_identity = json.loads(header['signature'])
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            'trajectory does not contain a valid NAMD system identity') from exc
+    identity_keys = (
+        'method', 'charge', 'functional', 'basis', 'scf_type',
+        'scf_multiplicity', 'tdhf_type', 'tdhf_multiplicity', 'nstate', 'tlf',
+        'trajectory_representation', 'system',
+    )
+    system_identity = {
+        key: restart_identity.get(key) for key in identity_keys
+    }
+    system = system_identity.get('system')
+    if (not isinstance(system, dict) or not system.get('sha256')
+            or system_identity.get('method') is None
+            or system_identity.get('nstate') is None):
+        raise ValueError('trajectory has an incomplete NAMD system identity')
     required = {
         'window', 'cv', 'cv_atom_indexing', 'cv_native_units', 'scale',
         'reference_r', 'reference_p', 'scaled_path_length', 'center',
@@ -273,6 +291,7 @@ def read_odp_wham_series(path):
                 f'trajectory ODP {label} records disagree with provenance')
     result = {
         'provenance': provenance,
+        'system_identity': system_identity,
         'ensemble': header.get('ensemble'),
         'step': np.array(records['step'], copy=True),
         'time_fs': np.array(records['time_fs'], copy=True),
@@ -1269,6 +1288,27 @@ class NAMD:
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
+        gate_controls = {
+            'nacme_check': str(md.get(
+                'nacme_check', 'off')).strip().lower().replace('-', '_'),
+            'ba_gap_max': float(md.get('ba_gap_max', 0.0734986443513)),
+            'nacme_gate': str(md.get(
+                'nacme_gate', 'warn')).strip().lower(),
+            'nacme_gate_invariant_tol': float(md.get(
+                'nacme_gate_invariant_tol', 1.0e-10)),
+            'nacme_gate_abs_tol': float(md.get(
+                'nacme_gate_abs_tol', 1.0e-4)),
+            'nacme_gate_rel_tol': float(md.get(
+                'nacme_gate_rel_tol', 1.0)),
+            'nacme_gate_consecutive': int(md.get(
+                'nacme_gate_consecutive', 3)),
+            'nve_gate': str(md.get('nve_gate', 'off')).strip().lower(),
+            'nve_gate_abs_tol': float(md.get('nve_gate_abs_tol', 5.0e-3)),
+            'nve_gate_step_tol': float(md.get('nve_gate_step_tol', 1.0e-3)),
+            'nve_gate_transition_tol': float(md.get(
+                'nve_gate_transition_tol', 1.0e-6)),
+            'nve_gate_consecutive': int(md.get('nve_gate_consecutive', 3)),
+        }
         identity = {
             'method': cfg['input'].get('method', ''),
             'charge': cfg['input'].get('charge', ''),
@@ -1288,6 +1328,7 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'gate_controls': gate_controls,
             'soc': md.get('soc', ''), 'soc_basis': md.get('soc_basis', ''),
             'trajectory_representation': getattr(
                 self, '_trajectory_representation', 'same_spin_adiabatic'),
