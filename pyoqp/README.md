@@ -562,8 +562,9 @@ automatically.
                  and there is no penalty parameter, i.e. gap_sigma is unused.
                  Works in delocalized internal coordinates with the native
                  model Hessian. Requires lib=oqp because it replaces the outer
-                 optimizer with its own trust-region step control; coordsys
-                 applies to that optimizer and is therefore not used here.
+                 optimizer with its own trust-region step control. coordsys=cart
+                 is honoured; the other settings, including tric, select DLC,
+                 because a dense KKT system needs a non-redundant basis.
                  Converges tighter and in fewer steps than auglag on the cases
                  tested so far, which is why auto selects it natively.
       auglag     least-squares multiplier plus gradient projection; with

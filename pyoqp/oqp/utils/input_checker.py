@@ -2597,9 +2597,24 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         if effective_mecp == "auto":
             effective_mecp = "sqp" if lib == "oqp" else "auglag"
         if effective_mecp == "sqp":
-            ignored = [key for key in
-                       ("auto_recovery", "recovery_maxit", "recovery_trust")
-                       if _get(config, "oqp", key, None) is not None]
+            # The schema injects all three, so only a value that differs from
+            # its default says anything about the user's intent.
+            recovery_defaults = {
+                "auto_recovery": True,
+                "recovery_maxit": 30,
+                "recovery_trust": 0.02,
+            }
+            ignored = []
+            for key, default in recovery_defaults.items():
+                value = _get(config, "oqp", key, default)
+                try:
+                    changed = (bool(value) != bool(default)
+                               if isinstance(default, bool)
+                               else float(value) != float(default))
+                except (TypeError, ValueError):
+                    changed = True
+                if changed:
+                    ignored.append(key)
             if ignored:
                 report.add(
                     "WARNING",

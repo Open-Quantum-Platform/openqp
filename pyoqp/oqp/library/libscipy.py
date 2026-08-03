@@ -1413,10 +1413,17 @@ class SQPMECPOpt(MECPOpt):
             cartesian = best['coordinates']
             # mol.energies, mol.grads and the metrics still describe the last
             # geometry visited, so recompute them at the one being returned.
+            # This is bookkeeping, not another search step: the iteration
+            # counter is restored so the status file and the maxit budget stay
+            # honest about how many steps the search actually took.
+            counter, budget = self.itr, self.maxit
+            self.maxit = counter + 1
             try:
                 self.one_step(cartesian)
             except StopIteration:
                 pass
+            finally:
+                self.itr, self.maxit = counter, budget
 
         self.mol.update_system(cartesian.reshape((self.natom, 3)))
         return cartesian
