@@ -4,9 +4,11 @@
 #       ROHF reference.
 # MM  = 5 TIP3P waters, handled by OpenMM (NoCutoff, non-periodic cluster).
 #
-# This is a *minimal* demonstration: nstep=2 reaches the second overlap
-# interval, where the three-point TD-Baeck-An estimate and NACME gate are first
-# invoked. Requires the optional OpenMM backend and the companion files
+# This is a *minimal* finite-droplet demonstration: nstep=2 reaches the second
+# overlap interval, where the three-point TD-Baeck-An estimate and NACME gate
+# are first invoked. The independent water boundary and solute-COM restraint
+# contribute conservative forces to the NVE energy audit. Requires the optional
+# OpenMM backend and the companion files
 # formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read relative to this
 # file).  It is part of `openqp --run_tests all`, and is reported SKIPPED when
 # OpenMM is not installed.
@@ -74,3 +76,18 @@ forcefield_files=formaldehyde.xml tip3p.xml
 qm_atoms=0-3
 cutoff=NoCutoff
 embedding=electrostatic
+
+[droplet]
+enabled=True
+center=0,0,0
+radius=3.3
+buffer=1.0
+force_constant=10.0
+target=water_com
+max_penetration=3.0
+
+[solute_com]
+enabled=True
+center=0,0,0
+force_constant=2.0
+atoms=0-3

@@ -128,6 +128,28 @@ OQP_CONFIG_SCHEMA = {
         # rc | z1 (optional redistribution refinements).
         'frontier_scheme': {'type': str, 'default': 'none'},
     },
+    # Finite nonperiodic solvent containment.  Lengths are angstrom and the
+    # force constant is kcal mol^-1 angstrom^-2 at the user boundary; the NAMD
+    # driver converts once before calling the resident atomic-unit kernel.
+    'droplet': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'radius': {'type': float, 'default': '20.0'},
+        'buffer': {'type': float, 'default': '1.0'},
+        'force_constant': {'type': float, 'default': '10.0'},
+        'target': {'type': string, 'default': 'water_com'},
+        'atoms': {'type': str, 'default': ''},
+        'water_resnames': {'type': sarray, 'default': 'hoh,wat,sol,tip3,tip3p'},
+        'max_penetration': {'type': float, 'default': '10.0'},
+    },
+    # Independent fixed-centre solute COM restraint.  This is deliberately not
+    # implied by droplet.enabled and is not part of ODP.
+    'solute_com': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'force_constant': {'type': float, 'default': '5.0'},
+        'atoms': {'type': str, 'default': ''},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': '6-31g*'},
@@ -586,6 +608,12 @@ OQP_CONFIG_SCHEMA = {
         'trajectory_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
+        # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
+        # ground-state OpenMM MD driver and must not silently thermostat FSSH.
+        'ensemble': {'type': string, 'default': 'nve'},
+        'thermostat': {'type': string, 'default': 'off'},
+        'thermostat_temperature': {'type': float, 'default': '300.0'}, # K
+        'thermostat_friction': {'type': float, 'default': '1.0'},     # ps^-1
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
         'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)
         'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction

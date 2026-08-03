@@ -645,6 +645,41 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     assert legacy["md"]["restart_file"] == "state.npz"
 
 
+def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
+        'namd(S1,nstep=10,ensemble=nvt,thermostat=langevin,'
+        'thermostat_temperature=310,thermostat_friction=2.5) '
+        'qmmm(pdb_file="drop.pdb",forcefield_files="tip3p.xml",'
+        'qm_atoms="0-2",cutoff=NoCutoff) '
+        'droplet(enabled=true,center="1.0,2.0,3.0",radius=18.0,buffer=1.5,'
+        'force_constant=12.0,target=water_com,max_penetration=8.0) '
+        'solute_com(enabled=true,center="1.0,2.0,3.0",force_constant=4.0)'
+    )
+    assert legacy["md"]["ensemble"] == "nvt"
+    assert legacy["md"]["thermostat"] == "langevin"
+    assert legacy["md"]["thermostat_temperature"] == "310"
+    assert legacy["md"]["thermostat_friction"] == "2.5"
+    assert legacy["droplet"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0", "radius": "18.0",
+        "buffer": "1.5", "force_constant": "12.0", "target": "water_com",
+        "max_penetration": "8.0",
+    }
+    assert legacy["solute_com"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0",
+        "force_constant": "4.0",
+    }
+    assert "odp" not in legacy
+
+
+def test_droplet_and_solute_com_reject_non_namd_drivers():
+    with pytest.raises(oqp_input.OQPInputError, match="connected only to namd"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'droplet(enabled=true,radius=10)'
+        )
+
+
 def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="reactant.xyz" geom2="previous.xyz" '

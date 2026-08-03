@@ -53,14 +53,38 @@ AMU_TO_AU = 1822.888486209
 # unit conversions for the QM/MM (OpenMM <-> atomic units) coupling
 BOHR_TO_NM = 0.052917721090
 NM_TO_BOHR = 1.0 / BOHR_TO_NM
+ANGSTROM_TO_BOHR = 0.1 * NM_TO_BOHR
 # 1 Hartree/bohr in kJ/mol/nm  (2625.499639 kJ/mol per Ha / 0.0529177 nm per bohr)
 HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
+KCALMOL_TO_HARTREE = 1.0 / 627.5094740631
+KCALMOLANG2_TO_HARTREEBOHR2 = (
+    KCALMOL_TO_HARTREE / ANGSTROM_TO_BOHR**2
+)
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 6
-NAMD_TRAJECTORY_SCHEMA_VERSION = 5
+NAMD_RESTART_SCHEMA_VERSION = 7
+NAMD_TRAJECTORY_SCHEMA_VERSION = 6
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
+
+
+def _validate_gate_tolerances(label, *values):
+    """Reject validation thresholds that silently disable comparisons."""
+    tolerances = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(tolerances)) or np.any(tolerances < 0.0):
+        raise ValueError(f'[md] {label} tolerances must be finite and non-negative')
+
+
+def _validate_thermostat_parameters(temperature, friction, enabled):
+    """Validate Langevin parameters, including a nonzero coupling rate."""
+    values = np.asarray((temperature, friction), dtype=float)
+    if not np.all(np.isfinite(values)) or np.any(values < 0.0):
+        raise ValueError(
+            '[md] thermostat_temperature and thermostat_friction must be '
+            'finite and non-negative')
+    if enabled and friction <= 0.0:
+        raise ValueError(
+            '[md] thermostat_friction must be positive for Langevin NVT')
 
 
 def _namd_trajectory_dtype(nstate, natom):
@@ -71,7 +95,19 @@ def _namd_trajectory_dtype(nstate, natom):
         ('step', '<i8'), ('time_fs', '<f8'), ('active', '<i4'),
         ('hopped', 'i1'), ('rng', '<f8'),
         ('e_pot_hartree', '<f8'), ('e_kin_hartree', '<f8'),
-        ('e_tot_hartree', '<f8'), ('state_energies', '<f8', (nstate,)),
+        ('e_tot_hartree', '<f8'),
+        ('droplet_energy_hartree', '<f8'),
+        ('droplet_max_penetration_bohr', '<f8'),
+        ('droplet_active_count', '<i8'),
+        ('solute_com_energy_hartree', '<f8'),
+        ('solute_com_displacement_bohr', '<f8'),
+        ('conservative_restraint_energy_hartree', '<f8'),
+        ('thermostat_exchange_hartree', '<f8'),
+        ('thermostat_exchange_cumulative_hartree', '<f8'),
+        ('thermostat_adjusted_energy_hartree', '<f8'),
+        ('droplet_force_hartree_per_bohr', '<f8', vectors),
+        ('solute_com_force_hartree_per_bohr', '<f8', vectors),
+        ('state_energies', '<f8', (nstate,)),
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
         ('velocities_au', '<f8', vectors), ('state_overlap', '<f8', matrix),
@@ -234,7 +270,7 @@ class NAMD:
             raise ValueError("[md] nacme_check must be off or baeck_an")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
         if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
-            raise ValueError("[md] ba_gap_max must be positive")
+            raise ValueError("[md] ba_gap_max must be finite and positive")
         self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nacme_gate must be off, warn, or error")
@@ -260,15 +296,33 @@ class NAMD:
         self.nve_gate_transition_tol = float(
             md.get('nve_gate_transition_tol', 1.0e-6))
         self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
-        nve_tolerances = (
-            self.nve_gate_abs_tol, self.nve_gate_step_tol,
+        _validate_gate_tolerances(
+            'NVE gate', self.nve_gate_abs_tol, self.nve_gate_step_tol,
             self.nve_gate_transition_tol)
-        if (not all(np.isfinite(value) for value in nve_tolerances)
-                or min(nve_tolerances) < 0.0):
-            raise ValueError(
-                "[md] NVE gate tolerances must be finite and non-negative")
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
+        self.ensemble = str(md.get('ensemble', 'nve')).strip().lower()
+        self.thermostat = str(md.get('thermostat', 'off')).strip().lower()
+        if self.ensemble not in ('nve', 'nvt'):
+            raise ValueError("[md] ensemble must be nve or nvt")
+        if self.thermostat not in ('off', 'langevin'):
+            raise ValueError("[md] thermostat must be off or langevin")
+        if self.ensemble == 'nve' and self.thermostat != 'off':
+            raise ValueError(
+                "[md] thermostat is independent of NVE; use ensemble=nvt or thermostat=off"
+            )
+        if self.ensemble == 'nvt' and self.thermostat == 'off':
+            raise ValueError("[md] ensemble=nvt requires thermostat=langevin")
+        if self.ensemble == 'nvt' and self.nve_gate != 'off':
+            raise ValueError(
+                "[md] nve_gate does not apply to NVT; thermostat exchange is recorded separately"
+            )
+        self.thermostat_temperature = float(
+            md.get('thermostat_temperature', self.init_temp))
+        self.thermostat_friction = float(md.get('thermostat_friction', 1.0))
+        _validate_thermostat_parameters(
+            self.thermostat_temperature, self.thermostat_friction,
+            self.thermostat == 'langevin')
         self.trajectory_interval_input = int(md.get('trajectory_interval', 0))
         self.restart_interval_input = int(md.get('restart_interval', 0))
         self.trajectory_interval = self._output_interval_steps(
@@ -331,8 +385,18 @@ class NAMD:
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
+        self._init_independent_controls(cfg)
+        if soc_requested and (self.droplet_enabled or self.solute_com_enabled
+                              or self.thermostat != 'off'):
+            raise NotImplementedError(
+                "droplet/solute_com/NVT controls currently support same-spin NAMD only"
+            )
+        if (self.droplet_enabled or self.solute_com_enabled) and not self._as_bool(
+                cfg.get('input', {}).get('qmmm_flag', False)):
+            self._setup_gas_restraint_targets()
         self._rng_step = 0
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         self._ba_energy_left = None
         self._ba_energy_center = None
         self._ba_tdc_left = None
@@ -351,6 +415,8 @@ class NAMD:
         self._nve_gate_failures = 0
         self._nve_gate_last = None
         self._pending_nve_gate_error = None
+        self._thermostat_exchange = 0.0
+        self._thermostat_exchange_cumulative = 0.0
         self._pending_nacme_gate_error = None
         self._trajectory_prefix_hasher = None
         self._trajectory_prefix_bytes = 0
@@ -397,6 +463,334 @@ class NAMD:
     @staticmethod
     def _as_bool(value):
         return (value is True) or (str(value).lower() in ('true', '1', 'on', 'yes'))
+
+    @staticmethod
+    def _vector3(value, label):
+        if isinstance(value, str):
+            values = [float(item) for item in value.replace(',', ' ').split()]
+        else:
+            values = [float(item) for item in value]
+        if len(values) != 3 or not np.all(np.isfinite(values)):
+            raise ValueError(f"{label} must contain three finite Cartesian values")
+        return np.asarray(values, dtype=np.float64)
+
+    def _init_independent_controls(self, cfg):
+        """Parse droplet, solute-COM, and thermostat records once.
+
+        User-facing droplet lengths are angstrom and force constants are
+        kcal mol^-1 angstrom^-2.  Everything below this method is atomic units.
+        Neither control is inferred from ODP, QM/MM, or the NVT thermostat.
+        """
+        droplet = cfg.get('droplet', {})
+        self.droplet_enabled = self._as_bool(droplet.get('enabled', False))
+        self.droplet_center_angstrom = self._vector3(
+            droplet.get('center', (0.0, 0.0, 0.0)), '[droplet] center')
+        self.droplet_center = (
+            self.droplet_center_angstrom * ANGSTROM_TO_BOHR)
+        self.droplet_radius_angstrom = float(droplet.get('radius', 20.0))
+        self.droplet_buffer_angstrom = float(droplet.get('buffer', 1.0))
+        self.droplet_force_constant_input = float(
+            droplet.get('force_constant', 10.0))
+        self.droplet_max_penetration_angstrom = float(
+            droplet.get('max_penetration', 10.0))
+        self.droplet_radius = self.droplet_radius_angstrom * ANGSTROM_TO_BOHR
+        self.droplet_buffer = self.droplet_buffer_angstrom * ANGSTROM_TO_BOHR
+        self.droplet_force_constant = (
+            self.droplet_force_constant_input *
+            KCALMOLANG2_TO_HARTREEBOHR2)
+        self.droplet_max_penetration = (
+            self.droplet_max_penetration_angstrom * ANGSTROM_TO_BOHR)
+        self.droplet_target = str(
+            droplet.get('target', 'water_com')).strip().lower().replace('-', '_')
+        if self.droplet_target in ('com', 'molecule_com', 'water_molecule_com'):
+            self.droplet_target = 'water_com'
+        if self.droplet_target in ('o', 'water_oxygen'):
+            self.droplet_target = 'oxygen'
+        if self.droplet_target not in ('water_com', 'oxygen', 'atoms'):
+            raise ValueError(
+                "[droplet] target must be water_com, oxygen, or atoms")
+        self.droplet_atoms_spec = str(droplet.get('atoms', '') or '').strip()
+        names = droplet.get(
+            'water_resnames', ('hoh', 'wat', 'sol', 'tip3', 'tip3p'))
+        if isinstance(names, str):
+            names = names.replace(',', ' ').split()
+        self.droplet_water_resnames = tuple(
+            str(name).strip().lower() for name in names if str(name).strip())
+        if self.droplet_enabled:
+            values = (self.droplet_radius_angstrom,
+                      self.droplet_buffer_angstrom,
+                      self.droplet_force_constant_input,
+                      self.droplet_max_penetration_angstrom)
+            if not np.all(np.isfinite(values)):
+                raise ValueError("[droplet] numeric settings must be finite")
+            if (self.droplet_radius_angstrom <= 0.0
+                    or self.droplet_buffer_angstrom < 0.0
+                    or self.droplet_force_constant_input <= 0.0
+                    or self.droplet_max_penetration_angstrom < 0.0):
+                raise ValueError(
+                    "[droplet] radius/force_constant must be positive and "
+                    "buffer/max_penetration non-negative")
+        self._droplet_group_index = None
+        self._droplet_group_count = 0
+        self._droplet_energy = 0.0
+        self._droplet_max_penetration = 0.0
+        self._droplet_active_count = 0
+        self._droplet_force = None
+        self._droplet_force_max = 0.0
+
+        solute = cfg.get('solute_com', {})
+        self.solute_com_enabled = self._as_bool(solute.get('enabled', False))
+        self.solute_com_center_angstrom = self._vector3(
+            solute.get('center', (0.0, 0.0, 0.0)), '[solute_com] center')
+        self.solute_com_center = (
+            self.solute_com_center_angstrom * ANGSTROM_TO_BOHR)
+        self.solute_com_force_constant_input = float(
+            solute.get('force_constant', 5.0))
+        self.solute_com_force_constant = (
+            self.solute_com_force_constant_input *
+            KCALMOLANG2_TO_HARTREEBOHR2)
+        self.solute_com_atoms_spec = str(solute.get('atoms', '') or '').strip()
+        if (self.solute_com_enabled
+                and (not np.isfinite(self.solute_com_force_constant_input)
+                     or self.solute_com_force_constant_input <= 0.0)):
+            raise ValueError("[solute_com] force_constant must be positive and finite")
+        self._solute_com_selected = None
+        self._solute_com_energy = 0.0
+        self._solute_com_displacement = 0.0
+        self._solute_com_force = None
+        self._conservative_restraint_energy = 0.0
+        self._conservative_restraint_force = None
+
+    @staticmethod
+    def _single_atom_groups(natom, atom_indices, label):
+        indices = np.asarray(sorted(set(int(i) for i in atom_indices)), dtype=int)
+        if indices.size == 0:
+            raise ValueError(f"{label} selected no atoms")
+        if indices[0] < 0 or indices[-1] >= int(natom):
+            raise ValueError(
+                f"{label} atom indices must be zero-based and within 0..{int(natom)-1}")
+        groups = np.zeros(int(natom), dtype=np.int64)
+        groups[indices] = np.arange(1, len(indices) + 1, dtype=np.int64)
+        return groups
+
+    def _setup_gas_restraint_targets(self):
+        if self.droplet_enabled:
+            if self.droplet_target == 'water_com':
+                raise ValueError(
+                    "[droplet] target=water_com requires qmmm(...) topology; "
+                    "use target=oxygen or target=atoms for all-QM NAMD")
+            if self.droplet_target == 'oxygen':
+                indices = np.flatnonzero(
+                    np.asarray(self.mol.get_atoms(), dtype=int) == 8)
+            else:
+                indices = _parse_int_list(self.droplet_atoms_spec)
+            self._droplet_group_index = self._single_atom_groups(
+                self.natom, indices, '[droplet]')
+            self._droplet_group_count = int(self._droplet_group_index.max())
+        if self.solute_com_enabled:
+            if self.solute_com_atoms_spec:
+                indices = _parse_int_list(self.solute_com_atoms_spec)
+            else:
+                indices = range(self.natom)
+            selected = self._single_atom_groups(
+                self.natom, indices, '[solute_com]')
+            self._solute_com_selected = (selected > 0).astype(np.int64)
+
+    def _setup_qmmm_restraint_targets(self):
+        if self.droplet_enabled:
+            if self.periodic:
+                raise ValueError(
+                    "[droplet] finite spherical containment requires qmmm(cutoff=NoCutoff)"
+                )
+            if self.droplet_target == 'atoms':
+                groups = self._single_atom_groups(
+                    self.natom_all, _parse_int_list(self.droplet_atoms_spec),
+                    '[droplet]')
+            else:
+                groups = np.zeros(self.natom_all, dtype=np.int64)
+                group = 0
+                for residue in self.pdb.topology.residues():
+                    if str(residue.name).strip().lower() not in self.droplet_water_resnames:
+                        continue
+                    atoms = list(residue.atoms())
+                    if self.droplet_target == 'oxygen':
+                        atoms = [atom for atom in atoms if (
+                            getattr(getattr(atom, 'element', None), 'symbol', '') == 'O'
+                            or str(atom.name).strip().upper().startswith('O'))]
+                        atoms = atoms[:1]
+                    if not atoms:
+                        continue
+                    group += 1
+                    for atom in atoms:
+                        groups[int(atom.index)] = group
+                if group == 0:
+                    raise ValueError(
+                        "[droplet] found no target waters; check target and water_resnames")
+            self._droplet_group_index = groups
+            self._droplet_group_count = int(groups.max())
+        if self.solute_com_enabled:
+            indices = (_parse_int_list(self.solute_com_atoms_spec)
+                       if self.solute_com_atoms_spec else self.qm_atoms)
+            selected = self._single_atom_groups(
+                self.natom_all, indices, '[solute_com]')
+            self._solute_com_selected = (selected > 0).astype(np.int64)
+
+    def _independent_settings_record(self):
+        # Keep low-level trajectory/checkpoint helpers usable in focused tests
+        # that construct a driver with ``__new__`` instead of running __init__.
+        if not hasattr(self, 'droplet_enabled'):
+            return {
+                'droplet': {'enabled': False},
+                'solute_com': {'enabled': False},
+                'thermostat': {
+                    'ensemble': getattr(self, 'ensemble', 'nve'),
+                    'type': getattr(self, 'thermostat', 'off'),
+                    'temperature_kelvin': getattr(
+                        self, 'thermostat_temperature', 0.0),
+                    'friction_ps_inverse': getattr(
+                        self, 'thermostat_friction', 0.0),
+                },
+            }
+        return {
+            'droplet': {
+                'enabled': bool(self.droplet_enabled),
+                'center_angstrom': self.droplet_center_angstrom.tolist(),
+                'radius_angstrom': self.droplet_radius_angstrom,
+                'buffer_angstrom': self.droplet_buffer_angstrom,
+                'force_constant_kcal_mol_angstrom2':
+                    self.droplet_force_constant_input,
+                'target': self.droplet_target,
+                'atoms_zero_based': self.droplet_atoms_spec,
+                'water_resnames': list(self.droplet_water_resnames),
+                'max_penetration_angstrom':
+                    self.droplet_max_penetration_angstrom,
+                'group_count': int(self._droplet_group_count),
+            },
+            'solute_com': {
+                'enabled': bool(self.solute_com_enabled),
+                'center_angstrom': self.solute_com_center_angstrom.tolist(),
+                'force_constant_kcal_mol_angstrom2':
+                    self.solute_com_force_constant_input,
+                'atoms_zero_based': self.solute_com_atoms_spec,
+            },
+            'thermostat': {
+                'ensemble': self.ensemble,
+                'type': self.thermostat,
+                'temperature_kelvin': self.thermostat_temperature,
+                'friction_ps_inverse': self.thermostat_friction,
+            },
+        }
+
+    def _evaluate_conservative_restraints(self, coordinates, masses):
+        coords = np.ascontiguousarray(coordinates, dtype=np.float64).reshape((-1, 3))
+        mass = np.ascontiguousarray(masses, dtype=np.float64).reshape(-1)
+        if len(coords) != len(mass):
+            raise ValueError("restraint coordinate/mass sizes do not match")
+        total_force = np.zeros_like(coords)
+        self._droplet_energy = 0.0
+        self._droplet_max_penetration = 0.0
+        self._droplet_active_count = 0
+        self._droplet_force = np.zeros_like(coords)
+        self._droplet_force_max = 0.0
+        if self.droplet_enabled:
+            if (self._droplet_group_index is None
+                    or len(self._droplet_group_index) != len(coords)):
+                raise RuntimeError("droplet target groups were not initialized")
+            force = np.zeros_like(coords)
+            energy = np.zeros(1, dtype=np.float64)
+            penetration = np.zeros(1, dtype=np.float64)
+            active = np.zeros(1, dtype=np.int64)
+            status = int(oqp.oqp_namd_droplet_boundary(
+                len(coords), self._droplet_group_count,
+                oqp.ffi.cast("double *", coords.ctypes.data),
+                oqp.ffi.cast("double *", mass.ctypes.data),
+                oqp.ffi.cast("int64_t *", self._droplet_group_index.ctypes.data),
+                oqp.ffi.cast("double *", self.droplet_center.ctypes.data),
+                self.droplet_radius, self.droplet_buffer,
+                self.droplet_force_constant, self.droplet_max_penetration,
+                oqp.ffi.cast("double *", energy.ctypes.data),
+                oqp.ffi.cast("double *", force.ctypes.data),
+                oqp.ffi.cast("double *", penetration.ctypes.data),
+                oqp.ffi.cast("int64_t *", active.ctypes.data),
+            ))
+            self._droplet_max_penetration = float(penetration[0])
+            self._droplet_active_count = int(active[0])
+            if status == 1:
+                raise RuntimeError(
+                    "droplet boundary failsafe: maximum penetration "
+                    f"{penetration[0]/ANGSTROM_TO_BOHR:.6f} angstrom exceeds "
+                    f"{self.droplet_max_penetration_angstrom:.6f} angstrom")
+            if status != 0:
+                raise RuntimeError(
+                    f"native droplet boundary rejected coordinates (status={status})")
+            self._droplet_energy = float(energy[0])
+            self._droplet_force = force.copy()
+            self._droplet_force_max = float(
+                np.max(np.linalg.norm(force, axis=1))) if len(force) else 0.0
+            total_force += force
+
+        self._solute_com_energy = 0.0
+        self._solute_com_displacement = 0.0
+        self._solute_com_force = np.zeros_like(coords)
+        if self.solute_com_enabled:
+            if (self._solute_com_selected is None
+                    or len(self._solute_com_selected) != len(coords)):
+                raise RuntimeError("solute COM target atoms were not initialized")
+            force = np.zeros_like(coords)
+            energy = np.zeros(1, dtype=np.float64)
+            displacement = np.zeros(1, dtype=np.float64)
+            status = int(oqp.oqp_namd_com_restraint(
+                len(coords), oqp.ffi.cast("double *", coords.ctypes.data),
+                oqp.ffi.cast("double *", mass.ctypes.data),
+                oqp.ffi.cast("int64_t *", self._solute_com_selected.ctypes.data),
+                oqp.ffi.cast("double *", self.solute_com_center.ctypes.data),
+                self.solute_com_force_constant,
+                oqp.ffi.cast("double *", energy.ctypes.data),
+                oqp.ffi.cast("double *", force.ctypes.data),
+                oqp.ffi.cast("double *", displacement.ctypes.data),
+            ))
+            if status != 0:
+                raise RuntimeError(
+                    f"native solute COM restraint rejected coordinates (status={status})")
+            self._solute_com_energy = float(energy[0])
+            self._solute_com_displacement = float(displacement[0])
+            self._solute_com_force = force.copy()
+            total_force += force
+        self._conservative_restraint_energy = (
+            self._droplet_energy + self._solute_com_energy)
+        self._conservative_restraint_force = total_force
+        return total_force, self._conservative_restraint_energy
+
+    def _add_last_conservative_restraints(self, force, potential_energy):
+        if self._conservative_restraint_force is None:
+            raise RuntimeError("conservative restraints have not been evaluated")
+        return (np.asarray(force) + self._conservative_restraint_force,
+                float(potential_energy) + self._conservative_restraint_energy)
+
+    def _langevin_update(self, velocities, masses, istep):
+        values = np.ascontiguousarray(velocities, dtype=np.float64)
+        mass = np.ascontiguousarray(masses, dtype=np.float64).reshape(-1)
+        heat = np.zeros(1, dtype=np.float64)
+        friction_au = self.thermostat_friction/(1000.0*FS_TO_AU)
+        status = int(oqp.oqp_namd_langevin_thermostat(
+            len(mass), self.dt, self.thermostat_temperature, friction_au,
+            self.seed, self.rng_stream, int(istep),
+            oqp.ffi.cast("double *", mass.ctypes.data),
+            oqp.ffi.cast("double *", values.ctypes.data),
+            oqp.ffi.cast("double *", heat.ctypes.data),
+        ))
+        if status != 0:
+            raise RuntimeError(
+                f"native Langevin thermostat rejected state (status={status})")
+        return values, float(heat[0])
+
+    def _apply_thermostat(self, istep):
+        self._thermostat_exchange = 0.0
+        if self.thermostat == 'off':
+            return
+        self.vel, self._thermostat_exchange = self._langevin_update(
+            self.vel, self.mass, istep)
+        self._thermostat_exchange_cumulative += self._thermostat_exchange
 
     def _md_output_path(self, configured, suffix):
         """Resolve NAMD sidecars beside the main log, not the process CWD."""
@@ -648,6 +1042,7 @@ class NAMD:
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         return self._rng_step >= self.first_hop_step
 
     def _hop_random(self):
@@ -779,6 +1174,7 @@ class NAMD:
         dt_right = float(self.dt)
 
         if self._ba_energy_center is None:
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -791,6 +1187,7 @@ class NAMD:
                 self.mol,
                 title='NACME check: Baeck-An history discontinuity; reseeding',
             )
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -831,6 +1228,7 @@ class NAMD:
             reference_mask=ba_mask,
             source='TD-Baeck-An',
             center_step=center_step,
+            evaluation_step=istep,
             signed=False,
         )
         self._ba_last = {
@@ -859,9 +1257,18 @@ class NAMD:
         self._ba_tdc_left = tdc_current.copy()
         self._ba_dt_left = dt_right
 
+    def _reset_nacme_gate_evaluation(self):
+        """Clear streak and record state for a non-evaluable NACME interval."""
+        self._nacme_gate_failures = 0
+        self._nacme_gate_last = None
+        self._nacme_reference_tdc = None
+        self._nacme_reference_mask = None
+        self._nacme_reference_source = 0
+        self._ba_last = None
+
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
-                        center_step=None, signed=False):
+                        center_step=None, evaluation_step=None, signed=False):
         """Run the common resident-Fortran NACME validation gate.
 
         Future analytic NAC support should contract the phase-aligned analytic
@@ -920,6 +1327,7 @@ class NAMD:
         result = {
             'source': source,
             'center_step': center_step,
+            'evaluation_step': evaluation_step,
             'signed_comparison': bool(signed),
             'verdict': verdict,
             'compared_pairs': compared_pairs,
@@ -992,6 +1400,17 @@ class NAMD:
         """Audit microcanonical energy conservation for same-spin FSSH."""
         self._pending_nve_gate_error = None
         total = float(epot + ekin)
+        if getattr(self, 'ensemble', 'nve') != 'nve':
+            self._nve_gate_last = {
+                'step': int(istep), 'verdict': 'off',
+                'total_energy': total, 'drift': np.nan,
+                'step_change': np.nan,
+                'transition_energy_jump': float(transition_energy_jump),
+                'drift_rate': np.nan, 'drift_failure': False,
+                'step_failure': False, 'transition_failure': False,
+                'consecutive_failures': 0,
+            }
+            return self._nve_gate_last
         if not np.isfinite(total):
             drift = np.nan
             step_change = np.nan
@@ -1110,8 +1529,11 @@ class NAMD:
                 'units': {
                     'time': 'fs', 'coordinates': 'bohr',
                     'velocities': 'bohr/atomic_time', 'energies': 'hartree',
-                    'tdc': 'atomic_time^-1',
+                    'tdc': 'atomic_time^-1', 'penetration': 'bohr',
+                    'restraint_force': 'hartree/bohr',
+                    'thermostat_exchange': 'hartree (positive into system)',
                 },
+                'independent_controls': self._independent_settings_record(),
                 'reference_source': {'0': 'none', '1': 'TD-Baeck-An',
                                      '2': 'analytic', '127': 'other'},
                 'gate_metrics': [
@@ -1162,6 +1584,14 @@ class NAMD:
         record = np.zeros(1, dtype=dtype)
         for field in (
                 'rng', 'e_pot_hartree', 'e_kin_hartree', 'e_tot_hartree',
+                'droplet_energy_hartree',
+                'droplet_max_penetration_bohr',
+                'solute_com_energy_hartree',
+                'solute_com_displacement_bohr',
+                'conservative_restraint_energy_hartree',
+                'thermostat_exchange_hartree',
+                'thermostat_exchange_cumulative_hartree',
+                'thermostat_adjusted_energy_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
                 'overlap_tdc_au', 'gate_candidate_tdc_au',
@@ -1188,6 +1618,31 @@ class NAMD:
         record['e_pot_hartree'] = epot
         record['e_kin_hartree'] = ekin
         record['e_tot_hartree'] = epot + ekin
+        record['droplet_energy_hartree'] = getattr(
+            self, '_droplet_energy', 0.0)
+        record['droplet_max_penetration_bohr'] = getattr(
+            self, '_droplet_max_penetration', 0.0)
+        record['droplet_active_count'] = getattr(
+            self, '_droplet_active_count', 0)
+        record['solute_com_energy_hartree'] = getattr(
+            self, '_solute_com_energy', 0.0)
+        record['solute_com_displacement_bohr'] = getattr(
+            self, '_solute_com_displacement', 0.0)
+        record['conservative_restraint_energy_hartree'] = getattr(
+            self, '_conservative_restraint_energy', 0.0)
+        record['thermostat_exchange_hartree'] = getattr(
+            self, '_thermostat_exchange', 0.0)
+        record['thermostat_exchange_cumulative_hartree'] = getattr(
+            self, '_thermostat_exchange_cumulative', 0.0)
+        record['thermostat_adjusted_energy_hartree'] = (
+            epot + ekin - getattr(
+                self, '_thermostat_exchange_cumulative', 0.0))
+        droplet_force = getattr(self, '_droplet_force', None)
+        if droplet_force is not None and np.asarray(droplet_force).shape == coords.shape:
+            record['droplet_force_hartree_per_bohr'] = droplet_force
+        solute_force = getattr(self, '_solute_com_force', None)
+        if solute_force is not None and np.asarray(solute_force).shape == coords.shape:
+            record['solute_com_force_hartree_per_bohr'] = solute_force
         record['populations'] = np.abs(self.coef)**2
         record['coef_real'] = self.coef.real
         record['coef_imag'] = self.coef.imag
@@ -1622,6 +2077,7 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'independent_controls': self._independent_settings_record(),
             'nac_align': cfg.get('nac', {}).get('align', ''),
             'gate_policy': {
                 key: md.get(key, '') for key in (
@@ -1795,6 +2251,27 @@ class NAMD:
             'rng_step': np.array([self._rng_step], dtype=np.int64),
             'gate_failures': np.array([self._nacme_gate_failures], dtype=np.int64),
             'nve_failures': np.array([self._nve_gate_failures], dtype=np.int64),
+            'independent_controls_json': np.array([
+                json.dumps(self._independent_settings_record(), sort_keys=True,
+                           separators=(',', ':'))
+            ]),
+            'droplet_energy': np.array([
+                getattr(self, '_droplet_energy', 0.0)], dtype=np.float64),
+            'droplet_max_penetration': np.array([
+                getattr(self, '_droplet_max_penetration', 0.0)],
+                dtype=np.float64),
+            'droplet_active_count': np.array([
+                getattr(self, '_droplet_active_count', 0)], dtype=np.int64),
+            'solute_com_energy': np.array([
+                getattr(self, '_solute_com_energy', 0.0)], dtype=np.float64),
+            'solute_com_displacement': np.array([
+                getattr(self, '_solute_com_displacement', 0.0)],
+                dtype=np.float64),
+            'thermostat_exchange': np.array([
+                getattr(self, '_thermostat_exchange', 0.0)], dtype=np.float64),
+            'thermostat_exchange_cumulative': np.array([
+                getattr(self, '_thermostat_exchange_cumulative', 0.0)],
+                dtype=np.float64),
             'coordinates': np.asarray(coordinates, dtype=np.float64),
             'velocities': np.asarray(velocities, dtype=np.float64),
             'acceleration': np.asarray(acceleration, dtype=np.float64),
@@ -2004,6 +2481,10 @@ class NAMD:
         self._t_fs = payload['time_fs']
         for name, value in payload['optional'].items():
             setattr(self, f'_{name}', value)
+        for name, value in payload['independent_state'].items():
+            setattr(self, f'_{name}', value)
+        self._conservative_restraint_energy = (
+            self._droplet_energy + self._solute_com_energy)
         self._reconcile_trajectory_with_restart(
             payload['step'], payload['trajectory_prefix'])
         dump_log(
@@ -2096,6 +2577,29 @@ class NAMD:
                 optional[name] = value
             optional = self._validate_restart_histories(
                 optional, context='NAMD restart checkpoint')
+            settings = np.asarray(saved['independent_controls_json'])
+            if (settings.shape != (1,) or settings.dtype.kind not in 'SU'
+                    or str(settings[0]) != json.dumps(
+                        self._independent_settings_record(), sort_keys=True,
+                        separators=(',', ':'))):
+                raise ValueError(
+                    'NAMD restart droplet/restraint/thermostat mismatch')
+            independent_state = {
+                'droplet_energy': self._restart_float(
+                    saved, 'droplet_energy', minimum=0.0),
+                'droplet_max_penetration': self._restart_float(
+                    saved, 'droplet_max_penetration', minimum=0.0),
+                'droplet_active_count': self._restart_integer(
+                    saved, 'droplet_active_count'),
+                'solute_com_energy': self._restart_float(
+                    saved, 'solute_com_energy', minimum=0.0),
+                'solute_com_displacement': self._restart_float(
+                    saved, 'solute_com_displacement', minimum=0.0),
+                'thermostat_exchange': self._restart_float(
+                    saved, 'thermostat_exchange'),
+                'thermostat_exchange_cumulative': self._restart_float(
+                    saved, 'thermostat_exchange_cumulative'),
+            }
             result = {
                 'step': step,
                 'coordinates': coordinates,
@@ -2114,6 +2618,7 @@ class NAMD:
                     'sha256': trajectory_prefix_sha256,
                 },
                 'optional': optional,
+                'independent_state': independent_state,
             }
         return result
 
@@ -2389,7 +2894,9 @@ class NAMD:
             r = mol.get_system().reshape((self.natom, 3))   # bohr
             # initial electronic structure + force on the active state
             self._electronic(with_overlap=False)
-            accel = -self._active_gradient() / self.mass[:, None]
+            restraint_force, _ = self._evaluate_conservative_restraints(
+                r, self.mass)
+            accel = (-self._active_gradient() + restraint_force) / self.mass[:, None]
             self._record_previous(r)
             self._log_step(0, r)
             self._save_restart(0, r, self.vel, accel)
@@ -2408,7 +2915,9 @@ class NAMD:
 
             # electronic structure at the new geometry (with overlap vs previous)
             self._electronic(with_overlap=True)
-            accel_new = -self._active_gradient() / self.mass[:, None]
+            restraint_force, _ = self._evaluate_conservative_restraints(
+                r, self.mass)
+            accel_new = (-self._active_gradient() + restraint_force) / self.mass[:, None]
 
             # velocity-Verlet velocity update
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
@@ -2419,6 +2928,7 @@ class NAMD:
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 + float(np.asarray(mol.energies)[active_old])
+                + self._conservative_restraint_energy
             )
             if self._prepare_hop_step(istep):
                 new_active, hopped = self._hop()
@@ -2431,16 +2941,21 @@ class NAMD:
                 # force for the next step is on the new active surface. This
                 # also covers trivial-crossing following, where the Fortran
                 # kernel can update ACTIVE without marking HOPPED.
-                accel_new = -self._active_gradient() / self.mass[:, None]
+                accel_new = (
+                    -self._active_gradient() +
+                    self._conservative_restraint_force
+                ) / self.mass[:, None]
                 energy_after_transition = (
                     0.5*np.sum(self.mass[:, None]*self.vel**2)
                     + float(np.asarray(mol.energies)[self.active])
+                    + self._conservative_restraint_energy
                 )
                 transition_energy_jump = (
                     energy_after_transition - energy_before_transition)
             else:
                 transition_energy_jump = np.nan
 
+            self._apply_thermostat(istep)
             accel = accel_new
             self._record_previous(r)
             self._log_step(
@@ -2461,14 +2976,24 @@ class NAMD:
         mol = self.mol
         e = np.array(mol.energies)
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
-        epot = float(e[self.active])
+        electronic_epot = float(e[self.active])
+        epot = electronic_epot + getattr(
+            self, '_conservative_restraint_energy', 0.0)
         pops = np.abs(self.coef) ** 2
         self._update_nve_gate(istep, epot, ekin, transition_energy_jump)
         dump_log(
             mol,
             title=(f'NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
-                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'E_pot={epot:.8f}  E_elec={electronic_epot:.8f}  '
+                   f'E_drop={getattr(self, "_droplet_energy", 0.0):.8f}  '
+                   f'drop_max={getattr(self, "_droplet_max_penetration", 0.0):.5f}bohr  '
+                   f'drop_n={getattr(self, "_droplet_active_count", 0)}  '
+                   f'drop_fmax={getattr(self, "_droplet_force_max", 0.0):.3e}Ha/bohr  '
+                   f'E_com={getattr(self, "_solute_com_energy", 0.0):.8f}  '
+                   f'E_kin={ekin:.8f}  '
+                   f'dQ_therm={getattr(self, "_thermostat_exchange", 0.0):+.3e}  '
+                   f'Q_therm={getattr(self, "_thermostat_exchange_cumulative", 0.0):+.3e}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
@@ -2525,6 +3050,9 @@ class NAMD_QMMM(NAMD):
         pdb_file = self._resolve_qmmm_aux_file(q['pdb_file'])
         ff_files = [self._resolve_qmmm_aux_file(s) for s in
                     str(q['forcefield_files']).replace(',', ' ').split() if s]
+        self._qmmm_pdb_file = pdb_file
+        self._qmmm_forcefield_files = ff_files
+        self._qmmm_restart_identity_cache = None
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff
@@ -2566,6 +3094,7 @@ class NAMD_QMMM(NAMD):
         self.qm_mass = self.mass.copy()
         # rigid-water (SHAKE/RATTLE) constraints for the MM region
         self._build_constraints()
+        self._setup_qmmm_restraint_targets()
 
     # ------------------------------------------------------------------ #
     def _build_constraints(self):
@@ -2646,6 +3175,20 @@ class NAMD_QMMM(NAMD):
             dv = k[:, None] * rij
             np.add.at(v, ci, -inv[ci][:, None] * dv)
             np.add.at(v, cj,  inv[cj][:, None] * dv)
+
+    def _apply_thermostat(self, istep):
+        """Thermostat the full QM/MM system and report constrained dK."""
+        self._thermostat_exchange = 0.0
+        if self.thermostat == 'off':
+            return
+        kinetic_before = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+        self.v_all, _ = self._langevin_update(
+            self.v_all, self.m_all, istep)
+        self._rattle(self.r_all, self.v_all)
+        kinetic_after = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+        self._thermostat_exchange = float(kinetic_after - kinetic_before)
+        self._thermostat_exchange_cumulative += self._thermostat_exchange
+        self.vel = self.v_all[self.qm_atoms].copy()
 
     # ------------------------------------------------------------------ #
     def _sync_positions(self):
@@ -2889,6 +3432,10 @@ class NAMD_QMMM(NAMD):
             self._sync_positions()
             potmm0, _ = self._electronic_qmmm(with_overlap=False)
             f_all, epot = self._total_force(potmm0)
+            restraint_force, restraint_energy = self._evaluate_conservative_restraints(
+                self.r_all, self.m_all)
+            f_all = f_all + restraint_force
+            epot = epot + restraint_energy
             accel = f_all / self.m_all[:, None]
             self._rattle(self.r_all, self.v_all)      # constrained velocities
             self._thermalize_initial()
@@ -2916,6 +3463,10 @@ class NAMD_QMMM(NAMD):
             # embedded electronic structure at the new geometry
             potmm, _ = self._electronic_qmmm(with_overlap=True)
             f_all, epot = self._total_force(potmm)
+            restraint_force, restraint_energy = self._evaluate_conservative_restraints(
+                self.r_all, self.m_all)
+            f_all = f_all + restraint_force
+            epot = epot + restraint_energy
             accel_new = f_all / self.m_all[:, None]
 
             # velocity-Verlet velocity update (all atoms) + RATTLE (rigid MM water)
@@ -2937,6 +3488,8 @@ class NAMD_QMMM(NAMD):
             if active_changed:
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
+                f_all, epot = self._add_last_conservative_restraints(
+                    f_all, epot)
                 accel_new = f_all / self.m_all[:, None]
                 energy_after_transition = (
                     0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
@@ -2945,6 +3498,7 @@ class NAMD_QMMM(NAMD):
             else:
                 transition_energy_jump = np.nan
 
+            self._apply_thermostat(istep)
             accel = accel_new
             self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
             self.prev_data = copy.deepcopy(mol.get_data())
@@ -2964,7 +3518,15 @@ class NAMD_QMMM(NAMD):
             self.mol,
             title=(f'QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
-                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'E_pot={epot:.8f}  '
+                   f'E_drop={getattr(self, "_droplet_energy", 0.0):.8f}  '
+                   f'drop_max={getattr(self, "_droplet_max_penetration", 0.0):.5f}bohr  '
+                   f'drop_n={getattr(self, "_droplet_active_count", 0)}  '
+                   f'drop_fmax={getattr(self, "_droplet_force_max", 0.0):.3e}Ha/bohr  '
+                   f'E_com={getattr(self, "_solute_com_energy", 0.0):.8f}  '
+                   f'E_kin={ekin:.8f}  '
+                   f'dQ_therm={getattr(self, "_thermostat_exchange", 0.0):+.3e}  '
+                   f'Q_therm={getattr(self, "_thermostat_exchange_cumulative", 0.0):+.3e}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
@@ -3230,6 +3792,8 @@ class NAMD_SOC(NAMD):
             fsum = flux.sum()
             if fsum > 1e-30:
                 cmhp = (dp / rho_a) * flux / fsum
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         # energy-based decoherence correction (Granucci-Persico)
         if self.decoherence == 1:
@@ -3605,6 +4169,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
                 # population through channel a->j becomes a hop probability.
                 loss = 2.0 * np.real(1j * c_old[a].conj() * h_mch[a, j] * c_old[j])
                 cmhp[j] = max(0.0, dt * loss / rho_a)
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         if self.decoherence == 1:
             ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)

@@ -282,6 +282,19 @@ int oqp_namd_nacme_gate(int64_t nstate, const double *candidate,
         const double *reference, const int *reference_mask, int compare_mode,
         double invariant_tol, double abs_tol, double rel_tol, double *metrics,
         int64_t *counts);
+int oqp_namd_droplet_boundary(int64_t natom, int64_t ngroup,
+        const double *coordinates, const double *masses,
+        const int64_t *group_index, const double *center, double radius,
+        double buffer, double force_constant, double max_penetration_limit,
+        double *energy, double *forces, double *max_penetration,
+        int64_t *active_count);
+int oqp_namd_com_restraint(int64_t natom, const double *coordinates,
+        const double *masses, const int64_t *selected, const double *center,
+        double force_constant, double *energy, double *forces,
+        double *displacement_norm);
+int oqp_namd_langevin_thermostat(int64_t natom, double dt,
+        double temperature, double friction, int64_t seed, int64_t stream,
+        int64_t step, const double *masses, double *velocities, double *heat);
 int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
         int *assignment, double *signs, double *matched, double *margins);
 int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,

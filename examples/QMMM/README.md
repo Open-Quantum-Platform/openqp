@@ -21,9 +21,10 @@ Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
 
 | Input | What it shows |
 | --- | --- |
-| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp` | MRSF-TDDFT FSSH (internal conversion, `[md] soc=false`) with ESPF QM/MM. |
-| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.oqp` | Two-step semantic-input version that writes a restart checkpoint. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp` | Two-step NVE MRSF-TDDFT FSSH (internal conversion, `[md] soc=false`) with ESPF QM/MM, an independent conservative water-droplet boundary, and a solute-COM restraint. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.oqp` | Semantic-input version of the same two-step calculation that writes a restart checkpoint. |
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.restart.oqp` | Paired continuation that loads the step-2 checkpoint and advances through step 3. `openqp --run_tests all` schedules it after the producer and reuses the same isolated run directory. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NVT.inp` | One-step NVT smoke run with the independent Langevin thermostat and separately recorded energy exchange. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
 
 To exercise checkpoint loading, select the semantic examples in the regression

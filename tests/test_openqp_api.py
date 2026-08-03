@@ -36,6 +36,23 @@ SCHEMA = {
         "rigidwater": {"type": bool, "default": "False"},
         "frontier_scheme": {"type": _string, "default": "none"},
     },
+    "droplet": {
+        "enabled": {"type": bool, "default": "False"},
+        "center": {"type": str, "default": "0.0,0.0,0.0"},
+        "radius": {"type": float, "default": "20.0"},
+        "buffer": {"type": float, "default": "1.0"},
+        "force_constant": {"type": float, "default": "10.0"},
+        "target": {"type": _string, "default": "water_com"},
+        "atoms": {"type": str, "default": ""},
+        "water_resnames": {"type": str, "default": "hoh,wat,sol,tip3,tip3p"},
+        "max_penetration": {"type": float, "default": "10.0"},
+    },
+    "solute_com": {
+        "enabled": {"type": bool, "default": "False"},
+        "center": {"type": str, "default": "0.0,0.0,0.0"},
+        "force_constant": {"type": float, "default": "5.0"},
+        "atoms": {"type": str, "default": ""},
+    },
     "md": {
         "nstep": {"type": int, "default": "100"},
         "dt": {"type": float, "default": "0.5"},
@@ -933,6 +950,37 @@ $$$$
         self.assertEqual(config["md"]["rng_stream"], "9")
         self.assertEqual(config["md"]["first_hop_step"], "2")
         self.assertEqual(config["md"]["nacme_check"], "off")
+
+    def test_namd_droplet_restraint_controls_are_pythonic(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="droplet_namd_qmmm")
+            .molecule("chromo.pdb 0-4", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+            .qmmm(cutoff="NoCutoff")
+            .droplet(
+                enabled=True,
+                center="0,0,0",
+                radius=12.0,
+                buffer=1.5,
+                force_constant=8.0,
+                target="water_com",
+                max_penetration=4.0,
+            )
+            .solute_com(
+                enabled=True,
+                center="0,0,0",
+                force_constant=2.0,
+                atoms="0-4",
+            )
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["droplet"]["enabled"], "True")
+        self.assertEqual(config["droplet"]["radius"], "12.0")
+        self.assertEqual(config["droplet"]["target"], "water_com")
+        self.assertEqual(config["solute_com"]["enabled"], "True")
+        self.assertEqual(config["solute_com"]["atoms"], "0-4")
 
     def test_workflow_namd_rejects_soc_nacme_and_builds_same_spin_gate(self):
         openqp = load_openqp_module()

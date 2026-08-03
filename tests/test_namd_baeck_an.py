@@ -74,7 +74,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
-    assert "does not support SOC NAMD logging paths" in tracer
+    assert '("NAMD_SOC", "_log_soc")' in tracer
     assert "finally:" in tracer
     qmmm_source = (ROOT / "source" / "modules" / "qmmm.F90").read_text()
     espf_environment = set(re.findall(
