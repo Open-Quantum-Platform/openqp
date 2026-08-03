@@ -228,6 +228,7 @@ def read_namd_trajectory(path, mmap_mode='r'):
 def read_odp_wham_series(path):
     """Extract the complete per-window ODP series from one packed NAMD TRJ."""
     header, records = read_namd_trajectory(path)
+    snapshot_bytes = int(records.offset + records.nbytes)
     provenance = header.get('odp', {})
     if not provenance.get('enabled', False):
         raise ValueError('trajectory does not contain an enabled ODP umbrella')
@@ -340,6 +341,7 @@ def read_odp_wham_series(path):
         'provenance': provenance,
         'system_identity': system_identity,
         'ensemble': header.get('ensemble'),
+        'snapshot_bytes': snapshot_bytes,
         'step': np.array(records['step'], copy=True),
         'time_fs': np.array(records['time_fs'], copy=True),
         'window': np.array(records['odp_window'], copy=True),
@@ -1024,29 +1026,37 @@ class NAMD:
             oqp.ffi.cast("double *", metrics.ctypes.data),
             oqp.ffi.cast("int64_t *", counts.ctypes.data),
         )
-        if status != 0:
-            raise RuntimeError(
-                f"native NACME validation gate failed for {source} (status={status})"
-            )
-
         compared_pairs = int(counts[0])
         invariant_failures = int(counts[1])
         reference_failures = int(counts[2])
-        if reference_failures:
-            self._nacme_gate_failures += 1
-        else:
-            self._nacme_gate_failures = 0
-        if invariant_failures or reference_failures:
+        native_error = None
+        if status != 0:
+            # The native kernel uses -2/-3 for non-finite candidate/reference
+            # matrices. Preserve that fatal status, but populate the dense
+            # diagnostic state before enforcing it after trajectory output.
+            native_error = RuntimeError(
+                f"native NACME validation gate failed for {source} "
+                f"(status={status})"
+            )
+            metrics[:] = np.nan
+            invariant_failures = max(1, invariant_failures)
+            verdict = 'fail'
+        elif invariant_failures or reference_failures:
             verdict = 'fail'
         elif compared_pairs == 0:
             verdict = 'not_evaluable'
         else:
             verdict = 'pass'
+        if status == 0 and reference_failures:
+            self._nacme_gate_failures += 1
+        elif status == 0:
+            self._nacme_gate_failures = 0
 
         result = {
             'source': source,
             'center_step': center_step,
             'signed_comparison': bool(signed),
+            'native_status': int(status),
             'verdict': verdict,
             'compared_pairs': compared_pairs,
             'invariant_failures': invariant_failures,
@@ -1061,6 +1071,9 @@ class NAMD:
             'max_tolerance_ratio': float(metrics[6]),
         }
         self._nacme_gate_last = result
+        # This is the exact candidate assessed by the gate (the TD-BA path is
+        # centered and can differ from the instantaneous overlap TDC).
+        self._last_overlap_tdc = candidate.copy()
         self._nacme_reference_tdc = reference.copy()
         self._nacme_reference_mask = mask.copy()
         self._nacme_reference_source = {
@@ -1086,8 +1099,8 @@ class NAMD:
         )
         self._write_nacme_audit_row(result)
 
-        if self.nacme_gate == 'error':
-            error = None
+        error = native_error
+        if error is None and self.nacme_gate == 'error':
             if invariant_failures:
                 error = RuntimeError(
                     f"NACME invariant gate failed for {source} at step {center_step}"
@@ -1097,8 +1110,8 @@ class NAMD:
                     f"NACME reference gate failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
-            if error is not None and self._pending_nacme_gate_error is None:
-                self._pending_nacme_gate_error = error
+        if error is not None and self._pending_nacme_gate_error is None:
+            self._pending_nacme_gate_error = error
         return result
 
     def _write_nacme_audit_row(self, result):
@@ -1112,6 +1125,7 @@ class NAMD:
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         columns = (
             'center_step', 'source', 'verdict', 'signed_comparison',
+            'native_status',
             'compared_pairs',
             'invariant_failures', 'reference_failures',
             'consecutive_reference_failures', 'candidate_diagonal_max',
@@ -1440,6 +1454,9 @@ class NAMD:
             self, '_electronic_config_identity', None)
         if electronic_config is None:
             electronic_config = _electronic_config_identity(cfg)
+        frozen_input = electronic_config.get('input', {})
+        frozen_scf = electronic_config.get('scf', {})
+        frozen_tdhf = electronic_config.get('tdhf', {})
         gate_controls = {
             'nacme_check': str(md.get(
                 'nacme_check', 'off')).strip().lower().replace('-', '_'),
@@ -1462,21 +1479,21 @@ class NAMD:
             'nve_gate_consecutive': int(md.get('nve_gate_consecutive', 3)),
         }
         identity = {
-            'method': cfg['input'].get('method', ''),
-            'charge': cfg['input'].get('charge', ''),
-            'functional': cfg['input'].get('functional', ''),
-            'basis': cfg['input'].get('basis', ''),
-            'd4': self._as_bool(cfg['input'].get('d4', False)),
-            'scf_type': cfg.get('scf', {}).get('type', ''),
-            'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
-            'tdhf_type': cfg['tdhf'].get('type', ''),
-            'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
-            'nstate': cfg['tdhf'].get('nstate', ''),
-            'tlf': cfg['tdhf'].get('tlf', ''),
+            'method': frozen_input.get('method', ''),
+            'charge': frozen_input.get('charge', ''),
+            'functional': frozen_input.get('functional', ''),
+            'basis': frozen_input.get('basis', ''),
+            'd4': self._as_bool(frozen_input.get('d4', False)),
+            'scf_type': frozen_scf.get('type', ''),
+            'scf_multiplicity': frozen_scf.get('multiplicity', ''),
+            'tdhf_type': frozen_tdhf.get('type', ''),
+            'tdhf_multiplicity': frozen_tdhf.get('multiplicity', ''),
+            'nstate': frozen_tdhf.get('nstate', ''),
+            'tlf': frozen_tdhf.get('tlf', ''),
             # Keep the complete normalized PCM section: every current field
             # changes the solvent Hamiltonian, and future schema additions
             # must become restart- and WHAM-visible without another allowlist.
-            'pcm': copy.deepcopy(cfg.get('pcm', {})),
+            'pcm': copy.deepcopy(electronic_config.get('pcm', {})),
             'electronic_config': electronic_config,
             'dt_fs': self.dt_fs, 'seed': self.seed,
             'rng_stream': self.rng_stream,

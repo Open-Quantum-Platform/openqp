@@ -385,6 +385,23 @@ except RuntimeError as error:
     enforced_nacme_error = error is pending_nacme_error
 else:
     enforced_nacme_error = False
+d.nacme_gate = 'warn'; d._pending_nacme_gate_error = None
+nonfinite_gate = d._run_nacme_gate(
+    np.array([[np.nan, 0.0], [0.0, 0.0]]),
+    np.zeros((2, 2)), reference_mask=np.zeros((2, 2), dtype=np.int32),
+    source='analytic', center_step=6, signed=True,
+)
+pending_nonfinite_error = d._pending_nacme_gate_error
+d.trajectory_file = os.path.join(root, 'failure-nonfinite.namd.trj')
+d._write_md_trajectory(6, np.ones((3, 3)), -0.8, 0.1, False)
+_, nonfinite_failure_records = read_namd_trajectory(d.trajectory_file)
+try:
+    d._enforce_nacme_gate()
+except RuntimeError as error:
+    enforced_nonfinite_error = (
+        error is pending_nonfinite_error and 'status=-2' in str(error))
+else:
+    enforced_nonfinite_error = False
 print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(), 'nstate': header['nstate'],
@@ -414,6 +431,13 @@ print('DENSE=' + json.dumps({
         'forced_nacme_failure_steps': nacme_failure_records['step'].tolist(),
         'forced_nacme_verdict': nacme_failure_records['gate_verdict'].tolist(),
         'enforced_nacme_error': enforced_nacme_error,
+        'nonfinite_native_status': nonfinite_gate['native_status'],
+        'forced_nonfinite_steps': nonfinite_failure_records['step'].tolist(),
+        'forced_nonfinite_verdict': nonfinite_failure_records[
+            'gate_verdict'].tolist(),
+        'forced_nonfinite_candidate_recorded': bool(np.isnan(
+            nonfinite_failure_records['overlap_tdc_au'][0, 0, 0])),
+        'enforced_nonfinite_error': enforced_nonfinite_error,
         'initial_temperature_kelvin': header['initial_temperature_kelvin'],
         'initial_temperature_dof': header[
             'initial_temperature_degrees_of_freedom'],
@@ -463,6 +487,11 @@ print('DENSE=' + json.dumps({
         'forced_nacme_failure_steps': [5],
         'forced_nacme_verdict': [2],
         'enforced_nacme_error': True,
+        'nonfinite_native_status': -2,
+        'forced_nonfinite_steps': [6],
+        'forced_nonfinite_verdict': [2],
+        'forced_nonfinite_candidate_recorded': True,
+        'enforced_nonfinite_error': True,
         'initial_temperature_kelvin': pytest.approx(
             9.0e-4/(6*3.166811563e-6)),
         'initial_temperature_dof': 6,

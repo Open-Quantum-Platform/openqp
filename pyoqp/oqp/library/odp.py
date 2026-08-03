@@ -279,11 +279,24 @@ def _logsumexp(values, axis=None):
     return np.squeeze(result, axis=axis)
 
 
-def _file_sha256(path):
+def _file_sha256(path, byte_count=None):
+    """Hash a complete file or the exact immutable prefix selected for WHAM."""
     digest = hashlib.sha256()
+    remaining = None if byte_count is None else int(byte_count)
+    if remaining is not None and remaining < 0:
+        raise ValueError("ODP WHAM snapshot byte count must be non-negative")
     with open(path, "rb") as stream:
-        for block in iter(lambda: stream.read(1024*1024), b""):
+        while remaining is None or remaining > 0:
+            request = 1024*1024 if remaining is None else min(1024*1024, remaining)
+            block = stream.read(request)
+            if not block:
+                if remaining is not None:
+                    raise ValueError(
+                        f"ODP WHAM trajectory was truncated while hashing: {path!r}")
+                break
             digest.update(block)
+            if remaining is not None:
+                remaining -= len(block)
     return digest.hexdigest()
 
 
@@ -330,8 +343,6 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         raise ValueError("ODP WHAM requires positive convergence controls")
 
     resolved_paths = {}
-    trajectory_hashes = []
-    hashed_paths = {}
     for path in paths:
         resolved = os.path.realpath(os.path.abspath(path))
         if resolved in resolved_paths:
@@ -340,7 +351,30 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
                 f"{resolved_paths[resolved]!r} and {path!r}"
             )
         resolved_paths[resolved] = path
-        digest = _file_sha256(path)
+    if output is not None:
+        output_path = os.fspath(output)
+        resolved_output = os.path.realpath(os.path.abspath(output_path))
+        aliases_input = resolved_output in resolved_paths
+        if not aliases_input and os.path.exists(output_path):
+            aliases_input = any(
+                os.path.samefile(output_path, path) for path in paths)
+        if aliases_input:
+            raise ValueError(
+                "ODP WHAM output must not overwrite an input trajectory: "
+                f"{output_path!r}")
+
+    loaded = []
+    trajectory_hashes = []
+    trajectory_snapshot_bytes = []
+    hashed_paths = {}
+    coordinate_provenance = None
+    system_identity = None
+    ensembles = []
+    window_definitions = {}
+    for path in paths:
+        series = read_odp_wham_series(path)
+        snapshot_bytes = int(series['snapshot_bytes'])
+        digest = _file_sha256(path, snapshot_bytes)
         if digest in hashed_paths:
             raise ValueError(
                 "ODP WHAM duplicate trajectory content: "
@@ -348,14 +382,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
             )
         hashed_paths[digest] = path
         trajectory_hashes.append(digest)
-
-    loaded = []
-    coordinate_provenance = None
-    system_identity = None
-    ensembles = []
-    window_definitions = {}
-    for path in paths:
-        series = read_odp_wham_series(path)
+        trajectory_snapshot_bytes.append(snapshot_bytes)
         provenance = series["provenance"]
         if coordinate_provenance is None:
             coordinate_provenance = provenance
@@ -535,6 +562,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         "system_identity": system_identity,
         "trajectory_paths": paths,
         "trajectory_sha256": trajectory_hashes,
+        "trajectory_snapshot_bytes": trajectory_snapshot_bytes,
         "discard": discard,
         "stride": stride,
         "tolerance": tolerance,

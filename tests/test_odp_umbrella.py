@@ -378,11 +378,13 @@ print("ODP_IO=" + json.dumps(payload))
 
 def test_python_wham_recovers_synthetic_unbiased_distribution(tmp_path):
     script = r'''
+import hashlib
 import json
 import os
 import shutil
 import struct
 import numpy as np
+import oqp.library.namd as namd_module
 from oqp.library.namd import (
     NAMD_TRAJECTORY_MAGIC, NAMD_TRAJECTORY_SCHEMA_VERSION,
     _namd_trajectory_dtype,
@@ -460,6 +462,20 @@ for window, center in enumerate(centers):
 output = os.path.join(root, "wham.npz")
 result = odp_wham(paths, temperature, bins=100, tolerance=1.0e-11, output=output)
 try:
+    odp_wham(paths, temperature, output=paths[0])
+except ValueError as error:
+    output_alias_rejected = "must not overwrite" in str(error)
+else:
+    output_alias_rejected = False
+hardlink_output = os.path.join(root, "hardlink-output.npz")
+os.link(paths[0], hardlink_output)
+try:
+    odp_wham(paths, temperature, output=hardlink_output)
+except ValueError as error:
+    hardlink_output_rejected = "must not overwrite" in str(error)
+else:
+    hardlink_output_rejected = False
+try:
     odp_wham(
         [paths[0], os.path.join(root, ".", os.path.basename(paths[0]))],
         temperature,
@@ -531,6 +547,26 @@ except ValueError as error:
     other_d4_rejected = "different molecular systems" in str(error)
 else:
     other_d4_rejected = False
+race_path = os.path.join(root, "append-race.namd.trj")
+shutil.copyfile(paths[0], race_path)
+race_snapshot_bytes = os.path.getsize(race_path)
+with open(race_path, "rb") as stream:
+    stream.seek(-dtype.itemsize, os.SEEK_END)
+    appended_record = stream.read(dtype.itemsize)
+original_reader = namd_module.read_odp_wham_series
+def read_then_append(path):
+    series = original_reader(path)
+    with open(path, "ab") as stream:
+        stream.write(appended_record)
+    return series
+namd_module.read_odp_wham_series = read_then_append
+try:
+    race_result = odp_wham([race_path], temperature, bins=100)
+finally:
+    namd_module.read_odp_wham_series = original_reader
+with open(race_path, "rb") as stream:
+    race_expected_hash = hashlib.sha256(
+        stream.read(race_snapshot_bytes)).hexdigest()
 mean = np.sum(result["sample_weights"]*result["sample_xi"])
 variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
 with np.load(output, allow_pickle=False) as saved:
@@ -548,12 +584,22 @@ print("ODP_WHAM=" + json.dumps({
     "ensemble_warning": result["ensemble_warning"],
     "metadata_converged": metadata["converged"],
     "metadata_hashes": metadata["trajectory_sha256"],
+    "metadata_snapshot_bytes": metadata["trajectory_snapshot_bytes"],
     "saved_centers": saved_centers,
     "duplicate_path_rejected": duplicate_path_rejected,
     "duplicate_hash_rejected": duplicate_hash_rejected,
+    "output_alias_rejected": output_alias_rejected,
+    "hardlink_output_rejected": hardlink_output_rejected,
     "other_system_rejected": other_system_rejected,
     "other_pcm_rejected": other_pcm_rejected,
     "other_d4_rejected": other_d4_rejected,
+    "race_snapshot_bytes": race_result["trajectory_snapshot_bytes"],
+    "race_initial_bytes": race_snapshot_bytes,
+    "race_record_bytes": dtype.itemsize,
+    "race_snapshot_hash": race_result["trajectory_sha256"],
+    "race_expected_hash": race_expected_hash,
+    "race_sample_count": int(race_result["sample_xi"].size),
+    "race_final_bytes": os.path.getsize(race_path),
     "system_identity": result["system_identity"],
 }))
 '''
@@ -603,11 +649,19 @@ print("ODP_WHAM=" + json.dumps({
         assert example_metadata["converged"] is True
         assert len(example_metadata["trajectory_sha256"]) == 5
     assert all(len(value) == 64 for value in values["metadata_hashes"])
+    assert all(value > 0 for value in values["metadata_snapshot_bytes"])
     assert values["saved_centers"] == pytest.approx(
         [-1.2, -0.6, 0.0, 0.6, 1.2])
     assert values["duplicate_path_rejected"] is True
     assert values["duplicate_hash_rejected"] is True
+    assert values["output_alias_rejected"] is True
+    assert values["hardlink_output_rejected"] is True
     assert values["other_system_rejected"] is True
     assert values["other_pcm_rejected"] is True
     assert values["other_d4_rejected"] is True
+    assert values["race_snapshot_bytes"] == [values["race_initial_bytes"]]
+    assert values["race_final_bytes"] == (
+        values["race_initial_bytes"] + values["race_record_bytes"])
+    assert values["race_snapshot_hash"] == [values["race_expected_hash"]]
+    assert values["race_sample_count"] == 12000
     assert values["system_identity"]["system"]["sha256"] == "system-a"

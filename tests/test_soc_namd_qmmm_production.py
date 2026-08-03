@@ -616,6 +616,12 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 driver._nacme_gate_last = None
                 driver._nve_gate_last = None
                 driver._pending_nve_gate_error = None
+                driver._electronic_config_identity = (
+                    namd._electronic_config_identity(mol.config))
+                frozen_signature = driver._restart_signature()
+                mol.config["tdhf"]["multiplicity"] = 1
+                self.assertEqual(
+                    driver._restart_signature(), frozen_signature)
 
                 driver._write_md_trajectory(
                     0, np.zeros((2, 3)), -1.0, 0.1, False)
@@ -634,6 +640,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 self.assertEqual(
                     header["ensemble_provenance"]["velocity_rescaling_mode"],
                     "restore_initial_total_energy")
+                self.assertEqual(header["signature"], frozen_signature)
                 np.testing.assert_allclose(
                     records["state_energies"][0], driver._trajectory_state_energies)
                 np.testing.assert_allclose(
