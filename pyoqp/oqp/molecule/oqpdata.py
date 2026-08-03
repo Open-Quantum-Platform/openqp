@@ -593,7 +593,7 @@ OQP_CONFIG_SCHEMA = {
         'first_hop_step': {'type': int, 'default': '1'},    # preserve historical OpenQP propagation/hop from step 1; use 2 for KNU/TLF2 comparisons
         'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
-        'nacme_gate': {'type': str, 'default': 'warn'},     # 'off' | 'warn' | 'error'
+        'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
         'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
         'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
         'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
@@ -624,6 +624,17 @@ OQP_CONFIG_SCHEMA = {
         'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
         'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
         'dx_max': {'type': float, 'default': '0.02'},       # bohr, max per-step atomic displacement (adaptive dt criterion)
+    },
+    'odp': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'cv': {'type': str, 'default': ''},
+        'scale': {'type': farray, 'default': ''},
+        'reference_r': {'type': farray, 'default': ''},
+        'reference_p': {'type': farray, 'default': ''},
+        'center': {'type': float, 'default': '0.0'},
+        'k_parallel': {'type': float, 'default': '0.0'},
+        'k_perpendicular': {'type': float, 'default': '0.0'},
+        'window': {'type': int, 'default': '0'},
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},

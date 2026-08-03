@@ -67,7 +67,7 @@ SCHEMA = {
         "first_hop_step": {"type": int, "default": "1"},
         "nacme_check": {"type": _string, "default": "off"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
-        "nacme_gate": {"type": _string, "default": "warn"},
+        "nacme_gate": {"type": _string, "default": "off"},
         "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
         "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
         "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
@@ -81,6 +81,17 @@ SCHEMA = {
         "restart_interval": {"type": int, "default": "0"},
         "trajectory_file": {"type": _string, "default": ""},
         "restart_file": {"type": _string, "default": ""},
+    },
+    "odp": {
+        "enabled": {"type": bool, "default": "False"},
+        "cv": {"type": str, "default": ""},
+        "scale": {"type": str, "default": ""},
+        "reference_r": {"type": str, "default": ""},
+        "reference_p": {"type": str, "default": ""},
+        "center": {"type": float, "default": "0.0"},
+        "k_parallel": {"type": float, "default": "0.0"},
+        "k_perpendicular": {"type": float, "default": "0.0"},
+        "window": {"type": int, "default": "0"},
     },
     "scf": {
         "type": {"type": _string, "default": "rhf"},
@@ -263,6 +274,26 @@ def load_openqp_module():
 
 
 class TestOpenQPNativeAPI(unittest.TestCase):
+    def test_odp_section_is_exposed_through_settings_api(self):
+        openqp = load_openqp_module()
+        job = openqp.OpenQP(project="odp_window")
+        job.settings.odp(
+            enabled=True,
+            cv="distance(1,2);angle(1,2,3)",
+            scale="0.5,1.0",
+            reference_r="2.0,1.5",
+            reference_p="3.0,2.1",
+            center=0.4,
+            k_parallel=0.08,
+            k_perpendicular=0.01,
+            window=7,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["odp"]["enabled"], "True")
+        self.assertEqual(config["odp"]["cv"], "distance(1,2);angle(1,2,3)")
+        self.assertEqual(config["odp"]["scale"], "0.5,1.0")
+        self.assertEqual(config["odp"]["window"], "7")
+
     def test_builtin_geometry_resolves_common_names(self):
         openqp = load_openqp_module()
 

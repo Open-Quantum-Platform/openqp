@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import inspect
+import os
 from pathlib import Path
 
 import numpy as np
@@ -30,26 +31,55 @@ def _namd_sidecar_paths(md: dict, log_path: Path) -> dict[str, Path]:
             return path.resolve() if path.is_absolute() else (log_dir / path).resolve()
         return (log_dir / f'{stem}{suffix}').resolve()
 
-    return {
+    row = {
         'trajectory-file': output('trajectory_file', '.namd.trj'),
         'restart-file': output('restart_file', '.namd.restart.npz'),
         'restart-manifest-file': (
             log_dir / f'{stem}.namd.restart.oqp').resolve(),
     }
+    return row
+
+
+def _paths_alias(left: Path, right: Path) -> bool:
+    """Return whether two path spellings designate the same filesystem object."""
+    if os.path.normcase(os.path.realpath(left)) == os.path.normcase(
+            os.path.realpath(right)):
+        return True
+    try:
+        return os.path.samefile(left, right)
+    except (FileNotFoundError, OSError):
+        return False
 
 
 def _reject_trace_aliases(trace: Path, protected_paths: dict[str, Path]) -> None:
-    aliases = [name for name, path in protected_paths.items() if path == trace]
+    aliases = [
+        name for name, path in protected_paths.items()
+        if _paths_alias(trace, path)
+    ]
     if aliases:
         raise ValueError(
             f"--trace must not alias the {', '.join(aliases)} path")
 
 
+def validate_trace_output(
+    trace: Path,
+    *,
+    input_path: Path,
+    random_file: Path | None,
+    log_path: Path,
+) -> None:
+    """Protect diagnostic inputs before the trace is removed or opened."""
+    protected = {'input deck': input_path, 'job log': log_path}
+    if random_file is not None:
+        protected['random replay file'] = random_file
+    _reject_trace_aliases(trace, protected)
+
+
 def _trace_hop_matrices(driver, kernel_called: bool):
     """Return current overlap/TDC matrices even when the hop was skipped."""
-    nstate = getattr(driver, "nstate", None)
-    if nstate is None:
-        nstate = np.asarray(driver.coef).size
+    coef = getattr(driver, "coef", None)
+    nstate = (np.asarray(coef).size if coef is not None
+              else int(driver.nstate))
     data = getattr(driver.mol, "data", {})
 
     def native_tag(name):
@@ -70,10 +100,13 @@ def _trace_hop_matrices(driver, kernel_called: bool):
         overlap = np.full((nstate, nstate), np.nan)
     if tdc is None:
         tdc = np.full((nstate, nstate), np.nan)
-    return (
-        np.asarray(overlap, dtype=float).reshape(nstate, nstate),
-        np.asarray(tdc, dtype=float).reshape(nstate, nstate),
-    )
+    def full_matrix(value):
+        array = np.asarray(value, dtype=float)
+        if array.size != nstate*nstate:
+            return np.full((nstate, nstate), np.nan)
+        return array.reshape(nstate, nstate)
+
+    return full_matrix(overlap), full_matrix(tdc)
 
 
 class SequenceRNG:
@@ -207,6 +240,27 @@ def install_trace(
             time_fs=(getattr(self, '_t_fs', istep*self.dt_fs)
                      if getattr(self, 'dt_adaptive', False) else None),
         )
+        row.update({
+            f"pop_{state + 1}": abs(coef[state]) ** 2
+            for state in range(nstate)
+        })
+        row.update({
+            f"overlap_{left + 1}{right + 1}":
+                overlap[left, right]
+            for left in range(nstate)
+            for right in range(nstate)
+        })
+        row.update({
+            f"tdc_{left + 1}{right + 1}_au": tdc[left, right]
+            for left in range(nstate)
+            for right in range(left + 1, nstate)
+        })
+        row.update({
+            f"p_{source + 1}{target + 1}": cmhp[source, target]
+            for source in range(nstate)
+            for target in range(nstate)
+            if source != target
+        })
         write_header = not output.exists()
         with output.open("a", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=row.keys())
@@ -220,6 +274,9 @@ def install_trace(
         def traced(self, *args, **kwargs):
             bound = signature.bind(self, *args, **kwargs)
             bound.apply_defaults()
+            step = bound.arguments.get("istep")
+            if step is None and args:
+                step = args[0]
             original_failure = None
             result = None
             try:
@@ -231,8 +288,9 @@ def install_trace(
                 try:
                     record_trace(
                         self,
-                        int(bound.arguments["istep"]),
-                        bool(bound.arguments.get("hopped", False)),
+                        int(step),
+                        bool(bound.arguments.get(
+                            "hopped", kwargs.get("hopped", False))),
                     )
                 except Exception:
                     if original_failure is not None:
@@ -265,7 +323,7 @@ def install_trace(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="thymine.inp")
+    parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--trace", default="hop_trace.csv")
     parser.add_argument("--skip-first-hop", action="store_true")
     parser.add_argument(
@@ -275,23 +333,27 @@ def main() -> None:
     )
     args = parser.parse_args()
     trace = Path(args.trace).expanduser().resolve()
-    input_path = Path(args.input).expanduser().resolve()
+    input_path = args.input.expanduser().resolve()
     random_path = (None if args.random_file is None
                    else args.random_file.expanduser().resolve())
     project = input_path.stem
     log_path = input_path.with_suffix('.log')
-    protected_paths = {'input': input_path, 'log': log_path}
-    if random_path is not None:
-        protected_paths['random-file'] = random_path
-    _reject_trace_aliases(trace, protected_paths)
+    validate_trace_output(
+        trace, input_path=input_path, random_file=random_path,
+        log_path=log_path)
     from oqp.pyoqp import Runner
 
     runner = Runner(
         project=project, input_file=str(input_path), log=str(log_path),
         silent=1, usempi=False)
-    protected_paths.update(_namd_sidecar_paths(
-        runner.mol.config.get('md', {}), log_path))
+    protected_paths = _namd_sidecar_paths(
+        runner.mol.config.get('md', {}), log_path)
     _reject_trace_aliases(trace, protected_paths)
+    runtype = str(
+        runner.mol.config.get('input', {}).get('runtype', '')
+    ).strip().lower()
+    if runtype != 'namd':
+        raise ValueError('hop tracing requires a NAMD input')
     trace.unlink(missing_ok=True)
     random_values = None
     if random_path is not None:

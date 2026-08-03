@@ -692,6 +692,28 @@ def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
     assert legacy["neb"]["nimage"] == "7"
 
 
+def test_restart_manifest_paths_can_be_rebased_to_the_source_directory(tmp_path):
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    spec = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/sto-3g '
+        'namd(S1,velocity="velocities.dat") '
+        'guess(type=json,file="guess.json") '
+        'qmmm(pdb_file="cluster.pdb",forcefield_files="./local.xml amber14/tip3p.xml",qm_atoms="0-1") '
+        'geom="geometry.xyz"'
+    )
+
+    rebased = oqp_input.rebase_calculation_paths(spec, source_dir=source_dir)
+    rendered = oqp_input.render_canonical_oqp(rebased)
+
+    assert f'geom="{(source_dir / "geometry.xyz").resolve()}"' in rendered
+    assert f'velocity="{(source_dir / "velocities.dat").resolve()}"' in rendered
+    assert f'file="{(source_dir / "guess.json").resolve()}"' in rendered
+    assert f'pdb_file="{(source_dir / "cluster.pdb").resolve()}"' in rendered
+    assert str((source_dir / "local.xml").resolve()) in rendered
+    assert "amber14/tip3p.xml" in rendered
+
+
 def test_compact_pdb_geometry_resolves_only_path_prefix(tmp_path):
     _, legacy = _parse(
         'dft/pbe0/def2-svp geom="protein model.pdb 9 10 17-19" energy',
@@ -1679,3 +1701,43 @@ def test_common_input_mistakes_get_actionable_corrections():
         oqp_input.parse_canonical_oqp(
             'mrsf/bhhlyp/6-31g* geom="h2o.xyz" istate=1 opt(S0)'
         )
+
+
+def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
+    text = (
+        'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '
+        'namd(T0,nstep=1,dt=0.1,velocity=zero) '
+        'odp(enabled=true,cv="distance(1,2);angle(3,1,4)",'
+        'scale="0.5,1.0",reference_r="2.1,1.9",'
+        'reference_p="2.5,2.2",center=0.5,k_parallel=0.02,'
+        'k_perpendicular=0.005,window=1)'
+    )
+    spec, legacy = _parse(text)
+    assert legacy["input"]["runtype"] == "namd"
+    assert legacy["odp"] == {
+        "enabled": "True",
+        "cv": "distance(1,2);angle(3,1,4)",
+        "scale": "0.5,1.0",
+        "reference_r": "2.1,1.9",
+        "reference_p": "2.5,2.2",
+        "center": "0.5",
+        "k_parallel": "0.02",
+        "k_perpendicular": "0.005",
+        "window": "1",
+    }
+    rendered = oqp_input.render_canonical_oqp(spec)
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert oqp_input.lower_to_legacy(reparsed)["odp"] == legacy["odp"]
+
+    with pytest.raises(OQPInputError, match="requires the NVE namd"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'odp(enabled=true,k_parallel=0.1)'
+        )
+
+    _, disabled = _parse(
+        'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+        'odp(enabled=false,k_parallel=0.1)'
+    )
+    assert disabled["input"]["runtype"] == "energy"
+    assert disabled["odp"]["enabled"] == "False"
