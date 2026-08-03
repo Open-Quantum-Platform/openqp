@@ -423,10 +423,11 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     assert "was not generated" in notices[0]
 
 
-def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
+def test_soc_namd_accepts_nve_and_dense_trajectory_controls(tmp_path):
     script = r"""
 import json
 import os
+import numpy as np
 from oqp.library.namd import NAMD
 
 root = os.environ['OQP_NAMD_TEST_ROOT']
@@ -439,6 +440,7 @@ base_md = {
 
 class Mol:
     log = os.path.join(root, 'soc.log')
+    data = {'natom': 1}
     def __init__(self, **overrides):
         md = dict(base_md)
         md.update(overrides)
@@ -448,6 +450,8 @@ class Mol:
             'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
             'properties': {}, 'nac': {}, 'md': md,
         }
+    def get_mass(self):
+        return np.array([1.0])
 
 def rejected(**overrides):
     try:
@@ -455,6 +459,13 @@ def rejected(**overrides):
     except NotImplementedError:
         return True
     return False
+
+def accepted(**overrides):
+    try:
+        NAMD(Mol(**overrides))
+    except Exception:
+        return False
+    return True
 
 def invalid(**overrides):
     try:
@@ -464,11 +475,12 @@ def invalid(**overrides):
     return False
 
 print('SOC_GATES=' + json.dumps({
-    'nve': rejected(nve_gate='warn'),
-    'truthy_integer': rejected(soc=2, nve_gate='warn'),
-    'truthy_string': rejected(soc='false', nve_gate='warn'),
-    'trajectory_file': rejected(trajectory_file='soc.trj'),
-    'trajectory_interval': rejected(trajectory_interval=2),
+    'nve': accepted(nve_gate='warn'),
+    'truthy_integer': accepted(soc=2, nve_gate='warn'),
+    'truthy_string': accepted(soc='false', nve_gate='warn'),
+    'trajectory_file': accepted(trajectory_file='soc.trj'),
+    'trajectory_interval': accepted(trajectory_interval=2),
+    'nacme_check': rejected(nacme_check='baeck_an'),
     'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
     'nacme_nan': invalid(nacme_gate_abs_tol=float('nan')),
@@ -500,6 +512,7 @@ print('SOC_GATES=' + json.dumps({
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'truthy_integer': True, 'truthy_string': True,
         'trajectory_file': True, 'trajectory_interval': True,
+        'nacme_check': True,
         'same_spin_adaptive': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
         'nve_nan': True, 'nve_inf': True,

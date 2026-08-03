@@ -400,6 +400,91 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
 
+    def test_soc_restart_round_trip_restores_complex_gauge_and_response_history(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            driver = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+            driver.nstate_soc = driver.nstate = 4
+            driver.prev_u = np.diag([1.0, 1j, -1.0, -1j]).astype(complex)
+            driver.prev_eval = np.array([0.0, 0.01, 0.02, 0.03])
+            driver.prev_sbvec = np.arange(6.0).reshape(2, 3)
+            driver.prev_tbvec = np.arange(6.0, 12.0).reshape(2, 3)
+
+            payload = driver._restart_extra_payload()
+            restored = driver._load_restart_extra(payload)
+            target = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+            target._restore_restart_extra(restored)
+
+            np.testing.assert_allclose(target.prev_u, driver.prev_u)
+            np.testing.assert_allclose(target.prev_eval, driver.prev_eval)
+            np.testing.assert_allclose(target.prev_sbvec, driver.prev_sbvec)
+            np.testing.assert_allclose(target.prev_tbvec, driver.prev_tbvec)
+
+            broken = dict(payload)
+            broken['soc_prev_u_real'] = np.ones((4, 4))
+            with self.assertRaisesRegex(RuntimeError, "not unitary"):
+                driver._load_restart_extra(broken)
+        finally:
+            cleanup()
+
+    def test_soc_overlap_generator_is_complex_antihermitian(self):
+        from scipy.linalg import expm
+
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            driver = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+            driver.dt = 2.5
+            generator = np.array(
+                [[0.2j, 0.03 + 0.04j], [-0.03 + 0.04j, -0.1j]],
+                dtype=complex,
+            )
+            overlap = expm(generator)
+            unitary, recovered = driver._soc_unitary_overlap(overlap)
+
+            np.testing.assert_allclose(
+                unitary.conj().T @ unitary, np.eye(2), atol=1.0e-12)
+            np.testing.assert_allclose(
+                recovered + recovered.conj().T, 0.0, atol=1.0e-12)
+            np.testing.assert_allclose(driver._last_state_overlap, overlap)
+            np.testing.assert_allclose(driver._last_overlap_tdc,
+                                       recovered / driver.dt)
+            self.assertGreater(
+                np.max(np.abs(driver._last_overlap_tdc.imag)), 0.0)
+        finally:
+            cleanup()
+
+    def test_soc_packed_trajectory_keeps_complex_overlap_components(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            dtype = namd._namd_trajectory_dtype(4, 3)
+            self.assertIn('state_overlap_imag', dtype.names)
+            self.assertIn('overlap_tdc_imag_au', dtype.names)
+            self.assertEqual(namd.NAMD_TRAJECTORY_SCHEMA_VERSION, 6)
+            self.assertEqual(namd.NAMD_RESTART_SCHEMA_VERSION, 7)
+        finally:
+            cleanup()
+
+    def test_all_soc_drivers_wire_output_restart_and_nve_gate(self):
+        src = NAMD.read_text()
+        for class_name, end_name in (
+            ('NAMD_SOC', 'NAMD_SOC_MCH'),
+            ('NAMD_SOC_MCH', 'NAMD_SOC_QMMM'),
+            ('NAMD_SOC_QMMM', 'NAMD_SOC_MCH_QMMM'),
+        ):
+            block = src.split(f'class {class_name}', 1)[1].split(
+                f'class {end_name}', 1)[0]
+            self.assertIn('self._prepare_md_outputs()', block)
+            self.assertIn('restart = self._load_restart()', block)
+            self.assertIn('self._save_restart(', block)
+            self.assertIn('self._update_nve_gate(', block)
+            self.assertIn('self._write_md_trajectory(', block)
+        final_block = src.split('class NAMD_SOC_MCH_QMMM', 1)[1]
+        self.assertIn('self._prepare_md_outputs()', final_block)
+        self.assertIn('restart = self._load_restart()', final_block)
+        self.assertIn('self._save_restart(', final_block)
+        self.assertIn('self._update_nve_gate(', final_block)
+        self.assertIn('self._write_md_trajectory(', final_block)
+
     def test_hop_rng_is_step_indexed_and_supports_exact_replay(self):
         namd, _logs, cleanup = load_namd_with_stubs()
         try:
