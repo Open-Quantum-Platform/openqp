@@ -886,6 +886,11 @@ class TestOQPTesterCollection(unittest.TestCase):
                 self.mol = types.SimpleNamespace(config={
                     "guess": {"file": "guess.json", "file2": "old.json"},
                     "md": {"velocity": "velocity.dat"},
+                    "qmmm": {
+                        "pdb_file": "system.pdb",
+                        "qm_atoms_xyz": "qm.xyz",
+                        "forcefield_files": "local.xml tip3p.xml",
+                    },
                 })
                 calls.append(("init", Path.cwd(), self.mol))
 
@@ -899,6 +904,7 @@ class TestOQPTesterCollection(unittest.TestCase):
             root = Path(temp_dir)
             input_file = root / "case.oqp"
             self._write(input_file)
+            self._write(root / "local.xml")
             worker_cwd = Path.cwd()
 
             with load_oqp_tester(
@@ -920,6 +926,14 @@ class TestOQPTesterCollection(unittest.TestCase):
                 config["guess"]["file2"], str((root / "old.json").resolve()))
             self.assertEqual(
                 config["md"]["velocity"], str((root / "velocity.dat").resolve()))
+            self.assertEqual(
+                config["qmmm"]["pdb_file"], str((root / "system.pdb").resolve()))
+            self.assertEqual(
+                config["qmmm"]["qm_atoms_xyz"], str((root / "qm.xyz").resolve()))
+            self.assertEqual(
+                config["qmmm"]["forcefield_files"],
+                f"{(root / 'local.xml').resolve()} tip3p.xml",
+            )
             self.assertEqual(calls[1][2].oqp_runtime_cwd, str(root.resolve()))
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):

@@ -245,6 +245,23 @@ class OQPTester:
             "", "zero", "none", "0", "maxwell", "boltzmann", "random"
         }:
             md["velocity"] = runtime_path(velocity)
+        qmmm = mol.config.get("qmmm", {})
+        for key in ("pdb_file", "qm_atoms_xyz"):
+            if key in qmmm:
+                qmmm[key] = runtime_path(qmmm[key])
+        for key in ("forcefield", "forcefield_files"):
+            value = qmmm.get(key)
+            if not isinstance(value, str):
+                continue
+            entries = [
+                item for item in value.replace(",", " ").split() if item
+            ]
+            qmmm[key] = " ".join(
+                runtime_path(item)
+                if os.path.isfile(runtime_path(item))
+                else item
+                for item in entries
+            )
         mol.oqp_runtime_cwd = caller_cwd
 
     def run_single_test(self, input_file: str,
