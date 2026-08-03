@@ -136,6 +136,7 @@ import numpy as np
 import oqp.library.namd as namd_module
 from oqp.library.namd import (
     NAMD, read_namd_trajectory, _validate_distinct_output_paths,
+    _validate_nacme_gate_activation,
 )
 namd_module.dump_log = lambda *_args, **_kwargs: None
 
@@ -149,6 +150,16 @@ except ValueError as error:
     output_collision_rejected = 'must be distinct' in str(error)
 else:
     output_collision_rejected = False
+inactive_gate_rejected = []
+for policy in ('warn', 'error'):
+    try:
+        _validate_nacme_gate_activation('off', policy)
+    except ValueError as error:
+        inactive_gate_rejected.append('nacme_check is off' in str(error))
+    else:
+        inactive_gate_rejected.append(False)
+_validate_nacme_gate_activation('off', 'off')
+_validate_nacme_gate_activation('baeck_an', 'error')
 
 class Mol:
     log = os.path.join(root, 'job.log')
@@ -180,7 +191,9 @@ d.nacme_audit_file = os.path.join(root, 'job.namd.nacme.tsv')
 d.restart_manifest_file = os.path.join(root, 'restart.oqp')
 d._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d.active = 1; d._last_hop_random = 0.25; d.coef = np.array([1+0j, 0+0j])
-d.vel = np.ones((3, 3))*0.01; d._last_state_overlap = np.eye(2)
+d.init_temp = 300.0; d.velocity_source = '/provided/velocity.dat'
+d.mass = np.ones(3); d.vel = np.ones((3, 3))*0.01
+d._last_state_overlap = np.eye(2)
 d._last_overlap_tdc = np.array([[0.0, 0.1], [-0.1, 0.0]])
 d._nacme_reference_tdc = np.array([[0.0, 0.11], [-0.11, 0.0]])
 d._nacme_reference_mask = np.array([[0, 1], [1, 0]], dtype=np.int32)
@@ -193,6 +206,7 @@ d._nacme_gate_last = {
     'pair_rms_error': 0.01, 'pair_max_error': 0.01,
     'max_tolerance_ratio': 0.2,
 }
+d._pending_nacme_gate_error = None
 d.nve_gate = 'warn'; d.nve_gate_abs_tol = 0.005
 d.nve_gate_step_tol = 0.001; d.nve_gate_transition_tol = 1.0e-6
 d.nve_gate_consecutive = 3; d._nve_reference_energy = None
@@ -263,6 +277,22 @@ except ValueError as error:
     electronic_mismatch = 'does not match the current run' in str(error)
 else:
     electronic_mismatch = False
+d_pcm = NAMD.__new__(NAMD); d_pcm.mol = Mol()
+d_pcm.mol.config = json.loads(json.dumps(Mol.config))
+d_pcm.mol.config['pcm'] = {
+    'enabled': True, 'backend': 'ddx', 'mode': 'reference_scf',
+    'model': 'ddpcm', 'solvent': 'water', 'epsilon': 40.0, 'radii': 'uff',
+}
+d_pcm.nstate = 2; d_pcm.dt_fs = 0.5
+d_pcm.seed = 1; d_pcm.rng_stream = 2; d_pcm.restart_requested = True
+d_pcm._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_pcm.restart_file = d.restart_file; d_pcm.trajectory_file = d.trajectory_file
+try:
+    d_pcm._load_restart()
+except ValueError as error:
+    pcm_mismatch = 'does not match the current run' in str(error)
+else:
+    pcm_mismatch = False
 d_gate = NAMD.__new__(NAMD); d_gate.mol = Mol()
 d_gate.mol.config = json.loads(json.dumps(Mol.config))
 d_gate.mol.config['md'] = {'nve_gate': 'error'}
@@ -325,6 +355,23 @@ except RuntimeError:
     enforced_error = True
 else:
     enforced_error = False
+d.nacme_gate = 'error'; d.nacme_gate_consecutive = 1
+d._pending_nacme_gate_error = None
+d._run_nacme_gate(
+    np.array([[1.0e-3, 0.0], [0.0, 0.0]]),
+    np.zeros((2, 2)), reference_mask=np.zeros((2, 2), dtype=np.int32),
+    source='analytic', center_step=5, signed=True,
+)
+pending_nacme_error = d._pending_nacme_gate_error
+d.trajectory_file = os.path.join(root, 'failure-nacme.namd.trj')
+d._write_md_trajectory(5, np.ones((3, 3)), -0.8, 0.1, False)
+_, nacme_failure_records = read_namd_trajectory(d.trajectory_file)
+try:
+    d._enforce_nacme_gate()
+except RuntimeError as error:
+    enforced_nacme_error = error is pending_nacme_error
+else:
+    enforced_nacme_error = False
 print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(), 'nstate': header['nstate'],
@@ -334,9 +381,11 @@ print('DENSE=' + json.dumps({
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
     'electronic_mismatch': electronic_mismatch,
+    'pcm_mismatch': pcm_mismatch,
     'gate_mismatch': gate_mismatch,
     'missing_trajectory_rejected': missing_trajectory_rejected,
     'output_collision_rejected': output_collision_rejected,
+    'inactive_gate_rejected': inactive_gate_rejected,
     'reseed_cleared': reseed_cleared,
     'audit_steps': [int(row[0]) for row in audit_lines[1:]],
     'audit_signed_comparison': audit['signed_comparison'],
@@ -348,6 +397,15 @@ print('DENSE=' + json.dumps({
         'deferred_error': deferred_error,
         'enforced_error': enforced_error,
         'forced_failure_steps': forced_failure_steps,
+        'forced_nacme_failure_steps': nacme_failure_records['step'].tolist(),
+        'forced_nacme_verdict': nacme_failure_records['gate_verdict'].tolist(),
+        'enforced_nacme_error': enforced_nacme_error,
+        'initial_temperature_kelvin': header['initial_temperature_kelvin'],
+        'initial_temperature_dof': header[
+            'initial_temperature_degrees_of_freedom'],
+        'requested_initial_temperature_kelvin': header[
+            'requested_initial_temperature_kelvin'],
+        'initial_velocity_source': header['initial_velocity_source'],
 }))
 """
     env = os.environ.copy()
@@ -378,11 +436,21 @@ print('DENSE=' + json.dumps({
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,
+        'pcm_mismatch': True,
         'gate_mismatch': True,
         'missing_trajectory_rejected': True,
-        'output_collision_rejected': True, 'audit_steps': [0],
+        'output_collision_rejected': True,
+        'inactive_gate_rejected': [True, True], 'audit_steps': [0],
         'invariant_without_pairs': 'fail',
         'nve_failures': 0, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],
+        'forced_nacme_failure_steps': [5],
+        'forced_nacme_verdict': [2],
+        'enforced_nacme_error': True,
+        'initial_temperature_kelvin': pytest.approx(
+            9.0e-4/(6*3.166811563e-6)),
+        'initial_temperature_dof': 6,
+        'requested_initial_temperature_kelvin': 300.0,
+        'initial_velocity_source': 'file',
     }

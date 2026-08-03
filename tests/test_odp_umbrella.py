@@ -402,6 +402,7 @@ system_identity = {
     "method": "synthetic", "charge": 0, "functional": "", "basis": "none",
     "scf_type": "rhf", "scf_multiplicity": 1,
     "tdhf_type": "rpa", "tdhf_multiplicity": 1, "nstate": 1, "tlf": 2,
+    "pcm": {"enabled": True, "model": "ddpcm", "epsilon": 78.3553},
     "trajectory_representation": "same_spin_adiabatic",
     "system": {"kind": "synthetic", "natom": 1, "sha256": "system-a"},
 }
@@ -493,6 +494,24 @@ except ValueError as error:
     other_system_rejected = "different molecular systems" in str(error)
 else:
     other_system_rejected = False
+pcm_header = json.loads(json.dumps(other_header))
+pcm_header["wham_system_identity"] = system_identity["system"]
+pcm_signature = json.loads(pcm_header["signature"])
+pcm_signature["pcm"]["epsilon"] = 40.0
+pcm_header["signature"] = json.dumps(pcm_signature, sort_keys=True)
+pcm_encoded = json.dumps(pcm_header, sort_keys=True).encode("utf-8")
+other_pcm = os.path.join(root, "other-pcm.namd.trj")
+with open(other_pcm, "wb") as stream:
+    stream.write(magic)
+    stream.write(struct.pack("<Q", len(pcm_encoded)))
+    stream.write(pcm_encoded)
+    stream.write(other_payload)
+try:
+    odp_wham([paths[0], other_pcm], temperature)
+except ValueError as error:
+    other_pcm_rejected = "different molecular systems" in str(error)
+else:
+    other_pcm_rejected = False
 mean = np.sum(result["sample_weights"]*result["sample_xi"])
 variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
 with np.load(output, allow_pickle=False) as saved:
@@ -514,6 +533,7 @@ print("ODP_WHAM=" + json.dumps({
     "duplicate_path_rejected": duplicate_path_rejected,
     "duplicate_hash_rejected": duplicate_hash_rejected,
     "other_system_rejected": other_system_rejected,
+    "other_pcm_rejected": other_pcm_rejected,
     "system_identity": result["system_identity"],
 }))
 '''
@@ -568,4 +588,5 @@ print("ODP_WHAM=" + json.dumps({
     assert values["duplicate_path_rejected"] is True
     assert values["duplicate_hash_rejected"] is True
     assert values["other_system_rejected"] is True
+    assert values["other_pcm_rejected"] is True
     assert values["system_identity"]["system"]["sha256"] == "system-a"

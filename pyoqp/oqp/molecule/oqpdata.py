@@ -569,7 +569,7 @@ OQP_CONFIG_SCHEMA = {
         'first_hop_step': {'type': int, 'default': '2'},    # KNU/TLF2 convention: no propagation/hop at step 1
         'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
-        'nacme_gate': {'type': str, 'default': 'warn'},     # 'off' | 'warn' | 'error'
+        'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
         'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
         'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
         'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},

@@ -93,6 +93,14 @@ def _validate_gate_tolerances(label, values):
             f"[md] {label} gate tolerances must be finite and non-negative")
 
 
+def _validate_nacme_gate_activation(check, gate):
+    """Reject a policy that cannot observe any NACME reference diagnostic."""
+    if check == 'off' and gate != 'off':
+        raise ValueError(
+            "[md] nacme_gate must be off when nacme_check is off; enable "
+            "nacme_check=baeck_an before selecting warn or error")
+
+
 def _validate_distinct_output_paths(**paths):
     """Reject NAMD outputs that would overwrite or corrupt one another."""
     aliases = {}
@@ -193,7 +201,7 @@ def read_odp_wham_series(path):
     identity_keys = (
         'method', 'charge', 'functional', 'basis', 'scf_type',
         'scf_multiplicity', 'tdhf_type', 'tdhf_multiplicity', 'nstate', 'tlf',
-        'trajectory_representation',
+        'pcm', 'trajectory_representation',
     )
     system_identity = {
         key: restart_identity.get(key) for key in identity_keys
@@ -425,9 +433,10 @@ class NAMD:
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
         if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
             raise ValueError("[md] ba_gap_max must be positive and finite")
-        self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
+        self.nacme_gate = str(md.get('nacme_gate', 'off')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nacme_gate must be off, warn, or error")
+        _validate_nacme_gate_activation(self.nacme_check, self.nacme_gate)
         self.nacme_gate_invariant_tol = float(
             md.get('nacme_gate_invariant_tol', 1.0e-10))
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
@@ -521,6 +530,7 @@ class NAMD:
         self._ba_last = None
         self._nacme_gate_failures = 0
         self._nacme_gate_last = None
+        self._pending_nacme_gate_error = None
         self._nacme_reference_tdc = None
         self._nacme_reference_mask = None
         self._nacme_reference_source = 0
@@ -717,6 +727,46 @@ class NAMD:
             return self._remove_com_motion(v)
         raise ValueError(f"[md] velocity='{self.velocity_source}' is not zero/maxwell or a readable file")
 
+    def _initial_temperature_metadata(self):
+        """Describe the actual initial kinetic temperature stored in the TRJ."""
+        requested = getattr(self, 'init_temp', None)
+        if hasattr(self, 'm_all') and hasattr(self, 'v_all'):
+            masses = np.asarray(self.m_all, dtype=np.float64).reshape(-1)
+            velocities = np.asarray(self.v_all, dtype=np.float64).reshape((-1, 3))
+            constraints = len(self._ci) if getattr(self, '_has_constraints', False) else 0
+            dof = 3*len(masses) - constraints - 3
+            source = 'restart' if getattr(self, 'restart_requested', False) else 'maxwell'
+        elif hasattr(self, 'mass') and hasattr(self, 'vel'):
+            masses = np.asarray(self.mass, dtype=np.float64).reshape(-1)
+            velocities = np.asarray(self.vel, dtype=np.float64).reshape((-1, 3))
+            dof = 3*len(masses) - 3
+            configured = str(getattr(self, 'velocity_source', '')).strip().lower()
+            if getattr(self, 'restart_requested', False):
+                source = 'restart'
+            elif configured in ('zero', 'none', '0'):
+                source = 'zero'
+            elif configured in ('maxwell', 'boltzmann', 'random'):
+                source = 'maxwell'
+            else:
+                source = 'file'
+        else:
+            masses = velocities = None
+            dof = None
+            source = 'unknown'
+
+        measured = None
+        if (dof is not None and dof > 0 and masses is not None
+                and velocities.shape == (len(masses), 3)):
+            kinetic = 0.5*np.sum(masses[:, None]*velocities**2)
+            if np.isfinite(kinetic):
+                measured = float(2.0*kinetic/(dof*KB_HARTREE))
+        return {
+            'measured_kelvin': measured,
+            'requested_kelvin': requested,
+            'dof': dof,
+            'velocity_source': source,
+        }
+
     def _remove_com_motion(self, v):
         p = (self.mass[:, None] * v).sum(axis=0)        # total momentum
         v = v - p / self.mass.sum()
@@ -872,6 +922,7 @@ class NAMD:
         self._nacme_reference_mask = None
         self._nacme_reference_source = 0
         self._nacme_gate_failures = 0
+        self._pending_nacme_gate_error = None
 
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
@@ -974,15 +1025,18 @@ class NAMD:
         self._write_nacme_audit_row(result)
 
         if self.nacme_gate == 'error':
+            error = None
             if invariant_failures:
-                raise RuntimeError(
+                error = RuntimeError(
                     f"NACME invariant gate failed for {source} at step {center_step}"
                 )
-            if self._nacme_gate_failures >= self.nacme_gate_consecutive:
-                raise RuntimeError(
+            elif self._nacme_gate_failures >= self.nacme_gate_consecutive:
+                error = RuntimeError(
                     f"NACME reference gate failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
+            if error is not None and self._pending_nacme_gate_error is None:
+                self._pending_nacme_gate_error = error
         return result
 
     def _write_nacme_audit_row(self, result):
@@ -1094,9 +1148,19 @@ class NAMD:
         if error is not None:
             raise error
 
+    def _enforce_nacme_gate(self):
+        """Stop only after the failing NACME matrices are in the dense TRJ."""
+        error = self._pending_nacme_gate_error
+        self._pending_nacme_gate_error = None
+        if error is not None:
+            raise error
+
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
-        gate_failure = getattr(self, '_pending_nve_gate_error', None) is not None
+        gate_failure = any(
+            getattr(self, name, None) is not None
+            for name in ('_pending_nacme_gate_error', '_pending_nve_gate_error')
+        )
         if istep % self.trajectory_interval != 0 and not gate_failure:
             return
         return self._run_io_rank(
@@ -1114,6 +1178,7 @@ class NAMD:
         trajectory_nstate = int(np.asarray(self.coef).size)
         dtype = _namd_trajectory_dtype(trajectory_nstate, len(coords), ncv)
         if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
+            temperature = self._initial_temperature_metadata()
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': trajectory_nstate,
@@ -1126,7 +1191,11 @@ class NAMD:
                 'electronic_representation': getattr(
                     self, '_trajectory_representation', 'same_spin_adiabatic'),
                 'ensemble': 'NVE',
-                'initial_temperature_kelvin': getattr(self, 'init_temp', None),
+                'initial_temperature_kelvin': temperature['measured_kelvin'],
+                'initial_temperature_degrees_of_freedom': temperature['dof'],
+                'requested_initial_temperature_kelvin': temperature[
+                    'requested_kelvin'],
+                'initial_velocity_source': temperature['velocity_source'],
                 'odp': self._odp_provenance(),
                 'wham': {
                     'reaction_coordinate_field': 'odp_xi',
@@ -1135,8 +1204,11 @@ class NAMD:
                     'unbiased_potential_field': 'e_unbiased_pot_hartree',
                     'energy_unit': 'hartree',
                     'temperature_note': (
-                        'NVE trajectory: initial_temperature_kelvin is not an '
-                        'NVT thermostat temperature'),
+                        'initial_temperature_kelvin is measured from the '
+                        'initial kinetic energy and stated degrees of freedom; '
+                        'requested_initial_temperature_kelvin is only a '
+                        'velocity-generation target, not an NVT thermostat '
+                        'temperature'),
                 },
                 'units': {
                     'time': 'fs', 'coordinates': 'bohr',
@@ -1305,7 +1377,7 @@ class NAMD:
                 'nacme_check', 'off')).strip().lower().replace('-', '_'),
             'ba_gap_max': float(md.get('ba_gap_max', 0.0734986443513)),
             'nacme_gate': str(md.get(
-                'nacme_gate', 'warn')).strip().lower(),
+                'nacme_gate', 'off')).strip().lower(),
             'nacme_gate_invariant_tol': float(md.get(
                 'nacme_gate_invariant_tol', 1.0e-10)),
             'nacme_gate_abs_tol': float(md.get(
@@ -1332,6 +1404,10 @@ class NAMD:
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
+            # Keep the complete normalized PCM section: every current field
+            # changes the solvent Hamiltonian, and future schema additions
+            # must become restart- and WHAM-visible without another allowlist.
+            'pcm': copy.deepcopy(cfg.get('pcm', {})),
             'dt_fs': self.dt_fs, 'seed': self.seed,
             'rng_stream': self.rng_stream,
             'substep': md.get('substep', ''),
@@ -1776,7 +1852,10 @@ class NAMD:
                 + float(np.asarray(mol.energies)[active_old])
                 + bias_energy
             )
-            if self._prepare_hop_step(istep):
+            hop_ready = self._prepare_hop_step(istep)
+            if getattr(self, '_pending_nacme_gate_error', None) is not None:
+                new_active, hopped = self.active, False
+            elif hop_ready:
                 new_active, hopped = self._hop()
             else:
                 new_active, hopped = self.active, False
@@ -1834,6 +1913,7 @@ class NAMD:
                    f'pop={np.array2string(pops, precision=4)}'),
         )
         self._write_md_trajectory(istep, r, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 
@@ -2400,7 +2480,10 @@ class NAMD_QMMM(NAMD):
             active_old = self.active
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
-            if self._prepare_hop_step(istep):
+            hop_ready = self._prepare_hop_step(istep)
+            if getattr(self, '_pending_nacme_gate_error', None) is not None:
+                new_active, hopped = self.active, False
+            elif hop_ready:
                 new_active, hopped = self._hop()
             else:
                 new_active, hopped = self.active, False
@@ -2443,6 +2526,7 @@ class NAMD_QMMM(NAMD):
         )
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 

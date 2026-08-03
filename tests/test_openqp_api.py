@@ -50,7 +50,7 @@ SCHEMA = {
         "first_hop_step": {"type": int, "default": "2"},
         "nacme_check": {"type": _string, "default": "off"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
-        "nacme_gate": {"type": _string, "default": "warn"},
+        "nacme_gate": {"type": _string, "default": "off"},
         "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
         "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
         "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
