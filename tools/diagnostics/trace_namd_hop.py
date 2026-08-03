@@ -37,7 +37,7 @@ class SequenceRNG:
 
 
 def build_trace_row(*, istep, dt_fs, active, hopped, last_hop_random,
-                    coef, params, tdc, cmhp):
+                    coef, params, tdc, cmhp, time_fs=None):
     """Build one stable trace row for any NAMD state count >= 2."""
     coef = np.asarray(coef)
     tdc = np.asarray(tdc, dtype=float)
@@ -54,11 +54,12 @@ def build_trace_row(*, istep, dt_fs, active, hopped, last_hop_random,
 
     return {
         "step": istep,
-        "t_fs": istep * dt_fs,
+        "t_fs": istep * dt_fs if time_fs is None else time_fs,
         "kernel_called": int(np.isfinite(last_hop_random)),
         "active": active,
         "hopped": int(bool(hopped)),
-        "random": params[3] if params.size > 3 else np.nan,
+        "random": (last_hop_random if np.isfinite(last_hop_random)
+                   else params[3] if params.size > 3 else np.nan),
         "pop_1": population(0),
         "pop_2": population(1),
         "pop_3": population(2),
@@ -119,6 +120,8 @@ def install_trace(
             istep=istep, dt_fs=self.dt_fs, active=self.active,
             hopped=hopped, last_hop_random=self._last_hop_random,
             coef=self.coef, params=params, tdc=tdc, cmhp=cmhp,
+            time_fs=(getattr(self, '_t_fs', istep*self.dt_fs)
+                     if getattr(self, 'dt_adaptive', False) else None),
         )
         write_header = not output.exists()
         with output.open("a", newline="") as handle:

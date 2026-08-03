@@ -14,13 +14,16 @@ def test_two_state_trace_uses_nan_for_three_state_only_columns():
         dt_fs=0.5,
         active=1,
         hopped=False,
-        last_hop_random=0.25,
+        last_hop_random=0.375,
         coef=np.array([np.sqrt(0.75), 0.5j]),
         params=np.array([0.0, 0.0, 0.0, 0.25]),
         tdc=np.array([[0.0, -0.1], [0.1, 0.0]]),
         cmhp=np.array([[0.0, 0.2], [0.3, 0.0]]),
+        time_fs=0.625,
     )
 
+    assert row["t_fs"] == 0.625
+    assert row["random"] == 0.375
     assert np.isclose(row["pop_1"], 0.75)
     assert np.isclose(row["pop_2"], 0.25)
     assert row["tdc_12_au"] == -0.1
@@ -75,6 +78,8 @@ def test_variant_loggers_write_trace_through_common_observer(tmp_path):
         instance.dt_fs = 0.5
         instance.active = 1
         instance._last_hop_random = 0.25
+        instance.dt_adaptive = True
+        instance._t_fs = 0.125 * instance.active
         instance.mol = SimpleNamespace(data={
             "OQP::namd_params": np.array([0.0, 0.0, 0.0, 0.25]),
             "OQP::namd_results": np.arange(4.0),
@@ -93,3 +98,5 @@ def test_variant_loggers_write_trace_through_common_observer(tmp_path):
         rows = list(csv.DictReader(stream))
     assert [row["step"] for row in rows] == ["1", "2", "3", "4", "5"]
     assert all(row["hopped"] == "1" for row in rows)
+    assert all(row["random"] == "0.25" for row in rows)
+    assert all(row["t_fs"] == "0.125" for row in rows)

@@ -136,7 +136,8 @@ import numpy as np
 import oqp.library.namd as namd_module
 from oqp.library.namd import (
     NAMD, read_namd_trajectory, _validate_gate_tolerances,
-    _validate_namd_sidecar_paths,
+    _validate_namd_sidecar_paths, _validate_soc_control_compatibility,
+    _validate_thermostat_parameters,
 )
 namd_module.dump_log = lambda *_args, **_kwargs: None
 
@@ -211,6 +212,17 @@ d._write_nacme_audit_row(dict(audit, evaluation_step=1))
 d._write_nacme_audit_row(dict(audit, evaluation_step=2, center_step=1,
                               signed_comparison=False))
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
+last_good_step = 1
+d.coef[0] = np.nan + 0j
+try:
+    d._save_restart(2, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
+except RuntimeError:
+    invalid_electronic_checkpoint_rejected = True
+else:
+    invalid_electronic_checkpoint_rejected = False
+with np.load(d.restart_file, allow_pickle=False) as last_good:
+    last_good_step = int(last_good['step'][0])
+d.coef = np.array([1+0j, 0+0j])
 
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
@@ -250,6 +262,27 @@ with open(pdb_path, 'a', encoding='utf-8') as stream:
 q._qmmm_restart_identity_cache = None
 signature_after = q._restart_signature()
 
+class SystemMol:
+    config = {
+        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*',
+                  'charge': 0, 'system': 'H 0 0 0\nH 0 0 0.7'},
+        'scf': {'multiplicity': 1},
+        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
+        'md': {},
+    }
+    @staticmethod
+    def get_atoms():
+        return np.array([1, 1])
+    @staticmethod
+    def get_mass():
+        return np.array([1.00784, 1.00784])
+system_driver = NAMD.__new__(NAMD); system_driver.mol = SystemMol()
+system_driver.dt_fs = 0.5; system_driver.seed = 1; system_driver.rng_stream = 2
+system_signature_before = system_driver._restart_signature()
+SystemMol.config['input']['charge'] = 1
+system_driver._molecular_restart_identity_cache = None
+system_signature_after = system_driver._restart_signature()
+
 rejected_tolerances = []
 for name, values in (
         ('nan', (1.0e-10, np.nan, 1.0)),
@@ -258,6 +291,20 @@ for name, values in (
         _validate_gate_tolerances('test gate', *values)
     except ValueError:
         rejected_tolerances.append(name)
+try:
+    _validate_thermostat_parameters(300.0, 0.0, True)
+except ValueError:
+    zero_friction_rejected = True
+else:
+    zero_friction_rejected = False
+soc_rejections = []
+for name, nve_gate, dense in (
+        ('nve', 'warn', (False,)),
+        ('dense', 'off', (True,))):
+    try:
+        _validate_soc_control_compatibility(True, nve_gate, dense)
+    except NotImplementedError:
+        soc_rejections.append(name)
 try:
     _validate_namd_sidecar_paths(
         trajectory_file=os.path.join(root, 'collision.dat'),
@@ -334,7 +381,12 @@ print('DENSE=' + json.dumps({
     'audit_rows': len(audit_lines) - 1,
     'audit_signed': audit_row['signed'],
     'qmmm_signature_changed': signature_before != signature_after,
+    'system_signature_changed': system_signature_before != system_signature_after,
     'rejected_tolerances': rejected_tolerances,
+    'zero_friction_rejected': zero_friction_rejected,
+    'soc_rejections': soc_rejections,
+    'invalid_electronic_checkpoint_rejected': invalid_electronic_checkpoint_rejected,
+    'last_good_step': last_good_step,
     'sidecar_collision_rejected': sidecar_collision_rejected,
     'manifest_geom_rebased': geom_path in rebased_manifest,
     'manifest_topology_rebased': topology_path in rebased_manifest,
@@ -380,7 +432,12 @@ print('DENSE=' + json.dumps({
         'loaded_droplet': 0.02, 'loaded_thermostat_cumulative': 0.003,
         'audit_rows': 1, 'audit_signed': 'True',
         'qmmm_signature_changed': True,
+        'system_signature_changed': True,
         'rejected_tolerances': ['nan', 'inf'],
+        'zero_friction_rejected': True,
+        'soc_rejections': ['nve', 'dense'],
+        'invalid_electronic_checkpoint_rejected': True,
+        'last_good_step': 1,
         'sidecar_collision_rejected': True,
         'manifest_geom_rebased': True, 'manifest_topology_rebased': True,
         'manifest_forcefield_rebased': True,

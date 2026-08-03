@@ -95,6 +95,18 @@ def _validate_gate_tolerances(label, *values):
         raise ValueError(f'[md] {label} tolerances must be finite and non-negative')
 
 
+def _validate_thermostat_parameters(temperature, friction, enabled):
+    """Validate Langevin parameters, including a nonzero coupling rate."""
+    values = np.asarray((temperature, friction), dtype=float)
+    if not np.all(np.isfinite(values)) or np.any(values < 0.0):
+        raise ValueError(
+            '[md] thermostat_temperature and thermostat_friction must be '
+            'finite and non-negative')
+    if enabled and friction <= 0.0:
+        raise ValueError(
+            '[md] thermostat_friction must be positive for Langevin NVT')
+
+
 def _validate_namd_sidecar_paths(**paths):
     """Require binary, text, and checkpoint sidecars to have distinct paths."""
     normalized = {}
@@ -104,6 +116,20 @@ def _validate_namd_sidecar_paths(**paths):
             raise ValueError(
                 f'[md] {name} and {normalized[canonical]} must use distinct paths')
         normalized[canonical] = name
+
+
+def _validate_soc_control_compatibility(soc_requested, nve_gate,
+                                        dense_controls):
+    """Reject same-spin-only validation and persistence controls for SOC."""
+    if not soc_requested:
+        return
+    if nve_gate != 'off':
+        raise NotImplementedError(
+            '[md] nve_gate currently supports same-spin NAMD only')
+    if any(dense_controls):
+        raise NotImplementedError(
+            '[md] dense trajectory/restart controls currently support '
+            'same-spin NAMD only')
 
 
 def _restart_asset_path(value, source_directory, *, filelike_only=False):
@@ -363,14 +389,9 @@ class NAMD:
         self.thermostat_temperature = float(
             md.get('thermostat_temperature', self.init_temp))
         self.thermostat_friction = float(md.get('thermostat_friction', 1.0))
-        if (not np.all(np.isfinite((self.thermostat_temperature,
-                                    self.thermostat_friction)))
-                or self.thermostat_temperature < 0.0
-                or self.thermostat_friction < 0.0):
-            raise ValueError(
-                "[md] thermostat_temperature and thermostat_friction must be "
-                "finite and non-negative"
-            )
+        _validate_thermostat_parameters(
+            self.thermostat_temperature, self.thermostat_friction,
+            self.thermostat == 'langevin')
         self.trajectory_interval = int(md.get('trajectory_interval', 1))
         self.restart_interval = int(md.get('restart_interval', 1))
         if self.trajectory_interval < 1 or self.restart_interval < 1:
@@ -392,6 +413,15 @@ class NAMD:
         )
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
+        soc_dense_controls = (
+            bool(str(md.get('trajectory_file', '') or '').strip()),
+            bool(str(md.get('nacme_audit_file', '') or '').strip()),
+            bool(str(md.get('restart_file', '') or '').strip()),
+            self.trajectory_interval != 1,
+            self.restart_interval != 1,
+        )
+        _validate_soc_control_compatibility(
+            soc_requested, self.nve_gate, soc_dense_controls)
         if soc_requested and self.nacme_check != 'off':
             raise NotImplementedError(
                 "[md] nacme_check currently supports same-spin NAMD only"
@@ -1475,10 +1505,40 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'molecular_system': self._molecular_restart_identity(),
             'qmmm': self._qmmm_restart_identity(),
             'independent_controls': self._independent_settings_record(),
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
+
+    def _molecular_restart_identity(self):
+        """Fingerprint the all-QM atom sequence, charge, spin, and input system."""
+        cached = getattr(self, '_molecular_restart_identity_cache', None)
+        if cached is not None:
+            return cached
+        cfg = self.mol.config
+        input_cfg = cfg.get('input', {})
+        scf_cfg = cfg.get('scf', {})
+        system = input_cfg.get('system', '')
+        system_digest = hashlib.sha256(
+            str(system).encode('utf-8')).hexdigest() if system else ''
+        identity = {
+            'charge': input_cfg.get('charge', ''),
+            'multiplicity': scf_cfg.get('multiplicity', ''),
+            'system_sha256': system_digest,
+        }
+        try:
+            identity['atomic_numbers'] = np.asarray(
+                self.mol.get_atoms(), dtype=int).reshape(-1).tolist()
+        except (AttributeError, TypeError, ValueError):
+            pass
+        try:
+            identity['masses_amu'] = np.asarray(
+                self.mol.get_mass(), dtype=float).reshape(-1).tolist()
+        except (AttributeError, TypeError, ValueError):
+            pass
+        self._molecular_restart_identity_cache = identity
+        return identity
 
     def _qmmm_restart_identity(self):
         """Fingerprint the QM/MM model and topology used by this trajectory."""
@@ -1555,6 +1615,33 @@ class NAMD:
             raise RuntimeError(
                 f'refusing to overwrite the last-good NAMD restart with an '
                 f'invalid nuclear state at step {istep}')
+        critical_state = {
+            'coef': self.coef,
+            'prev_xyz': self.prev_xyz,
+            'ba_energy_left': self._ba_energy_left,
+            'ba_energy_center': self._ba_energy_center,
+            'ba_tdc_left': self._ba_tdc_left,
+            'last_state_overlap': self._last_state_overlap,
+            'last_overlap_tdc': self._last_overlap_tdc,
+            'nacme_reference_tdc': self._nacme_reference_tdc,
+        }
+        invalid = []
+        for name, value in critical_state.items():
+            if value is None:
+                continue
+            array = np.asarray(value)
+            if array.dtype.kind in 'biufc' and not np.all(np.isfinite(array)):
+                invalid.append(name)
+        if np.asarray(self.coef).reshape(-1).size != self.nstate:
+            invalid.append('coef_shape')
+        for key, value in self.prev_data.items():
+            array = np.asarray(value)
+            if array.dtype.kind in 'biufc' and not np.all(np.isfinite(array)):
+                invalid.append(f'prev_data[{key!r}]')
+        if invalid:
+            raise RuntimeError(
+                f'refusing to overwrite the last-good NAMD restart with an '
+                f'invalid electronic state at step {istep}: {", ".join(invalid)}')
         prev_keys = sorted(self.prev_data)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
