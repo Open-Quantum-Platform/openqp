@@ -252,6 +252,20 @@ class OQPTester:
             "", "zero", "none", "0", "maxwell", "boltzmann", "random"
         }:
             md["velocity"] = runtime_path(velocity)
+        # Tight-binding adapters resolve relative paths first against the
+        # input directory and then against Path.cwd().  Preserve that fallback
+        # when the worker changes cwd to its isolated case directory.  Only
+        # rewrite caller-owned paths that exist there, so input-directory paths
+        # and package/environment defaults retain their normal resolution.
+        for section, keys in (
+            ("dftb", ("parameter_path", "library_path", "executable")),
+            ("xtb", ("parameter_path", "library_path")),
+        ):
+            config = mol.config.get(section, {})
+            for key in keys:
+                value = config.get(key)
+                if isinstance(value, str) and os.path.exists(runtime_path(value)):
+                    config[key] = runtime_path(value)
         qmmm = mol.config.get("qmmm", {})
         for key in ("pdb_file", "qm_atoms_xyz"):
             value = qmmm.get(key)

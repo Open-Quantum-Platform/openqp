@@ -934,6 +934,15 @@ class TestOQPTesterCollection(unittest.TestCase):
                 self.mol = types.SimpleNamespace(config={
                     "guess": {"file": "guess.json", "file2": "old.json"},
                     "md": {"velocity": "velocity.dat"},
+                    "dftb": {
+                        "parameter_path": "dftb-params",
+                        "library_path": "libdftb.so",
+                        "executable": "dftb-probe",
+                    },
+                    "xtb": {
+                        "parameter_path": "gfn1.opxtb",
+                        "library_path": "libxtb.so",
+                    },
                     "qmmm": {
                         "pdb_file": "system.pdb",
                         "qm_atoms_xyz": "qm.xyz",
@@ -955,6 +964,9 @@ class TestOQPTesterCollection(unittest.TestCase):
             self._write(root / "system.pdb")
             self._write(root / "qm.xyz")
             self._write(root / "local.xml")
+            (root / "dftb-params").mkdir()
+            for name in ("libdftb.so", "dftb-probe", "gfn1.opxtb", "libxtb.so"):
+                self._write(root / name)
             worker_cwd = Path.cwd()
 
             with load_oqp_tester(
@@ -976,6 +988,26 @@ class TestOQPTesterCollection(unittest.TestCase):
                 config["guess"]["file2"], str((root / "old.json").resolve()))
             self.assertEqual(
                 config["md"]["velocity"], str((root / "velocity.dat").resolve()))
+            self.assertEqual(
+                config["dftb"]["parameter_path"],
+                str((root / "dftb-params").resolve()),
+            )
+            self.assertEqual(
+                config["dftb"]["library_path"],
+                str((root / "libdftb.so").resolve()),
+            )
+            self.assertEqual(
+                config["dftb"]["executable"],
+                str((root / "dftb-probe").resolve()),
+            )
+            self.assertEqual(
+                config["xtb"]["parameter_path"],
+                str((root / "gfn1.opxtb").resolve()),
+            )
+            self.assertEqual(
+                config["xtb"]["library_path"],
+                str((root / "libxtb.so").resolve()),
+            )
             self.assertEqual(
                 config["qmmm"]["pdb_file"], str((root / "system.pdb").resolve()))
             self.assertEqual(
