@@ -1,0 +1,461 @@
+"""Native ODP umbrella equations, invariants, restart, and provenance gates."""
+
+import json
+import math
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+import numpy as np
+import pytest
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_odp_kernel_is_fortran_resident_and_c_interoperable():
+    source = (ROOT / "source" / "modules" / "odp_umbrella.F90").read_text()
+    header = (ROOT / "include" / "oqp.h").read_text()
+    driver = (ROOT / "pyoqp" / "oqp" / "library" / "odp.py").read_text()
+
+    assert 'bind(C, name="oqp_odp_umbrella_evaluate")' in source
+    assert "int oqp_odp_umbrella_evaluate(" in header
+    assert "oqp.oqp_odp_umbrella_evaluate(" in driver
+    assert "gradient = gradient - odp['force']" in (
+        ROOT / "pyoqp" / "oqp" / "library" / "namd.py"
+    ).read_text()
+    assert "abs(" not in source.split("xi =", 1)[1].splitlines()[0]
+
+
+def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
+    sys.path.insert(0, str(ROOT / "pyoqp"))
+    from oqp.library.odp import ODPUmbrella, parse_odp_cv_specification
+
+    types, atoms, labels = parse_odp_cv_specification(
+        "distance(1,2); asymmetric_distance(1,2,1,3); angle(4,5,6)"
+    )
+    assert types.tolist() == [1, 2, 3]
+    assert atoms.tolist() == [[0, 1, -1, -1], [0, 1, 0, 2], [3, 4, 5, -1]]
+    assert labels == (
+        "distance(1,2)", "asymmetric_distance(1,2,1,3)", "angle(4,5,6)")
+    with pytest.raises(ValueError, match="scale requires exactly 3"):
+        ODPUmbrella({
+            "enabled": True, "cv": "; ".join(labels), "scale": [1.0],
+            "reference_r": [1.0, 0.0, 1.0],
+            "reference_p": [2.0, 0.5, 2.0], "k_parallel": 0.1,
+        })
+    with pytest.raises(ValueError, match="unsupported CV"):
+        parse_odp_cv_specification("nearest_atom(1,2,3)")
+
+
+def test_built_odp_randomized_fd_invariance_signed_progress_and_singularities():
+    script = r'''
+import json
+import math
+import numpy as np
+from oqp.library.odp import ODPUmbrella
+
+section = {
+    "enabled": True,
+    "cv": "distance(1,2); asymmetric_distance(1,2,1,3); angle(4,5,6)",
+    "scale": [0.7, 0.6, 0.9],
+    "reference_r": [1.0, 0.1, 1.3],
+    "reference_p": [1.8, -0.5, 2.0],
+    "center": 0.35,
+    "k_parallel": 0.08,
+    "k_perpendicular": 0.03,
+    "window": 7,
+}
+odp = ODPUmbrella(section)
+
+def raw_cv(x):
+    d12 = np.linalg.norm(x[0] - x[1])
+    asym = d12 - np.linalg.norm(x[0] - x[2])
+    a = x[3] - x[4]
+    b = x[5] - x[4]
+    cosine = np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
+    angle = math.acos(np.clip(cosine, -1.0, 1.0))
+    return np.array([d12, asym, angle])
+
+def oracle_energy(x):
+    raw = raw_cv(x)
+    scaled = np.array(section["scale"])*raw
+    reactant = np.array(section["scale"])*np.array(section["reference_r"])
+    direction = np.array(section["scale"])*(np.array(section["reference_p"])
+                                              - np.array(section["reference_r"]))
+    displacement = scaled - reactant
+    xi = np.dot(displacement, direction)/np.dot(direction, direction)
+    perpendicular = displacement - xi*direction
+    energy_parallel = 0.5*section["k_parallel"]*(xi - section["center"])**2
+    energy_perpendicular = 0.5*section["k_perpendicular"]*np.dot(
+        perpendicular, perpendicular)
+    return energy_parallel + energy_perpendicular, xi, raw, perpendicular
+
+rng = np.random.default_rng(20260803)
+base = np.array([
+    [0.0, 0.0, 0.0], [1.2, 0.1, 0.0], [0.2, 1.1, 0.3],
+    [3.0, 0.0, 0.0], [4.0, 0.2, 0.0], [3.2, 1.1, 0.4],
+])
+max_energy_error = 0.0
+max_force_error = 0.0
+max_translation_force = 0.0
+max_torque = 0.0
+max_rotation_energy_error = 0.0
+max_rotation_force_error = 0.0
+h = 1.0e-6
+for _ in range(16):
+    xyz = base + rng.normal(scale=0.12, size=base.shape)
+    native = odp.evaluate(xyz)
+    expected, expected_xi, expected_raw, expected_perp = oracle_energy(xyz)
+    max_energy_error = max(max_energy_error, abs(native["energy"] - expected),
+                           abs(native["xi"] - expected_xi),
+                           np.max(np.abs(native["cv_raw"] - expected_raw)),
+                           np.max(np.abs(native["cv_perpendicular"] - expected_perp)))
+    fd_force = np.zeros_like(xyz)
+    for atom in range(len(xyz)):
+        for axis in range(3):
+            plus = xyz.copy(); plus[atom, axis] += h
+            minus = xyz.copy(); minus[atom, axis] -= h
+            fd_force[atom, axis] = -(odp.evaluate(plus)["energy"]
+                                     - odp.evaluate(minus)["energy"])/(2*h)
+    native = odp.evaluate(xyz)
+    max_force_error = max(max_force_error,
+                          np.max(np.abs(native["force"] - fd_force)))
+    max_translation_force = max(max_translation_force,
+                                np.linalg.norm(native["force"].sum(axis=0)))
+    max_torque = max(max_torque,
+                     np.linalg.norm(np.cross(xyz, native["force"]).sum(axis=0)))
+
+    matrix = rng.normal(size=(3, 3))
+    q, _ = np.linalg.qr(matrix)
+    if np.linalg.det(q) < 0:
+        q[:, 0] *= -1
+    shift = rng.normal(size=3)
+    transformed = xyz @ q.T + shift
+    rotated = odp.evaluate(transformed)
+    max_rotation_energy_error = max(
+        max_rotation_energy_error, abs(rotated["energy"] - native["energy"]))
+    max_rotation_force_error = max(
+        max_rotation_force_error,
+        np.max(np.abs(rotated["force"] - native["force"] @ q.T)))
+
+distance = ODPUmbrella({
+    "enabled": True, "cv": "distance(1,2)", "scale": [0.5],
+    "reference_r": [2.0], "reference_p": [3.0], "center": 0.5,
+    "k_parallel": 0.1, "k_perpendicular": 0.0,
+})
+negative = distance.evaluate(np.array([[0., 0., 0.], [1., 0., 0.]]))["xi"]
+beyond = distance.evaluate(np.array([[0., 0., 0.], [4., 0., 0.]]))["xi"]
+
+singular_distance = None
+try:
+    distance.evaluate(np.zeros((2, 3)))
+except RuntimeError as exc:
+    singular_distance = str(exc)
+singular_angle = None
+angle = ODPUmbrella({
+    "enabled": True, "cv": "angle(1,2,3)", "scale": [1.0],
+    "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,
+    "k_parallel": 0.1, "k_perpendicular": 0.0,
+})
+try:
+    angle.evaluate(np.array([[0., 0., 0.], [1., 0., 0.], [2., 0., 0.]]))
+except RuntimeError as exc:
+    singular_angle = str(exc)
+
+print("ODP=" + json.dumps({
+    "max_energy_error": max_energy_error,
+    "max_force_error": max_force_error,
+    "max_translation_force": max_translation_force,
+    "max_torque": max_torque,
+    "max_rotation_energy_error": max_rotation_energy_error,
+    "max_rotation_force_error": max_rotation_force_error,
+    "negative": negative, "beyond": beyond,
+    "singular_distance": singular_distance,
+    "singular_angle": singular_angle,
+}))
+'''
+    env = os.environ.copy()
+    pythonpath = str(ROOT / "pyoqp")
+    if env.get("PYTHONPATH"):
+        pythonpath += os.pathsep + env["PYTHONPATH"]
+    env["PYTHONPATH"] = pythonpath
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(
+        (line for line in result.stdout.splitlines() if line.startswith("ODP=")), None)
+    assert marker is not None, result.stdout + result.stderr
+    values = json.loads(marker.removeprefix("ODP="))
+    assert values["max_energy_error"] < 2.0e-14
+    assert values["max_force_error"] < 2.0e-9
+    assert values["max_translation_force"] < 2.0e-14
+    assert values["max_torque"] < 2.0e-13
+    assert values["max_rotation_energy_error"] < 2.0e-14
+    assert values["max_rotation_force_error"] < 2.0e-13
+    assert values["negative"] == pytest.approx(-1.0)
+    assert values["beyond"] == pytest.approx(2.0)
+    assert "singular distance" in values["singular_distance"]
+    assert "collinear angle" in values["singular_angle"]
+
+
+def test_odp_packed_trj_and_restart_preserve_wham_provenance(tmp_path):
+    script = r'''
+import json
+import os
+from types import SimpleNamespace
+import numpy as np
+import oqp.library.namd as namd_module
+from oqp.library.namd import NAMD, read_namd_trajectory, read_odp_wham_series
+from oqp.library.odp import ODPUmbrella
+namd_module.dump_log = lambda *_args, **_kwargs: None
+
+root = os.environ["OQP_ODP_TEST_ROOT"]
+class Mol:
+    log = os.path.join(root, "job.log")
+    oqp_canonical_input = (
+        "mrsf(nstate=2)/bhhlyp/6-31g*\n"
+        "namd(S1,nstep=2,dt=0.5)\n"
+        "odp(enabled=true,cv=\"distance(1,2)\",scale=\"1.0\","
+        "reference_r=\"1.0\",reference_p=\"2.0\",center=0.5,"
+        "k_parallel=0.1,window=4)\ngeom=\"h2.xyz\"\n"
+    )
+    config = {
+        "input": {"method": "tdhf", "functional": "bhhlyp", "basis": "6-31g*"},
+        "tdhf": {"type": "mrsf", "nstate": 2, "tlf": 2},
+        "md": {"substep": 2, "decoherence": "off", "edc_c": 0.1,
+               "thrshe": 1.0, "tdc": "fd", "trivial": False,
+               "trivial_thresh": 0.5, "first_hop_step": 2},
+    }
+    data = {"OQP::td_energies": np.array([0.0, 0.1])}
+    @staticmethod
+    def get_state_tracking():
+        return None
+    def put_data(self, data):
+        self.loaded = data
+
+d = NAMD.__new__(NAMD)
+d.mol = Mol(); d.nstate = 2; d.dt_fs = 0.5; d.dt_adaptive = False
+d._t_fs = 0.0; d.active = 1; d.coef = np.array([1.+0j, 0.+0j])
+d.vel = np.zeros((2, 3)); d.trajectory_interval = 1
+d.trajectory_file = os.path.join(root, "odp.namd.trj")
+d.nacme_audit_file = os.path.join(root, "odp.nacme.tsv")
+d.restart_file = os.path.join(root, "odp.restart.npz")
+d.restart_manifest_file = os.path.join(root, "restart.oqp")
+d.restart_interval = 1; d.restart_requested = False
+d.seed = 1; d.rng_stream = 0; d.init_temp = 300.0; d._rng_step = 1
+d._last_hop_random = 0.25; d._last_state_overlap = None
+d._last_overlap_tdc = None; d._nacme_reference_tdc = None
+d._nacme_reference_mask = None; d._nacme_reference_source = 0
+d._nacme_gate_last = None; d._nve_gate_last = None
+d._nacme_gate_failures = 0; d._nve_gate_failures = 0
+d._ba_energy_left = d._ba_energy_center = d._ba_tdc_left = d._ba_dt_left = None
+d._nve_reference_energy = d._nve_previous_energy = None
+d.prev_xyz = np.zeros(6); d.prev_data = {"x": np.array([1.0])}
+d.odp = ODPUmbrella({
+    "enabled": True, "cv": "distance(1,2)", "scale": [1.0],
+    "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,
+    "k_parallel": 0.1, "k_perpendicular": 0.0, "window": 4,
+})
+coords = np.array([[0., 0., 0.], [1.4, 0., 0.]])
+d._odp_last = d.odp.evaluate(coords)
+d._unbiased_potential_energy = -1.2
+d._write_md_trajectory(1, coords, -1.2 + d._odp_last["energy"], 0.3, False)
+d._save_restart(1, coords, np.zeros_like(coords), np.ones_like(coords))
+header, records = read_namd_trajectory(d.trajectory_file)
+series = read_odp_wham_series(d.trajectory_file)
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    restart_provenance = json.loads(str(saved["odp_provenance"][0]))
+d2 = NAMD.__new__(NAMD)
+d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
+d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
+d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
+d2.odp = ODPUmbrella({
+    "enabled": True, "cv": "distance(1,2)", "scale": [1.0],
+    "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,
+    "k_parallel": 0.1, "k_perpendicular": 0.0, "window": 4,
+})
+restored = d2._load_restart()
+restored_odp = d2.odp.evaluate(restored["coordinates"])
+payload = {
+    "header": header,
+    "xi": float(records["odp_xi"][0]),
+    "window": int(records["odp_window"][0]),
+    "bias": float(records["odp_bias_hartree"][0]),
+    "unbiased": float(records["e_unbiased_pot_hartree"][0]),
+    "series_xi": float(series["xi"][0]),
+    "restart_provenance": restart_provenance,
+    "restart_nuclear_exact": (
+        np.array_equal(restored["coordinates"], coords)
+        and np.array_equal(restored["velocities"], np.zeros_like(coords))
+        and np.array_equal(restored["acceleration"], np.ones_like(coords))
+    ),
+    "restart_odp_exact": (
+        restored_odp["energy"] == d._odp_last["energy"]
+        and restored_odp["xi"] == d._odp_last["xi"]
+        and np.array_equal(restored_odp["force"], d._odp_last["force"])
+    ),
+    "manifest": open(d.restart_manifest_file).read(),
+}
+del records
+print("ODP_IO=" + json.dumps(payload))
+'''
+    env = os.environ.copy()
+    pythonpath = str(ROOT / "pyoqp")
+    if env.get("PYTHONPATH"):
+        pythonpath += os.pathsep + env["PYTHONPATH"]
+    env["PYTHONPATH"] = pythonpath
+    env["OQP_ODP_TEST_ROOT"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(
+        (line for line in result.stdout.splitlines() if line.startswith("ODP_IO=")), None)
+    assert marker is not None, result.stdout + result.stderr
+    values = json.loads(marker.removeprefix("ODP_IO="))
+    assert values["header"]["ensemble"] == "NVE"
+    assert values["header"]["odp"]["window"] == 4
+    assert values["header"]["wham"]["reaction_coordinate_field"] == "odp_xi"
+    assert values["window"] == 4
+    assert values["xi"] == pytest.approx(0.4)
+    assert values["series_xi"] == pytest.approx(0.4)
+    assert values["unbiased"] == pytest.approx(-1.2)
+    assert values["bias"] == pytest.approx(0.0005)
+    assert values["restart_provenance"] == values["header"]["odp"]
+    assert values["restart_nuclear_exact"] is True
+    assert values["restart_odp_exact"] is True
+    assert "odp(" in values["manifest"]
+    assert "restart=true" in values["manifest"]
+
+
+def test_python_wham_recovers_synthetic_unbiased_distribution(tmp_path):
+    script = r'''
+import json
+import os
+import struct
+import numpy as np
+from oqp.library.namd import (
+    NAMD_TRAJECTORY_MAGIC, NAMD_TRAJECTORY_SCHEMA_VERSION,
+    _namd_trajectory_dtype,
+)
+from oqp.library.odp import KB_HARTREE_PER_KELVIN, odp_wham
+
+root = os.environ["OQP_ODP_WHAM_ROOT"]
+temperature = 300.0
+beta = 1.0/(KB_HARTREE_PER_KELVIN*temperature)
+k_unbiased = 0.002
+k_umbrella = 0.006
+centers = [-1.2, -0.6, 0.0, 0.6, 1.2]
+rng = np.random.default_rng(24681357)
+paths = []
+dtype = _namd_trajectory_dtype(1, 1, 1)
+for window, center in enumerate(centers):
+    mean = k_umbrella*center/(k_unbiased + k_umbrella)
+    sigma = np.sqrt(1.0/(beta*(k_unbiased + k_umbrella)))
+    xi = rng.normal(mean, sigma, size=12000)
+    umbrella = 0.5*k_umbrella*(xi - center)**2
+    unbiased = 0.5*k_unbiased*xi**2
+    records = np.zeros(xi.size, dtype=dtype)
+    records["step"] = np.arange(xi.size)
+    records["odp_window"] = window
+    records["odp_xi"] = xi
+    records["odp_cv_raw"][:, 0] = xi
+    records["odp_cv_scaled"][:, 0] = xi
+    records["odp_cv_perpendicular"][:, 0] = 0.0
+    records["odp_perpendicular_norm"] = 0.0
+    records["odp_bias_parallel_hartree"] = umbrella
+    records["odp_bias_perpendicular_hartree"] = 0.0
+    records["odp_bias_hartree"] = umbrella
+    records["e_unbiased_pot_hartree"] = unbiased
+    records["e_pot_hartree"] = unbiased + umbrella
+    records["e_tot_hartree"] = unbiased + umbrella
+    provenance = {
+        "enabled": True, "window": window, "cv": ["distance(1,2)"],
+        "cv_atom_indexing": "1-based", "cv_native_units": ["bohr"],
+        "scale": [1.0],
+        "reference_r": [0.0], "reference_p": [1.0],
+        "scaled_path_length": 1.0,
+        "center": center, "k_parallel_hartree": k_umbrella,
+        "k_perpendicular_hartree": 0.0,
+        "perpendicular_restraint": False,
+        "projection": "signed_scaled_dot_over_path_norm_squared",
+    }
+    header = {
+        "schema_version": NAMD_TRAJECTORY_SCHEMA_VERSION,
+        "nstate": 1, "natom": 1, "ncv": 1,
+        "record_bytes": dtype.itemsize, "signature": "synthetic",
+        "ensemble": "NVT", "odp": provenance,
+    }
+    encoded = json.dumps(header, sort_keys=True).encode("utf-8")
+    path = os.path.join(root, f"window-{window}.namd.trj")
+    with open(path, "wb") as stream:
+        stream.write(NAMD_TRAJECTORY_MAGIC)
+        stream.write(struct.pack("<Q", len(encoded)))
+        stream.write(encoded)
+        stream.write(records.tobytes(order="C"))
+    paths.append(path)
+
+output = os.path.join(root, "wham.npz")
+result = odp_wham(paths, temperature, bins=100, tolerance=1.0e-11, output=output)
+mean = np.sum(result["sample_weights"]*result["sample_xi"])
+variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
+with np.load(output, allow_pickle=False) as saved:
+    metadata = json.loads(str(saved["metadata_json"][0]))
+    saved_centers = saved["window_centers"].tolist()
+print("ODP_WHAM=" + json.dumps({
+    "mean": mean,
+    "variance": variance,
+    "expected_variance": 1.0/(beta*k_unbiased),
+    "iterations": result["iterations"],
+    "residual": result["residual"],
+    "probability_sum": float(result["probability"].sum()),
+    "overlap_row_sums": result["window_overlap"].sum(axis=1).tolist(),
+    "effective_sample_size": result["effective_sample_size"],
+    "ensemble_warning": result["ensemble_warning"],
+    "metadata_converged": metadata["converged"],
+    "metadata_hashes": metadata["trajectory_sha256"],
+    "saved_centers": saved_centers,
+}))
+'''
+    env = os.environ.copy()
+    pythonpath = str(ROOT / "pyoqp")
+    if env.get("PYTHONPATH"):
+        pythonpath += os.pathsep + env["PYTHONPATH"]
+    env["PYTHONPATH"] = pythonpath
+    env["OQP_ODP_WHAM_ROOT"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=ROOT, env=env,
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout + result.stderr)
+    marker = next(
+        (line for line in result.stdout.splitlines()
+         if line.startswith("ODP_WHAM=")), None)
+    assert marker is not None, result.stdout + result.stderr
+    values = json.loads(marker.removeprefix("ODP_WHAM="))
+    assert abs(values["mean"]) < 0.025
+    assert values["variance"] == pytest.approx(
+        values["expected_variance"], rel=0.04)
+    assert values["residual"] < 1.0e-11
+    assert values["probability_sum"] == pytest.approx(1.0, abs=1.0e-12)
+    assert values["overlap_row_sums"] == pytest.approx([1.0]*5, abs=1.0e-12)
+    assert values["effective_sample_size"] > 10000
+    assert values["ensemble_warning"] is None
+    assert values["metadata_converged"] is True
+    assert all(len(value) == 64 for value in values["metadata_hashes"])
+    assert values["saved_centers"] == pytest.approx(
+        [-1.2, -0.6, 0.0, 0.6, 1.2])

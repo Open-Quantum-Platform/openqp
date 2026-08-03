@@ -39,6 +39,7 @@ import numpy as np
 import oqp
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
 from oqp.library.nac_utils import canonical_state_overlap
+from oqp.library.odp import odp_from_config
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_section_name
 from oqp.utils.file_utils import dump_log
 
@@ -56,19 +57,20 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 1
-NAMD_TRAJECTORY_SCHEMA_VERSION = 2
+NAMD_RESTART_SCHEMA_VERSION = 2
+NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
 
-def _namd_trajectory_dtype(nstate, natom):
+def _namd_trajectory_dtype(nstate, natom, ncv=0):
     """Fixed-width, appendable binary record used by ``*.namd.trj``."""
     matrix = (nstate, nstate)
     vectors = (natom, 3)
     return np.dtype([
         ('step', '<i8'), ('time_fs', '<f8'), ('active', '<i4'),
         ('hopped', 'i1'), ('rng', '<f8'),
-        ('e_pot_hartree', '<f8'), ('e_kin_hartree', '<f8'),
+        ('e_unbiased_pot_hartree', '<f8'), ('e_pot_hartree', '<f8'),
+        ('e_kin_hartree', '<f8'),
         ('e_tot_hartree', '<f8'), ('state_energies', '<f8', (nstate,)),
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
@@ -79,6 +81,13 @@ def _namd_trajectory_dtype(nstate, natom):
         ('gate_counts', '<i8', (3,)), ('gate_metrics', '<f8', (7,)),
         ('nve_verdict', 'i1'), ('nve_streak', '<i8'),
         ('nve_metrics', '<f8', (4,)),
+        ('odp_window', '<i8'), ('odp_xi', '<f8'),
+        ('odp_cv_raw', '<f8', (ncv,)), ('odp_cv_scaled', '<f8', (ncv,)),
+        ('odp_cv_perpendicular', '<f8', (ncv,)),
+        ('odp_perpendicular_norm', '<f8'),
+        ('odp_bias_parallel_hartree', '<f8'),
+        ('odp_bias_perpendicular_hartree', '<f8'),
+        ('odp_bias_hartree', '<f8'),
         ('tracking_valid', 'i1'), ('tracking_order', '<i8', (nstate,)),
         ('tracking_phase', '<f8', (nstate,)),
         ('tracking_overlap', '<f8', (nstate,)),
@@ -100,7 +109,8 @@ def read_namd_trajectory(path, mmap_mode='r'):
         offset = 16 + header_size
     if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
         raise ValueError('unsupported OpenQP NAMD trajectory schema')
-    dtype = _namd_trajectory_dtype(int(header['nstate']), int(header['natom']))
+    dtype = _namd_trajectory_dtype(
+        int(header['nstate']), int(header['natom']), int(header.get('ncv', 0)))
     payload_size = os.path.getsize(path) - offset
     if payload_size < 0 or payload_size % dtype.itemsize:
         raise ValueError('truncated OpenQP NAMD trajectory record')
@@ -108,6 +118,118 @@ def read_namd_trajectory(path, mmap_mode='r'):
     records = np.memmap(path, dtype=dtype, mode=mmap_mode,
                         offset=offset, shape=(count,))
     return header, records
+
+
+def read_odp_wham_series(path):
+    """Extract the complete per-window ODP series from one packed NAMD TRJ."""
+    header, records = read_namd_trajectory(path)
+    provenance = header.get('odp', {})
+    if not provenance.get('enabled', False):
+        raise ValueError('trajectory does not contain an enabled ODP umbrella')
+    required = {
+        'window', 'cv', 'cv_atom_indexing', 'cv_native_units', 'scale',
+        'reference_r', 'reference_p', 'scaled_path_length', 'center',
+        'k_parallel_hartree', 'k_perpendicular_hartree', 'projection',
+        'perpendicular_restraint',
+    }
+    missing = sorted(required.difference(provenance))
+    if missing:
+        raise ValueError(
+            f'trajectory ODP provenance is missing {", ".join(missing)}')
+    ncv = int(header.get('ncv', 0))
+    scale = np.asarray(provenance['scale'], dtype=np.float64).reshape(-1)
+    reference_r = np.asarray(
+        provenance['reference_r'], dtype=np.float64).reshape(-1)
+    reference_p = np.asarray(
+        provenance['reference_p'], dtype=np.float64).reshape(-1)
+    center = float(provenance['center'])
+    k_parallel = float(provenance['k_parallel_hartree'])
+    k_perpendicular = float(provenance['k_perpendicular_hartree'])
+    if not (ncv > 0 and len(provenance['cv']) == ncv
+            and len(provenance['cv_native_units']) == ncv
+            and scale.size == reference_r.size == reference_p.size == ncv
+            and np.all(np.isfinite(scale)) and np.all(scale > 0.0)
+            and np.all(np.isfinite(reference_r))
+            and np.all(np.isfinite(reference_p))
+            and np.isfinite(center) and np.isfinite(k_parallel)
+            and np.isfinite(k_perpendicular) and k_parallel > 0.0
+            and k_perpendicular >= 0.0
+            and provenance['cv_atom_indexing'] == '1-based'
+            and provenance['projection']
+            == 'signed_scaled_dot_over_path_norm_squared'
+            and bool(provenance['perpendicular_restraint'])
+            == (k_perpendicular > 0.0)):
+        raise ValueError('trajectory ODP provenance has an invalid CV metric')
+    expected_window = int(provenance['window'])
+    recorded_windows = np.asarray(records['odp_window'], dtype=np.int64)
+    if np.any(recorded_windows != expected_window):
+        raise ValueError(
+            'trajectory ODP window records disagree with header provenance')
+    raw = np.asarray(records['odp_cv_raw'], dtype=np.float64)
+    scaled = np.asarray(records['odp_cv_scaled'], dtype=np.float64)
+    xi = np.asarray(records['odp_xi'], dtype=np.float64)
+    perpendicular = np.asarray(
+        records['odp_cv_perpendicular'], dtype=np.float64)
+    perpendicular_norm = np.asarray(
+        records['odp_perpendicular_norm'], dtype=np.float64)
+    direction = scale*(reference_p - reference_r)
+    path_length_squared = float(np.dot(direction, direction))
+    if not np.isfinite(path_length_squared) or path_length_squared <= 1.0e-24:
+        raise ValueError('trajectory ODP provenance has a degenerate R/P path')
+    if not np.isclose(
+            float(provenance['scaled_path_length']),
+            np.sqrt(path_length_squared), rtol=2.0e-12, atol=2.0e-12):
+        raise ValueError(
+            'trajectory ODP scaled path length disagrees with its metric')
+    displacement = scaled - scale*reference_r
+    expected_xi = displacement @ direction/path_length_squared
+    expected_perpendicular = displacement - expected_xi[:, None]*direction
+    expected_perpendicular_norm = np.linalg.norm(
+        expected_perpendicular, axis=1)
+    expected_bias = (
+        0.5*k_parallel*(xi - center)**2
+        + 0.5*k_perpendicular*perpendicular_norm**2
+    )
+    expected_bias_parallel = 0.5*k_parallel*(xi - center)**2
+    expected_bias_perpendicular = 0.5*k_perpendicular*perpendicular_norm**2
+    checks = (
+        (scaled, raw*scale, 'scaled CV'),
+        (xi, expected_xi, 'signed projection'),
+        (perpendicular, expected_perpendicular, 'perpendicular CV'),
+        (perpendicular_norm, expected_perpendicular_norm,
+         'perpendicular norm'),
+        (np.asarray(records['odp_bias_parallel_hartree'], dtype=np.float64),
+         expected_bias_parallel, 'parallel bias energy'),
+        (np.asarray(
+            records['odp_bias_perpendicular_hartree'], dtype=np.float64),
+         expected_bias_perpendicular, 'perpendicular bias energy'),
+        (np.asarray(records['odp_bias_hartree'], dtype=np.float64),
+         expected_bias, 'bias energy'),
+    )
+    for actual, expected, label in checks:
+        if (not np.all(np.isfinite(actual))
+                or not np.allclose(actual, expected, rtol=2.0e-12,
+                                   atol=2.0e-12)):
+            raise ValueError(
+                f'trajectory ODP {label} records disagree with provenance')
+    result = {
+        'provenance': provenance,
+        'ensemble': header.get('ensemble'),
+        'step': np.array(records['step'], copy=True),
+        'time_fs': np.array(records['time_fs'], copy=True),
+        'window': np.array(records['odp_window'], copy=True),
+        'xi': np.array(xi, copy=True),
+        'cv_raw': np.array(raw, copy=True),
+        'cv_scaled': np.array(scaled, copy=True),
+        'perpendicular_norm': np.array(perpendicular_norm, copy=True),
+        'bias_hartree': np.array(records['odp_bias_hartree'], copy=True),
+        'unbiased_potential_hartree': np.array(
+            records['e_unbiased_pot_hartree'], copy=True),
+        'total_conservative_hartree': np.array(
+            records['e_tot_hartree'], copy=True),
+    }
+    del records
+    return result
 
 # OQP::namd_params packed-scalar indices (0-based here; 1-based in the contract)
 _P_DT_FS = 0
@@ -263,6 +385,9 @@ class NAMD:
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = os.path.join(
             os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        self.odp = odp_from_config(cfg)
+        self._odp_last = None
+        self._unbiased_potential_energy = np.nan
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
         if soc_requested and self.nacme_check != 'off':
@@ -272,6 +397,10 @@ class NAMD:
         if soc_requested and self.restart_requested:
             raise NotImplementedError(
                 "[md] restart currently supports same-spin NAMD only"
+            )
+        if soc_requested and self.odp is not None:
+            raise NotImplementedError(
+                "[odp] currently supports same-spin NVE NAMD only"
             )
         if not INT64_MIN <= self.seed <= INT64_MAX:
             raise ValueError("[md] seed must fit in a signed 64-bit integer")
@@ -284,6 +413,9 @@ class NAMD:
         self.velocity_source = str(md['velocity'])
 
         self.natom = mol.data['natom']
+        if self.odp is not None and not self._as_bool(
+                cfg.get('input', {}).get('qmmm_flag', False)):
+            self.odp.validate_atom_count(self.natom)
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
@@ -365,6 +497,27 @@ class NAMD:
                    f'restart={self.restart_file} '
                    f'manifest={self.restart_manifest_file}'),
         )
+        if self.odp is not None:
+            dump_log(
+                self.mol,
+                title=('ODP umbrella: '
+                       f'window={self.odp.window} center={self.odp.center:g} '
+                       f'k_parallel={self.odp.k_parallel:g} Ha '
+                       f'k_perpendicular={self.odp.k_perpendicular:g} Ha '
+                       f'CVs={"; ".join(self.odp.cv_labels)}'),
+            )
+
+    def _odp_provenance(self):
+        if getattr(self, 'odp', None) is None:
+            return {'enabled': False}
+        return self.odp.provenance()
+
+    def _evaluate_odp(self, coordinates):
+        if self.odp is None:
+            self._odp_last = None
+            return None
+        self._odp_last = self.odp.evaluate(coordinates)
+        return self._odp_last
 
     def _prepare_hop_step(self, istep):
         """Bind the physical MD step to the stateless hop RNG.
@@ -465,7 +618,11 @@ class NAMD:
         mol = self.mol
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
-        return np.array(mol.grads[self.active]).reshape((self.natom, 3))
+        gradient = np.array(mol.grads[self.active]).reshape((self.natom, 3))
+        odp = self._evaluate_odp(mol.get_system().reshape((self.natom, 3)))
+        if odp is not None:
+            gradient = gradient - odp['force']
+        return gradient
 
     def _state_overlap(self, istep=None):
         """Compute the phase-corrected state overlap S(i,j)=<i(t-dt)|j(t)>."""
@@ -805,14 +962,29 @@ class NAMD:
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape(coords.shape)
         else:
             velocities = np.asarray(self.vel, dtype=np.float64).reshape(coords.shape)
-        dtype = _namd_trajectory_dtype(self.nstate, len(coords))
+        ncv = self.odp.ncv if getattr(self, 'odp', None) is not None else 0
+        dtype = _namd_trajectory_dtype(self.nstate, len(coords), ncv)
         if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': self.nstate,
                 'natom': len(coords),
+                'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
+                'ensemble': 'NVE',
+                'initial_temperature_kelvin': getattr(self, 'init_temp', None),
+                'odp': self._odp_provenance(),
+                'wham': {
+                    'reaction_coordinate_field': 'odp_xi',
+                    'window_field': 'odp_window',
+                    'bias_field': 'odp_bias_hartree',
+                    'unbiased_potential_field': 'e_unbiased_pot_hartree',
+                    'energy_unit': 'hartree',
+                    'temperature_note': (
+                        'NVE trajectory: initial_temperature_kelvin is not an '
+                        'NVT thermostat temperature'),
+                },
                 'units': {
                     'time': 'fs', 'coordinates': 'bohr',
                     'velocities': 'bohr/atomic_time', 'energies': 'hartree',
@@ -848,23 +1020,30 @@ class NAMD:
             del existing
             if (int(header['nstate']) != self.nstate
                     or int(header['natom']) != len(coords)
+                    or int(header.get('ncv', 0)) != ncv
                     or int(header['record_bytes']) != dtype.itemsize
                     or header.get('signature') != self._restart_signature()):
                 raise ValueError('NAMD trajectory schema/model mismatch on append')
 
         record = np.zeros(1, dtype=dtype)
         for field in (
-                'rng', 'e_pot_hartree', 'e_kin_hartree', 'e_tot_hartree',
+                'rng', 'e_unbiased_pot_hartree', 'e_pot_hartree',
+                'e_kin_hartree', 'e_tot_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
                 'overlap_tdc_au', 'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
+                'odp_xi', 'odp_cv_raw', 'odp_cv_scaled',
+                'odp_cv_perpendicular', 'odp_perpendicular_norm',
+                'odp_bias_parallel_hartree',
+                'odp_bias_perpendicular_hartree', 'odp_bias_hartree',
                 'tracking_phase', 'tracking_overlap', 'tracking_margin'):
             record[field] = np.nan
         record['tracking_order'] = -1
         record['gate_center_step'] = -1
         record['gate_verdict'] = -1
         record['nve_verdict'] = -1
+        record['odp_window'] = -1
         gate = self._nacme_gate_last or {}
         time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
         record['step'] = istep
@@ -872,6 +1051,8 @@ class NAMD:
         record['active'] = self.active
         record['hopped'] = int(bool(hopped))
         record['rng'] = self._last_hop_random
+        record['e_unbiased_pot_hartree'] = getattr(
+            self, '_unbiased_potential_energy', epot)
         record['e_pot_hartree'] = epot
         record['e_kin_hartree'] = ekin
         record['e_tot_hartree'] = epot + ekin
@@ -880,6 +1061,19 @@ class NAMD:
         record['coef_imag'] = self.coef.imag
         record['coordinates_bohr'] = coords
         record['velocities_au'] = velocities
+        if getattr(self, 'odp', None) is not None:
+            if getattr(self, '_odp_last', None) is None:
+                raise RuntimeError('ODP trajectory record has no native evaluation')
+            record['odp_window'] = self.odp.window
+            record['odp_xi'] = self._odp_last['xi']
+            record['odp_cv_raw'] = self._odp_last['cv_raw']
+            record['odp_cv_scaled'] = self._odp_last['cv_scaled']
+            record['odp_cv_perpendicular'] = self._odp_last['cv_perpendicular']
+            record['odp_perpendicular_norm'] = self._odp_last['perpendicular_norm']
+            record['odp_bias_parallel_hartree'] = self._odp_last['energy_parallel']
+            record['odp_bias_perpendicular_hartree'] = (
+                self._odp_last['energy_perpendicular'])
+            record['odp_bias_hartree'] = self._odp_last['energy']
         try:
             record['state_energies'] = np.asarray(
                 self.mol.data['OQP::td_energies'], dtype=float).reshape(-1)[:self.nstate]
@@ -955,6 +1149,7 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'odp': self._odp_provenance(),
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
@@ -1003,6 +1198,10 @@ class NAMD:
             'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
+            'odp_provenance': np.array([
+                json.dumps(self._odp_provenance(), sort_keys=True,
+                           separators=(',', ':'))
+            ]),
         }
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
@@ -1093,6 +1292,11 @@ class NAMD:
             signature = str(saved['signature'][0])
             if signature != self._restart_signature():
                 raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+            saved_odp = str(saved['odp_provenance'][0])
+            current_odp = json.dumps(
+                self._odp_provenance(), sort_keys=True, separators=(',', ':'))
+            if saved_odp != current_odp:
+                raise ValueError('NAMD restart ODP definition/metric mismatch')
             keys = [str(key) for key in saved['prev_keys']]
             self.prev_data = {
                 key: np.array(saved[f'prev_{index}'], copy=True)
@@ -1153,7 +1357,8 @@ class NAMD:
         if keep < len(records):
             del records
             dtype = _namd_trajectory_dtype(
-                int(header['nstate']), int(header['natom']))
+                int(header['nstate']), int(header['natom']),
+                int(header.get('ncv', 0)))
             with open(self.trajectory_file, 'r+b') as stream:
                 stream.truncate(offset + keep*dtype.itemsize)
                 stream.flush()
@@ -1282,9 +1487,12 @@ class NAMD:
             # state overlap (couplings) and FSSH hop
             self._state_overlap(istep)
             active_old = self.active
+            odp = self._evaluate_odp(r)
+            bias_energy = 0.0 if odp is None else odp['energy']
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 + float(np.asarray(mol.energies)[active_old])
+                + bias_energy
             )
             if self._prepare_hop_step(istep):
                 new_active, hopped = self._hop()
@@ -1301,6 +1509,7 @@ class NAMD:
                 energy_after_transition = (
                     0.5*np.sum(self.mass[:, None]*self.vel**2)
                     + float(np.asarray(mol.energies)[self.active])
+                    + bias_energy
                 )
                 transition_energy_jump = (
                     energy_after_transition - energy_before_transition)
@@ -1327,7 +1536,10 @@ class NAMD:
         mol = self.mol
         e = np.array(mol.energies)
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
-        epot = float(e[self.active])
+        self._unbiased_potential_energy = float(e[self.active])
+        odp = self._evaluate_odp(r)
+        epot = self._unbiased_potential_energy + (
+            0.0 if odp is None else odp['energy'])
         pops = np.abs(self.coef) ** 2
         self._update_nve_gate(istep, epot, ekin, transition_energy_jump)
         dump_log(
@@ -1335,6 +1547,7 @@ class NAMD:
             title=(f'NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'U_ODP={(0.0 if odp is None else odp["energy"]):.8f}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
@@ -1423,6 +1636,8 @@ class NAMD_QMMM(NAMD):
 
         # full-system state (atomic units)
         self.natom_all = self.pdb.topology.getNumAtoms()
+        if self.odp is not None:
+            self.odp.validate_atom_count(self.natom_all)
         pos_nm = np.array(self.pdb.positions.value_in_unit(u.nanometer))
         self.r_all = pos_nm * NM_TO_BOHR                       # (natom_all, 3) bohr
         sys0 = self.mm["sys0"]
@@ -1676,7 +1891,8 @@ class NAMD_QMMM(NAMD):
         pchg = np.array(mol.data["OQP::partial_charges"])
 
         if getattr(self.driver, "espf_full", False):
-            return self._total_force_espf(potmm, gqm, pchg)
+            force, epot = self._total_force_espf(potmm, gqm, pchg)
+            return self._apply_odp_to_force_energy(force, epot)
 
         # MM forces with embedded QM charges (OpenMM units)
         emm_q, gmm_q = self.driver.forces_mm(pchg)
@@ -1703,7 +1919,15 @@ class NAMD_QMMM(NAMD):
         znuc = np.array(mol.get_atoms2("charge"))
         eqm -= np.dot(pchg - znuc, potmm)
         epot = eqm + emm
-        return f_all, epot
+        return self._apply_odp_to_force_energy(f_all, epot)
+
+    def _apply_odp_to_force_energy(self, force, epot):
+        """Add the conservative native ODP term to a full QM/MM force."""
+        self._unbiased_potential_energy = float(epot)
+        odp = self._evaluate_odp(self.r_all)
+        if odp is None:
+            return force, float(epot)
+        return force + odp['force'], float(epot) + odp['energy']
 
     def _total_force_espf(self, potmm, gqm, pchg):
         """Full-ESPF force/energy assembly (mirrors OpenQpQMMM._assemble_force_espf,
@@ -1841,11 +2065,12 @@ class NAMD_QMMM(NAMD):
             title=(f'QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
                    f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'U_ODP={(0.0 if self._odp_last is None else self._odp_last["energy"]):.8f}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
         self._write_md_trajectory(
-            istep, self.r_all[self.qm_atoms], epot, ekin, hopped)
+            istep, self.r_all, epot, ekin, hopped)
         self._enforce_nve_gate()
 
 

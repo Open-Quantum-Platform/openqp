@@ -596,6 +596,17 @@ OQP_CONFIG_SCHEMA = {
         'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
         'dx_max': {'type': float, 'default': '0.02'},       # bohr, max per-step atomic displacement (adaptive dt criterion)
     },
+    'odp': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'cv': {'type': str, 'default': ''},
+        'scale': {'type': farray, 'default': ''},
+        'reference_r': {'type': farray, 'default': ''},
+        'reference_p': {'type': farray, 'default': ''},
+        'center': {'type': float, 'default': '0.0'},
+        'k_parallel': {'type': float, 'default': '0.0'},
+        'k_perpendicular': {'type': float, 'default': '0.0'},
+        'window': {'type': int, 'default': '0'},
+    },
     'json': {
             'scf_type': {'type': string, 'default': ''},
             'basis': {'type': string, 'default': ''},

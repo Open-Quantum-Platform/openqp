@@ -1624,3 +1624,36 @@ def test_common_input_mistakes_get_actionable_corrections():
         oqp_input.parse_canonical_oqp(
             'mrsf/bhhlyp/6-31g* geom="h2o.xyz" istate=1 opt(S0)'
         )
+
+
+def test_odp_modifier_roundtrips_and_is_restricted_to_namd():
+    text = (
+        'mrsf(nstate=2)/bhhlyp/sto-3g geom="h2co.xyz" '
+        'namd(T0,nstep=1,dt=0.1,velocity=zero) '
+        'odp(enabled=true,cv="distance(1,2);angle(3,1,4)",'
+        'scale="0.5,1.0",reference_r="2.1,1.9",'
+        'reference_p="2.5,2.2",center=0.5,k_parallel=0.02,'
+        'k_perpendicular=0.005,window=1)'
+    )
+    spec, legacy = _parse(text)
+    assert legacy["input"]["runtype"] == "namd"
+    assert legacy["odp"] == {
+        "enabled": "True",
+        "cv": "distance(1,2);angle(3,1,4)",
+        "scale": "0.5,1.0",
+        "reference_r": "2.1,1.9",
+        "reference_p": "2.5,2.2",
+        "center": "0.5",
+        "k_parallel": "0.02",
+        "k_perpendicular": "0.005",
+        "window": "1",
+    }
+    rendered = oqp_input.render_canonical_oqp(spec)
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert oqp_input.lower_to_legacy(reparsed)["odp"] == legacy["odp"]
+
+    with pytest.raises(OQPInputError, match="requires the NVE namd"):
+        oqp_input.parse_canonical_oqp(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'odp(enabled=true,k_parallel=0.1)'
+        )

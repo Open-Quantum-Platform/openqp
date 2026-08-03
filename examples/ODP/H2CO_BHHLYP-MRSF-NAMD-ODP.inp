@@ -1,0 +1,59 @@
+# One-step, gas-phase NVE ODP umbrella smoke test.
+#
+# CV native units are bohr for distance/asymmetric_distance and radians for
+# angle. The explicit per-CV scale maps the mixed raw units into the
+# dimensionless Euclidean space used by the signed ODP projection.
+[input]
+system=
+   6   0.000000   0.000000   0.000000
+   8   0.000000   0.000000   1.203000
+   1   0.000000   0.943000  -0.589000
+   1   0.000000  -0.943000  -0.589000
+charge=0
+runtype=namd
+basis=sto-3g
+functional=bhhlyp
+method=tdhf
+
+[guess]
+type=huckel
+
+[scf]
+multiplicity=3
+type=rohf
+
+[tdhf]
+type=mrsf
+nstate=2
+multiplicity=3
+
+[properties]
+grad=1
+
+[md]
+nstep=1
+dt=0.1
+active=1
+substep=20
+init_temp=0
+velocity=zero
+seed=20260803
+first_hop_step=2
+nve_gate=warn
+nve_gate_abs_tol=0.01
+nve_gate_step_tol=0.01
+trajectory_interval=1
+restart_interval=1
+decoherence=off
+trivial=False
+
+[odp]
+enabled=True
+cv=distance(1,2); asymmetric_distance(1,3,1,4); angle(3,1,4)
+scale=0.5,0.5,1.0
+reference_r=2.10,-0.10,1.90
+reference_p=2.50,0.10,2.20
+center=0.5
+k_parallel=0.02
+k_perpendicular=0.005
+window=1

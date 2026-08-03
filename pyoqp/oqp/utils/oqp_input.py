@@ -233,7 +233,7 @@ BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 SECTION_NAMES = {
     "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
-    "oqp", "neb", "hess", "nac", "md", "qmmm", "json", "tests",
+    "oqp", "neb", "hess", "nac", "md", "odp", "qmmm", "json", "tests",
 }
 
 
@@ -343,6 +343,7 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
         dt_adaptive dt_min dx_max
     """),
+    "odp": _keys("enabled cv scale reference_r reference_p center k_parallel k_perpendicular window"),
 }
 
 # Traditional sectioned ``.inp`` files and the Python workflow API retain
@@ -1546,6 +1547,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     qmmm_section = next(
         (call for call in spec.modifiers if call.name == "qmmm"), None
     )
+    odp_section = next(
+        (call for call in spec.modifiers if call.name == "odp"), None
+    )
     input_section = next(
         (call for call in spec.modifiers if call.name == "input"), None
     )
@@ -1580,6 +1584,13 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             "%s is not connected and would otherwise run without the requested QM/MM forces."
             % driver.name
         )
+    if odp_section is not None:
+        if odp_section.args:
+            raise OQPInputError("odp accepts keyword arguments only")
+        if driver.name != "namd":
+            raise OQPInputError(
+                "odp(...) currently requires the NVE namd(...) workflow"
+            )
     if states and set(_driver_options(driver)).intersection({"active", "init_state"}):
         key = sorted(set(_driver_options(driver)).intersection({"active", "init_state"}))[0]
         raise OQPInputError(

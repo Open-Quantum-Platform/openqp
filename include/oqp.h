@@ -282,6 +282,15 @@ int oqp_namd_nacme_gate(int64_t nstate, const double *candidate,
         const double *reference, const int *reference_mask, int compare_mode,
         double invariant_tol, double abs_tol, double rel_tol, double *metrics,
         int64_t *counts);
+/* Native ODP CV types: 1 distance, 2 d(a,b)-d(c,d), 3 angle a-b-c. */
+int oqp_odp_umbrella_evaluate(int64_t natom, int64_t ncv,
+        const int *cv_types, const int64_t *cv_atoms,
+        const double *cv_scales, const double *reference_r,
+        const double *reference_p, double center, double k_parallel,
+        double k_perpendicular, const double *coordinates, double *energy,
+        double *force, double *xi, double *cv_raw, double *cv_scaled,
+        double *cv_perpendicular, double *perpendicular_norm,
+        double *energy_parallel, double *energy_perpendicular);
 int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
         int *assignment, double *signs, double *matched, double *margins);
 int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,

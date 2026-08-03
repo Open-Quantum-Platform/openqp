@@ -51,6 +51,7 @@ for attr_name in dir(lib):
             'oqp_init', 'oqp_clean', 'oqp_set_atoms',
             'oqp_namd_counter_random', 'oqp_namd_counter_normal_fill',
             'oqp_namd_baeck_an_tdc', 'oqp_namd_nacme_gate',
+            'oqp_odp_umbrella_evaluate',
             'oqp_maximum_overlap_assignment', 'oqp_diagonal_phase_tracking',
         ):
             globals()[attr_name] = _oqp_wrapper(attr_value)
