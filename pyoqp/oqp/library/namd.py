@@ -1279,13 +1279,12 @@ class NAMD:
         if path is None:
             return value
         if not os.path.isfile(path):
-            return {'configured': value, 'resolved': os.path.realpath(path)}
+            return {'path': os.path.realpath(path)}
         digest = hashlib.sha256()
         with open(path, 'rb') as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b''):
                 digest.update(block)
         return {
-            'configured': value,
             'path': os.path.realpath(path),
             'sha256': digest.hexdigest(),
         }
@@ -1454,6 +1453,10 @@ class NAMD:
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
+        scf_settings = dict(cfg.get('scf', {}))
+        if 'init_basis' in scf_settings:
+            scf_settings['init_basis'] = self._basis_definition_identity(
+                scf_settings['init_basis'])
         identity = {
             'molecule': self._molecular_identity(),
             'method': cfg['input'].get('method', ''),
@@ -1467,7 +1470,7 @@ class NAMD:
             'input_multiplicity': cfg['input'].get('multiplicity', ''),
             'scf_type': cfg.get('scf', {}).get('type', ''),
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
-            'scf_settings': dict(cfg.get('scf', {})),
+            'scf_settings': scf_settings,
             'scf_init_basis': self._basis_definition_identity(
                 cfg.get('scf', {}).get('init_basis', 'none')),
             'tdhf_type': cfg['tdhf'].get('type', ''),
@@ -1714,11 +1717,13 @@ class NAMD:
             entries = [item for item in value.replace(',', ' ').split() if item]
             resolved = []
             for item in entries:
-                candidate = os.path.join(source_dir, os.path.expanduser(item))
+                candidate = self._resolve_qmmm_aux_file(
+                    os.path.expanduser(item))
                 # Preserve OpenMM built-in force-field names; only local files
-                # inherit the original input directory.
-                resolved.append(absolute_path(item) if os.path.isfile(candidate)
-                                else item)
+                # are made absolute.  The shared resolver preserves the
+                # runtime's existing-CWD-file precedence over input_dir.
+                resolved.append(os.path.abspath(candidate)
+                                if os.path.isfile(candidate) else item)
             return ' '.join(resolved)
 
         def basis_path(value):

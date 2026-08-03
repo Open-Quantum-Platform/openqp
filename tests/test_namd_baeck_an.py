@@ -779,6 +779,49 @@ basis_paths_rebased = (
     and reparsed_basis_spec.basis == 'file:' + os.path.abspath(basis_path)
     and reparsed_init_basis == 'file:' + os.path.abspath(basis_path))
 
+# Manifest rebasing changes relative file: spellings to absolute paths.  The
+# electronic identity, including the copy inside scf_settings, must remain
+# stable when both spellings resolve to the same basis contents.
+relative_basis_mol = Mol(); relative_basis_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+relative_basis_mol.config['input']['basis'] = 'file:custom-basis.json'
+relative_basis_mol.config['scf']['init_basis'] = 'file:custom-basis.json'
+absolute_basis_mol = Mol(); absolute_basis_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+absolute_basis_mol.config['input']['basis'] = 'file:' + os.path.abspath(basis_path)
+absolute_basis_mol.config['scf']['init_basis'] = (
+    'file:' + os.path.abspath(basis_path))
+d_relative_basis = NAMD.__new__(NAMD); d_relative_basis.mol = relative_basis_mol
+d_relative_basis.nstate = 2; d_relative_basis.dt_fs = 0.5
+d_relative_basis.seed = 1; d_relative_basis.rng_stream = 2
+d_absolute_basis = NAMD.__new__(NAMD); d_absolute_basis.mol = absolute_basis_mol
+d_absolute_basis.nstate = 2; d_absolute_basis.dt_fs = 0.5
+d_absolute_basis.seed = 1; d_absolute_basis.rng_stream = 2
+basis_spelling_stable = (
+    d_relative_basis._restart_signature()
+    == d_absolute_basis._restart_signature())
+
+# Restart-manifest force-field rebasing must preserve the runtime's CWD-first
+# resolution when a different file with the same name exists in input_dir.
+forcefield_spec = parse_canonical_oqp(
+    'mrsf(nstate=2)/bhhlyp/6-31g*\n'
+    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'qmmm(pdb_file="water.pdb",forcefield_files="shared.xml tip3p.xml",'
+    'qm_atoms="0-2")\ngeom="h2o.xyz"\n')
+original_cwd = os.getcwd()
+os.chdir(root)
+try:
+    rebased_forcefield_spec = d._rebase_restart_spec_paths(
+        forcefield_spec, input_root)
+finally:
+    os.chdir(original_cwd)
+rebased_qmmm = next(
+    call for call in rebased_forcefield_spec.modifiers if call.name == 'qmmm')
+forcefield_rebase_runtime_precedence = (
+    rebased_qmmm.kwargs['forcefield_files'].split()[0]
+    == os.path.abspath(cwd_forcefield)
+    and rebased_qmmm.kwargs['forcefield_files'].split()[1] == 'tip3p.xml')
+
 # Environment-selected ESPF modes alter the QM/MM Hamiltonian/forces and must
 # therefore invalidate checkpoints made with another effective mode.
 class EmptyTopology:
@@ -1104,7 +1147,10 @@ print('DENSE=' + json.dumps({
         'target_basis_file_bound': target_basis_file_bound,
         'initial_basis_file_bound': initial_basis_file_bound,
         'basis_paths_rebased': basis_paths_rebased,
+        'basis_spelling_stable': basis_spelling_stable,
         'runtime_forcefield_bound': runtime_forcefield_bound,
+        'forcefield_rebase_runtime_precedence':
+            forcefield_rebase_runtime_precedence,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -1176,7 +1222,9 @@ print('DENSE=' + json.dumps({
         'espf_modes_bound': True,
         'target_basis_file_bound': True, 'initial_basis_file_bound': True,
         'basis_paths_rebased': True,
+        'basis_spelling_stable': True,
         'runtime_forcefield_bound': True,
+        'forcefield_rebase_runtime_precedence': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
