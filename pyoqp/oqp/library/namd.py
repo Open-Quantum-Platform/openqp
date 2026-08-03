@@ -106,6 +106,21 @@ def _validate_distinct_output_paths(**paths):
             "[md] NAMD output paths must be distinct; collision: " + rendered)
 
 
+def _restart_manifest_path(log_path):
+    """Return a job-specific runnable restart manifest beside the main log."""
+    absolute = os.path.abspath(os.fspath(log_path))
+    stem = os.path.splitext(os.path.basename(absolute))[0]
+    return os.path.join(os.path.dirname(absolute), stem + '.restart.oqp')
+
+
+def _validate_odp_boundary_conditions(odp, periodic):
+    """Reject periodic ODP until native CVs implement minimum images."""
+    if odp is not None and bool(periodic):
+        raise NotImplementedError(
+            "[odp] periodic QM/MM is unsupported because ODP CVs do not yet "
+            "apply the minimum-image convention; use qmmm.cutoff=NoCutoff")
+
+
 def _namd_trajectory_dtype(nstate, natom, ncv=0):
     """Fixed-width, appendable binary record used by ``*.namd.trj``."""
     matrix = (nstate, nstate)
@@ -429,8 +444,7 @@ class NAMD:
             md.get('nacme_audit_file', ''), '.namd.nacme.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
-        self.restart_manifest_file = os.path.join(
-            os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        self.restart_manifest_file = _restart_manifest_path(self.mol.log)
         _validate_distinct_output_paths(
             log_file=self.mol.log,
             trajectory_file=self.trajectory_file,
@@ -637,6 +651,8 @@ class NAMD:
         return normals.reshape(shape)
 
     def _init_velocities(self):
+        if self.restart_requested:
+            return np.zeros((self.natom, 3))
         src = self.velocity_source.lower()
         if src in ('zero', 'none', '0'):
             return np.zeros((self.natom, 3))
@@ -1340,7 +1356,7 @@ class NAMD:
         self._io_barrier()
 
     def _write_restart_manifest(self):
-        """Write a directly runnable ``restart.oqp`` beside the checkpoint."""
+        """Write a directly runnable, job-specific manifest beside the checkpoint."""
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
             source = getattr(self.mol, 'oqp_input_source', None)
@@ -1350,7 +1366,7 @@ class NAMD:
         if not canonical:
             dump_log(
                 self.mol,
-                title=('NAMD checkpoint saved, but restart.oqp was not generated: '
+                title=('NAMD checkpoint saved, but its restart manifest was not generated: '
                        'the run did not originate from canonical .oqp input'),
             )
             return
@@ -1359,7 +1375,7 @@ class NAMD:
         )
         spec = parse_canonical_oqp(canonical)
         if spec.driver.name != 'namd':
-            raise ValueError('cannot create restart.oqp from a non-NAMD request')
+            raise ValueError('cannot create a restart manifest from a non-NAMD request')
         directory = os.path.dirname(self.restart_manifest_file) or '.'
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
@@ -1758,6 +1774,7 @@ class NAMD_QMMM(NAMD):
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff
+        _validate_odp_boundary_conditions(self.odp, self.periodic)
         embedding = str(q['embedding']).strip()
         frontier_scheme = str(q.get('frontier_scheme', 'none')).strip()
 
@@ -1789,10 +1806,13 @@ class NAMD_QMMM(NAMD):
             sys0, q)
 
         # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
-        sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
-        self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
-        p = (self.m_all[:, None] * self.v_all).sum(axis=0)
-        self.v_all -= p / self.m_all.sum()
+        if self.restart_requested:
+            self.v_all = np.zeros((self.natom_all, 3))
+        else:
+            sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
+            self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
+            p = (self.m_all[:, None] * self.v_all).sum(axis=0)
+            self.v_all -= p / self.m_all.sum()
 
         # sync the QM Molecule geometry from the pdb QM atoms
         self._sync_positions()

@@ -458,6 +458,51 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         finally:
             cleanup()
 
+    def test_restart_skips_fresh_velocity_source_initialization(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            driver = namd.NAMD.__new__(namd.NAMD)
+            driver.restart_requested = True
+            driver.natom = 2
+            driver.velocity_source = "/missing/or/moved/velocity.dat"
+            np.testing.assert_array_equal(
+                driver._init_velocities(), np.zeros((2, 3)))
+
+            driver.restart_requested = False
+            with self.assertRaisesRegex(ValueError, "not zero/maxwell"):
+                driver._init_velocities()
+        finally:
+            cleanup()
+
+    def test_restart_manifests_are_job_specific(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                first = namd._restart_manifest_path(
+                    str(Path(tmpdir) / "window-01.log"))
+                second = namd._restart_manifest_path(
+                    str(Path(tmpdir) / "window-02.log"))
+                self.assertEqual(first, str(Path(tmpdir) / "window-01.restart.oqp"))
+                self.assertEqual(second, str(Path(tmpdir) / "window-02.restart.oqp"))
+                self.assertNotEqual(first, second)
+        finally:
+            cleanup()
+
+    def test_periodic_odp_is_rejected_until_minimum_images_exist(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            self.assertIsNone(
+                namd._validate_odp_boundary_conditions(object(), False))
+            with self.assertRaisesRegex(NotImplementedError, "minimum-image"):
+                namd._validate_odp_boundary_conditions(object(), True)
+            src = NAMD.read_text()
+            self.assertIn(
+                "_validate_odp_boundary_conditions(self.odp, self.periodic)",
+                src,
+            )
+        finally:
+            cleanup()
+
     def test_soc_nve_gate_is_explicitly_rejected(self):
         src = NAMD.read_text()
 
