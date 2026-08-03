@@ -721,6 +721,7 @@ class NAMD:
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
             self._ba_dt_left = dt_right
+            self._reset_nacme_gate_state()
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -776,6 +777,14 @@ class NAMD:
         self._ba_energy_center = energies_current.copy()
         self._ba_tdc_left = tdc_current.copy()
         self._ba_dt_left = dt_right
+
+    def _reset_nacme_gate_state(self):
+        """Discard gate evidence that cannot cross a history discontinuity."""
+        self._nacme_gate_last = None
+        self._nacme_reference_tdc = None
+        self._nacme_reference_mask = None
+        self._nacme_reference_source = 0
+        self._nacme_gate_failures = 0
 
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
@@ -1011,15 +1020,18 @@ class NAMD:
         else:
             velocities = np.asarray(self.vel, dtype=np.float64).reshape(coords.shape)
         ncv = self.odp.ncv if getattr(self, 'odp', None) is not None else 0
-        dtype = _namd_trajectory_dtype(self.nstate, len(coords), ncv)
+        trajectory_nstate = int(np.asarray(self.coef).size)
+        dtype = _namd_trajectory_dtype(trajectory_nstate, len(coords), ncv)
         if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
-                'nstate': self.nstate,
+                'nstate': trajectory_nstate,
                 'natom': len(coords),
                 'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
+                'electronic_representation': getattr(
+                    self, '_trajectory_representation', 'same_spin_adiabatic'),
                 'ensemble': 'NVE',
                 'initial_temperature_kelvin': getattr(self, 'init_temp', None),
                 'odp': self._odp_provenance(),
@@ -1066,7 +1078,7 @@ class NAMD:
         else:
             header, existing = read_namd_trajectory(self.trajectory_file)
             del existing
-            if (int(header['nstate']) != self.nstate
+            if (int(header['nstate']) != trajectory_nstate
                     or int(header['natom']) != len(coords)
                     or int(header.get('ncv', 0)) != ncv
                     or int(header['record_bytes']) != dtype.itemsize
@@ -1122,16 +1134,27 @@ class NAMD:
             record['odp_bias_perpendicular_hartree'] = (
                 self._odp_last['energy_perpendicular'])
             record['odp_bias_hartree'] = self._odp_last['energy']
-        try:
-            record['state_energies'] = np.asarray(
-                self.mol.data['OQP::td_energies'], dtype=float).reshape(-1)[:self.nstate]
-        except (KeyError, TypeError, ValueError):
-            pass
-        if self._last_state_overlap is not None:
+        state_energies = getattr(self, '_trajectory_state_energies', None)
+        if state_energies is None:
+            try:
+                state_energies = self.mol.data['OQP::td_energies']
+            except (KeyError, TypeError):
+                state_energies = None
+        if state_energies is not None:
+            values = np.asarray(state_energies, dtype=float).reshape(-1)
+            if values.size >= trajectory_nstate:
+                record['state_energies'] = values[:trajectory_nstate]
+        if (self._last_state_overlap is not None
+                and np.shape(self._last_state_overlap)
+                == (trajectory_nstate, trajectory_nstate)):
             record['state_overlap'] = self._last_state_overlap
-        if self._last_overlap_tdc is not None:
+        if (self._last_overlap_tdc is not None
+                and np.shape(self._last_overlap_tdc)
+                == (trajectory_nstate, trajectory_nstate)):
             record['overlap_tdc_au'] = self._last_overlap_tdc
-        if self._nacme_reference_tdc is not None:
+        if (self._nacme_reference_tdc is not None
+                and np.shape(self._nacme_reference_tdc)
+                == (trajectory_nstate, trajectory_nstate)):
             record['reference_tdc_au'] = self._nacme_reference_tdc
             record['reference_mask'] = self._nacme_reference_mask
             record['reference_source'] = self._nacme_reference_source
@@ -1166,7 +1189,10 @@ class NAMD:
                 nve.get('drift_rate', np.nan),
             )
         tracking = self.mol.get_state_tracking()
-        if tracking is not None:
+        if (tracking is not None
+                and all(np.asarray(tracking[name]).size == trajectory_nstate
+                        for name in ('order', 'phase_step', 'matched_overlap',
+                                     'margin'))):
             record['tracking_valid'] = 1
             record['tracking_order'] = np.asarray(tracking['order'], dtype=np.int64)
             record['tracking_phase'] = np.asarray(tracking['phase_step'], dtype=float)
@@ -1184,9 +1210,13 @@ class NAMD:
         md = cfg.get('md', {})
         identity = {
             'method': cfg['input'].get('method', ''),
+            'charge': cfg['input'].get('charge', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
+            'scf_type': cfg.get('scf', {}).get('type', ''),
+            'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'tdhf_type': cfg['tdhf'].get('type', ''),
+            'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
             'dt_fs': self.dt_fs, 'seed': self.seed,
@@ -1197,6 +1227,9 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'soc': md.get('soc', ''), 'soc_basis': md.get('soc_basis', ''),
+            'trajectory_representation': getattr(
+                self, '_trajectory_representation', 'same_spin_adiabatic'),
             'odp': self._odp_provenance(),
             'system': getattr(
                 self, '_restart_system_identity', {'kind': 'unavailable'}),
@@ -2196,6 +2229,7 @@ class NAMD_SOC(NAMD):
         self.ns = self.nstate_mrsf
         self.nt = self.nstate_mrsf
         self.nstate_soc = self.ns + 3 * self.nt
+        self._trajectory_representation = 'soc_adiabatic'
         # active spin-adiabatic state (1-based); [md] active is reused
         self.active = int(mol.config['md']['active'])
         # electronic amplitudes over the spin-adiabatic states
@@ -2635,6 +2669,7 @@ class NAMD_SOC(NAMD):
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD (ISC, SHARC spin-adiabatic FSSH)')
+        self._prepare_md_outputs()
 
         r = mol.get_system().reshape((self.natom, 3))
 
@@ -2645,7 +2680,9 @@ class NAMD_SOC(NAMD):
         accel = -grad / self.mass[:, None]
         self._ulog = u
         self._store_prev(r, u, eval_ha)
-        self._log_soc(0, e_pure, mult, state, w, False)
+        self._log_soc(
+            0, e_pure, mult, state, w, False,
+            self.e_ref + self.e0 + eval_ha)
         self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
 
         for istep in range(1, self.nstep + 1):
@@ -2685,7 +2722,9 @@ class NAMD_SOC(NAMD):
                     self.vel *= np.sqrt(ket / ke)
             self._ulog = u
             self._store_prev(r, u, eval_ha)
-            self._log_soc(istep, e_pure, mult, state, w, hopped)
+            self._log_soc(
+                istep, e_pure, mult, state, w, hopped,
+                self.e_ref + self.e0 + eval_ha)
 
         dump_log(mol, title='PyOQP: SOC-NAMD trajectory complete')
 
@@ -2697,7 +2736,8 @@ class NAMD_SOC(NAMD):
         self.prev_sbvec = self.sbvec.copy()
         self.prev_tbvec = self.tbvec.copy()
 
-    def _log_soc(self, istep, e_pure, mult, state, w, hopped):
+    def _log_soc(self, istep, e_pure, mult, state, w, hopped,
+                 state_energies):
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
         # manifold-summed populations via the MCH projection (U c): the spin
         # character is in the MCH basis, where the first ns components are
@@ -2717,6 +2757,11 @@ class NAMD_SOC(NAMD):
                    f'dom=({self._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(e_pure)
+        self._trajectory_state_energies = np.asarray(
+            state_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(
+            istep, self.mol.get_system(), e_pure, ekin, hopped)
 
 
 class NAMD_SOC_MCH(NAMD_SOC):
@@ -2730,6 +2775,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
 
     def __init__(self, mol):
         super().__init__(mol)
+        self._trajectory_representation = 'soc_mch'
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
 
@@ -2844,6 +2890,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD (ISC, MCH-basis FSSH)')
+        self._prepare_md_outputs()
 
         r = mol.get_system().reshape((self.natom, 3))
         eval_ha, u = self._electronic_soc(with_overlap=False)
@@ -2853,7 +2900,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
         grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
         accel = -grad / self.mass[:, None]
         self._store_prev(r, u, eval_ha)
-        self._log_mch(0, e_pure, mult, state, False)
+        self._log_mch(0, e_pure, mult, state, False, e_mch)
         self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
 
         for istep in range(1, self.nstep + 1):
@@ -2884,11 +2931,11 @@ class NAMD_SOC_MCH(NAMD_SOC):
                 if ke > 0 and ket > 0:
                     self.vel *= np.sqrt(ket / ke)
             self._store_prev(r, u, eval_ha)
-            self._log_mch(istep, e_pure, mult, state, hopped)
+            self._log_mch(istep, e_pure, mult, state, hopped, e_mch)
 
         dump_log(mol, title='PyOQP: SOC-MCH-NAMD trajectory complete')
 
-    def _log_mch(self, istep, e_pure, mult, state, hopped):
+    def _log_mch(self, istep, e_pure, mult, state, hopped, state_energies):
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
         pmch = np.abs(self.coef) ** 2
         pop_s = float(pmch[:self.ns].sum())
@@ -2902,6 +2949,11 @@ class NAMD_SOC_MCH(NAMD_SOC):
                    f'{self._hop_rng_log()}  '
                    f'grad={self._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(e_pure)
+        self._trajectory_state_energies = np.asarray(
+            state_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(
+            istep, self.mol.get_system(), e_pure, ekin, hopped)
 
 
 class NAMD_SOC_QMMM(NAMD_QMMM):
@@ -2940,6 +2992,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.ns = self.nstate_mrsf
         self.nt = self.nstate_mrsf
         self.nstate_soc = self.ns + 3 * self.nt
+        self._trajectory_representation = 'soc_adiabatic'
         self.active = int(mol.config['md']['active'])
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
@@ -3119,6 +3172,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, SHARC spin-adiabatic FSSH + ESPF embedding)')
+        self._prepare_md_outputs()
 
         self._sync_positions()
         eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
@@ -3131,7 +3185,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self._ulog = u
         r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
         NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
-        self._log_soc_qmmm(0, epot, mult, state, w, False)
+        self._log_soc_qmmm(
+            0, epot, mult, state, w, False,
+            self.e_ref + self.e0 + eval_ha)
         self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
 
         for istep in range(1, self.nstep + 1):
@@ -3190,11 +3246,14 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                     self.v_all *= np.sqrt(ket / ke)
             self._ulog = u
             NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
-            self._log_soc_qmmm(istep, epot, mult, state, w, hopped)
+            self._log_soc_qmmm(
+                istep, epot, mult, state, w, hopped,
+                self.e_ref + self.e0 + eval_ha)
 
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM trajectory complete')
 
-    def _log_soc_qmmm(self, istep, epot, mult, state, w, hopped):
+    def _log_soc_qmmm(self, istep, epot, mult, state, w, hopped,
+                      state_energies):
         ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
         mch = self._ulog @ self.coef
         pmch = np.abs(mch) ** 2
@@ -3209,6 +3268,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                    f'dom=({NAMD_SOC._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(epot)
+        self._trajectory_state_energies = np.asarray(
+            state_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(
+            istep, self.r_all, epot, ekin, hopped)
 
 
 class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
@@ -3221,6 +3285,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
 
     def __init__(self, mol):
         super().__init__(mol)
+        self._trajectory_representation = 'soc_mch'
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
 
@@ -3245,6 +3310,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
     def run(self):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, MCH-basis FSSH + ESPF embedding)')
+        self._prepare_md_outputs()
 
         self._sync_positions()
         eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
@@ -3258,7 +3324,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         self._thermalize_initial()
         r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
         NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
-        self._log_mch_qmmm(0, epot, mult, state, False)
+        self._log_mch_qmmm(0, epot, mult, state, False, e_mch)
         self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
 
         for istep in range(1, self.nstep + 1):
@@ -3304,11 +3370,13 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                 if ke > 0 and ket > 0:
                     self.v_all *= np.sqrt(ket / ke)
             NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
-            self._log_mch_qmmm(istep, epot, mult, state, hopped)
+            self._log_mch_qmmm(
+                istep, epot, mult, state, hopped, e_mch)
 
         dump_log(mol, title='PyOQP: SOC-MCH-QMMM-NAMD trajectory complete')
 
-    def _log_mch_qmmm(self, istep, epot, mult, state, hopped):
+    def _log_mch_qmmm(self, istep, epot, mult, state, hopped,
+                      state_energies):
         ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
         pmch = np.abs(self.coef) ** 2
         pop_s = float(pmch[:self.ns].sum())
@@ -3322,6 +3390,11 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                    f'{self._hop_rng_log()}  '
                    f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(epot)
+        self._trajectory_state_energies = np.asarray(
+            state_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(
+            istep, self.r_all, epot, ekin, hopped)
 
 
 def _dftb_soc_tags(mol):

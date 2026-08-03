@@ -49,6 +49,28 @@ def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
         parse_odp_cv_specification("nearest_atom(1,2,3)")
 
 
+def test_runtime_checker_rejects_enabled_odp_outside_namd():
+    sys.path.insert(0, str(ROOT / "pyoqp"))
+    from oqp.utils.input_checker import check_input_values
+
+    config = {
+        "input": {
+            "system": "\n1 0.0 0.0 0.0\n1 0.0 0.0 1.4",
+            "charge": 0, "basis": "sto-3g", "functional": "",
+            "method": "hf", "runtype": "energy",
+        },
+        "scf": {"type": "rhf", "multiplicity": 1},
+        "tdhf": {"type": "rpa", "nstate": 1, "multiplicity": 1},
+        "odp": {"enabled": True},
+    }
+    report = check_input_values(config, raise_error=False, emit=False)
+    assert any(item.path == "odp.enabled" for item in report.errors)
+
+    config["odp"]["enabled"] = False
+    report = check_input_values(config, raise_error=False, emit=False)
+    assert not any(item.path == "odp.enabled" for item in report.errors)
+
+
 def test_built_odp_randomized_fd_invariance_signed_progress_and_singularities():
     script = r'''
 import json

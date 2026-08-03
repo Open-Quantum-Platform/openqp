@@ -2020,6 +2020,18 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
+    odp_enabled = _parse_bool_like(
+        _get(config, "odp", "enabled", False), "odp.enabled", report)
+    if odp_enabled is True and runtype != "namd":
+        report.add(
+            "ERROR",
+            "odp.enabled",
+            "ODP umbrella sampling currently requires the NVE NAMD workflow.",
+            value=f"enabled=True/runtype={runtype}",
+            expected="odp.enabled=False, or input.runtype=namd",
+            action="Disable [odp] for this calculation or use runtype=namd.",
+        )
+
     if runtype not in ALL_RUNTYPES:
         report.add(
             "ERROR",

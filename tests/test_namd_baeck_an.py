@@ -145,8 +145,10 @@ class Mol:
         'namd(S1,nstep=20,dt=0.5)\ngeom="h2o.xyz"\n'
     )
     config = {
-        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*'},
-        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
+        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*',
+                  'charge': 0},
+        'scf': {'type': 'rohf', 'multiplicity': 3},
+        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2, 'multiplicity': 3},
     }
     data = {'OQP::td_energies': np.array([0.0, 0.1])}
     @staticmethod
@@ -213,6 +215,18 @@ except ValueError as error:
     system_mismatch = 'does not match the current run' in str(error)
 else:
     system_mismatch = False
+d4 = NAMD.__new__(NAMD); d4.mol = Mol(); d4.nstate = 2; d4.dt_fs = 0.5
+d4.mol.config = json.loads(json.dumps(Mol.config))
+d4.mol.config['input']['charge'] = 1
+d4.seed = 1; d4.rng_stream = 2; d4.restart_requested = True
+d4._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d4.restart_file = d.restart_file; d4.trajectory_file = d.trajectory_file
+try:
+    d4._load_restart()
+except ValueError as error:
+    electronic_mismatch = 'does not match the current run' in str(error)
+else:
+    electronic_mismatch = False
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
 d._write_nacme_audit_row({
@@ -222,6 +236,23 @@ d._write_nacme_audit_row({
 with open(d.nacme_audit_file, encoding='utf-8') as stream:
     audit_header, audit_row = [line.rstrip('\n').split('\t') for line in stream]
 audit = dict(zip(audit_header, audit_row))
+d.nacme_check = 'baeck_an'; d.dt = 1.0
+d._ba_energy_center = np.array([0.0, 0.1])
+d._nacme_gate_last = {'verdict': 'fail'}
+d._nacme_reference_tdc = np.ones((2, 2))
+d._nacme_reference_mask = np.ones((2, 2), dtype=np.int32)
+d._nacme_reference_source = 1; d._nacme_gate_failures = 2
+d.mol.data['OQP::td_energies_old'] = np.array([0.0, 0.2])
+d.mol.data['OQP::td_energies'] = np.array([0.0, 0.3])
+d._compute_tdc = lambda overlap: np.asarray(overlap, dtype=float)
+d._update_baeck_an_check(3, np.eye(2))
+reseed_cleared = (
+    d._nacme_gate_last is None
+    and d._nacme_reference_tdc is None
+    and d._nacme_reference_mask is None
+    and d._nacme_reference_source == 0
+    and d._nacme_gate_failures == 0
+)
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
 d._nve_reference_energy = -0.9; d._nve_previous_energy = -0.9
 d._nve_gate_failures = 0
@@ -245,6 +276,8 @@ print('DENSE=' + json.dumps({
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
+    'electronic_mismatch': electronic_mismatch,
+    'reseed_cleared': reseed_cleared,
     'audit_signed_comparison': audit['signed_comparison'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
         'gate_failures': d2._nacme_gate_failures,
@@ -281,6 +314,7 @@ print('DENSE=' + json.dumps({
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
+        'electronic_mismatch': True, 'reseed_cleared': True,
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],

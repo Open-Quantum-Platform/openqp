@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -462,6 +463,88 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
 
         self.assertIn("if soc_requested and self.nve_gate != 'off':", src)
         self.assertIn("nve_gate currently supports same-spin NAMD only", src)
+
+    def test_soc_dense_trajectory_uses_full_electronic_state_space(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                mol = types.SimpleNamespace(
+                    config={
+                        "input": {
+                            "method": "tdhf", "functional": "bhhlyp",
+                            "basis": "sto-3g", "charge": 0,
+                        },
+                        "scf": {"type": "rohf", "multiplicity": 3},
+                        "tdhf": {
+                            "type": "mrsf", "multiplicity": 3,
+                            "nstate": 1, "tlf": 2,
+                        },
+                        "md": {"soc": True, "soc_basis": "adiabatic"},
+                    },
+                    data={"OQP::td_energies": np.array([-1.0])},
+                    get_state_tracking=lambda: {
+                        "order": [0], "phase_step": [1.0],
+                        "matched_overlap": [1.0], "margin": [1.0],
+                    },
+                )
+                driver = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+                driver.mol = mol
+                driver.nstate = 1
+                driver.coef = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
+                driver._trajectory_state_energies = np.array(
+                    [-1.0, -0.9, -0.9, -0.9])
+                driver._trajectory_representation = "soc_adiabatic"
+                driver._restart_system_identity = {
+                    "kind": "test", "sha256": "soc-system",
+                }
+                driver.trajectory_file = str(Path(tmpdir) / "soc.namd.trj")
+                driver.trajectory_interval = 1
+                driver.dt_fs = 0.5
+                driver.dt_adaptive = False
+                driver._t_fs = 0.0
+                driver.seed = 1
+                driver.rng_stream = 0
+                driver.init_temp = 300.0
+                driver.active = 1
+                driver.vel = np.zeros((2, 3))
+                driver.odp = None
+                driver._last_hop_random = np.nan
+                driver._unbiased_potential_energy = -1.0
+                driver._last_state_overlap = None
+                driver._last_overlap_tdc = None
+                driver._nacme_reference_tdc = None
+                driver._nacme_reference_mask = None
+                driver._nacme_reference_source = 0
+                driver._nacme_gate_last = None
+                driver._nve_gate_last = None
+                driver._pending_nve_gate_error = None
+
+                driver._write_md_trajectory(
+                    0, np.zeros((2, 3)), -1.0, 0.1, False)
+                header, records = namd.read_namd_trajectory(
+                    driver.trajectory_file)
+
+                self.assertEqual(header["nstate"], 4)
+                self.assertEqual(
+                    header["electronic_representation"], "soc_adiabatic")
+                np.testing.assert_allclose(
+                    records["state_energies"][0], driver._trajectory_state_energies)
+                np.testing.assert_allclose(
+                    records["populations"][0], [1.0, 0.0, 0.0, 0.0])
+                self.assertEqual(int(records["tracking_valid"][0]), 0)
+        finally:
+            cleanup()
+
+    def test_all_soc_run_paths_prepare_and_write_dense_trajectories(self):
+        src = NAMD.read_text()
+
+        self.assertEqual(src.count("self._prepare_md_outputs()"), 6)
+        for name in ("_log_soc", "_log_mch", "_log_soc_qmmm", "_log_mch_qmmm"):
+            block = re.search(
+                rf"    def {name}\(.*?(?=\n    def |\n\nclass |\n\ndef )",
+                src, re.S)
+            self.assertIsNotNone(block, name)
+            self.assertIn("self._write_md_trajectory(", block.group(0), name)
 
     def test_qmmm_single_point_inputs_stay_on_runner_path(self):
         src = PYOQP.read_text()
