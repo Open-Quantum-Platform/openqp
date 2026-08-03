@@ -113,7 +113,13 @@ def install_trace(
             # overlaps, so a single same-spin overlap matrix may not exist.
             tdc = np.full((nstate, nstate), np.nan)
         cmhp = np.full((nstate, nstate), np.nan)
-        if results.size >= nstate * nstate:
+        observed_probabilities = getattr(
+            self, "_last_hop_probabilities", None)
+        if (observed_probabilities is not None
+                and np.asarray(observed_probabilities).size == nstate*nstate):
+            cmhp = np.asarray(
+                observed_probabilities, dtype=float).reshape(nstate, nstate)
+        elif results.size >= nstate * nstate:
             # The native record is a Fortran column-major flattening.
             cmhp = results[: nstate * nstate].reshape(nstate, nstate, order="F")
         row = build_trace_row(

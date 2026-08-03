@@ -16,12 +16,13 @@ openqp examples/QMMM/H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp
 
 ## NAMD-QMMM (surface-hopping dynamics)
 
-Minimal (`[md] nstep=1`) nonadiabatic-dynamics demonstrations on formaldehyde
+Minimal nonadiabatic-dynamics demonstrations on formaldehyde
 (QM) solvated by 5 TIP3P waters (MM), `NoCutoff` (non-periodic cluster):
 
 | Input | What it shows |
 | --- | --- |
-| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp` | MRSF-TDDFT FSSH (internal conversion, `[md] soc=false`) with ESPF QM/MM. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp` | Two-step NVE MRSF-TDDFT FSSH with independent conservative droplet and solute-COM controls. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM-NVT.inp` | One-step NVT smoke run with the independent Langevin thermostat and separately recorded energy exchange. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
 
 Auxiliary files: `formaldehyde_water.pdb` (QM+MM coordinates/topology),

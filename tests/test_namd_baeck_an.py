@@ -223,6 +223,8 @@ else:
 with np.load(d.restart_file, allow_pickle=False) as last_good:
     last_good_step = int(last_good['step'][0])
 d.coef = np.array([1+0j, 0+0j])
+with open(d.trajectory_file, 'ab') as stream:
+    stream.write(b'incomplete packed trajectory record')
 
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
@@ -316,6 +318,35 @@ except ValueError:
 else:
     sidecar_collision_rejected = False
 
+gate_driver = NAMD.__new__(NAMD)
+gate_driver.mol = SimpleNamespace(data={
+    'OQP::td_energies_old': np.array([0.0, 0.3]),
+    'OQP::td_energies': np.array([0.0, 0.2]),
+})
+gate_driver.nacme_check = 'baeck_an'
+gate_driver.nstate = 2
+gate_driver.dt = 1.0
+gate_driver.tdc_scheme = 0
+gate_driver._ba_energy_left = np.array([0.0, 0.2])
+gate_driver._ba_energy_center = np.array([0.0, 0.1])
+gate_driver._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]])
+gate_driver._ba_dt_left = 1.0
+gate_driver._nacme_gate_failures = 2
+gate_driver._nacme_gate_last = {'verdict': 'fail'}
+gate_driver._nacme_reference_tdc = np.ones((2, 2))
+gate_driver._nacme_reference_mask = np.ones((2, 2), dtype=np.int32)
+gate_driver._nacme_reference_source = 1
+gate_driver._ba_last = {'gate': 'stale'}
+gate_driver._update_baeck_an_check(2, np.eye(2))
+baeck_reseed_cleared_gate = (
+    gate_driver._nacme_gate_failures == 0
+    and gate_driver._nacme_gate_last is None
+    and gate_driver._nacme_reference_tdc is None
+    and gate_driver._nacme_reference_mask is None
+    and gate_driver._nacme_reference_source == 0
+    and gate_driver._ba_last is None
+)
+
 asset_dir = os.path.join(root, 'assets')
 output_dir = os.path.join(root, 'outputs')
 os.makedirs(asset_dir); os.makedirs(output_dir)
@@ -388,6 +419,7 @@ print('DENSE=' + json.dumps({
     'invalid_electronic_checkpoint_rejected': invalid_electronic_checkpoint_rejected,
     'last_good_step': last_good_step,
     'sidecar_collision_rejected': sidecar_collision_rejected,
+    'baeck_reseed_cleared_gate': baeck_reseed_cleared_gate,
     'manifest_geom_rebased': geom_path in rebased_manifest,
     'manifest_topology_rebased': topology_path in rebased_manifest,
     'manifest_forcefield_rebased': local_ff_path in rebased_manifest,
@@ -439,6 +471,7 @@ print('DENSE=' + json.dumps({
         'invalid_electronic_checkpoint_rejected': True,
         'last_good_step': 1,
         'sidecar_collision_rejected': True,
+        'baeck_reseed_cleared_gate': True,
         'manifest_geom_rebased': True, 'manifest_topology_rebased': True,
         'manifest_forcefield_rebased': True,
         'manifest_builtin_forcefield': True,

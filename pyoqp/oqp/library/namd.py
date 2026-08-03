@@ -403,8 +403,7 @@ class NAMD:
             md.get('nacme_audit_file', ''), '.namd.nacme.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
-        self.restart_manifest_file = os.path.join(
-            os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        self.restart_manifest_file = self._md_output_path('', '.restart.oqp')
         _validate_namd_sidecar_paths(
             trajectory_file=self.trajectory_file,
             nacme_audit_file=self.nacme_audit_file,
@@ -455,6 +454,7 @@ class NAMD:
             self._setup_gas_restraint_targets()
         self._rng_step = 0
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         self._ba_energy_left = None
         self._ba_energy_center = None
         self._ba_tdc_left = None
@@ -872,6 +872,7 @@ class NAMD:
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         return self._rng_step >= self.first_hop_step
 
     def _hop_random(self):
@@ -997,6 +998,7 @@ class NAMD:
         dt_right = float(self.dt)
 
         if self._ba_energy_center is None:
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -1009,6 +1011,7 @@ class NAMD:
                 self.mol,
                 title='NACME check: Baeck-An history discontinuity; reseeding',
             )
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -1069,6 +1072,15 @@ class NAMD:
         self._ba_energy_center = energies_current.copy()
         self._ba_tdc_left = tdc_current.copy()
         self._ba_dt_left = dt_right
+
+    def _reset_nacme_gate_evaluation(self):
+        """Clear streak and record state for a non-evaluable NACME interval."""
+        self._nacme_gate_failures = 0
+        self._nacme_gate_last = None
+        self._nacme_reference_tdc = None
+        self._nacme_reference_mask = None
+        self._nacme_reference_source = 0
+        self._ba_last = None
 
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
@@ -1876,7 +1888,25 @@ class NAMD:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
             header_size = struct.unpack('<Q', stream.read(8))[0]
+            header = json.loads(stream.read(header_size).decode('utf-8'))
         offset = 16 + header_size
+        dtype = _namd_trajectory_dtype(
+            int(header['nstate']), int(header['natom']))
+        payload_size = os.path.getsize(self.trajectory_file) - offset
+        if payload_size < 0:
+            raise ValueError('restart trajectory header exceeds file size')
+        partial_bytes = payload_size % dtype.itemsize
+        if partial_bytes:
+            with open(self.trajectory_file, 'r+b') as stream:
+                stream.truncate(os.path.getsize(self.trajectory_file)
+                                - partial_bytes)
+                stream.flush()
+                os.fsync(stream.fileno())
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {partial_bytes} incomplete '
+                       f'trajectory byte(s) after the last full record'),
+            )
         header, records = read_namd_trajectory(self.trajectory_file)
         if header.get('signature') != self._restart_signature():
             raise ValueError('restart trajectory and checkpoint model mismatch')
@@ -1884,8 +1914,6 @@ class NAMD:
         keep = int(np.count_nonzero(steps <= int(checkpoint_step)))
         if keep < len(records):
             del records
-            dtype = _namd_trajectory_dtype(
-                int(header['nstate']), int(header['natom']))
             with open(self.trajectory_file, 'r+b') as stream:
                 stream.truncate(offset + keep*dtype.itemsize)
                 stream.flush()
@@ -2951,6 +2979,8 @@ class NAMD_SOC(NAMD):
             fsum = flux.sum()
             if fsum > 1e-30:
                 cmhp = (dp / rho_a) * flux / fsum
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         # energy-based decoherence correction (Granucci-Persico)
         if self.decoherence == 1:
@@ -3326,6 +3356,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
                 # population through channel a->j becomes a hop probability.
                 loss = 2.0 * np.real(1j * c_old[a].conj() * h_mch[a, j] * c_old[j])
                 cmhp[j] = max(0.0, dt * loss / rho_a)
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         if self.decoherence == 1:
             ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)

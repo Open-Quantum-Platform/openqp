@@ -89,7 +89,16 @@ def test_variant_loggers_write_trace_through_common_observer(tmp_path):
         return instance
 
     driver(FakeQMMM)._log_qmmm(1, -1.0, hopped=True)
-    driver(FakeSOC)._log_soc(2, -1.0, 1, 1, 1.0, True)
+    soc_driver = driver(FakeSOC)
+    soc_driver.coef = np.array([0.0 + 0.0j, 0.0 + 0.0j, 1.0 + 0.0j])
+    soc_driver.active = 3
+    soc_driver._last_hop_probabilities = np.array([
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.4, 0.5, 0.0],
+    ])
+    soc_driver._t_fs = 0.125
+    soc_driver._log_soc(2, -1.0, 1, 1, 1.0, True)
     driver(FakeMCH)._log_mch(3, -1.0, 1, 1, True)
     driver(FakeSOCQMMM)._log_soc_qmmm(4, -1.0, 1, 1, 1.0, True)
     driver(FakeMCHQMMM)._log_mch_qmmm(5, -1.0, 1, 1, True)
@@ -100,3 +109,5 @@ def test_variant_loggers_write_trace_through_common_observer(tmp_path):
     assert all(row["hopped"] == "1" for row in rows)
     assert all(row["random"] == "0.25" for row in rows)
     assert all(row["t_fs"] == "0.125" for row in rows)
+    assert rows[1]["p_31"] == "0.4"
+    assert rows[1]["p_32"] == "0.5"
