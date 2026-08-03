@@ -64,7 +64,7 @@ SCHEMA = {
         "init_temp": {"type": float, "default": "300.0"},
         "seed": {"type": int, "default": "0"},
         "rng_stream": {"type": int, "default": "1"},
-        "first_hop_step": {"type": int, "default": "2"},
+        "first_hop_step": {"type": int, "default": "1"},
         "nacme_check": {"type": _string, "default": "baeck_an"},
         "ba_gap_max": {"type": float, "default": "0.0734986443513"},
         "nacme_gate": {"type": _string, "default": "off"},

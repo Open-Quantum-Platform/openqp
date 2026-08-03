@@ -433,7 +433,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIsNotNone(block)
         body = block.group(0)
 
-        self.assertIn("hopped = self._mch_propagate_and_hop(h_mch, e_mch)", body)
+        self.assertIn("hopped = self._mch_propagate_and_hop(", body)
         self.assertIn("if hopped:", body)
         self.assertIn("g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)", body)
         self.assertIn("f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)", body)
@@ -586,6 +586,103 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 driver._hop_rng_log(),
                 "rng_step=2 random=0.060499999999999998",
             )
+        finally:
+            cleanup()
+
+    def test_delayed_hop_still_propagates_all_electronic_coefficients(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            # Same-spin path: the native call must still occur with a negative
+            # allow-hop flag, while no stochastic random number is consumed.
+            driver = namd.NAMD.__new__(namd.NAMD)
+            driver.nstate = 2
+            driver.natom = 1
+            driver.dt_fs = 0.5
+            driver.dt = 0.5 * namd.FS_TO_AU
+            driver.substep = 4
+            driver.thrshe = 0.1
+            driver.active = 1
+            driver.decoherence = 0
+            driver.edc_c = 0.1
+            driver.tdc_scheme = 0
+            driver.trivial = 0
+            driver.trivial_thresh = 0.5
+            driver.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
+            driver.vel = np.zeros((1, 3))
+            driver._hop_random_override = lambda: self.fail(
+                "delayed hop consumed a random number")
+            driver._last_hop_random = np.nan
+            driver.mol = types.SimpleNamespace(data={
+                "OQP::td_states_overlap": np.eye(2),
+                "OQP::td_energies": np.array([0.0, 0.1]),
+            })
+            driver._compute_tdc = lambda _overlap: np.zeros((2, 2))
+
+            native_calls = []
+
+            def propagate_only(mol):
+                native_calls.append(np.array(
+                    mol.data["OQP::namd_params"], copy=True))
+                mol.data["OQP::namd_coef"] = np.array(
+                    [np.sqrt(0.75), 0.0, 0.0, 0.5])
+
+            namd.oqp.mrsf_namd_hop = propagate_only
+            new_active, hopped = driver._hop(allow_hop=False)
+            self.assertEqual(len(native_calls), 1)
+            self.assertLess(native_calls[0][namd._P_ALLOW_HOP], 0.0)
+            np.testing.assert_allclose(
+                driver.coef, [np.sqrt(0.75), 0.5j])
+            self.assertEqual(new_active, 1)
+            self.assertFalse(hopped)
+            self.assertTrue(np.isnan(driver._last_hop_random))
+
+            # SOC adiabatic path: coefficient propagation likewise precedes
+            # the allow-hop return and must not consume the RNG.
+            soc = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+            soc.nstate_soc = 2
+            soc.active = 1
+            soc.dt = 0.2
+            soc.substep = 1
+            soc.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
+            soc.decoherence = 0
+            soc.mass = np.ones(1)
+            soc.vel = np.zeros((1, 3))
+            soc.thrshe = 0.1
+            soc._hop_random_override = lambda: self.fail(
+                "delayed SOC hop consumed a random number")
+            soc._last_hop_random = np.nan
+            theta = 0.2
+            overlap = np.array([
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)],
+            ], dtype=complex)
+            hopped = soc._propagate_and_hop(
+                np.zeros(2), np.zeros(2), overlap, allow_hop=False)
+            self.assertFalse(hopped)
+            self.assertEqual(soc.active, 1)
+            self.assertGreater(abs(soc.coef[1]), 0.1)
+            self.assertTrue(np.isnan(soc._last_hop_random))
+
+            # MCH-basis path follows the same contract.
+            mch = namd.NAMD_SOC_MCH.__new__(namd.NAMD_SOC_MCH)
+            mch.nstate_soc = 2
+            mch.active = 1
+            mch.dt = 0.2
+            mch.coef = np.array([1.0 + 0.0j, 0.0 + 0.0j])
+            mch.decoherence = 0
+            mch.mass = np.ones(1)
+            mch.vel = np.zeros((1, 3))
+            mch.thrshe = 0.1
+            mch._hop_random_override = lambda: self.fail(
+                "delayed MCH hop consumed a random number")
+            mch._last_hop_random = np.nan
+            hopped = mch._mch_propagate_and_hop(
+                np.array([[0.0, 0.2], [0.2, 0.0]]),
+                np.zeros(2), allow_hop=False)
+            self.assertFalse(hopped)
+            self.assertEqual(mch.active, 1)
+            self.assertGreater(abs(mch.coef[1]), 0.01)
+            self.assertTrue(np.isnan(mch._last_hop_random))
         finally:
             cleanup()
 

@@ -592,7 +592,7 @@ OQP_CONFIG_SCHEMA = {
         # the runnable restart manifest freezes the resulting integer seed.
         'seed': {'type': int, 'default': '0'},
         'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
-        'first_hop_step': {'type': int, 'default': '2'},    # KNU-GAMESS/TLF2 two-point initialization convention
+        'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
         'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'

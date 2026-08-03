@@ -1034,7 +1034,8 @@ contains
 !>   (1-D, layout-unambiguous):
 !>     in : OQP_td_states_overlap (n x n), OQP_td_energies (n),
 !>          OQP_namd_coef (2n: re1,im1,re2,im2,...), OQP_namd_velocity (3*nat),
-!>          OQP_namd_params (>=12 packed scalars)
+!>          OQP_namd_params (>=14 packed scalars; slot 14 < 0 suppresses
+!>          state changes while retaining coefficient propagation)
 !>     out: OQP_namd_coef, OQP_namd_velocity (rescaled), OQP_namd_params(active,
 !>          hopped, target), OQP_namd_results (n*n cumulative probs + flags)
   subroutine namd_hop(infos)
@@ -1049,7 +1050,7 @@ contains
 
     integer :: n, nat, i, a, isub, nsub, active, target, decoherence, trivial_en
     real(kind=dp) :: dt_fs, dt_au, hsub, thrshe, rand, edc_c, triv_thr, ekin
-    logical :: hopped, blocked, swapped
+    logical :: hopped, blocked, swapped, allow_hop
 
     real(kind=dp), allocatable :: tdc(:,:), cmhp(:,:), cr(:), ci(:), eabs(:), vel(:,:)
     real(kind=dp), allocatable :: mass_au(:)
@@ -1110,6 +1111,8 @@ contains
     ! params(8) = tdc scheme (0 finite-diff, 1 NPI), handled in the Python driver
     trivial_en  = nint(params(9))
     triv_thr    = params(10)
+    allow_hop   = .true.
+    if (size(params) >= 14) allow_hop = params(14) >= 0.0_dp
     dt_au       = dt_fs*FS_TO_AU
     hsub        = dt_au/real(nsub, dp)
 
@@ -1135,7 +1138,9 @@ contains
 
     ! 1) follow diabatic character across trivial/unavoided crossings
     swapped = .false.
-    if (trivial_en == 1) call namd_trivial_crossing(stas2, triv_thr, active, swapped)
+    if (allow_hop .and. trivial_en == 1) then
+      call namd_trivial_crossing(stas2, triv_thr, active, swapped)
+    end if
 
     ! 2) time-derivative couplings: supplied by the Python driver as a flat
     !    row-major (n x n) matrix (finite difference or norm-preserving
@@ -1161,8 +1166,13 @@ contains
       call namd_decoherence_edc(cr, ci, eabs, active, ekin, dt_au, edc_c)
 
     ! 5) fewest-switches hop + isotropic velocity rescaling
-    call namd_fssh_decision(cmhp, eabs, rand, thrshe, mass_au, vel, &
-                            active, hopped, target, blocked)
+    hopped = .false.
+    blocked = .false.
+    target = active
+    if (allow_hop) then
+      call namd_fssh_decision(cmhp, eabs, rand, thrshe, mass_au, vel, &
+                              active, hopped, target, blocked)
+    end if
 
     ! pack results back
     do i = 1, n

@@ -458,6 +458,7 @@ _P_TRIV_THR = 9
 _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
+_P_ALLOW_HOP = 13       # +1 permit state changes; -1 propagate coefficients only
 _NPARAMS = 16
 
 
@@ -553,7 +554,7 @@ class NAMD:
         self.init_temp = float(md['init_temp'])
         self.seed = _resolve_namd_seed(md.get('seed', 0))
         self.rng_stream = int(md.get('rng_stream', 1))
-        self.first_hop_step = int(md.get('first_hop_step', 2))
+        self.first_hop_step = int(md.get('first_hop_step', 1))
         self.nacme_check = str(md.get(
             'nacme_check', 'baeck_an')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
@@ -1371,11 +1372,11 @@ class NAMD:
         self._trajectory_prefix_stat = None
 
     def _prepare_hop_step(self, istep):
-        """Bind the physical MD step to the stateless hop RNG.
+        """Bind the physical MD step and report whether transitions are allowed.
 
-        Returning ``False`` suppresses both electronic propagation and the
-        stochastic FSSH decision.  The compatibility default is step 1; use
-        step 2 explicitly for the KNU-GAMESS/TLF2 initialisation convention.
+        Electronic coefficients and hop probabilities are propagated at every
+        overlap-defined interval, including step 1.  Returning ``False`` only
+        suppresses active-state changes, velocity rescaling, and RNG use.
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
@@ -3439,8 +3440,8 @@ class NAMD:
     # ------------------------------------------------------------------ #
     # Fortran FSSH hop
     # ------------------------------------------------------------------ #
-    def _hop(self):
-        """Call the Fortran FSSH kernel; updates amplitudes, velocities, active state."""
+    def _hop(self, allow_hop=True):
+        """Propagate amplitudes in Fortran and optionally permit a state change."""
         mol = self.mol
         n = self.nstate
 
@@ -3456,7 +3457,7 @@ class NAMD:
         params[_P_DT_FS] = self.dt_fs
         params[_P_NSUB] = float(self.substep)
         params[_P_THRSHE] = self.thrshe
-        params[_P_RAND] = self._hop_random()
+        params[_P_RAND] = self._hop_random() if allow_hop else 0.0
         params[_P_ACTIVE] = float(self.active)
         params[_P_DECO] = float(self.decoherence)
         params[_P_EDC_C] = self.edc_c
@@ -3464,6 +3465,7 @@ class NAMD:
         params[_P_TRIV] = float(self.trivial)
         params[_P_TRIV_THR] = self.trivial_thresh
         params[_P_NSTATE] = float(n)
+        params[_P_ALLOW_HOP] = 1.0 if allow_hop else -1.0
         mol.data["OQP::namd_params"] = params
 
         # state overlap + time-derivative couplings (FD or NPI), passed to the
@@ -3543,10 +3545,8 @@ class NAMD:
             hop_ready = self._prepare_hop_step(istep)
             if getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
-            elif hop_ready:
-                new_active, hopped = self._hop()
             else:
-                new_active, hopped = self.active, False
+                new_active, hopped = self._hop(allow_hop=hop_ready)
 
             active_changed = new_active != active_old
             if active_changed:
@@ -4201,10 +4201,8 @@ class NAMD_QMMM(NAMD):
             hop_ready = self._prepare_hop_step(istep)
             if getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
-            elif hop_ready:
-                new_active, hopped = self._hop()
             else:
-                new_active, hopped = self.active, False
+                new_active, hopped = self._hop(allow_hop=hop_ready)
             self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
             active_changed = new_active != active_old
             if active_changed:
@@ -4586,7 +4584,7 @@ class NAMD_SOC(NAMD):
         self._last_overlap_tdc = kgen / self.dt
         return tu, kgen
 
-    def _propagate_and_hop(self, eval_prev, eval_cur, t):
+    def _propagate_and_hop(self, eval_prev, eval_cur, t, allow_hop=True):
         """Local-diabatization (SHARC) propagation of the spin-adiabatic
         amplitudes + fewest-switches hop + isotropic velocity rescaling.
 
@@ -4665,6 +4663,8 @@ class NAMD_SOC(NAMD):
         self.coef = c_new
 
         # fewest-switches hop decision
+        if not allow_hop:
+            return False
         rand = self._hop_random()
         hopped = False
         lower = 0.0
@@ -4907,11 +4907,9 @@ class NAMD_SOC(NAMD):
             active_old = self.active
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure)
-            if self._prepare_hop_step(istep):
-                hopped = self._propagate_and_hop(self.prev_eval, eval_ha, t)
-            else:
-                self._soc_unitary_overlap(t)
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._propagate_and_hop(
+                self.prev_eval, eval_ha, t, allow_hop=allow_hop)
             if hopped:
                 grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
                 accel_new = -grad / self.mass[:, None]
@@ -5035,7 +5033,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
         e = self._mch_energies_abs()[active - 1]
         return g, e, mult, state
 
-    def _mch_propagate_and_hop(self, h_mch, e_mch):
+    def _mch_propagate_and_hop(self, h_mch, e_mch, allow_hop=True):
         from scipy.linalg import expm
         n = self.nstate_soc
         a = self.active - 1
@@ -5080,6 +5078,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
                     c_new[a] *= np.sqrt(max(0.0, 1.0 - p_others) / pa)
         self.coef = c_new
 
+        if not allow_hop:
+            return False
         rand = self._hop_random()
         hopped = False
         lower = 0.0
@@ -5147,10 +5147,9 @@ class NAMD_SOC_MCH(NAMD_SOC):
 
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure)
-            if self._prepare_hop_step(istep):
-                hopped = self._mch_propagate_and_hop(h_mch, e_mch)
-            else:
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._mch_propagate_and_hop(
+                h_mch, e_mch, allow_hop=allow_hop)
             if hopped:
                 grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
                 accel_new = -grad / self.mass[:, None]
@@ -5487,11 +5486,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
             self.vel = self.v_all[self.qm_atoms].copy()
-            if self._prepare_hop_step(istep):
-                hopped = NAMD_SOC._propagate_and_hop(self, self.prev_eval, eval_ha, t)
-            else:
-                self._soc_unitary_overlap(t)
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = NAMD_SOC._propagate_and_hop(
+                self, self.prev_eval, eval_ha, t, allow_hop=allow_hop)
             self.v_all[self.qm_atoms] = self.vel
             if hopped:
                 g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
@@ -5650,10 +5647,9 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
             self.vel = self.v_all[self.qm_atoms].copy()
-            if self._prepare_hop_step(istep):
-                hopped = self._mch_propagate_and_hop(h_mch, e_mch)
-            else:
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._mch_propagate_and_hop(
+                h_mch, e_mch, allow_hop=allow_hop)
             self.v_all[self.qm_atoms] = self.vel
             if hopped:
                 g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
