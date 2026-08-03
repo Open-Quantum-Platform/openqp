@@ -216,6 +216,31 @@ def test_trace_rejects_output_alias_before_deleting_source(tmp_path, alias_kind)
     assert '--trace must not alias' in result.stderr
 
 
+def test_trace_protects_default_and_configured_namd_sidecars(tmp_path):
+    from tools.diagnostics.trace_namd_hop import (
+        _namd_sidecar_paths, _reject_trace_aliases,
+    )
+
+    log_path = tmp_path / 'thymine.log'
+    defaults = _namd_sidecar_paths({}, log_path)
+    assert set(path.name for path in defaults.values()) == {
+        'thymine.namd.trj', 'thymine.namd.nacme.tsv',
+        'thymine.namd.restart.npz', 'thymine.namd.restart.oqp',
+    }
+    configured = _namd_sidecar_paths({
+        'trajectory_file': 'custom.trj',
+        'nacme_audit_file': str(tmp_path / 'absolute.tsv'),
+        'restart_file': 'custom.restart',
+    }, log_path)
+    assert configured['trajectory-file'] == (tmp_path / 'custom.trj').resolve()
+    assert configured['nacme-audit-file'] == (tmp_path / 'absolute.tsv').resolve()
+    assert configured['restart-file'] == (tmp_path / 'custom.restart').resolve()
+    for paths in (defaults, configured):
+        for name, path in paths.items():
+            with pytest.raises(ValueError, match=name):
+                _reject_trace_aliases(path, {name: path})
+
+
 def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
     script = r"""
 import json
@@ -567,6 +592,20 @@ incremental_trajectory_digest = (
     d2._trajectory_checkpoint_identity(1) == expected_trajectory_prefix)
 d2._scan_trajectory_prefix = original_scan
 
+# The much smaller NACME TSV follows the same incremental checkpoint path;
+# normal saves must not reread all previous validation rows either.
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    expected_audit_prefix = {
+        'bytes': int(saved['audit_prefix_bytes'][0]),
+        'sha256': str(saved['audit_prefix_sha256'][0]),
+    }
+original_audit_scan = d2._nacme_audit_committed_prefix
+d2._nacme_audit_committed_prefix = lambda _step: (_ for _ in ()).throw(
+    AssertionError('normal checkpoint rescanned the NACME audit'))
+incremental_audit_digest = (
+    d2._nacme_audit_checkpoint_identity(1) == expected_audit_prefix)
+d2._nacme_audit_committed_prefix = original_audit_scan
+
 # Losing the dense sidecar must not replace the last-good checkpoint with an
 # empty-prefix checkpoint.
 checkpoint_before_missing_trajectory = open(d.restart_file, 'rb').read()
@@ -629,6 +668,10 @@ else:
     foreign_audit_rejected = False
 with open(d.nacme_audit_file, 'w', encoding='utf-8') as stream:
     stream.write(legitimate_audit)
+audit_prefix, audit_removed = d._nacme_audit_committed_prefix((1 << 63) - 1)
+if audit_removed:
+    raise RuntimeError('restored legitimate NACME audit was truncated')
+d._remember_nacme_audit_prefix(audit_prefix)
 
 # A checkpoint created before the validation file exists must still recognize
 # and remove rows written after that checkpoint, including the first header.
@@ -1427,6 +1470,7 @@ print('DENSE=' + json.dumps({
         'foreign_audit_rejected': foreign_audit_rejected,
         'foreign_trajectory_rejected': foreign_trajectory_rejected,
         'incremental_trajectory_digest': incremental_trajectory_digest,
+        'incremental_audit_digest': incremental_audit_digest,
         'missing_trajectory_save_rejected': missing_trajectory_save_rejected,
         'last_good_checkpoint_preserved': last_good_checkpoint_preserved,
         'zero_step_audit_rolled_back': zero_step_audit_rolled_back,
@@ -1513,6 +1557,7 @@ print('DENSE=' + json.dumps({
         'foreign_audit_rejected': True,
         'foreign_trajectory_rejected': True,
         'incremental_trajectory_digest': True,
+        'incremental_audit_digest': True,
         'missing_trajectory_save_rejected': True,
         'last_good_checkpoint_preserved': True,
         'zero_step_audit_rolled_back': True,

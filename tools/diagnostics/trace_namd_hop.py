@@ -19,6 +19,35 @@ from oqp.library import namd as namd_module
 from oqp.pyoqp import Runner
 
 
+def _namd_sidecar_paths(md: dict, log_path: Path) -> dict[str, Path]:
+    """Resolve the production NAMD outputs without constructing the driver."""
+    log_path = log_path.expanduser().resolve()
+    log_dir = log_path.parent
+    stem = log_path.stem
+
+    def output(key: str, suffix: str) -> Path:
+        configured = str(md.get(key, '') or '').strip()
+        if configured:
+            path = Path(configured).expanduser()
+            return path.resolve() if path.is_absolute() else (log_dir / path).resolve()
+        return (log_dir / f'{stem}{suffix}').resolve()
+
+    return {
+        'trajectory-file': output('trajectory_file', '.namd.trj'),
+        'nacme-audit-file': output('nacme_audit_file', '.namd.nacme.tsv'),
+        'restart-file': output('restart_file', '.namd.restart.npz'),
+        'restart-manifest-file': (
+            log_dir / f'{stem}.namd.restart.oqp').resolve(),
+    }
+
+
+def _reject_trace_aliases(trace: Path, protected_paths: dict[str, Path]) -> None:
+    aliases = [name for name, path in protected_paths.items() if path == trace]
+    if aliases:
+        raise ValueError(
+            f"--trace must not alias the {', '.join(aliases)} path")
+
+
 class SequenceRNG:
     """Minimal Generator-compatible source for a prescribed hop RNG stream."""
 
@@ -142,16 +171,17 @@ def main() -> None:
     input_path = Path(args.input).expanduser().resolve()
     random_path = (None if args.random_file is None
                    else args.random_file.expanduser().resolve())
-    protected_paths = {'input': input_path, 'log': Path('thymine.log').resolve()}
+    log_path = Path('thymine.log').resolve()
+    protected_paths = {'input': input_path, 'log': log_path}
     if random_path is not None:
         protected_paths['random-file'] = random_path
-    aliases = [name for name, path in protected_paths.items() if path == trace]
-    if aliases:
-        raise ValueError(
-            f"--trace must not alias the {', '.join(aliases)} path")
+    _reject_trace_aliases(trace, protected_paths)
     runner = Runner(
         project="thymine", input_file=args.input, log="thymine.log",
         silent=1, usempi=False)
+    protected_paths.update(_namd_sidecar_paths(
+        runner.mol.config.get('md', {}), log_path))
+    _reject_trace_aliases(trace, protected_paths)
     soc = runner.mol.config.get("md", {}).get("soc", False)
     if soc:
         raise ValueError(

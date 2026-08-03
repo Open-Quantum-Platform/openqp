@@ -365,11 +365,20 @@ class OQPTester:
             "--output-dir", self.output_dir,
             "--omp", str(self.omp_threads),
         ]
+        child_env = os.environ.copy()
+        inherited_pythonpath = child_env.get("PYTHONPATH")
+        if inherited_pythonpath is not None:
+            parent_cwd = os.getcwd()
+            child_env["PYTHONPATH"] = os.pathsep.join(
+                os.path.realpath(os.path.abspath(os.path.expanduser(entry)))
+                if entry else parent_cwd
+                for entry in inherited_pythonpath.split(os.pathsep)
+            )
         start_time = time.perf_counter()
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=_test_timeout(),
-                cwd=case_output_dir,
+                cwd=case_output_dir, env=child_env,
             )
             stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
         except subprocess.TimeoutExpired as err:

@@ -1,4 +1,5 @@
 import importlib.util
+import os
 import sys
 import tempfile
 import types
@@ -842,8 +843,16 @@ class TestOQPTesterCollection(unittest.TestCase):
                         returncode=0,
                     )
 
-                with mock.patch.object(
-                    tester_module.subprocess, "run", side_effect=fake_run
+                relative_pythonpath = os.pathsep.join(
+                    ("pyoqp", "", str(root / "absolute-package")))
+                with (
+                    mock.patch.object(
+                        tester_module.subprocess, "run", side_effect=fake_run
+                    ),
+                    mock.patch.dict(
+                        tester_module.os.environ,
+                        {"PYTHONPATH": relative_pythonpath}, clear=False,
+                    ),
                 ):
                     result = tester._run_isolated(str(input_file))
 
@@ -857,6 +866,15 @@ class TestOQPTesterCollection(unittest.TestCase):
                 self.assertEqual(Path(cmd[isolated_index]), input_file.resolve())
                 self.assertEqual(Path(kwargs["cwd"]), expected_dir)
                 self.assertTrue(expected_dir.is_dir())
+                child_pythonpath = kwargs["env"]["PYTHONPATH"].split(os.pathsep)
+                self.assertEqual(
+                    child_pythonpath,
+                    [
+                        str((Path.cwd() / "pyoqp").resolve()),
+                        str(Path.cwd()),
+                        str((root / "absolute-package").resolve()),
+                    ],
+                )
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):
         class NoopRunner:
