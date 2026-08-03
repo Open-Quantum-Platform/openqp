@@ -1214,9 +1214,9 @@ def _validate_semantics(spec: CalculationSpec) -> None:
         options = _driver_options(driver)
     if driver.name == "mecp":
         algorithm = str(options.get("mecp_search", "auglag")).strip().lower()
-        if algorithm not in {"auglag", "penalty", "quad"}:
+        if algorithm not in {"auglag", "sqp", "penalty", "quad"}:
             raise OQPInputError(
-                "mecp algorithm must be auglag, penalty, or quad"
+                "mecp algorithm must be auglag, sqp, penalty, or quad"
             )
 
     if driver.name == "meci":

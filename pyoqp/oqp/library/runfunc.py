@@ -297,6 +297,14 @@ def get_optimizer(mol):
         # doubles and keeps the automatic orchestration native-only.
         from oqp.library.liboqp import OQPAutoMECIOpt
         return OQPAutoMECIOpt(mol)
+    if lib == 'oqp' and runtype == 'mecp' and \
+            str(mol.config['optimize'].get('mecp_search', 'auglag')).strip().lower() == 'sqp':
+        # SQP supplies its own KKT step control instead of an objective for the
+        # native engine, so it is dispatched like BaekA rather than through
+        # OQPMECPOpt.
+        from oqp.library.libscipy import SQPMECPOpt
+        return SQPMECPOpt(mol)
+
     if lib == 'oqp' and runtype == 'meci' and meci_search == 'baeka':
         # Lazy import keeps lightweight dispatcher test doubles compatible;
         # normal OpenQP installations load the real native class here.

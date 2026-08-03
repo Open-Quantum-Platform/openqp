@@ -761,6 +761,10 @@ class MECPOpt(Optimizer):
     calculation, which is why the fixed-weight quadratic penalty is no longer
     the default.
 
+    sqp      sequential quadratic programming.  Solves the KKT equations of
+             the constrained problem directly, so the multiplier comes out of
+             the step rather than a formula and there is no penalty parameter
+             to choose.  Needs SQPMECPOpt, which brings its own step control.
     auglag   augmented Lagrangian (default).  A least-squares multiplier
              absorbs the mean-gradient component along the branching
              direction, leaving a gap term and a projected mean gradient that
@@ -791,6 +795,7 @@ class MECPOpt(Optimizer):
         self.lagrange = 0.0
         self.mu_scaled = None
         self.mu = mol.config['optimize']['gap_sigma']
+        self.sqp_point = None
         self.metrics['mecp_search'] = self.mecp_search
 
         # check method
@@ -801,6 +806,7 @@ class MECPOpt(Optimizer):
         # choose mecp search method
         func_dict = {
             'auglag': self.auglag,
+            'sqp': self.sqp,
             'penalty': self.penalty,
             'quad': self.quad,
         }
@@ -994,6 +1000,49 @@ class MECPOpt(Optimizer):
 
         return self.record(coordinates, f, df, gap_e, gap_term)
 
+    def sqp(self, coordinates, energies, grads):
+        """
+        sequential quadratic programming target
+
+        MECP is a single equality-constrained minimisation,
+
+            minimise 0.5 * (E1 + E2)   subject to   c = E2 - E1 = 0
+
+        and both c and its gradient G2 - G1 are available analytically because
+        the two states differ in multiplicity.  That is the whole problem: no
+        estimated directions, no penalty parameter.  SQPMECPOpt solves the KKT
+        equations of the local quadratic model for the step and the multiplier
+        together, so lam is a result rather than a formula and there is no
+        gap_sigma to choose.
+
+        This work function only records the pieces the driver needs.  The value
+        and gradient it reports are the Lagrangian and its gradient at the
+        current multiplier, whose stationarity together with c = 0 defines the
+        crossing, so the standard convergence test applies unchanged.  lam
+        trails the geometry by one iteration, which costs at most one extra
+        step near the solution.
+        """
+
+        energy_i, energy_j, grad_i, grad_j = self.state_pair(energies, grads)
+
+        gap_e = energy_j - energy_i
+        gap_g = grad_j - grad_i
+        mean_g = (grad_i + grad_j) * 0.5
+
+        self.sqp_point = {
+            'mean_e': (energy_i + energy_j) * 0.5,
+            'mean_g': mean_g,
+            'c': gap_e,
+            'gc': gap_g,
+        }
+
+        gap_term = self.lagrange * gap_g
+        f = (energy_i + energy_j) * 0.5 + self.lagrange * gap_e
+        df = mean_g + gap_term
+        self.metrics['lagrange'] = self.lagrange
+
+        return self.record(coordinates, f, df, gap_e, gap_term)
+
     def penalty(self, coordinates, energies, grads):
         """
         smooth penalty optimization
@@ -1082,6 +1131,189 @@ class MECPOpt(Optimizer):
                 dump_log(self.mol,
                          title='PyOQP: Geometry Optimization Has Not Converged. Reached The Maximum Iteration')
                 raise StopIteration
+
+
+class SQPMECPOpt(MECPOpt):
+    r"""Trust-region SQP for the MECP problem.
+
+    MECP is
+
+        minimise 0.5 * (E1 + E2)   subject to   c(R) = E2 - E1 = 0,
+
+    a single equality constraint whose gradient G2 - G1 is analytic.  Each
+    iteration solves the KKT equations of the local quadratic model
+
+        | B    gc | | p   |   | -mean_g |
+        |         | |     | = |         |
+        | gc^T  0 | | lam |   |   -c    |
+
+    where B is a damped BFGS approximation to the Hessian of the Lagrangian
+    built from the gradients already being computed, so no second derivatives
+    are needed.  The step and the multiplier come out together, which is what
+    distinguishes this from auglag: there is no penalty parameter, so no
+    gap_sigma to choose.
+
+    The step length is capped by a trust radius that adapts to how well the
+    quadratic model predicted the merit function.  Steps are never rejected,
+    so there is exactly one electronic-structure evaluation per iteration and
+    the objective is never evaluated at a geometry the optimizer then discards.
+
+    reference: Nocedal and Wright, Numerical Optimization, ch. 18
+    """
+
+    def __init__(self, mol):
+        MECPOpt.__init__(self, mol)
+        if self.mecp_search != 'sqp':
+            raise ValueError(
+                f'SQPMECPOpt requires mecp_search=sqp, but found '
+                f'{self.mecp_search}'
+            )
+        native = mol.config.get('oqp', {}) or {}
+        self.trust = float(native.get('trust', 0.1) or 0.1)
+        self.trust_max = float(native.get('trust_max', 0.3) or 0.3)
+        self.trust_min = 1.0e-4
+
+    def kkt_step(self, hess, mean_g, gap_g, c):
+        """Return the KKT step and multiplier, or None if the system is singular."""
+        ndim = mean_g.size
+        matrix = np.zeros((ndim + 1, ndim + 1))
+        matrix[:ndim, :ndim] = hess
+        matrix[:ndim, ndim] = gap_g
+        matrix[ndim, :ndim] = gap_g
+        rhs = np.concatenate([-mean_g, [-c]])
+        try:
+            solution = np.linalg.solve(matrix, rhs)
+        except np.linalg.LinAlgError:
+            return None
+        if not np.all(np.isfinite(solution)):
+            return None
+        return solution[:ndim], float(solution[ndim])
+
+    def optimize(self):
+        coordinates = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        ndim = coordinates.size
+        hess = np.eye(ndim)
+        trust = self.trust
+        previous = None
+        predicted = None
+        merit = None
+        weight = 1.0
+        on_boundary = False
+        best = {'score': float('inf'), 'coordinates': coordinates.copy()}
+
+        try:
+            while True:
+                self.one_step(coordinates)
+                point = self.sqp_point
+                mean_e, mean_g = point['mean_e'], point['mean_g']
+                c, gap_g = point['c'], point['gc']
+
+                # merit function, used only to size the trust radius.  The
+                # weight only grows, so successive merits are comparable.
+                merit_now = mean_e + weight * abs(c)
+                if merit is not None and predicted:
+                    ratio = (merit - merit_now) / predicted
+                    if ratio < 0.0:
+                        # The model did not merely overshoot, it pointed the
+                        # wrong way.  Near the seam that means the accumulated
+                        # curvature has gone bad, so discard it rather than
+                        # keep stepping on it.
+                        hess = np.eye(ndim)
+                        trust = max(0.25 * trust, self.trust_min)
+                    elif ratio < 0.25:
+                        trust = max(0.25 * trust, self.trust_min)
+                    elif ratio > 0.75 and on_boundary:
+                        # grow only when the cap was what limited the step,
+                        # which is the standard test; growing after an interior
+                        # step would widen a radius that was not binding
+                        trust = min(2.0 * trust, self.trust_max)
+                merit = merit_now
+
+                # Normalised worst criterion: 1.0 means every threshold is
+                # exactly met.  Keeping the best point makes a late divergence
+                # cost iterations rather than the answer.
+                residual = mean_g + self.lagrange * gap_g
+                score = max(
+                    abs(c) / self.energy_gap,
+                    float(np.mean(residual ** 2) ** 0.5) / self.rmsd_grad,
+                )
+                if score < best['score']:
+                    best = {'score': score, 'coordinates': coordinates.copy()}
+
+                if previous is not None:
+                    step_old, grad_old = previous
+                    grad_new = mean_g + self.lagrange * gap_g
+                    dgrad = grad_new - grad_old
+                    curvature = step_old @ hess @ step_old
+                    if curvature > 0:
+                        # Powell damping keeps B positive definite even where
+                        # the Lagrangian is genuinely indefinite
+                        if step_old @ dgrad < 0.2 * curvature:
+                            theta = 0.8 * curvature / (curvature - step_old @ dgrad)
+                            dgrad = theta * dgrad + (1.0 - theta) * (hess @ step_old)
+                        denominator = step_old @ dgrad
+                        if denominator > 1.0e-14:
+                            hess = (hess + np.outer(dgrad, dgrad) / denominator
+                                    - np.outer(hess @ step_old, hess @ step_old)
+                                    / curvature)
+
+                solved = self.kkt_step(hess, mean_g, gap_g, c)
+                if solved is None:
+                    # A singular system means the branching direction carries no
+                    # information at this geometry; restart the curvature model
+                    # rather than taking an undefined step.
+                    hess = np.eye(ndim)
+                    solved = self.kkt_step(hess, mean_g, gap_g, c)
+                    if solved is None:
+                        dump_log(
+                            self.mol,
+                            title=(
+                                'PyOQP: MECP SQP step is undefined; the two '
+                                'states have identical gradients at this '
+                                'geometry'
+                            ),
+                        )
+                        raise StopIteration
+                step, lagrange = solved
+                self.lagrange = lagrange
+                # The weight must dominate |lam| for the merit function to be
+                # exact, but it must not chase a wild early multiplier, which
+                # would swamp the energy term and make every ratio meaningless.
+                weight = min(max(weight, 2.0 * abs(lagrange) + 1.0), 1.0e4)
+
+                self.check_convergence()
+
+                # A capped step only removes the fraction of the constraint
+                # violation that it covers.  Crediting the model with the whole
+                # of it makes every shortened step look like a failure, which
+                # shrinks the radius further and collapses the search.
+                length = np.linalg.norm(step)
+                fraction = 1.0 if length <= trust else trust / length
+                on_boundary = fraction < 1.0
+                step = step * fraction
+                predicted = max(
+                    -(mean_g @ step) - 0.5 * (step @ hess @ step)
+                    + weight * fraction * abs(c),
+                    1.0e-16,
+                )
+                previous = (step, mean_g + lagrange * gap_g)
+                coordinates = coordinates + step
+        except StopIteration:
+            pass
+
+        if best['score'] < float('inf') and not np.allclose(
+                best['coordinates'], coordinates):
+            dump_log(
+                self.mol,
+                title=(
+                    'PyOQP: MECP SQP returning the best geometry of the run, '
+                    'which is not the last one visited'
+                ),
+            )
+            coordinates = best['coordinates']
+
+        self.mol.update_system(coordinates.reshape((self.natom, 3)))
+        return coordinates
 
 
 class StateSpecificOpt(Optimizer):
