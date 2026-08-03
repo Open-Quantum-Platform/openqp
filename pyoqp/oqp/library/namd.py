@@ -1289,6 +1289,35 @@ class NAMD:
             'sha256': digest.hexdigest(),
         }
 
+    @staticmethod
+    def _espf_environment_identity():
+        """Return effective ESPF environment controls that alter QM/MM forces."""
+        def enabled(name):
+            return os.environ.get(name, '').strip() in ('1', 'on')
+
+        def enabled_by_default(name):
+            return os.environ.get(name, '').strip() not in ('0', 'off')
+
+        def real_value(name, default):
+            value = os.environ.get(name, '').strip()
+            if not value:
+                return float(default)
+            # Fortran list-directed input accepts D exponents; normalize them
+            # before producing the equivalent numeric restart identity.
+            return float(value.replace('d', 'e').replace('D', 'E'))
+
+        return {
+            'rohf': enabled('ESPF_ROHF'),
+            'legacy_gradient': enabled('ESPF_LEGACY'),
+            'hard_grid': enabled('ESPF_HARD_GRID'),
+            'keep_all': enabled('ESPF_KEEPALL'),
+            'smooth': enabled_by_default('ESPF_SMOOTH'),
+            'weight_derivative': enabled_by_default('ESPF_WDERIV'),
+            'weight_scale': real_value('ESPF_WSCALE', 1.0),
+            'switch_delta': real_value('ESPF_SWDELTA', 0.7),
+            'switch_scale': real_value('ESPF_SWSCALE', 1.8),
+        }
+
     def _effective_tight_binding_settings(self):
         """Return TB settings after non-mutating default-model resolution."""
         method = str(self.mol.config['input'].get('method', '')).lower()
@@ -1436,13 +1465,11 @@ class NAMD:
                 key: str(qmmm.get(key, ''))
                 for key in ('cutoff', 'embedding', 'frontier_scheme')
             }
-            # These environment switches change the QM/MM charge/gradient
-            # model in both Python and Fortran. Store their effective boolean
-            # semantics so an incompatible checkpoint cannot be resumed.
-            identity['qmmm_model']['espf_rohf'] = (
-                os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'))
-            identity['qmmm_model']['espf_hard_grid'] = (
-                os.environ.get('ESPF_HARD_GRID', '').strip() in ('1', 'on'))
+            # These environment controls change the QM/MM charge, grid, or
+            # gradient model in Python/Fortran.  Store effective values so a
+            # checkpointed acceleration cannot cross a force-model boundary.
+            identity['qmmm_model']['espf'] = (
+                self._espf_environment_identity())
             forcefields = (qmmm.get('forcefield_files', '')
                            or qmmm.get('forcefield', ''))
             identity['qmmm_model']['forcefields'] = (

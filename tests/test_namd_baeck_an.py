@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -35,6 +36,14 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert 'self.coef[2]' not in tracer
     assert "does not support SOC NAMD logging paths" in tracer
     assert "finally:" in tracer
+    qmmm_source = (ROOT / "source" / "modules" / "qmmm.F90").read_text()
+    espf_environment = set(re.findall(
+        r"get_environment_variable\('([^']+)'", qmmm_source))
+    assert espf_environment == {
+        'ESPF_ROHF', 'ESPF_LEGACY', 'ESPF_WDERIV', 'ESPF_WSCALE',
+        'ESPF_SMOOTH', 'ESPF_SWDELTA', 'ESPF_SWSCALE', 'ESPF_KEEPALL',
+        'ESPF_HARD_GRID', 'ESPF_NPRINT',
+    }
     example_inp = (
         ROOT / "examples" / "QMMM" /
         "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp"
@@ -842,19 +851,37 @@ def espf_probe():
     probe.m_all = np.ones(3)
     return probe
 
-os.environ['ESPF_ROHF'] = '0'
-os.environ['ESPF_HARD_GRID'] = '0'
-espf_default_signature = espf_probe()._restart_signature()
-os.environ['ESPF_ROHF'] = '1'
-espf_rohf_signature = espf_probe()._restart_signature()
-os.environ['ESPF_ROHF'] = '0'
-os.environ['ESPF_HARD_GRID'] = 'on'
-espf_hard_grid_signature = espf_probe()._restart_signature()
-os.environ.pop('ESPF_ROHF')
-os.environ.pop('ESPF_HARD_GRID')
-espf_modes_bound = (
-    espf_default_signature != espf_rohf_signature
-    and espf_default_signature != espf_hard_grid_signature)
+espf_force_controls = {
+    'ESPF_ROHF': '1',
+    'ESPF_LEGACY': 'on',
+    'ESPF_HARD_GRID': '1',
+    'ESPF_KEEPALL': '1',
+    'ESPF_SMOOTH': '0',
+    'ESPF_WDERIV': 'off',
+    'ESPF_WSCALE': '0.5',
+    'ESPF_SWDELTA': '0.5',
+    'ESPF_SWSCALE': '2.0',
+}
+saved_espf_environment = {
+    name: os.environ.get(name) for name in espf_force_controls}
+try:
+    for name in espf_force_controls:
+        os.environ.pop(name, None)
+    espf_default_signature = espf_probe()._restart_signature()
+    espf_changed_signatures = {}
+    for name, value in espf_force_controls.items():
+        os.environ[name] = value
+        espf_changed_signatures[name] = espf_probe()._restart_signature()
+        os.environ.pop(name)
+finally:
+    for name, value in saved_espf_environment.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+espf_modes_bound = all(
+    signature != espf_default_signature
+    for signature in espf_changed_signatures.values())
 
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
