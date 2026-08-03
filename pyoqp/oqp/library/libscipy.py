@@ -1418,11 +1418,23 @@ class SQPMECPOpt(MECPOpt):
             # honest about how many steps the search actually took.
             counter, budget = self.itr, self.maxit
             self.maxit = counter + 1
+
+            def quiet_record(coords, value, gradient, gap, gap_term):
+                # Refresh the metrics without appending a status row: this is
+                # the geometry the search already visited, not a new step.
+                self.metrics['gap'] = gap
+                self.metrics['rmsd_grad'] = np.mean(gradient ** 2) ** 0.5
+                self.metrics['max_grad'] = np.amax(np.abs(gradient))
+                return value, gradient
+
+            recorder = self.record
+            self.record = quiet_record
             try:
                 self.one_step(cartesian)
             except StopIteration:
                 pass
             finally:
+                self.record = recorder
                 self.itr, self.maxit = counter, budget
 
         self.mol.update_system(cartesian.reshape((self.natom, 3)))
