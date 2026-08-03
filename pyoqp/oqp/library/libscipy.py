@@ -1185,7 +1185,8 @@ class SQPMECPOpt(MECPOpt):
         native = mol.config.get('oqp', {}) or {}
         self.trust = float(native.get('trust', 0.1) or 0.1)
         self.trust_max = float(native.get('trust_max', 0.3) or 0.3)
-        self.trust_min = 1.0e-4
+        # never let the floor sit above the radius the input asked for
+        self.trust_min = min(1.0e-4, 0.1 * self.trust, 0.1 * self.trust_max)
 
     def kkt_step(self, hess, mean_g, gap_g, c):
         """Return the KKT step and multiplier, or None if the system is singular."""
@@ -1235,6 +1236,16 @@ class SQPMECPOpt(MECPOpt):
                        'optimizer, which this search replaces' % requested),
             )
         coords = build_coordinates(atoms, cartesian.reshape(-1, 3), coordsys)
+        if type(coords).__name__ == 'RedundantInternalCoordinates':
+            # build_coordinates falls back to the redundant set when DLC cannot
+            # be formed.  A dense KKT system in that basis is singular, so drop
+            # to Cartesians, which are at least non-redundant.
+            dump_log(
+                self.mol,
+                title=('PyOQP: MECP SQP could not form delocalized internals; '
+                       'falling back to Cartesian coordinates'),
+            )
+            coords = build_coordinates(atoms, cartesian.reshape(-1, 3), 'cart')
 
         hess = np.asarray(
             coords.guess_hessian(cartesian.reshape(-1, 3)), dtype=float)
@@ -1273,9 +1284,13 @@ class SQPMECPOpt(MECPOpt):
                 if score < best['score']:
                     best = {'score': score, 'coordinates': cartesian.copy()}
 
+                # Recombine the stored point at the current weight so the two
+                # merits being compared belong to the same function even though
+                # the weight grows with the multiplier.
                 merit_now = mean_e + weight * abs(c)
                 if merit is not None and predicted:
-                    ratio = (merit - merit_now) / predicted
+                    previous_merit = merit['mean_e'] + weight * merit['gap']
+                    ratio = (previous_merit - merit_now) / predicted
                     if ratio < 0.0:
                         # The model pointed the wrong way, so the accumulated
                         # curvature is worse than the model Hessian it started
@@ -1287,7 +1302,7 @@ class SQPMECPOpt(MECPOpt):
                         trust = max(0.25 * trust, self.trust_min)
                     elif ratio > 0.75 and on_boundary:
                         trust = min(2.0 * trust, self.trust_max)
-                merit = merit_now
+                merit = {'mean_e': mean_e, 'gap': abs(c)}
 
                 if previous is not None:
                     step_old, grad_old = previous
@@ -1340,6 +1355,7 @@ class SQPMECPOpt(MECPOpt):
                 # Realise the internal step in Cartesians, shrinking it if the
                 # back-transformation will not converge.
                 moved = None
+                attempt_full = step
                 attempt = step
                 for _ in range(5):
                     trial, ok = coords.back_transform(geometry, attempt)
@@ -1356,21 +1372,51 @@ class SQPMECPOpt(MECPOpt):
                     )
                     trust = max(0.25 * trust, self.trust_min)
                     previous = None
+                    predicted = None
                     continue
 
                 cartesian, step = moved[0], moved[1]
+                if not np.allclose(step, attempt_full):
+                    # the back-transformation shortened the step, so the model
+                    # prediction has to describe the step actually taken
+                    shortened = np.linalg.norm(step) / np.linalg.norm(attempt_full)
+                    predicted = max(
+                        -(mean_g @ step) - 0.5 * (step @ hess @ step)
+                        + weight * fraction * shortened * abs(c),
+                        1.0e-16,
+                    )
                 previous = (step, mean_g + lagrange * gap_g)
         except StopIteration:
             pass
 
-        if best['score'] < float('inf') and not np.allclose(
-                best['coordinates'], cartesian):
+        # A converged run must return the geometry that satisfied the criteria.
+        # The best-point score covers the gap and the KKT residual only, so it
+        # can prefer a different geometry that never met the step and energy
+        # tests; restoring it would discard the actual answer.
+        converged = (
+            abs(float(self.metrics.get('de', float('inf')))) <= self.energy_shift
+            and abs(float(self.metrics.get('gap', float('inf')))) <= self.energy_gap
+            and float(self.metrics.get('rmsd_step', float('inf'))) <= self.rmsd_step
+            and float(self.metrics.get('max_step', float('inf'))) <= self.max_step
+            and float(self.metrics.get('rmsd_grad', float('inf'))) <= self.rmsd_grad
+            and float(self.metrics.get('max_grad', float('inf'))) <= self.max_grad
+        )
+
+        if (not converged and best['score'] < float('inf')
+                and not np.allclose(best['coordinates'], cartesian)):
             dump_log(
                 self.mol,
-                title=('PyOQP: MECP SQP returning the best geometry of the run, '
-                       'which is not the last one visited'),
+                title=('PyOQP: MECP SQP did not converge; returning the best '
+                       'geometry of the run and re-evaluating it so the '
+                       'reported energies and gradients match'),
             )
             cartesian = best['coordinates']
+            # mol.energies, mol.grads and the metrics still describe the last
+            # geometry visited, so recompute them at the one being returned.
+            try:
+                self.one_step(cartesian)
+            except StopIteration:
+                pass
 
         self.mol.update_system(cartesian.reshape((self.natom, 3)))
         return cartesian

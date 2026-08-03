@@ -2593,6 +2593,26 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
 
     if runtype == "mecp":
         mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auto"))
+        effective_mecp = mecp_search
+        if effective_mecp == "auto":
+            effective_mecp = "sqp" if lib == "oqp" else "auglag"
+        if effective_mecp == "sqp":
+            ignored = [key for key in
+                       ("auto_recovery", "recovery_maxit", "recovery_trust")
+                       if _get(config, "oqp", key, None) is not None]
+            if ignored:
+                report.add(
+                    "WARNING",
+                    "oqp.%s" % ignored[0],
+                    "MECP SQP brings its own trust-region step control and does "
+                    "not run through the native recovery ladder, so %s "
+                    "%s no effect."
+                    % (", ".join(ignored), "have" if len(ignored) > 1 else "has"),
+                    value=", ".join(ignored),
+                    expected="unset for mecp_search=sqp",
+                    action="Remove them, or select mecp_search=auglag to use "
+                           "the native optimizer and its recovery ladder.",
+                )
         if mecp_search == "sqp" and lib != "oqp":
             report.add(
                 "ERROR",

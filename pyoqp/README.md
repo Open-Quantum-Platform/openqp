@@ -554,6 +554,8 @@ automatically.
 
 - mecp-search // choose the algorithm for spin-crossing (MECP) optimization
 
+      auto       (default) sqp when lib=oqp, auglag on the backends that
+                 bring their own optimizer
       sqp        sequential quadratic programming: solves the KKT equations
                  of the constrained problem for the step and the multiplier
                  together, so the multiplier is a result rather than a formula
@@ -564,12 +566,12 @@ automatically.
                  applies to that optimizer and is therefore not used here.
                  Converges tighter and in fewer steps than auglag on the cases
                  tested so far, which is why auto selects it natively.
-      auglag     (default) least-squares multiplier plus gradient projection;
-                 with gap_sigma=1 the converged form is the plain Bearpark
-                 gradient projection.
-                 The gap term and the projected mean gradient are orthogonal,
-                 so both must vanish separately and the stationary point is a
-                 true crossing
+      auglag     least-squares multiplier plus gradient projection; with
+                 gap_sigma=1 the converged form is the plain Bearpark gradient
+                 projection. The gap term and the projected mean gradient are
+                 orthogonal, so both must vanish separately and the stationary
+                 point is a true crossing. Selected by auto on the scipy and
+                 geometric backends, which supply their own optimizer
       penalty    Levine-Martinez smooth penalty
       quad       legacy fixed-weight quadratic penalty.  Its stationary point
                  balances the mean gradient against the gap term, leaving a
