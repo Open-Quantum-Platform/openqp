@@ -30,6 +30,7 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import hashlib
 import json
 import re
 import struct
@@ -64,6 +65,27 @@ INT64_MAX = (1 << 63) - 1
 NAMD_RESTART_SCHEMA_VERSION = 2
 NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
+
+
+def _restart_file_identity(path, source_directory=''):
+    """Return a portable name/content identity for a restart input file."""
+    configured = '' if path is None else os.fspath(path)
+    identity = {'configured': configured}
+    if not configured:
+        return identity
+    candidates = [configured]
+    if source_directory and not os.path.isabs(configured):
+        candidates.append(os.path.join(source_directory, configured))
+    resolved = next((candidate for candidate in candidates
+                     if os.path.isfile(candidate)), None)
+    if resolved is None:
+        return identity
+    digest = hashlib.sha256()
+    with open(resolved, 'rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    identity['sha256'] = digest.hexdigest()
+    return identity
 
 
 def _namd_trajectory_dtype(nstate, natom):
@@ -928,6 +950,7 @@ class NAMD:
             reference_mask=ba_mask,
             source='TD-Baeck-An',
             center_step=center_step,
+            evaluation_step=istep,
             signed=False,
         )
         self._ba_last = {
@@ -958,7 +981,7 @@ class NAMD:
 
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
-                        center_step=None, signed=False):
+                        center_step=None, evaluation_step=None, signed=False):
         """Run the common resident-Fortran NACME validation gate.
 
         Future analytic NAC support should contract the phase-aligned analytic
@@ -1016,6 +1039,7 @@ class NAMD:
         result = {
             'source': source,
             'center_step': center_step,
+            'evaluation_step': evaluation_step,
             'signed_comparison': bool(signed),
             'verdict': verdict,
             'compared_pairs': compared_pairs,
@@ -1076,14 +1100,19 @@ class NAMD:
         path = self.nacme_audit_file
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         columns = (
-            'center_step', 'source', 'verdict', 'signed', 'compared_pairs',
+            'evaluation_step', 'center_step', 'source', 'verdict', 'signed',
+            'compared_pairs',
             'invariant_failures', 'reference_failures',
             'consecutive_reference_failures', 'candidate_diagonal_max',
             'candidate_antisymmetry_max', 'reference_diagonal_max',
             'reference_antisymmetry_max', 'pair_rms_error', 'pair_max_error',
             'max_tolerance_ratio',
         )
-        values = [result.get(name, '') for name in columns]
+        values = [
+            result.get('signed_comparison', '') if name == 'signed'
+            else result.get(name, '')
+            for name in columns
+        ]
         with open(path, 'a', encoding='utf-8') as stream:
             if needs_header:
                 stream.write('\t'.join(columns) + '\n')
@@ -1385,9 +1414,57 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'qmmm': self._qmmm_restart_identity(),
             'independent_controls': self._independent_settings_record(),
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
+
+    def _qmmm_restart_identity(self):
+        """Fingerprint the QM/MM model and topology used by this trajectory."""
+        cached = getattr(self, '_qmmm_restart_identity_cache', None)
+        if cached is not None:
+            return cached
+        cfg = self.mol.config
+        input_cfg = cfg.get('input', {})
+        if not bool(input_cfg.get('qmmm_flag', False)):
+            identity = {'enabled': False}
+            self._qmmm_restart_identity_cache = identity
+            return identity
+        qmmm = cfg.get('qmmm', {})
+        input_file = getattr(self.mol, 'input_file', '')
+        source_directory = (os.path.dirname(os.path.abspath(input_file))
+                            if input_file else '')
+        pdb_file = getattr(self, '_qmmm_pdb_file', qmmm.get('pdb_file', ''))
+        forcefield_files = getattr(
+            self, '_qmmm_forcefield_files',
+            [item for item in str(qmmm.get('forcefield_files', '')).
+             replace(',', ' ').split() if item],
+        )
+        qm_atoms = getattr(self, 'qm_atoms', None)
+        if qm_atoms is None:
+            qm_atoms = _parse_int_list(qmmm.get('qm_atoms', ''))
+        identity = {
+            'enabled': True,
+            'pdb': _restart_file_identity(pdb_file, source_directory),
+            'forcefields': [
+                _restart_file_identity(path, source_directory)
+                for path in forcefield_files
+            ],
+            'qm_atoms_zero_based': np.asarray(qm_atoms, dtype=int).tolist(),
+            'cutoff': str(qmmm.get('cutoff', '')).strip().lower(),
+            'embedding': str(qmmm.get('embedding', '')).strip().lower(),
+            'rigidwater': bool(qmmm.get('rigidwater', False)),
+            'frontier_scheme': str(
+                qmmm.get('frontier_scheme', 'none')).strip().lower(),
+        }
+        mm_module = getattr(self, '_mm', None)
+        if mm_module is not None:
+            try:
+                identity['openmm_version'] = mm_module.Platform.getOpenMMVersion()
+            except (AttributeError, RuntimeError):
+                pass
+        self._qmmm_restart_identity_cache = identity
+        return identity
 
     @staticmethod
     def _checkpoint_optional(payload, name, value):
@@ -1544,7 +1621,8 @@ class NAMD:
                 raise ValueError(f'unsupported NAMD restart schema {version}')
             signature = str(saved['signature'][0])
             if signature != self._restart_signature():
-                raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+                raise ValueError(
+                    'NAMD restart model/topology/RNG/time-step mismatch')
             settings_json = str(saved['independent_controls_json'][0])
             expected_settings = json.dumps(
                 self._independent_settings_record(), sort_keys=True,
@@ -1595,6 +1673,7 @@ class NAMD:
                 'acceleration': np.array(saved['acceleration'], copy=True),
             }
         self._reconcile_trajectory_with_restart(result['step'])
+        self._reconcile_nacme_audit_with_restart(result['step'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={result["step"]} '
@@ -1636,6 +1715,63 @@ class NAMD:
             )
         else:
             del records
+        self._io_barrier()
+
+    def _reconcile_nacme_audit_with_restart(self, checkpoint_step):
+        """Atomically remove NACME audit rows newer than the checkpoint."""
+        if not self._is_io_rank():
+            self._io_barrier()
+            return
+        path = getattr(self, 'nacme_audit_file', '')
+        if not path or not os.path.isfile(path) or os.path.getsize(path) == 0:
+            self._io_barrier()
+            return
+        with open(path, 'r', encoding='utf-8') as stream:
+            lines = stream.readlines()
+        columns = lines[0].rstrip('\n').split('\t')
+        if 'evaluation_step' in columns:
+            step_index = columns.index('evaluation_step')
+            inclusive = True
+        elif 'center_step' in columns:
+            # Legacy rows were emitted while evaluating center_step + 1.
+            step_index = columns.index('center_step')
+            inclusive = False
+        else:
+            raise ValueError('NACME audit header has no restart step column')
+        kept = [lines[0]]
+        removed = 0
+        for line in lines[1:]:
+            if not line.strip():
+                continue
+            fields = line.rstrip('\n').split('\t')
+            try:
+                row_step = int(fields[step_index])
+            except (IndexError, ValueError) as exc:
+                raise ValueError('malformed NACME audit row during restart') from exc
+            committed = (row_step <= int(checkpoint_step) if inclusive
+                         else row_step < int(checkpoint_step))
+            if committed:
+                kept.append(line if line.endswith('\n') else line + '\n')
+            else:
+                removed += 1
+        if removed:
+            directory = os.path.dirname(path) or '.'
+            descriptor, temporary = tempfile.mkstemp(
+                prefix='.namd-nacme-audit-', suffix='.tmp', dir=directory)
+            try:
+                with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                    stream.writelines(kept)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, path)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {removed} uncommitted NACME '
+                       f'audit row(s) after step {checkpoint_step}'),
+            )
         self._io_barrier()
 
     # ------------------------------------------------------------------ #
@@ -1892,6 +2028,9 @@ class NAMD_QMMM(NAMD):
         pdb_file = _resolve_aux(q['pdb_file'])
         ff_files = [_resolve_aux(s) for s in
                     str(q['forcefield_files']).replace(',', ' ').split() if s]
+        self._qmmm_pdb_file = pdb_file
+        self._qmmm_forcefield_files = ff_files
+        self._qmmm_restart_identity_cache = None
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff

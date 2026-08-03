@@ -199,14 +199,53 @@ d.prev_data = {
 d._ba_energy_left = np.array([0.0, 0.2]); d._ba_energy_center = np.array([0.0, 0.1])
 d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
 d._nacme_gate_failures = 2; d._rng_step = 1
+audit = {
+    'center_step': 0, 'source': 'analytic', 'verdict': 'pass',
+    'signed_comparison': True, 'compared_pairs': 1,
+    'invariant_failures': 0, 'reference_failures': 0,
+}
+d._write_nacme_audit_row(dict(audit, evaluation_step=1))
+d._write_nacme_audit_row(dict(audit, evaluation_step=2, center_step=1,
+                              signed_comparison=False))
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
 
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
+d2.nacme_audit_file = d.nacme_audit_file
 loaded = d2._load_restart()
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
+audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
+audit_columns = audit_lines[0].split('\t')
+audit_values = audit_lines[1].split('\t')
+audit_row = dict(zip(audit_columns, audit_values))
+
+pdb_path = os.path.join(root, 'identity.pdb')
+ff_path = os.path.join(root, 'identity.xml')
+with open(pdb_path, 'w', encoding='utf-8') as stream:
+    stream.write('MODEL 1\nENDMDL\n')
+with open(ff_path, 'w', encoding='utf-8') as stream:
+    stream.write('<ForceField/>\n')
+class QMol:
+    input_file = os.path.join(root, 'identity.oqp')
+    config = {
+        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*',
+                  'qmmm_flag': True},
+        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
+        'md': {},
+        'qmmm': {'pdb_file': pdb_path, 'forcefield_files': ff_path,
+                 'qm_atoms': '0-3', 'cutoff': 'NoCutoff',
+                 'embedding': 'electrostatic', 'rigidwater': False,
+                 'frontier_scheme': 'none'},
+    }
+q = NAMD.__new__(NAMD); q.mol = QMol(); q.dt_fs = 0.5
+q.seed = 1; q.rng_stream = 2
+signature_before = q._restart_signature()
+with open(pdb_path, 'a', encoding='utf-8') as stream:
+    stream.write('REMARK topology changed\n')
+q._qmmm_restart_identity_cache = None
+signature_after = q._restart_signature()
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
 d._nve_reference_energy = -0.9; d._nve_previous_energy = -0.9
 d._nve_gate_failures = 0
@@ -235,6 +274,9 @@ print('DENSE=' + json.dumps({
     'loaded_droplet': d2._droplet_energy,
     'loaded_thermostat_cumulative': d2._thermostat_exchange_cumulative,
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
+    'audit_rows': len(audit_lines) - 1,
+    'audit_signed': audit_row['signed'],
+    'qmmm_signature_changed': signature_before != signature_after,
     'loaded_step': loaded['step'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
         'gate_failures': d2._nacme_gate_failures,
@@ -273,6 +315,8 @@ print('DENSE=' + json.dumps({
         'droplet_energy': [0.02], 'droplet_penetration': [0.3],
         'droplet_count': [2], 'thermostat_exchange': [0.001],
         'loaded_droplet': 0.02, 'loaded_thermostat_cumulative': 0.003,
+        'audit_rows': 1, 'audit_signed': 'True',
+        'qmmm_signature_changed': True,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,

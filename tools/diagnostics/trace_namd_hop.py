@@ -15,9 +15,6 @@ from pathlib import Path
 
 import numpy as np
 
-from oqp.library import namd as namd_module
-from oqp.pyoqp import Runner
-
 
 class SequenceRNG:
     """Minimal Generator-compatible source for a prescribed hop RNG stream."""
@@ -38,11 +35,47 @@ class SequenceRNG:
         return value
 
 
+def build_trace_row(*, istep, dt_fs, active, hopped, last_hop_random,
+                    coef, params, tdc, cmhp):
+    """Build one stable trace row for any NAMD state count >= 2."""
+    coef = np.asarray(coef)
+    tdc = np.asarray(tdc, dtype=float)
+    cmhp = np.asarray(cmhp, dtype=float)
+    params = np.asarray(params, dtype=float)
+
+    def population(index):
+        return abs(coef[index]) ** 2 if index < coef.size else np.nan
+
+    def matrix_value(matrix, row, column):
+        if row < matrix.shape[0] and column < matrix.shape[1]:
+            return matrix[row, column]
+        return np.nan
+
+    return {
+        "step": istep,
+        "t_fs": istep * dt_fs,
+        "kernel_called": int(np.isfinite(last_hop_random)),
+        "active": active,
+        "hopped": int(bool(hopped)),
+        "random": params[3] if params.size > 3 else np.nan,
+        "pop_1": population(0),
+        "pop_2": population(1),
+        "pop_3": population(2),
+        "tdc_12_au": matrix_value(tdc, 0, 1),
+        "tdc_13_au": matrix_value(tdc, 0, 2),
+        "tdc_23_au": matrix_value(tdc, 1, 2),
+        "p_31": matrix_value(cmhp, 2, 0),
+        "p_32": matrix_value(cmhp, 2, 1),
+    }
+
+
 def install_trace(
     output: Path,
     skip_first_hop: bool,
     random_values: np.ndarray | None = None,
 ) -> SequenceRNG | None:
+    from oqp.library import namd as namd_module
+
     original_prepare = namd_module.NAMD._prepare_hop_step
     original_log = namd_module.NAMD._log_step
     sequence_rng = None if random_values is None else SequenceRNG(random_values)
@@ -86,22 +119,11 @@ def install_trace(
         if results.size >= nstate * nstate:
             # The native record is a Fortran column-major flattening.
             cmhp = results[: nstate * nstate].reshape(nstate, nstate, order="F")
-        row = {
-            "step": istep,
-            "t_fs": istep * self.dt_fs,
-            "kernel_called": int(np.isfinite(self._last_hop_random)),
-            "active": self.active,
-            "hopped": int(bool(hopped)),
-            "random": params[3] if params.size > 3 else np.nan,
-            "pop_1": abs(self.coef[0]) ** 2,
-            "pop_2": abs(self.coef[1]) ** 2,
-            "pop_3": abs(self.coef[2]) ** 2,
-            "tdc_12_au": tdc[0, 1],
-            "tdc_13_au": tdc[0, 2],
-            "tdc_23_au": tdc[1, 2],
-            "p_31": cmhp[2, 0],
-            "p_32": cmhp[2, 1],
-        }
+        row = build_trace_row(
+            istep=istep, dt_fs=self.dt_fs, active=self.active,
+            hopped=hopped, last_hop_random=self._last_hop_random,
+            coef=self.coef, params=params, tdc=tdc, cmhp=cmhp,
+        )
         write_header = not output.exists()
         with output.open("a", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=row.keys())
@@ -115,6 +137,8 @@ def install_trace(
 
 
 def main() -> None:
+    from oqp.pyoqp import Runner
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default="thymine.inp")
     parser.add_argument("--trace", default="hop_trace.csv")

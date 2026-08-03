@@ -385,10 +385,24 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
                 pytest.skip("compiled OpenQP runtime is not available")
             pytest.fail(result.stdout + result.stderr)
 
-        from oqp.library.namd import read_namd_trajectory
-
-        header, records = read_namd_trajectory(
-            tmp_path / f"{ensemble}.namd.trj")
+        inspection = subprocess.run(
+            [sys.executable, "-c", (
+                "import json,sys\n"
+                "from oqp.library.namd import read_namd_trajectory\n"
+                "header,records=read_namd_trajectory(sys.argv[1])\n"
+                "last=records[-1]\n"
+                "print(json.dumps({"
+                "'groups':header['independent_controls']['droplet']['group_count'],"
+                "'length':len(records),"
+                "'active':int(last['droplet_active_count']),"
+                "'energy':float(last['droplet_energy_hartree']),"
+                "'nve_verdict':int(last['nve_verdict'])}))\n"
+            ), str(tmp_path / f"{ensemble}.namd.trj")],
+            cwd=tmp_path, env=env, capture_output=True, text=True, check=False,
+        )
+        if inspection.returncode != 0:
+            pytest.fail(inspection.stdout + inspection.stderr)
+        trajectory = json.loads(inspection.stdout)
         with np.load(
                 tmp_path / f"{ensemble}.namd.restart.npz",
                 allow_pickle=False) as checkpoint:
@@ -397,17 +411,17 @@ def test_openmm_five_water_droplet_nve_nvt_smoke(tmp_path):
             assert int(checkpoint["droplet_active_count"][0]) == 5
             thermostat_exchange = float(
                 checkpoint["thermostat_exchange_cumulative"][0])
-        assert header["independent_controls"]["droplet"]["group_count"] == 5
-        assert len(records) == 2
-        assert int(records[-1]["droplet_active_count"]) == 5
-        assert records[-1]["droplet_energy_hartree"] > 0.0
+        assert trajectory["groups"] == 5
+        assert trajectory["length"] == 2
+        assert trajectory["active"] == 5
+        assert trajectory["energy"] > 0.0
         log = (tmp_path / f"{ensemble}.log").read_text(encoding="utf-8")
         assert "drop_n=5" in log
         assert "droplet(enabled=true" in (
             tmp_path / "restart.oqp").read_text(encoding="utf-8")
         if ensemble == "nve":
-            assert int(records[-1]["nve_verdict"]) == 1
+            assert trajectory["nve_verdict"] == 1
             assert thermostat_exchange == 0.0
         else:
-            assert int(records[-1]["nve_verdict"]) == -1
+            assert trajectory["nve_verdict"] == -1
             assert abs(thermostat_exchange) > 1.0e-12
