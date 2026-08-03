@@ -200,6 +200,11 @@ class OQPTester:
     def _project_name_for_input(self, input_file: str) -> str:
         """Return a collision-free project name for a paired legacy input."""
         project_name = os.path.splitext(os.path.basename(input_file))[0]
+        if (input_file.lower().endswith(".restart.oqp")
+                and project_name.lower().endswith(".restart")):
+            # A paired continuation shares the producer project/log and NAMD
+            # sidecars, but is scheduled only after that producer completes.
+            project_name = project_name[:-len(".restart")]
         input_stem, extension = os.path.splitext(input_file)
         if (
             extension.lower() == ".inp"
@@ -219,6 +224,8 @@ class OQPTester:
         """
         project_name = project_name or self._project_name_for_input(input_file)
         real_input = os.path.realpath(os.path.abspath(input_file))
+        if real_input.lower().endswith(".restart.oqp"):
+            real_input = real_input[:-len(".restart.oqp")] + ".oqp"
         digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
         return os.path.join(self.output_dir, f"{project_name}__{digest}")
 
@@ -247,8 +254,9 @@ class OQPTester:
             md["velocity"] = runtime_path(velocity)
         qmmm = mol.config.get("qmmm", {})
         for key in ("pdb_file", "qm_atoms_xyz"):
-            if key in qmmm:
-                qmmm[key] = runtime_path(qmmm[key])
+            value = qmmm.get(key)
+            if isinstance(value, str) and os.path.isfile(runtime_path(value)):
+                qmmm[key] = runtime_path(value)
         for key in ("forcefield", "forcefield_files"):
             value = qmmm.get(key)
             if not isinstance(value, str):
@@ -511,7 +519,9 @@ class OQPTester:
             )
 
         if self.mpi_manager.use_mpi:
-            for input_file in input_files:
+            primary_inputs, restart_inputs = self._partition_restart_inputs(
+                input_files)
+            for input_file in primary_inputs + restart_inputs:
                 result = self.run_single_test(input_file)
                 self.results.append(result)
                 self._log_result_status(result)
@@ -529,18 +539,46 @@ class OQPTester:
             # tearing down a shared worker pool (BrokenProcessPool) and aborting
             # every still-pending test. A thread pool just supervises the child
             # processes, so the GIL is irrelevant here.
+            primary_inputs, restart_inputs = self._partition_restart_inputs(
+                input_files)
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_file = {
                     executor.submit(self._run_isolated, input_file): input_file
-                    for input_file in input_files
+                    for input_file in primary_inputs
                 }
                 for future in as_completed(future_to_file):
                     result = future.result()
                     self.results.append(result)
                     self._log_result_status(result)
+            # A *.restart.oqp example consumes the checkpoint and sidecars of
+            # its same-stem producer. Run paired continuations only after all
+            # ordinary examples have completed, never concurrently with their
+            # producer.
+            for input_file in restart_inputs:
+                result = self._run_isolated(input_file)
+                self.results.append(result)
+                self._log_result_status(result)
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
+
+    @staticmethod
+    def _partition_restart_inputs(input_files):
+        """Place paired restart examples after their checkpoint producers."""
+        selected = {
+            os.path.realpath(os.path.abspath(path)) for path in input_files
+        }
+        primary = []
+        restart = []
+        for path in input_files:
+            real_path = os.path.realpath(os.path.abspath(path))
+            if real_path.lower().endswith(".restart.oqp"):
+                producer = real_path[:-len(".restart.oqp")] + ".oqp"
+                if producer in selected:
+                    restart.append(path)
+                    continue
+            primary.append(path)
+        return primary, restart
 
     def _get_input_files(self, test_path: str, *,
                          input_format: str = 'auto') -> List[str]:

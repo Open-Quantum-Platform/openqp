@@ -92,6 +92,10 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
         ROOT / "examples" / "QMMM" /
         "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.oqp"
     ).read_text()
+    restart_oqp = (
+        ROOT / "examples" / "QMMM" /
+        "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.restart.oqp"
+    ).read_text()
     assert "nstep=2" in example_inp
     assert "nstep=2" in example_oqp
     assert "nacme_check=baeck_an" in example_inp
@@ -101,6 +105,13 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
             "trajectory_file=", "nacme_audit_file=", "restart_file="):
         assert keyword in example_inp
         assert keyword in example_oqp
+    assert "nstep=3" in restart_oqp
+    assert "restart=true" in restart_oqp
+    for sidecar in (
+            'trajectory_file="H2CO-water.namd.trj"',
+            'nacme_audit_file="H2CO-water.namd.nacme.tsv"',
+            'restart_file="H2CO-water.namd.restart.npz"'):
+        assert sidecar in restart_oqp
     for keyword in (
             "nacme_gate_invariant_tol=", "nacme_gate_abs_tol=",
             "nacme_gate_rel_tol=", "nacme_gate_consecutive=",
