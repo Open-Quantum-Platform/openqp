@@ -310,6 +310,32 @@ def test_trace_uses_driver_matrices_when_hop_kernel_is_skipped():
     np.testing.assert_allclose(tdc, driver._last_overlap_tdc)
 
 
+def test_trace_reads_normal_hop_tags_from_mapping_without_get():
+    from tools.diagnostics.trace_namd_hop import _trace_hop_matrices
+
+    class OQPDataLike:
+        def __init__(self, values):
+            self.values = values
+
+        def __getitem__(self, name):
+            return self.values[name]
+
+    native_overlap = np.array([[0.8, 0.2], [-0.2, 0.8]])
+    native_tdc = np.array([[0.0, 0.3], [-0.3, 0.0]])
+    driver = SimpleNamespace(
+        nstate=2,
+        mol=SimpleNamespace(data=OQPDataLike({
+            "OQP::namd_stas": native_overlap,
+            "OQP::namd_tdc": native_tdc,
+        })),
+        _last_state_overlap=np.eye(2),
+        _last_overlap_tdc=np.zeros((2, 2)),
+    )
+    overlap, tdc = _trace_hop_matrices(driver, kernel_called=True)
+    np.testing.assert_allclose(overlap, native_overlap)
+    np.testing.assert_allclose(tdc, native_tdc)
+
+
 def test_namd_output_interval_defaults_to_about_ten_femtoseconds():
     from oqp.library.namd import NAMD
 

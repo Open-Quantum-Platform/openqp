@@ -51,8 +51,17 @@ def _trace_hop_matrices(driver, kernel_called: bool):
     """Return current overlap/TDC matrices even when the hop was skipped."""
     nstate = driver.nstate
     data = getattr(driver.mol, "data", {})
-    overlap = data.get("OQP::namd_stas") if kernel_called else None
-    tdc = data.get("OQP::namd_tdc") if kernel_called else None
+
+    def native_tag(name):
+        if not kernel_called:
+            return None
+        try:
+            return data[name]
+        except (AttributeError, KeyError, TypeError):
+            return None
+
+    overlap = native_tag("OQP::namd_stas")
+    tdc = native_tag("OQP::namd_tdc")
     if overlap is None:
         overlap = getattr(driver, "_last_state_overlap", None)
     if tdc is None:
