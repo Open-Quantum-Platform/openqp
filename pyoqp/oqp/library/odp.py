@@ -62,6 +62,10 @@ def parse_odp_cv_specification(specification):
             raise ValueError("[odp] a distance requires two distinct atoms")
         if cv_type == 2 and (indices[0] == indices[1] or indices[2] == indices[3]):
             raise ValueError("[odp] each asymmetric-distance pair must be distinct")
+        if cv_type == 2 and frozenset(indices[:2]) == frozenset(indices[2:]):
+            raise ValueError(
+                "[odp] the two asymmetric-distance atom pairs must differ"
+            )
         if cv_type == 3 and len(set(indices)) != 3:
             raise ValueError("[odp] an angle requires three distinct atoms")
         row = [-1, -1, -1, -1]
@@ -325,6 +329,26 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     if max_iterations < 1 or not math.isfinite(tolerance) or tolerance <= 0.0:
         raise ValueError("ODP WHAM requires positive convergence controls")
 
+    resolved_paths = {}
+    trajectory_hashes = []
+    hashed_paths = {}
+    for path in paths:
+        resolved = os.path.realpath(os.path.abspath(path))
+        if resolved in resolved_paths:
+            raise ValueError(
+                "ODP WHAM duplicate trajectory input resolves to the same file: "
+                f"{resolved_paths[resolved]!r} and {path!r}"
+            )
+        resolved_paths[resolved] = path
+        digest = _file_sha256(path)
+        if digest in hashed_paths:
+            raise ValueError(
+                "ODP WHAM duplicate trajectory content: "
+                f"{hashed_paths[digest]!r} and {path!r}"
+            )
+        hashed_paths[digest] = path
+        trajectory_hashes.append(digest)
+
     loaded = []
     coordinate_provenance = None
     ensembles = []
@@ -501,7 +525,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
                         "projection")
         },
         "trajectory_paths": paths,
-        "trajectory_sha256": [_file_sha256(path) for path in paths],
+        "trajectory_sha256": trajectory_hashes,
         "discard": discard,
         "stride": stride,
         "tolerance": tolerance,

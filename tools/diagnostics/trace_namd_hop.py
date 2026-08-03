@@ -62,53 +62,73 @@ def install_trace(
         hopped=False,
         transition_energy_jump=np.nan,
     ):
-        original_log(
-            self,
-            istep,
-            r,
-            hopped=hopped,
-            transition_energy_jump=transition_energy_jump,
-        )
+        original_failure = None
+        try:
+            original_log(
+                self,
+                istep,
+                r,
+                hopped=hopped,
+                transition_energy_jump=transition_energy_jump,
+            )
+        except Exception as error:
+            original_failure = (error, error.__traceback__)
         if istep == 0:
+            if original_failure is not None:
+                error, traceback = original_failure
+                raise error.with_traceback(traceback)
             return
-        nstate = self.nstate
         try:
-            params = np.asarray(self.mol.data["OQP::namd_params"], dtype=float)
-        except (AttributeError, KeyError):
-            params = np.empty(0)
-        try:
-            results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
-        except (AttributeError, KeyError):
-            results = np.empty(0)
-        overlap = np.asarray(self.mol.data["OQP::td_states_overlap"], dtype=float).reshape(nstate, nstate).T
-        tdc = self._compute_tdc(overlap)
-        cmhp = np.full((nstate, nstate), np.nan)
-        if results.size >= nstate * nstate:
-            # The native record is a Fortran column-major flattening.
-            cmhp = results[: nstate * nstate].reshape(nstate, nstate, order="F")
-        row = {
-            "step": istep,
-            "t_fs": istep * self.dt_fs,
-            "kernel_called": int(np.isfinite(self._last_hop_random)),
-            "active": self.active,
-            "hopped": int(bool(hopped)),
-            "random": params[3] if params.size > 3 else np.nan,
-        }
-        for index, coefficient in enumerate(self.coef):
-            row[f"pop_{index + 1}"] = abs(coefficient) ** 2
-        for left in range(nstate):
-            for right in range(left + 1, nstate):
-                row[f"tdc_{left + 1}{right + 1}_au"] = tdc[left, right]
-        for source in range(nstate):
-            for target in range(nstate):
-                if source != target:
-                    row[f"p_{source + 1}{target + 1}"] = cmhp[source, target]
-        write_header = not output.exists()
-        with output.open("a", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=row.keys())
-            if write_header:
-                writer.writeheader()
-            writer.writerow(row)
+            nstate = self.nstate
+            try:
+                params = np.asarray(self.mol.data["OQP::namd_params"], dtype=float)
+            except (AttributeError, KeyError):
+                params = np.empty(0)
+            try:
+                results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
+            except (AttributeError, KeyError):
+                results = np.empty(0)
+            overlap = np.asarray(
+                self.mol.data["OQP::td_states_overlap"], dtype=float
+            ).reshape(nstate, nstate).T
+            tdc = self._compute_tdc(overlap)
+            cmhp = np.full((nstate, nstate), np.nan)
+            if results.size >= nstate * nstate:
+                # The native record is a Fortran column-major flattening.
+                cmhp = results[: nstate * nstate].reshape(
+                    nstate, nstate, order="F"
+                )
+            row = {
+                "step": istep,
+                "t_fs": istep * self.dt_fs,
+                "kernel_called": int(np.isfinite(self._last_hop_random)),
+                "active": self.active,
+                "hopped": int(bool(hopped)),
+                "random": params[3] if params.size > 3 else np.nan,
+            }
+            for index, coefficient in enumerate(self.coef):
+                row[f"pop_{index + 1}"] = abs(coefficient) ** 2
+            for left in range(nstate):
+                for right in range(left + 1, nstate):
+                    row[f"tdc_{left + 1}{right + 1}_au"] = tdc[left, right]
+            for source in range(nstate):
+                for target in range(nstate):
+                    if source != target:
+                        row[f"p_{source + 1}{target + 1}"] = cmhp[source, target]
+            write_header = not output.exists()
+            with output.open("a", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=row.keys())
+                if write_header:
+                    writer.writeheader()
+                writer.writerow(row)
+        except Exception:
+            if original_failure is not None:
+                error, traceback = original_failure
+                raise error.with_traceback(traceback) from None
+            raise
+        if original_failure is not None:
+            error, traceback = original_failure
+            raise error.with_traceback(traceback)
 
     namd_module.NAMD._prepare_hop_step = traced_prepare
     namd_module.NAMD._log_step = traced_log
@@ -144,6 +164,8 @@ def main() -> None:
         return (value is True) or str(value).lower() in {
             "true", "1", "on", "yes",
         }
+    if str(config.get("input", {}).get("runtype", "")).strip().lower() != "namd":
+        parser.error("hop tracing requires a NAMD input (input.runtype=namd)")
     if enabled(config.get("input", {}).get("qmmm_flag", False)):
         parser.error("hop tracing currently supports gas-phase NAMD only; QM/MM is rejected")
     if enabled(config.get("md", {}).get("soc", False)):

@@ -47,6 +47,12 @@ def test_odp_configuration_requires_explicit_metric_and_continuous_cvs():
         })
     with pytest.raises(ValueError, match="unsupported CV"):
         parse_odp_cv_specification("nearest_atom(1,2,3)")
+    for specification in (
+        "asymmetric_distance(1,2,1,2)",
+        "asymmetric_distance(1,2,2,1)",
+    ):
+        with pytest.raises(ValueError, match="atom pairs must differ"):
+            parse_odp_cv_specification(specification)
 
 
 def test_runtime_checker_rejects_enabled_odp_outside_namd():
@@ -366,6 +372,7 @@ def test_python_wham_recovers_synthetic_unbiased_distribution(tmp_path):
     script = r'''
 import json
 import os
+import shutil
 import struct
 import numpy as np
 from oqp.library.namd import (
@@ -431,6 +438,23 @@ for window, center in enumerate(centers):
 
 output = os.path.join(root, "wham.npz")
 result = odp_wham(paths, temperature, bins=100, tolerance=1.0e-11, output=output)
+try:
+    odp_wham(
+        [paths[0], os.path.join(root, ".", os.path.basename(paths[0]))],
+        temperature,
+    )
+except ValueError as error:
+    duplicate_path_rejected = "duplicate trajectory input" in str(error)
+else:
+    duplicate_path_rejected = False
+duplicate_copy = os.path.join(root, "duplicate-copy.namd.trj")
+shutil.copyfile(paths[0], duplicate_copy)
+try:
+    odp_wham([paths[0], duplicate_copy], temperature)
+except ValueError as error:
+    duplicate_hash_rejected = "duplicate trajectory content" in str(error)
+else:
+    duplicate_hash_rejected = False
 mean = np.sum(result["sample_weights"]*result["sample_xi"])
 variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
 with np.load(output, allow_pickle=False) as saved:
@@ -449,6 +473,8 @@ print("ODP_WHAM=" + json.dumps({
     "metadata_converged": metadata["converged"],
     "metadata_hashes": metadata["trajectory_sha256"],
     "saved_centers": saved_centers,
+    "duplicate_path_rejected": duplicate_path_rejected,
+    "duplicate_hash_rejected": duplicate_hash_rejected,
 }))
 '''
     env = os.environ.copy()
@@ -499,3 +525,5 @@ print("ODP_WHAM=" + json.dumps({
     assert all(len(value) == 64 for value in values["metadata_hashes"])
     assert values["saved_centers"] == pytest.approx(
         [-1.2, -0.6, 0.0, 0.6, 1.2])
+    assert values["duplicate_path_rejected"] is True
+    assert values["duplicate_hash_rejected"] is True
