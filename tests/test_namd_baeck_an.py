@@ -90,7 +90,8 @@ def run(old, center, current, dt_left=1.0, dt_right=1.0, gap_max=1.0):
     )
     return status, out.tolist()
 
-def gate(candidate, reference, signed=False):
+def gate(candidate, reference, signed=False,
+         tolerances=(1.0e-12, 1.0e-8, 0.01)):
     candidate = np.ascontiguousarray(candidate, dtype=np.float64)
     reference = np.ascontiguousarray(reference, dtype=np.float64)
     n = candidate.shape[0]
@@ -103,7 +104,7 @@ def gate(candidate, reference, signed=False):
         oqp.ffi.cast('double *', candidate.ctypes.data),
         oqp.ffi.cast('double *', reference.ctypes.data),
         oqp.ffi.cast('int *', mask.ctypes.data),
-        int(signed), 1.0e-12, 1.0e-8, 0.01,
+        int(signed), *tolerances,
         oqp.ffi.cast('double *', metrics.ctypes.data),
         oqp.ffi.cast('int64_t *', counts.ctypes.data),
     )
@@ -122,6 +123,15 @@ result = {
                         [[0.0, -0.5], [0.5, 0.0]], signed=True),
     'gate_invariant': gate([[0.0, -0.5], [0.4, 0.0]],
                            [[0.0, -0.5], [0.5, 0.0]]),
+    'gate_nan_invariant_tol': gate(
+        [[0.0, -0.5], [0.5, 0.0]], [[0.0, -0.5], [0.5, 0.0]],
+        tolerances=(float('nan'), 1.0e-8, 0.01)),
+    'gate_inf_abs_tol': gate(
+        [[0.0, -0.5], [0.5, 0.0]], [[0.0, -0.5], [0.5, 0.0]],
+        tolerances=(1.0e-12, float('inf'), 0.01)),
+    'gate_nan_rel_tol': gate(
+        [[0.0, -0.5], [0.5, 0.0]], [[0.0, -0.5], [0.5, 0.0]],
+        tolerances=(1.0e-12, 1.0e-8, float('nan'))),
 }
 print('BAECK_AN=' + json.dumps(result))
 """
@@ -165,6 +175,10 @@ print('BAECK_AN=' + json.dumps(result))
     assert status == 0
     assert counts[1] == 1
     assert metrics[1] == pytest.approx(0.1)
+    for key in ('gate_nan_invariant_tol', 'gate_inf_abs_tol',
+                'gate_nan_rel_tol'):
+        status, _metrics, _counts = values[key]
+        assert status != 0
 
 
 def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
@@ -504,6 +518,30 @@ header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
 audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
 
+# A dense trajectory from another run must not be spliced into a checkpoint
+# merely because its dimensions and electronic model signature are identical.
+legitimate_trajectory = open(d.trajectory_file, 'rb').read()
+_foreign_header, foreign_records = read_namd_trajectory(
+    d.trajectory_file, mmap_mode='r+')
+foreign_records['coordinates_bohr'][0, 0, 0] += 0.25
+foreign_records.flush()
+del foreign_records
+d_foreign_trajectory = NAMD.__new__(NAMD); d_foreign_trajectory.mol = Mol()
+d_foreign_trajectory.nstate = 2; d_foreign_trajectory.dt_fs = 0.5
+d_foreign_trajectory.seed = 1; d_foreign_trajectory.rng_stream = 2
+d_foreign_trajectory.restart_requested = True
+d_foreign_trajectory.restart_file = d.restart_file
+d_foreign_trajectory.trajectory_file = d.trajectory_file
+d_foreign_trajectory.nacme_audit_file = d.nacme_audit_file
+try:
+    d_foreign_trajectory._load_restart()
+except ValueError:
+    foreign_trajectory_rejected = True
+else:
+    foreign_trajectory_rejected = False
+with open(d.trajectory_file, 'wb') as stream:
+    stream.write(legitimate_trajectory)
+
 # A same-shaped validation file from another trajectory must not be spliced
 # into the checkpoint history merely because its center_step column is valid.
 legitimate_audit = open(d.nacme_audit_file, encoding='utf-8').read()
@@ -558,7 +596,7 @@ def mpi_restart_loader(rank, restart_path):
     probe.restart_requested = True; probe.restart_file = restart_path
     probe.trajectory_file = d.trajectory_file
     probe.nacme_audit_file = d.nacme_audit_file
-    probe._reconcile_trajectory_with_restart = lambda _step: None
+    probe._reconcile_trajectory_with_restart = lambda _step, _prefix: None
     probe._reconcile_nacme_audit_with_restart = lambda _step, _prefix: None
     return probe, probe._load_restart()
 
@@ -941,6 +979,30 @@ forcefield_rebase_runtime_precedence = (
     == os.path.abspath(cwd_forcefield)
     and rebased_qmmm.kwargs['forcefield_files'].split()[1] == 'tip3p.xml')
 
+# Guess readers resolve relative files from the process CWD.  A restart
+# manifest must retain that precedence even when its source input lives in a
+# different directory containing a same-named file.
+cwd_guess = os.path.join(root, 'shared-guess.json')
+input_guess = os.path.join(input_root, 'shared-guess.json')
+with open(cwd_guess, 'w', encoding='utf-8') as stream:
+    stream.write('{"source": "cwd"}\n')
+with open(input_guess, 'w', encoding='utf-8') as stream:
+    stream.write('{"source": "input"}\n')
+guess_spec = parse_canonical_oqp(
+    'mrsf(nstate=2)/bhhlyp/6-31g*\n'
+    'namd(S1,nstep=2,dt=0.5,velocity="zero")\n'
+    'guess(type="json",file="shared-guess.json")\ngeom="h2o.xyz"\n')
+original_cwd = os.getcwd()
+os.chdir(root)
+try:
+    rebased_guess_spec = d._rebase_restart_spec_paths(guess_spec, input_root)
+finally:
+    os.chdir(original_cwd)
+rebased_guess = next(
+    call for call in rebased_guess_spec.modifiers if call.name == 'guess')
+guess_rebase_runtime_precedence = (
+    rebased_guess.kwargs['file'] == os.path.realpath(cwd_guess))
+
 # Environment-selected ESPF modes alter the QM/MM Hamiltonian/forces and must
 # therefore invalidate checkpoints made with another effective mode.
 class EmptyTopology:
@@ -1017,7 +1079,9 @@ for rank in (0, 1):
     d_mpi.mol = SimpleNamespace(mpi_manager=FakeMPI(rank))
     d_mpi.trajectory_file = broken_trajectory
     try:
-        d_mpi._reconcile_trajectory_with_restart(1)
+        d_mpi._reconcile_trajectory_with_restart(1, {
+            'bytes': 0, 'sha256': hashlib.sha256(b'').hexdigest(),
+        })
     except ValueError as error:
         mpi_errors.append(str(error))
 collective_error_propagated = (
@@ -1294,10 +1358,12 @@ print('DENSE=' + json.dumps({
         'mutable_guess_path_change_rejected': mutable_guess_path_change_rejected,
         'malformed_signature_rejected': malformed_signature_rejected,
         'foreign_audit_rejected': foreign_audit_rejected,
+        'foreign_trajectory_rejected': foreign_trajectory_rejected,
         'zero_step_audit_rolled_back': zero_step_audit_rolled_back,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'forcefield_rebase_runtime_precedence':
             forcefield_rebase_runtime_precedence,
+        'guess_rebase_runtime_precedence': guess_rebase_runtime_precedence,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -1375,9 +1441,11 @@ print('DENSE=' + json.dumps({
         'mutable_guess_path_change_rejected': True,
         'malformed_signature_rejected': True,
         'foreign_audit_rejected': True,
+        'foreign_trajectory_rejected': True,
         'zero_step_audit_rolled_back': True,
         'runtime_forcefield_bound': True,
         'forcefield_rebase_runtime_precedence': True,
+        'guess_rebase_runtime_precedence': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,

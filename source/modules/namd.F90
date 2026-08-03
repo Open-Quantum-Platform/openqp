@@ -282,8 +282,12 @@ contains
     logical :: pair_valid
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. invariant_tol < 0.0_dp .or. &
-        abs_tol < 0.0_dp .or. rel_tol < 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. &
+        .not. ieee_is_finite(invariant_tol) .or. &
+        .not. ieee_is_finite(abs_tol) .or. &
+        .not. ieee_is_finite(rel_tol) .or. &
+        invariant_tol < 0.0_dp .or. abs_tol < 0.0_dp .or. &
+        rel_tol < 0.0_dp) return
     if (compare_mode /= 0_c_int .and. compare_mode /= 1_c_int) return
     n = int(nstate)
     metrics(1:7) = 0.0_dp

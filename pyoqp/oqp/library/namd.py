@@ -58,7 +58,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 3
+NAMD_RESTART_SCHEMA_VERSION = 4
 NAMD_TRAJECTORY_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 NACME_AUDIT_COLUMNS = (
@@ -1765,6 +1765,8 @@ class NAMD:
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
                     f'step {istep}: history'))
         audit_prefix, _removed = self._nacme_audit_committed_prefix(istep)
+        trajectory_prefix, _records, _partial = (
+            self._trajectory_committed_prefix(istep))
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
             'signature': np.array([self._restart_signature()]),
@@ -1785,6 +1787,10 @@ class NAMD:
                 [len(audit_prefix)], dtype=np.int64),
             'audit_prefix_sha256': np.array(
                 [hashlib.sha256(audit_prefix).hexdigest()]),
+            'trajectory_prefix_bytes': np.array(
+                [len(trajectory_prefix)], dtype=np.int64),
+            'trajectory_prefix_sha256': np.array(
+                [hashlib.sha256(trajectory_prefix).hexdigest()]),
         }
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
@@ -1818,6 +1824,13 @@ class NAMD:
                 return os.path.normpath(expanded)
             return os.path.normpath(os.path.abspath(os.path.join(
                 source_dir, expanded)))
+
+        def runtime_path(value):
+            """Resolve paths exactly as the live guess readers do."""
+            if not isinstance(value, str) or not value.strip():
+                return value
+            return os.path.realpath(os.path.abspath(
+                os.path.expanduser(value.strip())))
 
         def geometry_path(value):
             if not isinstance(value, str) or '\n' in value or '\r' in value:
@@ -1884,7 +1897,9 @@ class NAMD:
             kwargs = dict(call.kwargs)
             for key in single_path_keys.get(call.name, set()):
                 if key in kwargs:
-                    kwargs[key] = absolute_path(kwargs[key])
+                    kwargs[key] = (runtime_path(kwargs[key])
+                                   if call.name == 'guess'
+                                   else absolute_path(kwargs[key]))
             if call.name == 'qmmm':
                 for key in ('forcefield', 'forcefield_files'):
                     if key in kwargs:
@@ -1969,7 +1984,8 @@ class NAMD:
         self._t_fs = payload['time_fs']
         for name, value in payload['optional'].items():
             setattr(self, f'_{name}', value)
-        self._reconcile_trajectory_with_restart(payload['step'])
+        self._reconcile_trajectory_with_restart(
+            payload['step'], payload['trajectory_prefix'])
         self._reconcile_nacme_audit_with_restart(
             payload['step'], payload['audit_prefix'])
         dump_log(
@@ -2016,6 +2032,21 @@ class NAMD:
             if not re.fullmatch(r'[0-9a-f]{64}', audit_prefix_sha256):
                 raise RuntimeError(
                     'NAMD restart checkpoint has invalid NACME validation '
+                    'prefix metadata')
+            trajectory_prefix_bytes = self._restart_integer(
+                saved, 'trajectory_prefix_bytes')
+            trajectory_digest_array = np.asarray(
+                saved['trajectory_prefix_sha256'])
+            if (trajectory_digest_array.shape != (1,)
+                    or trajectory_digest_array.dtype.kind not in 'SU'):
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid dense trajectory '
+                    'prefix metadata')
+            trajectory_prefix_sha256 = str(
+                trajectory_digest_array[0]).lower()
+            if not re.fullmatch(r'[0-9a-f]{64}', trajectory_prefix_sha256):
+                raise RuntimeError(
+                    'NAMD restart checkpoint has invalid dense trajectory '
                     'prefix metadata')
             if rng_step > step:
                 raise RuntimeError(
@@ -2077,6 +2108,10 @@ class NAMD:
                     'bytes': audit_prefix_bytes,
                     'sha256': audit_prefix_sha256,
                 },
+                'trajectory_prefix': {
+                    'bytes': trajectory_prefix_bytes,
+                    'sha256': trajectory_prefix_sha256,
+                },
                 'optional': optional,
             }
         return result
@@ -2104,16 +2139,12 @@ class NAMD:
                 f'NAMD restart checkpoint has invalid {name} metadata')
         return scalar
 
-    def _reconcile_trajectory_with_restart(self, checkpoint_step):
-        """Repair a partial record and discard TRJ state after checkpoint."""
-        return self._run_io_collective(
-            lambda: self._reconcile_trajectory_on_io_rank(checkpoint_step))
-
-    def _reconcile_trajectory_on_io_rank(self, checkpoint_step):
-        """Perform packed-trajectory reconciliation on rank zero."""
-        if not os.path.isfile(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
-            return
-        with open(self.trajectory_file, 'rb') as stream:
+    def _trajectory_committed_prefix(self, checkpoint_step):
+        """Return exact dense-TRJ bytes committed through a checkpoint."""
+        path = self.trajectory_file
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            return b'', 0, 0
+        with open(path, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
             size_bytes = stream.read(8)
@@ -2123,47 +2154,80 @@ class NAMD:
             header_bytes = stream.read(header_size)
             if len(header_bytes) != header_size:
                 raise ValueError('restart trajectory has a truncated header')
-            header = json.loads(header_bytes.decode('utf-8'))
+            try:
+                header = json.loads(header_bytes.decode('utf-8'))
+            except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise ValueError(
+                    'restart trajectory has an invalid header') from error
         offset = 16 + header_size
+        if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
+            raise ValueError('unsupported OpenQP NAMD trajectory schema')
         if header.get('signature') != self._restart_signature():
             raise ValueError('restart trajectory and checkpoint model mismatch')
-        dtype = _namd_trajectory_dtype(
-            int(header['nstate']), int(header['natom']))
+        try:
+            dtype = _namd_trajectory_dtype(
+                int(header['nstate']), int(header['natom']))
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError(
+                'restart trajectory has invalid dimensions') from error
         if int(header.get('record_bytes', -1)) != dtype.itemsize:
             raise ValueError('restart trajectory record layout mismatch')
-        payload_size = os.path.getsize(self.trajectory_file) - offset
+        payload_size = os.path.getsize(path) - offset
         if payload_size < 0:
             raise ValueError('restart trajectory has an invalid header size')
         partial_bytes = payload_size % dtype.itemsize
-        if partial_bytes:
-            with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(os.path.getsize(self.trajectory_file)
-                                - partial_bytes)
-                stream.flush()
-                os.fsync(stream.fileno())
-            dump_log(
-                self.mol,
-                title=(f'NAMD restart removed {partial_bytes} byte(s) from an '
-                       f'incomplete final trajectory record'),
-            )
-        header, records = read_namd_trajectory(self.trajectory_file)
-        steps = np.array(records['step'], copy=True)
-        keep = int(np.count_nonzero(steps <= int(checkpoint_step)))
-        if keep < len(records):
+        count = payload_size // dtype.itemsize
+        if count:
+            records = np.memmap(
+                path, dtype=dtype, mode='r', offset=offset, shape=(count,))
+            steps = np.array(records['step'], copy=True)
             del records
-            dtype = _namd_trajectory_dtype(
-                int(header['nstate']), int(header['natom']))
-            with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(offset + keep*dtype.itemsize)
-                stream.flush()
-                os.fsync(stream.fileno())
-            dump_log(
-                self.mol,
-                title=(f'NAMD restart removed {len(steps) - keep} uncommitted '
-                       f'trajectory record(s) after step {checkpoint_step}'),
-            )
+            if (np.any(steps < 0)
+                    or (len(steps) > 1 and np.any(np.diff(steps) <= 0))):
+                raise ValueError(
+                    'restart trajectory contains non-monotonic step records')
+            keep = int(np.searchsorted(
+                steps, int(checkpoint_step), side='right'))
         else:
-            del records
+            keep = 0
+        prefix_bytes = offset + keep*dtype.itemsize
+        with open(path, 'rb') as stream:
+            prefix = stream.read(prefix_bytes)
+        if len(prefix) != prefix_bytes:
+            raise ValueError('restart trajectory changed while being validated')
+        return prefix, count - keep, partial_bytes
+
+    def _reconcile_trajectory_with_restart(self, checkpoint_step,
+                                           expected_prefix):
+        """Verify the committed TRJ prefix, then discard later bytes."""
+        return self._run_io_collective(
+            lambda: self._reconcile_trajectory_on_io_rank(
+                checkpoint_step, expected_prefix))
+
+    def _reconcile_trajectory_on_io_rank(self, checkpoint_step,
+                                         expected_prefix):
+        """Perform packed-trajectory reconciliation on rank zero."""
+        prefix, removed_records, partial_bytes = (
+            self._trajectory_committed_prefix(checkpoint_step))
+        observed = {
+            'bytes': len(prefix),
+            'sha256': hashlib.sha256(prefix).hexdigest(),
+        }
+        if observed != expected_prefix:
+            raise ValueError(
+                'restart dense trajectory does not match the checkpoint '
+                'committed prefix')
+        if removed_records or partial_bytes:
+            with open(self.trajectory_file, 'r+b') as stream:
+                stream.truncate(len(prefix))
+                stream.flush()
+                os.fsync(stream.fileno())
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {removed_records} uncommitted '
+                       f'trajectory record(s) and {partial_bytes} incomplete '
+                       f'byte(s) after step {checkpoint_step}'),
+            )
 
     def _nacme_audit_committed_prefix(self, checkpoint_step):
         """Return canonical bytes committed before a checkpoint step."""
