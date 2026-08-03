@@ -1190,64 +1190,98 @@ class SQPMECPOpt(MECPOpt):
         return solution[:ndim], float(solution[ndim])
 
     def optimize(self):
-        coordinates = np.asarray(self.pre_coord, dtype=float).reshape(-1)
-        ndim = coordinates.size
-        hess = np.eye(ndim)
+        """Run the KKT loop in the native internal coordinates.
+
+        Working in Cartesians is what made an earlier version of this driver
+        unstable on a 12-atom ring: a quasi-Newton search there has no useful
+        starting curvature and couples every internal motion.  The same
+        coordinate machinery the native optimizer uses is reused instead, which
+        also supplies a model Hessian for the constrained subproblem.
+        """
+        from oqp.library.oqp_coords import build_coordinates
+
+        atoms = np.asarray(self.mol.get_atoms(), dtype=int).reshape(-1)
+        cartesian = np.asarray(self.pre_coord, dtype=float).reshape(-1)
+        # The KKT system is solved densely, so the working coordinates must be
+        # non-redundant.  build_coordinates("tric") returns the redundant
+        # primitive set - over a thousand coordinates for a 12-atom ring, of
+        # rank 3N-6 - which makes that system singular.  Delocalized internals
+        # are the non-redundant combination of the same primitives and are what
+        # this driver uses unless Cartesians are asked for explicitly.
+        requested = str(
+            (self.mol.config.get('oqp', {}) or {}).get('coordsys', 'dlc')
+            or 'dlc'
+        ).lower()
+        coordsys = requested if requested in ('cart', 'cartesian', 'dlc') else 'dlc'
+        if coordsys != requested:
+            dump_log(
+                self.mol,
+                title=('PyOQP: MECP SQP works in delocalized internal '
+                       'coordinates; coordsys=%s applies to the native '
+                       'optimizer, which this search replaces' % requested),
+            )
+        coords = build_coordinates(atoms, cartesian.reshape(-1, 3), coordsys)
+
+        hess = np.asarray(
+            coords.guess_hessian(cartesian.reshape(-1, 3)), dtype=float)
+        ndim = hess.shape[0]
         trust = self.trust
         previous = None
         predicted = None
         merit = None
         weight = 1.0
         on_boundary = False
-        best = {'score': float('inf'), 'coordinates': coordinates.copy()}
+        best = {'score': float('inf'), 'coordinates': cartesian.copy()}
 
         try:
             while True:
-                self.one_step(coordinates)
+                self.one_step(cartesian)
                 point = self.sqp_point
-                mean_e, mean_g = point['mean_e'], point['mean_g']
-                c, gap_g = point['c'], point['gc']
+                mean_e, c = point['mean_e'], point['c']
+                geometry = cartesian.reshape(-1, 3)
+                mean_g = np.asarray(
+                    coords.grad_to_q(geometry, point['mean_g']), dtype=float)
+                gap_g = np.asarray(
+                    coords.grad_to_q(geometry, point['gc']), dtype=float)
+                if not (np.all(np.isfinite(mean_g)) and np.all(np.isfinite(gap_g))):
+                    dump_log(
+                        self.mol,
+                        title=('PyOQP: MECP SQP could not express the gradients '
+                               'in the working coordinates'),
+                    )
+                    raise StopIteration
 
-                # merit function, used only to size the trust radius.  The
-                # weight only grows, so successive merits are comparable.
-                merit_now = mean_e + weight * abs(c)
-                if merit is not None and predicted:
-                    ratio = (merit - merit_now) / predicted
-                    if ratio < 0.0:
-                        # The model did not merely overshoot, it pointed the
-                        # wrong way.  Near the seam that means the accumulated
-                        # curvature has gone bad, so discard it rather than
-                        # keep stepping on it.
-                        hess = np.eye(ndim)
-                        trust = max(0.25 * trust, self.trust_min)
-                    elif ratio < 0.25:
-                        trust = max(0.25 * trust, self.trust_min)
-                    elif ratio > 0.75 and on_boundary:
-                        # grow only when the cap was what limited the step,
-                        # which is the standard test; growing after an interior
-                        # step would widen a radius that was not binding
-                        trust = min(2.0 * trust, self.trust_max)
-                merit = merit_now
-
-                # Normalised worst criterion: 1.0 means every threshold is
-                # exactly met.  Keeping the best point makes a late divergence
-                # cost iterations rather than the answer.
                 residual = mean_g + self.lagrange * gap_g
                 score = max(
                     abs(c) / self.energy_gap,
                     float(np.mean(residual ** 2) ** 0.5) / self.rmsd_grad,
                 )
                 if score < best['score']:
-                    best = {'score': score, 'coordinates': coordinates.copy()}
+                    best = {'score': score, 'coordinates': cartesian.copy()}
+
+                merit_now = mean_e + weight * abs(c)
+                if merit is not None and predicted:
+                    ratio = (merit - merit_now) / predicted
+                    if ratio < 0.0:
+                        # The model pointed the wrong way, so the accumulated
+                        # curvature is worse than the model Hessian it started
+                        # from.  Go back to that rather than keep building on it.
+                        hess = np.asarray(
+                            coords.guess_hessian(geometry), dtype=float)
+                        trust = max(0.25 * trust, self.trust_min)
+                    elif ratio < 0.25:
+                        trust = max(0.25 * trust, self.trust_min)
+                    elif ratio > 0.75 and on_boundary:
+                        trust = min(2.0 * trust, self.trust_max)
+                merit = merit_now
 
                 if previous is not None:
                     step_old, grad_old = previous
-                    grad_new = mean_g + self.lagrange * gap_g
-                    dgrad = grad_new - grad_old
+                    dgrad = residual - grad_old
                     curvature = step_old @ hess @ step_old
                     if curvature > 0:
-                        # Powell damping keeps B positive definite even where
-                        # the Lagrangian is genuinely indefinite
+                        # Powell damping keeps the model positive definite even
+                        # where the Lagrangian genuinely is not
                         if step_old @ dgrad < 0.2 * curvature:
                             theta = 0.8 * curvature / (curvature - step_old @ dgrad)
                             dgrad = theta * dgrad + (1.0 - theta) * (hess @ step_old)
@@ -1259,34 +1293,26 @@ class SQPMECPOpt(MECPOpt):
 
                 solved = self.kkt_step(hess, mean_g, gap_g, c)
                 if solved is None:
-                    # A singular system means the branching direction carries no
-                    # information at this geometry; restart the curvature model
-                    # rather than taking an undefined step.
-                    hess = np.eye(ndim)
+                    hess = np.asarray(coords.guess_hessian(geometry), dtype=float)
                     solved = self.kkt_step(hess, mean_g, gap_g, c)
                     if solved is None:
                         dump_log(
                             self.mol,
-                            title=(
-                                'PyOQP: MECP SQP step is undefined; the two '
-                                'states have identical gradients at this '
-                                'geometry'
-                            ),
+                            title=('PyOQP: MECP SQP step is undefined; the two '
+                                   'states have identical gradients at this '
+                                   'geometry'),
                         )
                         raise StopIteration
                 step, lagrange = solved
                 self.lagrange = lagrange
-                # The weight must dominate |lam| for the merit function to be
-                # exact, but it must not chase a wild early multiplier, which
-                # would swamp the energy term and make every ratio meaningless.
                 weight = min(max(weight, 2.0 * abs(lagrange) + 1.0), 1.0e4)
 
                 self.check_convergence()
 
                 # A capped step only removes the fraction of the constraint
-                # violation that it covers.  Crediting the model with the whole
-                # of it makes every shortened step look like a failure, which
-                # shrinks the radius further and collapses the search.
+                # violation that it covers.  Crediting the model with all of it
+                # makes every shortened step look like a failure, which shrinks
+                # the radius further and collapses the search.
                 length = np.linalg.norm(step)
                 fraction = 1.0 if length <= trust else trust / length
                 on_boundary = fraction < 1.0
@@ -1296,24 +1322,44 @@ class SQPMECPOpt(MECPOpt):
                     + weight * fraction * abs(c),
                     1.0e-16,
                 )
+
+                # Realise the internal step in Cartesians, shrinking it if the
+                # back-transformation will not converge.
+                moved = None
+                attempt = step
+                for _ in range(5):
+                    trial, ok = coords.back_transform(geometry, attempt)
+                    if ok:
+                        moved = (np.asarray(trial, dtype=float).reshape(-1),
+                                 attempt)
+                        break
+                    attempt = attempt * 0.5
+                if moved is None:
+                    dump_log(
+                        self.mol,
+                        title=('PyOQP: MECP SQP back-transformation failed; '
+                               'shrinking the trust radius'),
+                    )
+                    trust = max(0.25 * trust, self.trust_min)
+                    previous = None
+                    continue
+
+                cartesian, step = moved[0], moved[1]
                 previous = (step, mean_g + lagrange * gap_g)
-                coordinates = coordinates + step
         except StopIteration:
             pass
 
         if best['score'] < float('inf') and not np.allclose(
-                best['coordinates'], coordinates):
+                best['coordinates'], cartesian):
             dump_log(
                 self.mol,
-                title=(
-                    'PyOQP: MECP SQP returning the best geometry of the run, '
-                    'which is not the last one visited'
-                ),
+                title=('PyOQP: MECP SQP returning the best geometry of the run, '
+                       'which is not the last one visited'),
             )
-            coordinates = best['coordinates']
+            cartesian = best['coordinates']
 
-        self.mol.update_system(coordinates.reshape((self.natom, 3)))
-        return coordinates
+        self.mol.update_system(cartesian.reshape((self.natom, 3)))
+        return cartesian
 
 
 class StateSpecificOpt(Optimizer):

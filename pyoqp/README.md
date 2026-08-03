@@ -554,15 +554,16 @@ automatically.
 
 - mecp-search // choose the algorithm for spin-crossing (MECP) optimization
 
-      sqp        EXPERIMENTAL. Sequential quadratic programming: solves the
-                 KKT equations of the constrained problem for the step and the
-                 multiplier together, so there is no penalty parameter and
-                 gap_sigma is not used. Requires lib=oqp because it replaces
-                 the outer optimizer with its own trust-region step control,
-                 and therefore works in Cartesians rather than the internal
-                 coordinates the native optimizer uses. That is fast on small
-                 systems and unreliable on larger ones; auglag remains the
-                 recommended default.
+      sqp        sequential quadratic programming: solves the KKT equations
+                 of the constrained problem for the step and the multiplier
+                 together, so the multiplier is a result rather than a formula
+                 and there is no penalty parameter, i.e. gap_sigma is unused.
+                 Works in delocalized internal coordinates with the native
+                 model Hessian. Requires lib=oqp because it replaces the outer
+                 optimizer with its own trust-region step control; coordsys
+                 applies to that optimizer and is therefore not used here.
+                 Converges tighter and in fewer steps than auglag on the cases
+                 tested so far, but it is newer, so auglag remains the default.
       auglag     (default) least-squares multiplier plus gradient projection;
                  with gap_sigma=1 the converged form is the plain Bearpark
                  gradient projection.
