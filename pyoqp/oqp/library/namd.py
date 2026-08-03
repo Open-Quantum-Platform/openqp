@@ -225,7 +225,7 @@ class NAMD:
         if self.nacme_check not in ('off', 'baeck_an'):
             raise ValueError("[md] nacme_check must be off or baeck_an")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
-        if self.ba_gap_max <= 0.0:
+        if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
             raise ValueError("[md] ba_gap_max must be positive")
         self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
@@ -235,9 +235,13 @@ class NAMD:
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
         self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
         self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
-        if min(self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
-               self.nacme_gate_rel_tol) < 0.0:
-            raise ValueError("[md] NACME gate tolerances must be non-negative")
+        nacme_tolerances = (
+            self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
+            self.nacme_gate_rel_tol)
+        if (not all(np.isfinite(value) for value in nacme_tolerances)
+                or min(nacme_tolerances) < 0.0):
+            raise ValueError(
+                "[md] NACME gate tolerances must be finite and non-negative")
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
         self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
@@ -248,9 +252,13 @@ class NAMD:
         self.nve_gate_transition_tol = float(
             md.get('nve_gate_transition_tol', 1.0e-6))
         self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
-        if min(self.nve_gate_abs_tol, self.nve_gate_step_tol,
-               self.nve_gate_transition_tol) < 0.0:
-            raise ValueError("[md] NVE gate tolerances must be non-negative")
+        nve_tolerances = (
+            self.nve_gate_abs_tol, self.nve_gate_step_tol,
+            self.nve_gate_transition_tol)
+        if (not all(np.isfinite(value) for value in nve_tolerances)
+                or min(nve_tolerances) < 0.0):
+            raise ValueError(
+                "[md] NVE gate tolerances must be finite and non-negative")
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
         self.trajectory_interval = int(md.get('trajectory_interval', 1))
@@ -372,6 +380,32 @@ class NAMD:
         manager = getattr(self.mol, 'mpi_manager', None)
         if manager is not None and hasattr(manager, 'barrier'):
             manager.barrier()
+
+    def _run_io_collective(self, operation):
+        """Run rank-zero I/O and propagate any failure to every MPI rank."""
+        manager = getattr(self.mol, 'mpi_manager', None)
+        if manager is None or not bool(getattr(manager, 'use_mpi', False)):
+            return operation() if self._is_io_rank() else None
+
+        status = None
+        result = None
+        if self._is_io_rank():
+            try:
+                result = operation()
+                status = (True, '', '')
+            except Exception as error:  # broadcast before raising on rank zero
+                status = (False, type(error).__name__, str(error))
+        status = manager.bcast(status, root=0)
+        if not status[0]:
+            exception_type = {
+                'FileNotFoundError': FileNotFoundError,
+                'OSError': OSError,
+                'RuntimeError': RuntimeError,
+                'TypeError': TypeError,
+                'ValueError': ValueError,
+            }.get(status[1], RuntimeError)
+            raise exception_type(status[2])
+        return result
 
     def _prepare_md_outputs(self):
         """Start fresh sidecars or preserve them when explicitly restarting."""
@@ -1053,7 +1087,12 @@ class NAMD:
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
+            'charge': cfg['input'].get('charge', ''),
+            'input_multiplicity': cfg['input'].get('multiplicity', ''),
+            'scf_type': cfg.get('scf', {}).get('type', ''),
+            'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'tdhf_type': cfg['tdhf'].get('type', ''),
+            'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
             'dt_fs': self.dt_fs, 'seed': self.seed,
@@ -1122,14 +1161,18 @@ class NAMD:
                         f'shape {value.shape}; expected {expected_shape}')
                 if key in {
                         'OQP::state_tracking_order',
-                        'OQP::state_tracking_raw_order',
-                        'OQP::state_tracking_lineage'}:
+                        'OQP::state_tracking_raw_order'}:
                     order = np.asarray(value, dtype=np.int64)
                     if not np.array_equal(
                             np.sort(order), np.arange(self.nstate)):
                         raise RuntimeError(
                             f'{context} contains invalid tracking permutation '
                             f'{key!r}')
+                if key == 'OQP::state_tracking_lineage':
+                    if (value.dtype.kind not in 'iu'
+                            or np.unique(value).size != self.nstate):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking lineage IDs')
                 if key in {
                         'OQP::state_tracking_phase_step',
                         'OQP::state_tracking_phase_initial',
@@ -1368,8 +1411,16 @@ class NAMD:
             }
             prev_xyz = np.array(saved['prev_xyz'], copy=True)
             active = int(saved['active'][0])
-            coef = (np.array(saved['coef_real'], copy=True)
-                    + 1j*np.array(saved['coef_imag'], copy=True))
+            coef_real = np.array(saved['coef_real'], copy=True)
+            coef_imag = np.array(saved['coef_imag'], copy=True)
+            if (coef_real.shape != (self.nstate,)
+                    or coef_imag.shape != (self.nstate,)
+                    or not np.all(np.isfinite(coef_real))
+                    or not np.all(np.isfinite(coef_imag))):
+                raise RuntimeError(
+                    'NAMD restart checkpoint contains invalid serialized '
+                    'electronic coefficient vectors')
+            coef = coef_real + 1j*coef_imag
             nuclear_state = tuple(np.array(saved[name], copy=True) for name in (
                 'coordinates', 'velocities', 'acceleration'))
             coordinates, velocities, acceleration, coef, prev_xyz = (
@@ -1415,11 +1466,12 @@ class NAMD:
 
     def _reconcile_trajectory_with_restart(self, checkpoint_step):
         """Repair a partial record and discard TRJ state after checkpoint."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(
+            lambda: self._reconcile_trajectory_on_io_rank(checkpoint_step))
+
+    def _reconcile_trajectory_on_io_rank(self, checkpoint_step):
+        """Perform packed-trajectory reconciliation on rank zero."""
         if not os.path.isfile(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
-            self._io_barrier()
             return
         with open(self.trajectory_file, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
@@ -1472,21 +1524,20 @@ class NAMD:
             )
         else:
             del records
-        self._io_barrier()
 
     def _reconcile_nacme_audit_with_restart(self, checkpoint_step):
         """Atomically discard incomplete or uncommitted NACME TSV rows."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(
+            lambda: self._reconcile_nacme_audit_on_io_rank(checkpoint_step))
+
+    def _reconcile_nacme_audit_on_io_rank(self, checkpoint_step):
+        """Perform NACME-audit reconciliation on rank zero."""
         path = self.nacme_audit_file
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
-            self._io_barrier()
             return
         with open(path, 'r', encoding='utf-8') as stream:
             lines = stream.readlines()
         if not lines:
-            self._io_barrier()
             return
         columns = lines[0].rstrip('\r\n').split('\t')
         if 'center_step' not in columns:
@@ -1501,7 +1552,7 @@ class NAMD:
                 center_step = int(fields[step_index]) if complete else None
             except (IndexError, ValueError):
                 center_step = None
-            if center_step is None or center_step > int(checkpoint_step):
+            if center_step is None or center_step >= int(checkpoint_step):
                 removed += 1
             else:
                 kept.append(line)
@@ -1524,7 +1575,6 @@ class NAMD:
                        f'uncommitted NACME audit row(s) after step '
                        f'{checkpoint_step}'),
             )
-        self._io_barrier()
 
     # ------------------------------------------------------------------ #
     # time-derivative couplings

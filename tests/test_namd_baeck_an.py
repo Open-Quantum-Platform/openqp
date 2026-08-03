@@ -40,6 +40,11 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "nstep=2" in example_oqp
     assert "nacme_check=baeck_an" in example_inp
     assert "nacme_check=baeck_an" in example_oqp
+    for keyword in (
+            "trajectory_interval=2", "restart_interval=2",
+            "trajectory_file=", "nacme_audit_file=", "restart_file="):
+        assert keyword in example_inp
+        assert keyword in example_oqp
 
 
 def test_built_baeck_an_kernel_matches_quadratic_gap_oracle():
@@ -172,10 +177,22 @@ def rejected(**overrides):
         return True
     return False
 
+def invalid(**overrides):
+    try:
+        NAMD(Mol(**overrides))
+    except ValueError:
+        return True
+    return False
+
 print('SOC_GATES=' + json.dumps({
     'nve': rejected(nve_gate='warn'),
     'trajectory_file': rejected(trajectory_file='soc.trj'),
     'trajectory_interval': rejected(trajectory_interval=2),
+    'ba_gap_nan': invalid(ba_gap_max=float('nan')),
+    'nacme_nan': invalid(nacme_gate_abs_tol=float('nan')),
+    'nacme_inf': invalid(nacme_gate_rel_tol=float('inf')),
+    'nve_nan': invalid(nve_gate_abs_tol=float('nan')),
+    'nve_inf': invalid(nve_gate_step_tol=float('inf')),
 }))
 """
     env = os.environ.copy()
@@ -200,6 +217,8 @@ print('SOC_GATES=' + json.dumps({
     assert marker is not None, result.stdout + result.stderr
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'trajectory_file': True, 'trajectory_interval': True,
+        'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
+        'nve_nan': True, 'nve_inf': True,
     }
 
 
@@ -229,8 +248,10 @@ class Mol:
         'qm_atoms="0-2")\ngeom="h2o.xyz"\n'
     )
     config = {
-        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*'},
-        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
+        'input': {'method': 'tdhf', 'functional': 'bhhlyp', 'basis': '6-31g*',
+                  'charge': 0, 'multiplicity': 3},
+        'scf': {'type': 'rohf', 'multiplicity': 3},
+        'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2, 'multiplicity': 3},
     }
     data = {'OQP::td_energies': np.array([0.0, 0.1])}
     atoms = np.array([8, 1, 1])
@@ -281,6 +302,7 @@ d.prev_data = {
     'OQP::VEC_MO_A': np.arange(6.0).reshape(2, 3),
     'OQP::td_bvec_mo': np.arange(4.0).reshape(2, 2),
     'OQP::state_tracking_phase_initial': np.array([1.0, -1.0]),
+    'OQP::state_tracking_lineage': np.array([7, 4]),
 }
 d._ba_energy_left = np.array([0.0, 0.2]); d._ba_energy_center = np.array([0.0, 0.1])
 d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
@@ -328,12 +350,14 @@ d.coef = np.array([1+0j, 0+0j])
 with np.load(d.restart_file, allow_pickle=False) as saved:
     checkpoint_after_rejection = int(saved['step'][0])
 
-# The audit has one committed row, one uncommitted row, and a torn final row.
+# For checkpoint k, only audits centered before k are committed: the
+# center_step=k row requires energies from step k+1 and must be regenerated.
 audit_base = {
     'source': 'TD-Baeck-An', 'verdict': 'pass', 'signed_comparison': False,
     'compared_pairs': 1, 'invariant_failures': 0, 'reference_failures': 0,
     'consecutive_reference_failures': 0,
 }
+d._write_nacme_audit_row(dict(audit_base, center_step=0))
 d._write_nacme_audit_row(dict(audit_base, center_step=1))
 d._write_nacme_audit_row(dict(audit_base, center_step=2,
                               signed_comparison=True))
@@ -371,6 +395,29 @@ except RuntimeError:
 else:
     corrupt_load_rejected = False
 
+# Independent real/imaginary vectors must not exploit NumPy broadcasting to
+# synthesize an apparently valid nstate-vector during checkpoint loading.
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    broadcast_corrupt = {
+        key: np.array(saved[key], copy=True) for key in saved.files}
+broadcast_corrupt['coef_real'] = np.array([0.0])
+broadcast_corrupt['coef_imag'] = np.array([1.0, 0.0])
+broadcast_restart = os.path.join(root, 'broadcast.namd.restart.npz')
+np.savez_compressed(broadcast_restart, **broadcast_corrupt)
+d_broadcast = NAMD.__new__(NAMD); d_broadcast.mol = Mol()
+d_broadcast.nstate = 2; d_broadcast.dt_fs = 0.5
+d_broadcast.seed = 1; d_broadcast.rng_stream = 2
+d_broadcast.restart_requested = True
+d_broadcast.restart_file = broadcast_restart
+d_broadcast.trajectory_file = d.trajectory_file
+d_broadcast.nacme_audit_file = d.nacme_audit_file
+try:
+    d_broadcast._load_restart()
+except RuntimeError:
+    broadcast_load_rejected = True
+else:
+    broadcast_load_rejected = False
+
 # Same method/count but different atom identities must not accept the file.
 wrong_mol = Mol(); wrong_mol.atoms = np.array([7, 1, 2])
 d_wrong = NAMD.__new__(NAMD); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
@@ -393,6 +440,58 @@ d_qm2 = NAMD.__new__(NAMD); d_qm2.mol = Mol(); d_qm2.nstate = 2
 d_qm2.dt_fs = 0.5; d_qm2.seed = 1; d_qm2.rng_stream = 2
 d_qm2.qm_atoms = np.array([1, 2])
 qm_selection_bound = d_qm1._restart_signature() != d_qm2._restart_signature()
+
+# Charge and reference/excited-state spin settings define the electronic
+# Hamiltonian and therefore participate in checkpoint compatibility.
+d_charge = NAMD.__new__(NAMD); d_charge.mol = Mol(); d_charge.nstate = 2
+d_charge.dt_fs = 0.5; d_charge.seed = 1; d_charge.rng_stream = 2
+charge_mol = Mol()
+charge_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+charge_mol.config['input']['charge'] = 1
+d_wrong_charge = NAMD.__new__(NAMD); d_wrong_charge.mol = charge_mol
+d_wrong_charge.nstate = 2; d_wrong_charge.dt_fs = 0.5
+d_wrong_charge.seed = 1; d_wrong_charge.rng_stream = 2
+charge_bound = d_charge._restart_signature() != d_wrong_charge._restart_signature()
+spin_mol = Mol()
+spin_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+spin_mol.config['tdhf']['multiplicity'] = 1
+d_wrong_spin = NAMD.__new__(NAMD); d_wrong_spin.mol = spin_mol
+d_wrong_spin.nstate = 2; d_wrong_spin.dt_fs = 0.5
+d_wrong_spin.seed = 1; d_wrong_spin.rng_stream = 2
+spin_bound = d_charge._restart_signature() != d_wrong_spin._restart_signature()
+
+# Rank-zero reconciliation failures must be broadcast before any rank raises;
+# no unmatched explicit barrier is permitted on either simulated rank.
+class FakeMPI:
+    status = None
+    barrier_calls = 0
+    def __init__(self, rank):
+        self.rank = rank
+        self.use_mpi = 1
+    def bcast(self, value, root=0):
+        if self.rank == root:
+            FakeMPI.status = value
+        return FakeMPI.status
+    def barrier(self):
+        FakeMPI.barrier_calls += 1
+
+broken_trajectory = os.path.join(root, 'broken.namd.trj')
+with open(broken_trajectory, 'wb') as stream:
+    stream.write(b'not-a-valid-header')
+mpi_errors = []
+for rank in (0, 1):
+    d_mpi = NAMD.__new__(NAMD)
+    d_mpi.mol = SimpleNamespace(mpi_manager=FakeMPI(rank))
+    d_mpi.trajectory_file = broken_trajectory
+    try:
+        d_mpi._reconcile_trajectory_with_restart(1)
+    except ValueError as error:
+        mpi_errors.append(str(error))
+collective_error_propagated = (
+    len(mpi_errors) == 2 and mpi_errors[0] == mpi_errors[1]
+    and FakeMPI.barrier_calls == 0)
 
 # Defaults derive a unique manifest from the log stem.
 d_other = NAMD.__new__(NAMD)
@@ -436,8 +535,11 @@ print('DENSE=' + json.dumps({
         'invalid_save_rejected': invalid_save_rejected,
         'checkpoint_after_rejection': checkpoint_after_rejection,
         'corrupt_load_rejected': corrupt_load_rejected,
+        'broadcast_load_rejected': broadcast_load_rejected,
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
+        'charge_bound': charge_bound, 'spin_bound': spin_bound,
+        'collective_error_propagated': collective_error_propagated,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
         'coefficient_shape_rejected': coefficient_shape_rejected,
@@ -479,7 +581,9 @@ print('DENSE=' + json.dumps({
         'forced_failure_steps': [3],
         'invalid_save_rejected': True, 'checkpoint_after_rejection': 1,
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
-        'qm_selection_bound': True, 'unique_manifests': True,
+        'broadcast_load_rejected': True,
+        'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
+        'collective_error_propagated': True, 'unique_manifests': True,
         'forcefield_identity_stable': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
         'audit_rows': [
@@ -489,6 +593,6 @@ print('DENSE=' + json.dumps({
             'candidate_antisymmetry_max\treference_diagonal_max\t'
             'reference_antisymmetry_max\tpair_rms_error\tpair_max_error\t'
             'max_tolerance_ratio',
-            '1\tTD-Baeck-An\tpass\tFalse\t1\t0\t0\t0\t\t\t\t\t\t\t',
+            '0\tTD-Baeck-An\tpass\tFalse\t1\t0\t0\t0\t\t\t\t\t\t\t',
         ],
     }
