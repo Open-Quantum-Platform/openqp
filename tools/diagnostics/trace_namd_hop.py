@@ -45,6 +45,7 @@ def install_trace(
 ) -> SequenceRNG | None:
     original_prepare = namd_module.NAMD._prepare_hop_step
     original_log = namd_module.NAMD._log_step
+    original_log_qmmm = namd_module.NAMD_QMMM._log_qmmm
     sequence_rng = None if random_values is None else SequenceRNG(random_values)
 
     def traced_prepare(self, istep):
@@ -55,20 +56,7 @@ def install_trace(
             self._hop_random_override = sequence_rng
         return enabled
 
-    def traced_log(
-        self,
-        istep,
-        r,
-        hopped=False,
-        transition_energy_jump=np.nan,
-    ):
-        original_log(
-            self,
-            istep,
-            r,
-            hopped=hopped,
-            transition_energy_jump=transition_energy_jump,
-        )
+    def record_trace(self, istep, hopped):
         if istep == 0:
             return
         nstate = self.nstate
@@ -114,8 +102,22 @@ def install_trace(
                 writer.writeheader()
             writer.writerow(row)
 
+    def traced_log(self, istep, r, hopped=False,
+                   transition_energy_jump=np.nan):
+        original_log(self, istep, r, hopped=hopped,
+                     transition_energy_jump=transition_energy_jump)
+        record_trace(self, istep, hopped)
+
+    def traced_log_qmmm(self, istep, epot, hopped=False,
+                        transition_energy_jump=np.nan):
+        original_log_qmmm(
+            self, istep, epot, hopped=hopped,
+            transition_energy_jump=transition_energy_jump)
+        record_trace(self, istep, hopped)
+
     namd_module.NAMD._prepare_hop_step = traced_prepare
     namd_module.NAMD._log_step = traced_log
+    namd_module.NAMD_QMMM._log_qmmm = traced_log_qmmm
     return sequence_rng
 
 

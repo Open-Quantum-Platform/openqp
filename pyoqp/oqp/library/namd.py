@@ -734,6 +734,14 @@ class NAMD:
             'pair_max_error': float(metrics[5]),
             'max_tolerance_ratio': float(metrics[6]),
         }
+        if self.nacme_gate == 'off':
+            result['verdict'] = 'off'
+            self._nacme_gate_failures = 0
+            self._nacme_gate_last = None
+            self._nacme_reference_tdc = None
+            self._nacme_reference_mask = None
+            self._nacme_reference_source = 0
+            return result
         self._nacme_gate_last = result
         self._nacme_reference_tdc = reference.copy()
         self._nacme_reference_mask = mask.copy()
@@ -1142,6 +1150,13 @@ class NAMD:
                     np.asarray(self.m_all, dtype=float).reshape(-1) / AMU_TO_AU
                 ).tolist() if hasattr(self, 'm_all') else [],
             }
+            box_getter = getattr(topology, 'getPeriodicBoxVectors', None)
+            box = box_getter() if box_getter is not None else None
+            identity['qmmm_topology']['periodic_box_vectors'] = (
+                None if box is None else [
+                    [float(component) for component in vector]
+                    for vector in box
+                ])
             qmmm = self.mol.config.get('qmmm', {})
             identity['qmmm_model'] = {
                 key: str(qmmm.get(key, ''))
@@ -1162,6 +1177,7 @@ class NAMD:
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
+            'd4': cfg['input'].get('d4', False),
             'charge': cfg['input'].get('charge', ''),
             'input_multiplicity': cfg['input'].get('multiplicity', ''),
             'scf_type': cfg.get('scf', {}).get('type', ''),
