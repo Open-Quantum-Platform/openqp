@@ -34,6 +34,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
     assert "does not support SOC NAMD logging paths" in tracer
+    assert "finally:" in tracer
     example_inp = (
         ROOT / "examples" / "QMMM" /
         "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp"
@@ -199,6 +200,8 @@ def invalid(**overrides):
 
 print('SOC_GATES=' + json.dumps({
     'nve': rejected(nve_gate='warn'),
+    'truthy_integer': rejected(soc=2, nve_gate='warn'),
+    'truthy_string': rejected(soc='false', nve_gate='warn'),
     'trajectory_file': rejected(trajectory_file='soc.trj'),
     'trajectory_interval': rejected(trajectory_interval=2),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
@@ -229,7 +232,8 @@ print('SOC_GATES=' + json.dumps({
     )
     assert marker is not None, result.stdout + result.stderr
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
-        'nve': True, 'trajectory_file': True, 'trajectory_interval': True,
+        'nve': True, 'truthy_integer': True, 'truthy_string': True,
+        'trajectory_file': True, 'trajectory_interval': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
         'nve_nan': True, 'nve_inf': True,
     }
@@ -635,6 +639,40 @@ d_scf = NAMD.__new__(NAMD); d_scf.mol = scf_mol; d_scf.nstate = 2
 d_scf.dt_fs = 0.5; d_scf.seed = 1; d_scf.rng_stream = 2
 scf_settings_bound = d_charge._restart_signature() != d_scf._restart_signature()
 
+# Environment-selected ESPF modes alter the QM/MM Hamiltonian/forces and must
+# therefore invalidate checkpoints made with another effective mode.
+class EmptyTopology:
+    @staticmethod
+    def atoms():
+        return []
+    @staticmethod
+    def bonds():
+        return []
+    @staticmethod
+    def getPeriodicBoxVectors():
+        return None
+
+def espf_probe():
+    probe = NAMD.__new__(NAMD); probe.mol = Mol(); probe.nstate = 2
+    probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
+    probe.pdb = SimpleNamespace(topology=EmptyTopology())
+    probe.m_all = np.ones(3)
+    return probe
+
+os.environ['ESPF_ROHF'] = '0'
+os.environ['ESPF_HARD_GRID'] = '0'
+espf_default_signature = espf_probe()._restart_signature()
+os.environ['ESPF_ROHF'] = '1'
+espf_rohf_signature = espf_probe()._restart_signature()
+os.environ['ESPF_ROHF'] = '0'
+os.environ['ESPF_HARD_GRID'] = 'on'
+espf_hard_grid_signature = espf_probe()._restart_signature()
+os.environ.pop('ESPF_ROHF')
+os.environ.pop('ESPF_HARD_GRID')
+espf_modes_bound = (
+    espf_default_signature != espf_rohf_signature
+    and espf_default_signature != espf_hard_grid_signature)
+
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
 class FakeMPI:
@@ -743,9 +781,19 @@ def input_collision(candidate, *, velocity='zero', qmmm=None, config=None):
         return True
     return False
 
+with open(os.path.join(root, 'cwd-vel.dat'), 'w', encoding='utf-8') as stream:
+    stream.write('0 0 0\n' * 3)
+original_cwd = os.getcwd()
+os.chdir(root)
+try:
+    cwd_velocity_collision = input_collision(
+        os.path.join(root, 'cwd-vel.dat'), velocity='cwd-vel.dat')
+finally:
+    os.chdir(original_cwd)
+
 input_collisions_rejected = all((
     input_collision(os.path.join(input_root, 'request.oqp')),
-    input_collision(os.path.join(input_root, 'vel.dat'), velocity='vel.dat'),
+    cwd_velocity_collision,
     input_collision(
         os.path.join(input_root, 'water.pdb'),
         qmmm={'pdb_file': 'water.pdb'}),
@@ -875,6 +923,7 @@ print('DENSE=' + json.dumps({
         'tight_binding_bound': tight_binding_bound,
         'default_tb_artifact_bound': default_tb_artifact_bound,
         'default_tb_model_stable': default_tb_model_stable,
+        'espf_modes_bound': espf_modes_bound,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -937,6 +986,7 @@ print('DENSE=' + json.dumps({
         'tight_binding_bound': True,
         'default_tb_artifact_bound': True, 'scf_settings_bound': True,
         'default_tb_model_stable': True,
+        'espf_modes_bound': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,

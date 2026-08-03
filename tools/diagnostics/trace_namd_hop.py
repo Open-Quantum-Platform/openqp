@@ -104,16 +104,22 @@ def install_trace(
 
     def traced_log(self, istep, r, hopped=False,
                    transition_energy_jump=np.nan):
-        original_log(self, istep, r, hopped=hopped,
-                     transition_energy_jump=transition_energy_jump)
-        record_trace(self, istep, hopped)
+        try:
+            original_log(self, istep, r, hopped=hopped,
+                         transition_energy_jump=transition_energy_jump)
+        finally:
+            # Preserve the terminal diagnostic row when the production logger
+            # raises a deferred NVE-gate error after recording the dense step.
+            record_trace(self, istep, hopped)
 
     def traced_log_qmmm(self, istep, epot, hopped=False,
                         transition_energy_jump=np.nan):
-        original_log_qmmm(
-            self, istep, epot, hopped=hopped,
-            transition_energy_jump=transition_energy_jump)
-        record_trace(self, istep, hopped)
+        try:
+            original_log_qmmm(
+                self, istep, epot, hopped=hopped,
+                transition_energy_jump=transition_energy_jump)
+        finally:
+            record_trace(self, istep, hopped)
 
     namd_module.NAMD._prepare_hop_step = traced_prepare
     namd_module.NAMD._log_step = traced_log

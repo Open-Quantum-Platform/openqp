@@ -282,7 +282,10 @@ class NAMD:
         self.velocity_source = str(md['velocity'])
         self._validate_sidecar_paths()
         _soc = md.get('soc', False)
-        soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
+        # Keep this guard identical to compute_namd's ``if soc:`` dispatch.
+        # Programmatic callers are not necessarily constrained by the input
+        # schema and may supply another truthy value.
+        soc_requested = bool(_soc)
         if soc_requested and self.nacme_check != 'off':
             raise NotImplementedError(
                 "[md] nacme_check currently supports same-spin NAMD only"
@@ -381,6 +384,17 @@ class NAMD:
         stem = os.path.splitext(os.path.basename(self.mol.log))[0]
         return os.path.join(log_dir, stem + '.namd.restart.oqp')
 
+    def _resolved_velocity_file(self):
+        """Resolve a file velocity source exactly as the runtime consumes it."""
+        velocity = str(getattr(self, 'velocity_source', '') or '').strip()
+        if velocity.lower() in (
+                'zero', 'none', '0', 'maxwell', 'boltzmann', 'random'):
+            return None
+        # Relative velocity paths have historically been interpreted from the
+        # process working directory by _init_velocities, not from the input
+        # file directory. Keep validation and loading on one resolver.
+        return os.path.abspath(os.path.expanduser(velocity))
+
     def _validate_sidecar_paths(self):
         """Reject aliases between NAMD sidecars and simulation inputs."""
         outputs = {
@@ -401,12 +415,9 @@ class NAMD:
         if resolved_input:
             inputs['input_file'] = resolved_input
 
-        velocity = str(getattr(self, 'velocity_source', '') or '').strip()
-        if velocity and velocity.lower() not in ('maxwell', 'zero'):
-            expanded = os.path.expanduser(velocity)
-            inputs['velocity_file'] = (
-                expanded if os.path.isabs(expanded)
-                else os.path.join(source_dir, expanded))
+        velocity_file = self._resolved_velocity_file()
+        if velocity_file is not None:
+            inputs['velocity_file'] = velocity_file
 
         qmmm = getattr(self.mol, 'config', {}).get('qmmm', {})
         pdb_file = str(qmmm.get('pdb_file', '') or '').strip()
@@ -587,8 +598,9 @@ class NAMD:
             v = self._counter_normals((self.natom, 3)) * sigma[:, None]
             return self._remove_com_motion(v)
         # otherwise treat as a file path: "vx vy vz" per atom (atomic units)
-        if os.path.isfile(self.velocity_source):
-            v = np.loadtxt(self.velocity_source).reshape((self.natom, 3))
+        velocity_file = self._resolved_velocity_file()
+        if velocity_file is not None and os.path.isfile(velocity_file):
+            v = np.loadtxt(velocity_file).reshape((self.natom, 3))
             return self._remove_com_motion(v)
         raise ValueError(f"[md] velocity='{self.velocity_source}' is not zero/maxwell or a readable file")
 
@@ -1325,6 +1337,13 @@ class NAMD:
                 key: str(qmmm.get(key, ''))
                 for key in ('cutoff', 'embedding', 'frontier_scheme')
             }
+            # These environment switches change the QM/MM charge/gradient
+            # model in both Python and Fortran. Store their effective boolean
+            # semantics so an incompatible checkpoint cannot be resumed.
+            identity['qmmm_model']['espf_rohf'] = (
+                os.environ.get('ESPF_ROHF', '').strip() in ('1', 'on'))
+            identity['qmmm_model']['espf_hard_grid'] = (
+                os.environ.get('ESPF_HARD_GRID', '').strip() in ('1', 'on'))
             forcefields = (qmmm.get('forcefield_files', '')
                            or qmmm.get('forcefield', ''))
             identity['qmmm_model']['forcefields'] = (
