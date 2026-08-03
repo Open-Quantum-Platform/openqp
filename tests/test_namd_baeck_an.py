@@ -267,6 +267,9 @@ class Mol:
     @staticmethod
     def get_state_tracking():
         return {'order': [0, 1], 'phase_step': [1.0, -1.0],
+                'raw_order': [1, 0], 'lineage': [7, 4],
+                'phase_initial': [-1.0, 1.0],
+                'previous_phase_initial': [1.0, 1.0],
                 'matched_overlap': [0.99, 0.98], 'margin': [0.2, 0.3]}
     def put_data(self, data):
         self.loaded = data
@@ -499,6 +502,16 @@ d_wrong_spin = NAMD.__new__(NAMD); d_wrong_spin.mol = spin_mol
 d_wrong_spin.nstate = 2; d_wrong_spin.dt_fs = 0.5
 d_wrong_spin.seed = 1; d_wrong_spin.rng_stream = 2
 spin_bound = d_charge._restart_signature() != d_wrong_spin._restart_signature()
+basis_mol = Mol()
+basis_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+basis_mol.config['input']['library'] = 'H 6-31g; O aug-cc-pvdz'
+basis_mol.config['input']['ispher'] = 0
+d_wrong_basis = NAMD.__new__(NAMD); d_wrong_basis.mol = basis_mol
+d_wrong_basis.nstate = 2; d_wrong_basis.dt_fs = 0.5
+d_wrong_basis.seed = 1; d_wrong_basis.rng_stream = 2
+basis_definition_bound = (
+    d_charge._restart_signature() != d_wrong_basis._restart_signature())
 
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
@@ -619,7 +632,11 @@ else:
     enforced_error = False
 print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
-    'phase': records['tracking_phase'].tolist(), 'nstate': header['nstate'],
+    'phase': records['tracking_phase'].tolist(),
+    'phase_initial': records['tracking_phase_initial'].tolist(),
+    'lineage': records['tracking_lineage'].tolist(),
+    'raw_order': records['tracking_raw_order'].tolist(),
+    'nstate': header['nstate'],
     'natom': header['natom'], 'restart': 'restart=true' in manifest,
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
     'manifest_name': os.path.basename(d.restart_manifest_file),
@@ -644,6 +661,7 @@ print('DENSE=' + json.dumps({
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
+        'basis_definition_bound': basis_definition_bound,
         'collective_error_propagated': collective_error_propagated,
         'collective_save_error': collective_save_error,
         'fresh_outputs_invalidated': fresh_outputs_invalidated,
@@ -680,6 +698,8 @@ print('DENSE=' + json.dumps({
     assert values == {
         'shape': [1], 'steps': [1],
         'phase': [[1.0, -1.0]],
+        'phase_initial': [[-1.0, 1.0]], 'lineage': [[7, 4]],
+        'raw_order': [[1, 0]],
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
         'manifest_name': 'job.namd.restart.oqp',
         'geom_rebased': True, 'velocity_rebased': True,
@@ -694,6 +714,7 @@ print('DENSE=' + json.dumps({
         'broadcast_load_rejected': True,
         'history_load_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
+        'basis_definition_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
         'sidecar_collision_rejected': True, 'stale_gate_cleared': True,

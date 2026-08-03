@@ -58,7 +58,7 @@ KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
 NAMD_RESTART_SCHEMA_VERSION = 2
-NAMD_TRAJECTORY_SCHEMA_VERSION = 2
+NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
 
@@ -81,7 +81,11 @@ def _namd_trajectory_dtype(nstate, natom):
         ('nve_verdict', 'i1'), ('nve_streak', '<i8'),
         ('nve_metrics', '<f8', (4,)),
         ('tracking_valid', 'i1'), ('tracking_order', '<i8', (nstate,)),
+        ('tracking_raw_order', '<i8', (nstate,)),
+        ('tracking_lineage', '<i8', (nstate,)),
         ('tracking_phase', '<f8', (nstate,)),
+        ('tracking_phase_initial', '<f8', (nstate,)),
+        ('tracking_previous_phase_initial', '<f8', (nstate,)),
         ('tracking_overlap', '<f8', (nstate,)),
         ('tracking_margin', '<f8', (nstate,)),
     ], align=False)
@@ -963,9 +967,13 @@ class NAMD:
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
                 'overlap_tdc_au', 'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
-                'tracking_phase', 'tracking_overlap', 'tracking_margin'):
+                'tracking_phase', 'tracking_phase_initial',
+                'tracking_previous_phase_initial', 'tracking_overlap',
+                'tracking_margin'):
             record[field] = np.nan
         record['tracking_order'] = -1
+        record['tracking_raw_order'] = -1
+        record['tracking_lineage'] = -1
         record['gate_center_step'] = -1
         record['gate_verdict'] = -1
         record['nve_verdict'] = -1
@@ -1031,7 +1039,17 @@ class NAMD:
         if tracking is not None:
             record['tracking_valid'] = 1
             record['tracking_order'] = np.asarray(tracking['order'], dtype=np.int64)
+            record['tracking_raw_order'] = np.asarray(
+                tracking.get('raw_order', tracking['order']), dtype=np.int64)
+            record['tracking_lineage'] = np.asarray(
+                tracking.get('lineage', tracking['order']), dtype=np.int64)
             record['tracking_phase'] = np.asarray(tracking['phase_step'], dtype=float)
+            record['tracking_phase_initial'] = np.asarray(
+                tracking.get('phase_initial', tracking['phase_step']), dtype=float)
+            record['tracking_previous_phase_initial'] = np.asarray(
+                tracking.get('previous_phase_initial',
+                             tracking.get('phase_initial', tracking['phase_step'])),
+                dtype=float)
             record['tracking_overlap'] = np.asarray(tracking['matched_overlap'], dtype=float)
             record['tracking_margin'] = np.asarray(tracking['margin'], dtype=float)
 
@@ -1152,6 +1170,12 @@ class NAMD:
             }
             box_getter = getattr(topology, 'getPeriodicBoxVectors', None)
             box = box_getter() if box_getter is not None else None
+            if box is not None and hasattr(box, 'value_in_unit'):
+                try:
+                    from openmm import unit as openmm_unit
+                except ImportError:
+                    from simtk import unit as openmm_unit
+                box = box.value_in_unit(openmm_unit.nanometer)
             identity['qmmm_topology']['periodic_box_vectors'] = (
                 None if box is None else [
                     [float(component) for component in vector]
@@ -1177,6 +1201,8 @@ class NAMD:
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
+            'basis_library': cfg['input'].get('library', ''),
+            'basis_ispher': cfg['input'].get('ispher', ''),
             'd4': cfg['input'].get('d4', False),
             'charge': cfg['input'].get('charge', ''),
             'input_multiplicity': cfg['input'].get('multiplicity', ''),
