@@ -218,7 +218,8 @@ contains
     real(kind=dp) :: curvature, radicand, sigma
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. dt_right <= 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. &
+        dt_right <= 0.0_dp .or. .not. ieee_is_finite(gap_max)) return
     n = int(nstate)
     denominator = dt_left*dt_right*(dt_left + dt_right)
     if (.not. ieee_is_finite(denominator) .or. denominator <= 0.0_dp) return

@@ -22,6 +22,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
 
     assert "function namd_baeck_an_tdc(" in source
     assert 'bind(C, name="oqp_namd_baeck_an_tdc")' in source
+    assert ".not. ieee_is_finite(gap_max)" in source
     assert "int oqp_namd_baeck_an_tdc(" in header
     assert "oqp.oqp_namd_baeck_an_tdc(" in driver
     assert "magnitude diagnostic" in driver
@@ -115,6 +116,10 @@ result = {
     'nonuniform': run([0.0, 0.06], [0.0, 0.02], [0.0, 0.03], 2.0, 1.0),
     'negative_radicand': run([0.0, 0.01], [0.0, 0.02], [0.0, 0.01]),
     'gap_cutoff': run([0.0, 0.03], [0.0, 0.02], [0.0, 0.03], 1.0, 1.0, 0.01),
+    'gap_nan': run([0.0, 0.03], [0.0, 0.02], [0.0, 0.03],
+                   1.0, 1.0, float('nan')),
+    'gap_inf': run([0.0, 0.03], [0.0, 0.02], [0.0, 0.03],
+                   1.0, 1.0, float('inf')),
     'gate_pass': gate([[0.0, -0.5], [0.5, 0.0]],
                       [[0.0, -0.5], [0.5, 0.0]]),
     'gate_magnitude': gate([[0.0, 0.5], [-0.5, 0.0]],
@@ -163,6 +168,9 @@ print('BAECK_AN=' + json.dumps(result))
         status, matrix = values[key]
         assert status == 0
         assert matrix == [[0.0, 0.0], [0.0, 0.0]]
+    for key in ('gap_nan', 'gap_inf'):
+        status, _matrix = values[key]
+        assert status != 0
 
     for key in ('gate_pass', 'gate_magnitude'):
         status, _metrics, counts = values[key]
@@ -179,6 +187,33 @@ print('BAECK_AN=' + json.dumps(result))
                 'gate_nan_rel_tol'):
         status, _metrics, _counts = values[key]
         assert status != 0
+
+
+@pytest.mark.parametrize('alias_kind', ('input', 'random'))
+def test_trace_rejects_output_alias_before_deleting_source(tmp_path, alias_kind):
+    input_path = tmp_path / 'trajectory.inp'
+    random_path = tmp_path / 'random.dat'
+    input_path.write_text('input sentinel\n')
+    random_path.write_text('0.25\n')
+    protected = input_path if alias_kind == 'input' else random_path
+    command = [
+        sys.executable, str(ROOT / 'tools' / 'diagnostics' / 'trace_namd_hop.py'),
+        '--input', str(input_path), '--random-file', str(random_path),
+        '--trace', str(protected),
+    ]
+    env = os.environ.copy()
+    pythonpath = str(ROOT / 'pyoqp')
+    if env.get('PYTHONPATH'):
+        pythonpath += os.pathsep + env['PYTHONPATH']
+    env['PYTHONPATH'] = pythonpath
+    result = subprocess.run(
+        command, cwd=tmp_path, env=env, capture_output=True, text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert protected.read_text() == (
+        'input sentinel\n' if alias_kind == 'input' else '0.25\n')
+    assert '--trace must not alias' in result.stderr
 
 
 def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
@@ -517,6 +552,38 @@ loaded = d2._load_restart()
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
 audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
+
+# Normal checkpoints reuse the incremental trajectory digest.  They must not
+# rescan the growing sidecar on every MD step.
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    expected_trajectory_prefix = {
+        'bytes': int(saved['trajectory_prefix_bytes'][0]),
+        'sha256': str(saved['trajectory_prefix_sha256'][0]),
+    }
+original_scan = d2._scan_trajectory_prefix
+d2._scan_trajectory_prefix = lambda _step: (_ for _ in ()).throw(
+    AssertionError('normal checkpoint rescanned the dense trajectory'))
+incremental_trajectory_digest = (
+    d2._trajectory_checkpoint_identity(1) == expected_trajectory_prefix)
+d2._scan_trajectory_prefix = original_scan
+
+# Losing the dense sidecar must not replace the last-good checkpoint with an
+# empty-prefix checkpoint.
+checkpoint_before_missing_trajectory = open(d.restart_file, 'rb').read()
+trajectory_backup = d.trajectory_file + '.saved'
+os.replace(d.trajectory_file, trajectory_backup)
+d2.restart_interval = 1
+try:
+    d2._save_restart(
+        1, loaded['coordinates'], loaded['velocities'], loaded['acceleration'])
+except RuntimeError:
+    missing_trajectory_save_rejected = True
+else:
+    missing_trajectory_save_rejected = False
+finally:
+    os.replace(trajectory_backup, d.trajectory_file)
+last_good_checkpoint_preserved = (
+    open(d.restart_file, 'rb').read() == checkpoint_before_missing_trajectory)
 
 # A dense trajectory from another run must not be spliced into a checkpoint
 # merely because its dimensions and electronic model signature are identical.
@@ -1359,6 +1426,9 @@ print('DENSE=' + json.dumps({
         'malformed_signature_rejected': malformed_signature_rejected,
         'foreign_audit_rejected': foreign_audit_rejected,
         'foreign_trajectory_rejected': foreign_trajectory_rejected,
+        'incremental_trajectory_digest': incremental_trajectory_digest,
+        'missing_trajectory_save_rejected': missing_trajectory_save_rejected,
+        'last_good_checkpoint_preserved': last_good_checkpoint_preserved,
         'zero_step_audit_rolled_back': zero_step_audit_rolled_back,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'forcefield_rebase_runtime_precedence':
@@ -1442,6 +1512,9 @@ print('DENSE=' + json.dumps({
         'malformed_signature_rejected': True,
         'foreign_audit_rejected': True,
         'foreign_trajectory_rejected': True,
+        'incremental_trajectory_digest': True,
+        'missing_trajectory_save_rejected': True,
+        'last_good_checkpoint_preserved': True,
         'zero_step_audit_rolled_back': True,
         'runtime_forcefield_bound': True,
         'forcefield_rebase_runtime_precedence': True,

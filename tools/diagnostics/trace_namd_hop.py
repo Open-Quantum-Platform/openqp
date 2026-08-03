@@ -138,6 +138,17 @@ def main() -> None:
         help="one prescribed uniform random value per effective hop interval",
     )
     args = parser.parse_args()
+    trace = Path(args.trace).expanduser().resolve()
+    input_path = Path(args.input).expanduser().resolve()
+    random_path = (None if args.random_file is None
+                   else args.random_file.expanduser().resolve())
+    protected_paths = {'input': input_path, 'log': Path('thymine.log').resolve()}
+    if random_path is not None:
+        protected_paths['random-file'] = random_path
+    aliases = [name for name, path in protected_paths.items() if path == trace]
+    if aliases:
+        raise ValueError(
+            f"--trace must not alias the {', '.join(aliases)} path")
     runner = Runner(
         project="thymine", input_file=args.input, log="thymine.log",
         silent=1, usempi=False)
@@ -146,11 +157,10 @@ def main() -> None:
         raise ValueError(
             "trace_namd_hop does not support SOC NAMD logging paths"
         )
-    trace = Path(args.trace)
     trace.unlink(missing_ok=True)
     random_values = None
-    if args.random_file is not None:
-        random_values = np.atleast_1d(np.loadtxt(args.random_file, dtype=float))
+    if random_path is not None:
+        random_values = np.atleast_1d(np.loadtxt(random_path, dtype=float))
         if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
             raise ValueError("Prescribed random values must lie in [0, 1)")
     sequence_rng = install_trace(trace, args.skip_first_hop, random_values)

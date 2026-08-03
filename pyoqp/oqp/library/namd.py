@@ -58,7 +58,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 4
+NAMD_RESTART_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 NACME_AUDIT_COLUMNS = (
@@ -360,6 +360,10 @@ class NAMD:
         self._nve_gate_last = None
         self._pending_nve_gate_error = None
         self._pending_nacme_gate_error = None
+        self._trajectory_prefix_hasher = None
+        self._trajectory_prefix_bytes = 0
+        self._trajectory_prefix_last_step = None
+        self._trajectory_prefix_stat = None
 
         # electronic amplitudes (complex), one per excited state. For SOC-NAMD
         # the active index runs over the larger spin-adiabatic manifold and the
@@ -632,6 +636,10 @@ class NAMD:
         for path in (self.trajectory_file, self.nacme_audit_file):
             with open(path, 'w', encoding='utf-8'):
                 pass
+        self._trajectory_prefix_hasher = None
+        self._trajectory_prefix_bytes = 0
+        self._trajectory_prefix_last_step = None
+        self._trajectory_prefix_stat = None
 
     def _prepare_hop_step(self, istep):
         """Bind the physical MD step to the stateless hop RNG.
@@ -1109,7 +1117,9 @@ class NAMD:
         else:
             velocities = np.asarray(self.vel, dtype=np.float64).reshape(coords.shape)
         dtype = _namd_trajectory_dtype(self.nstate, len(coords))
-        if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
+        new_file = (not os.path.exists(self.trajectory_file)
+                    or os.path.getsize(self.trajectory_file) == 0)
+        if new_file:
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': self.nstate,
@@ -1140,13 +1150,26 @@ class NAMD:
                 'nve_verdict': {'-1': 'off', '1': 'pass', '2': 'fail'},
             }
             encoded = json.dumps(header, sort_keys=True).encode('utf-8')
+            header_record = (NAMD_TRAJECTORY_MAGIC
+                             + struct.pack('<Q', len(encoded)) + encoded)
             with open(self.trajectory_file, 'wb') as stream:
-                stream.write(NAMD_TRAJECTORY_MAGIC)
-                stream.write(struct.pack('<Q', len(encoded)))
-                stream.write(encoded)
+                stream.write(header_record)
                 stream.flush()
                 os.fsync(stream.fileno())
+            self._trajectory_prefix_hasher = hashlib.sha256(header_record)
+            self._trajectory_prefix_bytes = len(header_record)
+            self._trajectory_prefix_last_step = None
+            self._trajectory_prefix_stat = self._trajectory_stat_identity()
         else:
+            cached_hasher = getattr(self, '_trajectory_prefix_hasher', None)
+            if cached_hasher is None:
+                scanned = self._scan_trajectory_prefix(INT64_MAX)
+                if scanned['partial_bytes'] or scanned['removed_records']:
+                    raise ValueError(
+                        'NAMD trajectory has an incomplete append history')
+                self._remember_trajectory_prefix(scanned)
+            else:
+                self._require_unchanged_trajectory_prefix()
             header, existing = read_namd_trajectory(self.trajectory_file)
             del existing
             if (int(header['nstate']) != self.nstate
@@ -1255,10 +1278,15 @@ class NAMD:
             record['tracking_overlap'] = np.asarray(tracking['matched_overlap'], dtype=float)
             record['tracking_margin'] = np.asarray(tracking['margin'], dtype=float)
 
+        record_bytes = record.tobytes(order='C')
         with open(self.trajectory_file, 'ab') as stream:
-            stream.write(record.tobytes(order='C'))
+            stream.write(record_bytes)
             stream.flush()
             os.fsync(stream.fileno())
+        self._trajectory_prefix_hasher.update(record_bytes)
+        self._trajectory_prefix_bytes += len(record_bytes)
+        self._trajectory_prefix_last_step = int(istep)
+        self._trajectory_prefix_stat = self._trajectory_stat_identity()
 
     def _qmmm_forcefield_identity(self, value):
         """Canonicalize local force fields across relocated restart manifests."""
@@ -1765,8 +1793,7 @@ class NAMD:
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
                     f'step {istep}: history'))
         audit_prefix, _removed = self._nacme_audit_committed_prefix(istep)
-        trajectory_prefix, _records, _partial = (
-            self._trajectory_committed_prefix(istep))
+        trajectory_prefix = self._trajectory_checkpoint_identity(istep)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
             'signature': np.array([self._restart_signature()]),
@@ -1788,9 +1815,9 @@ class NAMD:
             'audit_prefix_sha256': np.array(
                 [hashlib.sha256(audit_prefix).hexdigest()]),
             'trajectory_prefix_bytes': np.array(
-                [len(trajectory_prefix)], dtype=np.int64),
+                [trajectory_prefix['bytes']], dtype=np.int64),
             'trajectory_prefix_sha256': np.array(
-                [hashlib.sha256(trajectory_prefix).hexdigest()]),
+                [trajectory_prefix['sha256']]),
         }
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
@@ -2139,11 +2166,42 @@ class NAMD:
                 f'NAMD restart checkpoint has invalid {name} metadata')
         return scalar
 
-    def _trajectory_committed_prefix(self, checkpoint_step):
-        """Return exact dense-TRJ bytes committed through a checkpoint."""
+    def _trajectory_stat_identity(self):
+        """Return cheap metadata that detects sidecar replacement/mutation."""
+        try:
+            status = os.stat(self.trajectory_file)
+        except OSError as error:
+            raise RuntimeError(
+                'NAMD dense trajectory disappeared before checkpoint') from error
+        return (
+            int(status.st_dev), int(status.st_ino), int(status.st_size),
+            int(status.st_mtime_ns),
+        )
+
+    def _require_unchanged_trajectory_prefix(self):
+        """Reject external sidecar changes before using the cached digest."""
+        expected = getattr(self, '_trajectory_prefix_stat', None)
+        if expected is None or self._trajectory_stat_identity() != expected:
+            raise RuntimeError(
+                'NAMD dense trajectory changed outside the active writer')
+
+    def _remember_trajectory_prefix(self, scanned):
+        """Install a validated incremental digest after start or restart."""
+        self._trajectory_prefix_hasher = scanned['hasher']
+        self._trajectory_prefix_bytes = scanned['bytes']
+        self._trajectory_prefix_last_step = scanned['last_step']
+        self._trajectory_prefix_stat = self._trajectory_stat_identity()
+
+    def _scan_trajectory_prefix(self, checkpoint_step):
+        """Scan one committed prefix without retaining its trajectory bytes."""
         path = self.trajectory_file
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
-            return b'', 0, 0
+            return {
+                'hasher': hashlib.sha256(), 'bytes': 0, 'sha256':
+                hashlib.sha256(b'').hexdigest(), 'records': 0,
+                'last_step': None, 'removed_records': 0,
+                'partial_bytes': 0,
+            }
         with open(path, 'rb') as stream:
             if stream.read(8) != NAMD_TRAJECTORY_MAGIC:
                 raise ValueError('restart trajectory is not an OpenQP dense TRJ')
@@ -2188,14 +2246,48 @@ class NAMD:
                     'restart trajectory contains non-monotonic step records')
             keep = int(np.searchsorted(
                 steps, int(checkpoint_step), side='right'))
+            last_step = int(steps[keep - 1]) if keep else None
         else:
             keep = 0
+            last_step = None
         prefix_bytes = offset + keep*dtype.itemsize
+        digest = hashlib.sha256()
+        remaining = prefix_bytes
         with open(path, 'rb') as stream:
-            prefix = stream.read(prefix_bytes)
-        if len(prefix) != prefix_bytes:
-            raise ValueError('restart trajectory changed while being validated')
-        return prefix, count - keep, partial_bytes
+            while remaining:
+                block = stream.read(min(1024 * 1024, remaining))
+                if not block:
+                    raise ValueError(
+                        'restart trajectory changed while being validated')
+                digest.update(block)
+                remaining -= len(block)
+        return {
+            'hasher': digest, 'bytes': prefix_bytes,
+            'sha256': digest.hexdigest(), 'records': keep,
+            'last_step': last_step, 'removed_records': count - keep,
+            'partial_bytes': partial_bytes,
+        }
+
+    def _trajectory_checkpoint_identity(self, checkpoint_step):
+        """Return a checkpoint prefix digest in O(1) during normal MD."""
+        cached = getattr(self, '_trajectory_prefix_hasher', None)
+        if cached is not None:
+            self._require_unchanged_trajectory_prefix()
+            last_step = getattr(self, '_trajectory_prefix_last_step', None)
+            if last_step is not None and last_step <= int(checkpoint_step):
+                return {
+                    'bytes': int(self._trajectory_prefix_bytes),
+                    'sha256': cached.hexdigest(),
+                }
+
+        scanned = self._scan_trajectory_prefix(checkpoint_step)
+        if scanned['records'] == 0:
+            raise RuntimeError(
+                'refusing to checkpoint without the committed dense '
+                'trajectory record')
+        if not scanned['removed_records'] and not scanned['partial_bytes']:
+            self._remember_trajectory_prefix(scanned)
+        return {'bytes': scanned['bytes'], 'sha256': scanned['sha256']}
 
     def _reconcile_trajectory_with_restart(self, checkpoint_step,
                                            expected_prefix):
@@ -2207,27 +2299,32 @@ class NAMD:
     def _reconcile_trajectory_on_io_rank(self, checkpoint_step,
                                          expected_prefix):
         """Perform packed-trajectory reconciliation on rank zero."""
-        prefix, removed_records, partial_bytes = (
-            self._trajectory_committed_prefix(checkpoint_step))
+        scanned = self._scan_trajectory_prefix(checkpoint_step)
+        if scanned['records'] == 0:
+            raise ValueError(
+                'restart checkpoint requires its committed dense trajectory')
         observed = {
-            'bytes': len(prefix),
-            'sha256': hashlib.sha256(prefix).hexdigest(),
+            'bytes': scanned['bytes'],
+            'sha256': scanned['sha256'],
         }
         if observed != expected_prefix:
             raise ValueError(
                 'restart dense trajectory does not match the checkpoint '
                 'committed prefix')
-        if removed_records or partial_bytes:
+        if scanned['removed_records'] or scanned['partial_bytes']:
             with open(self.trajectory_file, 'r+b') as stream:
-                stream.truncate(len(prefix))
+                stream.truncate(scanned['bytes'])
                 stream.flush()
                 os.fsync(stream.fileno())
             dump_log(
                 self.mol,
-                title=(f'NAMD restart removed {removed_records} uncommitted '
-                       f'trajectory record(s) and {partial_bytes} incomplete '
+                title=(f'NAMD restart removed '
+                       f'{scanned["removed_records"]} uncommitted '
+                       f'trajectory record(s) and '
+                       f'{scanned["partial_bytes"]} incomplete '
                        f'byte(s) after step {checkpoint_step}'),
             )
+        self._remember_trajectory_prefix(scanned)
 
     def _nacme_audit_committed_prefix(self, checkpoint_step):
         """Return canonical bytes committed before a checkpoint step."""
