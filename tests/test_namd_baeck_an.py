@@ -213,6 +213,7 @@ print('SOC_GATES=' + json.dumps({
     'truthy_string': rejected(soc='false', nve_gate='warn'),
     'trajectory_file': rejected(trajectory_file='soc.trj'),
     'trajectory_interval': rejected(trajectory_interval=2),
+    'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
     'nacme_nan': invalid(nacme_gate_abs_tol=float('nan')),
     'nacme_inf': invalid(nacme_gate_rel_tol=float('inf')),
@@ -243,6 +244,7 @@ print('SOC_GATES=' + json.dumps({
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'truthy_integer': True, 'truthy_string': True,
         'trajectory_file': True, 'trajectory_interval': True,
+        'same_spin_adaptive': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
         'nve_nan': True, 'nve_inf': True,
     }
@@ -251,6 +253,7 @@ print('SOC_GATES=' + json.dumps({
 def test_dense_trajectory_is_appendable_and_restart_manifest_is_runnable(tmp_path):
     script = r"""
 import json
+import hashlib
 import os
 from types import SimpleNamespace
 import numpy as np
@@ -342,6 +345,13 @@ d.prev_data = {
 d._ba_energy_left = np.array([0.0, 0.2]); d._ba_energy_center = np.array([0.0, 0.1])
 d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
 d._nacme_gate_failures = 2; d._rng_step = 1
+# For checkpoint k, only validation rows centered before k are committed.
+audit_base = {
+    'source': 'TD-Baeck-An', 'verdict': 'pass', 'signed_comparison': False,
+    'compared_pairs': 1, 'invariant_failures': 0, 'reference_failures': 0,
+    'consecutive_reference_failures': 0,
+}
+d._write_nacme_audit_row(dict(audit_base, center_step=0))
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
 
 # Rebased local force-field paths must retain the same restart identity, while
@@ -474,14 +484,7 @@ d.coef = np.array([1+0j, 0+0j])
 with np.load(d.restart_file, allow_pickle=False) as saved:
     checkpoint_after_rejection = int(saved['step'][0])
 
-# For checkpoint k, only audits centered before k are committed: the
-# center_step=k row requires energies from step k+1 and must be regenerated.
-audit_base = {
-    'source': 'TD-Baeck-An', 'verdict': 'pass', 'signed_comparison': False,
-    'compared_pairs': 1, 'invariant_failures': 0, 'reference_failures': 0,
-    'consecutive_reference_failures': 0,
-}
-d._write_nacme_audit_row(dict(audit_base, center_step=0))
+# The center_step=k row requires energies from step k+1 and must be regenerated.
 d._write_nacme_audit_row(dict(audit_base, center_step=1))
 d._write_nacme_audit_row(dict(audit_base, center_step=2,
                               signed_comparison=True))
@@ -500,6 +503,41 @@ loaded = d2._load_restart()
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
 audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
+
+# A same-shaped validation file from another trajectory must not be spliced
+# into the checkpoint history merely because its center_step column is valid.
+legitimate_audit = open(d.nacme_audit_file, encoding='utf-8').read()
+with open(d.nacme_audit_file, 'w', encoding='utf-8') as stream:
+    stream.write(legitimate_audit.replace('\tpass\t', '\tfail\t', 1))
+d_foreign_audit = NAMD.__new__(NAMD); d_foreign_audit.mol = Mol()
+d_foreign_audit.nstate = 2; d_foreign_audit.dt_fs = 0.5
+d_foreign_audit.seed = 1; d_foreign_audit.rng_stream = 2
+d_foreign_audit.restart_requested = True
+d_foreign_audit.restart_file = d.restart_file
+d_foreign_audit.trajectory_file = d.trajectory_file
+d_foreign_audit.nacme_audit_file = d.nacme_audit_file
+try:
+    d_foreign_audit._load_restart()
+except ValueError:
+    foreign_audit_rejected = True
+else:
+    foreign_audit_rejected = False
+with open(d.nacme_audit_file, 'w', encoding='utf-8') as stream:
+    stream.write(legitimate_audit)
+
+# A checkpoint created before the validation file exists must still recognize
+# and remove rows written after that checkpoint, including the first header.
+zero_audit_path = os.path.join(root, 'zero-step.nacme.tsv')
+d_zero_audit = NAMD.__new__(NAMD); d_zero_audit.mol = Mol()
+d_zero_audit.nacme_audit_file = zero_audit_path
+zero_prefix, _ = d_zero_audit._nacme_audit_committed_prefix(0)
+d_zero_audit._write_nacme_audit_row(dict(audit_base, center_step=0))
+d_zero_audit._reconcile_nacme_audit_with_restart(0, {
+    'bytes': len(zero_prefix),
+    'sha256': hashlib.sha256(zero_prefix).hexdigest(),
+})
+zero_step_audit_rolled_back = (
+    open(zero_audit_path, 'rb').read() == zero_prefix)
 
 # Only rank zero needs checkpoint filesystem/model access; all ranks restore
 # the exact validated payload broadcast by rank zero.
@@ -521,7 +559,7 @@ def mpi_restart_loader(rank, restart_path):
     probe.trajectory_file = d.trajectory_file
     probe.nacme_audit_file = d.nacme_audit_file
     probe._reconcile_trajectory_with_restart = lambda _step: None
-    probe._reconcile_nacme_audit_with_restart = lambda _step: None
+    probe._reconcile_nacme_audit_with_restart = lambda _step, _prefix: None
     return probe, probe._load_restart()
 
 mpi_root, mpi_root_loaded = mpi_restart_loader(0, d.restart_file)
@@ -840,6 +878,47 @@ guess_settings_bound = (
     guess_default_signature != guess_type_signature
     and guess_default_signature != guess_swap_signature
     and guess_file_signature1 != guess_file_signature2)
+
+# save_mol may rewrite guess.file at every geometry.  Preserve the initial
+# input identity during the live trajectory, and accept only that same path
+# when a checkpoint is resumed after the expected output mutation.
+mutable_guess_mol = Mol(); mutable_guess_mol.config = {
+    section: dict(values) for section, values in Mol.config.items()}
+mutable_guess_mol.config['guess'] = {
+    'type': 'json', 'file': guess_path, 'file2': '', 'save_mol': True,
+    'continue_geom': False, 'swapmo': '',
+}
+d_mutable_guess = NAMD.__new__(NAMD); d_mutable_guess.mol = mutable_guess_mol
+d_mutable_guess.nstate = 2; d_mutable_guess.dt_fs = 0.5
+d_mutable_guess.seed = 1; d_mutable_guess.rng_stream = 2
+mutable_guess_signature = d_mutable_guess._restart_signature()
+with open(guess_path, 'w', encoding='utf-8') as stream:
+    stream.write('{"saved result": 3}\n')
+guess_identity_cached = (
+    d_mutable_guess._restart_signature() == mutable_guess_signature)
+d_mutable_restart = NAMD.__new__(NAMD); d_mutable_restart.mol = mutable_guess_mol
+d_mutable_restart.nstate = 2; d_mutable_restart.dt_fs = 0.5
+d_mutable_restart.seed = 1; d_mutable_restart.rng_stream = 2
+mutable_guess_restart_accepted = (
+    d_mutable_restart._restart_signature_matches(mutable_guess_signature)
+    and d_mutable_restart._restart_signature() == mutable_guess_signature)
+other_guess_path = os.path.join(input_root, 'other-guess.json')
+with open(other_guess_path, 'w', encoding='utf-8') as stream:
+    stream.write('{"saved result": 3}\n')
+changed_path_mol = Mol(); changed_path_mol.config = {
+    section: dict(values) for section, values in mutable_guess_mol.config.items()}
+changed_path_mol.config['guess']['file'] = other_guess_path
+d_changed_guess = NAMD.__new__(NAMD); d_changed_guess.mol = changed_path_mol
+d_changed_guess.nstate = 2; d_changed_guess.dt_fs = 0.5
+d_changed_guess.seed = 1; d_changed_guess.rng_stream = 2
+mutable_guess_path_change_rejected = not d_changed_guess._restart_signature_matches(
+    mutable_guess_signature)
+try:
+    d_changed_guess._restart_signature_matches('[]')
+except RuntimeError:
+    malformed_signature_rejected = True
+else:
+    malformed_signature_rejected = False
 
 # Restart-manifest force-field rebasing must preserve the runtime's CWD-first
 # resolution when a different file with the same name exists in input_dir.
@@ -1210,6 +1289,12 @@ print('DENSE=' + json.dumps({
         'basis_paths_rebased': basis_paths_rebased,
         'basis_spelling_stable': basis_spelling_stable,
         'guess_settings_bound': guess_settings_bound,
+        'guess_identity_cached': guess_identity_cached,
+        'mutable_guess_restart_accepted': mutable_guess_restart_accepted,
+        'mutable_guess_path_change_rejected': mutable_guess_path_change_rejected,
+        'malformed_signature_rejected': malformed_signature_rejected,
+        'foreign_audit_rejected': foreign_audit_rejected,
+        'zero_step_audit_rolled_back': zero_step_audit_rolled_back,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'forcefield_rebase_runtime_precedence':
             forcefield_rebase_runtime_precedence,
@@ -1285,7 +1370,12 @@ print('DENSE=' + json.dumps({
         'target_basis_file_bound': True, 'initial_basis_file_bound': True,
         'basis_paths_rebased': True,
         'basis_spelling_stable': True,
-        'guess_settings_bound': True,
+        'guess_settings_bound': True, 'guess_identity_cached': True,
+        'mutable_guess_restart_accepted': True,
+        'mutable_guess_path_change_rejected': True,
+        'malformed_signature_rejected': True,
+        'foreign_audit_rejected': True,
+        'zero_step_audit_rolled_back': True,
         'runtime_forcefield_bound': True,
         'forcefield_rebase_runtime_precedence': True,
         'forcefield_identity_stable': True,
