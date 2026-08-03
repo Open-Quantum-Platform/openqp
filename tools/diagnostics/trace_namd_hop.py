@@ -111,7 +111,7 @@ def build_trace_row(*, istep, dt_fs, active, hopped, last_hop_random,
             return matrix[row, column]
         return np.nan
 
-    return {
+    row = {
         "step": istep,
         "t_fs": istep * dt_fs if time_fs is None else time_fs,
         "kernel_called": int(np.isfinite(last_hop_random)),
@@ -128,6 +128,23 @@ def build_trace_row(*, istep, dt_fs, active, hopped, last_hop_random,
         "p_31": matrix_value(cmhp, 2, 0),
         "p_32": matrix_value(cmhp, 2, 1),
     }
+    nstate = coef.size
+    row.update({
+        f"pop_{state + 1}": population(state)
+        for state in range(nstate)
+    })
+    row.update({
+        f"tdc_{left + 1}{right + 1}_au": matrix_value(tdc, left, right)
+        for left in range(nstate)
+        for right in range(left + 1, nstate)
+    })
+    row.update({
+        f"p_{source + 1}{target + 1}": matrix_value(cmhp, source, target)
+        for source in range(nstate)
+        for target in range(nstate)
+        if source != target
+    })
+    return row
 
 
 def install_trace(
@@ -275,11 +292,6 @@ def main() -> None:
     protected_paths.update(_namd_sidecar_paths(
         runner.mol.config.get('md', {}), log_path))
     _reject_trace_aliases(trace, protected_paths)
-    soc = runner.mol.config.get("md", {}).get("soc", False)
-    if soc:
-        raise ValueError(
-            "trace_namd_hop does not support SOC NAMD logging paths"
-        )
     trace.unlink(missing_ok=True)
     random_values = None
     if random_path is not None:
