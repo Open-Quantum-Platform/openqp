@@ -330,6 +330,9 @@ relative_ff_identity = d._qmmm_forcefield_identity('local.xml tip3p.xml')
 absolute_ff_identity = d._qmmm_forcefield_identity(
     os.path.join(input_root, 'local.xml') + ' tip3p.xml')
 forcefield_identity_stable = relative_ff_identity == absolute_ff_identity
+builtin_forcefield_fingerprinted = (
+    relative_ff_identity[1].get('builtin') == 'tip3p.xml'
+    and len(relative_ff_identity[1].get('sha256', '')) == 64)
 
 # Tight-binding model settings and parameter contents define the Hamiltonian.
 tb1 = Mol(); tb1.config = {
@@ -534,6 +537,20 @@ d_operator.nstate = 2; d_operator.dt_fs = 0.5
 d_operator.seed = 1; d_operator.rng_stream = 2
 tdhf_operator_bound = (
     d_charge._restart_signature() != d_operator._restart_signature())
+grid_mol = Mol(); grid_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+grid_mol.config['dftgrid'] = {'rad_npts': 120, 'ang_npts': 434,
+                              'hfscale': 0.55}
+d_grid = NAMD.__new__(NAMD); d_grid.mol = grid_mol; d_grid.nstate = 2
+d_grid.dt_fs = 0.5; d_grid.seed = 1; d_grid.rng_stream = 2
+dftgrid_bound = d_charge._restart_signature() != d_grid._restart_signature()
+policy_mol = Mol(); policy_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+policy_mol.config['md'] = {'nacme_gate': 'error',
+                           'nacme_gate_consecutive': 5}
+d_policy = NAMD.__new__(NAMD); d_policy.mol = policy_mol; d_policy.nstate = 2
+d_policy.dt_fs = 0.5; d_policy.seed = 1; d_policy.rng_stream = 2
+gate_policy_bound = d_charge._restart_signature() != d_policy._restart_signature()
 
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
@@ -655,6 +672,14 @@ except RuntimeError:
     short_live_energy_rejected = True
 else:
     short_live_energy_rejected = False
+bad_hop = NAMD.__new__(NAMD); bad_hop.nstate = 2
+bad_hop.mol = SimpleNamespace(data={'OQP::td_energies': np.array([0.0])})
+try:
+    bad_hop._validated_td_energies('OQP::td_energies')
+except RuntimeError:
+    hop_energy_rejected = True
+else:
+    hop_energy_rejected = False
 
 # Defaults derive a unique manifest from the log stem.
 d_other = NAMD.__new__(NAMD)
@@ -680,6 +705,7 @@ print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(),
     'phase_initial': records['tracking_phase_initial'].tolist(),
+    'gate_streak': records['gate_streak'].tolist(),
     'lineage': records['tracking_lineage'].tolist(),
     'raw_order': records['tracking_raw_order'].tolist(),
     'nstate': header['nstate'],
@@ -709,6 +735,7 @@ print('DENSE=' + json.dumps({
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
         'basis_definition_bound': basis_definition_bound,
         'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
+        'dftgrid_bound': dftgrid_bound, 'gate_policy_bound': gate_policy_bound,
         'collective_error_propagated': collective_error_propagated,
         'collective_save_error': collective_save_error,
         'fresh_outputs_invalidated': fresh_outputs_invalidated,
@@ -716,9 +743,11 @@ print('DENSE=' + json.dumps({
         'log_collision_rejected': log_collision_rejected,
         'stale_gate_cleared': stale_gate_cleared,
         'short_live_energy_rejected': short_live_energy_rejected,
+        'hop_energy_rejected': hop_energy_rejected,
         'tight_binding_bound': tight_binding_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
+        'builtin_forcefield_fingerprinted': builtin_forcefield_fingerprinted,
         'coefficient_shape_rejected': coefficient_shape_rejected,
         'tracking_shape_rejected': tracking_shape_rejected,
         'audit_rows': audit_lines,
@@ -748,6 +777,7 @@ print('DENSE=' + json.dumps({
         'shape': [1], 'steps': [1],
         'phase': [[1.0, -1.0]],
         'phase_initial': [[-1.0, 1.0]], 'lineage': [[7, 4]],
+        'gate_streak': [0],
         'raw_order': [[1, 0]],
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
         'manifest_name': 'job.namd.restart.oqp',
@@ -765,12 +795,15 @@ print('DENSE=' + json.dumps({
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
         'basis_definition_bound': True,
         'pcm_bound': True, 'tdhf_operator_bound': True,
+        'dftgrid_bound': True, 'gate_policy_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
         'sidecar_collision_rejected': True, 'stale_gate_cleared': True,
         'log_collision_rejected': True, 'short_live_energy_rejected': True,
+        'hop_energy_rejected': True,
         'tight_binding_bound': True,
         'forcefield_identity_stable': True,
+        'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
         'audit_rows': [
             'center_step\tsource\tverdict\tsigned\tcompared_pairs\t'

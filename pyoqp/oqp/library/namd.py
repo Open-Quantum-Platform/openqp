@@ -35,6 +35,7 @@ import json
 import re
 import struct
 import tempfile
+from importlib import resources
 import numpy as np
 
 import oqp
@@ -58,7 +59,7 @@ KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
 NAMD_RESTART_SCHEMA_VERSION = 2
-NAMD_TRAJECTORY_SCHEMA_VERSION = 3
+NAMD_TRAJECTORY_SCHEMA_VERSION = 4
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
 
@@ -77,7 +78,8 @@ def _namd_trajectory_dtype(nstate, natom):
         ('overlap_tdc_au', '<f8', matrix), ('reference_tdc_au', '<f8', matrix),
         ('reference_mask', 'u1', matrix), ('reference_source', 'i1'),
         ('gate_center_step', '<i8'), ('gate_verdict', 'i1'),
-        ('gate_counts', '<i8', (3,)), ('gate_metrics', '<f8', (7,)),
+        ('gate_counts', '<i8', (3,)), ('gate_streak', '<i8'),
+        ('gate_metrics', '<f8', (7,)),
         ('nve_verdict', 'i1'), ('nve_streak', '<i8'),
         ('nve_metrics', '<f8', (4,)),
         ('tracking_valid', 'i1'), ('tracking_order', '<i8', (nstate,)),
@@ -568,6 +570,15 @@ class NAMD:
         self._update_baeck_an_check(istep, state_overlap)
         return state_overlap
 
+    def _validated_td_energies(self, tag):
+        """Return an exact finite nstate vector safe for native pointer use."""
+        energies = np.asarray(self.mol.data[tag], dtype=np.float64).reshape(-1)
+        if (energies.shape != (self.nstate,)
+                or not np.all(np.isfinite(energies))):
+            raise RuntimeError(
+                f'{tag} must be an exact finite nstate TD-energy vector')
+        return np.ascontiguousarray(energies)
+
     def _update_baeck_an_check(self, istep, state_overlap):
         """Compare overlap TDC magnitudes with a centred TD-Baeck-An estimate.
 
@@ -579,17 +590,8 @@ class NAMD:
 
         n = self.nstate
         data = self.mol.data
-        energies_old = np.asarray(
-            data["OQP::td_energies_old"], dtype=np.float64).reshape(-1)
-        energies_current = np.asarray(
-            data["OQP::td_energies"], dtype=np.float64).reshape(-1)
-        if (energies_old.shape != (n,) or energies_current.shape != (n,)
-                or not np.all(np.isfinite(energies_old))
-                or not np.all(np.isfinite(energies_current))):
-            raise RuntimeError(
-                'NACME check requires exact finite nstate TD-energy vectors')
-        energies_old = np.ascontiguousarray(energies_old)
-        energies_current = np.ascontiguousarray(energies_current)
+        energies_old = self._validated_td_energies("OQP::td_energies_old")
+        energies_current = self._validated_td_energies("OQP::td_energies")
         tdc_current = np.ascontiguousarray(
             self._compute_tdc(state_overlap), dtype=np.float64
         )
@@ -985,6 +987,7 @@ class NAMD:
         record['tracking_lineage'] = -1
         record['gate_center_step'] = -1
         record['gate_verdict'] = -1
+        record['gate_streak'] = -1
         record['nve_verdict'] = -1
         gate = self._nacme_gate_last or {}
         time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
@@ -1024,6 +1027,8 @@ class NAMD:
                 gate.get('compared_pairs', 0), gate.get('invariant_failures', 0),
                 gate.get('reference_failures', 0),
             )
+            record['gate_streak'] = gate.get(
+                'consecutive_reference_failures', 0)
             record['gate_metrics'] = (
                 gate.get('candidate_diagonal_max', np.nan),
                 gate.get('candidate_antisymmetry_max', np.nan),
@@ -1090,7 +1095,16 @@ class NAMD:
                     'sha256': digest.hexdigest(),
                 })
             else:
-                identity.append({'builtin': item})
+                try:
+                    resource = resources.files('openmm.app').joinpath(
+                        'data', *item.split('/'))
+                    if not resource.is_file():
+                        raise FileNotFoundError(item)
+                    digest = hashlib.sha256(resource.read_bytes()).hexdigest()
+                except (ImportError, FileNotFoundError, ModuleNotFoundError):
+                    raise RuntimeError(
+                        f'cannot fingerprint OpenMM force-field resource {item!r}')
+                identity.append({'builtin': item, 'sha256': digest})
         return identity
 
     def _tight_binding_identity(self):
@@ -1220,6 +1234,7 @@ class NAMD:
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'tdhf_settings': dict(cfg['tdhf']),
+            'dftgrid_settings': dict(cfg.get('dftgrid', {})),
             'pcm_settings': dict(cfg.get('pcm', {})),
             'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
@@ -1232,6 +1247,14 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'gate_policy': {
+                key: md.get(key, '') for key in (
+                    'nacme_check', 'ba_gap_max', 'nacme_gate',
+                    'nacme_gate_invariant_tol', 'nacme_gate_abs_tol',
+                    'nacme_gate_rel_tol', 'nacme_gate_consecutive',
+                    'nve_gate', 'nve_gate_abs_tol', 'nve_gate_step_tol',
+                    'nve_gate_transition_tol', 'nve_gate_consecutive')
+            },
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
 
@@ -1802,7 +1825,8 @@ class NAMD:
         tdc = self._compute_tdc(s)
         mol.data["OQP::namd_tdc"] = tdc.reshape(-1).copy()
         mol.data["OQP::namd_stas"] = s.reshape(-1).copy()
-        mol.data["OQP::namd_eabs"] = np.array(mol.data["OQP::td_energies"]).reshape(-1)[:n].copy()
+        mol.data["OQP::namd_eabs"] = self._validated_td_energies(
+            "OQP::td_energies").copy()
 
         oqp.mrsf_namd_hop(mol)
 
