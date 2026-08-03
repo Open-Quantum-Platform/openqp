@@ -93,15 +93,20 @@ def install_trace(
             "active": self.active,
             "hopped": int(bool(hopped)),
             "random": params[3] if params.size > 3 else np.nan,
-            "pop_1": abs(self.coef[0]) ** 2,
-            "pop_2": abs(self.coef[1]) ** 2,
-            "pop_3": abs(self.coef[2]) ** 2,
-            "tdc_12_au": tdc[0, 1],
-            "tdc_13_au": tdc[0, 2],
-            "tdc_23_au": tdc[1, 2],
-            "p_31": cmhp[2, 0],
-            "p_32": cmhp[2, 1],
         }
+        row.update({
+            f"pop_{state + 1}": abs(self.coef[state]) ** 2
+            for state in range(nstate)
+        })
+        row.update({
+            f"tdc_{left + 1}{right + 1}_au": tdc[left, right]
+            for left in range(nstate) for right in range(left + 1, nstate)
+        })
+        row.update({
+            f"p_{source + 1}{target + 1}": cmhp[source, target]
+            for source in range(nstate) for target in range(nstate)
+            if source != target
+        })
         write_header = not output.exists()
         with output.open("a", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=row.keys())

@@ -273,6 +273,7 @@ class NAMD:
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = self._restart_manifest_path()
+        self._validate_sidecar_paths()
         _soc = md.get('soc', False)
         soc_requested = (_soc is True) or (str(_soc).lower() in ('true', '1', 'on', 'yes'))
         if soc_requested and self.nacme_check != 'off':
@@ -372,6 +373,23 @@ class NAMD:
         stem = os.path.splitext(os.path.basename(self.mol.log))[0]
         return os.path.join(log_dir, stem + '.namd.restart.oqp')
 
+    def _validate_sidecar_paths(self):
+        """Reject aliases that would let one NAMD sidecar corrupt another."""
+        paths = {
+            'trajectory_file': self.trajectory_file,
+            'nacme_audit_file': self.nacme_audit_file,
+            'restart_file': self.restart_file,
+            'restart_manifest_file': self.restart_manifest_file,
+        }
+        resolved = {}
+        for name, path in paths.items():
+            canonical = os.path.normcase(os.path.realpath(os.path.abspath(path)))
+            if canonical in resolved:
+                raise ValueError(
+                    f'[md] {name} and {resolved[canonical]} resolve to the '
+                    f'same NAMD sidecar path: {path}')
+            resolved[canonical] = name
+
     def _is_io_rank(self):
         manager = getattr(self.mol, 'mpi_manager', None)
         return manager is None or int(getattr(manager, 'rank', 0)) == 0
@@ -409,11 +427,7 @@ class NAMD:
 
     def _prepare_md_outputs(self):
         """Start fresh sidecars or preserve them when explicitly restarting."""
-        if self._is_io_rank() and not self.restart_requested:
-            for path in (self.trajectory_file, self.nacme_audit_file):
-                with open(path, 'w', encoding='utf-8'):
-                    pass
-        self._io_barrier()
+        self._run_io_collective(self._prepare_md_outputs_on_io_rank)
         dump_log(
             self.mol,
             title=(f'NAMD files: trajectory={self.trajectory_file} '
@@ -421,6 +435,18 @@ class NAMD:
                    f'restart={self.restart_file} '
                    f'manifest={self.restart_manifest_file}'),
         )
+
+    def _prepare_md_outputs_on_io_rank(self):
+        if self.restart_requested:
+            return
+        # Invalidate the runnable stale manifest first.  A failed fresh start
+        # must never leave a launchable checkpoint from an older trajectory.
+        for path in (self.restart_manifest_file, self.restart_file):
+            if os.path.lexists(path):
+                os.unlink(path)
+        for path in (self.trajectory_file, self.nacme_audit_file):
+            with open(path, 'w', encoding='utf-8'):
+                pass
 
     def _prepare_hop_step(self, istep):
         """Bind the physical MD step to the stateless hop RNG.
@@ -573,6 +599,11 @@ class NAMD:
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
             self._ba_dt_left = dt_right
+            self._ba_last = None
+            self._nacme_gate_last = None
+            self._nacme_reference_tdc = None
+            self._nacme_reference_mask = None
+            self._nacme_reference_source = 0
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -1023,6 +1054,46 @@ class NAMD:
                 identity.append({'builtin': item})
         return identity
 
+    def _tight_binding_identity(self):
+        """Bind a restart to the active DFTB/xTB Hamiltonian definition."""
+        cached = getattr(self, '_restart_tb_identity', None)
+        if cached is not None:
+            return cached
+        method = str(self.mol.config['input'].get('method', '')).lower()
+        if method not in ('dftb', 'xtb'):
+            return None
+        settings = dict(self.mol.config.get(method, {}))
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        for key in ('parameter_path', 'library_path', 'executable'):
+            value = settings.get(key, '')
+            if not isinstance(value, str) or not value.strip():
+                continue
+            expanded = os.path.expanduser(value.strip())
+            path = (expanded if os.path.isabs(expanded)
+                    else os.path.join(source_dir, expanded))
+            if not os.path.exists(path):
+                settings[key] = {'configured': value}
+                continue
+            digest = hashlib.sha256()
+            real_path = os.path.realpath(path)
+            files = ([real_path] if os.path.isfile(real_path) else [
+                os.path.join(root, filename)
+                for root, _dirs, names in os.walk(real_path)
+                for filename in sorted(names)
+            ])
+            for filename in sorted(files):
+                relative = os.path.relpath(filename, real_path)
+                digest.update(relative.encode('utf-8') + b'\0')
+                with open(filename, 'rb') as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+            settings[key] = {'path': real_path, 'sha256': digest.hexdigest()}
+        self._restart_tb_identity = {'section': method, 'settings': settings}
+        return self._restart_tb_identity
+
     def _molecular_identity(self):
         """Return stable nuclear and QM/MM topology identity for sidecars."""
         cached = getattr(self, '_restart_molecular_identity', None)
@@ -1093,6 +1164,7 @@ class NAMD:
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
+            'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
             'dt_fs': self.dt_fs, 'seed': self.seed,
@@ -1192,15 +1264,41 @@ class NAMD:
             payload[f'has_{name}'] = np.array([1], dtype=np.int8)
             payload[name] = np.asarray(value)
 
+    def _validate_restart_histories(self, histories, *, context):
+        """Validate optional Baeck-An and NVE state without reshaping it."""
+        shapes = {
+            'ba_energy_left': (self.nstate,),
+            'ba_energy_center': (self.nstate,),
+            'ba_tdc_left': (self.nstate, self.nstate),
+            'ba_dt_left': (),
+            'nve_reference_energy': (),
+            'nve_previous_energy': (),
+        }
+        validated = {}
+        for name, expected in shapes.items():
+            value = histories.get(name)
+            if value is None:
+                validated[name] = None
+                continue
+            array = np.asarray(value)
+            if array.shape != expected or not np.all(np.isfinite(array)):
+                raise RuntimeError(f'{context} contains invalid {name}')
+            if name == 'ba_dt_left' and float(array) <= 0.0:
+                raise RuntimeError(f'{context} contains invalid ba_dt_left')
+            validated[name] = float(array) if expected == () else array.copy()
+        return validated
+
     def _save_restart(self, istep, coordinates, velocities, acceleration):
         """Atomically save all state needed for phase-continuous continuation."""
         if istep % self.restart_interval != 0:
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_collective(lambda: self._save_restart_on_io_rank(
+            istep, coordinates, velocities, acceleration))
+
+    def _save_restart_on_io_rank(self, istep, coordinates, velocities,
+                                 acceleration):
+        """Validate and atomically write a checkpoint on rank zero."""
         if self.prev_data is None or self.prev_xyz is None:
-            self._io_barrier()
             return
         nuclear_state = (coordinates, velocities, acceleration)
         coordinates, velocities, acceleration, coef, prev_xyz = (
@@ -1212,6 +1310,15 @@ class NAMD:
             )
         )
         prev_keys = sorted(self.prev_data)
+        histories = self._validate_restart_histories({
+            'ba_energy_left': self._ba_energy_left,
+            'ba_energy_center': self._ba_energy_center,
+            'ba_tdc_left': self._ba_tdc_left,
+            'ba_dt_left': self._ba_dt_left,
+            'nve_reference_energy': self._nve_reference_energy,
+            'nve_previous_energy': self._nve_previous_energy,
+        }, context=(f'refusing to overwrite the last-good NAMD restart at '
+                    f'step {istep}: history'))
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
             'signature': np.array([self._restart_signature()]),
@@ -1232,13 +1339,7 @@ class NAMD:
         for index, key in enumerate(prev_keys):
             value = np.asarray(self.prev_data[key])
             payload[f'prev_{index}'] = value
-        for name, value in (
-                ('ba_energy_left', self._ba_energy_left),
-                ('ba_energy_center', self._ba_energy_center),
-                ('ba_tdc_left', self._ba_tdc_left),
-                ('ba_dt_left', self._ba_dt_left),
-                ('nve_reference_energy', self._nve_reference_energy),
-                ('nve_previous_energy', self._nve_previous_energy)):
+        for name, value in histories.items():
             self._checkpoint_optional(payload, name, value)
 
         directory = os.path.dirname(self.restart_file) or '.'
@@ -1254,7 +1355,6 @@ class NAMD:
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-        self._io_barrier()
 
     def _rebase_restart_spec_paths(self, spec, source_dir):
         """Make input-owned paths stable when the manifest moves to log_dir."""
@@ -1429,6 +1529,19 @@ class NAMD:
                     context='NAMD restart checkpoint',
                 )
             )
+            optional = {}
+            for name in ('ba_energy_left', 'ba_energy_center', 'ba_tdc_left',
+                         'ba_dt_left', 'nve_reference_energy',
+                         'nve_previous_energy'):
+                present = np.asarray(saved[f'has_{name}'])
+                if (present.shape != (1,) or int(present[0]) not in (0, 1)):
+                    raise RuntimeError(
+                        f'NAMD restart checkpoint has invalid {name} marker')
+                value = (np.array(saved[name], copy=True)
+                         if int(present[0]) else None)
+                optional[name] = value
+            optional = self._validate_restart_histories(
+                optional, context='NAMD restart checkpoint')
             self.prev_data = prev_data
             self.prev_xyz = prev_xyz
             self.mol.put_data(self.prev_data)
@@ -1439,14 +1552,7 @@ class NAMD:
             self._nacme_gate_failures = int(saved['gate_failures'][0])
             self._nve_gate_failures = int(saved['nve_failures'][0])
             self._t_fs = float(saved['time_fs'][0])
-            for name in ('ba_energy_left', 'ba_energy_center', 'ba_tdc_left',
-                         'ba_dt_left', 'nve_reference_energy',
-                         'nve_previous_energy'):
-                value = (np.array(saved[name], copy=True)
-                         if int(saved[f'has_{name}'][0]) else None)
-                if name in ('ba_dt_left', 'nve_reference_energy',
-                            'nve_previous_energy') and value is not None:
-                    value = float(value.reshape(-1)[0])
+            for name, value in optional.items():
                 setattr(self, f'_{name}', value)
             result = {
                 'step': int(saved['step'][0]),
@@ -2254,7 +2360,7 @@ class NAMD_QMMM(NAMD):
                    f'pop={np.array2string(pops, precision=4)}'),
         )
         self._write_md_trajectory(
-            istep, self.r_all[self.qm_atoms], epot, ekin, hopped)
+            istep, self.r_all, epot, ekin, hopped)
         self._enforce_nve_gate()
 
 

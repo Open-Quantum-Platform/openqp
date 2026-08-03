@@ -17,6 +17,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     source = (ROOT / "source" / "modules" / "namd.F90").read_text()
     header = (ROOT / "include" / "oqp.h").read_text()
     driver = (ROOT / "pyoqp" / "oqp" / "library" / "namd.py").read_text()
+    tracer = (ROOT / "tools" / "diagnostics" / "trace_namd_hop.py").read_text()
 
     assert "function namd_baeck_an_tdc(" in source
     assert 'bind(C, name="oqp_namd_baeck_an_tdc")' in source
@@ -28,6 +29,9 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "int oqp_namd_nacme_gate(" in header
     assert "def _run_nacme_gate(" in driver
     assert "signed=True" in driver
+    assert "istep, self.r_all, epot, ekin, hopped" in driver
+    assert 'for state in range(nstate)' in tracer
+    assert 'self.coef[2]' not in tracer
     example_inp = (
         ROOT / "examples" / "QMMM" /
         "H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp"
@@ -316,6 +320,21 @@ absolute_ff_identity = d._qmmm_forcefield_identity(
     os.path.join(input_root, 'local.xml') + ' tip3p.xml')
 forcefield_identity_stable = relative_ff_identity == absolute_ff_identity
 
+# Tight-binding model settings and parameter contents define the Hamiltonian.
+tb1 = Mol(); tb1.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+tb1.config['input']['method'] = 'dftb'
+tb1.config['dftb'] = {'backend': 'native', 'model': 'mio',
+                      'parameter_path': 'local.xml', 'scc_mixing': 0.35}
+tb2 = Mol(); tb2.config = {
+    section: dict(settings) for section, settings in tb1.config.items()}
+tb2.config['dftb']['model'] = '3ob'
+d_tb1 = NAMD.__new__(NAMD); d_tb1.mol = tb1; d_tb1.nstate = 2
+d_tb1.dt_fs = 0.5; d_tb1.seed = 1; d_tb1.rng_stream = 2
+d_tb2 = NAMD.__new__(NAMD); d_tb2.mol = tb2; d_tb2.nstate = 2
+d_tb2.dt_fs = 0.5; d_tb2.seed = 1; d_tb2.rng_stream = 2
+tight_binding_bound = d_tb1._restart_signature() != d_tb2._restart_signature()
+
 # Electronic arrays must retain their exact vector shape, and tracking
 # histories must remain one entry per state.
 try:
@@ -418,6 +437,25 @@ except RuntimeError:
 else:
     broadcast_load_rejected = False
 
+# Malformed optional native histories must be rejected before restoration.
+with np.load(d.restart_file, allow_pickle=False) as saved:
+    history_corrupt = {
+        key: np.array(saved[key], copy=True) for key in saved.files}
+history_corrupt['ba_energy_left'] = np.array([0.0])
+history_restart = os.path.join(root, 'history.namd.restart.npz')
+np.savez_compressed(history_restart, **history_corrupt)
+d_history = NAMD.__new__(NAMD); d_history.mol = Mol(); d_history.nstate = 2
+d_history.dt_fs = 0.5; d_history.seed = 1; d_history.rng_stream = 2
+d_history.restart_requested = True; d_history.restart_file = history_restart
+d_history.trajectory_file = d.trajectory_file
+d_history.nacme_audit_file = d.nacme_audit_file
+try:
+    d_history._load_restart()
+except RuntimeError:
+    history_load_rejected = True
+else:
+    history_load_rejected = False
+
 # Same method/count but different atom identities must not accept the file.
 wrong_mol = Mol(); wrong_mol.atoms = np.array([7, 1, 2])
 d_wrong = NAMD.__new__(NAMD); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
@@ -493,6 +531,72 @@ collective_error_propagated = (
     len(mpi_errors) == 2 and mpi_errors[0] == mpi_errors[1]
     and FakeMPI.barrier_calls == 0)
 
+# Checkpoint writes use the same collective failure propagation path.
+FakeMPI.status = None
+save_errors = []
+for rank in (0, 1):
+    d_save_mpi = NAMD.__new__(NAMD)
+    d_save_mpi.mol = SimpleNamespace(mpi_manager=FakeMPI(rank))
+    d_save_mpi.restart_interval = 1
+    d_save_mpi._save_restart_on_io_rank = (
+        lambda *_args: (_ for _ in ()).throw(ValueError('checkpoint failure')))
+    try:
+        d_save_mpi._save_restart(1, None, None, None)
+    except ValueError as error:
+        save_errors.append(str(error))
+collective_save_error = len(save_errors) == 2 and save_errors[0] == save_errors[1]
+
+# Fresh starts invalidate old runnable checkpoints, while path aliases are
+# rejected before any sidecar is opened.
+d_fresh = NAMD.__new__(NAMD); d_fresh.mol = SimpleNamespace(
+    log=os.path.join(root, 'fresh.log'))
+d_fresh.restart_requested = False
+d_fresh.trajectory_file = os.path.join(root, 'fresh.trj')
+d_fresh.nacme_audit_file = os.path.join(root, 'fresh.tsv')
+d_fresh.restart_file = os.path.join(root, 'fresh.npz')
+d_fresh.restart_manifest_file = os.path.join(root, 'fresh.oqp')
+for path in (d_fresh.trajectory_file, d_fresh.nacme_audit_file,
+             d_fresh.restart_file, d_fresh.restart_manifest_file):
+    with open(path, 'w', encoding='utf-8') as stream:
+        stream.write('stale')
+d_fresh._prepare_md_outputs()
+fresh_outputs_invalidated = (
+    os.path.getsize(d_fresh.trajectory_file) == 0
+    and os.path.getsize(d_fresh.nacme_audit_file) == 0
+    and not os.path.exists(d_fresh.restart_file)
+    and not os.path.exists(d_fresh.restart_manifest_file))
+d_collision = NAMD.__new__(NAMD)
+d_collision.trajectory_file = d_fresh.trajectory_file
+d_collision.nacme_audit_file = d_fresh.trajectory_file
+d_collision.restart_file = d_fresh.restart_file
+d_collision.restart_manifest_file = d_fresh.restart_manifest_file
+try:
+    d_collision._validate_sidecar_paths()
+except ValueError:
+    sidecar_collision_rejected = True
+else:
+    sidecar_collision_rejected = False
+
+# A discontinuity invalidates the previous gate result before the current
+# dense record is written.
+d_ba = NAMD.__new__(NAMD); d_ba.nacme_check = 'baeck_an'; d_ba.nstate = 2
+d_ba.dt = 1.0; d_ba._ba_energy_left = np.array([0.0, 0.1])
+d_ba._ba_energy_center = np.array([0.0, 0.2]); d_ba._ba_tdc_left = np.eye(2)
+d_ba._ba_dt_left = 1.0; d_ba._ba_last = {'stale': True}
+d_ba._nacme_gate_last = {'stale': True}; d_ba._nacme_reference_tdc = np.eye(2)
+d_ba._nacme_reference_mask = np.ones((2, 2)); d_ba._nacme_reference_source = 1
+d_ba._compute_tdc = lambda _overlap: np.zeros((2, 2))
+d_ba.mol = SimpleNamespace(data={
+    'OQP::td_energies_old': np.array([0.0, 0.3]),
+    'OQP::td_energies': np.array([0.0, 0.4]),
+})
+d_ba._update_baeck_an_check(3, np.eye(2))
+stale_gate_cleared = (
+    d_ba._ba_last is None and d_ba._nacme_gate_last is None
+    and d_ba._nacme_reference_tdc is None
+    and d_ba._nacme_reference_mask is None
+    and d_ba._nacme_reference_source == 0)
+
 # Defaults derive a unique manifest from the log stem.
 d_other = NAMD.__new__(NAMD)
 d_other.mol = SimpleNamespace(log=os.path.join(root, 'other.log'))
@@ -536,10 +640,16 @@ print('DENSE=' + json.dumps({
         'checkpoint_after_rejection': checkpoint_after_rejection,
         'corrupt_load_rejected': corrupt_load_rejected,
         'broadcast_load_rejected': broadcast_load_rejected,
+        'history_load_rejected': history_load_rejected,
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
         'collective_error_propagated': collective_error_propagated,
+        'collective_save_error': collective_save_error,
+        'fresh_outputs_invalidated': fresh_outputs_invalidated,
+        'sidecar_collision_rejected': sidecar_collision_rejected,
+        'stale_gate_cleared': stale_gate_cleared,
+        'tight_binding_bound': tight_binding_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
         'coefficient_shape_rejected': coefficient_shape_rejected,
@@ -582,8 +692,12 @@ print('DENSE=' + json.dumps({
         'invalid_save_rejected': True, 'checkpoint_after_rejection': 1,
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'broadcast_load_rejected': True,
+        'history_load_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
+        'collective_save_error': True, 'fresh_outputs_invalidated': True,
+        'sidecar_collision_rejected': True, 'stale_gate_cleared': True,
+        'tight_binding_bound': True,
         'forcefield_identity_stable': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
         'audit_rows': [
