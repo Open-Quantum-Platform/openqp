@@ -93,15 +93,16 @@ def install_trace(
             "active": self.active,
             "hopped": int(bool(hopped)),
             "random": params[3] if params.size > 3 else np.nan,
-            "pop_1": abs(self.coef[0]) ** 2,
-            "pop_2": abs(self.coef[1]) ** 2,
-            "pop_3": abs(self.coef[2]) ** 2,
-            "tdc_12_au": tdc[0, 1],
-            "tdc_13_au": tdc[0, 2],
-            "tdc_23_au": tdc[1, 2],
-            "p_31": cmhp[2, 0],
-            "p_32": cmhp[2, 1],
         }
+        for index, coefficient in enumerate(self.coef):
+            row[f"pop_{index + 1}"] = abs(coefficient) ** 2
+        for left in range(nstate):
+            for right in range(left + 1, nstate):
+                row[f"tdc_{left + 1}{right + 1}_au"] = tdc[left, right]
+        for source in range(nstate):
+            for target in range(nstate):
+                if source != target:
+                    row[f"p_{source + 1}{target + 1}"] = cmhp[source, target]
         write_header = not output.exists()
         with output.open("a", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=row.keys())
@@ -125,22 +126,32 @@ def main() -> None:
         help="one prescribed uniform random value per effective hop interval",
     )
     args = parser.parse_args()
-    trace = Path(args.trace)
-    trace.unlink(missing_ok=True)
     random_values = None
     if args.random_file is not None:
         random_values = np.atleast_1d(np.loadtxt(args.random_file, dtype=float))
         if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
             raise ValueError("Prescribed random values must lie in [0, 1)")
-    sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
     project = args.input.stem
-    Runner(
+    runner = Runner(
         project=project,
         input_file=str(args.input),
         log=f"{project}.log",
         silent=1,
         usempi=False,
-    ).run()
+    )
+    config = runner.mol.config
+    def enabled(value):
+        return (value is True) or str(value).lower() in {
+            "true", "1", "on", "yes",
+        }
+    if enabled(config.get("input", {}).get("qmmm_flag", False)):
+        parser.error("hop tracing currently supports gas-phase NAMD only; QM/MM is rejected")
+    if enabled(config.get("md", {}).get("soc", False)):
+        parser.error("hop tracing currently supports same-spin NAMD only; SOC is rejected")
+    trace = Path(args.trace)
+    trace.unlink(missing_ok=True)
+    sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
+    runner.run()
     if sequence_rng is not None and sequence_rng.index != sequence_rng.values.size:
         raise RuntimeError(
             "Prescribed NAMD hop RNG consumed "

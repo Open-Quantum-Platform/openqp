@@ -2144,7 +2144,7 @@ def _resolve_search_path_list(value: Any, source_dir: Optional[Path]) -> Any:
     if source_dir is None or not isinstance(value, str):
         return value
     resolved: List[str] = []
-    for raw in value.split(","):
+    for raw in re.split(r"[\s,]+", value):
         item = raw.strip()
         if not item:
             continue
@@ -2155,6 +2155,71 @@ def _resolve_search_path_list(value: Any, source_dir: Optional[Path]) -> Any:
         # searchable unless a same-named local file actually exists.
         resolved.append(str(local) if explicit or local.exists() else item)
     return ",".join(resolved)
+
+
+def _resolve_velocity_source(value: Any, source_dir: Optional[Path]) -> Any:
+    """Resolve file-backed NAMD velocities while preserving built-in modes."""
+
+    if not isinstance(value, str) or value.strip().lower() in {
+        "zero", "none", "0", "maxwell", "boltzmann", "random",
+    }:
+        return value
+    return _resolve_path(value, source_dir)
+
+
+def rebase_calculation_paths(
+    spec: CalculationSpec, *, source_dir: Optional[Path]
+) -> CalculationSpec:
+    """Return a canonical request whose input paths no longer depend on CWD.
+
+    This is primarily used for restart manifests written somewhere other than
+    the source ``.oqp`` directory.  It mirrors the path ownership used by
+    :func:`lower_to_legacy` without changing inline geometries or package
+    search names such as ``amber14/tip3p.xml``.
+    """
+
+    if source_dir is None:
+        return spec
+    source_dir = Path(source_dir).resolve()
+    options = dict(spec.options)
+    for key in ("geom", "geom2"):
+        if key in options:
+            options[key] = _normalize_geometry(options[key], source_dir)
+
+    def rebase_call(call: CallSpec) -> CallSpec:
+        kwargs = dict(call.kwargs)
+        for key, value in tuple(kwargs.items()):
+            if (call.name, key) == ("input", "system2"):
+                kwargs[key] = _normalize_geometry(value, source_dir)
+            elif (call.name, key) in {
+                ("neb", "product"), ("guess", "file"), ("guess", "file2"),
+                ("dftb", "parameter_path"), ("dftb", "library_path"),
+                ("geometric", "constraints_file"), ("oqp", "neb_output"),
+            }:
+                kwargs[key] = _resolve_path(value, source_dir)
+            elif call.name == "qmmm" and key in {
+                "pdb_file", "qm_atoms_xyz", "trajectory_file", "log_file",
+                "energy_file",
+            }:
+                kwargs[key] = _resolve_path(value, source_dir)
+            elif call.name == "qmmm" and key in {
+                "forcefield", "forcefield_files",
+            }:
+                kwargs[key] = _resolve_search_path_list(value, source_dir)
+            elif call.name == "namd" and key == "velocity":
+                kwargs[key] = _resolve_velocity_source(value, source_dir)
+        return CallSpec(call.name, call.args, kwargs, call.explicit)
+
+    return CalculationSpec(
+        spec.model,
+        spec.functional,
+        spec.basis,
+        spec.model_options,
+        options,
+        rebase_call(spec.driver),
+        tuple(rebase_call(call) for call in spec.modifiers),
+        spec.source_text,
+    )
 
 
 def lower_to_legacy(
@@ -2453,6 +2518,8 @@ def lower_to_legacy(
             else:
                 put("md", "active", roots[0])
         for key, value in driver_options.items():
+            if key == "velocity":
+                value = _resolve_velocity_source(value, source_dir)
             put("md", key, value)
     elif name == "ekt":
         if roots:
@@ -2885,6 +2952,7 @@ __all__ = [
     "looks_canonical",
     "lower_to_legacy",
     "parse_canonical_oqp",
+    "rebase_calculation_paths",
     "render_canonical_oqp",
     "resolve_oqp_file",
     "resolve_oqp_text",

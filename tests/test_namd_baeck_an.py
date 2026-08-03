@@ -152,6 +152,7 @@ else:
 
 class Mol:
     log = os.path.join(root, 'job.log')
+    oqp_input_source = os.path.join(root, 'source', 'request.oqp')
     oqp_canonical_input = (
         'mrsf(nstate=2)/bhhlyp/6-31g*\n'
         'namd(S1,nstep=20,dt=0.5)\ngeom="h2o.xyz"\n'
@@ -264,6 +265,8 @@ else:
     electronic_mismatch = False
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
+manifest_geometry = os.path.realpath(
+    os.path.join(root, 'source', 'h2o.xyz')) in manifest
 with open(d.nacme_audit_file, encoding='utf-8') as stream:
     audit_lines = [line.rstrip('\n').split('\t') for line in stream]
 audit_header, audit_row = audit_lines
@@ -313,6 +316,7 @@ print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(), 'nstate': header['nstate'],
     'natom': header['natom'], 'restart': 'restart=true' in manifest,
+    'manifest_geometry': manifest_geometry,
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
@@ -355,7 +359,8 @@ print('DENSE=' + json.dumps({
     assert values == {
         'shape': [1], 'steps': [1],
         'phase': [[1.0, -1.0]],
-        'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
+        'nstate': 2, 'natom': 3, 'restart': True,
+        'manifest_geometry': True, 'checkpoint': True,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,

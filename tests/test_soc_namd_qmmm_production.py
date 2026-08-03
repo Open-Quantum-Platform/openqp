@@ -253,6 +253,58 @@ class DummyMol:
 
 
 class SOCNAMDQMMMProductionTests(unittest.TestCase):
+    def test_rank_zero_io_failure_is_broadcast_to_every_mpi_rank(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            root = namd.NAMD.__new__(namd.NAMD)
+
+            class RootManager:
+                rank = 0
+                use_mpi = 1
+
+                @staticmethod
+                def bcast(value, root=0, barrier=True):
+                    self.assertEqual(root, 0)
+                    self.assertFalse(barrier)
+                    return value
+
+            root.mol = types.SimpleNamespace(mpi_manager=RootManager())
+            with self.assertRaisesRegex(
+                RuntimeError, "checkpoint write failed on MPI rank 0: OSError: disk full"
+            ):
+                root._run_io_rank(
+                    lambda: (_ for _ in ()).throw(OSError("disk full")),
+                    "checkpoint write",
+                )
+
+            follower = namd.NAMD.__new__(namd.NAMD)
+
+            class FollowerManager:
+                rank = 1
+                use_mpi = 1
+
+                @staticmethod
+                def bcast(value, root=0, barrier=True):
+                    self.assertIsNone(value)
+                    self.assertEqual(root, 0)
+                    self.assertFalse(barrier)
+                    return {"ok": False, "error": "OSError: disk full"}
+
+            follower.mol = types.SimpleNamespace(mpi_manager=FollowerManager())
+            action_called = False
+
+            def unexpected_action():
+                nonlocal action_called
+                action_called = True
+
+            with self.assertRaisesRegex(
+                RuntimeError, "checkpoint write failed on MPI rank 0: OSError: disk full"
+            ):
+                follower._run_io_rank(unexpected_action, "checkpoint write")
+            self.assertFalse(action_called)
+        finally:
+            cleanup()
+
     def test_soc_basis_mch_dispatches_to_mch_qmmm_class(self):
         runfunc, calls, cleanup = load_runfunc_with_namd_stubs()
         try:

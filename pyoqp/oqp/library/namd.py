@@ -559,18 +559,34 @@ class NAMD:
         manager = getattr(self.mol, 'mpi_manager', None)
         return manager is None or int(getattr(manager, 'rank', 0)) == 0
 
-    def _io_barrier(self):
+    def _run_io_rank(self, action, label):
+        """Run rank-zero I/O and broadcast its success or failure to all ranks."""
         manager = getattr(self.mol, 'mpi_manager', None)
-        if manager is not None and hasattr(manager, 'barrier'):
-            manager.barrier()
+        distributed = bool(
+            manager is not None and int(getattr(manager, 'use_mpi', 0)) > 0)
+        result = None
+        outcome = None
+        if self._is_io_rank():
+            try:
+                result = action()
+                outcome = {'ok': True, 'error': ''}
+            except Exception as error:
+                if not distributed:
+                    raise
+                outcome = {
+                    'ok': False,
+                    'error': f'{type(error).__name__}: {error}',
+                }
+        if distributed:
+            outcome = manager.bcast(outcome, root=0, barrier=False)
+            if not outcome['ok']:
+                raise RuntimeError(
+                    f'{label} failed on MPI rank 0: {outcome["error"]}')
+        return result
 
     def _prepare_md_outputs(self):
         """Start fresh sidecars or preserve them when explicitly restarting."""
-        if self._is_io_rank() and not self.restart_requested:
-            for path in (self.trajectory_file, self.nacme_audit_file):
-                with open(path, 'w', encoding='utf-8'):
-                    pass
-        self._io_barrier()
+        self._run_io_rank(self._prepare_md_outputs_io, 'NAMD output preparation')
         dump_log(
             self.mol,
             title=(f'NAMD files: trajectory={self.trajectory_file} '
@@ -587,6 +603,12 @@ class NAMD:
                        f'k_perpendicular={self.odp.k_perpendicular:g} Ha '
                        f'CVs={"; ".join(self.odp.cv_labels)}'),
             )
+
+    def _prepare_md_outputs_io(self):
+        if not self.restart_requested:
+            for path in (self.trajectory_file, self.nacme_audit_file):
+                with open(path, 'w', encoding='utf-8'):
+                    pass
 
     def _odp_provenance(self):
         if getattr(self, 'odp', None) is None:
@@ -936,9 +958,11 @@ class NAMD:
 
     def _write_nacme_audit_row(self, result):
         """Append one machine-readable gate row for ensemble/post-MD audits."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_rank(
+            lambda: self._write_nacme_audit_row_io(result),
+            'NACME audit write')
+
+    def _write_nacme_audit_row_io(self, result):
         path = self.nacme_audit_file
         needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
         columns = (
@@ -957,7 +981,6 @@ class NAMD:
             stream.write('\t'.join(str(value) for value in values) + '\n')
             stream.flush()
             os.fsync(stream.fileno())
-        self._io_barrier()
 
     def _update_nve_gate(self, istep, epot, ekin, transition_energy_jump=np.nan):
         """Audit microcanonical energy conservation for same-spin FSSH."""
@@ -1047,9 +1070,12 @@ class NAMD:
         gate_failure = getattr(self, '_pending_nve_gate_error', None) is not None
         if istep % self.trajectory_interval != 0 and not gate_failure:
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_rank(
+            lambda: self._write_md_trajectory_io(
+                istep, coordinates, epot, ekin, hopped),
+            'packed NAMD trajectory write')
+
+    def _write_md_trajectory_io(self, istep, coordinates, epot, ekin, hopped):
         coords = np.asarray(coordinates, dtype=np.float64).reshape((-1, 3))
         if hasattr(self, 'r_all') and len(coords) == len(self.r_all):
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape(coords.shape)
@@ -1239,7 +1265,6 @@ class NAMD:
             stream.write(record.tobytes(order='C'))
             stream.flush()
             os.fsync(stream.fileno())
-        self._io_barrier()
 
     def _restart_signature(self):
         cfg = self.mol.config
@@ -1285,12 +1310,14 @@ class NAMD:
         """Atomically save all state needed for phase-continuous continuation."""
         if istep % self.restart_interval != 0:
             return
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
         if self.prev_data is None or self.prev_xyz is None:
-            self._io_barrier()
             return
+        return self._run_io_rank(
+            lambda: self._save_restart_io(
+                istep, coordinates, velocities, acceleration),
+            'NAMD restart checkpoint write')
+
+    def _save_restart_io(self, istep, coordinates, velocities, acceleration):
         nuclear_state = tuple(np.asarray(value, dtype=float) for value in (
             coordinates, velocities, acceleration))
         if (nuclear_state[0].shape != nuclear_state[1].shape
@@ -1361,13 +1388,12 @@ class NAMD:
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-        self._io_barrier()
 
     def _write_restart_manifest(self):
         """Write a directly runnable, job-specific manifest beside the checkpoint."""
+        source = getattr(self.mol, 'oqp_input_source', None)
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
-            source = getattr(self.mol, 'oqp_input_source', None)
             if source and str(source).lower().endswith('.oqp') and os.path.isfile(source):
                 with open(source, 'r', encoding='utf-8') as stream:
                     canonical = stream.read().strip()
@@ -1379,11 +1405,15 @@ class NAMD:
             )
             return
         from oqp.utils.oqp_input import (
-            CallSpec, CalculationSpec, parse_canonical_oqp, render_canonical_oqp,
+            CallSpec, CalculationSpec, parse_canonical_oqp,
+            rebase_calculation_paths, render_canonical_oqp,
         )
         spec = parse_canonical_oqp(canonical)
         if spec.driver.name != 'namd':
             raise ValueError('cannot create a restart manifest from a non-NAMD request')
+        if source:
+            spec = rebase_calculation_paths(
+                spec, source_dir=os.path.dirname(os.path.abspath(source)))
         directory = os.path.dirname(self.restart_manifest_file) or '.'
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
@@ -1477,9 +1507,13 @@ class NAMD:
     def _reconcile_trajectory_with_restart(self, checkpoint_step,
                                            checkpoint_bytes):
         """Restore the exact committed packed-trajectory checkpoint prefix."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_rank(
+            lambda: self._reconcile_trajectory_with_restart_io(
+                checkpoint_step, checkpoint_bytes),
+            'NAMD restart trajectory reconciliation')
+
+    def _reconcile_trajectory_with_restart_io(self, checkpoint_step,
+                                              checkpoint_bytes):
         checkpoint_bytes = int(checkpoint_bytes)
         if checkpoint_bytes <= 0:
             raise ValueError('restart checkpoint has an invalid trajectory size')
@@ -1534,14 +1568,17 @@ class NAMD:
                        f'trajectory byte(s) after checkpoint step '
                        f'{checkpoint_step}'),
             )
-        self._io_barrier()
 
     def _reconcile_nacme_audit_with_restart(self, checkpoint_step,
                                             checkpoint_bytes):
         """Restore the exact machine-readable audit prefix at a checkpoint."""
-        if not self._is_io_rank():
-            self._io_barrier()
-            return
+        return self._run_io_rank(
+            lambda: self._reconcile_nacme_audit_with_restart_io(
+                checkpoint_step, checkpoint_bytes),
+            'NAMD restart NACME audit reconciliation')
+
+    def _reconcile_nacme_audit_with_restart_io(self, checkpoint_step,
+                                               checkpoint_bytes):
         checkpoint_bytes = int(checkpoint_bytes)
         if checkpoint_bytes < 0:
             raise ValueError('restart checkpoint has an invalid NACME audit size')
@@ -1563,7 +1600,6 @@ class NAMD:
                        f'uncommitted NACME audit byte(s) after checkpoint step '
                        f'{checkpoint_step}'),
             )
-        self._io_barrier()
 
     # ------------------------------------------------------------------ #
     # time-derivative couplings
