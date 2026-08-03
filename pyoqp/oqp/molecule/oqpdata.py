@@ -566,7 +566,7 @@ OQP_CONFIG_SCHEMA = {
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
         'seed': {'type': int, 'default': '1'},
         'rng_stream': {'type': int, 'default': '0'},        # independent counter-RNG stream / trajectory id
-        'first_hop_step': {'type': int, 'default': '2'},    # KNU/TLF2 convention: no propagation/hop at step 1
+        'first_hop_step': {'type': int, 'default': '1'},    # preserve historical OpenQP propagation/hop from step 1; use 2 for KNU/TLF2 comparisons
         'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'warn'},     # 'off' | 'warn' | 'error'
@@ -579,10 +579,9 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
-        'trajectory_interval': {'type': int, 'default': '1'},
-        'restart_interval': {'type': int, 'default': '1'},
+        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
-        'nacme_audit_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD

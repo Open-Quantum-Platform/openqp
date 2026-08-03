@@ -34,7 +34,6 @@ def _namd_sidecar_paths(md: dict, log_path: Path) -> dict[str, Path]:
 
     return {
         'trajectory-file': output('trajectory_file', '.namd.trj'),
-        'nacme-audit-file': output('nacme_audit_file', '.namd.nacme.tsv'),
         'restart-file': output('restart_file', '.namd.restart.npz'),
         'restart-manifest-file': (
             log_dir / f'{stem}.namd.restart.oqp').resolve(),
@@ -97,8 +96,12 @@ def install_trace(
             results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
         except (AttributeError, KeyError):
             results = np.empty(0)
-        overlap = np.asarray(self.mol.data["OQP::td_states_overlap"], dtype=float).reshape(nstate, nstate).T
-        tdc = self._compute_tdc(overlap)
+        overlap = np.asarray(
+            self.mol.data["OQP::namd_stas"], dtype=float
+        ).reshape(nstate, nstate)
+        tdc = np.asarray(
+            self.mol.data["OQP::namd_tdc"], dtype=float
+        ).reshape(nstate, nstate)
         cmhp = np.full((nstate, nstate), np.nan)
         if results.size >= nstate * nstate:
             # The native record is a Fortran column-major flattening.
@@ -109,11 +112,18 @@ def install_trace(
             "kernel_called": int(np.isfinite(self._last_hop_random)),
             "active": self.active,
             "hopped": int(bool(hopped)),
-            "random": params[3] if params.size > 3 else np.nan,
+            "random": (
+                params[namd_module._P_RAND]
+                if params.size > namd_module._P_RAND else np.nan
+            ),
         }
         row.update({
             f"pop_{state + 1}": abs(self.coef[state]) ** 2
             for state in range(nstate)
+        })
+        row.update({
+            f"overlap_{left + 1}{right + 1}": overlap[left, right]
+            for left in range(nstate) for right in range(nstate)
         })
         row.update({
             f"tdc_{left + 1}{right + 1}_au": tdc[left, right]
@@ -171,13 +181,14 @@ def main() -> None:
     input_path = Path(args.input).expanduser().resolve()
     random_path = (None if args.random_file is None
                    else args.random_file.expanduser().resolve())
-    log_path = Path('thymine.log').resolve()
+    project = input_path.stem
+    log_path = input_path.with_suffix('.log')
     protected_paths = {'input': input_path, 'log': log_path}
     if random_path is not None:
         protected_paths['random-file'] = random_path
     _reject_trace_aliases(trace, protected_paths)
     runner = Runner(
-        project="thymine", input_file=args.input, log="thymine.log",
+        project=project, input_file=str(input_path), log=str(log_path),
         silent=1, usempi=False)
     protected_paths.update(_namd_sidecar_paths(
         runner.mol.config.get('md', {}), log_path))

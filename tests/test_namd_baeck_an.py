@@ -102,14 +102,13 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "nacme_check=baeck_an" in example_oqp
     for keyword in (
             "trajectory_interval=2", "restart_interval=2",
-            "trajectory_file=", "nacme_audit_file=", "restart_file="):
+            "trajectory_file=", "restart_file="):
         assert keyword in example_inp
         assert keyword in example_oqp
     assert "nstep=3" in restart_oqp
     assert "restart=true" in restart_oqp
     for sidecar in (
             'trajectory_file="H2CO-water.namd.trj"',
-            'nacme_audit_file="H2CO-water.namd.nacme.tsv"',
             'restart_file="H2CO-water.namd.restart.npz"'):
         assert sidecar in restart_oqp
     for keyword in (
@@ -282,21 +281,84 @@ def test_trace_protects_default_and_configured_namd_sidecars(tmp_path):
     log_path = tmp_path / 'thymine.log'
     defaults = _namd_sidecar_paths({}, log_path)
     assert set(path.name for path in defaults.values()) == {
-        'thymine.namd.trj', 'thymine.namd.nacme.tsv',
-        'thymine.namd.restart.npz', 'thymine.namd.restart.oqp',
+        'thymine.namd.trj', 'thymine.namd.restart.npz',
+        'thymine.namd.restart.oqp',
     }
     configured = _namd_sidecar_paths({
         'trajectory_file': 'custom.trj',
-        'nacme_audit_file': str(tmp_path / 'absolute.tsv'),
         'restart_file': 'custom.restart',
     }, log_path)
     assert configured['trajectory-file'] == (tmp_path / 'custom.trj').resolve()
-    assert configured['nacme-audit-file'] == (tmp_path / 'absolute.tsv').resolve()
     assert configured['restart-file'] == (tmp_path / 'custom.restart').resolve()
     for paths in (defaults, configured):
         for name, path in paths.items():
             with pytest.raises(ValueError, match=name):
                 _reject_trace_aliases(path, {name: path})
+
+
+def test_namd_output_interval_defaults_to_about_ten_femtoseconds():
+    from oqp.library.namd import NAMD
+
+    assert NAMD._output_interval_steps(0, 0.5) == 20
+    assert NAMD._output_interval_steps(0, 0.25) == 40
+    assert NAMD._output_interval_steps(7, 0.5) == 7
+    with pytest.raises(ValueError, match="zero or positive"):
+        NAMD._output_interval_steps(-1, 0.5)
+
+
+def test_namd_output_interval_keeps_final_and_gate_failure_records():
+    from oqp.library.namd import NAMD
+
+    trajectory_steps = []
+    namd = NAMD.__new__(NAMD)
+    namd.nstep = 21
+    namd.trajectory_interval = 20
+    namd._pending_nve_gate_error = None
+    namd._pending_nacme_gate_error = None
+    namd._run_io_collective = lambda operation: operation()
+    namd._write_md_trajectory_on_io_rank = (
+        lambda istep, *_args: trajectory_steps.append(istep))
+
+    for istep in (1, 20, 21):
+        namd._write_md_trajectory(istep, None, None, None, False)
+    namd._pending_nacme_gate_error = RuntimeError("gate failure")
+    namd._write_md_trajectory(7, None, None, None, False)
+
+    restart_steps = []
+    namd.restart_interval = 20
+    namd._save_restart_on_io_rank = (
+        lambda istep, *_args: restart_steps.append(istep))
+    for istep in (1, 20, 21):
+        namd._save_restart(istep, None, None, None)
+
+    assert trajectory_steps == [20, 21, 7]
+    assert restart_steps == [20, 21]
+
+
+def test_restart_manifest_is_not_rewritten_and_legacy_notice_is_once(
+        tmp_path, monkeypatch):
+    from oqp.library import namd as namd_module
+    from oqp.library.namd import NAMD
+
+    manifest = tmp_path / "restart.oqp"
+    manifest.write_text("existing manifest\n", encoding="utf-8")
+    namd = NAMD.__new__(NAMD)
+    namd.restart_manifest_file = str(manifest)
+    namd.mol = SimpleNamespace(oqp_canonical_input="invalid if parsed")
+    namd._write_restart_manifest()
+    assert manifest.read_text(encoding="utf-8") == "existing manifest\n"
+
+    manifest.unlink()
+    notices = []
+    namd.mol = SimpleNamespace(
+        oqp_canonical_input="", oqp_input_source=None, input_file=None)
+    monkeypatch.setattr(
+        namd_module, "dump_log",
+        lambda *_args, **kwargs: notices.append(kwargs.get("title", "")))
+    namd._write_restart_manifest()
+    namd._write_restart_manifest()
+    assert len(notices) == 1
+    assert "was not generated" in notices[0]
 
 
 def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
@@ -437,11 +499,10 @@ class Mol:
         self.loaded = data
 
 d = NAMD.__new__(NAMD)
-d.mol = Mol(); d.nstate = 2; d.dt_fs = 0.5; d.dt_adaptive = False
+d.mol = Mol(); d.nstate = 2; d.nstep = 3; d.dt_fs = 0.5; d.dt_adaptive = False
 d._t_fs = 0.0; d.seed = 1; d.rng_stream = 2; d.trajectory_interval = 1
 d.trajectory_file = os.path.join(root, 'job.namd.trj')
 d.restart_file = os.path.join(root, 'job.namd.restart.npz')
-d.nacme_audit_file = os.path.join(root, 'job.namd.nacme.tsv')
 d.restart_manifest_file = d._restart_manifest_path()
 d.active = 1; d._last_hop_random = 0.25; d.coef = np.array([1+0j, 0+0j])
 d.vel = np.ones((3, 3))*0.01; d._last_state_overlap = np.eye(2)
@@ -477,13 +538,6 @@ d.prev_data = {
 d._ba_energy_left = np.array([0.0, 0.2]); d._ba_energy_center = np.array([0.0, 0.1])
 d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
 d._nacme_gate_failures = 2; d._rng_step = 1
-# For checkpoint k, only validation rows centered before k are committed.
-audit_base = {
-    'source': 'TD-Baeck-An', 'verdict': 'pass', 'signed_comparison': False,
-    'compared_pairs': 1, 'invariant_failures': 0, 'reference_failures': 0,
-    'consecutive_reference_failures': 0,
-}
-d._write_nacme_audit_row(dict(audit_base, center_step=0))
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
 
 # Rebased local force-field paths must retain the same restart identity, while
@@ -616,13 +670,6 @@ d.coef = np.array([1+0j, 0+0j])
 with np.load(d.restart_file, allow_pickle=False) as saved:
     checkpoint_after_rejection = int(saved['step'][0])
 
-# The center_step=k row requires energies from step k+1 and must be regenerated.
-d._write_nacme_audit_row(dict(audit_base, center_step=1))
-d._write_nacme_audit_row(dict(audit_base, center_step=2,
-                              signed_comparison=True))
-with open(d.nacme_audit_file, 'a', encoding='utf-8') as stream:
-    stream.write('3\tpartial')
-
 # Simulate interruption in the middle of the final packed trajectory record.
 with open(d.trajectory_file, 'ab') as stream:
     stream.write(b'partial-record')
@@ -630,11 +677,9 @@ with open(d.trajectory_file, 'ab') as stream:
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
-d2.nacme_audit_file = d.nacme_audit_file
 loaded = d2._load_restart()
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
-audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
 
 # Normal checkpoints reuse the incremental trajectory digest.  They must not
 # rescan the growing sidecar on every MD step.
@@ -649,20 +694,6 @@ d2._scan_trajectory_prefix = lambda _step: (_ for _ in ()).throw(
 incremental_trajectory_digest = (
     d2._trajectory_checkpoint_identity(1) == expected_trajectory_prefix)
 d2._scan_trajectory_prefix = original_scan
-
-# The much smaller NACME TSV follows the same incremental checkpoint path;
-# normal saves must not reread all previous validation rows either.
-with np.load(d.restart_file, allow_pickle=False) as saved:
-    expected_audit_prefix = {
-        'bytes': int(saved['audit_prefix_bytes'][0]),
-        'sha256': str(saved['audit_prefix_sha256'][0]),
-    }
-original_audit_scan = d2._nacme_audit_committed_prefix
-d2._nacme_audit_committed_prefix = lambda _step: (_ for _ in ()).throw(
-    AssertionError('normal checkpoint rescanned the NACME audit'))
-incremental_audit_digest = (
-    d2._nacme_audit_checkpoint_identity(1) == expected_audit_prefix)
-d2._nacme_audit_committed_prefix = original_audit_scan
 
 # Losing the dense sidecar must not replace the last-good checkpoint with an
 # empty-prefix checkpoint.
@@ -696,7 +727,6 @@ d_foreign_trajectory.seed = 1; d_foreign_trajectory.rng_stream = 2
 d_foreign_trajectory.restart_requested = True
 d_foreign_trajectory.restart_file = d.restart_file
 d_foreign_trajectory.trajectory_file = d.trajectory_file
-d_foreign_trajectory.nacme_audit_file = d.nacme_audit_file
 try:
     d_foreign_trajectory._load_restart()
 except ValueError:
@@ -705,45 +735,6 @@ else:
     foreign_trajectory_rejected = False
 with open(d.trajectory_file, 'wb') as stream:
     stream.write(legitimate_trajectory)
-
-# A same-shaped validation file from another trajectory must not be spliced
-# into the checkpoint history merely because its center_step column is valid.
-legitimate_audit = open(d.nacme_audit_file, encoding='utf-8').read()
-with open(d.nacme_audit_file, 'w', encoding='utf-8') as stream:
-    stream.write(legitimate_audit.replace('\tpass\t', '\tfail\t', 1))
-d_foreign_audit = NAMD.__new__(NAMD); d_foreign_audit.mol = Mol()
-d_foreign_audit.nstate = 2; d_foreign_audit.dt_fs = 0.5
-d_foreign_audit.seed = 1; d_foreign_audit.rng_stream = 2
-d_foreign_audit.restart_requested = True
-d_foreign_audit.restart_file = d.restart_file
-d_foreign_audit.trajectory_file = d.trajectory_file
-d_foreign_audit.nacme_audit_file = d.nacme_audit_file
-try:
-    d_foreign_audit._load_restart()
-except ValueError:
-    foreign_audit_rejected = True
-else:
-    foreign_audit_rejected = False
-with open(d.nacme_audit_file, 'w', encoding='utf-8') as stream:
-    stream.write(legitimate_audit)
-audit_prefix, audit_removed = d._nacme_audit_committed_prefix((1 << 63) - 1)
-if audit_removed:
-    raise RuntimeError('restored legitimate NACME audit was truncated')
-d._remember_nacme_audit_prefix(audit_prefix)
-
-# A checkpoint created before the validation file exists must still recognize
-# and remove rows written after that checkpoint, including the first header.
-zero_audit_path = os.path.join(root, 'zero-step.nacme.tsv')
-d_zero_audit = NAMD.__new__(NAMD); d_zero_audit.mol = Mol()
-d_zero_audit.nacme_audit_file = zero_audit_path
-zero_prefix, _ = d_zero_audit._nacme_audit_committed_prefix(0)
-d_zero_audit._write_nacme_audit_row(dict(audit_base, center_step=0))
-d_zero_audit._reconcile_nacme_audit_with_restart(0, {
-    'bytes': len(zero_prefix),
-    'sha256': hashlib.sha256(zero_prefix).hexdigest(),
-})
-zero_step_audit_rolled_back = (
-    open(zero_audit_path, 'rb').read() == zero_prefix)
 
 # Only rank zero needs checkpoint filesystem/model access; all ranks restore
 # the exact validated payload broadcast by rank zero.
@@ -763,9 +754,7 @@ def mpi_restart_loader(rank, restart_path):
     probe.nstate = 2; probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
     probe.restart_requested = True; probe.restart_file = restart_path
     probe.trajectory_file = d.trajectory_file
-    probe.nacme_audit_file = d.nacme_audit_file
     probe._reconcile_trajectory_with_restart = lambda _step, _prefix: None
-    probe._reconcile_nacme_audit_with_restart = lambda _step, _prefix: None
     return probe, probe._load_restart()
 
 mpi_root, mpi_root_loaded = mpi_restart_loader(0, d.restart_file)
@@ -788,7 +777,6 @@ d_bad = NAMD.__new__(NAMD); d_bad.mol = Mol(); d_bad.nstate = 2
 d_bad.dt_fs = 0.5; d_bad.seed = 1; d_bad.rng_stream = 2
 d_bad.restart_requested = True; d_bad.restart_file = bad_restart
 d_bad.trajectory_file = d.trajectory_file
-d_bad.nacme_audit_file = d.nacme_audit_file
 try:
     d_bad._load_restart()
 except RuntimeError:
@@ -811,7 +799,6 @@ d_broadcast.seed = 1; d_broadcast.rng_stream = 2
 d_broadcast.restart_requested = True
 d_broadcast.restart_file = broadcast_restart
 d_broadcast.trajectory_file = d.trajectory_file
-d_broadcast.nacme_audit_file = d.nacme_audit_file
 try:
     d_broadcast._load_restart()
 except RuntimeError:
@@ -830,7 +817,6 @@ d_history = NAMD.__new__(NAMD); d_history.mol = Mol(); d_history.nstate = 2
 d_history.dt_fs = 0.5; d_history.seed = 1; d_history.rng_stream = 2
 d_history.restart_requested = True; d_history.restart_file = history_restart
 d_history.trajectory_file = d.trajectory_file
-d_history.nacme_audit_file = d.nacme_audit_file
 try:
     d_history._load_restart()
 except RuntimeError:
@@ -849,7 +835,6 @@ d_partial = NAMD.__new__(NAMD); d_partial.mol = Mol(); d_partial.nstate = 2
 d_partial.dt_fs = 0.5; d_partial.seed = 1; d_partial.rng_stream = 2
 d_partial.restart_requested = True; d_partial.restart_file = partial_history_restart
 d_partial.trajectory_file = d.trajectory_file
-d_partial.nacme_audit_file = d.nacme_audit_file
 try:
     d_partial._load_restart()
 except RuntimeError:
@@ -874,7 +859,6 @@ for index, replacement in enumerate((
     d_streak.dt_fs = 0.5; d_streak.seed = 1; d_streak.rng_stream = 2
     d_streak.restart_requested = True; d_streak.restart_file = streak_restart
     d_streak.trajectory_file = d.trajectory_file
-    d_streak.nacme_audit_file = d.nacme_audit_file
     try:
         d_streak._load_restart()
     except RuntimeError:
@@ -889,7 +873,6 @@ d_wrong = NAMD.__new__(NAMD); d_wrong.mol = wrong_mol; d_wrong.nstate = 2
 d_wrong.dt_fs = 0.5; d_wrong.seed = 1; d_wrong.rng_stream = 2
 d_wrong.restart_requested = True; d_wrong.restart_file = d.restart_file
 d_wrong.trajectory_file = d.trajectory_file
-d_wrong.nacme_audit_file = d.nacme_audit_file
 try:
     d_wrong._load_restart()
 except ValueError:
@@ -1284,25 +1267,23 @@ collective_save_error = len(save_errors) == 2 and save_errors[0] == save_errors[
 d_fresh = NAMD.__new__(NAMD); d_fresh.mol = SimpleNamespace(
     log=os.path.join(root, 'fresh.log'))
 d_fresh.restart_requested = False
+d_fresh.trajectory_interval = 20; d_fresh.restart_interval = 20
 d_fresh.trajectory_file = os.path.join(root, 'fresh.trj')
-d_fresh.nacme_audit_file = os.path.join(root, 'fresh.tsv')
 d_fresh.restart_file = os.path.join(root, 'fresh.npz')
 d_fresh.restart_manifest_file = os.path.join(root, 'fresh.oqp')
-for path in (d_fresh.trajectory_file, d_fresh.nacme_audit_file,
-             d_fresh.restart_file, d_fresh.restart_manifest_file):
+for path in (d_fresh.trajectory_file, d_fresh.restart_file,
+             d_fresh.restart_manifest_file):
     with open(path, 'w', encoding='utf-8') as stream:
         stream.write('stale')
 d_fresh._prepare_md_outputs()
 fresh_outputs_invalidated = (
     os.path.getsize(d_fresh.trajectory_file) == 0
-    and os.path.getsize(d_fresh.nacme_audit_file) == 0
     and not os.path.exists(d_fresh.restart_file)
     and not os.path.exists(d_fresh.restart_manifest_file))
 d_collision = NAMD.__new__(NAMD)
 d_collision.mol = SimpleNamespace(log=os.path.join(root, 'collision.log'))
 d_collision.trajectory_file = d_fresh.trajectory_file
-d_collision.nacme_audit_file = d_fresh.trajectory_file
-d_collision.restart_file = d_fresh.restart_file
+d_collision.restart_file = d_fresh.trajectory_file
 d_collision.restart_manifest_file = d_fresh.restart_manifest_file
 try:
     d_collision._validate_sidecar_paths()
@@ -1313,7 +1294,6 @@ else:
 d_log_collision = NAMD.__new__(NAMD)
 d_log_collision.mol = SimpleNamespace(log=d_fresh.trajectory_file)
 d_log_collision.trajectory_file = d_fresh.trajectory_file
-d_log_collision.nacme_audit_file = d_fresh.nacme_audit_file
 d_log_collision.restart_file = d_fresh.restart_file
 d_log_collision.restart_manifest_file = d_fresh.restart_manifest_file
 try:
@@ -1334,7 +1314,6 @@ def input_collision(candidate, *, velocity='zero', qmmm=None, config=None):
             'input': {'method': 'tdhf'}, 'qmmm': qmmm or {}}))
     probe.velocity_source = velocity
     probe.trajectory_file = candidate
-    probe.nacme_audit_file = os.path.join(root, 'input-collision.tsv')
     probe.restart_file = os.path.join(root, 'input-collision.npz')
     probe.restart_manifest_file = os.path.join(root, 'input-collision.oqp')
     try:
@@ -1533,13 +1512,10 @@ print('DENSE=' + json.dumps({
         'mutable_guess_restart_accepted': mutable_guess_restart_accepted,
         'mutable_guess_path_change_rejected': mutable_guess_path_change_rejected,
         'malformed_signature_rejected': malformed_signature_rejected,
-        'foreign_audit_rejected': foreign_audit_rejected,
         'foreign_trajectory_rejected': foreign_trajectory_rejected,
         'incremental_trajectory_digest': incremental_trajectory_digest,
-        'incremental_audit_digest': incremental_audit_digest,
         'missing_trajectory_save_rejected': missing_trajectory_save_rejected,
         'last_good_checkpoint_preserved': last_good_checkpoint_preserved,
-        'zero_step_audit_rolled_back': zero_step_audit_rolled_back,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'forcefield_rebase_runtime_precedence':
             forcefield_rebase_runtime_precedence,
@@ -1551,7 +1527,6 @@ print('DENSE=' + json.dumps({
         'builtin_forcefield_fingerprinted': builtin_forcefield_fingerprinted,
         'coefficient_shape_rejected': coefficient_shape_rejected,
         'tracking_shape_rejected': tracking_shape_rejected,
-        'audit_rows': audit_lines,
 }))
 """
     env = os.environ.copy()
@@ -1622,26 +1597,14 @@ print('DENSE=' + json.dumps({
         'mutable_guess_restart_accepted': True,
         'mutable_guess_path_change_rejected': True,
         'malformed_signature_rejected': True,
-        'foreign_audit_rejected': True,
         'foreign_trajectory_rejected': True,
         'incremental_trajectory_digest': True,
-        'incremental_audit_digest': True,
         'missing_trajectory_save_rejected': True,
         'last_good_checkpoint_preserved': True,
-        'zero_step_audit_rolled_back': True,
         'runtime_forcefield_bound': True,
         'forcefield_rebase_runtime_precedence': True,
         'guess_rebase_runtime_precedence': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
-        'audit_rows': [
-            'center_step\tsource\tverdict\tsigned\tcompared_pairs\t'
-            'invariant_failures\treference_failures\t'
-            'consecutive_reference_failures\tcandidate_diagonal_max\t'
-            'candidate_antisymmetry_max\treference_diagonal_max\t'
-            'reference_antisymmetry_max\tpair_rms_error\tpair_max_error\t'
-            'max_tolerance_ratio',
-            '0\tTD-Baeck-An\tpass\tFalse\t1\t0\t0\t0\t\t\t\t\t\t\t',
-        ],
     }

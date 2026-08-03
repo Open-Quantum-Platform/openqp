@@ -58,18 +58,9 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 5
+NAMD_RESTART_SCHEMA_VERSION = 6
 NAMD_TRAJECTORY_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
-NACME_AUDIT_COLUMNS = (
-    'center_step', 'source', 'verdict', 'signed', 'compared_pairs',
-    'invariant_failures', 'reference_failures',
-    'consecutive_reference_failures', 'candidate_diagonal_max',
-    'candidate_antisymmetry_max', 'reference_diagonal_max',
-    'reference_antisymmetry_max', 'pair_rms_error', 'pair_max_error',
-    'max_tolerance_ratio',
-)
-NACME_AUDIT_HEADER = ('\t'.join(NACME_AUDIT_COLUMNS) + '\n').encode('utf-8')
 
 
 def _namd_trajectory_dtype(nstate, natom):
@@ -235,7 +226,7 @@ class NAMD:
         self.init_temp = float(md['init_temp'])
         self.seed = int(md['seed'])
         self.rng_stream = int(md.get('rng_stream', 0))
-        self.first_hop_step = int(md.get('first_hop_step', 2))
+        self.first_hop_step = int(md.get('first_hop_step', 1))
         self.nacme_check = str(md.get('nacme_check', 'off')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
@@ -278,15 +269,15 @@ class NAMD:
                 "[md] NVE gate tolerances must be finite and non-negative")
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
-        self.trajectory_interval = int(md.get('trajectory_interval', 1))
-        self.restart_interval = int(md.get('restart_interval', 1))
-        if self.trajectory_interval < 1 or self.restart_interval < 1:
-            raise ValueError("[md] trajectory/restart intervals must be at least 1")
+        self.trajectory_interval_input = int(md.get('trajectory_interval', 0))
+        self.restart_interval_input = int(md.get('restart_interval', 0))
+        self.trajectory_interval = self._output_interval_steps(
+            self.trajectory_interval_input, self.dt_fs)
+        self.restart_interval = self._output_interval_steps(
+            self.restart_interval_input, self.dt_fs)
         self.restart_requested = self._as_bool(md.get('restart', False))
         self.trajectory_file = self._md_output_path(
             md.get('trajectory_file', ''), '.namd.trj')
-        self.nacme_audit_file = self._md_output_path(
-            md.get('nacme_audit_file', ''), '.namd.nacme.tsv')
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = self._restart_manifest_path()
@@ -320,10 +311,9 @@ class NAMD:
             )
         if soc_requested and (
                 str(md.get('trajectory_file', '') or '').strip()
-                or self.trajectory_interval != 1
+                or self.trajectory_interval_input != 0
                 or str(md.get('restart_file', '') or '').strip()
-                or self.restart_interval != 1
-                or str(md.get('nacme_audit_file', '') or '').strip()):
+                or self.restart_interval_input != 0):
             raise NotImplementedError(
                 "[md] trajectory/checkpoint record controls currently support "
                 "same-spin NAMD only"
@@ -365,10 +355,6 @@ class NAMD:
         self._trajectory_prefix_bytes = 0
         self._trajectory_prefix_last_step = None
         self._trajectory_prefix_stat = None
-        self._nacme_audit_prefix_hasher = None
-        self._nacme_audit_prefix_bytes = 0
-        self._nacme_audit_prefix_last_center = None
-        self._nacme_audit_prefix_stat = None
 
         # electronic amplitudes (complex), one per excited state. For SOC-NAMD
         # the active index runs over the larger spin-adiabatic manifold and the
@@ -394,6 +380,18 @@ class NAMD:
         cfg['properties']['back_door'] = True
         # NACME needs a dt; reuse the MD step (atomic units) for the TDC scale
         cfg['nac']['dt'] = self.dt
+
+    @staticmethod
+    def _output_interval_steps(configured, dt_fs):
+        """Resolve zero to an approximately 10 fs fixed-step output cadence."""
+        configured = int(configured)
+        dt_fs = float(dt_fs)
+        if configured < 0:
+            raise ValueError(
+                "[md] trajectory/restart intervals must be zero or positive")
+        if not np.isfinite(dt_fs) or dt_fs <= 0.0:
+            raise ValueError("[md] dt must be finite and positive")
+        return configured or max(1, int(round(10.0 / dt_fs)))
 
     @staticmethod
     def _as_bool(value):
@@ -452,7 +450,6 @@ class NAMD:
         outputs = {
             'log_file': self.mol.log,
             'trajectory_file': self.trajectory_file,
-            'nacme_audit_file': self.nacme_audit_file,
             'restart_file': self.restart_file,
             'restart_manifest_file': self.restart_manifest_file,
         }
@@ -564,11 +561,6 @@ class NAMD:
         manager = getattr(self.mol, 'mpi_manager', None)
         return manager is None or int(getattr(manager, 'rank', 0)) == 0
 
-    def _io_barrier(self):
-        manager = getattr(self.mol, 'mpi_manager', None)
-        if manager is not None and hasattr(manager, 'barrier'):
-            manager.barrier()
-
     def _run_io_collective(self, operation):
         """Run rank-zero I/O and propagate any failure to every MPI rank."""
         manager = getattr(self.mol, 'mpi_manager', None)
@@ -625,8 +617,9 @@ class NAMD:
         dump_log(
             self.mol,
             title=(f'NAMD files: trajectory={self.trajectory_file} '
-                   f'nacme_audit={self.nacme_audit_file} '
+                   f'trajectory_interval={self.trajectory_interval}step '
                    f'restart={self.restart_file} '
+                   f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
         )
 
@@ -638,25 +631,19 @@ class NAMD:
         for path in (self.restart_manifest_file, self.restart_file):
             if os.path.lexists(path):
                 os.unlink(path)
-        for path in (self.trajectory_file, self.nacme_audit_file):
-            with open(path, 'w', encoding='utf-8'):
-                pass
+        with open(self.trajectory_file, 'w', encoding='utf-8'):
+            pass
         self._trajectory_prefix_hasher = None
         self._trajectory_prefix_bytes = 0
         self._trajectory_prefix_last_step = None
         self._trajectory_prefix_stat = None
-        self._nacme_audit_prefix_hasher = hashlib.sha256(NACME_AUDIT_HEADER)
-        self._nacme_audit_prefix_bytes = len(NACME_AUDIT_HEADER)
-        self._nacme_audit_prefix_last_center = None
-        self._nacme_audit_prefix_stat = self._nacme_audit_stat_identity()
 
     def _prepare_hop_step(self, istep):
         """Bind the physical MD step to the stateless hop RNG.
 
         Returning ``False`` suppresses both electronic propagation and the
-        stochastic FSSH decision.  The default first_hop_step=2 reproduces the
-        KNU-GAMESS/TLF2 initialisation convention without consuming a random
-        value at the skipped first interval.
+        stochastic FSSH decision.  The compatibility default is step 1; use
+        step 2 explicitly for the KNU-GAMESS/TLF2 initialisation convention.
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
@@ -981,8 +968,6 @@ class NAMD:
             section='text',
             info={'text': table},
         )
-        self._write_nacme_audit_row(result)
-
         if self.nacme_gate == 'error':
             if invariant_failures:
                 self._pending_nacme_gate_error = RuntimeError(
@@ -1001,39 +986,6 @@ class NAMD:
         self._pending_nacme_gate_error = None
         if error is not None:
             raise error
-
-    def _write_nacme_audit_row(self, result):
-        """Append one machine-readable gate row for ensemble/post-MD audits."""
-        return self._run_io_collective(
-            lambda: self._write_nacme_audit_row_on_io_rank(result))
-
-    def _write_nacme_audit_row_on_io_rank(self, result):
-        """Append one audit row on rank zero."""
-        path = self.nacme_audit_file
-        needs_header = not os.path.exists(path) or os.path.getsize(path) == 0
-        values = [
-            result.get('signed_comparison', '') if name == 'signed'
-            else result.get(name, '')
-            for name in NACME_AUDIT_COLUMNS
-        ]
-        row = ('\t'.join(str(value) for value in values) + '\n').encode('utf-8')
-        if getattr(self, '_nacme_audit_prefix_hasher', None) is None:
-            prefix, removed = self._nacme_audit_committed_prefix(INT64_MAX)
-            if removed:
-                raise ValueError('NACME audit has an incomplete append history')
-            self._remember_nacme_audit_prefix(prefix)
-        else:
-            self._require_unchanged_nacme_audit_prefix()
-        with open(path, 'ab') as stream:
-            if needs_header:
-                stream.write(NACME_AUDIT_HEADER)
-            stream.write(row)
-            stream.flush()
-            os.fsync(stream.fileno())
-        self._nacme_audit_prefix_hasher.update(row)
-        self._nacme_audit_prefix_bytes += len(row)
-        self._nacme_audit_prefix_last_center = int(result['center_step'])
-        self._nacme_audit_prefix_stat = self._nacme_audit_stat_identity()
 
     def _update_nve_gate(self, istep, epot, ekin, transition_energy_jump=np.nan):
         """Audit microcanonical energy conservation for same-spin FSSH."""
@@ -1123,7 +1075,8 @@ class NAMD:
         gate_failure = (
             getattr(self, '_pending_nve_gate_error', None) is not None
             or getattr(self, '_pending_nacme_gate_error', None) is not None)
-        if istep % self.trajectory_interval != 0 and not gate_failure:
+        if (istep % self.trajectory_interval != 0
+                and istep != self.nstep and not gate_failure):
             return
         return self._run_io_collective(
             lambda: self._write_md_trajectory_on_io_rank(
@@ -1796,7 +1749,7 @@ class NAMD:
 
     def _save_restart(self, istep, coordinates, velocities, acceleration):
         """Atomically save all state needed for phase-continuous continuation."""
-        if istep % self.restart_interval != 0:
+        if istep % self.restart_interval != 0 and istep != self.nstep:
             return
         return self._run_io_collective(lambda: self._save_restart_on_io_rank(
             istep, coordinates, velocities, acceleration))
@@ -1825,7 +1778,6 @@ class NAMD:
             'nve_previous_energy': self._nve_previous_energy,
         }, context=(f'refusing to overwrite the last-good NAMD restart at '
                     f'step {istep}: history'))
-        audit_prefix = self._nacme_audit_checkpoint_identity(istep)
         trajectory_prefix = self._trajectory_checkpoint_identity(istep)
         payload = {
             'schema_version': np.array([NAMD_RESTART_SCHEMA_VERSION], dtype=np.int64),
@@ -1843,10 +1795,6 @@ class NAMD:
             'coef_imag': np.asarray(coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
-            'audit_prefix_bytes': np.array(
-                [audit_prefix['bytes']], dtype=np.int64),
-            'audit_prefix_sha256': np.array(
-                [audit_prefix['sha256']]),
             'trajectory_prefix_bytes': np.array(
                 [trajectory_prefix['bytes']], dtype=np.int64),
             'trajectory_prefix_sha256': np.array(
@@ -1976,6 +1924,8 @@ class NAMD:
 
     def _write_restart_manifest(self):
         """Write a directly runnable per-job restart manifest."""
+        if os.path.isfile(self.restart_manifest_file):
+            return
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
             source = getattr(self.mol, 'oqp_input_source', None)
@@ -1983,11 +1933,14 @@ class NAMD:
                 with open(source, 'r', encoding='utf-8') as stream:
                     canonical = stream.read().strip()
         if not canonical:
-            dump_log(
-                self.mol,
-                title=('NAMD checkpoint saved, but restart.oqp was not generated: '
-                       'the run did not originate from canonical .oqp input'),
-            )
+            if not getattr(self, '_manifest_notice_logged', False):
+                dump_log(
+                    self.mol,
+                    title=(
+                        'NAMD checkpoint saved, but restart.oqp was not generated: '
+                        'the run did not originate from canonical .oqp input'),
+                )
+                self._manifest_notice_logged = True
             return
         from oqp.utils.oqp_input import (
             CallSpec, CalculationSpec, parse_canonical_oqp, render_canonical_oqp,
@@ -2006,7 +1959,6 @@ class NAMD:
             'restart': True,
             'restart_file': os.path.relpath(self.restart_file, directory),
             'trajectory_file': os.path.relpath(self.trajectory_file, directory),
-            'nacme_audit_file': os.path.relpath(self.nacme_audit_file, directory),
         })
         driver = CallSpec(
             spec.driver.name, spec.driver.args, kwargs, spec.driver.explicit)
@@ -2046,8 +1998,6 @@ class NAMD:
             setattr(self, f'_{name}', value)
         self._reconcile_trajectory_with_restart(
             payload['step'], payload['trajectory_prefix'])
-        self._reconcile_nacme_audit_with_restart(
-            payload['step'], payload['audit_prefix'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={payload["step"]} '
@@ -2080,19 +2030,6 @@ class NAMD:
             gate_failures = self._restart_integer(saved, 'gate_failures')
             nve_failures = self._restart_integer(saved, 'nve_failures')
             time_fs = self._restart_float(saved, 'time_fs', minimum=0.0)
-            audit_prefix_bytes = self._restart_integer(
-                saved, 'audit_prefix_bytes')
-            audit_digest_array = np.asarray(saved['audit_prefix_sha256'])
-            if (audit_digest_array.shape != (1,)
-                    or audit_digest_array.dtype.kind not in 'SU'):
-                raise RuntimeError(
-                    'NAMD restart checkpoint has invalid NACME validation '
-                    'prefix metadata')
-            audit_prefix_sha256 = str(audit_digest_array[0]).lower()
-            if not re.fullmatch(r'[0-9a-f]{64}', audit_prefix_sha256):
-                raise RuntimeError(
-                    'NAMD restart checkpoint has invalid NACME validation '
-                    'prefix metadata')
             trajectory_prefix_bytes = self._restart_integer(
                 saved, 'trajectory_prefix_bytes')
             trajectory_digest_array = np.asarray(
@@ -2164,10 +2101,6 @@ class NAMD:
                 'gate_failures': gate_failures,
                 'nve_failures': nve_failures,
                 'time_fs': time_fs,
-                'audit_prefix': {
-                    'bytes': audit_prefix_bytes,
-                    'sha256': audit_prefix_sha256,
-                },
                 'trajectory_prefix': {
                     'bytes': trajectory_prefix_bytes,
                     'sha256': trajectory_prefix_sha256,
@@ -2358,130 +2291,6 @@ class NAMD:
                        f'byte(s) after step {checkpoint_step}'),
             )
         self._remember_trajectory_prefix(scanned)
-
-    def _nacme_audit_stat_identity(self):
-        """Return audit metadata without requiring the logical header file."""
-        try:
-            status = os.stat(self.nacme_audit_file)
-        except FileNotFoundError:
-            return None
-        except OSError as error:
-            raise RuntimeError(
-                'cannot inspect the NAMD NACME audit file') from error
-        return (
-            int(status.st_dev), int(status.st_ino), int(status.st_size),
-            int(status.st_mtime_ns),
-        )
-
-    def _require_unchanged_nacme_audit_prefix(self):
-        """Reject audit replacement before using its incremental digest."""
-        if (self._nacme_audit_stat_identity()
-                != getattr(self, '_nacme_audit_prefix_stat', None)):
-            raise RuntimeError(
-                'NAMD NACME audit changed outside the active writer')
-
-    def _remember_nacme_audit_prefix(self, prefix):
-        """Install a validated audit digest after start or restart."""
-        lines = prefix.decode('utf-8').splitlines()
-        last_center = int(lines[-1].split('\t', 1)[0]) if len(lines) > 1 else None
-        self._nacme_audit_prefix_hasher = hashlib.sha256(prefix)
-        self._nacme_audit_prefix_bytes = len(prefix)
-        self._nacme_audit_prefix_last_center = last_center
-        self._nacme_audit_prefix_stat = self._nacme_audit_stat_identity()
-
-    def _nacme_audit_checkpoint_identity(self, checkpoint_step):
-        """Return the audit prefix digest in O(1) during normal MD."""
-        cached = getattr(self, '_nacme_audit_prefix_hasher', None)
-        if cached is not None:
-            self._require_unchanged_nacme_audit_prefix()
-            last_center = getattr(
-                self, '_nacme_audit_prefix_last_center', None)
-            if last_center is None or last_center < int(checkpoint_step):
-                return {
-                    'bytes': int(self._nacme_audit_prefix_bytes),
-                    'sha256': cached.hexdigest(),
-                }
-        prefix, removed = self._nacme_audit_committed_prefix(checkpoint_step)
-        if not removed:
-            self._remember_nacme_audit_prefix(prefix)
-        return {
-            'bytes': len(prefix), 'sha256': hashlib.sha256(prefix).hexdigest(),
-        }
-
-    def _nacme_audit_committed_prefix(self, checkpoint_step):
-        """Return canonical bytes committed before a checkpoint step."""
-        path = self.nacme_audit_file
-        if not os.path.isfile(path) or os.path.getsize(path) == 0:
-            # Logically an empty validation record still has its fixed schema.
-            # This lets a checkpoint made before the file exists recognize and
-            # trim a later header plus wholly uncommitted rows.
-            return NACME_AUDIT_HEADER, 0
-        with open(path, 'r', encoding='utf-8') as stream:
-            lines = stream.readlines()
-        if not lines:
-            return NACME_AUDIT_HEADER, 0
-        columns = lines[0].rstrip('\r\n').split('\t')
-        if tuple(columns) != NACME_AUDIT_COLUMNS:
-            raise ValueError(
-                'restart NACME validation record has an incompatible schema')
-        if 'center_step' not in columns:
-            raise ValueError('restart NACME validation record is missing center_step')
-        step_index = columns.index('center_step')
-        kept = [lines[0] if lines[0].endswith('\n') else lines[0] + '\n']
-        removed = 0
-        for line in lines[1:]:
-            fields = line.rstrip('\r\n').split('\t')
-            try:
-                complete = line.endswith('\n') and len(fields) == len(columns)
-                center_step = int(fields[step_index]) if complete else None
-            except (IndexError, ValueError):
-                center_step = None
-            if center_step is None or center_step >= int(checkpoint_step):
-                removed += 1
-            else:
-                kept.append(line)
-        return ''.join(kept).encode('utf-8'), removed
-
-    def _reconcile_nacme_audit_with_restart(self, checkpoint_step,
-                                            expected_prefix):
-        """Atomically discard incomplete or uncommitted NACME TSV rows."""
-        return self._run_io_collective(
-            lambda: self._reconcile_nacme_audit_on_io_rank(
-                checkpoint_step, expected_prefix))
-
-    def _reconcile_nacme_audit_on_io_rank(self, checkpoint_step,
-                                          expected_prefix):
-        """Perform NACME-audit reconciliation on rank zero."""
-        path = self.nacme_audit_file
-        prefix, removed = self._nacme_audit_committed_prefix(checkpoint_step)
-        observed = {
-            'bytes': len(prefix),
-            'sha256': hashlib.sha256(prefix).hexdigest(),
-        }
-        if observed != expected_prefix:
-            raise ValueError(
-                'restart NACME validation record does not match the '
-                'checkpoint committed prefix')
-        if removed:
-            directory = os.path.dirname(path) or '.'
-            descriptor, temporary = tempfile.mkstemp(
-                prefix='.namd-audit-', suffix='.tmp', dir=directory)
-            try:
-                with os.fdopen(descriptor, 'wb') as stream:
-                    stream.write(prefix)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, path)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
-            dump_log(
-                self.mol,
-                title=(f'NAMD restart removed {removed} incomplete or '
-                       f'uncommitted NACME audit row(s) after step '
-                       f'{checkpoint_step}'),
-            )
-        self._remember_nacme_audit_prefix(prefix)
 
     # ------------------------------------------------------------------ #
     # time-derivative couplings

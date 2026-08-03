@@ -63,7 +63,6 @@ nve_gate_consecutive=2
 trajectory_interval=2
 restart_interval=2
 trajectory_file=H2CO-water.namd.trj
-nacme_audit_file=H2CO-water.namd.nacme.tsv
 restart_file=H2CO-water.namd.restart.npz
 decoherence=edc
 trivial=True

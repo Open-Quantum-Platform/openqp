@@ -625,7 +625,7 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
         'nve_gate=warn,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,'
         'nve_gate_transition_tol=1e-7,nve_gate_consecutive=2,'
         'trajectory_interval=1,restart_interval=1,trajectory_file="dense.trj",'
-        'nacme_audit_file="nacme.tsv",restart_file="state.npz")'
+        'restart_file="state.npz")'
     )
     assert legacy["md"]["nacme_check"] == "baeck_an"
     assert legacy["md"]["ba_gap_max"] == "0.05"
@@ -642,7 +642,6 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     assert legacy["md"]["trajectory_interval"] == "1"
     assert legacy["md"]["restart_interval"] == "1"
     assert legacy["md"]["trajectory_file"] == "dense.trj"
-    assert legacy["md"]["nacme_audit_file"] == "nacme.tsv"
     assert legacy["md"]["restart_file"] == "state.npz"
 
 
