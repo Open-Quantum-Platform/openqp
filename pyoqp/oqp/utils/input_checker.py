@@ -155,7 +155,7 @@ PCM_BACKEND_MODELS = {
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
-MECP_SEARCH = {"auglag", "penalty", "quad"}
+MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2561,7 +2561,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         # disabled value must not block a run that never reads it.
         if runtype == "mecp":
             effective_search = _as_lower(
-                _get(config, "optimize", "mecp_search", "auglag"))
+                _get(config, "optimize", "mecp_search", "auto"))
+            if effective_search == "auto":
+                # auto is SQP natively and auglag on the other backends
+                effective_search = "auglag" if lib != "oqp" else "sqp"
         else:
             effective_search = _as_lower(
                 _get(config, "optimize", "meci_search", "auto"))
@@ -2589,7 +2592,51 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     if runtype == "mecp":
-        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auglag"))
+        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auto"))
+        effective_mecp = mecp_search
+        if effective_mecp == "auto":
+            effective_mecp = "sqp" if lib == "oqp" else "auglag"
+        if effective_mecp == "sqp":
+            # The schema injects all three, so only a value that differs from
+            # its default says anything about the user's intent.
+            recovery_defaults = {
+                "auto_recovery": True,
+                "recovery_maxit": 30,
+                "recovery_trust": 0.02,
+            }
+            ignored = []
+            for key, default in recovery_defaults.items():
+                value = _get(config, "oqp", key, default)
+                try:
+                    changed = (bool(value) != bool(default)
+                               if isinstance(default, bool)
+                               else float(value) != float(default))
+                except (TypeError, ValueError):
+                    changed = True
+                if changed:
+                    ignored.append(key)
+            if ignored:
+                report.add(
+                    "WARNING",
+                    "oqp.%s" % ignored[0],
+                    "MECP SQP brings its own trust-region step control and does "
+                    "not run through the native recovery ladder, so %s "
+                    "%s no effect."
+                    % (", ".join(ignored), "have" if len(ignored) > 1 else "has"),
+                    value=", ".join(ignored),
+                    expected="unset for mecp_search=sqp",
+                    action="Remove them, or select mecp_search=auglag to use "
+                           "the native optimizer and its recovery ladder.",
+                )
+        if mecp_search == "sqp" and lib != "oqp":
+            report.add(
+                "ERROR",
+                "optimize.lib",
+                "MECP SQP replaces the outer optimizer with its own KKT step "
+                "control, so it does not run under another backend.",
+                value=lib, expected="oqp",
+                action="Set [optimize] lib=oqp.",
+            )
         if mecp_search not in MECP_SEARCH:
             report.add(
                 "ERROR",
@@ -2597,7 +2644,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECP search algorithm.",
                 value=mecp_search,
                 expected=", ".join(sorted(MECP_SEARCH)),
-                action="Use auglag (recommended), penalty, or quad.",
+                action="Use auto (default), sqp, auglag, penalty, or quad.",
             )
         elif mecp_search == "penalty":
             penalty_controls = {

@@ -246,6 +246,104 @@ class MECPObjectiveTest(unittest.TestCase):
         self.assertIn("auglag", checker.MECI_SEARCH)
 
 
+class MECPSQPTest(unittest.TestCase):
+    """The SQP driver on the same model, with a curved seam.
+
+    A straight seam makes the constraint linear and SQP exact in one step,
+    which would flatter it, so the gap is given a quadratic term in y.
+    """
+
+    CURVE = 0.05  # must stay below A/(2 X0) or (X0, 0) is not the seam minimum
+
+    def curved(self, coordinates):
+        x, y = coordinates
+        e_lo = 0.5 * K * (x * x + y * y)
+        g_lo = np.array([K * x, K * y])
+        c = A * (x - X0) + self.CURVE * y * y
+        g_c = np.array([A, 2.0 * self.CURVE * y])
+        return e_lo, g_lo, e_lo + c, g_lo + g_c
+
+    def curved_gap(self, coordinates):
+        return A * (coordinates[0] - X0) + self.CURVE * coordinates[1] ** 2
+
+    def make_driver(self):
+        opt = object.__new__(libscipy.SQPMECPOpt)
+        opt.istate, opt.jstate, opt.nstate = 1, 1, 2
+        opt.mecp_search = "sqp"
+        opt.lagrange = 0.0
+        opt.metrics = {}
+        opt.trust, opt.trust_max, opt.trust_min = 0.5, 1.0, 1.0e-6
+        return opt
+
+    def test_kkt_step_solves_the_multiplier_and_step_together(self):
+        """The multiplier is a result of the step equations, not a formula."""
+        opt = self.make_driver()
+        hess = np.eye(2)
+        mean_g = np.array([0.4, -0.2])
+        gap_g = np.array([A, 0.1])
+        c = 0.03
+        step, lagrange = opt.kkt_step(hess, mean_g, gap_g, c)
+        # the KKT rows must hold exactly
+        np.testing.assert_allclose(hess @ step + mean_g + lagrange * gap_g,
+                                   np.zeros(2), atol=1.0e-12)
+        self.assertAlmostEqual(gap_g @ step + c, 0.0, places=12)
+
+    def test_singular_system_is_reported_not_guessed(self):
+        opt = self.make_driver()
+        # identical state gradients leave the branching direction undefined
+        self.assertIsNone(
+            opt.kkt_step(np.zeros((2, 2)), np.array([1.0, 0.0]),
+                         np.zeros(2), 0.1)
+        )
+
+    def test_driver_reaches_the_exact_crossing_on_a_curved_seam(self):
+        """Drive the KKT loop directly, without the electronic-structure layer."""
+        opt = self.make_driver()
+        coordinates = np.array([0.0, 0.6])
+        hess = np.eye(2)
+        previous = None
+        for _ in range(60):
+            e_lo, g_lo, e_up, g_up = self.curved(coordinates)
+            c, gap_g = e_up - e_lo, g_up - g_lo
+            mean_g = 0.5 * (g_lo + g_up)
+            if previous is not None:
+                step_old, grad_old = previous
+                dgrad = mean_g + opt.lagrange * gap_g - grad_old
+                curvature = step_old @ hess @ step_old
+                if curvature > 0 and step_old @ dgrad > 1.0e-14:
+                    hess = (hess + np.outer(dgrad, dgrad) / (step_old @ dgrad)
+                            - np.outer(hess @ step_old, hess @ step_old) / curvature)
+            step, lagrange = opt.kkt_step(hess, mean_g, gap_g, c)
+            opt.lagrange = lagrange
+            length = np.linalg.norm(step)
+            if length > opt.trust:
+                step = step * (opt.trust / length)
+            previous = (step, mean_g + lagrange * gap_g)
+            coordinates = coordinates + step
+        self.assertLess(abs(self.curved_gap(coordinates)), 1.0e-9)
+        self.assertAlmostEqual(coordinates[0], X0, places=6)
+        self.assertAlmostEqual(coordinates[1], 0.0, places=6)
+
+    def test_sqp_needs_no_gap_sigma(self):
+        """The driver never reads the auglag penalty scale.
+
+        Checked on the parsed tree rather than the text, so the prose in the
+        docstring explaining that gap_sigma is not needed does not count.
+        """
+        import ast
+
+        source = (ROOT / "pyoqp/oqp/library/libscipy.py").read_text()
+        tree = ast.parse(source)
+        driver = next(node for node in tree.body
+                      if isinstance(node, ast.ClassDef)
+                      and node.name == "SQPMECPOpt")
+        for node in ast.walk(driver):
+            if isinstance(node, ast.Constant) and node.value == "gap_sigma":
+                self.fail("SQPMECPOpt reads gap_sigma")
+            if isinstance(node, ast.Attribute) and node.attr == "mu":
+                self.fail("SQPMECPOpt reads the auglag penalty parameter")
+
+
 class MECIObjectiveTest(unittest.TestCase):
     def make_meci(self):
         opt = object.__new__(libscipy.MECIOpt)
