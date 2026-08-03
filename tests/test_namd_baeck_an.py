@@ -810,6 +810,37 @@ basis_spelling_stable = (
     d_relative_basis._restart_signature()
     == d_absolute_basis._restart_signature())
 
+# Guess construction controls select the reference determinant at every
+# electronic step.  Both their effective settings and external file contents
+# therefore belong to the restart identity.
+guess_path = os.path.join(input_root, 'guess.json')
+with open(guess_path, 'w', encoding='utf-8') as stream:
+    stream.write('{"guess": 1}\n')
+
+def guess_signature(**settings):
+    mol = Mol(); mol.config = {
+        section: dict(values) for section, values in Mol.config.items()}
+    mol.config['guess'] = {
+        'type': 'huckel', 'file': '', 'file2': '', 'save_mol': False,
+        'continue_geom': False, 'swapmo': '',
+    }
+    mol.config['guess'].update(settings)
+    probe = NAMD.__new__(NAMD); probe.mol = mol; probe.nstate = 2
+    probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
+    return probe._restart_signature()
+
+guess_default_signature = guess_signature()
+guess_type_signature = guess_signature(type='hcore')
+guess_swap_signature = guess_signature(swapmo='1,2')
+guess_file_signature1 = guess_signature(type='json', file=guess_path)
+with open(guess_path, 'w', encoding='utf-8') as stream:
+    stream.write('{"guess": 2}\n')
+guess_file_signature2 = guess_signature(type='json', file=guess_path)
+guess_settings_bound = (
+    guess_default_signature != guess_type_signature
+    and guess_default_signature != guess_swap_signature
+    and guess_file_signature1 != guess_file_signature2)
+
 # Restart-manifest force-field rebasing must preserve the runtime's CWD-first
 # resolution when a different file with the same name exists in input_dir.
 forcefield_spec = parse_canonical_oqp(
@@ -1014,6 +1045,9 @@ input_collisions_rejected = all((
     input_collision(basis_path, config={
         'input': {'method': 'tdhf', 'basis': '6-31g*'},
         'scf': {'init_basis': 'file:custom-basis.json'}, 'qmmm': {}}),
+    input_collision(guess_path, config={
+        'input': {'method': 'tdhf'},
+        'guess': {'file': guess_path, 'file2': ''}, 'qmmm': {}}),
     input_collision(
         os.path.join(input_root, 'water.pdb'),
         qmmm={'pdb_file': 'water.pdb'}),
@@ -1175,6 +1209,7 @@ print('DENSE=' + json.dumps({
         'initial_basis_file_bound': initial_basis_file_bound,
         'basis_paths_rebased': basis_paths_rebased,
         'basis_spelling_stable': basis_spelling_stable,
+        'guess_settings_bound': guess_settings_bound,
         'runtime_forcefield_bound': runtime_forcefield_bound,
         'forcefield_rebase_runtime_precedence':
             forcefield_rebase_runtime_precedence,
@@ -1250,6 +1285,7 @@ print('DENSE=' + json.dumps({
         'target_basis_file_bound': True, 'initial_basis_file_bound': True,
         'basis_paths_rebased': True,
         'basis_spelling_stable': True,
+        'guess_settings_bound': True,
         'runtime_forcefield_bound': True,
         'forcefield_rebase_runtime_precedence': True,
         'forcefield_identity_stable': True,

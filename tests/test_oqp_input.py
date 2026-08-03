@@ -416,6 +416,27 @@ def test_harmless_whitespace_and_bare_calls_normalize_to_compact_input():
     )
 
 
+def test_file_basis_scheme_and_whitespace_round_trip_without_path_case_loss():
+    spaced = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp basis="FILE:My Basis.JSON" '
+        'geom="h2o.xyz" energy'
+    )
+    assert spaced.basis == 'file:My Basis.JSON'
+    rendered = oqp_input.render_canonical_oqp(spaced)
+    assert 'basis="file:My Basis.JSON"' in rendered
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert reparsed.basis == spaced.basis
+    assert oqp_input.lower_to_legacy(reparsed)["input"]["basis"] == (
+        'file:My Basis.JSON')
+
+    route = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/FiLe:Basis.JSON geom="h2o.xyz" energy'
+    )
+    assert route.basis == 'file:Basis.JSON'
+    assert oqp_input.parse_canonical_oqp(
+        oqp_input.render_canonical_oqp(route)).basis == route.basis
+
+
 def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses():
     spec, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() pcm nmr d4'

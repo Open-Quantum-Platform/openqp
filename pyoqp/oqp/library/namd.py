@@ -466,6 +466,13 @@ class NAMD:
             if path is not None:
                 inputs[name] = path
 
+        guess = getattr(self.mol, 'config', {}).get('guess', {})
+        for key in ('file', 'file2'):
+            value = str(guess.get(key, '') or '').strip()
+            if value:
+                inputs[f'guess_{key}'] = os.path.abspath(
+                    os.path.expanduser(value))
+
         velocity_file = self._resolved_velocity_file()
         if velocity_file is not None:
             inputs['velocity_file'] = velocity_file
@@ -1290,6 +1297,21 @@ class NAMD:
         }
 
     @staticmethod
+    def _external_file_identity(value):
+        """Fingerprint a runtime file whose contents influence a trajectory."""
+        if not isinstance(value, str) or not value.strip():
+            return value
+        path = os.path.realpath(os.path.abspath(
+            os.path.expanduser(value.strip())))
+        if not os.path.isfile(path):
+            return {'path': path}
+        digest = hashlib.sha256()
+        with open(path, 'rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return {'path': path, 'sha256': digest.hexdigest()}
+
+    @staticmethod
     def _espf_environment_identity():
         """Return effective ESPF environment controls that alter QM/MM forces."""
         def enabled(name):
@@ -1484,6 +1506,11 @@ class NAMD:
         if 'init_basis' in scf_settings:
             scf_settings['init_basis'] = self._basis_definition_identity(
                 scf_settings['init_basis'])
+        guess_settings = dict(cfg.get('guess', {}))
+        for key in ('file', 'file2'):
+            if key in guess_settings:
+                guess_settings[key] = self._external_file_identity(
+                    guess_settings[key])
         identity = {
             'molecule': self._molecular_identity(),
             'method': cfg['input'].get('method', ''),
@@ -1500,6 +1527,7 @@ class NAMD:
             'scf_settings': scf_settings,
             'scf_init_basis': self._basis_definition_identity(
                 cfg.get('scf', {}).get('init_basis', 'none')),
+            'guess_settings': guess_settings,
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'tdhf_settings': dict(cfg['tdhf']),
