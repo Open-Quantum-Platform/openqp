@@ -298,6 +298,7 @@ d2 = NAMD.__new__(NAMD)
 d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
+d2.nacme_audit_file = d.nacme_audit_file
 d2.odp = ODPUmbrella({
     "enabled": True, "cv": "distance(1,2)", "scale": [1.0],
     "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,
@@ -478,6 +479,23 @@ print("ODP_WHAM=" + json.dumps({
     assert values["effective_sample_size"] > 10000
     assert values["ensemble_warning"] is None
     assert values["metadata_converged"] is True
+    example_output = tmp_path / "wham-example.npz"
+    example_paths = sorted(tmp_path.glob("window-*.namd.trj"))
+    example = subprocess.run(
+        [
+            sys.executable, str(ROOT / "examples" / "ODP" / "odp_wham.py"),
+            "--temperature", "300", "--bins", "100",
+            "--output", str(example_output),
+            *(str(path) for path in example_paths),
+        ],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    assert example.returncode == 0, example.stdout + example.stderr
+    assert "WHAM converged" in example.stdout
+    with np.load(example_output, allow_pickle=False) as saved:
+        example_metadata = json.loads(str(saved["metadata_json"][0]))
+        assert example_metadata["converged"] is True
+        assert len(example_metadata["trajectory_sha256"]) == 5
     assert all(len(value) == 64 for value in values["metadata_hashes"])
     assert values["saved_centers"] == pytest.approx(
         [-1.2, -0.6, 0.0, 0.6, 1.2])

@@ -58,7 +58,7 @@ HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 2
+NAMD_RESTART_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_SCHEMA_VERSION = 3
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
@@ -91,6 +91,19 @@ def _validate_gate_tolerances(label, values):
     if not all(np.isfinite(value) and value >= 0.0 for value in values):
         raise ValueError(
             f"[md] {label} gate tolerances must be finite and non-negative")
+
+
+def _validate_distinct_output_paths(**paths):
+    """Reject NAMD outputs that would overwrite or corrupt one another."""
+    aliases = {}
+    for label, path in paths.items():
+        normalized = os.path.normcase(os.path.realpath(os.fspath(path)))
+        aliases.setdefault(normalized, []).append(label)
+    collisions = [labels for labels in aliases.values() if len(labels) > 1]
+    if collisions:
+        rendered = "; ".join(" = ".join(labels) for labels in collisions)
+        raise ValueError(
+            "[md] NAMD output paths must be distinct; collision: " + rendered)
 
 
 def _namd_trajectory_dtype(nstate, natom, ncv=0):
@@ -418,6 +431,13 @@ class NAMD:
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = os.path.join(
             os.path.dirname(os.path.abspath(self.mol.log)), 'restart.oqp')
+        _validate_distinct_output_paths(
+            log_file=self.mol.log,
+            trajectory_file=self.trajectory_file,
+            nacme_audit_file=self.nacme_audit_file,
+            restart_file=self.restart_file,
+            restart_manifest_file=self.restart_manifest_file,
+        )
         self.odp = odp_from_config(cfg)
         self._odp_last = None
         self._unbiased_potential_energy = np.nan
@@ -836,10 +856,10 @@ class NAMD:
             self._nacme_gate_failures += 1
         else:
             self._nacme_gate_failures = 0
-        if compared_pairs == 0:
-            verdict = 'not_evaluable'
-        elif invariant_failures or reference_failures:
+        if invariant_failures or reference_failures:
             verdict = 'fail'
+        elif compared_pairs == 0:
+            verdict = 'not_evaluable'
         else:
             verdict = 'pass'
 
@@ -1281,6 +1301,10 @@ class NAMD:
             'coef_imag': np.asarray(self.coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(self.prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
+            'nacme_audit_bytes': np.array([
+                os.path.getsize(self.nacme_audit_file)
+                if os.path.isfile(self.nacme_audit_file) else 0
+            ], dtype=np.int64),
             'odp_provenance': np.array([
                 json.dumps(self._odp_provenance(), sort_keys=True,
                            separators=(',', ':'))
@@ -1411,8 +1435,11 @@ class NAMD:
                 'coordinates': np.array(saved['coordinates'], copy=True),
                 'velocities': np.array(saved['velocities'], copy=True),
                 'acceleration': np.array(saved['acceleration'], copy=True),
+                'nacme_audit_bytes': int(saved['nacme_audit_bytes'][0]),
             }
         self._reconcile_trajectory_with_restart(result['step'])
+        self._reconcile_nacme_audit_with_restart(
+            result['step'], result['nacme_audit_bytes'])
         dump_log(
             self.mol,
             title=(f'NAMD restart loaded: step={result["step"]} '
@@ -1455,6 +1482,35 @@ class NAMD:
             )
         else:
             del records
+        self._io_barrier()
+
+    def _reconcile_nacme_audit_with_restart(self, checkpoint_step,
+                                            checkpoint_bytes):
+        """Restore the exact machine-readable audit prefix at a checkpoint."""
+        if not self._is_io_rank():
+            self._io_barrier()
+            return
+        checkpoint_bytes = int(checkpoint_bytes)
+        if checkpoint_bytes < 0:
+            raise ValueError('restart checkpoint has an invalid NACME audit size')
+        current_bytes = (
+            os.path.getsize(self.nacme_audit_file)
+            if os.path.isfile(self.nacme_audit_file) else 0
+        )
+        if current_bytes < checkpoint_bytes:
+            raise ValueError(
+                'NAMD restart NACME audit is missing committed checkpoint data')
+        if current_bytes > checkpoint_bytes:
+            with open(self.nacme_audit_file, 'r+b') as stream:
+                stream.truncate(checkpoint_bytes)
+                stream.flush()
+                os.fsync(stream.fileno())
+            dump_log(
+                self.mol,
+                title=(f'NAMD restart removed {current_bytes - checkpoint_bytes} '
+                       f'uncommitted NACME audit byte(s) after checkpoint step '
+                       f'{checkpoint_step}'),
+            )
         self._io_barrier()
 
     # ------------------------------------------------------------------ #

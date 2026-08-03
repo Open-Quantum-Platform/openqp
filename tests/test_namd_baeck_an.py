@@ -134,10 +134,22 @@ import os
 from types import SimpleNamespace
 import numpy as np
 import oqp.library.namd as namd_module
-from oqp.library.namd import NAMD, read_namd_trajectory
+from oqp.library.namd import (
+    NAMD, read_namd_trajectory, _validate_distinct_output_paths,
+)
 namd_module.dump_log = lambda *_args, **_kwargs: None
 
 root = os.environ['OQP_NAMD_TEST_ROOT']
+try:
+    _validate_distinct_output_paths(
+        trajectory_file=os.path.join(root, 'collision'),
+        nacme_audit_file=os.path.join(root, '.', 'collision'),
+    )
+except ValueError as error:
+    output_collision_rejected = 'must be distinct' in str(error)
+else:
+    output_collision_rejected = False
+
 class Mol:
     log = os.path.join(root, 'job.log')
     oqp_canonical_input = (
@@ -198,12 +210,21 @@ d.prev_data = {
 d._ba_energy_left = np.array([0.0, 0.2]); d._ba_energy_center = np.array([0.0, 0.1])
 d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
 d._nacme_gate_failures = 2; d._rng_step = 1
+d._write_nacme_audit_row({
+    'center_step': 0, 'source': 'baeck_an', 'verdict': 'pass',
+    'signed_comparison': False, 'compared_pairs': 1,
+})
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
+d._write_nacme_audit_row({
+    'center_step': 1, 'source': 'baeck_an', 'verdict': 'fail',
+    'signed_comparison': True, 'compared_pairs': 1,
+})
 
 d2 = NAMD.__new__(NAMD); d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 2; d2.restart_requested = True
 d2._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
+d2.nacme_audit_file = d.nacme_audit_file
 loaded = d2._load_restart()
 d3 = NAMD.__new__(NAMD); d3.mol = Mol(); d3.nstate = 2; d3.dt_fs = 0.5
 d3.seed = 1; d3.rng_stream = 2; d3.restart_requested = True
@@ -229,12 +250,9 @@ else:
     electronic_mismatch = False
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
-d._write_nacme_audit_row({
-    'center_step': 1, 'source': 'baeck_an', 'verdict': 'pass',
-    'signed_comparison': False, 'compared_pairs': 1,
-})
 with open(d.nacme_audit_file, encoding='utf-8') as stream:
-    audit_header, audit_row = [line.rstrip('\n').split('\t') for line in stream]
+    audit_lines = [line.rstrip('\n').split('\t') for line in stream]
+audit_header, audit_row = audit_lines
 audit = dict(zip(audit_header, audit_row))
 d.nacme_check = 'baeck_an'; d.dt = 1.0
 d._ba_energy_center = np.array([0.0, 0.1])
@@ -252,6 +270,14 @@ reseed_cleared = (
     and d._nacme_reference_mask is None
     and d._nacme_reference_source == 0
     and d._nacme_gate_failures == 0
+)
+d.nacme_gate = 'warn'; d.nacme_gate_invariant_tol = 1.0e-12
+d.nacme_gate_abs_tol = 1.0e-8; d.nacme_gate_rel_tol = 0.01
+d.nacme_gate_consecutive = 3
+invariant_without_pairs = d._run_nacme_gate(
+    np.array([[1.0e-3, 0.0], [0.0, 0.0]]),
+    np.zeros((2, 2)), reference_mask=np.zeros((2, 2), dtype=np.int32),
+    source='analytic', center_step=4, signed=True,
 )
 d.nve_gate = 'error'; d.nve_gate_consecutive = 1
 d._nve_reference_energy = -0.9; d._nve_previous_energy = -0.9
@@ -277,8 +303,11 @@ print('DENSE=' + json.dumps({
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
     'electronic_mismatch': electronic_mismatch,
+    'output_collision_rejected': output_collision_rejected,
     'reseed_cleared': reseed_cleared,
+    'audit_steps': [int(row[0]) for row in audit_lines[1:]],
     'audit_signed_comparison': audit['signed_comparison'],
+    'invariant_without_pairs': invariant_without_pairs['verdict'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
         'gate_failures': d2._nacme_gate_failures,
         'nve_failures': d2._nve_gate_failures,
@@ -315,6 +344,8 @@ print('DENSE=' + json.dumps({
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,
+        'output_collision_rejected': True, 'audit_steps': [0],
+        'invariant_without_pairs': 'fail',
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],
