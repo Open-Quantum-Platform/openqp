@@ -181,6 +181,10 @@ d.nve_gate = 'warn'; d.nve_gate_abs_tol = 0.005
 d.nve_gate_step_tol = 0.001; d.nve_gate_transition_tol = 1.0e-6
 d.nve_gate_consecutive = 3; d._nve_reference_energy = None
 d._nve_previous_energy = None; d._nve_gate_failures = 0; d._nve_gate_last = None
+d._droplet_energy = 0.02; d._droplet_max_penetration = 0.3
+d._droplet_active_count = 2; d._solute_com_energy = 0.004
+d._solute_com_displacement = 0.15; d._conservative_restraint_energy = 0.024
+d._thermostat_exchange = 0.001; d._thermostat_exchange_cumulative = 0.003
 d._update_nve_gate(0, -1.0, 0.1)
 d._update_nve_gate(1, -1.0, 0.1)
 d._write_md_trajectory(1, np.zeros((3, 3)), -1.0, 0.1, False)
@@ -223,6 +227,13 @@ print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(), 'nstate': header['nstate'],
     'natom': header['natom'], 'restart': 'restart=true' in manifest,
+    'controls': sorted(header['independent_controls']),
+    'droplet_energy': records['droplet_energy_hartree'].tolist(),
+    'droplet_penetration': records['droplet_max_penetration_bohr'].tolist(),
+    'droplet_count': records['droplet_active_count'].tolist(),
+    'thermostat_exchange': records['thermostat_exchange_hartree'].tolist(),
+    'loaded_droplet': d2._droplet_energy,
+    'loaded_thermostat_cumulative': d2._thermostat_exchange_cumulative,
     'checkpoint': 'restart_file="job.namd.restart.npz"' in manifest,
     'loaded_step': loaded['step'],
     'phase_history': d2.mol.loaded['OQP::state_tracking_phase_initial'].tolist(),
@@ -258,6 +269,10 @@ print('DENSE=' + json.dumps({
         'shape': [1], 'steps': [1],
         'phase': [[1.0, -1.0]],
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
+        'controls': ['droplet', 'solute_com', 'thermostat'],
+        'droplet_energy': [0.02], 'droplet_penetration': [0.3],
+        'droplet_count': [2], 'thermostat_exchange': [0.001],
+        'loaded_droplet': 0.02, 'loaded_thermostat_cumulative': 0.003,
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,

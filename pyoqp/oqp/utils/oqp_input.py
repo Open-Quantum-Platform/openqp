@@ -233,7 +233,8 @@ BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 SECTION_NAMES = {
     "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
-    "oqp", "neb", "hess", "nac", "md", "qmmm", "json", "tests",
+    "oqp", "neb", "hess", "nac", "md", "qmmm", "droplet",
+    "solute_com", "json", "tests",
 }
 
 
@@ -256,6 +257,11 @@ GENERIC_SCHEMA_KEYS = {
         trajectory_format trajectory_file log_file report_interval energy_file
         qm_atoms_xyz qm_list frontier_scheme
     """),
+    "droplet": _keys("""
+        enabled center radius buffer force_constant target atoms water_resnames
+        max_penetration
+    """),
+    "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
@@ -339,7 +345,8 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
         nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
         nve_gate_consecutive
         trajectory_interval restart_interval trajectory_file nacme_audit_file
-        restart_file restart soc soc_basis
+        restart_file restart ensemble thermostat thermostat_temperature
+        thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
         dt_adaptive dt_min dx_max
     """),
@@ -537,6 +544,8 @@ DRIVER_OPTIONS = {
         "nve_gate_transition_tol", "nve_gate_consecutive",
         "trajectory_interval", "restart_interval", "trajectory_file",
         "nacme_audit_file", "restart_file", "restart", "soc", "soc_basis",
+        "ensemble", "thermostat", "thermostat_temperature",
+        "thermostat_friction",
         "soc_du_dt_corr", "soc_tdc_grad_corr", "grad_wthr", "init_state",
         "econs", "dt_adaptive", "dt_min", "dx_max",
     },
@@ -1546,6 +1555,16 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     qmmm_section = next(
         (call for call in spec.modifiers if call.name == "qmmm"), None
     )
+    for independent_control in ("droplet", "solute_com"):
+        control = next(
+            (call for call in spec.modifiers if call.name == independent_control),
+            None,
+        )
+        if control is not None and driver.name != "namd":
+            raise OQPInputError(
+                "%s(...) is currently connected only to namd(...)" %
+                independent_control
+            )
     input_section = next(
         (call for call in spec.modifiers if call.name == "input"), None
     )
