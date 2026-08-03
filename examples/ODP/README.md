@@ -14,3 +14,13 @@ The supplied temperature is the canonical temperature assumed by WHAM. The
 current ODP production path is NVE, so users must decide whether their ensemble
 preparation and sampling justify that analysis; OpenQP records this distinction
 and emits a warning for non-NVT trajectory metadata.
+
+To exercise checkpoint continuation end to end, run:
+
+```console
+python odp_restart.py --workdir odp-restart-smoke
+```
+
+The example performs one native ODP step, extends the generated canonical
+`restart=true` manifest to step two, runs that manifest, and verifies the final
+checkpoint. Omit `--workdir` for an automatically removed temporary run.

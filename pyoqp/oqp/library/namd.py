@@ -140,17 +140,35 @@ def _validate_nacme_gate_activation(check, gate):
             "nacme_check=baeck_an before selecting warn or error")
 
 
-def _validate_distinct_output_paths(**paths):
-    """Reject NAMD outputs that would overwrite or corrupt one another."""
-    aliases = {}
-    for label, path in paths.items():
-        normalized = os.path.normcase(os.path.realpath(os.fspath(path)))
-        aliases.setdefault(normalized, []).append(label)
-    collisions = [labels for labels in aliases.values() if len(labels) > 1]
+def _validate_distinct_output_paths(*, protected_paths=(), **paths):
+    """Reject NAMD outputs that overwrite one another or an input deck."""
+    def aliases(first, second):
+        first = os.fspath(first)
+        second = os.fspath(second)
+        if (os.path.normcase(os.path.realpath(first))
+                == os.path.normcase(os.path.realpath(second))):
+            return True
+        try:
+            return os.path.samefile(first, second)
+        except (FileNotFoundError, OSError):
+            return False
+
+    outputs = list(paths.items())
+    collisions = []
+    for index, (left_label, left_path) in enumerate(outputs):
+        for right_label, right_path in outputs[index + 1:]:
+            if aliases(left_path, right_path):
+                collisions.append((left_label, right_label))
     if collisions:
         rendered = "; ".join(" = ".join(labels) for labels in collisions)
         raise ValueError(
             "[md] NAMD output paths must be distinct; collision: " + rendered)
+
+    protected = [path for path in protected_paths if path]
+    for label, output_path in outputs:
+        if any(aliases(output_path, input_path) for input_path in protected):
+            raise ValueError(
+                f"[md] NAMD output {label} must not alias the input deck")
 
 
 def _restart_manifest_path(log_path):
@@ -519,6 +537,11 @@ class NAMD:
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = _restart_manifest_path(self.mol.log)
         _validate_distinct_output_paths(
+            protected_paths=(
+                getattr(self.mol, 'input_file', None),
+                getattr(self.mol, 'oqp_input_source', None),
+                getattr(self.mol, 'oqp_resolved_input', None),
+            ),
             log_file=self.mol.log,
             trajectory_file=self.trajectory_file,
             nacme_audit_file=self.nacme_audit_file,

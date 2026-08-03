@@ -150,6 +150,27 @@ except ValueError as error:
     output_collision_rejected = 'must be distinct' in str(error)
 else:
     output_collision_rejected = False
+try:
+    _validate_distinct_output_paths(
+        protected_paths=(os.path.join(root, 'request.oqp'),),
+        trajectory_file=os.path.join(root, '.', 'request.oqp'),
+    )
+except ValueError as error:
+    input_alias_rejected = 'must not alias the input deck' in str(error)
+else:
+    input_alias_rejected = False
+input_deck = os.path.join(root, 'hardlink-input.oqp')
+hardlink_output = os.path.join(root, 'hardlink-trajectory.namd.trj')
+with open(input_deck, 'w', encoding='utf-8') as stream:
+    stream.write('test input')
+os.link(input_deck, hardlink_output)
+try:
+    _validate_distinct_output_paths(
+        protected_paths=(input_deck,), trajectory_file=hardlink_output)
+except ValueError as error:
+    input_hardlink_alias_rejected = 'must not alias the input deck' in str(error)
+else:
+    input_hardlink_alias_rejected = False
 inactive_gate_rejected = []
 for policy in ('warn', 'error'):
     try:
@@ -430,6 +451,8 @@ print('DENSE=' + json.dumps({
     'gate_mismatch': gate_mismatch,
     'missing_trajectory_rejected': missing_trajectory_rejected,
     'output_collision_rejected': output_collision_rejected,
+    'input_alias_rejected': input_alias_rejected,
+    'input_hardlink_alias_rejected': input_hardlink_alias_rejected,
     'inactive_gate_rejected': inactive_gate_rejected,
     'reseed_cleared': reseed_cleared,
     'audit_steps': [int(row[0]) for row in audit_lines[1:]],
@@ -494,6 +517,8 @@ print('DENSE=' + json.dumps({
         'gate_mismatch': True,
         'missing_trajectory_rejected': True,
         'output_collision_rejected': True,
+        'input_alias_rejected': True,
+        'input_hardlink_alias_rejected': True,
         'inactive_gate_rejected': [True, True], 'audit_steps': [0],
         'invariant_without_pairs': 'fail',
         'nve_failures': 0, 'nve_verdict': [1],

@@ -323,7 +323,9 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     window bias only at histogram-bin centres.  This preserves optional
     perpendicular-restraint reweighting.  ``temperature_kelvin`` is mandatory:
     an NVE trajectory's initial velocity temperature is never silently treated
-    as a canonical thermostat temperature.
+    as a canonical thermostat temperature.  Continuation files for one window
+    are concatenated in caller-supplied order before ``discard`` and ``stride``
+    are applied.
     """
     from oqp.library.namd import read_odp_wham_series
 
@@ -373,6 +375,7 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
     system_identity = None
     ensembles = []
     window_definitions = {}
+    window_segments = {}
     for path in paths:
         series = read_odp_wham_series(path)
         snapshot_bytes = int(series['snapshot_bytes'])
@@ -408,15 +411,12 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         if window in window_definitions and window_definitions[window] != definition:
             raise ValueError(f"ODP WHAM window {window} has conflicting bias definitions")
         window_definitions[window] = definition
-        selection = slice(discard, None, stride)
-        xi = np.asarray(series["xi"][selection], dtype=np.float64)
+        xi = np.asarray(series["xi"], dtype=np.float64)
         perpendicular_norm = np.asarray(
-            series["perpendicular_norm"][selection], dtype=np.float64)
+            series["perpendicular_norm"], dtype=np.float64)
         recorded_bias = np.asarray(
-            series["bias_hartree"][selection], dtype=np.float64)
-        steps = np.asarray(series["step"][selection], dtype=np.int64)
-        if xi.size == 0:
-            raise ValueError(f"ODP WHAM trajectory {path!r} has no selected samples")
+            series["bias_hartree"], dtype=np.float64)
+        steps = np.asarray(series["step"], dtype=np.int64)
         if not (np.all(np.isfinite(xi))
                 and np.all(np.isfinite(perpendicular_norm))
                 and np.all(np.isfinite(recorded_bias))):
@@ -430,15 +430,33 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
                 f"ODP WHAM trajectory {path!r} bias records disagree with provenance"
             )
         ensembles.append(series.get("ensemble"))
-        loaded.append((path, window, xi, perpendicular_norm, steps))
+        window_segments.setdefault(window, []).append(
+            (xi, perpendicular_norm, steps))
+
+    # A restarted window may be represented by more than one packed file.
+    # Concatenate those segments in the caller-supplied order, then apply the
+    # equilibration discard and sampling stride once to the complete window.
+    # Applying them to each file separately changes the stride phase at every
+    # continuation boundary and discards equilibration more than once.
+    selection = slice(discard, None, stride)
+    for window in sorted(window_segments):
+        segments = window_segments[window]
+        xi = np.concatenate([segment[0] for segment in segments])[selection]
+        perpendicular_norm = np.concatenate(
+            [segment[1] for segment in segments])[selection]
+        steps = np.concatenate([segment[2] for segment in segments])[selection]
+        if xi.size == 0:
+            raise ValueError(
+                f"ODP WHAM window {window} has no selected samples")
+        loaded.append((window, xi, perpendicular_norm, steps))
 
     windows = np.asarray(sorted(window_definitions), dtype=np.int64)
     window_lookup = {window: index for index, window in enumerate(windows)}
-    xi = np.concatenate([entry[2] for entry in loaded])
-    perpendicular_norm = np.concatenate([entry[3] for entry in loaded])
-    sample_steps = np.concatenate([entry[4] for entry in loaded])
+    xi = np.concatenate([entry[1] for entry in loaded])
+    perpendicular_norm = np.concatenate([entry[2] for entry in loaded])
+    sample_steps = np.concatenate([entry[3] for entry in loaded])
     sample_window = np.concatenate([
-        np.full(entry[2].size, entry[1], dtype=np.int64) for entry in loaded
+        np.full(entry[1].size, entry[0], dtype=np.int64) for entry in loaded
     ])
     origins = np.asarray(
         [window_lookup[int(window)] for window in sample_window], dtype=np.int64)
@@ -508,6 +526,9 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         if (edges.size < 3 or not np.all(np.isfinite(edges))
                 or np.any(np.diff(edges) <= 0.0)):
             raise ValueError("ODP WHAM bin edges must be finite and strictly increasing")
+        if edges[0] > np.min(xi) or edges[-1] < np.max(xi):
+            raise ValueError(
+                "ODP WHAM bin edges must cover every selected xi sample")
     probability, _ = np.histogram(xi, bins=edges, weights=weights)
     widths = np.diff(edges)
     density = probability/widths

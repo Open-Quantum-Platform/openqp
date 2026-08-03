@@ -461,6 +461,33 @@ for window, center in enumerate(centers):
 
 output = os.path.join(root, "wham.npz")
 result = odp_wham(paths, temperature, bins=100, tolerance=1.0e-11, output=output)
+with open(paths[0], "rb") as stream:
+    segment_magic = stream.read(8)
+    segment_header_size = struct.unpack("<Q", stream.read(8))[0]
+    segment_header = stream.read(segment_header_size)
+    segment_payload = stream.read()
+segment_paths = []
+segment_record_count = 6000
+for name, payload in (
+    ("segment-a.namd.trj", segment_payload[:segment_record_count*dtype.itemsize]),
+    ("segment-b.namd.trj", segment_payload[segment_record_count*dtype.itemsize:]),
+):
+    segment_path = os.path.join(root, name)
+    with open(segment_path, "wb") as stream:
+        stream.write(segment_magic)
+        stream.write(struct.pack("<Q", segment_header_size))
+        stream.write(segment_header)
+        stream.write(payload)
+    segment_paths.append(segment_path)
+segment_result = odp_wham(
+    segment_paths, temperature, bins=100, discard=100, stride=3)
+segment_steps = segment_result["sample_step"]
+try:
+    odp_wham([paths[0]], temperature, bins=[-0.1, 0.0, 0.1])
+except ValueError as error:
+    incomplete_bins_rejected = "cover every selected" in str(error)
+else:
+    incomplete_bins_rejected = False
 extension_input = os.path.join(root, "extension-window.npz")
 shutil.copyfile(paths[0], extension_input)
 try:
@@ -613,6 +640,11 @@ print("ODP_WHAM=" + json.dumps({
     "race_sample_count": int(race_result["sample_xi"].size),
     "race_final_bytes": os.path.getsize(race_path),
     "system_identity": result["system_identity"],
+    "segment_sample_count": int(segment_steps.size),
+    "segment_first_step": int(segment_steps[0]),
+    "segment_first_step_after_boundary": int(
+        segment_steps[np.searchsorted(segment_steps, segment_record_count)]),
+    "incomplete_bins_rejected": incomplete_bins_rejected,
 }))
 '''
     env = os.environ.copy()
@@ -678,3 +710,30 @@ print("ODP_WHAM=" + json.dumps({
     assert values["race_snapshot_hash"] == [values["race_expected_hash"]]
     assert values["race_sample_count"] == 12000
     assert values["system_identity"]["system"]["sha256"] == "system-a"
+    assert values["segment_sample_count"] == len(range(100, 12000, 3))
+    assert values["segment_first_step"] == 100
+    assert values["segment_first_step_after_boundary"] == 6001
+    assert values["incomplete_bins_rejected"] is True
+
+
+def test_odp_restart_example_runs_generated_manifest(tmp_path):
+    env = os.environ.copy()
+    pythonpath = str(ROOT / "pyoqp")
+    if env.get("PYTHONPATH"):
+        pythonpath += os.pathsep + env["PYTHONPATH"]
+    env["PYTHONPATH"] = pythonpath
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "examples" / "ODP" / "odp_restart.py"),
+            "--workdir", str(tmp_path),
+        ],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if "cannot load" in result.stderr or "No module named" in result.stderr:
+            pytest.skip("compiled OpenQP runtime is not available")
+        pytest.fail(result.stdout + result.stderr)
+    assert "ODP restart completed through step 2" in result.stdout
+    assert (tmp_path / "odp-restart.namd.restart.npz").is_file()
+    assert (tmp_path / "odp-restart.namd.trj").is_file()
