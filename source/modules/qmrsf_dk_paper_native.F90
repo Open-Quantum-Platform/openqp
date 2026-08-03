@@ -29,7 +29,7 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A
     use qmrsf_ao2mo_mod, only: qmrsf_active_integrals
     use eigen, only: diag_symm_full
-    use oqp_linalg, only: dgemm
+    use oqp_linalg
 
     type(information), target, intent(inout) :: infos
 
@@ -45,19 +45,21 @@ contains
     real(dp) :: asing(NSING,NSING), atrip(NTRIP,NTRIP), aquint(1,1)
     real(dp) :: esing(NSING), etrip(NTRIP), equint(1)
     real(dp) :: ecore, c_h, c_ref, orth_err, cross_err, vxc_max
+    real(dp) :: eref, thresh, aquint_diag, qvec(1,1)
+    character(len=8) :: csf_label(NDET)
     integer :: dets(4,NDET), act(NACT)
     integer :: nbf, ncore, i, j, ierr
     logical :: is_dft
 
     open(unit=iw, file=infos%log_filename, position='append')
-    call print_module_info('QMRSF_DK_NATIVE', &
-         'Paper spin-adapted QMRSF-DK from OpenQP orbitals, Fock, v_xc, and ERIs')
+    call print_module_info('QMRSF-DK', &
+         'Quintet-reference MRSF-TDDFT with a dressed exchange-correlation kernel')
 
     nbf = int(infos%basis%nbf)
     ncore = int(infos%mol_prop%nelec_B)
     if (int(infos%mol_prop%nelec_A) - ncore /= NACT) then
-      write(iw,'(/,5x,a)') 'QMRSF-DK native requires a high-spin quintet reference '// &
-           '(N_alpha-N_beta=4).'
+      write(iw,'(/,5x,a)') 'QMRSF-DK requires a high-spin quintet reference '// &
+           '(N_alpha - N_beta = 4).'
       call flush(iw)
       close(iw)
       return
@@ -103,7 +105,7 @@ contains
     call native_build_h(dets,h1k,gk,hkdet)
     hdet = hdet - (1.0_dp-c_h)*hkdet
     call native_add_vxc_diag(dets,va_act,vb_act,hdet)
-    call native_build_ucsf(dets,ucsf,orth_err)
+    call native_build_ucsf(dets,ucsf,orth_err,csf_label)
     call dgemm('N','T',NDET,NDET,NDET,1.0_dp,hdet,NDET,ucsf,NDET, &
                0.0_dp,work36,NDET)
     call dgemm('N','N',NDET,NDET,NDET,1.0_dp,ucsf,NDET,work36,NDET, &
@@ -126,44 +128,58 @@ contains
     aquint = hcsf(NDET:NDET,NDET:NDET)
     call diag_symm_full(0,NSING,asing,NSING,esing,ierr)
     if (ierr /= 0) then
-      write(iw,'(5x,a,i0)') 'QMRSF-DK native singlet diagonalization failed, info=',ierr
+      write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the singlet manifold failed, info = ',ierr
       close(iw)
       return
     end if
     call diag_symm_full(0,NTRIP,atrip,NTRIP,etrip,ierr)
     if (ierr /= 0) then
-      write(iw,'(5x,a,i0)') 'QMRSF-DK native triplet diagonalization failed, info=',ierr
+      write(iw,'(5x,a,i0)') 'QMRSF-DK: diagonalization of the triplet manifold failed, info = ',ierr
       close(iw)
       return
     end if
     equint(1) = aquint(1,1)
+    aquint_diag = aquint(1,1)
+    qvec(1,1) = 1.0_dp
 
     vxc_max = max(maxval(abs(va_act)),maxval(abs(vb_act)))
-    write(iw,'(/,5x,a)') '================ QMRSF-DK native paper matrix ================'
-    write(iw,'(5x,a,i0)')       'basis functions                 = ',nbf
-    write(iw,'(5x,a,i0)')       'inactive doubly occupied MOs    = ',ncore
-    write(iw,'(5x,a,4(i0,1x))') 'active SOMO indices             = ',act
-    write(iw,'(5x,a,f10.6)')    'reference exact exchange c_ref  = ',c_ref
-    write(iw,'(5x,a,f10.6)')    'response exact exchange c_H     = ',c_h
-    write(iw,'(5x,a,es12.4)')   'hard-coded U orthonormal error  = ',orth_err
-    write(iw,'(5x,a,es12.4)')   'discarded cross-spin block max = ',cross_err
-    write(iw,'(5x,a,es12.4)')   'max active spin v_xc            = ',vxc_max
+    write(iw,'(/,5x,a)') 'QMRSF-DK response space'
+    write(iw,'(5x,a)')   '-----------------------'
+    write(iw,'(5x,a)')   'The four singly occupied orbitals of the quintet reference span a'
+    write(iw,'(5x,a)')   'CAS(4,4).  Its 36 M_s = 0 determinants are spin adapted into 20'
+    write(iw,'(5x,a)')   'singlet, 15 triplet and 1 quintet configuration state functions,'
+    write(iw,'(5x,a)')   'which are reported below as three separate manifolds.'
+    write(iw,'(/,5x,a,i0)')     'Basis functions                        = ',nbf
+    write(iw,'(5x,a,i0)')       'Doubly occupied (inactive) orbitals    = ',ncore
+    write(iw,'(5x,a,4(i0,1x))') 'Active (singly occupied) orbitals      = ',act
+    write(iw,'(5x,a,f10.6)')    'Exact exchange in the reference        = ',c_ref
+    write(iw,'(5x,a,f10.6)')    'Exact exchange in the dressed kernel   = ',c_h
+    write(iw,'(/,5x,a)')        'Numerical checks'
+    write(iw,'(5x,a,es12.4)')   'Spin-adaptation orthonormality error   = ',orth_err
+    write(iw,'(5x,a,es12.4)')   'Largest neglected inter-multiplicity coupling = ',cross_err
+    write(iw,'(5x,a,es12.4)')   'Largest active-space v_xc element      = ',vxc_max
+    write(iw,'(/,5x,a)')        'Spin-resolved v_xc on the active orbitals (Hartree)'
+    write(iw,'(7x,a)')          'orbital        alpha             beta'
     do i = 1, NACT
-      write(iw,'(5x,a,i0,a,2f16.10)') 'active v_xc diagonal, orbital ',i, &
-           ' (alpha,beta) = ',va_act(i,i),vb_act(i,i)
+      write(iw,'(9x,i0,4x,2f16.10)') act(i),va_act(i,i),vb_act(i,i)
     end do
-    write(iw,'(5x,a)') 'Energy law: E_I = E_ROKS(quintet) + lambda_I - A_quintet'
-    write(iw,'(/,5x,a)') 'Lowest singlet excitation energies relative to S0 (eV):'
-    do i = 1, min(10,NSING)
-      write(iw,'(7x,a,i2,a,f12.6)') 'S',i-1,'  ',(esing(i)-esing(1))*27.211386245988_dp
-    end do
-    write(iw,'(/,5x,a)') 'Lowest triplet energies relative to singlet S0 (eV):'
-    do i = 1, min(6,NTRIP)
-      write(iw,'(7x,a,i2,a,f12.6)') 'T',i-1,'  ',(etrip(i)-esing(1))*27.211386245988_dp
-    end do
+    write(iw,'(/,5x,a)') 'State energies are obtained as'
+    write(iw,'(5x,a)')   '   E(state) = E_SCF(quintet reference) + omega(state),'
+    write(iw,'(5x,a)')   'where omega is the response eigenvalue measured from the quintet'
+    write(iw,'(5x,a)')   'configuration state function.'
+
+    eref = infos%mol_energy%energy - aquint_diag
+    thresh = infos%control%conf_print_threshold
+
+    call native_print_block(infos, 'singlet', 'S', 0.0_dp, NSING, esing, asing, &
+                            csf_label(1:NSING), eref, esing(1), thresh)
+    call native_print_block(infos, 'triplet', 'T', 2.0_dp, NTRIP, etrip, atrip, &
+                            csf_label(NSING+1:NSING+NTRIP), eref, esing(1), thresh)
+    call native_print_block(infos, 'quintet', 'Q', 6.0_dp, 1, equint, qvec, &
+                            csf_label(NDET:NDET), eref, esing(1), thresh)
 
     call native_write_dump(c_h,c_ref,equint(1),esing,etrip,orth_err,cross_err)
-    write(iw,'(/,5x,a)') 'QMRSF-DK native results written to qmrsf_dk_full_live.dat.'
+    write(iw,'(/,5x,a)') 'Machine-readable QMRSF-DK results written to qmrsf_dk_full_live.dat'
 
     deallocate(h_act,eri_act,cact)
     call flush(iw)
@@ -176,7 +192,7 @@ contains
     use dft, only: dft_initialize, dftclean, dftexcor
     use mod_dft_molgrid, only: dft_grid_t
     use mathlib, only: unpack_matrix
-    use oqp_linalg, only: dgemm
+    use oqp_linalg
     type(information), target, intent(inout) :: infos
     real(dp), intent(in) :: mo(:,:), cact(:,:)
     real(dp), intent(out) :: va(NACT,NACT), vb(NACT,NACT)
@@ -392,9 +408,11 @@ contains
   end function native_fermi_phase
 
 
-  subroutine native_build_ucsf(dets,u,orth_err)
+  subroutine native_build_ucsf(dets,u,orth_err,label)
     integer, intent(in) :: dets(4,NDET)
     real(dp), intent(out) :: u(NDET,NDET),orth_err
+    character(len=8), intent(out), optional :: label(NDET)
+    character(len=8) :: lbl(NDET)
     character(len=4) :: cfg(NDET),sw,fo_cfg(6)
     logical :: seen(NDET)
     integer :: phase(NDET),i,j,p,rs,rt,k,fo(6)
@@ -407,9 +425,11 @@ contains
       phase(i)=native_fermi_phase(cfg(i))
     end do
 
+    lbl=' '
     do i=1,NDET
       if (native_os_class(cfg(i))==0) then
         rs=rs+1; u(rs,i)=real(phase(i),dp)
+        lbl(rs)=cfg(i)
       end if
     end do
 
@@ -430,9 +450,11 @@ contains
       rs=rs+1
       u(rs,i)= real(phase(i),dp)/sq2
       u(rs,j)=-real(phase(j),dp)/sq2
+      lbl(rs)=native_open_label(cfg(i))
       rt=rt+1
       u(rt,i)=real(phase(i),dp)/sq2
       u(rt,j)=real(phase(j),dp)/sq2
+      lbl(rt)=native_open_label(cfg(i))
     end do
 
     fo_cfg=(/'uudd','udud','uddu','duud','dudu','dduu'/)
@@ -453,12 +475,15 @@ contains
     do k=1,2
       rs=rs+1
       do i=1,6; u(rs,fo(i))=c4(i,k)*real(phase(fo(i)),dp); end do
+      write(lbl(rs),'(a,i1,a)') 'ssss[S',k,']'
     end do
     do k=3,5
       rt=rt+1
       do i=1,6; u(rt,fo(i))=c4(i,k)*real(phase(fo(i)),dp); end do
+      write(lbl(rt),'(a,i1,a)') 'ssss[T',k-2,']'
     end do
     do i=1,6; u(NDET,fo(i))=c4(i,6)*real(phase(fo(i)),dp); end do
+    lbl(NDET)='ssss[Q]'
 
     if (rs/=NSING .or. rt/=NSING+NTRIP) &
       error stop 'QMRSF-DK native: incorrect spin-adapted block dimensions'
@@ -466,7 +491,91 @@ contains
                0.0_dp,gram,NDET)
     do i=1,NDET; gram(i,i)=gram(i,i)-1.0_dp; end do
     orth_err=maxval(abs(gram))
+    if (present(label)) label=lbl
   end subroutine native_build_ucsf
+
+
+!> @brief Print one spin manifold of the QMRSF-DK spectrum.
+!> @detail A single quintet reference yields the singlet, triplet and quintet
+!>         manifolds of the CAS(4,4) at once.  Each manifold is reported with
+!>         the same layout as the TD-DFT summary: total energies, excitation
+!>         energies measured from the QMRSF-DK ground state, and the leading
+!>         spin-adapted configurations of every root.
+!> @param[in]  infos      calculation metadata
+!> @param[in]  manifold   name of the spin manifold
+!> @param[in]  tag        one-letter state tag (S, T or Q)
+!> @param[in]  ssq        exact <S^2> of the manifold
+!> @param[in]  nstates    number of roots in the manifold
+!> @param[in]  eig        response eigenvalues of the manifold
+!> @param[in]  vec        eigenvectors, one column per root
+!> @param[in]  label      configuration label of every basis CSF
+!> @param[in]  eref       E_ROKS(quintet) - A_quintet, the energy-law offset
+!> @param[in]  e0         lowest singlet eigenvalue, the zero of excitation
+!> @param[in]  thresh     print threshold on the configuration coefficients
+  subroutine native_print_block(infos, manifold, tag, ssq, nstates, eig, vec, &
+                                label, eref, e0, thresh)
+    use types, only: information
+    use io_constants, only: iw
+    use physical_constants, only: UNITS_EV
+
+    type(information), intent(in) :: infos
+    character(len=*), intent(in) :: manifold, tag
+    real(dp), intent(in) :: ssq, eref, e0, thresh
+    integer, intent(in) :: nstates
+    real(dp), intent(in) :: eig(:), vec(:,:)
+    character(len=8), intent(in) :: label(:)
+
+    integer :: istate, icsf
+    real(dp) :: etot, dele, coeff, weight
+
+    write(iw,'(/,1x,78("^"))')
+    write(iw,'(/,8x,3a,/)') 'Summary of the QMRSF-DK ', manifold, ' manifold'
+    write(iw,'(A12,A20,A16,A12)') 'State', 'E(Hartree)', 'dE(eV)', '<S^2>'
+
+    do istate = 1, nstates
+      etot = eref + eig(istate)
+      dele = (eig(istate) - e0)/UNITS_EV
+      write(iw,'(3X,A,G0,t13,F20.10,F16.6,F12.4)') tag, istate-1, etot, dele, ssq
+    end do
+
+    write(iw,'(/,8x,3a,/)') 'Leading configurations of the ', manifold, ' states'
+
+    do istate = 1, nstates
+      dele = (eig(istate) - e0)/UNITS_EV
+      write(iw,'(/,1x,"State ",a,i0,2x,"Energy =",f12.6,1x,"eV")') trim(tag), istate-1, dele
+      write(iw,'(15x,"<S^2> =",1x,f9.4)') ssq
+      write(iw,'(8x,"CSF",4x,"Coeff",5x,"Weight(%)",4x,"Configuration")')
+      write(iw,'(8x,3("-"),2x,9("-"),2x,9("-"),4x,13("-"))')
+      do icsf = 1, nstates
+        coeff = vec(icsf,istate)
+        if (abs(coeff) <= thresh) cycle
+        weight = 100.0_dp*coeff*coeff
+        write(iw,'(7x,i4,1x,f9.6,2x,f9.2,6x,a)') icsf, coeff, weight, trim(label(icsf))
+      end do
+    end do
+
+    write(iw,'(1x,78("=")/)')
+
+  end subroutine native_print_block
+
+
+!> @brief Occupation label of an open-shell configuration state function.
+!> @detail Singly occupied orbitals are singlet- or triplet-coupled in pairs,
+!>         so the individual alpha/beta labels carry no meaning; both are
+!>         printed as 's', in the notation used for the CAS(4,4) manifold.
+  pure function native_open_label(cfg) result(lbl)
+    character(len=4), intent(in) :: cfg
+    character(len=8) :: lbl
+    integer :: p
+    lbl=' '
+    do p=1,NACT
+      if (cfg(p:p)=='u' .or. cfg(p:p)=='d') then
+        lbl(p:p)='s'
+      else
+        lbl(p:p)=cfg(p:p)
+      end if
+    end do
+  end function native_open_label
 
 
   subroutine native_write_dump(c_h,c_ref,aq,es,et,orth_err,cross_err)

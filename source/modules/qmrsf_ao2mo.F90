@@ -54,7 +54,8 @@ contains
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_Hcore
     use int2_compute, only: int2_compute_t, int2_rhf_data_t
     use mathlib, only: unpack_matrix
-    use oqp_linalg, only: dgemm, ddot
+    use oqp_linalg
+    real(dp), external :: ddot
 
     type(information), target, intent(inout) :: infos
     integer, intent(in)  :: nact, ncore

@@ -324,7 +324,7 @@ def parse_qmrsf_dk_dump(path):
 
 
 def _parse_qmrsf_dk_native(lines, path):
-    """Parse the compact dump written by the OpenQP-native paper builder."""
+    """Parse the compact results dump written by the QMRSF-DK module."""
     header = lines[0].split()
     if len(header) != 5:
         raise ValueError('Malformed native QMRSF-DK header in %s: %r' % (path, lines[0]))
@@ -600,23 +600,23 @@ def _format_qmrsf_dk_native_log_table(results, max_states=10):
     n_show = min(max_states, len(states))
     diag = results.get('diagnostics', {})
     header = [
-        'QMRSF-DK results (OpenQP-native paper matrix)',
-        'reference quintet energy = %18.10f Hartree' % results['reference_energy'],
-        'active exchange c_H = %.6f   reference exchange c_ref = %.6f'
+        'QMRSF-DK results',
+        'quintet reference energy = %18.10f Hartree' % results['reference_energy'],
+        'exact exchange: dressed kernel c_H = %.6f, reference c_ref = %.6f'
         % (results['c_H'], results['c_ref']),
-        'spin-adapted roots: %d singlets, %d triplets, %d quintet'
+        'spin-adapted manifolds: %d singlets, %d triplets, %d quintet'
         % (results['n_singlets'], results['n_triplets'], results['n_quintets']),
         '',
     ]
     col = '%5s %5s %18s %14s'
-    table = [col % ('state', '2S+1', 'E_DK(Eh)', 'exc-DK(eV)'), '-' * 48]
+    table = [col % ('state', '2S+1', 'E(Hartree)', 'dE(eV)'), '-' * 48]
     row = '%5d %5d %18.10f %14.4f'
     for state in states[:n_show]:
         table.append(row % (state['index'], state['mult'], state['E_DK'],
                             state['exc_DK_eV']))
     footer = [
         '',
-        'CSF diagnostics: %s  (orthonormal %.2e, discarded cross-spin %.2e)'
+        'Spin adaptation: %s  (orthonormality %.2e, neglected inter-multiplicity coupling %.2e)'
         % ('PASS' if diag.get('pass') else 'FAIL',
            diag.get('csf_orthonormal_error', float('nan')),
            diag.get('discarded_cross_spin_block_max', float('nan'))),
