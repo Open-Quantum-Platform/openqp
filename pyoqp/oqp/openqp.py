@@ -1174,8 +1174,14 @@ class OpenQP:
     def _set_optimize_options(self, **kwargs):
         """Set optimizer options, routing backend-specific keys by lib."""
         requested = dict(kwargs)
+        active_runtype = str(
+            self.config_typed.get("input", {}).get("runtype", "energy")
+        ).lower()
         public_aliases = {
-            "algorithm": "meci_search",
+            # the crossing driver decides which search key algorithm names
+            "algorithm": (
+                "mecp_search" if active_runtype == "mecp" else "meci_search"
+            ),
             "sigma": "pen_sigma",
             "alpha": "pen_alpha",
             "delta_beta": "pen_delta",

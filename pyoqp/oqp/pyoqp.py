@@ -465,6 +465,9 @@ class Runner:
             'soc': self.mol.soc,
             'data': self.mol.get_data(),
         }
+        state_tracking = self.mol.get_state_tracking()
+        if state_tracking is not None:
+            summary['state_tracking'] = state_tracking
         return summary
 
     def reload(self):

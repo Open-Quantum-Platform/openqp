@@ -442,6 +442,18 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
+        # MECP objective.  ``auto`` selects SQP on the native optimizer, which
+        # it replaces outright, and the augmented Lagrangian on the backends
+        # that supply their own optimizer.  Both converge the energy gap; the
+        # legacy fixed-weight quadratic penalty (quad) does not, because its
+        # residual gap is of order 1/gap_weight.
+        'mecp_search': {'type': str, 'default': 'auto'},
+        # Strength of the auglag gap term relative to the projected mean
+        # gradient.  1.0 reproduces the plain Bearpark projection; the larger
+        # default reaches the seam faster and keeps the quasi-Newton history
+        # consistent, which matters because the projected gradient is not the
+        # derivative of the reported objective.
+        'gap_sigma': {'type': float, 'default': '10.0'},
         'pen_sigma': {'type': float, 'default': '1.0'},
         'pen_alpha': {'type': float, 'default': '0.0'},
         'pen_incre': {'type': float, 'default': '1.0'},
@@ -547,7 +559,10 @@ OQP_CONFIG_SCHEMA = {
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
         'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
         'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
-        'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
+        # Opt in only: an overlap-triggered root relabel is a method-specific
+        # heuristic, not part of standard FSSH, and can otherwise be mistaken
+        # for a stochastic hop at a genuine conical intersection.
+        'trivial': {'type': bool, 'default': 'False'},      # trivial-crossing diabatic following
         'trivial_thresh': {'type': float, 'default': '0.5'},
         'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>

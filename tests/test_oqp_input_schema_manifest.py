@@ -105,6 +105,12 @@ def _generic_input(section, key, value_text):
     return "%s %s(%s=%s)" % (route, section, key, value_text)
 
 
+def test_trivial_crossing_following_is_opt_in():
+    """Standard FSSH must not relabel the active root without an explicit opt-in."""
+
+    assert _schema_defaults_from_ast()["md"]["trivial"] == ("False", "bool")
+
+
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
     oqp_input = _load_oqp_input()
     schema = _schema_keys_from_ast()
@@ -198,8 +204,13 @@ def test_route_driver_manifest_matches_public_driver_coverage():
     oqp_input = _load_oqp_input()
     owners = oqp_input.ROUTE_DRIVER_SCHEMA_KEYS
 
+    # gap_sigma and mecp_search are [optimize] schema keys emitted only by the
+    # crossing drivers, so the manifest owns them while DRIVER_OPTIONS keeps
+    # them out of the drivers that never read them.
     assert owners["optimize"] == (
         set(oqp_input._OPT_OPTIONS)
+        | set(oqp_input._CROSSING_OPTIONS)
+        | set(oqp_input._MECP_ONLY_OPTIONS)
         | {"lib", "istate", "jstate", "kstate", "states", "imult", "jmult"}
     )
     assert owners["neb"] == {"product", "nimage"}
