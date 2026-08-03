@@ -16,13 +16,23 @@ openqp examples/QMMM/H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp
 
 ## NAMD-QMMM (surface-hopping dynamics)
 
-Minimal (`[md] nstep=1`) nonadiabatic-dynamics demonstrations on formaldehyde
-(QM) solvated by 5 TIP3P waters (MM), `NoCutoff` (non-periodic cluster):
+Minimal nonadiabatic-dynamics demonstrations on formaldehyde (QM) solvated by
+5 TIP3P waters (MM), `NoCutoff` (non-periodic cluster):
 
 | Input | What it shows |
 | --- | --- |
 | `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.inp` | MRSF-TDDFT FSSH (internal conversion, `[md] soc=false`) with ESPF QM/MM. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.oqp` | Two-step semantic-input version that writes a restart checkpoint. |
+| `H2CO-water_BHHLYP-MRSF-NAMD-QMMM.restart.oqp` | Paired continuation that loads the step-2 checkpoint and advances through step 3. `openqp --run_tests all` schedules it after the producer and reuses the same isolated run directory. |
 | `H2CO-water_BHHLYP-SOC-NAMD-QMMM.inp` | SOC-NAMD (intersystem crossing, `[md] soc=true`) on the spin-adiabatic manifold with ESPF QM/MM. |
+
+To exercise checkpoint loading, select the semantic examples in the regression
+runner. It gives the producer and continuation the same project directory and
+runs the continuation only after the checkpoint-producing job finishes:
+
+```bash
+openqp --run_tests examples/QMMM --input-format oqp
+```
 
 Auxiliary files: `formaldehyde_water.pdb` (QM+MM coordinates/topology),
 `formaldehyde.xml` (minimal QM-residue force field — only the Lennard-Jones

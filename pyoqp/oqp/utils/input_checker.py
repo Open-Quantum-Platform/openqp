@@ -736,6 +736,13 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     guess_file2 = _get(config, "guess", "file2", "")
     continue_geom = _get(config, "guess", "continue_geom", False)
     swapmo = _get(config, "guess", "swapmo", "")
+    restart_namd_mutable_guess = (
+        _as_lower(_get(config, "input", "runtype", "")) == "namd"
+        and str(_get(config, "md", "restart", False)).strip().lower()
+        in _TRUE_BOOL
+        and str(_get(config, "guess", "save_mol", False)).strip().lower()
+        in _TRUE_BOOL
+    )
 
     if guess_type not in GUESS_TYPES:
         report.add(
@@ -759,7 +766,8 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
             )
         else:
             resolved = _norm_path(guess_file, _get(config, "input", "system", ""))
-            if not os.path.exists(resolved):
+            if (not os.path.exists(resolved)
+                    and not restart_namd_mutable_guess):
                 report.add(
                     "ERROR",
                     "guess.file",

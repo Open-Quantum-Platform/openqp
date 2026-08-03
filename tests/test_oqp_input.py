@@ -416,6 +416,27 @@ def test_harmless_whitespace_and_bare_calls_normalize_to_compact_input():
     )
 
 
+def test_file_basis_scheme_and_whitespace_round_trip_without_path_case_loss():
+    spaced = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp basis="FILE:My Basis.JSON" '
+        'geom="h2o.xyz" energy'
+    )
+    assert spaced.basis == 'file:My Basis.JSON'
+    rendered = oqp_input.render_canonical_oqp(spaced)
+    assert 'basis="file:My Basis.JSON"' in rendered
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert reparsed.basis == spaced.basis
+    assert oqp_input.lower_to_legacy(reparsed)["input"]["basis"] == (
+        'file:My Basis.JSON')
+
+    route = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/FiLe:Basis.JSON geom="h2o.xyz" energy'
+    )
+    assert route.basis == 'file:Basis.JSON'
+    assert oqp_input.parse_canonical_oqp(
+        oqp_input.render_canonical_oqp(route)).basis == route.basis
+
+
 def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses():
     spec, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() pcm nmr d4'
@@ -583,6 +604,45 @@ def test_string_enums_are_not_globally_coerced_to_bool_or_null():
     assert "init_basis=null" in rendered
     reparsed = oqp_input.parse_canonical_oqp(rendered)
     assert reparsed.modifiers[0].kwargs["init_basis"] is None
+
+
+def test_namd_counter_rng_controls_lower_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,seed=20260803,rng_stream=7,first_hop_step=2)'
+    )
+    assert legacy["md"]["seed"] == "20260803"
+    assert legacy["md"]["rng_stream"] == "7"
+    assert legacy["md"]["first_hop_step"] == "2"
+
+
+def test_namd_baeck_an_check_controls_lower_to_md_section():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="h2o.xyz" '
+        'namd(S1,nacme_check=baeck_an,ba_gap_max=0.05,nacme_gate=error,'
+        'nacme_gate_invariant_tol=1e-11,nacme_gate_abs_tol=2e-4,'
+        'nacme_gate_rel_tol=0.5,nacme_gate_consecutive=4,'
+        'nve_gate=warn,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,'
+        'nve_gate_transition_tol=1e-7,nve_gate_consecutive=2,'
+        'trajectory_interval=1,restart_interval=1,trajectory_file="dense.trj",'
+        'restart_file="state.npz")'
+    )
+    assert legacy["md"]["nacme_check"] == "baeck_an"
+    assert legacy["md"]["ba_gap_max"] == "0.05"
+    assert legacy["md"]["nacme_gate"] == "error"
+    assert legacy["md"]["nacme_gate_invariant_tol"] == "1e-11"
+    assert legacy["md"]["nacme_gate_abs_tol"] == "0.0002"
+    assert legacy["md"]["nacme_gate_rel_tol"] == "0.5"
+    assert legacy["md"]["nacme_gate_consecutive"] == "4"
+    assert legacy["md"]["nve_gate"] == "warn"
+    assert legacy["md"]["nve_gate_abs_tol"] == "0.004"
+    assert legacy["md"]["nve_gate_step_tol"] == "0.0008"
+    assert legacy["md"]["nve_gate_transition_tol"] == "1e-07"
+    assert legacy["md"]["nve_gate_consecutive"] == "2"
+    assert legacy["md"]["trajectory_interval"] == "1"
+    assert legacy["md"]["restart_interval"] == "1"
+    assert legacy["md"]["trajectory_file"] == "dense.trj"
+    assert legacy["md"]["restart_file"] == "state.npz"
 
 
 def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):

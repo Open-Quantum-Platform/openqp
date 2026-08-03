@@ -474,6 +474,22 @@ class Runner:
         """
         Reload calculation based on the specified guess type.
         """
+        input_config = self.mol.config.get('input', {})
+        md_config = self.mol.config.get('md', {})
+        restart_namd = (
+            str(input_config.get('runtype', '')).strip().lower() == 'namd'
+            and (
+                md_config.get('restart') is True
+                or str(md_config.get('restart', '')).strip().lower()
+                in {'true', '1', 'yes', 'on'}
+            )
+        )
+        if restart_namd:
+            # The atomic NAMD checkpoint is the authoritative electronic
+            # state. In particular, a save_mol JSON file is a mutable output
+            # and may be absent or incomplete after interruption; preloading
+            # it would fail before NAMD can validate and restore the checkpoint.
+            return
         guess_type = self.mol.config['guess']['type']
         guess_file = self.mol.config['guess']['file']
 

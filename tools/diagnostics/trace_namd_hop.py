@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""Record the native NAMD hop kernel without changing its numerical path.
+
+This diagnostic runner is deliberately a thin Python observer.  The TLF,
+electronic propagation, and FSSH probability construction remain in the
+production Fortran implementation.  ``--skip-first-hop`` emulates the
+historical KNU-GAMESS first-interval convention for controlled comparisons.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from pathlib import Path
+
+import numpy as np
+
+from oqp.library import namd as namd_module
+from oqp.pyoqp import Runner
+
+
+def _namd_sidecar_paths(md: dict, log_path: Path) -> dict[str, Path]:
+    """Resolve the production NAMD outputs without constructing the driver."""
+    log_path = log_path.expanduser().resolve()
+    log_dir = log_path.parent
+    stem = log_path.stem
+
+    def output(key: str, suffix: str) -> Path:
+        configured = str(md.get(key, '') or '').strip()
+        if configured:
+            path = Path(configured).expanduser()
+            return path.resolve() if path.is_absolute() else (log_dir / path).resolve()
+        return (log_dir / f'{stem}{suffix}').resolve()
+
+    return {
+        'trajectory-file': output('trajectory_file', '.namd.trj'),
+        'restart-file': output('restart_file', '.namd.restart.npz'),
+        'restart-manifest-file': (
+            log_dir / f'{stem}.namd.restart.oqp').resolve(),
+    }
+
+
+def _reject_trace_aliases(trace: Path, protected_paths: dict[str, Path]) -> None:
+    aliases = [name for name, path in protected_paths.items() if path == trace]
+    if aliases:
+        raise ValueError(
+            f"--trace must not alias the {', '.join(aliases)} path")
+
+
+def _trace_hop_matrices(driver, kernel_called: bool):
+    """Return current overlap/TDC matrices even when the hop was skipped."""
+    nstate = driver.nstate
+    data = getattr(driver.mol, "data", {})
+
+    def native_tag(name):
+        if not kernel_called:
+            return None
+        try:
+            return data[name]
+        except (AttributeError, KeyError, TypeError):
+            return None
+
+    overlap = native_tag("OQP::namd_stas")
+    tdc = native_tag("OQP::namd_tdc")
+    if overlap is None:
+        overlap = getattr(driver, "_last_state_overlap", None)
+    if tdc is None:
+        tdc = getattr(driver, "_last_overlap_tdc", None)
+    if overlap is None:
+        overlap = np.full((nstate, nstate), np.nan)
+    if tdc is None:
+        tdc = np.full((nstate, nstate), np.nan)
+    return (
+        np.asarray(overlap, dtype=float).reshape(nstate, nstate),
+        np.asarray(tdc, dtype=float).reshape(nstate, nstate),
+    )
+
+
+class SequenceRNG:
+    """Minimal Generator-compatible source for a prescribed hop RNG stream."""
+
+    def __init__(self, values: np.ndarray):
+        self.values = np.asarray(values, dtype=float).reshape(-1)
+        self.index = 0
+
+    def random(self, size=None):
+        if size is not None:
+            raise RuntimeError("Prescribed NAMD hop RNG only supports scalar draws")
+        if self.index >= self.values.size:
+            raise RuntimeError(
+                f"Prescribed NAMD hop RNG exhausted after {self.index} draws"
+            )
+        value = float(self.values[self.index])
+        self.index += 1
+        return value
+
+
+def install_trace(
+    output: Path,
+    skip_first_hop: bool,
+    random_values: np.ndarray | None = None,
+) -> SequenceRNG | None:
+    original_prepare = namd_module.NAMD._prepare_hop_step
+    original_log = namd_module.NAMD._log_step
+    original_log_qmmm = namd_module.NAMD_QMMM._log_qmmm
+    sequence_rng = None if random_values is None else SequenceRNG(random_values)
+
+    def traced_prepare(self, istep):
+        enabled = original_prepare(self, istep)
+        if skip_first_hop and int(istep) == 1:
+            enabled = False
+        if sequence_rng is not None:
+            self._hop_random_override = sequence_rng
+        return enabled
+
+    def record_trace(self, istep, hopped):
+        if istep == 0:
+            return
+        nstate = self.nstate
+        kernel_called = bool(np.isfinite(self._last_hop_random))
+        try:
+            params = np.asarray(self.mol.data["OQP::namd_params"], dtype=float)
+        except (AttributeError, KeyError):
+            params = np.empty(0)
+        try:
+            results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
+        except (AttributeError, KeyError):
+            results = np.empty(0)
+        overlap, tdc = _trace_hop_matrices(self, kernel_called)
+        cmhp = np.full((nstate, nstate), np.nan)
+        if results.size >= nstate * nstate:
+            # The native record is a Fortran column-major flattening.
+            cmhp = results[: nstate * nstate].reshape(nstate, nstate, order="F")
+        row = {
+            "step": istep,
+            "t_fs": istep * self.dt_fs,
+            "kernel_called": int(kernel_called),
+            "active": self.active,
+            "hopped": int(bool(hopped)),
+            "random": (
+                params[namd_module._P_RAND]
+                if params.size > namd_module._P_RAND else np.nan
+            ),
+        }
+        row.update({
+            f"pop_{state + 1}": abs(self.coef[state]) ** 2
+            for state in range(nstate)
+        })
+        row.update({
+            f"overlap_{left + 1}{right + 1}": overlap[left, right]
+            for left in range(nstate) for right in range(nstate)
+        })
+        row.update({
+            f"tdc_{left + 1}{right + 1}_au": tdc[left, right]
+            for left in range(nstate) for right in range(left + 1, nstate)
+        })
+        row.update({
+            f"p_{source + 1}{target + 1}": cmhp[source, target]
+            for source in range(nstate) for target in range(nstate)
+            if source != target
+        })
+        write_header = not output.exists()
+        with output.open("a", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=row.keys())
+            if write_header:
+                writer.writeheader()
+            writer.writerow(row)
+
+    def traced_log(self, istep, r, hopped=False,
+                   transition_energy_jump=np.nan):
+        try:
+            original_log(self, istep, r, hopped=hopped,
+                         transition_energy_jump=transition_energy_jump)
+        finally:
+            # Preserve the terminal diagnostic row when the production logger
+            # raises a deferred NVE-gate error after recording the dense step.
+            record_trace(self, istep, hopped)
+
+    def traced_log_qmmm(self, istep, epot, hopped=False,
+                        transition_energy_jump=np.nan):
+        try:
+            original_log_qmmm(
+                self, istep, epot, hopped=hopped,
+                transition_energy_jump=transition_energy_jump)
+        finally:
+            record_trace(self, istep, hopped)
+
+    namd_module.NAMD._prepare_hop_step = traced_prepare
+    namd_module.NAMD._log_step = traced_log
+    namd_module.NAMD_QMMM._log_qmmm = traced_log_qmmm
+    return sequence_rng
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", default="thymine.inp")
+    parser.add_argument("--trace", default="hop_trace.csv")
+    parser.add_argument("--skip-first-hop", action="store_true")
+    parser.add_argument(
+        "--random-file",
+        type=Path,
+        help="one prescribed uniform random value per effective hop interval",
+    )
+    args = parser.parse_args()
+    trace = Path(args.trace).expanduser().resolve()
+    input_path = Path(args.input).expanduser().resolve()
+    random_path = (None if args.random_file is None
+                   else args.random_file.expanduser().resolve())
+    project = input_path.stem
+    log_path = input_path.with_suffix('.log')
+    protected_paths = {'input': input_path, 'log': log_path}
+    if random_path is not None:
+        protected_paths['random-file'] = random_path
+    _reject_trace_aliases(trace, protected_paths)
+    runner = Runner(
+        project=project, input_file=str(input_path), log=str(log_path),
+        silent=1, usempi=False)
+    protected_paths.update(_namd_sidecar_paths(
+        runner.mol.config.get('md', {}), log_path))
+    _reject_trace_aliases(trace, protected_paths)
+    soc = runner.mol.config.get("md", {}).get("soc", False)
+    if soc:
+        raise ValueError(
+            "trace_namd_hop does not support SOC NAMD logging paths"
+        )
+    trace.unlink(missing_ok=True)
+    random_values = None
+    if random_path is not None:
+        random_values = np.atleast_1d(np.loadtxt(random_path, dtype=float))
+        if random_values.size == 0 or np.any((random_values < 0.0) | (random_values >= 1.0)):
+            raise ValueError("Prescribed random values must lie in [0, 1)")
+    sequence_rng = install_trace(trace, args.skip_first_hop, random_values)
+    runner.run()
+    if sequence_rng is not None and sequence_rng.index != sequence_rng.values.size:
+        raise RuntimeError(
+            "Prescribed NAMD hop RNG consumed "
+            f"{sequence_rng.index} of {sequence_rng.values.size} values"
+        )
+
+
+if __name__ == "__main__":
+    main()
