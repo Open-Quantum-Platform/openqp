@@ -619,6 +619,35 @@ except ValueError as error:
     other_system_rejected = "different molecular systems" in str(error)
 else:
     other_system_rejected = False
+restraint_header = json.loads(json.dumps(other_header))
+restraint_header["wham_system_identity"] = system_identity["system"]
+restraint_signature = json.loads(restraint_header["signature"])
+restraint_signature["independent_controls"] = {
+    "droplet": {
+        "enabled": True, "center_angstrom": [0.0, 0.0, 0.0],
+        "radius_angstrom": 12.0, "buffer_angstrom": 1.0,
+        "force_constant_kcal_mol_angstrom2": 10.0,
+        "target": "atoms", "atoms_zero_based": "0",
+        "water_resnames": [], "max_penetration_angstrom": 5.0,
+        "group_count": 1,
+    },
+    "solute_com": {"enabled": False},
+}
+restraint_header["signature"] = json.dumps(
+    restraint_signature, sort_keys=True)
+restraint_encoded = json.dumps(restraint_header, sort_keys=True).encode("utf-8")
+other_restraint = os.path.join(root, "other-restraint.namd.trj")
+with open(other_restraint, "wb") as stream:
+    stream.write(magic)
+    stream.write(struct.pack("<Q", len(restraint_encoded)))
+    stream.write(restraint_encoded)
+    stream.write(other_payload)
+try:
+    odp_wham([paths[0], other_restraint], temperature)
+except ValueError as error:
+    other_restraint_rejected = "different molecular systems" in str(error)
+else:
+    other_restraint_rejected = False
 pcm_header = json.loads(json.dumps(other_header))
 pcm_header["wham_system_identity"] = system_identity["system"]
 pcm_signature = json.loads(pcm_header["signature"])
@@ -700,6 +729,7 @@ print("ODP_WHAM=" + json.dumps({
     "implicit_extension_alias_rejected": implicit_extension_alias_rejected,
     "hardlink_output_rejected": hardlink_output_rejected,
     "other_system_rejected": other_system_rejected,
+    "other_restraint_rejected": other_restraint_rejected,
     "other_pcm_rejected": other_pcm_rejected,
     "other_d4_rejected": other_d4_rejected,
     "race_snapshot_bytes": race_result["trajectory_snapshot_bytes"],
@@ -773,6 +803,7 @@ print("ODP_WHAM=" + json.dumps({
     assert values["implicit_extension_alias_rejected"] is True
     assert values["hardlink_output_rejected"] is True
     assert values["other_system_rejected"] is True
+    assert values["other_restraint_rejected"] is True
     assert values["other_pcm_rejected"] is True
     assert values["other_d4_rejected"] is True
     assert values["race_snapshot_bytes"] == [values["race_initial_bytes"]]

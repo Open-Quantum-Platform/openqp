@@ -306,6 +306,15 @@ def read_odp_wham_series(path):
     system_identity = {
         key: restart_identity.get(key) for key in identity_keys
     }
+    independent_controls = restart_identity.get('independent_controls', {})
+    conservative_restraints = {}
+    for name in ('droplet', 'solute_com'):
+        control = independent_controls.get(name, {})
+        conservative_restraints[name] = (
+            control if bool(control.get('enabled', False))
+            else {'enabled': False}
+        )
+    system_identity['conservative_restraints'] = conservative_restraints
     system = header.get('wham_system_identity')
     system_identity['system'] = system
     if (not isinstance(system, dict) or not system.get('sha256')

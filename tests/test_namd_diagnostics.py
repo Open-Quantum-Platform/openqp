@@ -34,6 +34,31 @@ def test_hop_tracer_is_state_count_agnostic_and_rejects_untraced_modes():
     assert "raise error.with_traceback(traceback)" in source
 
 
+def test_trace_sidecars_return_a_map_and_soc_fallback_uses_coef_dimension(
+        tmp_path):
+    from tools.diagnostics.trace_namd_hop import (
+        _namd_sidecar_paths, _trace_hop_matrices,
+    )
+
+    paths = _namd_sidecar_paths({}, tmp_path / "job.log")
+    assert set(paths) == {
+        "trajectory-file", "restart-file", "restart-manifest-file",
+    }
+
+    driver = SimpleNamespace(
+        nstate=2,
+        coef=np.ones(8, dtype=complex),
+        mol=SimpleNamespace(data={}),
+        _last_state_overlap=np.eye(2),
+        _last_overlap_tdc=np.zeros((2, 2)),
+    )
+    overlap, tdc = _trace_hop_matrices(driver, kernel_called=False)
+    assert overlap.shape == (8, 8)
+    assert tdc.shape == (8, 8)
+    assert np.isnan(overlap).all()
+    assert np.isnan(tdc).all()
+
+
 def test_hop_tracer_records_the_row_before_preserving_an_nve_abort(tmp_path):
     import sys
 

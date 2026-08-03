@@ -37,6 +37,7 @@ def _namd_sidecar_paths(md: dict, log_path: Path) -> dict[str, Path]:
         'restart-manifest-file': (
             log_dir / f'{stem}.namd.restart.oqp').resolve(),
     }
+    return row
 
 
 def _paths_alias(left: Path, right: Path) -> bool:
@@ -76,9 +77,9 @@ def validate_trace_output(
 
 def _trace_hop_matrices(driver, kernel_called: bool):
     """Return current overlap/TDC matrices even when the hop was skipped."""
-    nstate = getattr(driver, "nstate", None)
-    if nstate is None:
-        nstate = np.asarray(driver.coef).size
+    coef = getattr(driver, "coef", None)
+    nstate = (np.asarray(coef).size if coef is not None
+              else int(driver.nstate))
     data = getattr(driver.mol, "data", {})
 
     def native_tag(name):
@@ -99,10 +100,13 @@ def _trace_hop_matrices(driver, kernel_called: bool):
         overlap = np.full((nstate, nstate), np.nan)
     if tdc is None:
         tdc = np.full((nstate, nstate), np.nan)
-    return (
-        np.asarray(overlap, dtype=float).reshape(nstate, nstate),
-        np.asarray(tdc, dtype=float).reshape(nstate, nstate),
-    )
+    def full_matrix(value):
+        array = np.asarray(value, dtype=float)
+        if array.size != nstate*nstate:
+            return np.full((nstate, nstate), np.nan)
+        return array.reshape(nstate, nstate)
+
+    return full_matrix(overlap), full_matrix(tdc)
 
 
 class SequenceRNG:
