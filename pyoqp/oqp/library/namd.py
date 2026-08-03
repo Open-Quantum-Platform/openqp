@@ -30,6 +30,7 @@ This is the gas-phase (all-QM) path; QM/MM and PBC are layered on later.
 
 import os
 import copy
+import hashlib
 import json
 import re
 import struct
@@ -962,6 +963,32 @@ class NAMD:
             os.fsync(stream.fileno())
         self._io_barrier()
 
+    def _qmmm_forcefield_identity(self, value):
+        """Canonicalize local force fields across relocated restart manifests."""
+        if not isinstance(value, str):
+            return value
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
+        source_dir = (os.path.dirname(os.path.abspath(source))
+                      if source else os.getcwd())
+        identity = []
+        for item in value.replace(',', ' ').split():
+            expanded = os.path.expanduser(item)
+            candidate = (expanded if os.path.isabs(expanded)
+                         else os.path.join(source_dir, expanded))
+            if os.path.isfile(candidate):
+                digest = hashlib.sha256()
+                with open(candidate, 'rb') as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+                identity.append({
+                    'path': os.path.realpath(candidate),
+                    'sha256': digest.hexdigest(),
+                })
+            else:
+                identity.append({'builtin': item})
+        return identity
+
     def _molecular_identity(self):
         """Return stable nuclear and QM/MM topology identity for sidecars."""
         cached = getattr(self, '_restart_molecular_identity', None)
@@ -1009,9 +1036,12 @@ class NAMD:
             qmmm = self.mol.config.get('qmmm', {})
             identity['qmmm_model'] = {
                 key: str(qmmm.get(key, ''))
-                for key in ('forcefield_files', 'cutoff', 'embedding',
-                            'frontier_scheme')
+                for key in ('cutoff', 'embedding', 'frontier_scheme')
             }
+            forcefields = (qmmm.get('forcefield_files', '')
+                           or qmmm.get('forcefield', ''))
+            identity['qmmm_model']['forcefields'] = (
+                self._qmmm_forcefield_identity(forcefields))
         self._restart_molecular_identity = identity
         return identity
 

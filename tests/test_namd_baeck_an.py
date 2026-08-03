@@ -287,6 +287,13 @@ d._ba_tdc_left = np.array([[0.0, 0.1], [-0.1, 0.0]]); d._ba_dt_left = 2.0
 d._nacme_gate_failures = 2; d._rng_step = 1
 d._save_restart(1, np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001)
 
+# Rebased local force-field paths must retain the same restart identity, while
+# OpenMM built-in names remain stable symbolic identities.
+relative_ff_identity = d._qmmm_forcefield_identity('local.xml tip3p.xml')
+absolute_ff_identity = d._qmmm_forcefield_identity(
+    os.path.join(input_root, 'local.xml') + ' tip3p.xml')
+forcefield_identity_stable = relative_ff_identity == absolute_ff_identity
+
 # A non-finite electronic state must not replace the last-good checkpoint.
 d.coef = np.array([np.nan+0j, 0+0j])
 try:
@@ -410,6 +417,7 @@ print('DENSE=' + json.dumps({
         'molecule_mismatch_rejected': molecule_mismatch_rejected,
         'qm_selection_bound': qm_selection_bound,
         'unique_manifests': unique_manifests,
+        'forcefield_identity_stable': forcefield_identity_stable,
         'audit_rows': audit_lines,
 }))
 """
@@ -448,6 +456,7 @@ print('DENSE=' + json.dumps({
         'invalid_save_rejected': True, 'checkpoint_after_rejection': 1,
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'qm_selection_bound': True, 'unique_manifests': True,
+        'forcefield_identity_stable': True,
         'audit_rows': [
             'center_step\tsource\tverdict\tsigned\tcompared_pairs\t'
             'invariant_failures\treference_failures\t'
