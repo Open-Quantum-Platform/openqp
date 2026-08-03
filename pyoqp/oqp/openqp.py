@@ -223,14 +223,20 @@ class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
     def __call__(self, **kwargs):
         current = self._owner.config_typed.get("md", {})
         soc = kwargs.get("soc", current.get("soc", False))
+        nacme_explicit = "nacme_check" in kwargs
         nacme_check = kwargs.get(
-            "nacme_check", current.get("nacme_check", "off"))
+            "nacme_check", current.get("nacme_check", "baeck_an"))
         soc_requested = (soc is True) or (
             str(soc).strip().lower() in {"true", "1", "on", "yes"})
-        if soc_requested and str(nacme_check).strip().lower() != "off":
+        if (soc_requested and nacme_explicit
+                and str(nacme_check).strip().lower() != "off"):
             raise ValueError(
                 "SOC NAMD does not support nacme_check; use nacme_check='off'."
             )
+        if soc_requested and not nacme_explicit:
+            # The global default is the same-spin Baeck-An diagnostic.  SOC
+            # stores its complex spin-adiabatic overlap/TDC instead.
+            kwargs["nacme_check"] = "off"
         return super().__call__(**kwargs)
 
 

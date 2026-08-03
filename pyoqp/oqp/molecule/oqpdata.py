@@ -579,7 +579,7 @@ OQP_CONFIG_SCHEMA = {
         'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
+        'thrshe': {'type': float, 'default': '0.1'},        # energy-gap hop gate (Hartree)
         'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
         # Opt in only: an overlap-triggered root relabel is a method-specific
         # heuristic, not part of standard FSSH, and can otherwise be mistaken
@@ -588,17 +588,19 @@ OQP_CONFIG_SCHEMA = {
         'trivial_thresh': {'type': float, 'default': '0.5'},
         'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
-        'seed': {'type': int, 'default': '1'},
-        'rng_stream': {'type': int, 'default': '0'},        # independent counter-RNG stream / trajectory id
-        'first_hop_step': {'type': int, 'default': '1'},    # preserve historical OpenQP propagation/hop from step 1; use 2 for KNU/TLF2 comparisons
-        'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
+        # Zero is a runtime sentinel resolved once to the local YYYYMMDD date;
+        # the runnable restart manifest freezes the resulting integer seed.
+        'seed': {'type': int, 'default': '0'},
+        'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
+        'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
+        'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
         'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
         'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
         'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
         'nacme_gate_consecutive': {'type': int, 'default': '3'},
-        'nve_gate': {'type': str, 'default': 'off'},       # 'off' | 'warn' | 'error'
+        'nve_gate': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
         'nve_gate_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
         'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha

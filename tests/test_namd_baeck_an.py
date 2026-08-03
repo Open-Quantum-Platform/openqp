@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from datetime import date
 from types import SimpleNamespace
 
 import numpy as np
@@ -13,6 +14,14 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_zero_seed_resolves_to_run_date_and_explicit_seed_is_unchanged():
+    from oqp.library.namd import _resolve_namd_seed
+
+    run_date = date(2026, 8, 4)
+    assert _resolve_namd_seed(0, run_date) == 20260804
+    assert _resolve_namd_seed(918273, run_date) == 918273
 
 
 def test_restart_namd_uses_checkpoint_before_mutable_guess_file():
@@ -392,6 +401,7 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     namd.restart_manifest_file = str(manifest)
     namd.restart_file = str(tmp_path / "new.restart.npz")
     namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.seed = 20260804
     namd.mol = SimpleNamespace(
         oqp_canonical_input=(
             'mrsf(nstate=2)/bhhlyp/6-31g*\n'
@@ -403,6 +413,7 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     refreshed = manifest.read_text(encoding="utf-8")
     assert "existing manifest" not in refreshed
     assert "nstep=40" in refreshed
+    assert "seed=20260804" in refreshed
     assert 'restart_file="new.restart.npz"' in refreshed
     assert namd._restart_manifest_written
     namd.mol.oqp_canonical_input = "invalid if rendered twice"
@@ -423,10 +434,11 @@ def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
     assert "was not generated" in notices[0]
 
 
-def test_soc_namd_rejects_unimplemented_nve_and_dense_trajectory_controls(tmp_path):
+def test_soc_namd_accepts_nve_and_dense_trajectory_controls(tmp_path):
     script = r"""
 import json
 import os
+import numpy as np
 from oqp.library.namd import NAMD
 
 root = os.environ['OQP_NAMD_TEST_ROOT']
@@ -439,6 +451,7 @@ base_md = {
 
 class Mol:
     log = os.path.join(root, 'soc.log')
+    data = {'natom': 1}
     def __init__(self, **overrides):
         md = dict(base_md)
         md.update(overrides)
@@ -448,6 +461,12 @@ class Mol:
             'tdhf': {'type': 'mrsf', 'nstate': 2, 'tlf': 2},
             'properties': {}, 'nac': {}, 'md': md,
         }
+    def get_mass(self):
+        return np.array([1.0])
+    def get_atoms(self):
+        return np.array([1])
+    def get_system(self):
+        return np.zeros((1, 3))
 
 def rejected(**overrides):
     try:
@@ -456,6 +475,13 @@ def rejected(**overrides):
         return True
     return False
 
+def accepted(**overrides):
+    try:
+        NAMD(Mol(**overrides))
+    except Exception:
+        return False
+    return True
+
 def invalid(**overrides):
     try:
         NAMD(Mol(**overrides))
@@ -463,12 +489,16 @@ def invalid(**overrides):
         return True
     return False
 
+def contextual_nacme_off(**overrides):
+    return NAMD(Mol(**overrides)).nacme_check == 'off'
+
 print('SOC_GATES=' + json.dumps({
-    'nve': rejected(nve_gate='warn'),
-    'truthy_integer': rejected(soc=2, nve_gate='warn'),
-    'truthy_string': rejected(soc='false', nve_gate='warn'),
-    'trajectory_file': rejected(trajectory_file='soc.trj'),
-    'trajectory_interval': rejected(trajectory_interval=2),
+    'nve': accepted(nve_gate='warn'),
+    'truthy_integer': accepted(soc=2, nve_gate='warn'),
+    'truthy_string': accepted(soc='false', nve_gate='warn'),
+    'trajectory_file': accepted(trajectory_file='soc.trj'),
+    'trajectory_interval': accepted(trajectory_interval=2),
+    'nacme_check': contextual_nacme_off(nacme_check='baeck_an'),
     'same_spin_adaptive': rejected(soc=False, dt_adaptive=True),
     'ba_gap_nan': invalid(ba_gap_max=float('nan')),
     'nacme_nan': invalid(nacme_gate_abs_tol=float('nan')),
@@ -500,6 +530,7 @@ print('SOC_GATES=' + json.dumps({
     assert json.loads(marker.removeprefix("SOC_GATES=")) == {
         'nve': True, 'truthy_integer': True, 'truthy_string': True,
         'trajectory_file': True, 'trajectory_interval': True,
+        'nacme_check': True,
         'same_spin_adaptive': True,
         'ba_gap_nan': True, 'nacme_nan': True, 'nacme_inf': True,
         'nve_nan': True, 'nve_inf': True,

@@ -35,6 +35,7 @@ import json
 import re
 import struct
 import tempfile
+from datetime import date
 from importlib import resources
 import numpy as np
 
@@ -161,6 +162,15 @@ def _validate_nacme_gate_activation(check, gate):
             "nacme_check=baeck_an before selecting warn or error")
 
 
+def _resolve_namd_seed(value, current_date=None):
+    """Resolve the zero default to a reproducible YYYYMMDD run seed."""
+    seed = int(value)
+    if seed != 0:
+        return seed
+    run_date = date.today() if current_date is None else current_date
+    return int(run_date.strftime('%Y%m%d'))
+
+
 def _validate_distinct_output_paths(*, protected_paths=(), **paths):
     """Reject NAMD outputs that overwrite one another or an input deck."""
     def aliases(first, second):
@@ -232,7 +242,9 @@ def _namd_trajectory_dtype(nstate, natom, ncv=0):
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
         ('velocities_au', '<f8', vectors), ('state_overlap', '<f8', matrix),
+        ('state_overlap_imag', '<f8', matrix),
         ('overlap_tdc_au', '<f8', matrix),
+        ('overlap_tdc_imag_au', '<f8', matrix),
         ('gate_candidate_tdc_au', '<f8', matrix),
         ('reference_tdc_au', '<f8', matrix),
         ('reference_mask', 'u1', matrix), ('reference_source', 'i1'),
@@ -446,6 +458,7 @@ _P_TRIV_THR = 9
 _P_HOPPED = 10
 _P_TARGET = 11
 _P_NSTATE = 12          # number of states for the hop (0 -> tddft.nstate)
+_P_ALLOW_HOP = 13       # +1 permit state changes; -1 propagate coefficients only
 _NPARAMS = 16
 
 
@@ -539,10 +552,11 @@ class NAMD:
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
-        self.seed = int(md['seed'])
-        self.rng_stream = int(md.get('rng_stream', 0))
+        self.seed = _resolve_namd_seed(md.get('seed', 0))
+        self.rng_stream = int(md.get('rng_stream', 1))
         self.first_hop_step = int(md.get('first_hop_step', 1))
-        self.nacme_check = str(md.get('nacme_check', 'off')).strip().lower().replace('-', '_')
+        self.nacme_check = str(md.get(
+            'nacme_check', 'baeck_an')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
         if self.nacme_check not in ('off', 'baeck_an'):
@@ -565,7 +579,7 @@ class NAMD:
         ))
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
-        self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
+        self.nve_gate = str(md.get('nve_gate', 'warn')).strip().lower()
         if self.nve_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nve_gate must be off, warn, or error")
         self.nve_gate_abs_tol = float(md.get('nve_gate_abs_tol', 5.0e-3))
@@ -591,6 +605,10 @@ class NAMD:
             )
         if self.ensemble == 'nvt' and self.thermostat == 'off':
             raise ValueError("[md] ensemble=nvt requires thermostat=langevin")
+        if self.ensemble == 'nvt' and self.nve_gate == 'warn':
+            # ``warn`` is the NVE safety default.  NVT records thermostat work
+            # instead, so an inherited default becomes contextually inactive.
+            self.nve_gate = 'off'
         if self.ensemble == 'nvt' and self.nve_gate != 'off':
             raise ValueError(
                 "[md] nve_gate does not apply to NVT; thermostat exchange is recorded separately"
@@ -628,17 +646,14 @@ class NAMD:
         # Programmatic callers are not necessarily constrained by the input
         # schema and may supply another truthy value.
         soc_requested = bool(_soc)
+        if (soc_requested and self.nacme_check == 'baeck_an'
+                and self.nacme_gate == 'off'):
+            # Baeck-An is a real same-spin magnitude diagnostic.  SOC records
+            # the full complex spin-adiabatic overlap and anti-Hermitian TDC.
+            self.nacme_check = 'off'
         if soc_requested and self.nacme_check != 'off':
             raise NotImplementedError(
                 "[md] nacme_check currently supports same-spin NAMD only"
-            )
-        if soc_requested and self.restart_requested:
-            raise NotImplementedError(
-                "[md] restart currently supports same-spin NAMD only"
-            )
-        if soc_requested and self.nve_gate != 'off':
-            raise NotImplementedError(
-                "[md] nve_gate currently supports same-spin NAMD only"
             )
         if soc_requested and self.odp is not None:
             raise NotImplementedError(
@@ -651,15 +666,6 @@ class NAMD:
         if self.dt_adaptive and not soc_requested:
             raise NotImplementedError(
                 "[md] dt_adaptive currently supports SOC-NAMD only"
-            )
-        if soc_requested and (
-                str(md.get('trajectory_file', '') or '').strip()
-                or self.trajectory_interval_input != 0
-                or str(md.get('restart_file', '') or '').strip()
-                or self.restart_interval_input != 0):
-            raise NotImplementedError(
-                "[md] trajectory/checkpoint record controls currently support "
-                "same-spin NAMD only"
             )
         if not INT64_MIN <= self.seed <= INT64_MAX:
             raise ValueError("[md] seed must fit in a signed 64-bit integer")
@@ -1328,7 +1334,7 @@ class NAMD:
                    f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
         )
-        if self.odp is not None:
+        if getattr(self, 'odp', None) is not None:
             dump_log(
                 self.mol,
                 title=('ODP umbrella: '
@@ -1366,11 +1372,11 @@ class NAMD:
         self._trajectory_prefix_stat = None
 
     def _prepare_hop_step(self, istep):
-        """Bind the physical MD step to the stateless hop RNG.
+        """Bind the physical MD step and report whether transitions are allowed.
 
-        Returning ``False`` suppresses both electronic propagation and the
-        stochastic FSSH decision.  The compatibility default is step 1; use
-        step 2 explicitly for the KNU-GAMESS/TLF2 initialisation convention.
+        Electronic coefficients and hop probabilities are propagated at every
+        overlap-defined interval, including step 1.  Returning ``False`` only
+        suppresses active-state changes, velocity rescaling, and RNG use.
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
@@ -1816,7 +1822,7 @@ class NAMD:
             raise error
 
     def _update_nve_gate(self, istep, epot, ekin, transition_energy_jump=np.nan):
-        """Audit microcanonical energy conservation for same-spin FSSH."""
+        """Audit microcanonical energy conservation for FSSH/ISC dynamics."""
         self._pending_nve_gate_error = None
         total = float(epot + ekin)
         if getattr(self, 'ensemble', 'nve') != 'nve':
@@ -1954,6 +1960,9 @@ class NAMD:
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': trajectory_nstate,
                 'natom': len(coords),
+                'representation': getattr(
+                    self, '_trajectory_representation',
+                    'same_spin_adiabatic'),
                 'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
@@ -2052,7 +2061,8 @@ class NAMD:
                 'thermostat_adjusted_energy_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
-                'overlap_tdc_au', 'gate_candidate_tdc_au',
+                'state_overlap_imag', 'overlap_tdc_au',
+                'overlap_tdc_imag_au', 'gate_candidate_tdc_au',
                 'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
                 'odp_xi', 'odp_cv_raw', 'odp_cv_scaled',
@@ -2127,6 +2137,11 @@ class NAMD:
                 self._odp_last['energy_perpendicular'])
             record['odp_bias_hartree'] = self._odp_last['energy']
         state_energies = getattr(self, '_trajectory_state_energies', None)
+        if callable(state_energies):
+            try:
+                state_energies = state_energies()
+            except (KeyError, TypeError, ValueError, AttributeError):
+                state_energies = None
         if state_energies is None:
             try:
                 state_energies = self.mol.data['OQP::td_energies']
@@ -2139,11 +2154,15 @@ class NAMD:
         if (self._last_state_overlap is not None
                 and np.shape(self._last_state_overlap)
                 == (trajectory_nstate, trajectory_nstate)):
-            record['state_overlap'] = self._last_state_overlap
+            overlap = np.asarray(self._last_state_overlap)
+            record['state_overlap'] = overlap.real
+            record['state_overlap_imag'] = overlap.imag
         if (self._last_overlap_tdc is not None
                 and np.shape(self._last_overlap_tdc)
                 == (trajectory_nstate, trajectory_nstate)):
-            record['overlap_tdc_au'] = self._last_overlap_tdc
+            overlap_tdc = np.asarray(self._last_overlap_tdc)
+            record['overlap_tdc_au'] = overlap_tdc.real
+            record['overlap_tdc_imag_au'] = overlap_tdc.imag
         candidate_tdc = getattr(self, '_nacme_candidate_tdc', None)
         if (candidate_tdc is not None
                 and np.shape(candidate_tdc)
@@ -2525,6 +2544,33 @@ class NAMD:
             self, '_electronic_config_identity', None)
         if electronic_config is None:
             electronic_config = _electronic_config_identity(cfg)
+        else:
+            electronic_config = copy.deepcopy(electronic_config)
+        # The detailed electronic snapshot must use the same canonical
+        # identities as the dedicated restart fields below.  Keeping raw
+        # ``file:relative`` spellings or the pre-resolution empty DFTB model
+        # here would make two physically identical runs fail restart matching
+        # even though their basis contents and effective Hamiltonian agree.
+        electronic_input = electronic_config.setdefault('input', {})
+        electronic_input['basis'] = self._basis_definition_identity(
+            electronic_input.get('basis', ''))
+        electronic_scf = electronic_config.setdefault('scf', {})
+        if 'init_basis' in electronic_scf:
+            electronic_scf['init_basis'] = self._basis_definition_identity(
+                electronic_scf['init_basis'])
+        method = str(electronic_input.get('method', '')).lower()
+        if method in ('dftb', 'xtb'):
+            if method == 'dftb':
+                from oqp.utils.input_checker import apply_dftb_model_default
+                apply_dftb_model_default(electronic_config)
+            electronic_tb = dict(electronic_config.get(method, {}))
+            # External artifacts are content-addressed by
+            # ``_tight_binding_identity``; retaining path spellings here
+            # would duplicate that identity non-canonically.
+            for key in ('parameter_path', 'library_path', 'executable'):
+                electronic_tb.pop(key, None)
+            electronic_config[method] = electronic_tb
+        electronic_config = _normalize_identity_value(electronic_config)
         scf_settings = dict(cfg.get('scf', {}))
         if 'init_basis' in scf_settings:
             scf_settings['init_basis'] = self._basis_definition_identity(
@@ -2576,6 +2622,12 @@ class NAMD:
             'tdc': md.get('tdc', ''), 'trivial': md.get('trivial', ''),
             'trivial_thresh': md.get('trivial_thresh', ''),
             'first_hop_step': md.get('first_hop_step', ''),
+            'soc_settings': {
+                key: md.get(key, '') for key in (
+                    'soc', 'soc_basis', 'soc_du_dt_corr',
+                    'soc_tdc_grad_corr', 'grad_wthr', 'init_state',
+                    'dt_adaptive', 'dt_min', 'dx_max', 'econs')
+            },
             'soc': md.get('soc', ''), 'soc_basis': md.get('soc_basis', ''),
             'trajectory_representation': getattr(
                 self, '_trajectory_representation', 'same_spin_adiabatic'),
@@ -2594,6 +2646,30 @@ class NAMD:
             },
         }
         return json.dumps(identity, sort_keys=True, separators=(',', ':'))
+
+    def _tracking_state_count(self):
+        """Number of response roots represented by Molecule tracking tags."""
+        return self.nstate
+
+    def _trajectory_state_energies(self):
+        """Return energies in the trajectory's electronic propagation basis."""
+        return np.asarray(
+            self.mol.data['OQP::td_energies'], dtype=float
+        ).reshape(-1)[:self.nstate]
+
+    def _restart_extra_payload(self):
+        """Subclass hook for representation-specific checkpoint arrays."""
+        return {}
+
+    def _load_restart_extra(self, saved, prev_data=None):
+        """Subclass hook for validating representation-specific arrays."""
+        del saved, prev_data
+        return {}
+
+    def _restore_restart_extra(self, extra):
+        """Subclass hook for restoring representation-specific state."""
+        if extra:
+            raise RuntimeError('unexpected NAMD restart representation state')
 
     def _validate_restart_state(self, nuclear_state, coef, active, prev_xyz,
                                 prev_data, *, context):
@@ -2641,9 +2717,10 @@ class NAMD:
                 raise RuntimeError(
                     f'{context} contains non-finite previous-state tag {key!r}')
             if key.startswith('OQP::state_tracking_'):
+                tracking_nstate = self._tracking_state_count()
                 scalar_tags = {'OQP::state_tracking_output_reordered'}
                 expected_shape = ((1,) if key in scalar_tags
-                                  else (self.nstate,))
+                                  else (tracking_nstate,))
                 if value.shape != expected_shape:
                     raise RuntimeError(
                         f'{context} contains invalid tracking tag {key!r} '
@@ -2653,13 +2730,13 @@ class NAMD:
                         'OQP::state_tracking_raw_order'}:
                     order = np.asarray(value, dtype=np.int64)
                     if not np.array_equal(
-                            np.sort(order), np.arange(self.nstate)):
+                            np.sort(order), np.arange(tracking_nstate)):
                         raise RuntimeError(
                             f'{context} contains invalid tracking permutation '
                             f'{key!r}')
                 if key == 'OQP::state_tracking_lineage':
                     if (value.dtype.kind not in 'iu'
-                            or np.unique(value).size != self.nstate):
+                            or np.unique(value).size != tracking_nstate):
                         raise RuntimeError(
                             f'{context} contains invalid tracking lineage IDs')
                 if key in {
@@ -2798,6 +2875,13 @@ class NAMD:
             payload[f'prev_{index}'] = value
         for name, value in histories.items():
             self._checkpoint_optional(payload, name, value)
+        extra_payload = self._restart_extra_payload()
+        duplicate = set(payload).intersection(extra_payload)
+        if duplicate:
+            raise RuntimeError(
+                'duplicate representation checkpoint fields: '
+                + ', '.join(sorted(duplicate)))
+        payload.update(extra_payload)
 
         directory = os.path.dirname(self.restart_file) or '.'
         descriptor, temporary = tempfile.mkstemp(
@@ -2952,6 +3036,9 @@ class NAMD:
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
             'restart': True,
+            # Freeze a date-derived default so restarting on a later day keeps
+            # exactly the original stochastic stream and signature.
+            'seed': self.seed,
             'restart_file': os.path.relpath(self.restart_file, directory),
             'trajectory_file': os.path.relpath(self.trajectory_file, directory),
         })
@@ -2975,7 +3062,7 @@ class NAMD:
                 os.unlink(temporary)
 
     def _load_restart(self):
-        """Collectively load and restore a same-spin NAMD checkpoint."""
+        """Collectively load and restore a representation-aware checkpoint."""
         if not self.restart_requested:
             return None
         payload = self._run_io_collective_result(
@@ -2992,6 +3079,7 @@ class NAMD:
         self._t_fs = payload['time_fs']
         for name, value in payload['optional'].items():
             setattr(self, f'_{name}', value)
+        self._restore_restart_extra(payload['extra'])
         for name, value in payload['independent_state'].items():
             setattr(self, f'_{name}', value)
         self._conservative_restraint_energy = (
@@ -3094,6 +3182,7 @@ class NAMD:
                 optional[name] = value
             optional = self._validate_restart_histories(
                 optional, context='NAMD restart checkpoint')
+            extra = self._load_restart_extra(saved, prev_data)
             settings = np.asarray(saved['independent_controls_json'])
             if (settings.shape != (1,) or settings.dtype.kind not in 'SU'
                     or str(settings[0]) != json.dumps(
@@ -3135,6 +3224,7 @@ class NAMD:
                     'sha256': trajectory_prefix_sha256,
                 },
                 'optional': optional,
+                'extra': extra,
                 'independent_state': independent_state,
             }
         return result
@@ -3350,8 +3440,8 @@ class NAMD:
     # ------------------------------------------------------------------ #
     # Fortran FSSH hop
     # ------------------------------------------------------------------ #
-    def _hop(self):
-        """Call the Fortran FSSH kernel; updates amplitudes, velocities, active state."""
+    def _hop(self, allow_hop=True):
+        """Propagate amplitudes in Fortran and optionally permit a state change."""
         mol = self.mol
         n = self.nstate
 
@@ -3367,7 +3457,7 @@ class NAMD:
         params[_P_DT_FS] = self.dt_fs
         params[_P_NSUB] = float(self.substep)
         params[_P_THRSHE] = self.thrshe
-        params[_P_RAND] = self._hop_random()
+        params[_P_RAND] = self._hop_random() if allow_hop else 0.0
         params[_P_ACTIVE] = float(self.active)
         params[_P_DECO] = float(self.decoherence)
         params[_P_EDC_C] = self.edc_c
@@ -3375,6 +3465,7 @@ class NAMD:
         params[_P_TRIV] = float(self.trivial)
         params[_P_TRIV_THR] = self.trivial_thresh
         params[_P_NSTATE] = float(n)
+        params[_P_ALLOW_HOP] = 1.0 if allow_hop else -1.0
         mol.data["OQP::namd_params"] = params
 
         # state overlap + time-derivative couplings (FD or NPI), passed to the
@@ -3454,10 +3545,8 @@ class NAMD:
             hop_ready = self._prepare_hop_step(istep)
             if getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
-            elif hop_ready:
-                new_active, hopped = self._hop()
             else:
-                new_active, hopped = self.active, False
+                new_active, hopped = self._hop(allow_hop=hop_ready)
 
             active_changed = new_active != active_old
             if active_changed:
@@ -4112,10 +4201,8 @@ class NAMD_QMMM(NAMD):
             hop_ready = self._prepare_hop_step(istep)
             if getattr(self, '_pending_nacme_gate_error', None) is not None:
                 new_active, hopped = self.active, False
-            elif hop_ready:
-                new_active, hopped = self._hop()
             else:
-                new_active, hopped = self.active, False
+                new_active, hopped = self._hop(allow_hop=hop_ready)
             self.v_all[self.qm_atoms] = self.vel              # write back rescaled QM velocities
             active_changed = new_active != active_old
             if active_changed:
@@ -4198,6 +4285,9 @@ class NAMD_SOC(NAMD):
         self.ns = self.nstate_mrsf
         self.nt = self.nstate_mrsf
         self.nstate_soc = self.ns + 3 * self.nt
+        # Generic trajectory/restart machinery follows the propagated SOC
+        # basis, rather than one spatial MRSF spin manifold.
+        self.nstate = self.nstate_soc
         self._trajectory_representation = 'soc_adiabatic'
         # active spin-adiabatic state (1-based); [md] active is reused
         self.active = int(mol.config['md']['active'])
@@ -4221,6 +4311,110 @@ class NAMD_SOC(NAMD):
         self.soc_du_dt_corr = (_du is True) or (str(_du).lower() in ('true', '1', 'on', 'yes'))
         _tdcg = mol.config['md'].get('soc_tdc_grad_corr', False)
         self.soc_tdc_grad_corr = (_tdcg is True) or (str(_tdcg).lower() in ('true', '1', 'on', 'yes'))
+
+    def _tracking_state_count(self):
+        """Molecule tracking tags contain spatial roots, not SOC sublevels."""
+        return self.nstate_mrsf
+
+    def _trajectory_state_energies(self):
+        fallback = getattr(self, 'prev_eval', None)
+        energies = np.asarray(
+            getattr(self, '_trajectory_energies', fallback), dtype=float
+        ).reshape(-1)
+        if energies.shape != (self.nstate_soc,):
+            raise ValueError('SOC trajectory energy vector has the wrong shape')
+        return energies
+
+    def _restart_extra_payload(self):
+        """Serialize the SOC gauge and both MRSF response histories."""
+        required = {
+            'soc_prev_u': np.asarray(self.prev_u, dtype=np.complex128),
+            'soc_prev_eval': np.asarray(self.prev_eval, dtype=np.float64),
+            'soc_prev_sbvec': np.asarray(self.prev_sbvec),
+            'soc_prev_tbvec': np.asarray(self.prev_tbvec),
+        }
+        n = self.nstate_soc
+        if required['soc_prev_u'].shape != (n, n):
+            raise RuntimeError('invalid SOC eigenvector history at checkpoint')
+        if required['soc_prev_eval'].shape != (n,):
+            raise RuntimeError('invalid SOC energy history at checkpoint')
+        if (required['soc_prev_sbvec'].size == 0
+                or required['soc_prev_tbvec'].size == 0):
+            raise RuntimeError('empty SOC response-vector history at checkpoint')
+        current_vectors = {
+            'soc_prev_sbvec': np.asarray(self.sbvec),
+            'soc_prev_tbvec': np.asarray(self.tbvec),
+        }
+        for name, current in current_vectors.items():
+            previous = required[name]
+            if previous.shape != current.shape or previous.dtype != current.dtype:
+                raise RuntimeError(
+                    f'{name} does not match the current TD response-vector '
+                    'shape and dtype at checkpoint')
+        for name, value in required.items():
+            if value.dtype.kind in 'fc' and not np.all(np.isfinite(value)):
+                raise RuntimeError(f'non-finite {name} at checkpoint')
+        return {
+            'soc_prev_u_real': required['soc_prev_u'].real,
+            'soc_prev_u_imag': required['soc_prev_u'].imag,
+            'soc_prev_eval': required['soc_prev_eval'],
+            'soc_prev_sbvec': required['soc_prev_sbvec'],
+            'soc_prev_tbvec': required['soc_prev_tbvec'],
+        }
+
+    def _load_restart_extra(self, saved, prev_data=None):
+        """Validate SOC gauge/history arrays before exposing a checkpoint."""
+        names = (
+            'soc_prev_u_real', 'soc_prev_u_imag', 'soc_prev_eval',
+            'soc_prev_sbvec', 'soc_prev_tbvec')
+        missing = [name for name in names if name not in saved]
+        if missing:
+            raise RuntimeError(
+                'SOC restart checkpoint lacks ' + ', '.join(missing))
+        n = self.nstate_soc
+        u_real = np.asarray(saved['soc_prev_u_real'], dtype=float)
+        u_imag = np.asarray(saved['soc_prev_u_imag'], dtype=float)
+        prev_eval = np.asarray(saved['soc_prev_eval'], dtype=float)
+        sbvec = np.array(saved['soc_prev_sbvec'], copy=True)
+        tbvec = np.array(saved['soc_prev_tbvec'], copy=True)
+        if u_real.shape != (n, n) or u_imag.shape != (n, n):
+            raise RuntimeError('SOC restart checkpoint has invalid eigenvectors')
+        if prev_eval.shape != (n,):
+            raise RuntimeError('SOC restart checkpoint has invalid energies')
+        response_tags = {
+            'singlet': (sbvec, 'OQP::td_bvec_mo_s'),
+            'triplet': (tbvec, 'OQP::td_bvec_mo_t'),
+        }
+        if not isinstance(prev_data, dict):
+            raise RuntimeError(
+                'SOC restart checkpoint lacks TD response-vector metadata')
+        for label, (saved_vector, tag) in response_tags.items():
+            if tag not in prev_data:
+                raise RuntimeError(
+                    f'SOC restart checkpoint lacks {label} TD dimensions')
+            expected = np.asarray(prev_data[tag])
+            if (saved_vector.size == 0
+                    or saved_vector.shape != expected.shape
+                    or saved_vector.dtype != expected.dtype
+                    or saved_vector.dtype.kind not in 'fc'):
+                raise RuntimeError(
+                    f'SOC restart checkpoint has incompatible {label} '
+                    'response-vector shape or dtype')
+        for value in (u_real, u_imag, prev_eval, sbvec, tbvec):
+            if value.dtype.kind in 'fc' and not np.all(np.isfinite(value)):
+                raise RuntimeError('SOC restart checkpoint has non-finite history')
+        prev_u = u_real + 1j*u_imag
+        gram = prev_u.conj().T @ prev_u
+        if not np.allclose(gram, np.eye(n), atol=1.0e-7, rtol=0.0):
+            raise RuntimeError('SOC restart checkpoint eigenvectors are not unitary')
+        return {
+            'prev_u': prev_u, 'prev_eval': prev_eval.copy(),
+            'prev_sbvec': sbvec, 'prev_tbvec': tbvec,
+        }
+
+    def _restore_restart_extra(self, extra):
+        for name in ('prev_u', 'prev_eval', 'prev_sbvec', 'prev_tbvec'):
+            setattr(self, name, np.array(extra[name], copy=True))
 
     # ------------------------------------------------------------------ #
     def _resolve_initial_active(self, u):
@@ -4371,7 +4565,26 @@ class NAMD_SOC(NAMD):
         t_aligned = u_prev.conj().T @ s_mch @ u_aligned
         return u_aligned, t_aligned
 
-    def _propagate_and_hop(self, eval_prev, eval_cur, t):
+    def _soc_unitary_overlap(self, t):
+        """Return the nearest-unitary SOC overlap and its anti-Hermitian log.
+
+        The complex generator is also retained in the packed trajectory.  It
+        must not be forced through the real antisymmetric same-spin NACME gate:
+        SOC adiabatic derivative couplings are generally complex and
+        anti-Hermitian.
+        """
+        from scipy.linalg import sqrtm, logm
+        overlap = np.asarray(t, dtype=np.complex128)
+        metric_root = np.asarray(
+            sqrtm(overlap.conj().T @ overlap), dtype=np.complex128)
+        tu = overlap @ np.linalg.inv(metric_root)
+        kgen = np.asarray(logm(tu), dtype=np.complex128)
+        kgen = 0.5 * (kgen - kgen.conj().T)
+        self._last_state_overlap = overlap.copy()
+        self._last_overlap_tdc = kgen / self.dt
+        return tu, kgen
+
+    def _propagate_and_hop(self, eval_prev, eval_cur, t, allow_hop=True):
         """Local-diabatization (SHARC) propagation of the spin-adiabatic
         amplitudes + fewest-switches hop + isotropic velocity rescaling.
 
@@ -4386,19 +4599,18 @@ class NAMD_SOC(NAMD):
         Hop probabilities (SHARC) attribute the active-state population loss to
         the states it flowed into through P.
         """
-        from scipy.linalg import sqrtm, logm, expm
+        from scipy.linalg import expm
         n = self.nstate_soc
         a = self.active - 1
         dt = self.dt
         nsub = max(1, self.substep)
 
-        tu = t @ np.linalg.inv(sqrtm(t.conj().T @ t))       # nearest unitary
+        tu, kgen = self._soc_unitary_overlap(t)
         # substep local diabatization: split the basis rotation into nsub equal
         # fractional rotations (tu^{1/nsub}) and integrate the energy phase with
         # linearly interpolated diagonal energies.  The net full-step propagator
         # p is accumulated and used for the SHARC flux hop probabilities.
         # Reduces exactly to the single-step LD propagator when nsub = 1.
-        kgen = logm(tu)                                     # skew-Hermitian generator
         rsub_dag = expm(-kgen / nsub)                       # (tu^{1/nsub})^dagger
         dtau = dt / nsub
         p = np.eye(n, dtype=complex)
@@ -4451,6 +4663,8 @@ class NAMD_SOC(NAMD):
         self.coef = c_new
 
         # fewest-switches hop decision
+        if not allow_hop:
+            return False
         rand = self._hop_random()
         hopped = False
         lower = 0.0
@@ -4641,22 +4855,34 @@ class NAMD_SOC(NAMD):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD (ISC, SHARC spin-adiabatic FSSH)')
         self._prepare_md_outputs()
+        restart = self._load_restart()
+        if restart is None:
+            r = mol.get_system().reshape((self.natom, 3))
+            eval_ha, u = self._electronic_soc(with_overlap=False)
+            self._resolve_initial_active(u)
+            grad, e_pure, mult, state, w = self._soc_gradient(
+                u, self.active, eval_ha)
+            accel = -grad / self.mass[:, None]
+            self._ulog = u
+            self._trajectory_energies = (
+                self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
+            self._store_prev(r, u, eval_ha)
+            self._log_soc(0, e_pure, mult, state, w, False)
+            self._save_restart(0, r, self.vel, accel)
+            start_step = 0
+        else:
+            r = restart['coordinates'].reshape((self.natom, 3))
+            self.vel = restart['velocities'].reshape((self.natom, 3))
+            accel = restart['acceleration'].reshape((self.natom, 3))
+            mol.update_system(r.reshape(-1))
+            start_step = restart['step']
+        self._e_ref_tot = (
+            self._nve_reference_energy
+            if self._nve_reference_energy is not None
+            else 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                 + (e_pure if restart is None else 0.0))
 
-        r = mol.get_system().reshape((self.natom, 3))
-
-        # initial electronic structure + active-surface force
-        eval_ha, u = self._electronic_soc(with_overlap=False)
-        self._resolve_initial_active(u)
-        grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
-        accel = -grad / self.mass[:, None]
-        self._ulog = u
-        self._store_prev(r, u, eval_ha)
-        self._log_soc(
-            0, e_pure, mult, state, w, False,
-            self.e_ref + self.e0 + eval_ha)
-        self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
-
-        for istep in range(1, self.nstep + 1):
+        for istep in range(start_step + 1, self.nstep + 1):
             # adaptive timestep + velocity-Verlet position update
             self.dt = self._adaptive_dt(self.vel, accel)
             self._t_fs += self.dt / FS_TO_AU
@@ -4670,6 +4896,7 @@ class NAMD_SOC(NAMD):
             s_mch = self._mch_overlap()
             self._last_s_mch = s_mch
             u, t = self._phase_track(u, self.prev_u, s_mch, eval_ha)
+            self._last_state_overlap = np.array(t, copy=True)
 
             # active-surface force (weighted-MCH diagonal gradient) + vel update
             grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
@@ -4677,13 +4904,20 @@ class NAMD_SOC(NAMD):
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
 
             # local-diabatization propagation + fewest-switches hop
-            if self._prepare_hop_step(istep):
-                hopped = self._propagate_and_hop(self.prev_eval, eval_ha, t)
-            else:
-                hopped = False
+            active_old = self.active
+            energy_before_transition = (
+                0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure)
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._propagate_and_hop(
+                self.prev_eval, eval_ha, t, allow_hop=allow_hop)
             if hopped:
                 grad, e_pure, mult, state, w = self._soc_gradient(u, self.active, eval_ha)
                 accel_new = -grad / self.mass[:, None]
+                transition_energy_jump = (
+                    0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure
+                    - energy_before_transition)
+            else:
+                transition_energy_jump = np.nan
 
             accel = accel_new
             if self.econs:                                 # temporary E_tot-conservation rescale
@@ -4692,10 +4926,13 @@ class NAMD_SOC(NAMD):
                 if ke > 0 and ket > 0:
                     self.vel *= np.sqrt(ket / ke)
             self._ulog = u
+            self._trajectory_energies = (
+                self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
             self._store_prev(r, u, eval_ha)
             self._log_soc(
                 istep, e_pure, mult, state, w, hopped,
-                self.e_ref + self.e0 + eval_ha)
+                transition_energy_jump=transition_energy_jump)
+            self._save_restart(istep, r, self.vel, accel)
 
         dump_log(mol, title='PyOQP: SOC-NAMD trajectory complete')
 
@@ -4708,8 +4945,10 @@ class NAMD_SOC(NAMD):
         self.prev_tbvec = self.tbvec.copy()
 
     def _log_soc(self, istep, e_pure, mult, state, w, hopped,
-                 state_energies):
+                 transition_energy_jump=np.nan):
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+        self._update_nve_gate(
+            istep, e_pure, ekin, transition_energy_jump)
         # manifold-summed populations via the MCH projection (U c): the spin
         # character is in the MCH basis, where the first ns components are
         # singlets and the rest triplet Ms sublevels. The adiabatic states are
@@ -4730,9 +4969,10 @@ class NAMD_SOC(NAMD):
         )
         self._unbiased_potential_energy = float(e_pure)
         self._trajectory_state_energies = np.asarray(
-            state_energies, dtype=float).reshape(-1)
-        self._write_md_trajectory(
-            istep, self.mol.get_system(), e_pure, ekin, hopped)
+            self._trajectory_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(istep, self.mol.get_system().reshape(
+            (self.natom, 3)), e_pure, ekin, hopped)
+        self._enforce_nve_gate()
 
 
 class NAMD_SOC_MCH(NAMD_SOC):
@@ -4793,7 +5033,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
         e = self._mch_energies_abs()[active - 1]
         return g, e, mult, state
 
-    def _mch_propagate_and_hop(self, h_mch, e_mch):
+    def _mch_propagate_and_hop(self, h_mch, e_mch, allow_hop=True):
         from scipy.linalg import expm
         n = self.nstate_soc
         a = self.active - 1
@@ -4838,6 +5078,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
                     c_new[a] *= np.sqrt(max(0.0, 1.0 - p_others) / pa)
         self.coef = c_new
 
+        if not allow_hop:
+            return False
         rand = self._hop_random()
         hopped = False
         lower = 0.0
@@ -4864,19 +5106,33 @@ class NAMD_SOC_MCH(NAMD_SOC):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD (ISC, MCH-basis FSSH)')
         self._prepare_md_outputs()
+        restart = self._load_restart()
+        if restart is None:
+            r = mol.get_system().reshape((self.natom, 3))
+            eval_ha, u = self._electronic_soc(with_overlap=False)
+            self._resolve_initial_mch_active()
+            h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+            e_mch = self._mch_energies_abs()
+            grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
+            accel = -grad / self.mass[:, None]
+            self._trajectory_energies = e_mch.copy()
+            self._store_prev(r, u, eval_ha)
+            self._log_mch(0, e_pure, mult, state, False)
+            self._save_restart(0, r, self.vel, accel)
+            start_step = 0
+        else:
+            r = restart['coordinates'].reshape((self.natom, 3))
+            self.vel = restart['velocities'].reshape((self.natom, 3))
+            accel = restart['acceleration'].reshape((self.natom, 3))
+            mol.update_system(r.reshape(-1))
+            start_step = restart['step']
+        self._e_ref_tot = (
+            self._nve_reference_energy
+            if self._nve_reference_energy is not None
+            else 0.5*np.sum(self.mass[:, None]*self.vel**2)
+                 + (e_pure if restart is None else 0.0))
 
-        r = mol.get_system().reshape((self.natom, 3))
-        eval_ha, u = self._electronic_soc(with_overlap=False)
-        self._resolve_initial_mch_active()
-        h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
-        e_mch = self._mch_energies_abs()
-        grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
-        accel = -grad / self.mass[:, None]
-        self._store_prev(r, u, eval_ha)
-        self._log_mch(0, e_pure, mult, state, False, e_mch)
-        self._e_ref_tot = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2) + e_pure
-
-        for istep in range(1, self.nstep + 1):
+        for istep in range(start_step + 1, self.nstep + 1):
             self.dt = self._adaptive_dt(self.vel, accel)
             self._t_fs += self.dt / FS_TO_AU
             r = r + self.vel * self.dt + 0.5 * accel * self.dt ** 2
@@ -4889,13 +5145,19 @@ class NAMD_SOC_MCH(NAMD_SOC):
             accel_new = -grad / self.mass[:, None]
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
 
-            if self._prepare_hop_step(istep):
-                hopped = self._mch_propagate_and_hop(h_mch, e_mch)
-            else:
-                hopped = False
+            energy_before_transition = (
+                0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure)
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._mch_propagate_and_hop(
+                h_mch, e_mch, allow_hop=allow_hop)
             if hopped:
                 grad, e_pure, mult, state = self._mch_exact_gradient(self.active)
                 accel_new = -grad / self.mass[:, None]
+                transition_energy_jump = (
+                    0.5*np.sum(self.mass[:, None]*self.vel**2) + e_pure
+                    - energy_before_transition)
+            else:
+                transition_energy_jump = np.nan
 
             accel = accel_new
             if self.econs:
@@ -4903,13 +5165,20 @@ class NAMD_SOC_MCH(NAMD_SOC):
                 ket = self._e_ref_tot - e_pure
                 if ke > 0 and ket > 0:
                     self.vel *= np.sqrt(ket / ke)
+            self._trajectory_energies = e_mch.copy()
             self._store_prev(r, u, eval_ha)
-            self._log_mch(istep, e_pure, mult, state, hopped, e_mch)
+            self._log_mch(
+                istep, e_pure, mult, state, hopped,
+                transition_energy_jump=transition_energy_jump)
+            self._save_restart(istep, r, self.vel, accel)
 
         dump_log(mol, title='PyOQP: SOC-MCH-NAMD trajectory complete')
 
-    def _log_mch(self, istep, e_pure, mult, state, hopped, state_energies):
+    def _log_mch(self, istep, e_pure, mult, state, hopped,
+                 transition_energy_jump=np.nan):
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
+        self._update_nve_gate(
+            istep, e_pure, ekin, transition_energy_jump)
         pmch = np.abs(self.coef) ** 2
         pop_s = float(pmch[:self.ns].sum())
         pop_t = float(pmch[self.ns:].sum())
@@ -4924,9 +5193,10 @@ class NAMD_SOC_MCH(NAMD_SOC):
         )
         self._unbiased_potential_energy = float(e_pure)
         self._trajectory_state_energies = np.asarray(
-            state_energies, dtype=float).reshape(-1)
-        self._write_md_trajectory(
-            istep, self.mol.get_system(), e_pure, ekin, hopped)
+            self._trajectory_energies, dtype=float).reshape(-1)
+        self._write_md_trajectory(istep, self.mol.get_system().reshape(
+            (self.natom, 3)), e_pure, ekin, hopped)
+        self._enforce_nve_gate()
 
 
 class NAMD_SOC_QMMM(NAMD_QMMM):
@@ -4957,6 +5227,12 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
     _dominant_component = NAMD_SOC._dominant_component
     _mch_energies_abs = NAMD_SOC._mch_energies_abs
     _mch_hamiltonian_from_u = NAMD_SOC._mch_hamiltonian_from_u
+    _soc_unitary_overlap = NAMD_SOC._soc_unitary_overlap
+    _tracking_state_count = NAMD_SOC._tracking_state_count
+    _trajectory_state_energies = NAMD_SOC._trajectory_state_energies
+    _restart_extra_payload = NAMD_SOC._restart_extra_payload
+    _load_restart_extra = NAMD_SOC._load_restart_extra
+    _restore_restart_extra = NAMD_SOC._restore_restart_extra
 
     def __init__(self, mol):
         super().__init__(mol)                                  # NAMD_QMMM: OpenMM + QM masses + v_all
@@ -4965,6 +5241,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.ns = self.nstate_mrsf
         self.nt = self.nstate_mrsf
         self.nstate_soc = self.ns + 3 * self.nt
+        self.nstate = self.nstate_soc
         self._trajectory_representation = 'soc_adiabatic'
         self.active = int(mol.config['md']['active'])
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
@@ -5146,24 +5423,41 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, SHARC spin-adiabatic FSSH + ESPF embedding)')
         self._prepare_md_outputs()
+        restart = self._load_restart()
+        if restart is None:
+            self._sync_positions()
+            eval_ha, u, potmm, _ = self._electronic_soc_qmmm(
+                with_overlap=False)
+            NAMD_SOC._resolve_initial_active(self, u)
+            g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(
+                u, self.active, eval_ha)
+            f_all, epot = self._total_force_soc(
+                potmm, g_qm, e_diag, pchg)
+            accel = f_all / self.m_all[:, None]
+            self._rattle(self.r_all, self.v_all)
+            self._thermalize_initial()
+            self._ulog = u
+            self._trajectory_energies = (
+                self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
+            r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+            NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
+            self._log_soc_qmmm(0, epot, mult, state, w, False)
+            self._save_restart(0, self.r_all, self.v_all, accel)
+            start_step = 0
+        else:
+            self.r_all = restart['coordinates'].reshape((self.natom_all, 3))
+            self.v_all = restart['velocities'].reshape((self.natom_all, 3))
+            accel = restart['acceleration'].reshape((self.natom_all, 3))
+            self.vel = self.v_all[self.qm_atoms].copy()
+            self._sync_positions()
+            start_step = restart['step']
+        self._e_ref_tot = (
+            self._nve_reference_energy
+            if self._nve_reference_energy is not None
+            else 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+                 + (epot if restart is None else 0.0))
 
-        self._sync_positions()
-        eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
-        NAMD_SOC._resolve_initial_active(self, u)
-        g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
-        f_all, epot = self._total_force_soc(potmm, g_qm, e_diag, pchg)
-        accel = f_all / self.m_all[:, None]
-        self._rattle(self.r_all, self.v_all)          # project initial MM velocities onto constraints
-        self._thermalize_initial()                    # rescale to init_temp on the constrained DOF
-        self._ulog = u
-        r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
-        NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
-        self._log_soc_qmmm(
-            0, epot, mult, state, w, False,
-            self.e_ref + self.e0 + eval_ha)
-        self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
-
-        for istep in range(1, self.nstep + 1):
+        for istep in range(start_step + 1, self.nstep + 1):
             # adaptive timestep + velocity-Verlet position update + SHAKE
             self.dt = self._adaptive_dt(self.v_all, accel)
             self._t_fs += self.dt / FS_TO_AU
@@ -5177,6 +5471,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             s_mch = NAMD_SOC._mch_overlap(self)
             self._last_s_mch = s_mch
             u, t = NAMD_SOC._phase_track(u, self.prev_u, s_mch, eval_ha)
+            self._last_state_overlap = np.array(t, copy=True)
 
             # active-surface force (weighted-MCH diagonal gradient + ESPF) + vel update
             g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
@@ -5188,11 +5483,12 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
             # local-diabatization propagation + spin-adiabatic hop (QM velocities only)
             active_old = self.active                           # save for ESPF correction below
             epot_old = epot                                    # total E_pot before hop
+            energy_before_transition = (
+                0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
             self.vel = self.v_all[self.qm_atoms].copy()
-            if self._prepare_hop_step(istep):
-                hopped = NAMD_SOC._propagate_and_hop(self, self.prev_eval, eval_ha, t)
-            else:
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = NAMD_SOC._propagate_and_hop(
+                self, self.prev_eval, eval_ha, t, allow_hop=allow_hop)
             self.v_all[self.qm_atoms] = self.vel
             if hopped:
                 g_qm, e_diag, mult, state, w, pchg = self._soc_gradient_qmmm(u, self.active, eval_ha)
@@ -5210,6 +5506,11 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                     ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
                     if ekin_all > 0:
                         self.v_all *= np.sqrt(max(0.0, 1.0 + de_espf / ekin_all))
+                transition_energy_jump = (
+                    0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot
+                    - energy_before_transition)
+            else:
+                transition_energy_jump = np.nan
 
             accel = accel_new
             if self.econs:                                 # temporary E_tot-conservation rescale
@@ -5218,16 +5519,21 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                 if ke > 0 and ket > 0:
                     self.v_all *= np.sqrt(ket / ke)
             self._ulog = u
+            self._trajectory_energies = (
+                self.e_ref + self.e0 + np.asarray(eval_ha, dtype=float))
             NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
             self._log_soc_qmmm(
                 istep, epot, mult, state, w, hopped,
-                self.e_ref + self.e0 + eval_ha)
+                transition_energy_jump=transition_energy_jump)
+            self._save_restart(istep, self.r_all, self.v_all, accel)
 
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM trajectory complete')
 
     def _log_soc_qmmm(self, istep, epot, mult, state, w, hopped,
-                      state_energies):
+                      transition_energy_jump=np.nan):
         ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        self._update_nve_gate(
+            istep, epot, ekin, transition_energy_jump)
         mch = self._ulog @ self.coef
         pmch = np.abs(mch) ** 2
         pop_s = float(pmch[:self.ns].sum())
@@ -5243,9 +5549,10 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         )
         self._unbiased_potential_energy = float(epot)
         self._trajectory_state_energies = np.asarray(
-            state_energies, dtype=float).reshape(-1)
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
+        self._enforce_nve_gate()
 
 
 class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
@@ -5284,23 +5591,41 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         mol = self.mol
         dump_log(mol, title='PyOQP: SOC-NAMD QM/MM (ISC, MCH-basis FSSH + ESPF embedding)')
         self._prepare_md_outputs()
+        restart = self._load_restart()
+        if restart is None:
+            self._sync_positions()
+            eval_ha, u, potmm, _ = self._electronic_soc_qmmm(
+                with_overlap=False)
+            self._resolve_initial_mch_active()
+            h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
+            e_mch = self._mch_energies_abs()
+            g_qm, e_pure, mult, state, pchg = (
+                self._mch_exact_gradient_qmmm(self.active))
+            f_all, epot = self._total_force_soc(
+                potmm, g_qm, e_pure, pchg)
+            accel = f_all / self.m_all[:, None]
+            self._rattle(self.r_all, self.v_all)
+            self._thermalize_initial()
+            self._trajectory_energies = e_mch.copy()
+            r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
+            NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
+            self._log_mch_qmmm(0, epot, mult, state, False)
+            self._save_restart(0, self.r_all, self.v_all, accel)
+            start_step = 0
+        else:
+            self.r_all = restart['coordinates'].reshape((self.natom_all, 3))
+            self.v_all = restart['velocities'].reshape((self.natom_all, 3))
+            accel = restart['acceleration'].reshape((self.natom_all, 3))
+            self.vel = self.v_all[self.qm_atoms].copy()
+            self._sync_positions()
+            start_step = restart['step']
+        self._e_ref_tot = (
+            self._nve_reference_energy
+            if self._nve_reference_energy is not None
+            else 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+                 + (epot if restart is None else 0.0))
 
-        self._sync_positions()
-        eval_ha, u, potmm, _ = self._electronic_soc_qmmm(with_overlap=False)
-        self._resolve_initial_mch_active()
-        h_mch = self._mch_hamiltonian_from_u(u, eval_ha)
-        e_mch = self._mch_energies_abs()
-        g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
-        f_all, epot = self._total_force_soc(potmm, g_qm, e_pure, pchg)
-        accel = f_all / self.m_all[:, None]
-        self._rattle(self.r_all, self.v_all)
-        self._thermalize_initial()
-        r_qm = self.r_all[self.qm_atoms].reshape((self.natom, 3))
-        NAMD_SOC._store_prev(self, r_qm, u, eval_ha)
-        self._log_mch_qmmm(0, epot, mult, state, False, e_mch)
-        self._e_ref_tot = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2) + epot
-
-        for istep in range(1, self.nstep + 1):
+        for istep in range(start_step + 1, self.nstep + 1):
             self.dt = self._adaptive_dt(self.v_all, accel)
             self._t_fs += self.dt / FS_TO_AU
             r_old = self.r_all.copy()
@@ -5319,11 +5644,12 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
 
             active_old = self.active
             epot_old = epot
+            energy_before_transition = (
+                0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
             self.vel = self.v_all[self.qm_atoms].copy()
-            if self._prepare_hop_step(istep):
-                hopped = self._mch_propagate_and_hop(h_mch, e_mch)
-            else:
-                hopped = False
+            allow_hop = self._prepare_hop_step(istep)
+            hopped = self._mch_propagate_and_hop(
+                h_mch, e_mch, allow_hop=allow_hop)
             self.v_all[self.qm_atoms] = self.vel
             if hopped:
                 g_qm, e_pure, mult, state, pchg = self._mch_exact_gradient_qmmm(self.active)
@@ -5335,6 +5661,11 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                     ekin_all = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
                     if ekin_all > 0:
                         self.v_all *= np.sqrt(max(0.0, 1.0 + de_espf / ekin_all))
+                transition_energy_jump = (
+                    0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot
+                    - energy_before_transition)
+            else:
+                transition_energy_jump = np.nan
 
             accel = accel_new
             if self.econs:
@@ -5342,15 +5673,20 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                 ket = self._e_ref_tot - epot
                 if ke > 0 and ket > 0:
                     self.v_all *= np.sqrt(ket / ke)
+            self._trajectory_energies = e_mch.copy()
             NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)
             self._log_mch_qmmm(
-                istep, epot, mult, state, hopped, e_mch)
+                istep, epot, mult, state, hopped,
+                transition_energy_jump=transition_energy_jump)
+            self._save_restart(istep, self.r_all, self.v_all, accel)
 
         dump_log(mol, title='PyOQP: SOC-MCH-QMMM-NAMD trajectory complete')
 
     def _log_mch_qmmm(self, istep, epot, mult, state, hopped,
-                      state_energies):
+                      transition_energy_jump=np.nan):
         ekin = 0.5 * np.sum(self.m_all[:, None] * self.v_all ** 2)
+        self._update_nve_gate(
+            istep, epot, ekin, transition_energy_jump)
         pmch = np.abs(self.coef) ** 2
         pop_s = float(pmch[:self.ns].sum())
         pop_t = float(pmch[self.ns:].sum())
@@ -5365,9 +5701,10 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
         )
         self._unbiased_potential_energy = float(epot)
         self._trajectory_state_energies = np.asarray(
-            state_energies, dtype=float).reshape(-1)
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
+        self._enforce_nve_gate()
 
 
 def _dftb_soc_tags(mol):
