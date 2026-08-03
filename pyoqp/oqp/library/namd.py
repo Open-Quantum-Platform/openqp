@@ -1087,7 +1087,7 @@ class NAMD:
                 f'{context} nuclear atom count {coordinates.shape[0]} does not '
                 f'match the current system ({expected_natom})')
 
-        coef = np.asarray(coef, dtype=np.complex128).reshape(-1)
+        coef = np.asarray(coef, dtype=np.complex128)
         if (coef.shape != (self.nstate,)
                 or not np.all(np.isfinite(coef.real))
                 or not np.all(np.isfinite(coef.imag))):
@@ -1112,6 +1112,32 @@ class NAMD:
             if value.dtype.kind in 'biufc' and not np.all(np.isfinite(value)):
                 raise RuntimeError(
                     f'{context} contains non-finite previous-state tag {key!r}')
+            if key.startswith('OQP::state_tracking_'):
+                scalar_tags = {'OQP::state_tracking_output_reordered'}
+                expected_shape = ((1,) if key in scalar_tags
+                                  else (self.nstate,))
+                if value.shape != expected_shape:
+                    raise RuntimeError(
+                        f'{context} contains invalid tracking tag {key!r} '
+                        f'shape {value.shape}; expected {expected_shape}')
+                if key in {
+                        'OQP::state_tracking_order',
+                        'OQP::state_tracking_raw_order',
+                        'OQP::state_tracking_lineage'}:
+                    order = np.asarray(value, dtype=np.int64)
+                    if not np.array_equal(
+                            np.sort(order), np.arange(self.nstate)):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking permutation '
+                            f'{key!r}')
+                if key in {
+                        'OQP::state_tracking_phase_step',
+                        'OQP::state_tracking_phase_initial',
+                        'OQP::state_tracking_previous_phase_initial'}:
+                    if not np.allclose(np.abs(value), 1.0, atol=1.0e-12,
+                                       rtol=0.0):
+                        raise RuntimeError(
+                            f'{context} contains invalid tracking phase {key!r}')
         return coordinates, velocities, acceleration, coef, prev_xyz
 
     @staticmethod

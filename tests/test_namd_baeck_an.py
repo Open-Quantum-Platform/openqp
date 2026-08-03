@@ -294,6 +294,28 @@ absolute_ff_identity = d._qmmm_forcefield_identity(
     os.path.join(input_root, 'local.xml') + ' tip3p.xml')
 forcefield_identity_stable = relative_ff_identity == absolute_ff_identity
 
+# Electronic arrays must retain their exact vector shape, and tracking
+# histories must remain one entry per state.
+try:
+    d._validate_restart_state(
+        (np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001),
+        np.array([[1+0j], [0+0j]]), d.active, d.prev_xyz, d.prev_data,
+        context='shape test')
+except RuntimeError:
+    coefficient_shape_rejected = True
+else:
+    coefficient_shape_rejected = False
+bad_tracking = dict(d.prev_data)
+bad_tracking['OQP::state_tracking_phase_initial'] = np.array([1.0])
+try:
+    d._validate_restart_state(
+        (np.zeros((3, 3)), d.vel, np.ones((3, 3))*0.001),
+        d.coef, d.active, d.prev_xyz, bad_tracking, context='tracking test')
+except RuntimeError:
+    tracking_shape_rejected = True
+else:
+    tracking_shape_rejected = False
+
 # A non-finite electronic state must not replace the last-good checkpoint.
 d.coef = np.array([np.nan+0j, 0+0j])
 try:
@@ -418,6 +440,8 @@ print('DENSE=' + json.dumps({
         'qm_selection_bound': qm_selection_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
+        'coefficient_shape_rejected': coefficient_shape_rejected,
+        'tracking_shape_rejected': tracking_shape_rejected,
         'audit_rows': audit_lines,
 }))
 """
@@ -457,6 +481,7 @@ print('DENSE=' + json.dumps({
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'qm_selection_bound': True, 'unique_manifests': True,
         'forcefield_identity_stable': True,
+        'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
         'audit_rows': [
             'center_step\tsource\tverdict\tsigned\tcompared_pairs\t'
             'invariant_failures\treference_failures\t'
