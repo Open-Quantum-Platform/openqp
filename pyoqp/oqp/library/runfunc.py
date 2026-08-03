@@ -298,7 +298,7 @@ def get_optimizer(mol):
         from oqp.library.liboqp import OQPAutoMECIOpt
         return OQPAutoMECIOpt(mol)
     if lib == 'oqp' and runtype == 'mecp' and \
-            str(mol.config['optimize'].get('mecp_search', 'auglag')).strip().lower() == 'sqp':
+            str(mol.config['optimize'].get('mecp_search', 'auto')).strip().lower() in ('auto', 'sqp'):
         # SQP supplies its own KKT step control instead of an objective for the
         # native engine, so it is dispatched like BaekA rather than through
         # OQPMECPOpt.

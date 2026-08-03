@@ -442,10 +442,12 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
-        # MECP objective.  The default is the augmented Lagrangian because the
-        # legacy fixed-weight quadratic penalty (quad) leaves a residual gap of
-        # order 1/gap_weight and cannot meet energy_gap.
-        'mecp_search': {'type': str, 'default': 'auglag'},
+        # MECP objective.  ``auto`` selects SQP on the native optimizer, which
+        # it replaces outright, and the augmented Lagrangian on the backends
+        # that supply their own optimizer.  Both converge the energy gap; the
+        # legacy fixed-weight quadratic penalty (quad) does not, because its
+        # residual gap is of order 1/gap_weight.
+        'mecp_search': {'type': str, 'default': 'auto'},
         # Strength of the auglag gap term relative to the projected mean
         # gradient.  1.0 reproduces the plain Bearpark projection; the larger
         # default reaches the seam faster and keeps the quasi-Newton history

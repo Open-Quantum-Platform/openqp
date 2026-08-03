@@ -155,7 +155,7 @@ PCM_BACKEND_MODELS = {
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
 MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
-MECP_SEARCH = {"auglag", "sqp", "penalty", "quad"}
+MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -2561,7 +2561,10 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
         # disabled value must not block a run that never reads it.
         if runtype == "mecp":
             effective_search = _as_lower(
-                _get(config, "optimize", "mecp_search", "auglag"))
+                _get(config, "optimize", "mecp_search", "auto"))
+            if effective_search == "auto":
+                # auto is SQP natively and auglag on the other backends
+                effective_search = "auglag" if lib != "oqp" else "sqp"
         else:
             effective_search = _as_lower(
                 _get(config, "optimize", "meci_search", "auto"))
@@ -2589,7 +2592,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             )
 
     if runtype == "mecp":
-        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auglag"))
+        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auto"))
         if mecp_search == "sqp" and lib != "oqp":
             report.add(
                 "ERROR",
@@ -2606,7 +2609,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECP search algorithm.",
                 value=mecp_search,
                 expected=", ".join(sorted(MECP_SEARCH)),
-                action="Use auglag (default), sqp, penalty, or quad.",
+                action="Use auto (default), sqp, auglag, penalty, or quad.",
             )
         elif mecp_search == "penalty":
             penalty_controls = {

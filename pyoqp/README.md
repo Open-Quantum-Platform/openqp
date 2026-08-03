@@ -563,7 +563,7 @@ automatically.
                  optimizer with its own trust-region step control; coordsys
                  applies to that optimizer and is therefore not used here.
                  Converges tighter and in fewer steps than auglag on the cases
-                 tested so far, but it is newer, so auglag remains the default.
+                 tested so far, which is why auto selects it natively.
       auglag     (default) least-squares multiplier plus gradient projection;
                  with gap_sigma=1 the converged form is the plain Bearpark
                  gradient projection.

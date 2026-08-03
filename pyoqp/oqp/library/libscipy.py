@@ -761,6 +761,7 @@ class MECPOpt(Optimizer):
     calculation, which is why the fixed-weight quadratic penalty is no longer
     the default.
 
+    auto     (default) SQP with the native optimizer, auglag elsewhere.
     sqp      sequential quadratic programming.  Solves the KKT equations of
              the constrained problem directly, so the multiplier comes out of
              the step rather than a formula and there is no penalty parameter
@@ -783,6 +784,11 @@ class MECPOpt(Optimizer):
         # legacy .inp and the Python API reach here without the concise
         # parser's normalization, so fold case at the dispatch point
         self.mecp_search = str(mol.config['optimize']['mecp_search']).strip().lower()
+        # ``auto`` reaches SQPMECPOpt through the dispatcher when the native
+        # optimizer is in use.  Arriving here means another backend supplies
+        # the optimizer, so it needs an objective: the augmented Lagrangian.
+        if self.mecp_search == 'auto':
+            self.mecp_search = 'auglag'
         self.weights = mol.config['optimize']['gap_weight']
         self.sigma = mol.config['optimize']['pen_sigma']
         self.incre = mol.config['optimize']['pen_incre']
@@ -1162,12 +1168,20 @@ class SQPMECPOpt(MECPOpt):
     """
 
     def __init__(self, mol):
+        requested = str(
+            mol.config['optimize'].get('mecp_search', 'auto')
+        ).strip().lower()
         MECPOpt.__init__(self, mol)
-        if self.mecp_search != 'sqp':
+        if requested not in ('auto', 'sqp'):
             raise ValueError(
-                f'SQPMECPOpt requires mecp_search=sqp, but found '
-                f'{self.mecp_search}'
+                f'SQPMECPOpt requires mecp_search=sqp or auto, but found '
+                f'{requested}'
             )
+        # MECPOpt resolves auto to the objective the other backends need; this
+        # driver is the native resolution of the same request.
+        self.mecp_search = 'sqp'
+        self.work_func = self.sqp
+        self.metrics['mecp_search'] = 'sqp'
         native = mol.config.get('oqp', {}) or {}
         self.trust = float(native.get('trust', 0.1) or 0.1)
         self.trust_max = float(native.get('trust_max', 0.3) or 0.3)
