@@ -27,6 +27,8 @@ def test_two_state_trace_uses_nan_for_three_state_only_columns():
     assert np.isclose(row["pop_1"], 0.75)
     assert np.isclose(row["pop_2"], 0.25)
     assert row["tdc_12_au"] == -0.1
+    assert row["p_12"] == 0.2
+    assert row["p_21"] == 0.3
     for name in ("pop_3", "tdc_13_au", "tdc_23_au", "p_31", "p_32"):
         assert np.isnan(row[name])
 

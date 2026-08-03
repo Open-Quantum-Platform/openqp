@@ -27,10 +27,9 @@ def test_hop_tracer_is_state_count_agnostic_and_rejects_untraced_modes():
     assert 'cmhp[2,' not in source
     assert "for state in range(nstate)" in source
     assert "for left in range(nstate)" in source
-    assert 'get("soc", False)' in source
     assert "get('runtype', '')" in source
     assert "hop tracing requires a NAMD input" in source
-    assert "does not support SOC NAMD" in source
+    assert '("NAMD_SOC", "_log_soc")' in source
     assert "original_failure = (error, error.__traceback__)" in source
     assert "raise error.with_traceback(traceback)" in source
 

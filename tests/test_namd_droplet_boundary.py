@@ -36,6 +36,20 @@ def test_droplet_production_path_is_native_and_has_a_c_abi():
     assert "ODP" not in source
 
 
+@pytest.mark.parametrize("section", ("droplet", "solute_com"))
+def test_legacy_enabled_restraints_reject_non_namd_runtype(section):
+    from oqp.utils.input_checker import CheckReport, _check_runtype
+
+    config = {
+        "input": {"method": "hf", "runtype": "energy"},
+        section: {"enabled": True},
+    }
+    report = CheckReport()
+    _check_runtype(config, report)
+    assert not report.ok
+    assert f"{section}.enabled" in report.to_text()
+
+
 def test_built_droplet_force_matches_central_finite_difference_and_fails_safe():
     script = r'''
 import json

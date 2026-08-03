@@ -2063,6 +2063,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
         )
         return
 
+    for section in ("droplet", "solute_com"):
+        enabled = str(_get(config, section, "enabled", False)).strip().lower()
+        if enabled in _TRUE_BOOL and runtype != "namd":
+            report.add(
+                "ERROR",
+                f"{section}.enabled",
+                f"[{section}] is currently connected only to NAMD.",
+                value=True,
+                expected="input.runtype=namd",
+                action=(
+                    f"Set [input] runtype=namd or disable [{section}]."
+                ),
+            )
+
     if method == "mp2" and runtype != "energy":
         report.add(
             "ERROR",
