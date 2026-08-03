@@ -591,6 +591,7 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 driver._trajectory_state_energies = np.array(
                     [-1.0, -0.9, -0.9, -0.9])
                 driver._trajectory_representation = "soc_adiabatic"
+                driver.econs = True
                 driver._restart_system_identity = {
                     "kind": "test", "sha256": "soc-system",
                 }
@@ -624,6 +625,15 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 self.assertEqual(header["nstate"], 4)
                 self.assertEqual(
                     header["electronic_representation"], "soc_adiabatic")
+                self.assertEqual(
+                    header["ensemble"],
+                    "ENERGY_CONSTRAINED_VELOCITY_RESCALING")
+                self.assertTrue(
+                    header["ensemble_provenance"][
+                        "per_step_velocity_rescaling"])
+                self.assertEqual(
+                    header["ensemble_provenance"]["velocity_rescaling_mode"],
+                    "restore_initial_total_energy")
                 np.testing.assert_allclose(
                     records["state_energies"][0], driver._trajectory_state_energies)
                 np.testing.assert_allclose(

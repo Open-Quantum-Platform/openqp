@@ -86,6 +86,44 @@ def _restart_identity_digest(array_parts=(), text_parts=()):
     return digest.hexdigest()
 
 
+def _normalize_identity_value(value):
+    """Convert parsed configuration values into deterministic JSON values."""
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_identity_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_identity_value(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _normalize_identity_value(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def _electronic_config_identity(config):
+    """Capture every normalized option that can change NAMD surfaces."""
+    input_keys = (
+        'charge', 'basis', 'library', 'functional', 'method', 'ispher', 'd4',
+        'soc_2e',
+    )
+    identity = {
+        'input': {
+            key: config.get('input', {}).get(key)
+            for key in input_keys
+        },
+    }
+    for section in (
+            'scf', 'tdhf', 'dftgrid', 'pcm', 'dftb', 'xtb', 'symmetry'):
+        identity[section] = config.get(section, {})
+    return _normalize_identity_value(identity)
+
+
 def _validate_gate_tolerances(label, values):
     """Reject NaN/Inf as well as negative validation tolerances."""
     if not all(np.isfinite(value) and value >= 0.0 for value in values):
@@ -201,7 +239,7 @@ def read_odp_wham_series(path):
     identity_keys = (
         'method', 'charge', 'functional', 'basis', 'scf_type',
         'scf_multiplicity', 'tdhf_type', 'tdhf_multiplicity', 'nstate', 'tlf',
-        'pcm', 'trajectory_representation',
+        'd4', 'pcm', 'electronic_config', 'trajectory_representation',
     )
     system_identity = {
         key: restart_identity.get(key) for key in identity_keys
@@ -399,6 +437,9 @@ class NAMD:
         self.mol = mol
         cfg = mol.config
         md = cfg['md']
+        # Freeze the user-resolved electronic configuration before SOC/TB
+        # helpers temporarily switch response manifolds during propagation.
+        self._electronic_config_identity = _electronic_config_identity(cfg)
 
         self.nstep = int(md['nstep'])
         self.dt_fs = float(md['dt'])
@@ -765,6 +806,27 @@ class NAMD:
             'requested_kelvin': requested,
             'dof': dof,
             'velocity_source': source,
+        }
+
+    def _trajectory_ensemble_metadata(self):
+        """Return honest ensemble provenance for the packed trajectory."""
+        # Only SOC drivers implement econs and therefore define this attribute;
+        # an irrelevant econs spelling on a same-spin deck must remain NVE.
+        econs = bool(getattr(self, 'econs', False))
+        if econs:
+            return {
+                'ensemble': 'ENERGY_CONSTRAINED_VELOCITY_RESCALING',
+                'integrator': 'velocity_verlet',
+                'per_step_velocity_rescaling': True,
+                'velocity_rescaling_mode': 'restore_initial_total_energy',
+                'thermostat': False,
+            }
+        return {
+            'ensemble': 'NVE',
+            'integrator': 'velocity_verlet',
+            'per_step_velocity_rescaling': False,
+            'velocity_rescaling_mode': 'none',
+            'thermostat': False,
         }
 
     def _remove_com_motion(self, v):
@@ -1179,6 +1241,7 @@ class NAMD:
         dtype = _namd_trajectory_dtype(trajectory_nstate, len(coords), ncv)
         if not os.path.exists(self.trajectory_file) or os.path.getsize(self.trajectory_file) == 0:
             temperature = self._initial_temperature_metadata()
+            ensemble = self._trajectory_ensemble_metadata()
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
                 'nstate': trajectory_nstate,
@@ -1190,7 +1253,8 @@ class NAMD:
                     self, '_wham_system_identity', {'kind': 'unavailable'}),
                 'electronic_representation': getattr(
                     self, '_trajectory_representation', 'same_spin_adiabatic'),
-                'ensemble': 'NVE',
+                'ensemble': ensemble['ensemble'],
+                'ensemble_provenance': ensemble,
                 'initial_temperature_kelvin': temperature['measured_kelvin'],
                 'initial_temperature_degrees_of_freedom': temperature['dof'],
                 'requested_initial_temperature_kelvin': temperature[
@@ -1372,6 +1436,10 @@ class NAMD:
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
+        electronic_config = getattr(
+            self, '_electronic_config_identity', None)
+        if electronic_config is None:
+            electronic_config = _electronic_config_identity(cfg)
         gate_controls = {
             'nacme_check': str(md.get(
                 'nacme_check', 'off')).strip().lower().replace('-', '_'),
@@ -1398,6 +1466,7 @@ class NAMD:
             'charge': cfg['input'].get('charge', ''),
             'functional': cfg['input'].get('functional', ''),
             'basis': cfg['input'].get('basis', ''),
+            'd4': self._as_bool(cfg['input'].get('d4', False)),
             'scf_type': cfg.get('scf', {}).get('type', ''),
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'tdhf_type': cfg['tdhf'].get('type', ''),
@@ -1408,6 +1477,7 @@ class NAMD:
             # changes the solvent Hamiltonian, and future schema additions
             # must become restart- and WHAM-visible without another allowlist.
             'pcm': copy.deepcopy(cfg.get('pcm', {})),
+            'electronic_config': electronic_config,
             'dt_fs': self.dt_fs, 'seed': self.seed,
             'rng_stream': self.rng_stream,
             'substep': md.get('substep', ''),

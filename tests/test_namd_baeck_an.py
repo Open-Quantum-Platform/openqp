@@ -277,6 +277,19 @@ except ValueError as error:
     electronic_mismatch = 'does not match the current run' in str(error)
 else:
     electronic_mismatch = False
+d_d4 = NAMD.__new__(NAMD); d_d4.mol = Mol()
+d_d4.mol.config = json.loads(json.dumps(Mol.config))
+d_d4.mol.config['input']['d4'] = True
+d_d4.nstate = 2; d_d4.dt_fs = 0.5
+d_d4.seed = 1; d_d4.rng_stream = 2; d_d4.restart_requested = True
+d_d4._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_d4.restart_file = d.restart_file; d_d4.trajectory_file = d.trajectory_file
+try:
+    d_d4._load_restart()
+except ValueError as error:
+    d4_mismatch = 'does not match the current run' in str(error)
+else:
+    d4_mismatch = False
 d_pcm = NAMD.__new__(NAMD); d_pcm.mol = Mol()
 d_pcm.mol.config = json.loads(json.dumps(Mol.config))
 d_pcm.mol.config['pcm'] = {
@@ -381,6 +394,7 @@ print('DENSE=' + json.dumps({
     'loaded_step': loaded['step'],
     'system_mismatch': system_mismatch,
     'electronic_mismatch': electronic_mismatch,
+    'd4_mismatch': d4_mismatch,
     'pcm_mismatch': pcm_mismatch,
     'gate_mismatch': gate_mismatch,
     'missing_trajectory_rejected': missing_trajectory_rejected,
@@ -436,6 +450,7 @@ print('DENSE=' + json.dumps({
         'loaded_step': 1, 'phase_history': [1.0, -1.0], 'gate_failures': 2,
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,
+        'd4_mismatch': True,
         'pcm_mismatch': True,
         'gate_mismatch': True,
         'missing_trajectory_rejected': True,

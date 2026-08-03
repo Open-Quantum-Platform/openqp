@@ -400,6 +400,7 @@ paths = []
 dtype = _namd_trajectory_dtype(1, 1, 1)
 system_identity = {
     "method": "synthetic", "charge": 0, "functional": "", "basis": "none",
+    "d4": False,
     "scf_type": "rhf", "scf_multiplicity": 1,
     "tdhf_type": "rpa", "tdhf_multiplicity": 1, "nstate": 1, "tlf": 2,
     "pcm": {"enabled": True, "model": "ddpcm", "epsilon": 78.3553},
@@ -512,6 +513,24 @@ except ValueError as error:
     other_pcm_rejected = "different molecular systems" in str(error)
 else:
     other_pcm_rejected = False
+d4_header = json.loads(json.dumps(other_header))
+d4_header["wham_system_identity"] = system_identity["system"]
+d4_signature = json.loads(d4_header["signature"])
+d4_signature["d4"] = True
+d4_header["signature"] = json.dumps(d4_signature, sort_keys=True)
+d4_encoded = json.dumps(d4_header, sort_keys=True).encode("utf-8")
+other_d4 = os.path.join(root, "other-d4.namd.trj")
+with open(other_d4, "wb") as stream:
+    stream.write(magic)
+    stream.write(struct.pack("<Q", len(d4_encoded)))
+    stream.write(d4_encoded)
+    stream.write(other_payload)
+try:
+    odp_wham([paths[0], other_d4], temperature)
+except ValueError as error:
+    other_d4_rejected = "different molecular systems" in str(error)
+else:
+    other_d4_rejected = False
 mean = np.sum(result["sample_weights"]*result["sample_xi"])
 variance = np.sum(result["sample_weights"]*(result["sample_xi"] - mean)**2)
 with np.load(output, allow_pickle=False) as saved:
@@ -534,6 +553,7 @@ print("ODP_WHAM=" + json.dumps({
     "duplicate_hash_rejected": duplicate_hash_rejected,
     "other_system_rejected": other_system_rejected,
     "other_pcm_rejected": other_pcm_rejected,
+    "other_d4_rejected": other_d4_rejected,
     "system_identity": result["system_identity"],
 }))
 '''
@@ -589,4 +609,5 @@ print("ODP_WHAM=" + json.dumps({
     assert values["duplicate_hash_rejected"] is True
     assert values["other_system_rejected"] is True
     assert values["other_pcm_rejected"] is True
+    assert values["other_d4_rejected"] is True
     assert values["system_identity"]["system"]["sha256"] == "system-a"
