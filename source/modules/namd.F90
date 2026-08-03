@@ -46,6 +46,7 @@
 !> @date    2026-06
 module namd_mod
 
+  use, intrinsic :: iso_c_binding, only: c_double, c_int, c_int64_t
   use precision, only: dp
   use state_tracking_mod, only: maximum_overlap_assignment
 
@@ -65,12 +66,297 @@ module namd_mod
   public :: namd_fssh_decision
   public :: namd_decoherence_edc
   public :: namd_trivial_crossing
+  public :: namd_counter_random
+  public :: namd_counter_normal_fill
+  public :: namd_baeck_an_tdc
+  public :: namd_nacme_gate
 
   !> Default empirical decoherence constant C in the energy-based correction
   !> (Granucci & Persico, J. Chem. Phys. 126, 134114 (2007)), in Hartree.
   real(kind=dp), parameter, public :: NAMD_EDC_C_DEFAULT = 0.1_dp
 
 contains
+
+!> @brief Add two 64-bit bit patterns modulo 2^64 without signed overflow.
+  pure function namd_add64_mod(a, b) result(value)
+    integer(c_int64_t), intent(in) :: a, b
+    integer(c_int64_t) :: value
+    integer(c_int64_t) :: total, carry, limb
+    integer(c_int64_t), parameter :: mask16 = int(z'FFFF', c_int64_t)
+    integer(c_int64_t), parameter :: base16 = 65536_c_int64_t
+    integer :: k
+
+    value = 0_c_int64_t
+    carry = 0_c_int64_t
+    do k = 0, 3
+      total = iand(shiftr(a, 16*k), mask16) + &
+              iand(shiftr(b, 16*k), mask16) + carry
+      limb = modulo(total, base16)
+      carry = total/base16
+      value = ior(value, shiftl(limb, 16*k))
+    end do
+  end function namd_add64_mod
+
+!> @brief Multiply two 64-bit bit patterns modulo 2^64 without signed overflow.
+  pure function namd_mul64_mod(a, b) result(value)
+    integer(c_int64_t), intent(in) :: a, b
+    integer(c_int64_t) :: value
+    integer(c_int64_t) :: aa(0:3), bb(0:3)
+    integer(c_int64_t) :: total, carry, limb
+    integer(c_int64_t), parameter :: mask16 = int(z'FFFF', c_int64_t)
+    integer(c_int64_t), parameter :: base16 = 65536_c_int64_t
+    integer :: j, k
+
+    do k = 0, 3
+      aa(k) = iand(shiftr(a, 16*k), mask16)
+      bb(k) = iand(shiftr(b, 16*k), mask16)
+    end do
+    value = 0_c_int64_t
+    carry = 0_c_int64_t
+    do k = 0, 3
+      total = carry
+      do j = 0, k
+        total = total + aa(j)*bb(k - j)
+      end do
+      limb = modulo(total, base16)
+      carry = total/base16
+      value = ior(value, shiftl(limb, 16*k))
+    end do
+  end function namd_mul64_mod
+
+!> @brief Stateless, counter-based uniform random number for NAMD.
+!>
+!> The returned value depends only on (seed, stream, step), not on call order,
+!> process scheduling, or restart history.  The SplitMix64 finalizer is used as
+!> a high-quality integer mixer; its upper 53 bits map exactly to an IEEE-754
+!> double in [0,1).  The helper operations implement modulo-2^64 arithmetic
+!> with 16-bit limbs, avoiding non-standard signed overflow under optimization.
+!>
+!> @param[in] seed    campaign/trajectory seed
+!> @param[in] stream  independent trajectory stream identifier
+!> @param[in] step    physical nuclear-step index
+  pure function namd_counter_random(seed, stream, step) result(rand)
+    integer(c_int64_t), intent(in) :: seed, stream, step
+    real(kind=dp) :: rand
+    integer(c_int64_t) :: z, mantissa
+    integer(c_int64_t), parameter :: gamma = int(z'9E3779B97F4A7C15', c_int64_t)
+    integer(c_int64_t), parameter :: stream_mix = int(z'D2B74407B1CE6E93', c_int64_t)
+    integer(c_int64_t), parameter :: mix1 = int(z'BF58476D1CE4E5B9', c_int64_t)
+    integer(c_int64_t), parameter :: mix2 = int(z'94D049BB133111EB', c_int64_t)
+    real(kind=dp), parameter :: two_to_minus_53 = 1.0_dp/9007199254740992.0_dp
+
+    z = namd_add64_mod(seed, namd_mul64_mod(gamma, &
+        namd_add64_mod(step, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(stream_mix, &
+        namd_add64_mod(stream, 1_c_int64_t)))
+    z = namd_mul64_mod(ieor(z, shiftr(z, 30)), mix1)
+    z = namd_mul64_mod(ieor(z, shiftr(z, 27)), mix2)
+    z = ieor(z, shiftr(z, 31))
+    mantissa = shiftr(z, 11)
+    rand = real(mantissa, dp)*two_to_minus_53
+  end function namd_counter_random
+
+!> @brief C ABI for the stateless NAMD counter RNG.
+  function namd_counter_random_C(seed, stream, step) result(rand) &
+      bind(C, name="oqp_namd_counter_random")
+    integer(c_int64_t), value, intent(in) :: seed, stream, step
+    real(c_double) :: rand
+    rand = real(namd_counter_random(seed, stream, step), c_double)
+  end function namd_counter_random_C
+
+!> @brief Fill an array with deterministic standard-normal deviates.
+!>
+!> Negative counter values form a domain separate from the positive physical
+!> MD steps used for hopping.  Box-Muller pairs are generated wholly in the
+!> resident Fortran layer so rng_stream also separates Maxwell initial
+!> velocities between trajectories.
+  pure subroutine namd_counter_normal_fill(seed, stream, count, values) &
+      bind(C, name="oqp_namd_counter_normal_fill")
+    integer(c_int64_t), value, intent(in) :: seed, stream, count
+    real(c_double), intent(out) :: values(*)
+    integer :: i, nvalue
+    real(kind=dp) :: u1, u2, radius, angle
+    real(kind=dp), parameter :: two_pi = 6.28318530717958647692528676655900577_dp
+
+    nvalue = int(count)
+    do i = 1, nvalue, 2
+      u1 = max(namd_counter_random(seed, stream, -int(i, c_int64_t)), tiny(1.0_dp))
+      u2 = namd_counter_random(seed, stream, -int(i + 1, c_int64_t))
+      radius = sqrt(-2.0_dp*log(u1))
+      angle = two_pi*u2
+      values(i) = radius*cos(angle)
+      if (i + 1 <= nvalue) values(i + 1) = radius*sin(angle)
+    end do
+  end subroutine namd_counter_normal_fill
+
+!> @brief Time-dependent Baeck-An TDC from three consecutive energy points.
+!>
+!> The result is centred on energies_center.  dt_left spans old -> center and
+!> dt_right spans center -> current, so the nonuniform three-point curvature is
+!>
+!>   f''(center) = 2 [dt_left*f(current)
+!>                     -(dt_left+dt_right)*f(center)
+!>                     +dt_right*f(old)]
+!>                   / [dt_left*dt_right*(dt_left+dt_right)].
+!>
+!> For each pair, sigma_ij = sign(DeltaE_ij)/2 * sqrt(DeltaE''_ij/DeltaE_ij)
+!> when the radicand is positive and the gap is inside gap_max.  The method is
+!> a magnitude-only diagnostic: its sign convention cannot validate the
+!> wavefunction gauge of an overlap-derived NACME.
+  function namd_baeck_an_tdc(nstate, dt_left, dt_right, gap_max, &
+      energies_old, energies_center, energies_current, tdc_row_major) &
+      result(info) bind(C, name="oqp_namd_baeck_an_tdc")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: nstate
+    real(c_double), value, intent(in) :: dt_left, dt_right, gap_max
+    real(c_double), intent(in) :: energies_old(*), energies_center(*), &
+                                  energies_current(*)
+    real(c_double), intent(out) :: tdc_row_major(*)
+    integer(c_int) :: info
+    integer :: i, j, n
+    real(kind=dp) :: denominator, gap_old, gap_center, gap_current
+    real(kind=dp) :: curvature, radicand, sigma
+
+    info = -1_c_int
+    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. dt_right <= 0.0_dp) return
+    n = int(nstate)
+    denominator = dt_left*dt_right*(dt_left + dt_right)
+    if (.not. ieee_is_finite(denominator) .or. denominator <= 0.0_dp) return
+
+    do i = 1, n*n
+      tdc_row_major(i) = 0.0_dp
+    end do
+    do i = 1, n
+      if (.not. ieee_is_finite(energies_old(i)) .or. &
+          .not. ieee_is_finite(energies_center(i)) .or. &
+          .not. ieee_is_finite(energies_current(i))) then
+        info = -2_c_int
+        return
+      end if
+      do j = i + 1, n
+        gap_old = energies_old(i) - energies_old(j)
+        gap_center = energies_center(i) - energies_center(j)
+        gap_current = energies_current(i) - energies_current(j)
+        if (abs(gap_center) <= tiny(1.0_dp)) cycle
+        if (gap_max > 0.0_dp .and. abs(gap_center) > gap_max) cycle
+        curvature = 2.0_dp*(dt_left*gap_current &
+                    -(dt_left + dt_right)*gap_center &
+                    +dt_right*gap_old)/denominator
+        radicand = curvature/gap_center
+        if (.not. ieee_is_finite(radicand) .or. radicand <= 0.0_dp) cycle
+        sigma = sign(0.5_dp, gap_center)*sqrt(radicand)
+        tdc_row_major((i - 1)*n + j) = sigma
+        tdc_row_major((j - 1)*n + i) = -sigma
+      end do
+    end do
+    info = 0_c_int
+  end function namd_baeck_an_tdc
+
+!> @brief Provider-neutral validation gate for an MD time-derivative coupling.
+!>
+!> Exact matrix invariants (finite values, zero diagonal, antisymmetry) are
+!> checked independently of the optional reference.  Masked state pairs are
+!> then compared either by magnitude (compare_mode=0, appropriate for TD-BA)
+!> or with their signed gauge (compare_mode=1, intended for phase-aligned
+!> analytic d_ij dot velocity values).
+!>
+!> metrics = [candidate diagonal max, candidate antisymmetry max,
+!>            reference diagonal max, reference antisymmetry max,
+!>            pair RMS error, pair max error, max tolerance ratio]
+!> counts  = [compared pairs, invariant failures, reference failures]
+  function namd_nacme_gate(nstate, candidate, reference, reference_mask, &
+      compare_mode, invariant_tol, abs_tol, rel_tol, metrics, counts) &
+      result(info) bind(C, name="oqp_namd_nacme_gate")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: nstate
+    real(c_double), intent(in) :: candidate(*), reference(*)
+    integer(c_int), intent(in) :: reference_mask(*)
+    integer(c_int), value, intent(in) :: compare_mode
+    real(c_double), value, intent(in) :: invariant_tol, abs_tol, rel_tol
+    real(c_double), intent(out) :: metrics(*)
+    integer(c_int64_t), intent(out) :: counts(*)
+    integer(c_int) :: info
+    integer :: i, j, n, ij, ji
+    real(kind=dp) :: cand_i, cand_j, ref_i, ref_j
+    real(kind=dp) :: error, scale, sum_error2
+    logical :: pair_valid
+
+    info = -1_c_int
+    if (nstate <= 0_c_int64_t .or. invariant_tol < 0.0_dp .or. &
+        abs_tol < 0.0_dp .or. rel_tol < 0.0_dp) return
+    if (compare_mode /= 0_c_int .and. compare_mode /= 1_c_int) return
+    n = int(nstate)
+    metrics(1:7) = 0.0_dp
+    counts(1:3) = 0_c_int64_t
+    sum_error2 = 0.0_dp
+
+    do i = 1, n
+      ij = (i - 1)*n + i
+      if (.not. ieee_is_finite(candidate(ij))) then
+        info = -2_c_int
+        return
+      end if
+      metrics(1) = max(metrics(1), abs(candidate(ij)))
+      if (abs(candidate(ij)) > invariant_tol) &
+        counts(2) = counts(2) + 1_c_int64_t
+      if (reference_mask(ij) /= 0_c_int) then
+        if (.not. ieee_is_finite(reference(ij))) then
+          info = -3_c_int
+          return
+        end if
+        metrics(3) = max(metrics(3), abs(reference(ij)))
+        if (abs(reference(ij)) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+      end if
+      do j = i + 1, n
+        ij = (i - 1)*n + j
+        ji = (j - 1)*n + i
+        cand_i = candidate(ij)
+        cand_j = candidate(ji)
+        if (.not. ieee_is_finite(cand_i) .or. &
+            .not. ieee_is_finite(cand_j)) then
+          info = -2_c_int
+          return
+        end if
+        metrics(2) = max(metrics(2), abs(cand_i + cand_j))
+        if (abs(cand_i + cand_j) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+
+        pair_valid = reference_mask(ij) /= 0_c_int .or. &
+                     reference_mask(ji) /= 0_c_int
+        if (.not. pair_valid) cycle
+        ref_i = reference(ij)
+        ref_j = reference(ji)
+        if (.not. ieee_is_finite(ref_i) .or. &
+            .not. ieee_is_finite(ref_j)) then
+          info = -3_c_int
+          return
+        end if
+        metrics(4) = max(metrics(4), abs(ref_i + ref_j))
+        if (abs(ref_i + ref_j) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+
+        if (compare_mode == 0_c_int) then
+          error = abs(abs(cand_i) - abs(ref_i))
+        else
+          error = abs(cand_i - ref_i)
+        end if
+        scale = abs_tol + rel_tol*abs(ref_i)
+        counts(1) = counts(1) + 1_c_int64_t
+        sum_error2 = sum_error2 + error*error
+        metrics(6) = max(metrics(6), error)
+        if (scale > 0.0_dp) then
+          metrics(7) = max(metrics(7), error/scale)
+        else if (error > 0.0_dp) then
+          metrics(7) = huge(1.0_dp)
+        end if
+        if (error > scale) counts(3) = counts(3) + 1_c_int64_t
+      end do
+    end do
+    if (counts(1) > 0_c_int64_t) &
+      metrics(5) = sqrt(sum_error2/real(counts(1), dp))
+    info = 0_c_int
+  end function namd_nacme_gate
 
 !> @brief Time-derivative (nonadiabatic) coupling from state overlaps.
 !>        sigma(i,j) = ( S(i,j) - S(j,i) ) / (2 dt)

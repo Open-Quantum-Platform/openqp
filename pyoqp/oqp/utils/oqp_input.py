@@ -333,7 +333,13 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
         nstep dt active substep decoherence edc_c thrshe tdc trivial
-        trivial_thresh init_temp velocity seed restart soc soc_basis
+        trivial_thresh init_temp velocity seed rng_stream first_hop_step
+        nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
+        nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
+        nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
+        nve_gate_consecutive
+        trajectory_interval restart_interval trajectory_file nacme_audit_file
+        restart_file restart soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
         dt_adaptive dt_min dx_max
     """),
@@ -524,7 +530,13 @@ DRIVER_OPTIONS = {
     "namd": {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
         "thrshe", "tdc", "trivial", "trivial_thresh", "init_temp",
-        "velocity", "seed", "restart", "soc", "soc_basis",
+        "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
+        "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
+        "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
+        "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
+        "nve_gate_transition_tol", "nve_gate_consecutive",
+        "trajectory_interval", "restart_interval", "trajectory_file",
+        "nacme_audit_file", "restart_file", "restart", "soc", "soc_basis",
         "soc_du_dt_corr", "soc_tdc_grad_corr", "grad_wthr", "init_state",
         "econs", "dt_adaptive", "dt_min", "dx_max",
     },

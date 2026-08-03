@@ -565,6 +565,25 @@ OQP_CONFIG_SCHEMA = {
         'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
         'seed': {'type': int, 'default': '1'},
+        'rng_stream': {'type': int, 'default': '0'},        # independent counter-RNG stream / trajectory id
+        'first_hop_step': {'type': int, 'default': '2'},    # KNU/TLF2 convention: no propagation/hop at step 1
+        'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
+        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
+        'nacme_gate': {'type': str, 'default': 'warn'},     # 'off' | 'warn' | 'error'
+        'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
+        'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
+        'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
+        'nacme_gate_consecutive': {'type': int, 'default': '3'},
+        'nve_gate': {'type': str, 'default': 'off'},       # 'off' | 'warn' | 'error'
+        'nve_gate_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
+        'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
+        'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
+        'nve_gate_consecutive': {'type': int, 'default': '3'},
+        'trajectory_interval': {'type': int, 'default': '1'},
+        'restart_interval': {'type': int, 'default': '1'},
+        'trajectory_file': {'type': str, 'default': ''},
+        'nacme_audit_file': {'type': str, 'default': ''},
+        'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
         'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)

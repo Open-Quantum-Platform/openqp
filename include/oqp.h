@@ -271,6 +271,17 @@ void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
 void mrsf_namd_hop(struct oqp_handle_t *inf);
+double oqp_namd_counter_random(int64_t seed, int64_t stream, int64_t step);
+void oqp_namd_counter_normal_fill(int64_t seed, int64_t stream, int64_t count,
+        double *values);
+int oqp_namd_baeck_an_tdc(int64_t nstate, double dt_left, double dt_right,
+        double gap_max, const double *energies_old,
+        const double *energies_center, const double *energies_current,
+        double *tdc_row_major);
+int oqp_namd_nacme_gate(int64_t nstate, const double *candidate,
+        const double *reference, const int *reference_mask, int compare_mode,
+        double invariant_tol, double abs_tol, double rel_tol, double *metrics,
+        int64_t *counts);
 int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
         int *assignment, double *signs, double *matched, double *margins);
 int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,

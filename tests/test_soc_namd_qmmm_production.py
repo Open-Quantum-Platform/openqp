@@ -134,6 +134,13 @@ def load_namd_with_stubs():
     logs = []
     oqp = types.ModuleType("oqp")
     oqp.__path__ = []
+    setattr(
+        oqp,
+        "oqp_namd_counter_random",
+        lambda seed, stream, step: ((int(seed) + 17 * int(stream) + 31 * int(step)) % 997) / 997.0,
+    )
+    setattr(oqp, "oqp_namd_counter_normal_fill", lambda *_args: None)
+    setattr(oqp, "ffi", types.SimpleNamespace(cast=lambda _ctype, ptr: ptr))
     library = types.ModuleType("oqp.library")
     library.__path__ = []
     utils = types.ModuleType("oqp.utils")
@@ -384,11 +391,58 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
     def test_overlap_tracking_and_rng_are_reproducible_contracts(self):
         src = NAMD.read_text()
 
-        self.assertIn("self.rng = np.random.default_rng(self.seed)", src)
+        self.assertIn("oqp.oqp_namd_counter_random(", src)
+        self.assertIn("oqp.oqp_namd_counter_normal_fill(", src)
+        self.assertIn("self._rng_step >= self.first_hop_step", src)
+        self.assertNotIn("np.random.default_rng", src)
         self.assertIn("cfg['properties']['back_door'] = True", src)
         self.assertIn("NAMD_SOC._store_prev(self, self.r_all[self.qm_atoms].reshape((self.natom, 3)), u, eval_ha)", src)
         self.assertIn("BasisOverlap(mol).overlap()", src)
         self.assertIn("s_mch = NAMD_SOC._mch_overlap(self)", src)
+
+    def test_hop_rng_is_step_indexed_and_supports_exact_replay(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            driver = namd.NAMD.__new__(namd.NAMD)
+            driver.seed = 11
+            driver.rng_stream = 7
+            driver.first_hop_step = 2
+            driver._rng_step = 0
+            driver._last_hop_random = np.nan
+
+            self.assertFalse(driver._prepare_hop_step(1))
+            self.assertTrue(np.isnan(driver._last_hop_random))
+            self.assertTrue(driver._prepare_hop_step(2))
+            expected = ((11 + 17 * 7 + 31 * 2) % 997) / 997.0
+            self.assertEqual(driver._hop_random(), expected)
+            self.assertEqual(driver._hop_random(), expected)
+
+            class Replay:
+                calls = 0
+
+                def random(self):
+                    self.calls += 1
+                    return 0.0605
+
+            replay = Replay()
+            driver._hop_random_override = replay
+            driver._prepare_hop_step(2)
+            self.assertEqual(driver._hop_random(), 0.0605)
+            self.assertEqual(driver._hop_random(), 0.0605)
+            self.assertEqual(replay.calls, 1)
+            self.assertEqual(
+                driver._hop_rng_log(),
+                "rng_step=2 random=0.060499999999999998",
+            )
+        finally:
+            cleanup()
+
+    def test_hop_rng_configuration_rejects_invalid_domains(self):
+        src = NAMD.read_text()
+
+        self.assertIn("seed must fit in a signed 64-bit integer", src)
+        self.assertIn("rng_stream must be a non-negative signed 64-bit integer", src)
+        self.assertIn("first_hop_step must be at least 1", src)
 
     def test_qmmm_single_point_inputs_stay_on_runner_path(self):
         src = PYOQP.read_text()

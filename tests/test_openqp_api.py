@@ -45,6 +45,26 @@ SCHEMA = {
         "init_state": {"type": _string, "default": ""},
         "thrshe": {"type": float, "default": "1.0e9"},
         "init_temp": {"type": float, "default": "300.0"},
+        "seed": {"type": int, "default": "1"},
+        "rng_stream": {"type": int, "default": "0"},
+        "first_hop_step": {"type": int, "default": "2"},
+        "nacme_check": {"type": _string, "default": "off"},
+        "ba_gap_max": {"type": float, "default": "0.0734986443513"},
+        "nacme_gate": {"type": _string, "default": "warn"},
+        "nacme_gate_invariant_tol": {"type": float, "default": "1.0e-10"},
+        "nacme_gate_abs_tol": {"type": float, "default": "1.0e-4"},
+        "nacme_gate_rel_tol": {"type": float, "default": "1.0"},
+        "nacme_gate_consecutive": {"type": int, "default": "3"},
+        "nve_gate": {"type": _string, "default": "off"},
+        "nve_gate_abs_tol": {"type": float, "default": "5.0e-3"},
+        "nve_gate_step_tol": {"type": float, "default": "1.0e-3"},
+        "nve_gate_transition_tol": {"type": float, "default": "1.0e-6"},
+        "nve_gate_consecutive": {"type": int, "default": "3"},
+        "trajectory_interval": {"type": int, "default": "1"},
+        "restart_interval": {"type": int, "default": "1"},
+        "trajectory_file": {"type": _string, "default": ""},
+        "nacme_audit_file": {"type": _string, "default": ""},
+        "restart_file": {"type": _string, "default": ""},
     },
     "scf": {
         "type": {"type": _string, "default": "rhf"},
@@ -890,7 +910,22 @@ $$$$
             .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
             .qmmm(cutoff="PME")
         )
-        job.workflow.namd(soc=True, soc_basis="mch", nstep=200, dt=0.5, init_state="S1")
+        job.workflow.namd(
+            soc=True,
+            soc_basis="mch",
+            nstep=200,
+            dt=0.5,
+            init_state="S1",
+            seed=20260803,
+            rng_stream=9,
+            first_hop_step=2,
+            nacme_check="baeck_an",
+            ba_gap_max=0.05,
+            nacme_gate="error",
+            nacme_gate_abs_tol=2.0e-4,
+            nacme_gate_rel_tol=0.5,
+            nacme_gate_consecutive=4,
+        )
         config = job.to_input_dict()
         self.assertEqual(config["input"]["qmmm_flag"], "True")
         self.assertEqual(config["input"]["runtype"], "namd")
@@ -901,6 +936,15 @@ $$$$
         self.assertEqual(config["md"]["soc_basis"], "mch")
         self.assertEqual(config["md"]["nstep"], "200")
         self.assertEqual(config["md"]["init_state"], "S1")
+        self.assertEqual(config["md"]["seed"], "20260803")
+        self.assertEqual(config["md"]["rng_stream"], "9")
+        self.assertEqual(config["md"]["first_hop_step"], "2")
+        self.assertEqual(config["md"]["nacme_check"], "baeck_an")
+        self.assertEqual(config["md"]["ba_gap_max"], "0.05")
+        self.assertEqual(config["md"]["nacme_gate"], "error")
+        self.assertEqual(config["md"]["nacme_gate_abs_tol"], "0.0002")
+        self.assertEqual(config["md"]["nacme_gate_rel_tol"], "0.5")
+        self.assertEqual(config["md"]["nacme_gate_consecutive"], "4")
 
     def test_workflow_namd_requires_mrsf_theory(self):
         openqp = load_openqp_module()
