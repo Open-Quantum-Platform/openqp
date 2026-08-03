@@ -121,6 +121,7 @@ def _electronic_config_identity(config):
     for section in (
             'scf', 'tdhf', 'dftgrid', 'pcm', 'dftb', 'xtb', 'symmetry'):
         identity[section] = config.get(section, {})
+    identity['nac'] = {'align': config.get('nac', {}).get('align')}
     return _normalize_identity_value(identity)
 
 

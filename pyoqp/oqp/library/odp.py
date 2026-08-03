@@ -353,15 +353,17 @@ def odp_wham(trajectory_paths, temperature_kelvin, bins=100, *, discard=0,
         resolved_paths[resolved] = path
     if output is not None:
         output_path = os.fspath(output)
-        resolved_output = os.path.realpath(os.path.abspath(output_path))
+        effective_output = (
+            output_path if output_path.endswith('.npz') else output_path + '.npz')
+        resolved_output = os.path.realpath(os.path.abspath(effective_output))
         aliases_input = resolved_output in resolved_paths
-        if not aliases_input and os.path.exists(output_path):
+        if not aliases_input and os.path.exists(effective_output):
             aliases_input = any(
-                os.path.samefile(output_path, path) for path in paths)
+                os.path.samefile(effective_output, path) for path in paths)
         if aliases_input:
             raise ValueError(
                 "ODP WHAM output must not overwrite an input trajectory: "
-                f"{output_path!r}")
+                f"{effective_output!r}")
 
     loaded = []
     trajectory_hashes = []

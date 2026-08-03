@@ -290,6 +290,19 @@ except ValueError as error:
     d4_mismatch = 'does not match the current run' in str(error)
 else:
     d4_mismatch = False
+d_nac = NAMD.__new__(NAMD); d_nac.mol = Mol()
+d_nac.mol.config = json.loads(json.dumps(Mol.config))
+d_nac.mol.config['nac'] = {'align': 'no'}
+d_nac.nstate = 2; d_nac.dt_fs = 0.5
+d_nac.seed = 1; d_nac.rng_stream = 2; d_nac.restart_requested = True
+d_nac._restart_system_identity = {'kind': 'test', 'sha256': 'system-a'}
+d_nac.restart_file = d.restart_file; d_nac.trajectory_file = d.trajectory_file
+try:
+    d_nac._load_restart()
+except ValueError as error:
+    nac_alignment_mismatch = 'does not match the current run' in str(error)
+else:
+    nac_alignment_mismatch = False
 d_pcm = NAMD.__new__(NAMD); d_pcm.mol = Mol()
 d_pcm.mol.config = json.loads(json.dumps(Mol.config))
 d_pcm.mol.config['pcm'] = {
@@ -412,6 +425,7 @@ print('DENSE=' + json.dumps({
     'system_mismatch': system_mismatch,
     'electronic_mismatch': electronic_mismatch,
     'd4_mismatch': d4_mismatch,
+    'nac_alignment_mismatch': nac_alignment_mismatch,
     'pcm_mismatch': pcm_mismatch,
     'gate_mismatch': gate_mismatch,
     'missing_trajectory_rejected': missing_trajectory_rejected,
@@ -475,6 +489,7 @@ print('DENSE=' + json.dumps({
         'system_mismatch': True, 'audit_signed_comparison': 'False',
         'electronic_mismatch': True, 'reseed_cleared': True,
         'd4_mismatch': True,
+        'nac_alignment_mismatch': True,
         'pcm_mismatch': True,
         'gate_mismatch': True,
         'missing_trajectory_rejected': True,

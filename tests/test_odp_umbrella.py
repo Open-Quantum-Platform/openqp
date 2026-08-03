@@ -461,12 +461,23 @@ for window, center in enumerate(centers):
 
 output = os.path.join(root, "wham.npz")
 result = odp_wham(paths, temperature, bins=100, tolerance=1.0e-11, output=output)
+extension_input = os.path.join(root, "extension-window.npz")
+shutil.copyfile(paths[0], extension_input)
 try:
-    odp_wham(paths, temperature, output=paths[0])
+    odp_wham([extension_input], temperature, output=extension_input)
 except ValueError as error:
     output_alias_rejected = "must not overwrite" in str(error)
 else:
     output_alias_rejected = False
+try:
+    odp_wham(
+        [extension_input], temperature,
+        output=os.path.join(root, "extension-window"),
+    )
+except ValueError as error:
+    implicit_extension_alias_rejected = "must not overwrite" in str(error)
+else:
+    implicit_extension_alias_rejected = False
 hardlink_output = os.path.join(root, "hardlink-output.npz")
 os.link(paths[0], hardlink_output)
 try:
@@ -589,6 +600,7 @@ print("ODP_WHAM=" + json.dumps({
     "duplicate_path_rejected": duplicate_path_rejected,
     "duplicate_hash_rejected": duplicate_hash_rejected,
     "output_alias_rejected": output_alias_rejected,
+    "implicit_extension_alias_rejected": implicit_extension_alias_rejected,
     "hardlink_output_rejected": hardlink_output_rejected,
     "other_system_rejected": other_system_rejected,
     "other_pcm_rejected": other_pcm_rejected,
@@ -655,6 +667,7 @@ print("ODP_WHAM=" + json.dumps({
     assert values["duplicate_path_rejected"] is True
     assert values["duplicate_hash_rejected"] is True
     assert values["output_alias_rejected"] is True
+    assert values["implicit_extension_alias_rejected"] is True
     assert values["hardlink_output_rejected"] is True
     assert values["other_system_rejected"] is True
     assert values["other_pcm_rejected"] is True
