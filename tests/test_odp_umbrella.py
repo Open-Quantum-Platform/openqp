@@ -281,6 +281,9 @@ d.seed = 1; d.rng_stream = 0; d.init_temp = 300.0; d._rng_step = 1
 d._restart_system_identity = {
     "kind": "test", "natom": 2, "sha256": "odp-system"
 }
+d._wham_system_identity = {
+    "kind": "test", "natom": 2, "sha256": "odp-topology"
+}
 d._last_hop_random = 0.25; d._last_state_overlap = None
 d._last_overlap_tdc = None; d._nacme_reference_tdc = None
 d._nacme_reference_mask = None; d._nacme_reference_source = 0
@@ -307,6 +310,7 @@ d2 = NAMD.__new__(NAMD)
 d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
 d2._restart_system_identity = d._restart_system_identity
+d2._wham_system_identity = d._wham_system_identity
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
 d2.nacme_audit_file = d.nacme_audit_file
 d2.odp = ODPUmbrella({
@@ -432,11 +436,14 @@ for window, center in enumerate(centers):
         "perpendicular_restraint": False,
         "projection": "signed_scaled_dot_over_path_norm_squared",
     }
+    restart_identity = json.loads(json.dumps(system_identity))
+    restart_identity["system"]["sha256"] = f"restart-window-{window}"
     header = {
         "schema_version": NAMD_TRAJECTORY_SCHEMA_VERSION,
         "nstate": 1, "natom": 1, "ncv": 1,
         "record_bytes": dtype.itemsize,
-        "signature": json.dumps(system_identity, sort_keys=True),
+        "signature": json.dumps(restart_identity, sort_keys=True),
+        "wham_system_identity": system_identity["system"],
         "ensemble": "NVT", "odp": provenance,
     }
     encoded = json.dumps(header, sort_keys=True).encode("utf-8")
@@ -472,9 +479,7 @@ with open(paths[0], "rb") as stream:
     header_size = struct.unpack("<Q", stream.read(8))[0]
     other_header = json.loads(stream.read(header_size).decode("utf-8"))
     other_payload = stream.read()
-other_identity = json.loads(other_header["signature"])
-other_identity["system"]["sha256"] = "system-b"
-other_header["signature"] = json.dumps(other_identity, sort_keys=True)
+other_header["wham_system_identity"]["sha256"] = "system-b"
 other_encoded = json.dumps(other_header, sort_keys=True).encode("utf-8")
 other_system = os.path.join(root, "other-system.namd.trj")
 with open(other_system, "wb") as stream:

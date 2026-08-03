@@ -193,12 +193,13 @@ def read_odp_wham_series(path):
     identity_keys = (
         'method', 'charge', 'functional', 'basis', 'scf_type',
         'scf_multiplicity', 'tdhf_type', 'tdhf_multiplicity', 'nstate', 'tlf',
-        'trajectory_representation', 'system',
+        'trajectory_representation',
     )
     system_identity = {
         key: restart_identity.get(key) for key in identity_keys
     }
-    system = system_identity.get('system')
+    system = header.get('wham_system_identity')
+    system_identity['system'] = system
     if (not isinstance(system, dict) or not system.get('sha256')
             or system_identity.get('method') is None
             or system_identity.get('nstate') is None):
@@ -510,6 +511,7 @@ class NAMD:
         # atomic units, so convert to electron masses.
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
         self._restart_system_identity = self._qm_restart_system_identity()
+        self._wham_system_identity = self._qm_wham_system_identity()
         self._rng_step = 0
         self._last_hop_random = np.nan
         self._ba_energy_left = None
@@ -562,6 +564,14 @@ class NAMD:
             ('atomic_numbers', self.mol.get_atoms(), '<i8'),
             ('masses_electron', self.mass, '<f8'),
             ('initial_coordinates_bohr', self.mol.get_system(), '<f8'),
+        ))
+        return {'kind': 'qm', 'natom': int(self.natom), 'sha256': digest}
+
+    def _qm_wham_system_identity(self):
+        """Bind WHAM windows to atom identity while allowing new coordinates."""
+        digest = _restart_identity_digest(array_parts=(
+            ('atomic_numbers', self.mol.get_atoms(), '<i8'),
+            ('masses_electron', self.mass, '<f8'),
         ))
         return {'kind': 'qm', 'natom': int(self.natom), 'sha256': digest}
 
@@ -1111,6 +1121,8 @@ class NAMD:
                 'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
+                'wham_system_identity': getattr(
+                    self, '_wham_system_identity', {'kind': 'unavailable'}),
                 'electronic_representation': getattr(
                     self, '_trajectory_representation', 'same_spin_adiabatic'),
                 'ensemble': 'NVE',
@@ -1917,6 +1929,7 @@ class NAMD_QMMM(NAMD):
         ]) * AMU_TO_AU                                          # electron masses
         self._restart_system_identity = self._qmmm_restart_system_identity(
             sys0, q)
+        self._wham_system_identity = self._qmmm_wham_system_identity(sys0, q)
 
         # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
         if self.restart_requested:
@@ -1967,6 +1980,49 @@ class NAMD_QMMM(NAMD):
                     qmmm_config, sort_keys=True, separators=(',', ':'),
                     default=str)),
                 ('openmm_system', system_xml),
+            ),
+        )
+        return {
+            'kind': 'qmmm', 'natom': int(self.natom_all),
+            'nqm': int(len(self.qm_atoms)), 'sha256': digest,
+        }
+
+    def _qmmm_wham_system_identity(self, system, qmmm_config):
+        """Hash QM/MM topology and Hamiltonian without initial coordinates."""
+        atoms = list(self.pdb.topology.atoms())
+        atomic_numbers = [
+            0 if atom.element is None else atom.element.atomic_number
+            for atom in atoms
+        ]
+        atom_metadata = [
+            (atom.name, atom.residue.name, atom.residue.index,
+             atom.residue.chain.id)
+            for atom in atoms
+        ]
+        bonds = np.asarray(sorted(
+            (min(atom1.index, atom2.index), max(atom1.index, atom2.index))
+            for atom1, atom2 in self.pdb.topology.bonds()
+        ), dtype='<i8').reshape((-1, 2))
+        hamiltonian_options = {
+            key: qmmm_config.get(key)
+            for key in ('embedding', 'frontier_scheme', 'cutoff',
+                        'nonbondedmethod')
+            if key in qmmm_config
+        }
+        digest = _restart_identity_digest(
+            array_parts=(
+                ('atomic_numbers', atomic_numbers, '<i8'),
+                ('masses_electron', self.m_all, '<f8'),
+                ('qm_atoms', self.qm_atoms, '<i8'),
+                ('bonds', bonds, '<i8'),
+            ),
+            text_parts=(
+                ('atom_metadata', json.dumps(
+                    atom_metadata, separators=(',', ':'))),
+                ('qmmm_hamiltonian', json.dumps(
+                    hamiltonian_options, sort_keys=True, separators=(',', ':'),
+                    default=str)),
+                ('openmm_system', self._mm.XmlSerializer.serialize(system)),
             ),
         )
         return {
