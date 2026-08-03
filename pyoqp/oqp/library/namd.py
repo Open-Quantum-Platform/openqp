@@ -346,7 +346,10 @@ class NAMD:
             self.coef[0] = 1.0 + 0.0j
 
         # velocities (natom, 3) in atomic units
-        self.vel = self._init_velocities()
+        # A checkpoint is the authoritative velocity state.  Do not retain a
+        # transport-time dependency on the original velocity input file.
+        self.vel = (np.zeros((self.natom, 3), dtype=float)
+                    if self.restart_requested else self._init_velocities())
 
         # previous-step payload for the overlap (back_door carry)
         self.prev_xyz = None
@@ -380,6 +383,7 @@ class NAMD:
     def _validate_sidecar_paths(self):
         """Reject aliases that would let one NAMD sidecar corrupt another."""
         paths = {
+            'log_file': self.mol.log,
             'trajectory_file': self.trajectory_file,
             'nacme_audit_file': self.nacme_audit_file,
             'restart_file': self.restart_file,
@@ -575,12 +579,17 @@ class NAMD:
 
         n = self.nstate
         data = self.mol.data
-        energies_old = np.ascontiguousarray(
-            np.asarray(data["OQP::td_energies_old"], dtype=np.float64).reshape(-1)[:n]
-        )
-        energies_current = np.ascontiguousarray(
-            np.asarray(data["OQP::td_energies"], dtype=np.float64).reshape(-1)[:n]
-        )
+        energies_old = np.asarray(
+            data["OQP::td_energies_old"], dtype=np.float64).reshape(-1)
+        energies_current = np.asarray(
+            data["OQP::td_energies"], dtype=np.float64).reshape(-1)
+        if (energies_old.shape != (n,) or energies_current.shape != (n,)
+                or not np.all(np.isfinite(energies_old))
+                or not np.all(np.isfinite(energies_current))):
+            raise RuntimeError(
+                'NACME check requires exact finite nstate TD-energy vectors')
+        energies_old = np.ascontiguousarray(energies_old)
+        energies_current = np.ascontiguousarray(energies_current)
         tdc_current = np.ascontiguousarray(
             self._compute_tdc(state_overlap), dtype=np.float64
         )
@@ -1210,6 +1219,8 @@ class NAMD:
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
+            'tdhf_settings': dict(cfg['tdhf']),
+            'pcm_settings': dict(cfg.get('pcm', {})),
             'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),

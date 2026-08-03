@@ -29,6 +29,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "int oqp_namd_nacme_gate(" in header
     assert "def _run_nacme_gate(" in driver
     assert "signed=True" in driver
+    assert "if self.restart_requested else self._init_velocities()" in driver
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
@@ -47,6 +48,13 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     for keyword in (
             "trajectory_interval=2", "restart_interval=2",
             "trajectory_file=", "nacme_audit_file=", "restart_file="):
+        assert keyword in example_inp
+        assert keyword in example_oqp
+    for keyword in (
+            "nacme_gate_invariant_tol=", "nacme_gate_abs_tol=",
+            "nacme_gate_rel_tol=", "nacme_gate_consecutive=",
+            "nve_gate_abs_tol=", "nve_gate_step_tol=",
+            "nve_gate_transition_tol=", "nve_gate_consecutive="):
         assert keyword in example_inp
         assert keyword in example_oqp
 
@@ -512,6 +520,20 @@ d_wrong_basis.nstate = 2; d_wrong_basis.dt_fs = 0.5
 d_wrong_basis.seed = 1; d_wrong_basis.rng_stream = 2
 basis_definition_bound = (
     d_charge._restart_signature() != d_wrong_basis._restart_signature())
+pcm_mol = Mol(); pcm_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+pcm_mol.config['pcm'] = {'enabled': True, 'epsilon': 40.0, 'model': 'ddpcm'}
+d_pcm = NAMD.__new__(NAMD); d_pcm.mol = pcm_mol; d_pcm.nstate = 2
+d_pcm.dt_fs = 0.5; d_pcm.seed = 1; d_pcm.rng_stream = 2
+pcm_bound = d_charge._restart_signature() != d_pcm._restart_signature()
+operator_mol = Mol(); operator_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+operator_mol.config['tdhf']['cam_alpha'] = 0.25
+d_operator = NAMD.__new__(NAMD); d_operator.mol = operator_mol
+d_operator.nstate = 2; d_operator.dt_fs = 0.5
+d_operator.seed = 1; d_operator.rng_stream = 2
+tdhf_operator_bound = (
+    d_charge._restart_signature() != d_operator._restart_signature())
 
 # Rank-zero reconciliation failures must be broadcast before any rank raises;
 # no unmatched explicit barrier is permitted on either simulated rank.
@@ -579,6 +601,7 @@ fresh_outputs_invalidated = (
     and not os.path.exists(d_fresh.restart_file)
     and not os.path.exists(d_fresh.restart_manifest_file))
 d_collision = NAMD.__new__(NAMD)
+d_collision.mol = SimpleNamespace(log=os.path.join(root, 'collision.log'))
 d_collision.trajectory_file = d_fresh.trajectory_file
 d_collision.nacme_audit_file = d_fresh.trajectory_file
 d_collision.restart_file = d_fresh.restart_file
@@ -589,6 +612,18 @@ except ValueError:
     sidecar_collision_rejected = True
 else:
     sidecar_collision_rejected = False
+d_log_collision = NAMD.__new__(NAMD)
+d_log_collision.mol = SimpleNamespace(log=d_fresh.trajectory_file)
+d_log_collision.trajectory_file = d_fresh.trajectory_file
+d_log_collision.nacme_audit_file = d_fresh.nacme_audit_file
+d_log_collision.restart_file = d_fresh.restart_file
+d_log_collision.restart_manifest_file = d_fresh.restart_manifest_file
+try:
+    d_log_collision._validate_sidecar_paths()
+except ValueError:
+    log_collision_rejected = True
+else:
+    log_collision_rejected = False
 
 # A discontinuity invalidates the previous gate result before the current
 # dense record is written.
@@ -609,6 +644,17 @@ stale_gate_cleared = (
     and d_ba._nacme_reference_tdc is None
     and d_ba._nacme_reference_mask is None
     and d_ba._nacme_reference_source == 0)
+bad_live = NAMD.__new__(NAMD); bad_live.nacme_check = 'baeck_an'
+bad_live.nstate = 2; bad_live.mol = SimpleNamespace(data={
+    'OQP::td_energies_old': np.array([0.0]),
+    'OQP::td_energies': np.array([0.0, 0.2]),
+})
+try:
+    bad_live._update_baeck_an_check(2, np.eye(2))
+except RuntimeError:
+    short_live_energy_rejected = True
+else:
+    short_live_energy_rejected = False
 
 # Defaults derive a unique manifest from the log stem.
 d_other = NAMD.__new__(NAMD)
@@ -662,11 +708,14 @@ print('DENSE=' + json.dumps({
         'qm_selection_bound': qm_selection_bound,
         'charge_bound': charge_bound, 'spin_bound': spin_bound,
         'basis_definition_bound': basis_definition_bound,
+        'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
         'collective_error_propagated': collective_error_propagated,
         'collective_save_error': collective_save_error,
         'fresh_outputs_invalidated': fresh_outputs_invalidated,
         'sidecar_collision_rejected': sidecar_collision_rejected,
+        'log_collision_rejected': log_collision_rejected,
         'stale_gate_cleared': stale_gate_cleared,
+        'short_live_energy_rejected': short_live_energy_rejected,
         'tight_binding_bound': tight_binding_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -715,9 +764,11 @@ print('DENSE=' + json.dumps({
         'history_load_rejected': True,
         'qm_selection_bound': True, 'charge_bound': True, 'spin_bound': True,
         'basis_definition_bound': True,
+        'pcm_bound': True, 'tdhf_operator_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
         'sidecar_collision_rejected': True, 'stale_gate_cleared': True,
+        'log_collision_rejected': True, 'short_live_energy_rejected': True,
         'tight_binding_bound': True,
         'forcefield_identity_stable': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
