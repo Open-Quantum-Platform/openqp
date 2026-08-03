@@ -281,6 +281,7 @@ class NAMD:
         self.restart_file = self._md_output_path(
             md.get('restart_file', ''), '.namd.restart.npz')
         self.restart_manifest_file = self._restart_manifest_path()
+        self._restart_manifest_written = False
         self.velocity_source = str(md['velocity'])
         self._validate_sidecar_paths()
         # Capture external guess inputs before the first electronic step.  A
@@ -1072,9 +1073,15 @@ class NAMD:
 
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
+        last_nve = getattr(self, '_nve_gate_last', None)
+        last_nacme = getattr(self, '_nacme_gate_last', None)
         gate_failure = (
             getattr(self, '_pending_nve_gate_error', None) is not None
-            or getattr(self, '_pending_nacme_gate_error', None) is not None)
+            or getattr(self, '_pending_nacme_gate_error', None) is not None
+            or (isinstance(last_nve, dict)
+                and last_nve.get('verdict') == 'fail')
+            or (isinstance(last_nacme, dict)
+                and last_nacme.get('verdict') == 'fail'))
         if (istep % self.trajectory_interval != 0
                 and istep != self.nstep and not gate_failure):
             return
@@ -1924,7 +1931,7 @@ class NAMD:
 
     def _write_restart_manifest(self):
         """Write a directly runnable per-job restart manifest."""
-        if os.path.isfile(self.restart_manifest_file):
+        if getattr(self, '_restart_manifest_written', False):
             return
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
@@ -1974,6 +1981,7 @@ class NAMD:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.restart_manifest_file)
+            self._restart_manifest_written = True
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)

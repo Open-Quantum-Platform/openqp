@@ -296,6 +296,20 @@ def test_trace_protects_default_and_configured_namd_sidecars(tmp_path):
                 _reject_trace_aliases(path, {name: path})
 
 
+def test_trace_uses_driver_matrices_when_hop_kernel_is_skipped():
+    from tools.diagnostics.trace_namd_hop import _trace_hop_matrices
+
+    driver = SimpleNamespace(
+        nstate=2,
+        mol=SimpleNamespace(data={}),
+        _last_state_overlap=np.array([[0.9, 0.1], [-0.1, 0.9]]),
+        _last_overlap_tdc=np.array([[0.0, 0.2], [-0.2, 0.0]]),
+    )
+    overlap, tdc = _trace_hop_matrices(driver, kernel_called=False)
+    np.testing.assert_allclose(overlap, driver._last_state_overlap)
+    np.testing.assert_allclose(tdc, driver._last_overlap_tdc)
+
+
 def test_namd_output_interval_defaults_to_about_ten_femtoseconds():
     from oqp.library.namd import NAMD
 
@@ -323,6 +337,12 @@ def test_namd_output_interval_keeps_final_and_gate_failure_records():
         namd._write_md_trajectory(istep, None, None, None, False)
     namd._pending_nacme_gate_error = RuntimeError("gate failure")
     namd._write_md_trajectory(7, None, None, None, False)
+    namd._pending_nacme_gate_error = None
+    namd._nacme_gate_last = {'verdict': 'fail'}
+    namd._write_md_trajectory(8, None, None, None, False)
+    namd._nacme_gate_last = {'verdict': 'pass'}
+    namd._nve_gate_last = {'verdict': 'fail'}
+    namd._write_md_trajectory(9, None, None, None, False)
 
     restart_steps = []
     namd.restart_interval = 20
@@ -331,11 +351,11 @@ def test_namd_output_interval_keeps_final_and_gate_failure_records():
     for istep in (1, 20, 21):
         namd._save_restart(istep, None, None, None)
 
-    assert trajectory_steps == [20, 21, 7]
+    assert trajectory_steps == [20, 21, 7, 8, 9]
     assert restart_steps == [20, 21]
 
 
-def test_restart_manifest_is_not_rewritten_and_legacy_notice_is_once(
+def test_restart_manifest_is_refreshed_once_and_legacy_notice_is_once(
         tmp_path, monkeypatch):
     from oqp.library import namd as namd_module
     from oqp.library.namd import NAMD
@@ -344,12 +364,28 @@ def test_restart_manifest_is_not_rewritten_and_legacy_notice_is_once(
     manifest.write_text("existing manifest\n", encoding="utf-8")
     namd = NAMD.__new__(NAMD)
     namd.restart_manifest_file = str(manifest)
-    namd.mol = SimpleNamespace(oqp_canonical_input="invalid if parsed")
+    namd.restart_file = str(tmp_path / "new.restart.npz")
+    namd.trajectory_file = str(tmp_path / "new.trj")
+    namd.mol = SimpleNamespace(
+        oqp_canonical_input=(
+            'mrsf(nstate=2)/bhhlyp/6-31g*\n'
+            'namd(S1,nstep=40,dt=0.5,velocity=zero)\n'
+            'geom="h2o.xyz"\n'),
+        oqp_input_source=None, input_file=None,
+    )
     namd._write_restart_manifest()
-    assert manifest.read_text(encoding="utf-8") == "existing manifest\n"
+    refreshed = manifest.read_text(encoding="utf-8")
+    assert "existing manifest" not in refreshed
+    assert "nstep=40" in refreshed
+    assert 'restart_file="new.restart.npz"' in refreshed
+    assert namd._restart_manifest_written
+    namd.mol.oqp_canonical_input = "invalid if rendered twice"
+    namd._write_restart_manifest()
+    assert manifest.read_text(encoding="utf-8") == refreshed
 
     manifest.unlink()
     notices = []
+    namd._restart_manifest_written = False
     namd.mol = SimpleNamespace(
         oqp_canonical_input="", oqp_input_source=None, input_file=None)
     monkeypatch.setattr(

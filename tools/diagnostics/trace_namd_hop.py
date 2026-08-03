@@ -47,6 +47,26 @@ def _reject_trace_aliases(trace: Path, protected_paths: dict[str, Path]) -> None
             f"--trace must not alias the {', '.join(aliases)} path")
 
 
+def _trace_hop_matrices(driver, kernel_called: bool):
+    """Return current overlap/TDC matrices even when the hop was skipped."""
+    nstate = driver.nstate
+    data = getattr(driver.mol, "data", {})
+    overlap = data.get("OQP::namd_stas") if kernel_called else None
+    tdc = data.get("OQP::namd_tdc") if kernel_called else None
+    if overlap is None:
+        overlap = getattr(driver, "_last_state_overlap", None)
+    if tdc is None:
+        tdc = getattr(driver, "_last_overlap_tdc", None)
+    if overlap is None:
+        overlap = np.full((nstate, nstate), np.nan)
+    if tdc is None:
+        tdc = np.full((nstate, nstate), np.nan)
+    return (
+        np.asarray(overlap, dtype=float).reshape(nstate, nstate),
+        np.asarray(tdc, dtype=float).reshape(nstate, nstate),
+    )
+
+
 class SequenceRNG:
     """Minimal Generator-compatible source for a prescribed hop RNG stream."""
 
@@ -88,6 +108,7 @@ def install_trace(
         if istep == 0:
             return
         nstate = self.nstate
+        kernel_called = bool(np.isfinite(self._last_hop_random))
         try:
             params = np.asarray(self.mol.data["OQP::namd_params"], dtype=float)
         except (AttributeError, KeyError):
@@ -96,12 +117,7 @@ def install_trace(
             results = np.asarray(self.mol.data["OQP::namd_results"], dtype=float)
         except (AttributeError, KeyError):
             results = np.empty(0)
-        overlap = np.asarray(
-            self.mol.data["OQP::namd_stas"], dtype=float
-        ).reshape(nstate, nstate)
-        tdc = np.asarray(
-            self.mol.data["OQP::namd_tdc"], dtype=float
-        ).reshape(nstate, nstate)
+        overlap, tdc = _trace_hop_matrices(self, kernel_called)
         cmhp = np.full((nstate, nstate), np.nan)
         if results.size >= nstate * nstate:
             # The native record is a Fortran column-major flattening.
@@ -109,7 +125,7 @@ def install_trace(
         row = {
             "step": istep,
             "t_fs": istep * self.dt_fs,
-            "kernel_called": int(np.isfinite(self._last_hop_random)),
+            "kernel_called": int(kernel_called),
             "active": self.active,
             "hopped": int(bool(hopped)),
             "random": (
