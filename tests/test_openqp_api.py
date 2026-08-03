@@ -919,12 +919,6 @@ $$$$
             seed=20260803,
             rng_stream=9,
             first_hop_step=2,
-            nacme_check="baeck_an",
-            ba_gap_max=0.05,
-            nacme_gate="error",
-            nacme_gate_abs_tol=2.0e-4,
-            nacme_gate_rel_tol=0.5,
-            nacme_gate_consecutive=4,
         )
         config = job.to_input_dict()
         self.assertEqual(config["input"]["qmmm_flag"], "True")
@@ -939,6 +933,28 @@ $$$$
         self.assertEqual(config["md"]["seed"], "20260803")
         self.assertEqual(config["md"]["rng_stream"], "9")
         self.assertEqual(config["md"]["first_hop_step"], "2")
+        self.assertEqual(config["md"]["nacme_check"], "off")
+
+    def test_workflow_namd_rejects_soc_nacme_and_builds_same_spin_gate(self):
+        openqp = load_openqp_module()
+        job = (
+            openqp.OpenQP(project="namd_gate")
+            .molecule("h2co.xyz", basis="6-31g*")
+            .theory("mrsf-tddft", functional="bhhlyp", nstate=3)
+        )
+        with self.assertRaisesRegex(ValueError, "does not support nacme_check"):
+            job.workflow.namd(soc=True, nacme_check="baeck_an")
+        job.workflow.namd(
+            soc=False,
+            nacme_check="baeck_an",
+            ba_gap_max=0.05,
+            nacme_gate="error",
+            nacme_gate_abs_tol=2.0e-4,
+            nacme_gate_rel_tol=0.5,
+            nacme_gate_consecutive=4,
+        )
+        config = job.to_input_dict()
+        self.assertEqual(config["md"]["soc"], "False")
         self.assertEqual(config["md"]["nacme_check"], "baeck_an")
         self.assertEqual(config["md"]["ba_gap_max"], "0.05")
         self.assertEqual(config["md"]["nacme_gate"], "error")

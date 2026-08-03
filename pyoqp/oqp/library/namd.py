@@ -59,7 +59,7 @@ KJMOL_TO_HARTREE = 1.0 / 2625.499639
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
 NAMD_RESTART_SCHEMA_VERSION = 2
-NAMD_TRAJECTORY_SCHEMA_VERSION = 4
+NAMD_TRAJECTORY_SCHEMA_VERSION = 5
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
 
@@ -75,7 +75,9 @@ def _namd_trajectory_dtype(nstate, natom):
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
         ('velocities_au', '<f8', vectors), ('state_overlap', '<f8', matrix),
-        ('overlap_tdc_au', '<f8', matrix), ('reference_tdc_au', '<f8', matrix),
+        ('overlap_tdc_au', '<f8', matrix),
+        ('gate_candidate_tdc_au', '<f8', matrix),
+        ('reference_tdc_au', '<f8', matrix),
         ('reference_mask', 'u1', matrix), ('reference_source', 'i1'),
         ('gate_center_step', '<i8'), ('gate_verdict', 'i1'),
         ('gate_counts', '<i8', (3,)), ('gate_streak', '<i8'),
@@ -329,6 +331,7 @@ class NAMD:
         self._ba_last = None
         self._nacme_gate_failures = 0
         self._nacme_gate_last = None
+        self._nacme_candidate_tdc = None
         self._nacme_reference_tdc = None
         self._nacme_reference_mask = None
         self._nacme_reference_source = 0
@@ -339,6 +342,7 @@ class NAMD:
         self._nve_gate_failures = 0
         self._nve_gate_last = None
         self._pending_nve_gate_error = None
+        self._pending_nacme_gate_error = None
 
         # electronic amplitudes (complex), one per excited state. For SOC-NAMD
         # the active index runs over the larger spin-adiabatic manifold and the
@@ -395,6 +399,19 @@ class NAMD:
         # file directory. Keep validation and loading on one resolver.
         return os.path.abspath(os.path.expanduser(velocity))
 
+    def _resolve_qmmm_aux_file(self, name):
+        """Resolve a QM/MM auxiliary path exactly as NAMD_QMMM does."""
+        value = str(name or '')
+        input_file = getattr(self.mol, 'input_file', None)
+        input_dir = (os.path.dirname(os.path.abspath(input_file))
+                     if input_file else '')
+        if (value and input_dir and not os.path.isabs(value)
+                and not os.path.exists(value)):
+            candidate = os.path.join(input_dir, value)
+            if os.path.exists(candidate):
+                return candidate
+        return value
+
     def _validate_sidecar_paths(self):
         """Reject aliases between NAMD sidecars and simulation inputs."""
         outputs = {
@@ -415,6 +432,21 @@ class NAMD:
         if resolved_input:
             inputs['input_file'] = resolved_input
 
+        input_config = getattr(self.mol, 'config', {}).get('input', {})
+        for key in ('system', 'system2'):
+            geometry = input_config.get(key, '')
+            if not isinstance(geometry, str) or not geometry.strip():
+                continue
+            candidate = geometry.strip()
+            if ('\n' in candidate or '\r' in candidate):
+                continue
+            expanded = os.path.expanduser(candidate)
+            path = (expanded if os.path.isabs(expanded)
+                    else os.path.join(source_dir, expanded))
+            if (os.path.isfile(path)
+                    or os.path.splitext(candidate)[1].lower() in ('.xyz', '.pdb')):
+                inputs[f'input_{key}'] = path
+
         velocity_file = self._resolved_velocity_file()
         if velocity_file is not None:
             inputs['velocity_file'] = velocity_file
@@ -422,10 +454,7 @@ class NAMD:
         qmmm = getattr(self.mol, 'config', {}).get('qmmm', {})
         pdb_file = str(qmmm.get('pdb_file', '') or '').strip()
         if pdb_file:
-            expanded = os.path.expanduser(pdb_file)
-            inputs['qmmm_pdb_file'] = (
-                expanded if os.path.isabs(expanded)
-                else os.path.join(source_dir, expanded))
+            inputs['qmmm_pdb_file'] = self._resolve_qmmm_aux_file(pdb_file)
         qm_atoms_xyz = str(qmmm.get('qm_atoms_xyz', '') or '').strip()
         if qm_atoms_xyz:
             expanded = os.path.expanduser(qm_atoms_xyz)
@@ -435,9 +464,7 @@ class NAMD:
         forcefields = str(qmmm.get('forcefield_files', '')
                           or qmmm.get('forcefield', '') or '')
         for index, item in enumerate(forcefields.replace(',', ' ').split()):
-            expanded = os.path.expanduser(item)
-            candidate = (expanded if os.path.isabs(expanded)
-                         else os.path.join(source_dir, expanded))
+            candidate = self._resolve_qmmm_aux_file(os.path.expanduser(item))
             is_builtin = False
             if not os.path.isfile(candidate):
                 try:
@@ -515,6 +542,30 @@ class NAMD:
             }.get(status[1], RuntimeError)
             raise exception_type(status[2])
         return result
+
+    def _run_io_collective_result(self, operation):
+        """Run rank-zero I/O and broadcast its validated result or failure."""
+        manager = getattr(self.mol, 'mpi_manager', None)
+        if manager is None or not bool(getattr(manager, 'use_mpi', False)):
+            return operation() if self._is_io_rank() else None
+
+        message = None
+        if self._is_io_rank():
+            try:
+                message = (True, operation(), '', '')
+            except Exception as error:
+                message = (False, None, type(error).__name__, str(error))
+        message = manager.bcast(message, root=0)
+        if not message[0]:
+            exception_type = {
+                'FileNotFoundError': FileNotFoundError,
+                'OSError': OSError,
+                'RuntimeError': RuntimeError,
+                'TypeError': TypeError,
+                'ValueError': ValueError,
+            }.get(message[2], RuntimeError)
+            raise exception_type(message[3])
+        return message[1]
 
     def _prepare_md_outputs(self):
         """Start fresh sidecars or preserve them when explicitly restarting."""
@@ -698,10 +749,12 @@ class NAMD:
             self._ba_dt_left = dt_right
             self._ba_last = None
             self._nacme_gate_last = None
+            self._nacme_candidate_tdc = None
             self._nacme_reference_tdc = None
             self._nacme_reference_mask = None
             self._nacme_reference_source = 0
             self._nacme_gate_failures = 0
+            self._pending_nacme_gate_error = None
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -770,6 +823,7 @@ class NAMD:
         gauge.  Thus the invariant and policy machinery is shared without
         treating the approximate TD-BA sign as physical.
         """
+        self._pending_nacme_gate_error = None
         n = self.nstate
         candidate = np.ascontiguousarray(
             np.asarray(candidate_tdc, dtype=np.float64).reshape((n, n)))
@@ -836,11 +890,14 @@ class NAMD:
             result['verdict'] = 'off'
             self._nacme_gate_failures = 0
             self._nacme_gate_last = None
+            self._nacme_candidate_tdc = None
             self._nacme_reference_tdc = None
             self._nacme_reference_mask = None
             self._nacme_reference_source = 0
+            self._pending_nacme_gate_error = None
             return result
         self._nacme_gate_last = result
+        self._nacme_candidate_tdc = candidate.copy()
         self._nacme_reference_tdc = reference.copy()
         self._nacme_reference_mask = mask.copy()
         self._nacme_reference_source = {
@@ -868,15 +925,22 @@ class NAMD:
 
         if self.nacme_gate == 'error':
             if invariant_failures:
-                raise RuntimeError(
+                self._pending_nacme_gate_error = RuntimeError(
                     f"NACME invariant gate failed for {source} at step {center_step}"
                 )
-            if self._nacme_gate_failures >= self.nacme_gate_consecutive:
-                raise RuntimeError(
+            elif self._nacme_gate_failures >= self.nacme_gate_consecutive:
+                self._pending_nacme_gate_error = RuntimeError(
                     f"NACME reference gate failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
         return result
+
+    def _enforce_nacme_gate(self):
+        """Stop only after the failing NACME point reaches the dense TRJ."""
+        error = getattr(self, '_pending_nacme_gate_error', None)
+        self._pending_nacme_gate_error = None
+        if error is not None:
+            raise error
 
     def _write_nacme_audit_row(self, result):
         """Append one machine-readable gate row for ensemble/post-MD audits."""
@@ -992,7 +1056,9 @@ class NAMD:
 
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
-        gate_failure = getattr(self, '_pending_nve_gate_error', None) is not None
+        gate_failure = (
+            getattr(self, '_pending_nve_gate_error', None) is not None
+            or getattr(self, '_pending_nacme_gate_error', None) is not None)
         if istep % self.trajectory_interval != 0 and not gate_failure:
             return
         return self._run_io_collective(
@@ -1059,7 +1125,8 @@ class NAMD:
                 'rng', 'e_pot_hartree', 'e_kin_hartree', 'e_tot_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
-                'overlap_tdc_au', 'reference_tdc_au', 'gate_metrics',
+                'overlap_tdc_au', 'gate_candidate_tdc_au',
+                'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
                 'tracking_phase', 'tracking_phase_initial',
                 'tracking_previous_phase_initial', 'tracking_overlap',
@@ -1096,6 +1163,9 @@ class NAMD:
             record['state_overlap'] = self._last_state_overlap
         if self._last_overlap_tdc is not None:
             record['overlap_tdc_au'] = self._last_overlap_tdc
+        candidate_tdc = getattr(self, '_nacme_candidate_tdc', None)
+        if candidate_tdc is not None:
+            record['gate_candidate_tdc_au'] = candidate_tdc
         if self._nacme_reference_tdc is not None:
             record['reference_tdc_au'] = self._nacme_reference_tdc
             record['reference_mask'] = self._nacme_reference_mask
@@ -1159,15 +1229,9 @@ class NAMD:
         """Canonicalize local force fields across relocated restart manifests."""
         if not isinstance(value, str):
             return value
-        source = (getattr(self.mol, 'oqp_input_source', None)
-                  or getattr(self.mol, 'input_file', None))
-        source_dir = (os.path.dirname(os.path.abspath(source))
-                      if source else os.getcwd())
         identity = []
         for item in value.replace(',', ' ').split():
-            expanded = os.path.expanduser(item)
-            candidate = (expanded if os.path.isabs(expanded)
-                         else os.path.join(source_dir, expanded))
+            candidate = self._resolve_qmmm_aux_file(os.path.expanduser(item))
             if os.path.isfile(candidate):
                 digest = hashlib.sha256()
                 with open(candidate, 'rb') as stream:
@@ -1189,6 +1253,26 @@ class NAMD:
                         f'cannot fingerprint OpenMM force-field resource {item!r}')
                 identity.append({'builtin': item, 'sha256': digest})
         return identity
+
+    def _basis_definition_identity(self, value):
+        """Fingerprint the file-backed basis definition used by BasisData."""
+        if not isinstance(value, str) or not value.startswith('file:'):
+            return value
+        filename = value[len('file:'):]
+        input_file = getattr(self.mol, 'input_file', None)
+        directory = os.path.dirname(input_file) if input_file else ''
+        path = os.path.join(directory, filename)
+        if not os.path.isfile(path):
+            return {'configured': value, 'resolved': os.path.realpath(path)}
+        digest = hashlib.sha256()
+        with open(path, 'rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        return {
+            'configured': value,
+            'path': os.path.realpath(path),
+            'sha256': digest.hexdigest(),
+        }
 
     def _effective_tight_binding_settings(self):
         """Return TB settings after non-mutating default-model resolution."""
@@ -1358,7 +1442,8 @@ class NAMD:
             'molecule': self._molecular_identity(),
             'method': cfg['input'].get('method', ''),
             'functional': cfg['input'].get('functional', ''),
-            'basis': cfg['input'].get('basis', ''),
+            'basis': self._basis_definition_identity(
+                cfg['input'].get('basis', '')),
             'basis_library': cfg['input'].get('library', ''),
             'basis_ispher': cfg['input'].get('ispher', ''),
             'd4': cfg['input'].get('d4', False),
@@ -1367,6 +1452,8 @@ class NAMD:
             'scf_type': cfg.get('scf', {}).get('type', ''),
             'scf_multiplicity': cfg.get('scf', {}).get('multiplicity', ''),
             'scf_settings': dict(cfg.get('scf', {})),
+            'scf_init_basis': self._basis_definition_identity(
+                cfg.get('scf', {}).get('init_basis', 'none')),
             'tdhf_type': cfg['tdhf'].get('type', ''),
             'tdhf_multiplicity': cfg['tdhf'].get('multiplicity', ''),
             'tdhf_settings': dict(cfg['tdhf']),
@@ -1708,9 +1795,38 @@ class NAMD:
                 os.unlink(temporary)
 
     def _load_restart(self):
-        """Load and validate a same-spin NAMD restart without pickle data."""
+        """Collectively load and restore a same-spin NAMD checkpoint."""
         if not self.restart_requested:
             return None
+        payload = self._run_io_collective_result(
+            self._load_restart_on_io_rank)
+        self.prev_data = payload['prev_data']
+        self.prev_xyz = payload['prev_xyz']
+        self.mol.put_data(self.prev_data)
+        self.active = payload['active']
+        self.coef = payload['coef']
+        self._rng_step = payload['rng_step']
+        self._last_hop_random = np.nan
+        self._nacme_gate_failures = payload['gate_failures']
+        self._nve_gate_failures = payload['nve_failures']
+        self._t_fs = payload['time_fs']
+        for name, value in payload['optional'].items():
+            setattr(self, f'_{name}', value)
+        self._reconcile_trajectory_with_restart(payload['step'])
+        self._reconcile_nacme_audit_with_restart(payload['step'])
+        dump_log(
+            self.mol,
+            title=(f'NAMD restart loaded: step={payload["step"]} '
+                   f'file={self.restart_file} phase_history=restored '
+                   f'rng=({self.seed},{self.rng_stream},step)'),
+        )
+        return {
+            key: payload[key] for key in (
+                'step', 'coordinates', 'velocities', 'acceleration')
+        }
+
+    def _load_restart_on_io_rank(self):
+        """Read and validate a checkpoint on rank zero without pickle data."""
         if not os.path.isfile(self.restart_file):
             raise FileNotFoundError(f'NAMD restart file not found: {self.restart_file}')
         with np.load(self.restart_file, allow_pickle=False) as saved:
@@ -1773,32 +1889,21 @@ class NAMD:
                 optional[name] = value
             optional = self._validate_restart_histories(
                 optional, context='NAMD restart checkpoint')
-            self.prev_data = prev_data
-            self.prev_xyz = prev_xyz
-            self.mol.put_data(self.prev_data)
-            self.active = active
-            self.coef = coef
-            self._rng_step = rng_step
-            self._last_hop_random = np.nan
-            self._nacme_gate_failures = gate_failures
-            self._nve_gate_failures = nve_failures
-            self._t_fs = time_fs
-            for name, value in optional.items():
-                setattr(self, f'_{name}', value)
             result = {
                 'step': step,
                 'coordinates': coordinates,
                 'velocities': velocities,
                 'acceleration': acceleration,
+                'prev_data': prev_data,
+                'prev_xyz': prev_xyz,
+                'active': active,
+                'coef': coef,
+                'rng_step': rng_step,
+                'gate_failures': gate_failures,
+                'nve_failures': nve_failures,
+                'time_fs': time_fs,
+                'optional': optional,
             }
-        self._reconcile_trajectory_with_restart(result['step'])
-        self._reconcile_nacme_audit_with_restart(result['step'])
-        dump_log(
-            self.mol,
-            title=(f'NAMD restart loaded: step={result["step"]} '
-                   f'file={self.restart_file} phase_history=restored '
-                   f'rng=({self.seed},{self.rng_stream},step)'),
-        )
         return result
 
     @staticmethod
@@ -2109,6 +2214,7 @@ class NAMD:
                    f'pop={np.array2string(pops, precision=4)}'),
         )
         self._write_md_trajectory(istep, r, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 
@@ -2156,20 +2262,9 @@ class NAMD_QMMM(NAMD):
         # any CWD (e.g. `openqp --run_tests`, which executes each example by its
         # full path). OpenMM built-in force fields (amber14-all.xml, ...) are left
         # untouched: the join is only used when it actually points at a file.
-        inp_dir = os.path.dirname(os.path.abspath(mol.input_file)) \
-            if getattr(mol, 'input_file', None) else ''
-
-        def _resolve_aux(name):
-            if name and inp_dir and not os.path.isabs(name) \
-                    and not os.path.exists(name):
-                cand = os.path.join(inp_dir, name)
-                if os.path.exists(cand):
-                    return cand
-            return name
-
         q = mol.config['qmmm']
-        pdb_file = _resolve_aux(q['pdb_file'])
-        ff_files = [_resolve_aux(s) for s in
+        pdb_file = self._resolve_qmmm_aux_file(q['pdb_file'])
+        ff_files = [self._resolve_qmmm_aux_file(s) for s in
                     str(q['forcefield_files']).replace(',', ' ').split() if s]
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
@@ -2616,6 +2711,7 @@ class NAMD_QMMM(NAMD):
         )
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
+        self._enforce_nacme_gate()
         self._enforce_nve_gate()
 
 

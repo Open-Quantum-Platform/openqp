@@ -262,6 +262,7 @@ with open(os.path.join(input_root, 'parameters', 'H-H.skf'),
 class Mol:
     log = os.path.join(root, 'job.log')
     oqp_input_source = os.path.join(input_root, 'request.oqp')
+    input_file = oqp_input_source
     oqp_canonical_input = (
         'mrsf(nstate=2)/bhhlyp/6-31g*\n'
         'namd(S1,nstep=20,dt=0.5,velocity="vel.dat")\n'
@@ -301,6 +302,7 @@ d.restart_manifest_file = d._restart_manifest_path()
 d.active = 1; d._last_hop_random = 0.25; d.coef = np.array([1+0j, 0+0j])
 d.vel = np.ones((3, 3))*0.01; d._last_state_overlap = np.eye(2)
 d._last_overlap_tdc = np.array([[0.0, 0.1], [-0.1, 0.0]])
+d._nacme_candidate_tdc = np.array([[0.0, 0.105], [-0.105, 0.0]])
 d._nacme_reference_tdc = np.array([[0.0, 0.11], [-0.11, 0.0]])
 d._nacme_reference_mask = np.array([[0, 1], [1, 0]], dtype=np.int32)
 d._nacme_reference_source = 1
@@ -342,6 +344,31 @@ forcefield_identity_stable = relative_ff_identity == absolute_ff_identity
 builtin_forcefield_fingerprinted = (
     relative_ff_identity[1].get('builtin') == 'tip3p.xml'
     and len(relative_ff_identity[1].get('sha256', '')) == 64)
+
+# Runtime resolution gives an existing CWD force field priority over an
+# input-directory file with the same relative name; identity must do likewise.
+cwd_forcefield = os.path.join(root, 'shared.xml')
+input_forcefield = os.path.join(input_root, 'shared.xml')
+with open(cwd_forcefield, 'w', encoding='utf-8') as stream:
+    stream.write('cwd-v1\n')
+with open(input_forcefield, 'w', encoding='utf-8') as stream:
+    stream.write('input-v1\n')
+original_cwd = os.getcwd()
+os.chdir(root)
+try:
+    cwd_forcefield_identity1 = d._qmmm_forcefield_identity('shared.xml')
+    with open(cwd_forcefield, 'w', encoding='utf-8') as stream:
+        stream.write('cwd-v2\n')
+    cwd_forcefield_identity2 = d._qmmm_forcefield_identity('shared.xml')
+    with open(input_forcefield, 'w', encoding='utf-8') as stream:
+        stream.write('input-v2\n')
+    cwd_forcefield_identity3 = d._qmmm_forcefield_identity('shared.xml')
+finally:
+    os.chdir(original_cwd)
+runtime_forcefield_bound = (
+    cwd_forcefield_identity1 != cwd_forcefield_identity2
+    and cwd_forcefield_identity2 == cwd_forcefield_identity3
+    and cwd_forcefield_identity2[0]['path'] == os.path.realpath(cwd_forcefield))
 
 # Tight-binding model settings and parameter contents define the Hamiltonian.
 tb1 = Mol(); tb1.config = {
@@ -464,6 +491,39 @@ loaded = d2._load_restart()
 header, records = read_namd_trajectory(d.trajectory_file)
 manifest = open(d.restart_manifest_file, encoding='utf-8').read()
 audit_lines = open(d.nacme_audit_file, encoding='utf-8').read().splitlines()
+
+# Only rank zero needs checkpoint filesystem/model access; all ranks restore
+# the exact validated payload broadcast by rank zero.
+class ResultMPI:
+    message = None
+    def __init__(self, rank):
+        self.rank = rank
+        self.use_mpi = 1
+    def bcast(self, value, root=0):
+        if self.rank == root:
+            ResultMPI.message = value
+        return ResultMPI.message
+
+def mpi_restart_loader(rank, restart_path):
+    probe = NAMD.__new__(NAMD); probe.mol = Mol()
+    probe.mol.mpi_manager = ResultMPI(rank)
+    probe.nstate = 2; probe.dt_fs = 0.5; probe.seed = 1; probe.rng_stream = 2
+    probe.restart_requested = True; probe.restart_file = restart_path
+    probe.trajectory_file = d.trajectory_file
+    probe.nacme_audit_file = d.nacme_audit_file
+    probe._reconcile_trajectory_with_restart = lambda _step: None
+    probe._reconcile_nacme_audit_with_restart = lambda _step: None
+    return probe, probe._load_restart()
+
+mpi_root, mpi_root_loaded = mpi_restart_loader(0, d.restart_file)
+mpi_other, mpi_other_loaded = mpi_restart_loader(
+    1, os.path.join(root, 'nonshared', 'missing-restart.npz'))
+collective_load_broadcast = (
+    mpi_root_loaded['step'] == mpi_other_loaded['step'] == 1
+    and np.array_equal(mpi_root_loaded['coordinates'],
+                       mpi_other_loaded['coordinates'])
+    and np.array_equal(mpi_root.coef, mpi_other.coef)
+    and np.array_equal(mpi_root.prev_xyz, mpi_other.prev_xyz))
 
 # Externally corrupted electronic payloads are rejected during load too.
 with np.load(d.restart_file, allow_pickle=False) as saved:
@@ -639,6 +699,41 @@ d_scf = NAMD.__new__(NAMD); d_scf.mol = scf_mol; d_scf.nstate = 2
 d_scf.dt_fs = 0.5; d_scf.seed = 1; d_scf.rng_stream = 2
 scf_settings_bound = d_charge._restart_signature() != d_scf._restart_signature()
 
+# File-backed target and initial basis definitions are part of the actual AO
+# model; changing either file must invalidate the electronic restart history.
+basis_path = os.path.join(input_root, 'custom-basis.json')
+with open(basis_path, 'w', encoding='utf-8') as stream:
+    stream.write('{"elements": {"1": {"electron_shells": []}}}\n')
+file_basis_mol = Mol(); file_basis_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+file_basis_mol.config['input']['basis'] = 'file:custom-basis.json'
+d_file_basis1 = NAMD.__new__(NAMD); d_file_basis1.mol = file_basis_mol
+d_file_basis1.nstate = 2; d_file_basis1.dt_fs = 0.5
+d_file_basis1.seed = 1; d_file_basis1.rng_stream = 2
+file_basis_signature1 = d_file_basis1._restart_signature()
+with open(basis_path, 'a', encoding='utf-8') as stream:
+    stream.write(' ')
+d_file_basis2 = NAMD.__new__(NAMD); d_file_basis2.mol = file_basis_mol
+d_file_basis2.nstate = 2; d_file_basis2.dt_fs = 0.5
+d_file_basis2.seed = 1; d_file_basis2.rng_stream = 2
+target_basis_file_bound = (
+    file_basis_signature1 != d_file_basis2._restart_signature())
+
+init_basis_mol = Mol(); init_basis_mol.config = {
+    section: dict(settings) for section, settings in Mol.config.items()}
+init_basis_mol.config['scf']['init_basis'] = 'file:custom-basis.json'
+d_init_basis1 = NAMD.__new__(NAMD); d_init_basis1.mol = init_basis_mol
+d_init_basis1.nstate = 2; d_init_basis1.dt_fs = 0.5
+d_init_basis1.seed = 1; d_init_basis1.rng_stream = 2
+init_basis_signature1 = d_init_basis1._restart_signature()
+with open(basis_path, 'a', encoding='utf-8') as stream:
+    stream.write(' ')
+d_init_basis2 = NAMD.__new__(NAMD); d_init_basis2.mol = init_basis_mol
+d_init_basis2.nstate = 2; d_init_basis2.dt_fs = 0.5
+d_init_basis2.seed = 1; d_init_basis2.rng_stream = 2
+initial_basis_file_bound = (
+    init_basis_signature1 != d_init_basis2._restart_signature())
+
 # Environment-selected ESPF modes alter the QM/MM Hamiltonian/forces and must
 # therefore invalidate checkpoints made with another effective mode.
 class EmptyTopology:
@@ -765,9 +860,11 @@ else:
 
 def input_collision(candidate, *, velocity='zero', qmmm=None, config=None):
     probe = NAMD.__new__(NAMD)
+    source_file = os.path.join(input_root, 'request.oqp')
     probe.mol = SimpleNamespace(
         log=os.path.join(root, 'input-collision.log'),
-        oqp_input_source=os.path.join(input_root, 'request.oqp'),
+        oqp_input_source=source_file,
+        input_file=source_file,
         config=(config or {
             'input': {'method': 'tdhf'}, 'qmmm': qmmm or {}}))
     probe.velocity_source = velocity
@@ -794,6 +891,8 @@ finally:
 input_collisions_rejected = all((
     input_collision(os.path.join(input_root, 'request.oqp')),
     cwd_velocity_collision,
+    input_collision(os.path.join(input_root, 'h2o.xyz'), config={
+        'input': {'method': 'tdhf', 'system': 'h2o.xyz'}, 'qmmm': {}}),
     input_collision(
         os.path.join(input_root, 'water.pdb'),
         qmmm={'pdb_file': 'water.pdb'}),
@@ -875,11 +974,32 @@ except RuntimeError:
     enforced_error = True
 else:
     enforced_error = False
+
+d.nacme_gate = 'error'; d.nacme_gate_consecutive = 1
+d.nacme_gate_invariant_tol = 1.0e-12
+d.nacme_gate_abs_tol = 1.0e-8; d.nacme_gate_rel_tol = 0.01
+d._nacme_gate_failures = 0
+d._run_nacme_gate(
+    np.array([[0.0, 0.2], [0.0, 0.0]]),
+    np.array([[0.0, -0.1], [0.1, 0.0]]),
+    source='analytic', center_step=3, signed=True)
+deferred_nacme_error = d._pending_nacme_gate_error is not None
+d.trajectory_file = os.path.join(root, 'nacme-failure.namd.trj')
+d._write_md_trajectory(3, np.zeros((3, 3)), -0.8, 0.1, False)
+_, nacme_failure_records = read_namd_trajectory(d.trajectory_file)
+forced_nacme_failure_steps = nacme_failure_records['step'].tolist()
+try:
+    d._enforce_nacme_gate()
+except RuntimeError:
+    enforced_nacme_error = True
+else:
+    enforced_nacme_error = False
 print('DENSE=' + json.dumps({
     'shape': records.shape, 'steps': records['step'].tolist(),
     'phase': records['tracking_phase'].tolist(),
     'phase_initial': records['tracking_phase_initial'].tolist(),
     'gate_streak': records['gate_streak'].tolist(),
+    'gate_candidate': records['gate_candidate_tdc_au'].tolist(),
     'lineage': records['tracking_lineage'].tolist(),
     'raw_order': records['tracking_raw_order'].tolist(),
     'nstate': header['nstate'],
@@ -899,6 +1019,9 @@ print('DENSE=' + json.dumps({
         'deferred_error': deferred_error,
         'enforced_error': enforced_error,
         'forced_failure_steps': forced_failure_steps,
+        'deferred_nacme_error': deferred_nacme_error,
+        'enforced_nacme_error': enforced_nacme_error,
+        'forced_nacme_failure_steps': forced_nacme_failure_steps,
         'invalid_save_rejected': invalid_save_rejected,
         'checkpoint_after_rejection': checkpoint_after_rejection,
         'corrupt_load_rejected': corrupt_load_rejected,
@@ -912,6 +1035,7 @@ print('DENSE=' + json.dumps({
         'pcm_bound': pcm_bound, 'tdhf_operator_bound': tdhf_operator_bound,
         'dftgrid_bound': dftgrid_bound, 'gate_policy_bound': gate_policy_bound,
         'collective_error_propagated': collective_error_propagated,
+        'collective_load_broadcast': collective_load_broadcast,
         'collective_save_error': collective_save_error,
         'fresh_outputs_invalidated': fresh_outputs_invalidated,
         'sidecar_collision_rejected': sidecar_collision_rejected,
@@ -924,6 +1048,9 @@ print('DENSE=' + json.dumps({
         'default_tb_artifact_bound': default_tb_artifact_bound,
         'default_tb_model_stable': default_tb_model_stable,
         'espf_modes_bound': espf_modes_bound,
+        'target_basis_file_bound': target_basis_file_bound,
+        'initial_basis_file_bound': initial_basis_file_bound,
+        'runtime_forcefield_bound': runtime_forcefield_bound,
         'scf_settings_bound': scf_settings_bound,
         'unique_manifests': unique_manifests,
         'forcefield_identity_stable': forcefield_identity_stable,
@@ -958,6 +1085,7 @@ print('DENSE=' + json.dumps({
         'phase': [[1.0, -1.0]],
         'phase_initial': [[-1.0, 1.0]], 'lineage': [[7, 4]],
         'gate_streak': [0],
+        'gate_candidate': [[[0.0, 0.105], [-0.105, 0.0]]],
         'raw_order': [[1, 0]],
         'nstate': 2, 'natom': 3, 'restart': True, 'checkpoint': True,
         'manifest_name': 'job.namd.restart.oqp',
@@ -968,6 +1096,8 @@ print('DENSE=' + json.dumps({
         'nve_failures': 1, 'nve_verdict': [1],
         'deferred_error': True, 'enforced_error': True,
         'forced_failure_steps': [3],
+        'deferred_nacme_error': True, 'enforced_nacme_error': True,
+        'forced_nacme_failure_steps': [3],
         'invalid_save_rejected': True, 'checkpoint_after_rejection': 1,
         'corrupt_load_rejected': True, 'molecule_mismatch_rejected': True,
         'broadcast_load_rejected': True,
@@ -978,6 +1108,7 @@ print('DENSE=' + json.dumps({
         'pcm_bound': True, 'tdhf_operator_bound': True,
         'dftgrid_bound': True, 'gate_policy_bound': True,
         'collective_error_propagated': True, 'unique_manifests': True,
+        'collective_load_broadcast': True,
         'collective_save_error': True, 'fresh_outputs_invalidated': True,
         'sidecar_collision_rejected': True, 'stale_gate_cleared': True,
         'log_collision_rejected': True, 'short_live_energy_rejected': True,
@@ -987,6 +1118,8 @@ print('DENSE=' + json.dumps({
         'default_tb_artifact_bound': True, 'scf_settings_bound': True,
         'default_tb_model_stable': True,
         'espf_modes_bound': True,
+        'target_basis_file_bound': True, 'initial_basis_file_bound': True,
+        'runtime_forcefield_bound': True,
         'forcefield_identity_stable': True,
         'builtin_forcefield_fingerprinted': True,
         'coefficient_shape_rejected': True, 'tracking_shape_rejected': True,
