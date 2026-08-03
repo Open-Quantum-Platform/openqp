@@ -5,6 +5,7 @@ import types
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -804,6 +805,58 @@ class TestOQPTesterCollection(unittest.TestCase):
         self.assertNotEqual(legacy_dir, semantic_dir)
         self.assertEqual(legacy_artifact, "H2O_RHF-HF_ENERGY__legacy")
         self.assertEqual(semantic_artifact, "H2O_RHF-HF_ENERGY")
+
+    def test_isolated_subprocess_uses_its_case_directory(self):
+        class NoopRunner:
+            pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            input_file = root / "HESS/viewer.oqp"
+            self._write(input_file)
+            output_dir = root / "output"
+            calls = []
+
+            with load_oqp_tester(
+                NoopRunner, "oqp_tester_subprocess_cwd_under_test"
+            ) as tester_module:
+                tester = tester_module.OQPTester.__new__(tester_module.OQPTester)
+                tester.output_dir = str(output_dir)
+                tester.omp_threads = 1
+                tester.mpi_manager = types.SimpleNamespace(rank=0, use_mpi=0)
+
+                def fake_run(cmd, **kwargs):
+                    calls.append((cmd, kwargs))
+                    payload = {
+                        "project": "viewer",
+                        "input_file": str(input_file),
+                        "log_file": "viewer.log",
+                        "status": "PASSED",
+                        "message": "matched",
+                        "execution_time": 0.0,
+                    }
+                    return types.SimpleNamespace(
+                        stdout=tester_module._RESULT_MARKER
+                        + tester_module.json.dumps(payload),
+                        stderr="",
+                        returncode=0,
+                    )
+
+                with mock.patch.object(
+                    tester_module.subprocess, "run", side_effect=fake_run
+                ):
+                    result = tester._run_isolated(str(input_file))
+
+                expected_dir = Path(
+                    tester._case_output_dir(str(input_file.resolve()), "viewer")
+                )
+                self.assertEqual(result["status"], "PASSED")
+                self.assertEqual(len(calls), 1)
+                cmd, kwargs = calls[0]
+                isolated_index = cmd.index("--isolated") + 1
+                self.assertEqual(Path(cmd[isolated_index]), input_file.resolve())
+                self.assertEqual(Path(kwargs["cwd"]), expected_dir)
+                self.assertTrue(expected_dir.is_dir())
 
     def test_explicit_source_example_path_keeps_legacy_matrix(self):
         class NoopRunner:

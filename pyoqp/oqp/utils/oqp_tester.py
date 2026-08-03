@@ -348,8 +348,14 @@ class OQPTester:
         that child. We translate a non-zero exit (or a timeout) into an ERROR
         result for that one test rather than letting it crash the whole run.
         """
+        # Native Fortran units such as ``fort.6`` are opened relative to the
+        # process working directory.  Parallel test subprocesses must therefore
+        # have distinct working directories in addition to distinct log paths;
+        # otherwise one Hessian test can consume another test's unit-6 file.
+        input_file = os.path.realpath(os.path.abspath(input_file))
         project_name = self._project_name_for_input(input_file)
         case_output_dir = self._case_output_dir(input_file, project_name)
+        os.makedirs(case_output_dir, exist_ok=True)
         log = os.path.join(case_output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
@@ -363,6 +369,7 @@ class OQPTester:
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=_test_timeout(),
+                cwd=case_output_dir,
             )
             stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
         except subprocess.TimeoutExpired as err:
