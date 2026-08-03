@@ -265,17 +265,13 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 @staticmethod
                 def bcast(value, root=0, barrier=True):
                     self.assertEqual(root, 0)
-                    self.assertFalse(barrier)
+                    self.assertTrue(barrier)
                     return value
 
             root.mol = types.SimpleNamespace(mpi_manager=RootManager())
-            with self.assertRaisesRegex(
-                RuntimeError, "checkpoint write failed on MPI rank 0: OSError: disk full"
-            ):
-                root._run_io_rank(
-                    lambda: (_ for _ in ()).throw(OSError("disk full")),
-                    "checkpoint write",
-                )
+            with self.assertRaisesRegex(OSError, "disk full"):
+                root._run_io_collective(
+                    lambda: (_ for _ in ()).throw(OSError("disk full")))
 
             follower = namd.NAMD.__new__(namd.NAMD)
 
@@ -287,8 +283,8 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 def bcast(value, root=0, barrier=True):
                     self.assertIsNone(value)
                     self.assertEqual(root, 0)
-                    self.assertFalse(barrier)
-                    return {"ok": False, "error": "OSError: disk full"}
+                    self.assertTrue(barrier)
+                    return (False, "OSError", "disk full")
 
             follower.mol = types.SimpleNamespace(mpi_manager=FollowerManager())
             action_called = False
@@ -297,10 +293,8 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 nonlocal action_called
                 action_called = True
 
-            with self.assertRaisesRegex(
-                RuntimeError, "checkpoint write failed on MPI rank 0: OSError: disk full"
-            ):
-                follower._run_io_rank(unexpected_action, "checkpoint write")
+            with self.assertRaisesRegex(OSError, "disk full"):
+                follower._run_io_collective(unexpected_action)
             self.assertFalse(action_called)
         finally:
             cleanup()
@@ -534,8 +528,10 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     str(Path(tmpdir) / "window-01.log"))
                 second = namd._restart_manifest_path(
                     str(Path(tmpdir) / "window-02.log"))
-                self.assertEqual(first, str(Path(tmpdir) / "window-01.restart.oqp"))
-                self.assertEqual(second, str(Path(tmpdir) / "window-02.restart.oqp"))
+                self.assertEqual(
+                    first, str(Path(tmpdir) / "window-01.namd.restart.oqp"))
+                self.assertEqual(
+                    second, str(Path(tmpdir) / "window-02.namd.restart.oqp"))
                 self.assertNotEqual(first, second)
         finally:
             cleanup()
@@ -595,6 +591,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                 driver._restart_system_identity = {
                     "kind": "test", "sha256": "soc-system",
                 }
+                driver._restart_molecular_identity = {
+                    "kind": "test", "sha256": "soc-molecule",
+                }
                 driver.trajectory_file = str(Path(tmpdir) / "soc.namd.trj")
                 driver.trajectory_interval = 1
                 driver.dt_fs = 0.5
@@ -620,6 +619,9 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
                     namd._electronic_config_identity(mol.config))
                 frozen_signature = driver._restart_signature()
                 mol.config["tdhf"]["multiplicity"] = 1
+                self.assertNotEqual(
+                    driver._restart_signature(), frozen_signature)
+                mol.config["tdhf"]["multiplicity"] = 3
                 self.assertEqual(
                     driver._restart_signature(), frozen_signature)
 

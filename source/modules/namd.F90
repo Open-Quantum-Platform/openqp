@@ -70,6 +70,9 @@ module namd_mod
   public :: namd_counter_normal_fill
   public :: namd_baeck_an_tdc
   public :: namd_nacme_gate
+  public :: namd_droplet_boundary
+  public :: namd_com_restraint
+  public :: namd_langevin_thermostat
 
   !> Default empirical decoherence constant C in the energy-based correction
   !> (Granucci & Persico, J. Chem. Phys. 126, 134114 (2007)), in Hartree.
@@ -189,6 +192,314 @@ contains
     end do
   end subroutine namd_counter_normal_fill
 
+!> @brief Native finite spherical-droplet boundary energy and force.
+!>
+!> Atom membership is supplied once by the driver as group_index(a).  A zero
+!> index excludes an atom; positive indices define restrained sites.  A
+!> one-atom group gives an atom/oxygen wall, while a multi-atom group gives a
+!> molecular-COM wall whose force is distributed by mass.  All arguments use
+!> atomic units.  The zero-force region is r <= radius.  With x=r-radius and
+!> t=x/buffer, the positive radial derivative is
+!>
+!>   dU/dr = k*x*(3*t**2 - 2*t**3),  0 < x < buffer
+!>         = k*x,                     x >= buffer.
+!>
+!> Integrating that expression gives a C2 onset at the boundary and a
+!> continuous match to a half-harmonic wall outside the buffer.  The returned
+!> Cartesian array is force (-grad U), in atom-major xyz order.
+  function namd_droplet_boundary(natom, ngroup, coordinates, masses, &
+      group_index, center, radius, buffer, force_constant, &
+      max_penetration_limit, energy, forces, max_penetration, active_count) &
+      result(info) bind(C, name="oqp_namd_droplet_boundary")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom, ngroup
+    real(c_double), intent(in) :: coordinates(*), masses(*), center(3)
+    integer(c_int64_t), intent(in) :: group_index(*)
+    real(c_double), value, intent(in) :: radius, buffer, force_constant
+    real(c_double), value, intent(in) :: max_penetration_limit
+    real(c_double), intent(out) :: energy, forces(*)
+    real(c_double), intent(out) :: max_penetration
+    integer(c_int64_t), intent(out) :: active_count
+    integer(c_int) :: info
+    real(kind=dp), allocatable :: group_mass(:), group_com(:,:), group_force(:,:)
+    real(kind=dp) :: displacement(3), distance, penetration, t, switch
+    real(kind=dp) :: radial_derivative, atom_weight
+    integer :: a, g, k, na, ng
+
+    info = -1_c_int
+    energy = 0.0_dp
+    max_penetration = 0.0_dp
+    active_count = 0_c_int64_t
+    if (natom <= 0_c_int64_t .or. ngroup <= 0_c_int64_t) return
+    if (.not. ieee_is_finite(radius) .or. radius <= 0.0_dp .or. &
+        .not. ieee_is_finite(buffer) .or. buffer < 0.0_dp .or. &
+        .not. ieee_is_finite(force_constant) .or. force_constant <= 0.0_dp .or. &
+        .not. ieee_is_finite(max_penetration_limit) .or. &
+        max_penetration_limit < 0.0_dp .or. &
+        any(.not. ieee_is_finite(center))) return
+
+    na = int(natom)
+    ng = int(ngroup)
+    allocate(group_mass(ng), group_com(3, ng), group_force(3, ng))
+    group_mass = 0.0_dp
+    group_com = 0.0_dp
+    group_force = 0.0_dp
+    do a = 1, na
+      do k = 1, 3
+        forces(3*(a - 1) + k) = 0.0_dp
+        if (.not. ieee_is_finite(coordinates(3*(a - 1) + k))) then
+          info = -2_c_int
+          return
+        end if
+      end do
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      g = int(group_index(a))
+      if (g < 0 .or. g > ng) then
+        info = -3_c_int
+        return
+      end if
+      if (g == 0) cycle
+      group_mass(g) = group_mass(g) + masses(a)
+      do k = 1, 3
+        group_com(k, g) = group_com(k, g) + &
+                          masses(a)*coordinates(3*(a - 1) + k)
+      end do
+    end do
+    do g = 1, ng
+      if (group_mass(g) <= 0.0_dp) then
+        info = -3_c_int
+        return
+      end if
+      group_com(:, g) = group_com(:, g)/group_mass(g)
+      displacement = group_com(:, g) - center
+      distance = norm2(displacement)
+      if (.not. ieee_is_finite(distance)) then
+        info = -2_c_int
+        return
+      end if
+      penetration = max(0.0_dp, distance - radius)
+      max_penetration = max(max_penetration, penetration)
+      if (penetration > 0.0_dp) active_count = active_count + 1_c_int64_t
+    end do
+    ! Stop before evaluating an unphysically large polynomial.  The caller can
+    ! checkpoint/report this configuration without propagating another step.
+    if (max_penetration_limit > 0.0_dp .and. &
+        max_penetration > max_penetration_limit) then
+      info = 1_c_int
+      return
+    end if
+
+    do g = 1, ng
+      displacement = group_com(:, g) - center
+      distance = norm2(displacement)
+      penetration = distance - radius
+      if (penetration <= 0.0_dp) cycle
+      if (buffer > 0.0_dp .and. penetration < buffer) then
+        t = penetration/buffer
+        switch = 3.0_dp*t*t - 2.0_dp*t*t*t
+        radial_derivative = force_constant*penetration*switch
+        energy = energy + force_constant*buffer*buffer* &
+                 (0.75_dp*t**4 - 0.4_dp*t**5)
+      else
+        radial_derivative = force_constant*penetration
+        energy = energy + 0.5_dp*force_constant*penetration*penetration
+        if (buffer > 0.0_dp) &
+          energy = energy - 0.15_dp*force_constant*buffer*buffer
+      end if
+      if (.not. ieee_is_finite(energy) .or. &
+          .not. ieee_is_finite(radial_derivative)) then
+        info = -4_c_int
+        return
+      end if
+      group_force(:, g) = -radial_derivative*displacement/distance
+    end do
+    do a = 1, na
+      g = int(group_index(a))
+      if (g == 0) cycle
+      atom_weight = masses(a)/group_mass(g)
+      do k = 1, 3
+        forces(3*(a - 1) + k) = atom_weight*group_force(k, g)
+      end do
+    end do
+    info = 0_c_int
+  end function namd_droplet_boundary
+
+!> @brief Harmonic restraint of a selected solute centre of mass.
+!>
+!> selected(a)=0 excludes atom a.  Force is distributed by mass so the
+!> restrained coordinate and its analytic Cartesian derivative are identical.
+  function namd_com_restraint(natom, coordinates, masses, selected, center, &
+      force_constant, energy, forces, displacement_norm) result(info) &
+      bind(C, name="oqp_namd_com_restraint")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom
+    real(c_double), intent(in) :: coordinates(*), masses(*), center(3)
+    integer(c_int64_t), intent(in) :: selected(*)
+    real(c_double), value, intent(in) :: force_constant
+    real(c_double), intent(out) :: energy, forces(*), displacement_norm
+    integer(c_int) :: info
+    real(kind=dp) :: total_mass, com(3), displacement(3), weight
+    integer :: a, k, na
+
+    info = -1_c_int
+    energy = 0.0_dp
+    displacement_norm = 0.0_dp
+    if (natom <= 0_c_int64_t .or. .not. ieee_is_finite(force_constant) .or. &
+        force_constant <= 0.0_dp .or. any(.not. ieee_is_finite(center))) return
+    na = int(natom)
+    total_mass = 0.0_dp
+    com = 0.0_dp
+    do a = 1, na
+      do k = 1, 3
+        forces(3*(a - 1) + k) = 0.0_dp
+        if (.not. ieee_is_finite(coordinates(3*(a - 1) + k))) then
+          info = -2_c_int
+          return
+        end if
+      end do
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      if (selected(a) == 0_c_int64_t) cycle
+      total_mass = total_mass + masses(a)
+      do k = 1, 3
+        com(k) = com(k) + masses(a)*coordinates(3*(a - 1) + k)
+      end do
+    end do
+    if (total_mass <= 0.0_dp) then
+      info = -3_c_int
+      return
+    end if
+    com = com/total_mass
+    displacement = com - center
+    displacement_norm = norm2(displacement)
+    energy = 0.5_dp*force_constant*displacement_norm*displacement_norm
+    if (.not. ieee_is_finite(energy)) then
+      info = -4_c_int
+      return
+    end if
+    do a = 1, na
+      if (selected(a) == 0_c_int64_t) cycle
+      weight = masses(a)/total_mass
+      do k = 1, 3
+        forces(3*(a - 1) + k) = -weight*force_constant*displacement(k)
+      end do
+    end do
+    info = 0_c_int
+  end function namd_com_restraint
+
+!> @brief Apply one exact Langevin Ornstein-Uhlenbeck velocity step.
+!>
+!> The random vector is a pure function of seed, stream, physical MD step and
+!> Cartesian component, so restart and process scheduling do not affect it.
+!> heat is K_after-K_before: positive values are energy transferred from the
+!> thermostat into the physical system.  The caller may subsequently project
+!> constraints and should then replace heat by the measured constrained dK.
+  function namd_langevin_thermostat(natom, dt, temperature, friction, seed, &
+      stream, step, masses, velocities, heat) result(info) &
+      bind(C, name="oqp_namd_langevin_thermostat")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom, seed, stream, step
+    real(c_double), value, intent(in) :: dt, temperature, friction
+    real(c_double), intent(in) :: masses(*)
+    real(c_double), intent(inout) :: velocities(*)
+    real(c_double), intent(out) :: heat
+    integer(c_int) :: info
+    integer :: a, i, ncomponent, na
+    real(kind=dp) :: damping, thermal_scale, u1, u2, radius, angle
+    real(kind=dp) :: kinetic_before, kinetic_after, normal1, normal2
+    real(kind=dp), parameter :: kb_hartree = 3.166811563e-6_dp
+    real(kind=dp), parameter :: two_pi = 6.28318530717958647692528676655900577_dp
+    integer(c_int64_t) :: component
+
+    info = -1_c_int
+    heat = 0.0_dp
+    if (natom <= 0_c_int64_t .or. .not. ieee_is_finite(dt) .or. dt <= 0.0_dp .or. &
+        .not. ieee_is_finite(temperature) .or. temperature < 0.0_dp .or. &
+        .not. ieee_is_finite(friction) .or. friction < 0.0_dp) return
+    na = int(natom)
+    ncomponent = 3*na
+    kinetic_before = 0.0_dp
+    do a = 1, na
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      do i = 1, 3
+        if (.not. ieee_is_finite(velocities(3*(a - 1) + i))) then
+          info = -2_c_int
+          return
+        end if
+        kinetic_before = kinetic_before + &
+          0.5_dp*masses(a)*velocities(3*(a - 1) + i)**2
+      end do
+    end do
+    damping = exp(-friction*dt)
+    do i = 1, ncomponent, 2
+      component = int(i, c_int64_t)
+      u1 = max(namd_counter_component_random(seed, stream, step, component), &
+               tiny(1.0_dp))
+      u2 = namd_counter_component_random(seed, stream, step, component + 1_c_int64_t)
+      radius = sqrt(-2.0_dp*log(u1))
+      angle = two_pi*u2
+      normal1 = radius*cos(angle)
+      normal2 = radius*sin(angle)
+      a = (i + 2)/3
+      thermal_scale = sqrt(max(0.0_dp, (1.0_dp - damping*damping)* &
+                           kb_hartree*temperature/masses(a)))
+      velocities(i) = damping*velocities(i) + thermal_scale*normal1
+      if (i + 1 <= ncomponent) then
+        a = (i + 3)/3
+        thermal_scale = sqrt(max(0.0_dp, (1.0_dp - damping*damping)* &
+                             kb_hartree*temperature/masses(a)))
+        velocities(i + 1) = damping*velocities(i + 1) + thermal_scale*normal2
+      end if
+    end do
+    kinetic_after = 0.0_dp
+    do a = 1, na
+      do i = 1, 3
+        kinetic_after = kinetic_after + &
+          0.5_dp*masses(a)*velocities(3*(a - 1) + i)**2
+      end do
+    end do
+    heat = kinetic_after - kinetic_before
+    if (.not. ieee_is_finite(heat)) then
+      info = -3_c_int
+      return
+    end if
+    info = 0_c_int
+  end function namd_langevin_thermostat
+
+!> @brief Counter random variate keyed by a fourth component index.
+  pure function namd_counter_component_random(seed, stream, step, component) &
+      result(rand)
+    integer(c_int64_t), intent(in) :: seed, stream, step, component
+    real(kind=dp) :: rand
+    integer(c_int64_t) :: z, mantissa
+    integer(c_int64_t), parameter :: gamma = int(z'9E3779B97F4A7C15', c_int64_t)
+    integer(c_int64_t), parameter :: stream_mix = int(z'D2B74407B1CE6E93', c_int64_t)
+    integer(c_int64_t), parameter :: component_mix = int(z'CA5A826395121157', c_int64_t)
+    integer(c_int64_t), parameter :: mix1 = int(z'BF58476D1CE4E5B9', c_int64_t)
+    integer(c_int64_t), parameter :: mix2 = int(z'94D049BB133111EB', c_int64_t)
+    real(kind=dp), parameter :: two_to_minus_53 = 1.0_dp/9007199254740992.0_dp
+
+    z = namd_add64_mod(seed, namd_mul64_mod(gamma, &
+        namd_add64_mod(step, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(stream_mix, &
+        namd_add64_mod(stream, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(component_mix, &
+        namd_add64_mod(component, 1_c_int64_t)))
+    z = namd_mul64_mod(ieor(z, shiftr(z, 30)), mix1)
+    z = namd_mul64_mod(ieor(z, shiftr(z, 27)), mix2)
+    z = ieor(z, shiftr(z, 31))
+    mantissa = shiftr(z, 11)
+    rand = real(mantissa, dp)*two_to_minus_53
+  end function namd_counter_component_random
+
 !> @brief Time-dependent Baeck-An TDC from three consecutive energy points.
 !>
 !> The result is centred on energies_center.  dt_left spans old -> center and
@@ -218,7 +529,8 @@ contains
     real(kind=dp) :: curvature, radicand, sigma
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. dt_right <= 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. &
+        dt_right <= 0.0_dp .or. .not. ieee_is_finite(gap_max)) return
     n = int(nstate)
     denominator = dt_left*dt_right*(dt_left + dt_right)
     if (.not. ieee_is_finite(denominator) .or. denominator <= 0.0_dp) return
@@ -282,8 +594,12 @@ contains
     logical :: pair_valid
 
     info = -1_c_int
-    if (nstate <= 0_c_int64_t .or. invariant_tol < 0.0_dp .or. &
-        abs_tol < 0.0_dp .or. rel_tol < 0.0_dp) return
+    if (nstate <= 0_c_int64_t .or. &
+        .not. ieee_is_finite(invariant_tol) .or. &
+        .not. ieee_is_finite(abs_tol) .or. &
+        .not. ieee_is_finite(rel_tol) .or. &
+        invariant_tol < 0.0_dp .or. abs_tol < 0.0_dp .or. &
+        rel_tol < 0.0_dp) return
     if (compare_mode /= 0_c_int .and. compare_mode /= 1_c_int) return
     n = int(nstate)
     metrics(1:7) = 0.0_dp
@@ -322,8 +638,12 @@ contains
         if (abs(cand_i + cand_j) > invariant_tol) &
           counts(2) = counts(2) + 1_c_int64_t
 
-        pair_valid = reference_mask(ij) /= 0_c_int .or. &
-                     reference_mask(ji) /= 0_c_int
+        if ((reference_mask(ij) /= 0_c_int) .neqv. &
+            (reference_mask(ji) /= 0_c_int)) then
+          info = -4_c_int
+          return
+        end if
+        pair_valid = reference_mask(ij) /= 0_c_int
         if (.not. pair_valid) cycle
         ref_i = reference(ij)
         ref_j = reference(ji)

@@ -128,6 +128,28 @@ OQP_CONFIG_SCHEMA = {
         # rc | z1 (optional redistribution refinements).
         'frontier_scheme': {'type': str, 'default': 'none'},
     },
+    # Finite nonperiodic solvent containment.  Lengths are angstrom and the
+    # force constant is kcal mol^-1 angstrom^-2 at the user boundary; the NAMD
+    # driver converts once before calling the resident atomic-unit kernel.
+    'droplet': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'radius': {'type': float, 'default': '20.0'},
+        'buffer': {'type': float, 'default': '1.0'},
+        'force_constant': {'type': float, 'default': '10.0'},
+        'target': {'type': string, 'default': 'water_com'},
+        'atoms': {'type': str, 'default': ''},
+        'water_resnames': {'type': sarray, 'default': 'hoh,wat,sol,tip3,tip3p'},
+        'max_penetration': {'type': float, 'default': '10.0'},
+    },
+    # Independent fixed-centre solute COM restraint.  This is deliberately not
+    # implied by droplet.enabled and is not part of ODP.
+    'solute_com': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'force_constant': {'type': float, 'default': '5.0'},
+        'atoms': {'type': str, 'default': ''},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': '6-31g*'},
@@ -442,10 +464,12 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
-        # MECP objective.  The default is the augmented Lagrangian because the
-        # legacy fixed-weight quadratic penalty (quad) leaves a residual gap of
-        # order 1/gap_weight and cannot meet energy_gap.
-        'mecp_search': {'type': str, 'default': 'auglag'},
+        # MECP objective.  ``auto`` selects SQP on the native optimizer, which
+        # it replaces outright, and the augmented Lagrangian on the backends
+        # that supply their own optimizer.  Both converge the energy gap; the
+        # legacy fixed-weight quadratic penalty (quad) does not, because its
+        # residual gap is of order 1/gap_weight.
+        'mecp_search': {'type': str, 'default': 'auto'},
         # Strength of the auglag gap term relative to the projected mean
         # gradient.  1.0 reproduces the plain Bearpark projection; the larger
         # default reaches the seam faster and keeps the quasi-Newton history
@@ -566,7 +590,7 @@ OQP_CONFIG_SCHEMA = {
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
         'seed': {'type': int, 'default': '1'},
         'rng_stream': {'type': int, 'default': '0'},        # independent counter-RNG stream / trajectory id
-        'first_hop_step': {'type': int, 'default': '2'},    # KNU/TLF2 convention: no propagation/hop at step 1
+        'first_hop_step': {'type': int, 'default': '1'},    # preserve historical OpenQP propagation/hop from step 1; use 2 for KNU/TLF2 comparisons
         'nacme_check': {'type': str, 'default': 'off'},     # 'off' | 'baeck_an' magnitude-only TD-BA audit
         'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
         'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
@@ -579,12 +603,17 @@ OQP_CONFIG_SCHEMA = {
         'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
         'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
         'nve_gate_consecutive': {'type': int, 'default': '3'},
-        'trajectory_interval': {'type': int, 'default': '1'},
-        'restart_interval': {'type': int, 'default': '1'},
+        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
         'trajectory_file': {'type': str, 'default': ''},
-        'nacme_audit_file': {'type': str, 'default': ''},
         'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
+        # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
+        # ground-state OpenMM MD driver and must not silently thermostat FSSH.
+        'ensemble': {'type': string, 'default': 'nve'},
+        'thermostat': {'type': string, 'default': 'off'},
+        'thermostat_temperature': {'type': float, 'default': '300.0'}, # K
+        'thermostat_friction': {'type': float, 'default': '1.0'},     # ps^-1
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
         'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)
         'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction

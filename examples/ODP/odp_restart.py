@@ -38,7 +38,7 @@ def run_example(workdir):
     subprocess.run(
         [*command, str(source)], cwd=workdir, env=environment, check=True)
 
-    manifest = workdir / "odp-restart.restart.oqp"
+    manifest = workdir / "odp-restart.namd.restart.oqp"
     if not manifest.is_file():
         raise RuntimeError("fresh ODP run did not generate a restart manifest")
     text = manifest.read_text(encoding="utf-8")

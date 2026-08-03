@@ -263,6 +263,12 @@ class Mol:
     }
     data = {"OQP::td_energies": np.array([0.0, 0.1])}
     @staticmethod
+    def get_atoms():
+        return np.array([1, 1])
+    @staticmethod
+    def get_mass():
+        return np.array([1.0, 1.0])
+    @staticmethod
     def get_state_tracking():
         return None
     def put_data(self, data):
@@ -272,8 +278,10 @@ d = NAMD.__new__(NAMD)
 d.mol = Mol(); d.nstate = 2; d.dt_fs = 0.5; d.dt_adaptive = False
 d._t_fs = 0.0; d.active = 1; d.coef = np.array([1.+0j, 0.+0j])
 d.vel = np.zeros((2, 3)); d.trajectory_interval = 1
+d.mass = np.ones(2); d.velocity_source = "zero"; d.ensemble = "nve"
+d.thermostat = "off"; d.thermostat_temperature = 300.0
+d.thermostat_friction = 1.0
 d.trajectory_file = os.path.join(root, "odp.namd.trj")
-d.nacme_audit_file = os.path.join(root, "odp.nacme.tsv")
 d.restart_file = os.path.join(root, "odp.restart.npz")
 d.restart_manifest_file = os.path.join(root, "restart.oqp")
 d.restart_interval = 1; d.restart_requested = False
@@ -309,10 +317,12 @@ with np.load(d.restart_file, allow_pickle=False) as saved:
 d2 = NAMD.__new__(NAMD)
 d2.mol = Mol(); d2.nstate = 2; d2.dt_fs = 0.5
 d2.seed = 1; d2.rng_stream = 0; d2.restart_requested = True
+d2.mass = np.ones(2); d2.velocity_source = "zero"; d2.ensemble = "nve"
+d2.thermostat = "off"; d2.thermostat_temperature = 300.0
+d2.thermostat_friction = 1.0
 d2._restart_system_identity = d._restart_system_identity
 d2._wham_system_identity = d._wham_system_identity
 d2.restart_file = d.restart_file; d2.trajectory_file = d.trajectory_file
-d2.nacme_audit_file = d.nacme_audit_file
 d2.odp = ODPUmbrella({
     "enabled": True, "cv": "distance(1,2)", "scale": [1.0],
     "reference_r": [1.0], "reference_p": [2.0], "center": 0.5,

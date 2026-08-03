@@ -568,12 +568,25 @@ automatically.
 
 - mecp-search // choose the algorithm for spin-crossing (MECP) optimization
 
-      auglag     (default) least-squares multiplier plus gradient projection;
-                 with gap_sigma=1 the converged form is the plain Bearpark
-                 gradient projection.
-                 The gap term and the projected mean gradient are orthogonal,
-                 so both must vanish separately and the stationary point is a
-                 true crossing
+      auto       (default) sqp when lib=oqp, auglag on the backends that
+                 bring their own optimizer
+      sqp        sequential quadratic programming: solves the KKT equations
+                 of the constrained problem for the step and the multiplier
+                 together, so the multiplier is a result rather than a formula
+                 and there is no penalty parameter, i.e. gap_sigma is unused.
+                 Works in delocalized internal coordinates with the native
+                 model Hessian. Requires lib=oqp because it replaces the outer
+                 optimizer with its own trust-region step control. coordsys=cart
+                 is honoured; the other settings, including tric, select DLC,
+                 because a dense KKT system needs a non-redundant basis.
+                 Converges tighter and in fewer steps than auglag on the cases
+                 tested so far, which is why auto selects it natively.
+      auglag     least-squares multiplier plus gradient projection; with
+                 gap_sigma=1 the converged form is the plain Bearpark gradient
+                 projection. The gap term and the projected mean gradient are
+                 orthogonal, so both must vanish separately and the stationary
+                 point is a true crossing. Selected by auto on the scipy and
+                 geometric backends, which supply their own optimizer
       penalty    Levine-Martinez smooth penalty
       quad       legacy fixed-weight quadratic penalty.  Its stationary point
                  balances the mean gradient against the gap term, leaving a

@@ -416,6 +416,27 @@ def test_harmless_whitespace_and_bare_calls_normalize_to_compact_input():
     )
 
 
+def test_file_basis_scheme_and_whitespace_round_trip_without_path_case_loss():
+    spaced = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp basis="FILE:My Basis.JSON" '
+        'geom="h2o.xyz" energy'
+    )
+    assert spaced.basis == 'file:My Basis.JSON'
+    rendered = oqp_input.render_canonical_oqp(spaced)
+    assert 'basis="file:My Basis.JSON"' in rendered
+    reparsed = oqp_input.parse_canonical_oqp(rendered)
+    assert reparsed.basis == spaced.basis
+    assert oqp_input.lower_to_legacy(reparsed)["input"]["basis"] == (
+        'file:My Basis.JSON')
+
+    route = oqp_input.parse_canonical_oqp(
+        'mrsf(nstate=2)/bhhlyp/FiLe:Basis.JSON geom="h2o.xyz" energy'
+    )
+    assert route.basis == 'file:Basis.JSON'
+    assert oqp_input.parse_canonical_oqp(
+        oqp_input.render_canonical_oqp(route)).basis == route.basis
+
+
 def test_zero_argument_drivers_and_simple_modifiers_render_without_parentheses():
     spec, legacy = _parse(
         'dft/pbe0/def2-svp geom="h2o.xyz" energy() pcm nmr d4'
@@ -604,7 +625,7 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
         'nve_gate=warn,nve_gate_abs_tol=0.004,nve_gate_step_tol=0.0008,'
         'nve_gate_transition_tol=1e-7,nve_gate_consecutive=2,'
         'trajectory_interval=1,restart_interval=1,trajectory_file="dense.trj",'
-        'nacme_audit_file="nacme.tsv",restart_file="state.npz")'
+        'restart_file="state.npz")'
     )
     assert legacy["md"]["nacme_check"] == "baeck_an"
     assert legacy["md"]["ba_gap_max"] == "0.05"
@@ -621,8 +642,42 @@ def test_namd_baeck_an_check_controls_lower_to_md_section():
     assert legacy["md"]["trajectory_interval"] == "1"
     assert legacy["md"]["restart_interval"] == "1"
     assert legacy["md"]["trajectory_file"] == "dense.trj"
-    assert legacy["md"]["nacme_audit_file"] == "nacme.tsv"
     assert legacy["md"]["restart_file"] == "state.npz"
+
+
+def test_namd_droplet_restraint_and_nvt_controls_are_independent_sections():
+    _, legacy = _parse(
+        'mrsf(nstate=3)/bhhlyp/6-31g* geom="solute.xyz" '
+        'namd(S1,nstep=10,ensemble=nvt,thermostat=langevin,'
+        'thermostat_temperature=310,thermostat_friction=2.5) '
+        'qmmm(pdb_file="drop.pdb",forcefield_files="tip3p.xml",'
+        'qm_atoms="0-2",cutoff=NoCutoff) '
+        'droplet(enabled=true,center="1.0,2.0,3.0",radius=18.0,buffer=1.5,'
+        'force_constant=12.0,target=water_com,max_penetration=8.0) '
+        'solute_com(enabled=true,center="1.0,2.0,3.0",force_constant=4.0)'
+    )
+    assert legacy["md"]["ensemble"] == "nvt"
+    assert legacy["md"]["thermostat"] == "langevin"
+    assert legacy["md"]["thermostat_temperature"] == "310"
+    assert legacy["md"]["thermostat_friction"] == "2.5"
+    assert legacy["droplet"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0", "radius": "18.0",
+        "buffer": "1.5", "force_constant": "12.0", "target": "water_com",
+        "max_penetration": "8.0",
+    }
+    assert legacy["solute_com"] == {
+        "enabled": "True", "center": "1.0,2.0,3.0",
+        "force_constant": "4.0",
+    }
+    assert "odp" not in legacy
+
+
+def test_droplet_and_solute_com_reject_non_namd_drivers():
+    with pytest.raises(oqp_input.OQPInputError, match="connected only to namd"):
+        _parse(
+            'dft/pbe0/def2-svp geom="h2o.xyz" energy '
+            'droplet(enabled=true,radius=10)'
+        )
 
 
 def test_paths_resolve_from_oqp_directory_not_process_cwd(tmp_path):
