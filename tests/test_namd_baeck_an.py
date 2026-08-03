@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from datetime import date
 from types import SimpleNamespace
 
 import numpy as np
@@ -13,6 +14,14 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_zero_seed_resolves_to_run_date_and_explicit_seed_is_unchanged():
+    from oqp.library.namd import _resolve_namd_seed
+
+    run_date = date(2026, 8, 4)
+    assert _resolve_namd_seed(0, run_date) == 20260804
+    assert _resolve_namd_seed(918273, run_date) == 918273
 
 
 def test_restart_namd_uses_checkpoint_before_mutable_guess_file():
@@ -74,7 +83,7 @@ def test_baeck_an_kernel_is_fortran_resident_and_c_interoperable():
     assert "istep, self.r_all, epot, ekin, hopped" in driver
     assert 'for state in range(nstate)' in tracer
     assert 'self.coef[2]' not in tracer
-    assert "does not support SOC NAMD logging paths" in tracer
+    assert '("NAMD_SOC", "_log_soc")' in tracer
     assert "finally:" in tracer
     qmmm_source = (ROOT / "source" / "modules" / "qmmm.F90").read_text()
     espf_environment = set(re.findall(

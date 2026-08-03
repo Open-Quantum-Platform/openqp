@@ -86,6 +86,11 @@ def _value_text(value, converter):
 
 
 def _generic_input(section, key, value_text):
+    if section in {"droplet", "solute_com"}:
+        return (
+            'mrsf(nstate=2)/bhhlyp/6-31g* geom="h2o.xyz" namd(S1) '
+            "%s(%s=%s)" % (section, key, value_text)
+        )
     if section == "qmmm":
         return (
             'dft/pbe0/def2-svp geom="h2o.xyz" energy '
@@ -111,6 +116,17 @@ def test_trivial_crossing_following_is_opt_in():
     assert _schema_defaults_from_ast()["md"]["trivial"] == ("False", "bool")
 
 
+def test_namd_scientific_safety_defaults_are_minimal_input_defaults():
+    defaults = _schema_defaults_from_ast()["md"]
+
+    assert defaults["seed"] == ("0", "int")
+    assert defaults["rng_stream"] == ("1", "int")
+    assert defaults["first_hop_step"] == ("2", "int")
+    assert defaults["thrshe"] == ("0.1", "float")
+    assert defaults["nacme_check"] == ("baeck_an", "str")
+    assert defaults["nve_gate"] == ("warn", "str")
+
+
 def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
     oqp_input = _load_oqp_input()
     schema = _schema_keys_from_ast()
@@ -125,8 +141,8 @@ def test_every_schema_keyword_has_exactly_one_semantic_input_owner():
         owner_counts.update(owners.values())
 
     assert owner_counts == {
-        "generic": 204,
-        "route_driver": 108,
+        "generic": 217,
+        "route_driver": 133,
         "legacy_only": 20,
         "intentional_forbidden": 1,
     }
@@ -164,7 +180,7 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 204
+    assert len(checked) == 217
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

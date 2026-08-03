@@ -2028,6 +2028,28 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
+    odp_enabled = _parse_bool_like(
+        _get(config, "odp", "enabled", False), "odp.enabled", report)
+    if odp_enabled is True and runtype != "namd":
+        report.add(
+            "ERROR",
+            "odp.enabled",
+            "ODP umbrella sampling currently requires the NVE NAMD workflow.",
+            value=f"enabled=True/runtype={runtype}",
+            expected="odp.enabled=False, or input.runtype=namd",
+            action="Disable [odp] for this calculation or use runtype=namd.",
+        )
+    if (odp_enabled is True and runtype == "namd"
+            and _as_lower(_get(config, "md", "ensemble", "nve")) != "nve"):
+        report.add(
+            "ERROR",
+            "md.ensemble",
+            "ODP umbrella sampling currently supports NVE NAMD only.",
+            value=_get(config, "md", "ensemble", "nve"),
+            expected="nve",
+            action="Set [md] ensemble=nve when [odp] enabled=True.",
+        )
+
     if runtype not in ALL_RUNTYPES:
         report.add(
             "ERROR",
@@ -2050,6 +2072,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             wiki=WIKI_HELP["input.runtype"],
         )
         return
+
+    for section in ("droplet", "solute_com"):
+        enabled = str(_get(config, section, "enabled", False)).strip().lower()
+        if enabled in _TRUE_BOOL and runtype != "namd":
+            report.add(
+                "ERROR",
+                f"{section}.enabled",
+                f"[{section}] is currently connected only to NAMD.",
+                value=True,
+                expected="input.runtype=namd",
+                action=(
+                    f"Set [input] runtype=namd or disable [{section}]."
+                ),
+            )
 
     if method == "mp2" and runtype != "energy":
         report.add(

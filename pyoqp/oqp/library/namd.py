@@ -35,12 +35,14 @@ import json
 import re
 import struct
 import tempfile
+from datetime import date
 from importlib import resources
 import numpy as np
 
 import oqp
 from oqp.library.single_point import SinglePoint, Gradient, LastStep, BasisOverlap, NACME
 from oqp.library.nac_utils import canonical_state_overlap
+from oqp.library.odp import odp_from_config
 from oqp.utils.tb_backends import is_tb_method, make_tb_adapter, tb_section_name
 from oqp.utils.file_utils import dump_log
 
@@ -53,25 +55,190 @@ AMU_TO_AU = 1822.888486209
 # unit conversions for the QM/MM (OpenMM <-> atomic units) coupling
 BOHR_TO_NM = 0.052917721090
 NM_TO_BOHR = 1.0 / BOHR_TO_NM
+ANGSTROM_TO_BOHR = 0.1 * NM_TO_BOHR
 # 1 Hartree/bohr in kJ/mol/nm  (2625.499639 kJ/mol per Ha / 0.0529177 nm per bohr)
 HABOHR_TO_KJMOLNM = 2625.499639 / BOHR_TO_NM
 KJMOL_TO_HARTREE = 1.0 / 2625.499639
+KCALMOL_TO_HARTREE = 1.0 / 627.5094740631
+KCALMOLANG2_TO_HARTREEBOHR2 = (
+    KCALMOL_TO_HARTREE / ANGSTROM_TO_BOHR**2
+)
 INT64_MIN = -(1 << 63)
 INT64_MAX = (1 << 63) - 1
-NAMD_RESTART_SCHEMA_VERSION = 7
-NAMD_TRAJECTORY_SCHEMA_VERSION = 6
+NAMD_RESTART_SCHEMA_VERSION = 8
+NAMD_TRAJECTORY_SCHEMA_VERSION = 7
 NAMD_TRAJECTORY_MAGIC = b'OQPNTRJ1'
 
 
-def _namd_trajectory_dtype(nstate, natom):
+def _restart_identity_digest(array_parts=(), text_parts=()):
+    """Return a stable digest for static molecular and topology identity."""
+    digest = hashlib.sha256()
+    for label, value, dtype in array_parts:
+        name = str(label).encode('utf-8')
+        array = np.ascontiguousarray(np.asarray(value, dtype=dtype))
+        digest.update(struct.pack('<Q', len(name)))
+        digest.update(name)
+        shape = json.dumps(array.shape, separators=(',', ':')).encode('ascii')
+        digest.update(struct.pack('<Q', len(shape)))
+        digest.update(shape)
+        digest.update(array.dtype.str.encode('ascii'))
+        digest.update(array.tobytes(order='C'))
+    for label, value in text_parts:
+        name = str(label).encode('utf-8')
+        payload = str(value).encode('utf-8')
+        digest.update(struct.pack('<Q', len(name)))
+        digest.update(name)
+        digest.update(struct.pack('<Q', len(payload)))
+        digest.update(payload)
+    return digest.hexdigest()
+
+
+def _normalize_identity_value(value):
+    """Convert parsed configuration values into deterministic JSON values."""
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_identity_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_identity_value(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return _normalize_identity_value(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, os.PathLike):
+        return os.fspath(value)
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def _electronic_config_identity(config):
+    """Capture every normalized option that can change NAMD surfaces."""
+    input_keys = (
+        'charge', 'basis', 'library', 'functional', 'method', 'ispher', 'd4',
+        'soc_2e',
+    )
+    identity = {
+        'input': {
+            key: config.get('input', {}).get(key)
+            for key in input_keys
+        },
+    }
+    for section in (
+            'scf', 'tdhf', 'dftgrid', 'pcm', 'dftb', 'xtb', 'symmetry'):
+        identity[section] = config.get(section, {})
+    identity['nac'] = {'align': config.get('nac', {}).get('align')}
+    return _normalize_identity_value(identity)
+
+
+def _validate_gate_tolerances(label, *values):
+    """Reject NaN/Inf as well as negative validation tolerances."""
+    if len(values) == 1 and not np.isscalar(values[0]):
+        values = tuple(values[0])
+    tolerances = np.asarray(values, dtype=float)
+    if not np.all(np.isfinite(tolerances)) or np.any(tolerances < 0.0):
+        raise ValueError(
+            f"[md] {label} gate tolerances must be finite and non-negative")
+
+
+def _validate_thermostat_parameters(temperature, friction, enabled):
+    """Validate Langevin parameters, including a nonzero coupling rate."""
+    values = np.asarray((temperature, friction), dtype=float)
+    if not np.all(np.isfinite(values)) or np.any(values < 0.0):
+        raise ValueError(
+            '[md] thermostat_temperature and thermostat_friction must be '
+            'finite and non-negative')
+    if enabled and friction <= 0.0:
+        raise ValueError(
+            '[md] thermostat_friction must be positive for Langevin NVT')
+
+
+def _validate_nacme_gate_activation(check, gate):
+    """Reject a policy that cannot observe any NACME reference diagnostic."""
+    if check == 'off' and gate != 'off':
+        raise ValueError(
+            "[md] nacme_gate must be off when nacme_check is off; enable "
+            "nacme_check=baeck_an before selecting warn or error")
+
+
+def _resolve_namd_seed(value, current_date=None):
+    """Resolve the zero default to a reproducible YYYYMMDD run seed."""
+    seed = int(value)
+    if seed != 0:
+        return seed
+    run_date = date.today() if current_date is None else current_date
+    return int(run_date.strftime('%Y%m%d'))
+
+
+def _validate_distinct_output_paths(*, protected_paths=(), **paths):
+    """Reject NAMD outputs that overwrite one another or an input deck."""
+    def aliases(first, second):
+        first = os.fspath(first)
+        second = os.fspath(second)
+        if (os.path.normcase(os.path.realpath(first))
+                == os.path.normcase(os.path.realpath(second))):
+            return True
+        try:
+            return os.path.samefile(first, second)
+        except (FileNotFoundError, OSError):
+            return False
+
+    outputs = list(paths.items())
+    collisions = []
+    for index, (left_label, left_path) in enumerate(outputs):
+        for right_label, right_path in outputs[index + 1:]:
+            if aliases(left_path, right_path):
+                collisions.append((left_label, right_label))
+    if collisions:
+        rendered = "; ".join(" = ".join(labels) for labels in collisions)
+        raise ValueError(
+            "[md] NAMD output paths must be distinct; collision: " + rendered)
+
+    protected = [path for path in protected_paths if path]
+    for label, output_path in outputs:
+        if any(aliases(output_path, input_path) for input_path in protected):
+            raise ValueError(
+                f"[md] NAMD output {label} must not alias the input deck")
+
+
+def _restart_manifest_path(log_path):
+    """Return a job-specific runnable restart manifest beside the main log."""
+    absolute = os.path.abspath(os.fspath(log_path))
+    stem = os.path.splitext(os.path.basename(absolute))[0]
+    return os.path.join(os.path.dirname(absolute), stem + '.namd.restart.oqp')
+
+
+def _validate_odp_boundary_conditions(odp, periodic):
+    """Reject periodic ODP until native CVs implement minimum images."""
+    if odp is not None and bool(periodic):
+        raise NotImplementedError(
+            "[odp] periodic QM/MM is unsupported because ODP CVs do not yet "
+            "apply the minimum-image convention; use qmmm.cutoff=NoCutoff")
+
+
+def _namd_trajectory_dtype(nstate, natom, ncv=0):
     """Fixed-width, appendable binary record used by ``*.namd.trj``."""
     matrix = (nstate, nstate)
     vectors = (natom, 3)
     return np.dtype([
         ('step', '<i8'), ('time_fs', '<f8'), ('active', '<i4'),
         ('hopped', 'i1'), ('rng', '<f8'),
-        ('e_pot_hartree', '<f8'), ('e_kin_hartree', '<f8'),
-        ('e_tot_hartree', '<f8'), ('state_energies', '<f8', (nstate,)),
+        ('e_unbiased_pot_hartree', '<f8'), ('e_pot_hartree', '<f8'),
+        ('e_kin_hartree', '<f8'),
+        ('e_tot_hartree', '<f8'),
+        ('droplet_energy_hartree', '<f8'),
+        ('droplet_max_penetration_bohr', '<f8'),
+        ('droplet_active_count', '<i8'),
+        ('solute_com_energy_hartree', '<f8'),
+        ('solute_com_displacement_bohr', '<f8'),
+        ('conservative_restraint_energy_hartree', '<f8'),
+        ('thermostat_exchange_hartree', '<f8'),
+        ('thermostat_exchange_cumulative_hartree', '<f8'),
+        ('thermostat_adjusted_energy_hartree', '<f8'),
+        ('droplet_force_hartree_per_bohr', '<f8', vectors),
+        ('solute_com_force_hartree_per_bohr', '<f8', vectors),
+        ('state_energies', '<f8', (nstate,)),
         ('populations', '<f8', (nstate,)), ('coef_real', '<f8', (nstate,)),
         ('coef_imag', '<f8', (nstate,)), ('coordinates_bohr', '<f8', vectors),
         ('velocities_au', '<f8', vectors), ('state_overlap', '<f8', matrix),
@@ -86,6 +253,13 @@ def _namd_trajectory_dtype(nstate, natom):
         ('gate_metrics', '<f8', (7,)),
         ('nve_verdict', 'i1'), ('nve_streak', '<i8'),
         ('nve_metrics', '<f8', (4,)),
+        ('odp_window', '<i8'), ('odp_xi', '<f8'),
+        ('odp_cv_raw', '<f8', (ncv,)), ('odp_cv_scaled', '<f8', (ncv,)),
+        ('odp_cv_perpendicular', '<f8', (ncv,)),
+        ('odp_perpendicular_norm', '<f8'),
+        ('odp_bias_parallel_hartree', '<f8'),
+        ('odp_bias_perpendicular_hartree', '<f8'),
+        ('odp_bias_hartree', '<f8'),
         ('tracking_valid', 'i1'), ('tracking_order', '<i8', (nstate,)),
         ('tracking_raw_order', '<i8', (nstate,)),
         ('tracking_lineage', '<i8', (nstate,)),
@@ -111,7 +285,8 @@ def read_namd_trajectory(path, mmap_mode='r'):
         offset = 16 + header_size
     if int(header.get('schema_version', -1)) != NAMD_TRAJECTORY_SCHEMA_VERSION:
         raise ValueError('unsupported OpenQP NAMD trajectory schema')
-    dtype = _namd_trajectory_dtype(int(header['nstate']), int(header['natom']))
+    dtype = _namd_trajectory_dtype(
+        int(header['nstate']), int(header['natom']), int(header.get('ncv', 0)))
     payload_size = os.path.getsize(path) - offset
     if payload_size < 0 or payload_size % dtype.itemsize:
         raise ValueError('truncated OpenQP NAMD trajectory record')
@@ -121,6 +296,153 @@ def read_namd_trajectory(path, mmap_mode='r'):
     records = np.memmap(path, dtype=dtype, mode=mmap_mode,
                         offset=offset, shape=(count,))
     return header, records
+
+
+def read_odp_wham_series(path):
+    """Extract the complete per-window ODP series from one packed NAMD TRJ."""
+    header, records = read_namd_trajectory(path)
+    snapshot_bytes = int(records.offset + records.nbytes)
+    provenance = header.get('odp', {})
+    if not provenance.get('enabled', False):
+        raise ValueError('trajectory does not contain an enabled ODP umbrella')
+    try:
+        restart_identity = json.loads(header['signature'])
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            'trajectory does not contain a valid NAMD system identity') from exc
+    identity_keys = (
+        'method', 'charge', 'functional', 'basis', 'scf_type',
+        'scf_multiplicity', 'tdhf_type', 'tdhf_multiplicity', 'nstate', 'tlf',
+        'd4', 'pcm', 'electronic_config', 'trajectory_representation',
+    )
+    system_identity = {
+        key: restart_identity.get(key) for key in identity_keys
+    }
+    independent_controls = restart_identity.get('independent_controls', {})
+    conservative_restraints = {}
+    for name in ('droplet', 'solute_com'):
+        control = independent_controls.get(name, {})
+        conservative_restraints[name] = (
+            control if bool(control.get('enabled', False))
+            else {'enabled': False}
+        )
+    system_identity['conservative_restraints'] = conservative_restraints
+    system = header.get('wham_system_identity')
+    system_identity['system'] = system
+    if (not isinstance(system, dict) or not system.get('sha256')
+            or system_identity.get('method') is None
+            or system_identity.get('nstate') is None):
+        raise ValueError('trajectory has an incomplete NAMD system identity')
+    required = {
+        'window', 'cv', 'cv_atom_indexing', 'cv_native_units', 'scale',
+        'reference_r', 'reference_p', 'scaled_path_length', 'center',
+        'k_parallel_hartree', 'k_perpendicular_hartree', 'projection',
+        'perpendicular_restraint',
+    }
+    missing = sorted(required.difference(provenance))
+    if missing:
+        raise ValueError(
+            f'trajectory ODP provenance is missing {", ".join(missing)}')
+    ncv = int(header.get('ncv', 0))
+    scale = np.asarray(provenance['scale'], dtype=np.float64).reshape(-1)
+    reference_r = np.asarray(
+        provenance['reference_r'], dtype=np.float64).reshape(-1)
+    reference_p = np.asarray(
+        provenance['reference_p'], dtype=np.float64).reshape(-1)
+    center = float(provenance['center'])
+    k_parallel = float(provenance['k_parallel_hartree'])
+    k_perpendicular = float(provenance['k_perpendicular_hartree'])
+    if not (ncv > 0 and len(provenance['cv']) == ncv
+            and len(provenance['cv_native_units']) == ncv
+            and scale.size == reference_r.size == reference_p.size == ncv
+            and np.all(np.isfinite(scale)) and np.all(scale > 0.0)
+            and np.all(np.isfinite(reference_r))
+            and np.all(np.isfinite(reference_p))
+            and np.isfinite(center) and np.isfinite(k_parallel)
+            and np.isfinite(k_perpendicular) and k_parallel > 0.0
+            and k_perpendicular >= 0.0
+            and provenance['cv_atom_indexing'] == '1-based'
+            and provenance['projection']
+            == 'signed_scaled_dot_over_path_norm_squared'
+            and bool(provenance['perpendicular_restraint'])
+            == (k_perpendicular > 0.0)):
+        raise ValueError('trajectory ODP provenance has an invalid CV metric')
+    expected_window = int(provenance['window'])
+    recorded_windows = np.asarray(records['odp_window'], dtype=np.int64)
+    if np.any(recorded_windows != expected_window):
+        raise ValueError(
+            'trajectory ODP window records disagree with header provenance')
+    raw = np.asarray(records['odp_cv_raw'], dtype=np.float64)
+    scaled = np.asarray(records['odp_cv_scaled'], dtype=np.float64)
+    xi = np.asarray(records['odp_xi'], dtype=np.float64)
+    perpendicular = np.asarray(
+        records['odp_cv_perpendicular'], dtype=np.float64)
+    perpendicular_norm = np.asarray(
+        records['odp_perpendicular_norm'], dtype=np.float64)
+    direction = scale*(reference_p - reference_r)
+    path_length_squared = float(np.dot(direction, direction))
+    if not np.isfinite(path_length_squared) or path_length_squared <= 1.0e-24:
+        raise ValueError('trajectory ODP provenance has a degenerate R/P path')
+    if not np.isclose(
+            float(provenance['scaled_path_length']),
+            np.sqrt(path_length_squared), rtol=2.0e-12, atol=2.0e-12):
+        raise ValueError(
+            'trajectory ODP scaled path length disagrees with its metric')
+    displacement = scaled - scale*reference_r
+    expected_xi = displacement @ direction/path_length_squared
+    expected_perpendicular = displacement - expected_xi[:, None]*direction
+    expected_perpendicular_norm = np.linalg.norm(
+        expected_perpendicular, axis=1)
+    expected_bias = (
+        0.5*k_parallel*(xi - center)**2
+        + 0.5*k_perpendicular*perpendicular_norm**2
+    )
+    expected_bias_parallel = 0.5*k_parallel*(xi - center)**2
+    expected_bias_perpendicular = 0.5*k_perpendicular*perpendicular_norm**2
+    checks = (
+        (scaled, raw*scale, 'scaled CV'),
+        (xi, expected_xi, 'signed projection'),
+        (perpendicular, expected_perpendicular, 'perpendicular CV'),
+        (perpendicular_norm, expected_perpendicular_norm,
+         'perpendicular norm'),
+        (np.asarray(records['odp_bias_parallel_hartree'], dtype=np.float64),
+         expected_bias_parallel, 'parallel bias energy'),
+        (np.asarray(
+            records['odp_bias_perpendicular_hartree'], dtype=np.float64),
+         expected_bias_perpendicular, 'perpendicular bias energy'),
+        (np.asarray(records['odp_bias_hartree'], dtype=np.float64),
+         expected_bias, 'bias energy'),
+    )
+    for actual, expected, label in checks:
+        if (not np.all(np.isfinite(actual))
+                or not np.allclose(actual, expected, rtol=2.0e-12,
+                                   atol=2.0e-12)):
+            raise ValueError(
+                f'trajectory ODP {label} records disagree with provenance')
+    result = {
+        'provenance': provenance,
+        'system_identity': system_identity,
+        'ensemble': header.get('ensemble'),
+        'thermostat_temperature_kelvin': (
+            header.get('independent_controls', {})
+            .get('thermostat', {}).get('temperature_kelvin')
+        ),
+        'snapshot_bytes': snapshot_bytes,
+        'step': np.array(records['step'], copy=True),
+        'time_fs': np.array(records['time_fs'], copy=True),
+        'window': np.array(records['odp_window'], copy=True),
+        'xi': np.array(xi, copy=True),
+        'cv_raw': np.array(raw, copy=True),
+        'cv_scaled': np.array(scaled, copy=True),
+        'perpendicular_norm': np.array(perpendicular_norm, copy=True),
+        'bias_hartree': np.array(records['odp_bias_hartree'], copy=True),
+        'unbiased_potential_hartree': np.array(
+            records['e_unbiased_pot_hartree'], copy=True),
+        'total_conservative_hartree': np.array(
+            records['e_tot_hartree'], copy=True),
+    }
+    del records
+    return result
 
 # OQP::namd_params packed-scalar indices (0-based here; 1-based in the contract)
 _P_DT_FS = 0
@@ -203,6 +525,9 @@ class NAMD:
         self.mol = mol
         cfg = mol.config
         md = cfg['md']
+        # Freeze the user-resolved electronic configuration before SOC/TB
+        # helpers temporarily switch response manifolds during propagation.
+        self._electronic_config_identity = _electronic_config_identity(cfg)
 
         self.nstep = int(md['nstep'])
         self.dt_fs = float(md['dt'])
@@ -226,35 +551,34 @@ class NAMD:
         self.trivial = 1 if str(md['trivial']).lower() in ('true', '1', 'on', 'yes') else 0
         self.trivial_thresh = float(md['trivial_thresh'])
         self.init_temp = float(md['init_temp'])
-        self.seed = int(md['seed'])
-        self.rng_stream = int(md.get('rng_stream', 0))
-        self.first_hop_step = int(md.get('first_hop_step', 1))
-        self.nacme_check = str(md.get('nacme_check', 'off')).strip().lower().replace('-', '_')
+        self.seed = _resolve_namd_seed(md.get('seed', 0))
+        self.rng_stream = int(md.get('rng_stream', 1))
+        self.first_hop_step = int(md.get('first_hop_step', 2))
+        self.nacme_check = str(md.get(
+            'nacme_check', 'baeck_an')).strip().lower().replace('-', '_')
         if self.nacme_check == 'tdba':
             self.nacme_check = 'baeck_an'
         if self.nacme_check not in ('off', 'baeck_an'):
             raise ValueError("[md] nacme_check must be off or baeck_an")
         self.ba_gap_max = float(md.get('ba_gap_max', 0.0734986443513))
         if not np.isfinite(self.ba_gap_max) or self.ba_gap_max <= 0.0:
-            raise ValueError("[md] ba_gap_max must be positive")
-        self.nacme_gate = str(md.get('nacme_gate', 'warn')).strip().lower()
+            raise ValueError("[md] ba_gap_max must be positive and finite")
+        self.nacme_gate = str(md.get('nacme_gate', 'off')).strip().lower()
         if self.nacme_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nacme_gate must be off, warn, or error")
+        _validate_nacme_gate_activation(self.nacme_check, self.nacme_gate)
         self.nacme_gate_invariant_tol = float(
             md.get('nacme_gate_invariant_tol', 1.0e-10))
         self.nacme_gate_abs_tol = float(md.get('nacme_gate_abs_tol', 1.0e-4))
         self.nacme_gate_rel_tol = float(md.get('nacme_gate_rel_tol', 1.0))
         self.nacme_gate_consecutive = int(md.get('nacme_gate_consecutive', 3))
-        nacme_tolerances = (
+        _validate_gate_tolerances('NACME', (
             self.nacme_gate_invariant_tol, self.nacme_gate_abs_tol,
-            self.nacme_gate_rel_tol)
-        if (not all(np.isfinite(value) for value in nacme_tolerances)
-                or min(nacme_tolerances) < 0.0):
-            raise ValueError(
-                "[md] NACME gate tolerances must be finite and non-negative")
+            self.nacme_gate_rel_tol,
+        ))
         if self.nacme_gate_consecutive < 1:
             raise ValueError("[md] nacme_gate_consecutive must be at least 1")
-        self.nve_gate = str(md.get('nve_gate', 'off')).strip().lower()
+        self.nve_gate = str(md.get('nve_gate', 'warn')).strip().lower()
         if self.nve_gate not in ('off', 'warn', 'error'):
             raise ValueError("[md] nve_gate must be off, warn, or error")
         self.nve_gate_abs_tol = float(md.get('nve_gate_abs_tol', 5.0e-3))
@@ -262,15 +586,38 @@ class NAMD:
         self.nve_gate_transition_tol = float(
             md.get('nve_gate_transition_tol', 1.0e-6))
         self.nve_gate_consecutive = int(md.get('nve_gate_consecutive', 3))
-        nve_tolerances = (
+        _validate_gate_tolerances('NVE', (
             self.nve_gate_abs_tol, self.nve_gate_step_tol,
-            self.nve_gate_transition_tol)
-        if (not all(np.isfinite(value) for value in nve_tolerances)
-                or min(nve_tolerances) < 0.0):
-            raise ValueError(
-                "[md] NVE gate tolerances must be finite and non-negative")
+            self.nve_gate_transition_tol,
+        ))
         if self.nve_gate_consecutive < 1:
             raise ValueError("[md] nve_gate_consecutive must be at least 1")
+        self.ensemble = str(md.get('ensemble', 'nve')).strip().lower()
+        self.thermostat = str(md.get('thermostat', 'off')).strip().lower()
+        if self.ensemble not in ('nve', 'nvt'):
+            raise ValueError("[md] ensemble must be nve or nvt")
+        if self.thermostat not in ('off', 'langevin'):
+            raise ValueError("[md] thermostat must be off or langevin")
+        if self.ensemble == 'nve' and self.thermostat != 'off':
+            raise ValueError(
+                "[md] thermostat is independent of NVE; use ensemble=nvt or thermostat=off"
+            )
+        if self.ensemble == 'nvt' and self.thermostat == 'off':
+            raise ValueError("[md] ensemble=nvt requires thermostat=langevin")
+        if self.ensemble == 'nvt' and self.nve_gate == 'warn':
+            # ``warn`` is the NVE safety default.  NVT records thermostat work
+            # instead, so an inherited default becomes contextually inactive.
+            self.nve_gate = 'off'
+        if self.ensemble == 'nvt' and self.nve_gate != 'off':
+            raise ValueError(
+                "[md] nve_gate does not apply to NVT; thermostat exchange is recorded separately"
+            )
+        self.thermostat_temperature = float(
+            md.get('thermostat_temperature', self.init_temp))
+        self.thermostat_friction = float(md.get('thermostat_friction', 1.0))
+        _validate_thermostat_parameters(
+            self.thermostat_temperature, self.thermostat_friction,
+            self.thermostat == 'langevin')
         self.trajectory_interval_input = int(md.get('trajectory_interval', 0))
         self.restart_interval_input = int(md.get('restart_interval', 0))
         self.trajectory_interval = self._output_interval_steps(
@@ -286,19 +633,34 @@ class NAMD:
         self._restart_manifest_written = False
         self.velocity_source = str(md['velocity'])
         self._validate_sidecar_paths()
-        # Capture external guess inputs before the first electronic step.  A
-        # save_mol target can be the same JSON path and is rewritten at every
-        # geometry, but that output mutation must not change the trajectory or
-        # checkpoint identity after step zero.
+        # Capture external guess inputs before the first electronic step. A
+        # save_mol target can be rewritten at every geometry, but that output
+        # mutation must not change trajectory or checkpoint identity.
         self._restart_guess_identity = self._guess_settings_identity()
+        self.odp = odp_from_config(cfg)
+        self._odp_last = None
+        self._unbiased_potential_energy = np.nan
         _soc = md.get('soc', False)
         # Keep this guard identical to compute_namd's ``if soc:`` dispatch.
         # Programmatic callers are not necessarily constrained by the input
         # schema and may supply another truthy value.
         soc_requested = bool(_soc)
+        if (soc_requested and self.nacme_check == 'baeck_an'
+                and self.nacme_gate == 'off'):
+            # Baeck-An is a real same-spin magnitude diagnostic.  SOC records
+            # the full complex spin-adiabatic overlap and anti-Hermitian TDC.
+            self.nacme_check = 'off'
         if soc_requested and self.nacme_check != 'off':
             raise NotImplementedError(
                 "[md] nacme_check currently supports same-spin NAMD only"
+            )
+        if soc_requested and self.odp is not None:
+            raise NotImplementedError(
+                "[odp] currently supports same-spin NVE NAMD only"
+            )
+        if self.odp is not None and self.ensemble != 'nve':
+            raise NotImplementedError(
+                "[odp] currently supports same-spin NVE NAMD only"
             )
         if self.dt_adaptive and not soc_requested:
             raise NotImplementedError(
@@ -313,11 +675,26 @@ class NAMD:
         if self.first_hop_step < 1:
             raise ValueError("[md] first_hop_step must be at least 1")
         self.natom = mol.data['natom']
+        if self.odp is not None and not self._as_bool(
+                cfg.get('input', {}).get('qmmm_flag', False)):
+            self.odp.validate_atom_count(self.natom)
         # get_mass() returns atomic masses in amu; the integrator works in
         # atomic units, so convert to electron masses.
         self.mass = mol.get_mass() * AMU_TO_AU     # (natom,) electron masses
+        self._restart_system_identity = self._qm_restart_system_identity()
+        self._wham_system_identity = self._qm_wham_system_identity()
+        self._init_independent_controls(cfg)
+        if soc_requested and (self.droplet_enabled or self.solute_com_enabled
+                              or self.thermostat != 'off'):
+            raise NotImplementedError(
+                "droplet/solute_com/NVT controls currently support same-spin NAMD only"
+            )
+        if (self.droplet_enabled or self.solute_com_enabled) and not self._as_bool(
+                cfg.get('input', {}).get('qmmm_flag', False)):
+            self._setup_gas_restraint_targets()
         self._rng_step = 0
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         self._ba_energy_left = None
         self._ba_energy_center = None
         self._ba_tdc_left = None
@@ -325,6 +702,7 @@ class NAMD:
         self._ba_last = None
         self._nacme_gate_failures = 0
         self._nacme_gate_last = None
+        self._pending_nacme_gate_error = None
         self._nacme_candidate_tdc = None
         self._nacme_reference_tdc = None
         self._nacme_reference_mask = None
@@ -336,6 +714,8 @@ class NAMD:
         self._nve_gate_failures = 0
         self._nve_gate_last = None
         self._pending_nve_gate_error = None
+        self._thermostat_exchange = 0.0
+        self._thermostat_exchange_cumulative = 0.0
         self._pending_nacme_gate_error = None
         self._trajectory_prefix_hasher = None
         self._trajectory_prefix_bytes = 0
@@ -382,6 +762,351 @@ class NAMD:
     @staticmethod
     def _as_bool(value):
         return (value is True) or (str(value).lower() in ('true', '1', 'on', 'yes'))
+
+    def _qm_restart_system_identity(self):
+        """Bind restarts to the ordered atoms, masses, and starting geometry."""
+        digest = _restart_identity_digest(array_parts=(
+            ('atomic_numbers', self.mol.get_atoms(), '<i8'),
+            ('masses_electron', self.mass, '<f8'),
+            ('initial_coordinates_bohr', self.mol.get_system(), '<f8'),
+        ))
+        return {'kind': 'qm', 'natom': int(self.natom), 'sha256': digest}
+
+    def _qm_wham_system_identity(self):
+        """Bind WHAM windows to atom identity while allowing new coordinates."""
+        digest = _restart_identity_digest(array_parts=(
+            ('atomic_numbers', self.mol.get_atoms(), '<i8'),
+            ('masses_electron', self.mass, '<f8'),
+        ))
+        return {'kind': 'qm', 'natom': int(self.natom), 'sha256': digest}
+
+    @staticmethod
+    def _vector3(value, label):
+        if isinstance(value, str):
+            values = [float(item) for item in value.replace(',', ' ').split()]
+        else:
+            values = [float(item) for item in value]
+        if len(values) != 3 or not np.all(np.isfinite(values)):
+            raise ValueError(f"{label} must contain three finite Cartesian values")
+        return np.asarray(values, dtype=np.float64)
+
+    def _init_independent_controls(self, cfg):
+        """Parse droplet, solute-COM, and thermostat records once.
+
+        User-facing droplet lengths are angstrom and force constants are
+        kcal mol^-1 angstrom^-2.  Everything below this method is atomic units.
+        Neither control is inferred from ODP, QM/MM, or the NVT thermostat.
+        """
+        droplet = cfg.get('droplet', {})
+        self.droplet_enabled = self._as_bool(droplet.get('enabled', False))
+        self.droplet_center_angstrom = self._vector3(
+            droplet.get('center', (0.0, 0.0, 0.0)), '[droplet] center')
+        self.droplet_center = (
+            self.droplet_center_angstrom * ANGSTROM_TO_BOHR)
+        self.droplet_radius_angstrom = float(droplet.get('radius', 20.0))
+        self.droplet_buffer_angstrom = float(droplet.get('buffer', 1.0))
+        self.droplet_force_constant_input = float(
+            droplet.get('force_constant', 10.0))
+        self.droplet_max_penetration_angstrom = float(
+            droplet.get('max_penetration', 10.0))
+        self.droplet_radius = self.droplet_radius_angstrom * ANGSTROM_TO_BOHR
+        self.droplet_buffer = self.droplet_buffer_angstrom * ANGSTROM_TO_BOHR
+        self.droplet_force_constant = (
+            self.droplet_force_constant_input *
+            KCALMOLANG2_TO_HARTREEBOHR2)
+        self.droplet_max_penetration = (
+            self.droplet_max_penetration_angstrom * ANGSTROM_TO_BOHR)
+        self.droplet_target = str(
+            droplet.get('target', 'water_com')).strip().lower().replace('-', '_')
+        if self.droplet_target in ('com', 'molecule_com', 'water_molecule_com'):
+            self.droplet_target = 'water_com'
+        if self.droplet_target in ('o', 'water_oxygen'):
+            self.droplet_target = 'oxygen'
+        if self.droplet_target not in ('water_com', 'oxygen', 'atoms'):
+            raise ValueError(
+                "[droplet] target must be water_com, oxygen, or atoms")
+        self.droplet_atoms_spec = str(droplet.get('atoms', '') or '').strip()
+        names = droplet.get(
+            'water_resnames', ('hoh', 'wat', 'sol', 'tip3', 'tip3p'))
+        if isinstance(names, str):
+            names = names.replace(',', ' ').split()
+        self.droplet_water_resnames = tuple(
+            str(name).strip().lower() for name in names if str(name).strip())
+        if self.droplet_enabled:
+            values = (self.droplet_radius_angstrom,
+                      self.droplet_buffer_angstrom,
+                      self.droplet_force_constant_input,
+                      self.droplet_max_penetration_angstrom)
+            if not np.all(np.isfinite(values)):
+                raise ValueError("[droplet] numeric settings must be finite")
+            if (self.droplet_radius_angstrom <= 0.0
+                    or self.droplet_buffer_angstrom < 0.0
+                    or self.droplet_force_constant_input <= 0.0
+                    or self.droplet_max_penetration_angstrom < 0.0):
+                raise ValueError(
+                    "[droplet] radius/force_constant must be positive and "
+                    "buffer/max_penetration non-negative")
+        self._droplet_group_index = None
+        self._droplet_group_count = 0
+        self._droplet_energy = 0.0
+        self._droplet_max_penetration = 0.0
+        self._droplet_active_count = 0
+        self._droplet_force = None
+        self._droplet_force_max = 0.0
+
+        solute = cfg.get('solute_com', {})
+        self.solute_com_enabled = self._as_bool(solute.get('enabled', False))
+        self.solute_com_center_angstrom = self._vector3(
+            solute.get('center', (0.0, 0.0, 0.0)), '[solute_com] center')
+        self.solute_com_center = (
+            self.solute_com_center_angstrom * ANGSTROM_TO_BOHR)
+        self.solute_com_force_constant_input = float(
+            solute.get('force_constant', 5.0))
+        self.solute_com_force_constant = (
+            self.solute_com_force_constant_input *
+            KCALMOLANG2_TO_HARTREEBOHR2)
+        self.solute_com_atoms_spec = str(solute.get('atoms', '') or '').strip()
+        if (self.solute_com_enabled
+                and (not np.isfinite(self.solute_com_force_constant_input)
+                     or self.solute_com_force_constant_input <= 0.0)):
+            raise ValueError("[solute_com] force_constant must be positive and finite")
+        self._solute_com_selected = None
+        self._solute_com_energy = 0.0
+        self._solute_com_displacement = 0.0
+        self._solute_com_force = None
+        self._conservative_restraint_energy = 0.0
+        self._conservative_restraint_force = None
+
+    @staticmethod
+    def _single_atom_groups(natom, atom_indices, label):
+        indices = np.asarray(sorted(set(int(i) for i in atom_indices)), dtype=int)
+        if indices.size == 0:
+            raise ValueError(f"{label} selected no atoms")
+        if indices[0] < 0 or indices[-1] >= int(natom):
+            raise ValueError(
+                f"{label} atom indices must be zero-based and within 0..{int(natom)-1}")
+        groups = np.zeros(int(natom), dtype=np.int64)
+        groups[indices] = np.arange(1, len(indices) + 1, dtype=np.int64)
+        return groups
+
+    def _setup_gas_restraint_targets(self):
+        if self.droplet_enabled:
+            if self.droplet_target == 'water_com':
+                raise ValueError(
+                    "[droplet] target=water_com requires qmmm(...) topology; "
+                    "use target=oxygen or target=atoms for all-QM NAMD")
+            if self.droplet_target == 'oxygen':
+                indices = np.flatnonzero(
+                    np.asarray(self.mol.get_atoms(), dtype=int) == 8)
+            else:
+                indices = _parse_int_list(self.droplet_atoms_spec)
+            self._droplet_group_index = self._single_atom_groups(
+                self.natom, indices, '[droplet]')
+            self._droplet_group_count = int(self._droplet_group_index.max())
+        if self.solute_com_enabled:
+            if self.solute_com_atoms_spec:
+                indices = _parse_int_list(self.solute_com_atoms_spec)
+            else:
+                indices = range(self.natom)
+            selected = self._single_atom_groups(
+                self.natom, indices, '[solute_com]')
+            self._solute_com_selected = (selected > 0).astype(np.int64)
+
+    def _setup_qmmm_restraint_targets(self):
+        if self.droplet_enabled:
+            if self.periodic:
+                raise ValueError(
+                    "[droplet] finite spherical containment requires qmmm(cutoff=NoCutoff)"
+                )
+            if self.droplet_target == 'atoms':
+                groups = self._single_atom_groups(
+                    self.natom_all, _parse_int_list(self.droplet_atoms_spec),
+                    '[droplet]')
+            else:
+                groups = np.zeros(self.natom_all, dtype=np.int64)
+                group = 0
+                for residue in self.pdb.topology.residues():
+                    if str(residue.name).strip().lower() not in self.droplet_water_resnames:
+                        continue
+                    atoms = list(residue.atoms())
+                    if self.droplet_target == 'oxygen':
+                        atoms = [atom for atom in atoms if (
+                            getattr(getattr(atom, 'element', None), 'symbol', '') == 'O'
+                            or str(atom.name).strip().upper().startswith('O'))]
+                        atoms = atoms[:1]
+                    if not atoms:
+                        continue
+                    group += 1
+                    for atom in atoms:
+                        groups[int(atom.index)] = group
+                if group == 0:
+                    raise ValueError(
+                        "[droplet] found no target waters; check target and water_resnames")
+            self._droplet_group_index = groups
+            self._droplet_group_count = int(groups.max())
+        if self.solute_com_enabled:
+            indices = (_parse_int_list(self.solute_com_atoms_spec)
+                       if self.solute_com_atoms_spec else self.qm_atoms)
+            selected = self._single_atom_groups(
+                self.natom_all, indices, '[solute_com]')
+            self._solute_com_selected = (selected > 0).astype(np.int64)
+
+    def _independent_settings_record(self):
+        # Keep low-level trajectory/checkpoint helpers usable in focused tests
+        # that construct a driver with ``__new__`` instead of running __init__.
+        if not hasattr(self, 'droplet_enabled'):
+            return {
+                'droplet': {'enabled': False},
+                'solute_com': {'enabled': False},
+                'thermostat': {
+                    'ensemble': getattr(self, 'ensemble', 'nve'),
+                    'type': getattr(self, 'thermostat', 'off'),
+                    'temperature_kelvin': getattr(
+                        self, 'thermostat_temperature', 0.0),
+                    'friction_ps_inverse': getattr(
+                        self, 'thermostat_friction', 0.0),
+                },
+            }
+        return {
+            'droplet': {
+                'enabled': bool(self.droplet_enabled),
+                'center_angstrom': self.droplet_center_angstrom.tolist(),
+                'radius_angstrom': self.droplet_radius_angstrom,
+                'buffer_angstrom': self.droplet_buffer_angstrom,
+                'force_constant_kcal_mol_angstrom2':
+                    self.droplet_force_constant_input,
+                'target': self.droplet_target,
+                'atoms_zero_based': self.droplet_atoms_spec,
+                'water_resnames': list(self.droplet_water_resnames),
+                'max_penetration_angstrom':
+                    self.droplet_max_penetration_angstrom,
+                'group_count': int(self._droplet_group_count),
+            },
+            'solute_com': {
+                'enabled': bool(self.solute_com_enabled),
+                'center_angstrom': self.solute_com_center_angstrom.tolist(),
+                'force_constant_kcal_mol_angstrom2':
+                    self.solute_com_force_constant_input,
+                'atoms_zero_based': self.solute_com_atoms_spec,
+            },
+            'thermostat': {
+                'ensemble': self.ensemble,
+                'type': self.thermostat,
+                'temperature_kelvin': self.thermostat_temperature,
+                'friction_ps_inverse': self.thermostat_friction,
+            },
+        }
+
+    def _evaluate_conservative_restraints(self, coordinates, masses):
+        coords = np.ascontiguousarray(coordinates, dtype=np.float64).reshape((-1, 3))
+        mass = np.ascontiguousarray(masses, dtype=np.float64).reshape(-1)
+        if len(coords) != len(mass):
+            raise ValueError("restraint coordinate/mass sizes do not match")
+        total_force = np.zeros_like(coords)
+        self._droplet_energy = 0.0
+        self._droplet_max_penetration = 0.0
+        self._droplet_active_count = 0
+        self._droplet_force = np.zeros_like(coords)
+        self._droplet_force_max = 0.0
+        if self.droplet_enabled:
+            if (self._droplet_group_index is None
+                    or len(self._droplet_group_index) != len(coords)):
+                raise RuntimeError("droplet target groups were not initialized")
+            force = np.zeros_like(coords)
+            energy = np.zeros(1, dtype=np.float64)
+            penetration = np.zeros(1, dtype=np.float64)
+            active = np.zeros(1, dtype=np.int64)
+            status = int(oqp.oqp_namd_droplet_boundary(
+                len(coords), self._droplet_group_count,
+                oqp.ffi.cast("double *", coords.ctypes.data),
+                oqp.ffi.cast("double *", mass.ctypes.data),
+                oqp.ffi.cast("int64_t *", self._droplet_group_index.ctypes.data),
+                oqp.ffi.cast("double *", self.droplet_center.ctypes.data),
+                self.droplet_radius, self.droplet_buffer,
+                self.droplet_force_constant, self.droplet_max_penetration,
+                oqp.ffi.cast("double *", energy.ctypes.data),
+                oqp.ffi.cast("double *", force.ctypes.data),
+                oqp.ffi.cast("double *", penetration.ctypes.data),
+                oqp.ffi.cast("int64_t *", active.ctypes.data),
+            ))
+            self._droplet_max_penetration = float(penetration[0])
+            self._droplet_active_count = int(active[0])
+            if status == 1:
+                raise RuntimeError(
+                    "droplet boundary failsafe: maximum penetration "
+                    f"{penetration[0]/ANGSTROM_TO_BOHR:.6f} angstrom exceeds "
+                    f"{self.droplet_max_penetration_angstrom:.6f} angstrom")
+            if status != 0:
+                raise RuntimeError(
+                    f"native droplet boundary rejected coordinates (status={status})")
+            self._droplet_energy = float(energy[0])
+            self._droplet_force = force.copy()
+            self._droplet_force_max = float(
+                np.max(np.linalg.norm(force, axis=1))) if len(force) else 0.0
+            total_force += force
+
+        self._solute_com_energy = 0.0
+        self._solute_com_displacement = 0.0
+        self._solute_com_force = np.zeros_like(coords)
+        if self.solute_com_enabled:
+            if (self._solute_com_selected is None
+                    or len(self._solute_com_selected) != len(coords)):
+                raise RuntimeError("solute COM target atoms were not initialized")
+            force = np.zeros_like(coords)
+            energy = np.zeros(1, dtype=np.float64)
+            displacement = np.zeros(1, dtype=np.float64)
+            status = int(oqp.oqp_namd_com_restraint(
+                len(coords), oqp.ffi.cast("double *", coords.ctypes.data),
+                oqp.ffi.cast("double *", mass.ctypes.data),
+                oqp.ffi.cast("int64_t *", self._solute_com_selected.ctypes.data),
+                oqp.ffi.cast("double *", self.solute_com_center.ctypes.data),
+                self.solute_com_force_constant,
+                oqp.ffi.cast("double *", energy.ctypes.data),
+                oqp.ffi.cast("double *", force.ctypes.data),
+                oqp.ffi.cast("double *", displacement.ctypes.data),
+            ))
+            if status != 0:
+                raise RuntimeError(
+                    f"native solute COM restraint rejected coordinates (status={status})")
+            self._solute_com_energy = float(energy[0])
+            self._solute_com_displacement = float(displacement[0])
+            self._solute_com_force = force.copy()
+            total_force += force
+        self._conservative_restraint_energy = (
+            self._droplet_energy + self._solute_com_energy)
+        self._conservative_restraint_force = total_force
+        return total_force, self._conservative_restraint_energy
+
+    def _add_last_conservative_restraints(self, force, potential_energy):
+        if self._conservative_restraint_force is None:
+            raise RuntimeError("conservative restraints have not been evaluated")
+        return (np.asarray(force) + self._conservative_restraint_force,
+                float(potential_energy) + self._conservative_restraint_energy)
+
+    def _langevin_update(self, velocities, masses, istep):
+        values = np.ascontiguousarray(velocities, dtype=np.float64)
+        mass = np.ascontiguousarray(masses, dtype=np.float64).reshape(-1)
+        heat = np.zeros(1, dtype=np.float64)
+        friction_au = self.thermostat_friction/(1000.0*FS_TO_AU)
+        status = int(oqp.oqp_namd_langevin_thermostat(
+            len(mass), self.dt, self.thermostat_temperature, friction_au,
+            self.seed, self.rng_stream, int(istep),
+            oqp.ffi.cast("double *", mass.ctypes.data),
+            oqp.ffi.cast("double *", values.ctypes.data),
+            oqp.ffi.cast("double *", heat.ctypes.data),
+        ))
+        if status != 0:
+            raise RuntimeError(
+                f"native Langevin thermostat rejected state (status={status})")
+        return values, float(heat[0])
+
+    def _apply_thermostat(self, istep):
+        self._thermostat_exchange = 0.0
+        if self.thermostat == 'off':
+            return
+        self.vel, self._thermostat_exchange = self._langevin_update(
+            self.vel, self.mass, istep)
+        self._thermostat_exchange_cumulative += self._thermostat_exchange
 
     def _md_output_path(self, configured, suffix):
         """Resolve NAMD sidecars beside the main log, not the process CWD."""
@@ -608,6 +1333,27 @@ class NAMD:
                    f'restart_interval={self.restart_interval}step '
                    f'manifest={self.restart_manifest_file}'),
         )
+        if self.odp is not None:
+            dump_log(
+                self.mol,
+                title=('ODP umbrella: '
+                       f'window={self.odp.window} center={self.odp.center:g} '
+                       f'k_parallel={self.odp.k_parallel:g} Ha '
+                       f'k_perpendicular={self.odp.k_perpendicular:g} Ha '
+                       f'CVs={"; ".join(self.odp.cv_labels)}'),
+            )
+
+    def _odp_provenance(self):
+        if getattr(self, 'odp', None) is None:
+            return {'enabled': False}
+        return self.odp.provenance()
+
+    def _evaluate_odp(self, coordinates):
+        if self.odp is None:
+            self._odp_last = None
+            return None
+        self._odp_last = self.odp.evaluate(coordinates)
+        return self._odp_last
 
     def _prepare_md_outputs_on_io_rank(self):
         if self.restart_requested:
@@ -633,6 +1379,7 @@ class NAMD:
         """
         self._rng_step = int(istep)
         self._last_hop_random = np.nan
+        self._last_hop_probabilities = None
         return self._rng_step >= self.first_hop_step
 
     def _hop_random(self):
@@ -674,6 +1421,8 @@ class NAMD:
         return normals.reshape(shape)
 
     def _init_velocities(self):
+        if self.restart_requested:
+            return np.zeros((self.natom, 3))
         src = self.velocity_source.lower()
         if src in ('zero', 'none', '0'):
             return np.zeros((self.natom, 3))
@@ -687,6 +1436,82 @@ class NAMD:
             v = np.loadtxt(velocity_file).reshape((self.natom, 3))
             return self._remove_com_motion(v)
         raise ValueError(f"[md] velocity='{self.velocity_source}' is not zero/maxwell or a readable file")
+
+    def _initial_temperature_metadata(self):
+        """Describe the actual initial kinetic temperature stored in the TRJ."""
+        requested = getattr(self, 'init_temp', None)
+        if hasattr(self, 'm_all') and hasattr(self, 'v_all'):
+            masses = np.asarray(self.m_all, dtype=np.float64).reshape(-1)
+            velocities = np.asarray(self.v_all, dtype=np.float64).reshape((-1, 3))
+            constraints = len(self._ci) if getattr(self, '_has_constraints', False) else 0
+            dof = 3*len(masses) - constraints - 3
+            source = 'restart' if getattr(self, 'restart_requested', False) else 'maxwell'
+        elif hasattr(self, 'mass') and hasattr(self, 'vel'):
+            masses = np.asarray(self.mass, dtype=np.float64).reshape(-1)
+            velocities = np.asarray(self.vel, dtype=np.float64).reshape((-1, 3))
+            dof = 3*len(masses) - 3
+            configured = str(getattr(self, 'velocity_source', '')).strip().lower()
+            if getattr(self, 'restart_requested', False):
+                source = 'restart'
+            elif configured in ('zero', 'none', '0'):
+                source = 'zero'
+            elif configured in ('maxwell', 'boltzmann', 'random'):
+                source = 'maxwell'
+            else:
+                source = 'file'
+        else:
+            masses = velocities = None
+            dof = None
+            source = 'unknown'
+
+        measured = None
+        if (dof is not None and dof > 0 and masses is not None
+                and velocities.shape == (len(masses), 3)):
+            kinetic = 0.5*np.sum(masses[:, None]*velocities**2)
+            if np.isfinite(kinetic):
+                measured = float(2.0*kinetic/(dof*KB_HARTREE))
+        return {
+            'measured_kelvin': measured,
+            'requested_kelvin': requested,
+            'dof': dof,
+            'velocity_source': source,
+        }
+
+    def _trajectory_ensemble_metadata(self):
+        """Return honest ensemble provenance for the packed trajectory."""
+        if getattr(self, 'ensemble', 'nve') == 'nvt':
+            return {
+                'ensemble': 'NVT',
+                'integrator': 'velocity_verlet_langevin',
+                'per_step_velocity_rescaling': False,
+                'velocity_rescaling_mode': 'none',
+                'thermostat': True,
+                'thermostat_type': getattr(self, 'thermostat', 'langevin'),
+                'target_temperature_kelvin': getattr(
+                    self, 'thermostat_temperature', None),
+                'friction_ps_inverse': getattr(
+                    self, 'thermostat_friction', None),
+                'energy_exchange_field':
+                    'thermostat_exchange_cumulative_hartree',
+            }
+        # Only SOC drivers implement econs and therefore define this attribute;
+        # an irrelevant econs spelling on a same-spin deck must remain NVE.
+        econs = bool(getattr(self, 'econs', False))
+        if econs:
+            return {
+                'ensemble': 'ENERGY_CONSTRAINED_VELOCITY_RESCALING',
+                'integrator': 'velocity_verlet',
+                'per_step_velocity_rescaling': True,
+                'velocity_rescaling_mode': 'restore_initial_total_energy',
+                'thermostat': False,
+            }
+        return {
+            'ensemble': 'NVE',
+            'integrator': 'velocity_verlet',
+            'per_step_velocity_rescaling': False,
+            'velocity_rescaling_mode': 'none',
+            'thermostat': False,
+        }
 
     def _remove_com_motion(self, v):
         p = (self.mass[:, None] * v).sum(axis=0)        # total momentum
@@ -723,7 +1548,11 @@ class NAMD:
         mol = self.mol
         mol.config['properties']['grad'] = [self.active]
         Gradient(mol).gradient()
-        return np.array(mol.grads[self.active]).reshape((self.natom, 3))
+        gradient = np.array(mol.grads[self.active]).reshape((self.natom, 3))
+        odp = self._evaluate_odp(mol.get_system().reshape((self.natom, 3)))
+        if odp is not None:
+            gradient = gradient - odp['force']
+        return gradient
 
     def _state_overlap(self, istep=None):
         """Compute the phase-corrected state overlap S(i,j)=<i(t-dt)|j(t)>."""
@@ -764,6 +1593,7 @@ class NAMD:
         dt_right = float(self.dt)
 
         if self._ba_energy_center is None:
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
@@ -776,18 +1606,11 @@ class NAMD:
                 self.mol,
                 title='NACME check: Baeck-An history discontinuity; reseeding',
             )
+            self._reset_nacme_gate_evaluation()
             self._ba_energy_left = energies_old.copy()
             self._ba_energy_center = energies_current.copy()
             self._ba_tdc_left = tdc_current.copy()
             self._ba_dt_left = dt_right
-            self._ba_last = None
-            self._nacme_gate_last = None
-            self._nacme_candidate_tdc = None
-            self._nacme_reference_tdc = None
-            self._nacme_reference_mask = None
-            self._nacme_reference_source = 0
-            self._nacme_gate_failures = 0
-            self._pending_nacme_gate_error = None
             return
 
         ba_tdc = np.zeros((n, n), dtype=np.float64)
@@ -816,6 +1639,7 @@ class NAMD:
             reference_mask=ba_mask,
             source='TD-Baeck-An',
             center_step=center_step,
+            evaluation_step=istep,
             signed=False,
         )
         self._ba_last = {
@@ -844,9 +1668,20 @@ class NAMD:
         self._ba_tdc_left = tdc_current.copy()
         self._ba_dt_left = dt_right
 
+    def _reset_nacme_gate_evaluation(self):
+        """Clear streak and record state for a non-evaluable NACME interval."""
+        self._nacme_gate_failures = 0
+        self._nacme_gate_last = None
+        self._nacme_candidate_tdc = None
+        self._nacme_reference_tdc = None
+        self._nacme_reference_mask = None
+        self._nacme_reference_source = 0
+        self._pending_nacme_gate_error = None
+        self._ba_last = None
+
     def _run_nacme_gate(self, candidate_tdc, reference_tdc, *,
                         reference_mask=None, source='reference',
-                        center_step=None, signed=False):
+                        center_step=None, evaluation_step=None, signed=False):
         """Run the common resident-Fortran NACME validation gate.
 
         Future analytic NAC support should contract the phase-aligned analytic
@@ -883,29 +1718,38 @@ class NAMD:
             oqp.ffi.cast("double *", metrics.ctypes.data),
             oqp.ffi.cast("int64_t *", counts.ctypes.data),
         )
-        if status != 0:
-            raise RuntimeError(
-                f"native NACME validation gate failed for {source} (status={status})"
-            )
-
         compared_pairs = int(counts[0])
         invariant_failures = int(counts[1])
         reference_failures = int(counts[2])
-        if reference_failures:
-            self._nacme_gate_failures += 1
-        else:
-            self._nacme_gate_failures = 0
-        if compared_pairs == 0:
-            verdict = 'not_evaluable'
+        native_error = None
+        if status != 0:
+            # The native kernel uses -2/-3 for non-finite candidate/reference
+            # matrices. Preserve that fatal status, but populate the dense
+            # diagnostic state before enforcing it after trajectory output.
+            native_error = RuntimeError(
+                f"native NACME validation gate failed for {source} "
+                f"(status={status})"
+            )
+            metrics[:] = np.nan
+            invariant_failures = max(1, invariant_failures)
+            verdict = 'fail'
         elif invariant_failures or reference_failures:
             verdict = 'fail'
+        elif compared_pairs == 0:
+            verdict = 'not_evaluable'
         else:
             verdict = 'pass'
+        if status == 0 and reference_failures:
+            self._nacme_gate_failures += 1
+        elif status == 0:
+            self._nacme_gate_failures = 0
 
         result = {
             'source': source,
             'center_step': center_step,
+            'evaluation_step': evaluation_step,
             'signed_comparison': bool(signed),
+            'native_status': int(status),
             'verdict': verdict,
             'compared_pairs': compared_pairs,
             'invariant_failures': invariant_failures,
@@ -954,16 +1798,19 @@ class NAMD:
             section='text',
             info={'text': table},
         )
-        if self.nacme_gate == 'error':
+        error = native_error
+        if error is None and self.nacme_gate == 'error':
             if invariant_failures:
-                self._pending_nacme_gate_error = RuntimeError(
+                error = RuntimeError(
                     f"NACME invariant gate failed for {source} at step {center_step}"
                 )
             elif self._nacme_gate_failures >= self.nacme_gate_consecutive:
-                self._pending_nacme_gate_error = RuntimeError(
+                error = RuntimeError(
                     f"NACME reference gate failed {self._nacme_gate_failures} "
                     f"consecutive times for {source} at step {center_step}"
                 )
+        if error is not None and self._pending_nacme_gate_error is None:
+            self._pending_nacme_gate_error = error
         return result
 
     def _enforce_nacme_gate(self):
@@ -977,6 +1824,17 @@ class NAMD:
         """Audit microcanonical energy conservation for FSSH/ISC dynamics."""
         self._pending_nve_gate_error = None
         total = float(epot + ekin)
+        if getattr(self, 'ensemble', 'nve') != 'nve':
+            self._nve_gate_last = {
+                'step': int(istep), 'verdict': 'off',
+                'total_energy': total, 'drift': np.nan,
+                'step_change': np.nan,
+                'transition_energy_jump': float(transition_energy_jump),
+                'drift_rate': np.nan, 'drift_failure': False,
+                'step_failure': False, 'transition_failure': False,
+                'consecutive_failures': 0,
+            }
+            return self._nve_gate_last
         if not np.isfinite(total):
             drift = np.nan
             step_change = np.nan
@@ -1056,6 +1914,13 @@ class NAMD:
         if error is not None:
             raise error
 
+    def _enforce_nacme_gate(self):
+        """Stop only after the failing NACME matrices are in the dense TRJ."""
+        error = self._pending_nacme_gate_error
+        self._pending_nacme_gate_error = None
+        if error is not None:
+            raise error
+
     def _write_md_trajectory(self, istep, coordinates, epot, ekin, hopped):
         """Append one lossless, fixed-width record to the dense binary TRJ."""
         last_nve = getattr(self, '_nve_gate_last', None)
@@ -1082,23 +1947,57 @@ class NAMD:
             velocities = np.asarray(self.v_all, dtype=np.float64).reshape(coords.shape)
         else:
             velocities = np.asarray(self.vel, dtype=np.float64).reshape(coords.shape)
-        dtype = _namd_trajectory_dtype(self.nstate, len(coords))
+        ncv = self.odp.ncv if getattr(self, 'odp', None) is not None else 0
+        trajectory_nstate = int(np.asarray(self.coef).size)
+        dtype = _namd_trajectory_dtype(trajectory_nstate, len(coords), ncv)
         new_file = (not os.path.exists(self.trajectory_file)
                     or os.path.getsize(self.trajectory_file) == 0)
         if new_file:
+            temperature = self._initial_temperature_metadata()
+            ensemble = self._trajectory_ensemble_metadata()
             header = {
                 'schema_version': NAMD_TRAJECTORY_SCHEMA_VERSION,
-                'nstate': self.nstate,
+                'nstate': trajectory_nstate,
                 'natom': len(coords),
                 'representation': getattr(
-                    self, 'trajectory_representation', 'same-spin-adiabatic'),
+                    self, '_trajectory_representation',
+                    'same_spin_adiabatic'),
+                'ncv': ncv,
                 'record_bytes': dtype.itemsize,
                 'signature': self._restart_signature(),
+                'wham_system_identity': getattr(
+                    self, '_wham_system_identity', {'kind': 'unavailable'}),
+                'electronic_representation': getattr(
+                    self, '_trajectory_representation', 'same_spin_adiabatic'),
+                'ensemble': ensemble['ensemble'],
+                'ensemble_provenance': ensemble,
+                'initial_temperature_kelvin': temperature['measured_kelvin'],
+                'initial_temperature_degrees_of_freedom': temperature['dof'],
+                'requested_initial_temperature_kelvin': temperature[
+                    'requested_kelvin'],
+                'initial_velocity_source': temperature['velocity_source'],
+                'odp': self._odp_provenance(),
+                'wham': {
+                    'reaction_coordinate_field': 'odp_xi',
+                    'window_field': 'odp_window',
+                    'bias_field': 'odp_bias_hartree',
+                    'unbiased_potential_field': 'e_unbiased_pot_hartree',
+                    'energy_unit': 'hartree',
+                    'temperature_note': (
+                        'initial_temperature_kelvin is measured from the '
+                        'initial kinetic energy and stated degrees of freedom; '
+                        'requested_initial_temperature_kelvin is only a '
+                        'velocity-generation target, not an NVT thermostat '
+                        'temperature'),
+                },
                 'units': {
                     'time': 'fs', 'coordinates': 'bohr',
                     'velocities': 'bohr/atomic_time', 'energies': 'hartree',
-                    'tdc': 'atomic_time^-1',
+                    'tdc': 'atomic_time^-1', 'penetration': 'bohr',
+                    'restraint_force': 'hartree/bohr',
+                    'thermostat_exchange': 'hartree (positive into system)',
                 },
+                'independent_controls': self._independent_settings_record(),
                 'reference_source': {'0': 'none', '1': 'TD-Baeck-An',
                                      '2': 'analytic', '127': 'other'},
                 'gate_metrics': [
@@ -1140,21 +2039,35 @@ class NAMD:
                 self._require_unchanged_trajectory_prefix()
             header, existing = read_namd_trajectory(self.trajectory_file)
             del existing
-            if (int(header['nstate']) != self.nstate
+            if (int(header['nstate']) != trajectory_nstate
                     or int(header['natom']) != len(coords)
+                    or int(header.get('ncv', 0)) != ncv
                     or int(header['record_bytes']) != dtype.itemsize
                     or header.get('signature') != self._restart_signature()):
                 raise ValueError('NAMD trajectory schema/model mismatch on append')
 
         record = np.zeros(1, dtype=dtype)
         for field in (
-                'rng', 'e_pot_hartree', 'e_kin_hartree', 'e_tot_hartree',
+                'rng', 'e_unbiased_pot_hartree', 'e_pot_hartree',
+                'e_kin_hartree', 'e_tot_hartree',
+                'droplet_energy_hartree',
+                'droplet_max_penetration_bohr',
+                'solute_com_energy_hartree',
+                'solute_com_displacement_bohr',
+                'conservative_restraint_energy_hartree',
+                'thermostat_exchange_hartree',
+                'thermostat_exchange_cumulative_hartree',
+                'thermostat_adjusted_energy_hartree',
                 'state_energies', 'populations', 'coef_real', 'coef_imag',
                 'coordinates_bohr', 'velocities_au', 'state_overlap',
                 'state_overlap_imag', 'overlap_tdc_au',
                 'overlap_tdc_imag_au', 'gate_candidate_tdc_au',
                 'reference_tdc_au', 'gate_metrics',
                 'nve_metrics',
+                'odp_xi', 'odp_cv_raw', 'odp_cv_scaled',
+                'odp_cv_perpendicular', 'odp_perpendicular_norm',
+                'odp_bias_parallel_hartree',
+                'odp_bias_perpendicular_hartree', 'odp_bias_hartree',
                 'tracking_phase', 'tracking_phase_initial',
                 'tracking_previous_phase_initial', 'tracking_overlap',
                 'tracking_margin'):
@@ -1166,6 +2079,7 @@ class NAMD:
         record['gate_verdict'] = -1
         record['gate_streak'] = -1
         record['nve_verdict'] = -1
+        record['odp_window'] = -1
         gate = self._nacme_gate_last or {}
         time_fs = self._t_fs if self.dt_adaptive else istep*self.dt_fs
         record['step'] = istep
@@ -1173,34 +2087,89 @@ class NAMD:
         record['active'] = self.active
         record['hopped'] = int(bool(hopped))
         record['rng'] = self._last_hop_random
+        record['e_unbiased_pot_hartree'] = getattr(
+            self, '_unbiased_potential_energy', epot)
         record['e_pot_hartree'] = epot
         record['e_kin_hartree'] = ekin
         record['e_tot_hartree'] = epot + ekin
+        record['droplet_energy_hartree'] = getattr(
+            self, '_droplet_energy', 0.0)
+        record['droplet_max_penetration_bohr'] = getattr(
+            self, '_droplet_max_penetration', 0.0)
+        record['droplet_active_count'] = getattr(
+            self, '_droplet_active_count', 0)
+        record['solute_com_energy_hartree'] = getattr(
+            self, '_solute_com_energy', 0.0)
+        record['solute_com_displacement_bohr'] = getattr(
+            self, '_solute_com_displacement', 0.0)
+        record['conservative_restraint_energy_hartree'] = getattr(
+            self, '_conservative_restraint_energy', 0.0)
+        record['thermostat_exchange_hartree'] = getattr(
+            self, '_thermostat_exchange', 0.0)
+        record['thermostat_exchange_cumulative_hartree'] = getattr(
+            self, '_thermostat_exchange_cumulative', 0.0)
+        record['thermostat_adjusted_energy_hartree'] = (
+            epot + ekin - getattr(
+                self, '_thermostat_exchange_cumulative', 0.0))
+        droplet_force = getattr(self, '_droplet_force', None)
+        if droplet_force is not None and np.asarray(droplet_force).shape == coords.shape:
+            record['droplet_force_hartree_per_bohr'] = droplet_force
+        solute_force = getattr(self, '_solute_com_force', None)
+        if solute_force is not None and np.asarray(solute_force).shape == coords.shape:
+            record['solute_com_force_hartree_per_bohr'] = solute_force
         record['populations'] = np.abs(self.coef)**2
         record['coef_real'] = self.coef.real
         record['coef_imag'] = self.coef.imag
         record['coordinates_bohr'] = coords
         record['velocities_au'] = velocities
-        try:
-            energies = np.asarray(
-                self._trajectory_state_energies(), dtype=float).reshape(-1)
-            if energies.shape != (self.nstate,):
-                raise ValueError('trajectory energy vector has the wrong shape')
-            record['state_energies'] = energies
-        except (KeyError, TypeError, ValueError, AttributeError):
-            pass
-        if self._last_state_overlap is not None:
+        if getattr(self, 'odp', None) is not None:
+            if getattr(self, '_odp_last', None) is None:
+                raise RuntimeError('ODP trajectory record has no native evaluation')
+            record['odp_window'] = self.odp.window
+            record['odp_xi'] = self._odp_last['xi']
+            record['odp_cv_raw'] = self._odp_last['cv_raw']
+            record['odp_cv_scaled'] = self._odp_last['cv_scaled']
+            record['odp_cv_perpendicular'] = self._odp_last['cv_perpendicular']
+            record['odp_perpendicular_norm'] = self._odp_last['perpendicular_norm']
+            record['odp_bias_parallel_hartree'] = self._odp_last['energy_parallel']
+            record['odp_bias_perpendicular_hartree'] = (
+                self._odp_last['energy_perpendicular'])
+            record['odp_bias_hartree'] = self._odp_last['energy']
+        state_energies = getattr(self, '_trajectory_state_energies', None)
+        if callable(state_energies):
+            try:
+                state_energies = state_energies()
+            except (KeyError, TypeError, ValueError, AttributeError):
+                state_energies = None
+        if state_energies is None:
+            try:
+                state_energies = self.mol.data['OQP::td_energies']
+            except (KeyError, TypeError):
+                state_energies = None
+        if state_energies is not None:
+            values = np.asarray(state_energies, dtype=float).reshape(-1)
+            if values.size >= trajectory_nstate:
+                record['state_energies'] = values[:trajectory_nstate]
+        if (self._last_state_overlap is not None
+                and np.shape(self._last_state_overlap)
+                == (trajectory_nstate, trajectory_nstate)):
             overlap = np.asarray(self._last_state_overlap)
             record['state_overlap'] = overlap.real
             record['state_overlap_imag'] = overlap.imag
-        if self._last_overlap_tdc is not None:
+        if (self._last_overlap_tdc is not None
+                and np.shape(self._last_overlap_tdc)
+                == (trajectory_nstate, trajectory_nstate)):
             overlap_tdc = np.asarray(self._last_overlap_tdc)
             record['overlap_tdc_au'] = overlap_tdc.real
             record['overlap_tdc_imag_au'] = overlap_tdc.imag
         candidate_tdc = getattr(self, '_nacme_candidate_tdc', None)
-        if candidate_tdc is not None:
+        if (candidate_tdc is not None
+                and np.shape(candidate_tdc)
+                == (trajectory_nstate, trajectory_nstate)):
             record['gate_candidate_tdc_au'] = candidate_tdc
-        if self._nacme_reference_tdc is not None:
+        if (self._nacme_reference_tdc is not None
+                and np.shape(self._nacme_reference_tdc)
+                == (trajectory_nstate, trajectory_nstate)):
             record['reference_tdc_au'] = self._nacme_reference_tdc
             record['reference_mask'] = self._nacme_reference_mask
             record['reference_source'] = self._nacme_reference_source
@@ -1237,8 +2206,10 @@ class NAMD:
                 nve.get('drift_rate', np.nan),
             )
         tracking = self.mol.get_state_tracking()
-        tracking_size = self._tracking_state_count()
-        if tracking is not None and tracking_size == self.nstate:
+        if (tracking is not None
+                and all(np.asarray(tracking[name]).size == trajectory_nstate
+                        for name in ('order', 'phase_step', 'matched_overlap',
+                                     'margin'))):
             record['tracking_valid'] = 1
             record['tracking_order'] = np.asarray(tracking['order'], dtype=np.int64)
             record['tracking_raw_order'] = np.asarray(
@@ -1568,6 +2539,10 @@ class NAMD:
     def _restart_signature(self):
         cfg = self.mol.config
         md = cfg.get('md', {})
+        electronic_config = getattr(
+            self, '_electronic_config_identity', None)
+        if electronic_config is None:
+            electronic_config = _electronic_config_identity(cfg)
         scf_settings = dict(cfg.get('scf', {}))
         if 'init_basis' in scf_settings:
             scf_settings['init_basis'] = self._basis_definition_identity(
@@ -1610,6 +2585,7 @@ class NAMD:
             'tight_binding': self._tight_binding_identity(),
             'nstate': cfg['tdhf'].get('nstate', ''),
             'tlf': cfg['tdhf'].get('tlf', ''),
+            'electronic_config': electronic_config,
             'dt_fs': self.dt_fs, 'seed': self.seed,
             'rng_stream': self.rng_stream,
             'substep': md.get('substep', ''),
@@ -1622,8 +2598,15 @@ class NAMD:
                 key: md.get(key, '') for key in (
                     'soc', 'soc_basis', 'soc_du_dt_corr',
                     'soc_tdc_grad_corr', 'grad_wthr', 'init_state',
-                    'dt_adaptive', 'dt_min', 'dx_max')
+                    'dt_adaptive', 'dt_min', 'dx_max', 'econs')
             },
+            'soc': md.get('soc', ''), 'soc_basis': md.get('soc_basis', ''),
+            'trajectory_representation': getattr(
+                self, '_trajectory_representation', 'same_spin_adiabatic'),
+            'odp': self._odp_provenance(),
+            'system': getattr(
+                self, '_restart_system_identity', {'kind': 'unavailable'}),
+            'independent_controls': self._independent_settings_record(),
             'nac_align': cfg.get('nac', {}).get('align', ''),
             'gate_policy': {
                 key: md.get(key, '') for key in (
@@ -1650,9 +2633,9 @@ class NAMD:
         """Subclass hook for representation-specific checkpoint arrays."""
         return {}
 
-    def _load_restart_extra(self, saved):
+    def _load_restart_extra(self, saved, prev_data=None):
         """Subclass hook for validating representation-specific arrays."""
-        del saved
+        del saved, prev_data
         return {}
 
     def _restore_restart_extra(self, extra):
@@ -1822,6 +2805,27 @@ class NAMD:
             'rng_step': np.array([self._rng_step], dtype=np.int64),
             'gate_failures': np.array([self._nacme_gate_failures], dtype=np.int64),
             'nve_failures': np.array([self._nve_gate_failures], dtype=np.int64),
+            'independent_controls_json': np.array([
+                json.dumps(self._independent_settings_record(), sort_keys=True,
+                           separators=(',', ':'))
+            ]),
+            'droplet_energy': np.array([
+                getattr(self, '_droplet_energy', 0.0)], dtype=np.float64),
+            'droplet_max_penetration': np.array([
+                getattr(self, '_droplet_max_penetration', 0.0)],
+                dtype=np.float64),
+            'droplet_active_count': np.array([
+                getattr(self, '_droplet_active_count', 0)], dtype=np.int64),
+            'solute_com_energy': np.array([
+                getattr(self, '_solute_com_energy', 0.0)], dtype=np.float64),
+            'solute_com_displacement': np.array([
+                getattr(self, '_solute_com_displacement', 0.0)],
+                dtype=np.float64),
+            'thermostat_exchange': np.array([
+                getattr(self, '_thermostat_exchange', 0.0)], dtype=np.float64),
+            'thermostat_exchange_cumulative': np.array([
+                getattr(self, '_thermostat_exchange_cumulative', 0.0)],
+                dtype=np.float64),
             'coordinates': np.asarray(coordinates, dtype=np.float64),
             'velocities': np.asarray(velocities, dtype=np.float64),
             'acceleration': np.asarray(acceleration, dtype=np.float64),
@@ -1829,6 +2833,10 @@ class NAMD:
             'coef_imag': np.asarray(coef.imag, dtype=np.float64),
             'prev_xyz': np.asarray(prev_xyz, dtype=np.float64),
             'prev_keys': np.asarray(prev_keys, dtype=np.str_),
+            'odp_provenance': np.array([
+                json.dumps(self._odp_provenance(), sort_keys=True,
+                           separators=(',', ':'))
+            ]),
             'trajectory_prefix_bytes': np.array(
                 [trajectory_prefix['bytes']], dtype=np.int64),
             'trajectory_prefix_sha256': np.array(
@@ -1860,7 +2868,6 @@ class NAMD:
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
-
     def _rebase_restart_spec_paths(self, spec, source_dir):
         """Make input-owned paths stable when the manifest moves to log_dir."""
         from oqp.utils.oqp_input import CallSpec, CalculationSpec
@@ -1967,9 +2974,10 @@ class NAMD:
         """Write a directly runnable per-job restart manifest."""
         if getattr(self, '_restart_manifest_written', False):
             return
+        source = (getattr(self.mol, 'oqp_input_source', None)
+                  or getattr(self.mol, 'input_file', None))
         canonical = str(getattr(self.mol, 'oqp_canonical_input', '') or '').strip()
         if not canonical:
-            source = getattr(self.mol, 'oqp_input_source', None)
             if source and str(source).lower().endswith('.oqp') and os.path.isfile(source):
                 with open(source, 'r', encoding='utf-8') as stream:
                     canonical = stream.read().strip()
@@ -1984,20 +2992,25 @@ class NAMD:
                 self._manifest_notice_logged = True
             return
         from oqp.utils.oqp_input import (
-            CallSpec, CalculationSpec, parse_canonical_oqp, render_canonical_oqp,
+            CallSpec, CalculationSpec, parse_canonical_oqp,
+            rebase_calculation_paths, render_canonical_oqp,
         )
         spec = parse_canonical_oqp(canonical)
         if spec.driver.name != 'namd':
-            raise ValueError('cannot create restart.oqp from a non-NAMD request')
+            raise ValueError('cannot create a restart manifest from a non-NAMD request')
+        if source:
+            spec = rebase_calculation_paths(
+                spec, source_dir=os.path.dirname(os.path.abspath(source)))
         directory = os.path.dirname(self.restart_manifest_file) or '.'
-        source = (getattr(self.mol, 'oqp_input_source', None)
-                  or getattr(self.mol, 'input_file', None))
         source_dir = (os.path.dirname(os.path.abspath(source))
                       if source else os.getcwd())
         spec = self._rebase_restart_spec_paths(spec, source_dir)
         kwargs = dict(spec.driver.kwargs)
         kwargs.update({
             'restart': True,
+            # Freeze a date-derived default so restarting on a later day keeps
+            # exactly the original stochastic stream and signature.
+            'seed': self.seed,
             'restart_file': os.path.relpath(self.restart_file, directory),
             'trajectory_file': os.path.relpath(self.trajectory_file, directory),
         })
@@ -2039,6 +3052,10 @@ class NAMD:
         for name, value in payload['optional'].items():
             setattr(self, f'_{name}', value)
         self._restore_restart_extra(payload['extra'])
+        for name, value in payload['independent_state'].items():
+            setattr(self, f'_{name}', value)
+        self._conservative_restraint_energy = (
+            self._droplet_energy + self._solute_com_energy)
         self._reconcile_trajectory_with_restart(
             payload['step'], payload['trajectory_prefix'])
         dump_log(
@@ -2067,6 +3084,12 @@ class NAMD:
             signature = str(signature_array[0])
             if not self._restart_signature_matches(signature):
                 raise ValueError('NAMD restart electronic model/RNG/time-step mismatch')
+            odp_array = np.asarray(saved['odp_provenance'])
+            current_odp = json.dumps(
+                self._odp_provenance(), sort_keys=True, separators=(',', ':'))
+            if (odp_array.shape != (1,) or odp_array.dtype.kind not in 'SU'
+                    or str(odp_array[0]) != current_odp):
+                raise ValueError('NAMD restart ODP definition/metric mismatch')
             step = self._restart_integer(saved, 'step')
             active = self._restart_integer(saved, 'active', minimum=1)
             rng_step = self._restart_integer(saved, 'rng_step')
@@ -2131,7 +3154,30 @@ class NAMD:
                 optional[name] = value
             optional = self._validate_restart_histories(
                 optional, context='NAMD restart checkpoint')
-            extra = self._load_restart_extra(saved)
+            extra = self._load_restart_extra(saved, prev_data)
+            settings = np.asarray(saved['independent_controls_json'])
+            if (settings.shape != (1,) or settings.dtype.kind not in 'SU'
+                    or str(settings[0]) != json.dumps(
+                        self._independent_settings_record(), sort_keys=True,
+                        separators=(',', ':'))):
+                raise ValueError(
+                    'NAMD restart droplet/restraint/thermostat mismatch')
+            independent_state = {
+                'droplet_energy': self._restart_float(
+                    saved, 'droplet_energy', minimum=0.0),
+                'droplet_max_penetration': self._restart_float(
+                    saved, 'droplet_max_penetration', minimum=0.0),
+                'droplet_active_count': self._restart_integer(
+                    saved, 'droplet_active_count'),
+                'solute_com_energy': self._restart_float(
+                    saved, 'solute_com_energy', minimum=0.0),
+                'solute_com_displacement': self._restart_float(
+                    saved, 'solute_com_displacement', minimum=0.0),
+                'thermostat_exchange': self._restart_float(
+                    saved, 'thermostat_exchange'),
+                'thermostat_exchange_cumulative': self._restart_float(
+                    saved, 'thermostat_exchange_cumulative'),
+            }
             result = {
                 'step': step,
                 'coordinates': coordinates,
@@ -2151,6 +3197,7 @@ class NAMD:
                 },
                 'optional': optional,
                 'extra': extra,
+                'independent_state': independent_state,
             }
         return result
 
@@ -2235,7 +3282,8 @@ class NAMD:
             raise ValueError('restart trajectory and checkpoint model mismatch')
         try:
             dtype = _namd_trajectory_dtype(
-                int(header['nstate']), int(header['natom']))
+                int(header['nstate']), int(header['natom']),
+                int(header.get('ncv', 0)))
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(
                 'restart trajectory has invalid dimensions') from error
@@ -2426,7 +3474,9 @@ class NAMD:
             r = mol.get_system().reshape((self.natom, 3))   # bohr
             # initial electronic structure + force on the active state
             self._electronic(with_overlap=False)
-            accel = -self._active_gradient() / self.mass[:, None]
+            restraint_force, _ = self._evaluate_conservative_restraints(
+                r, self.mass)
+            accel = (-self._active_gradient() + restraint_force) / self.mass[:, None]
             self._record_previous(r)
             self._log_step(0, r)
             self._save_restart(0, r, self.vel, accel)
@@ -2445,7 +3495,9 @@ class NAMD:
 
             # electronic structure at the new geometry (with overlap vs previous)
             self._electronic(with_overlap=True)
-            accel_new = -self._active_gradient() / self.mass[:, None]
+            restraint_force, _ = self._evaluate_conservative_restraints(
+                r, self.mass)
+            accel_new = (-self._active_gradient() + restraint_force) / self.mass[:, None]
 
             # velocity-Verlet velocity update
             self.vel = self.vel + 0.5 * (accel + accel_new) * self.dt
@@ -2453,11 +3505,18 @@ class NAMD:
             # state overlap (couplings) and FSSH hop
             self._state_overlap(istep)
             active_old = self.active
+            odp = self._evaluate_odp(r)
+            bias_energy = 0.0 if odp is None else odp['energy']
             energy_before_transition = (
                 0.5*np.sum(self.mass[:, None]*self.vel**2)
                 + float(np.asarray(mol.energies)[active_old])
+                + bias_energy
+                + self._conservative_restraint_energy
             )
-            if self._prepare_hop_step(istep):
+            hop_ready = self._prepare_hop_step(istep)
+            if getattr(self, '_pending_nacme_gate_error', None) is not None:
+                new_active, hopped = self.active, False
+            elif hop_ready:
                 new_active, hopped = self._hop()
             else:
                 new_active, hopped = self.active, False
@@ -2468,16 +3527,22 @@ class NAMD:
                 # force for the next step is on the new active surface. This
                 # also covers trivial-crossing following, where the Fortran
                 # kernel can update ACTIVE without marking HOPPED.
-                accel_new = -self._active_gradient() / self.mass[:, None]
+                accel_new = (
+                    -self._active_gradient() +
+                    self._conservative_restraint_force
+                ) / self.mass[:, None]
                 energy_after_transition = (
                     0.5*np.sum(self.mass[:, None]*self.vel**2)
                     + float(np.asarray(mol.energies)[self.active])
+                    + bias_energy
+                    + self._conservative_restraint_energy
                 )
                 transition_energy_jump = (
                     energy_after_transition - energy_before_transition)
             else:
                 transition_energy_jump = np.nan
 
+            self._apply_thermostat(istep)
             accel = accel_new
             self._record_previous(r)
             self._log_step(
@@ -2498,14 +3563,28 @@ class NAMD:
         mol = self.mol
         e = np.array(mol.energies)
         ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
-        epot = float(e[self.active])
+        self._unbiased_potential_energy = float(e[self.active])
+        odp = self._evaluate_odp(r)
+        electronic_epot = self._unbiased_potential_energy
+        epot = (electronic_epot
+                + (0.0 if odp is None else odp['energy'])
+                + getattr(self, '_conservative_restraint_energy', 0.0))
         pops = np.abs(self.coef) ** 2
         self._update_nve_gate(istep, epot, ekin, transition_energy_jump)
         dump_log(
             mol,
             title=(f'NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
-                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'E_pot={epot:.8f}  E_elec={electronic_epot:.8f}  '
+                   f'U_ODP={(0.0 if odp is None else odp["energy"]):.8f}  '
+                   f'E_drop={getattr(self, "_droplet_energy", 0.0):.8f}  '
+                   f'drop_max={getattr(self, "_droplet_max_penetration", 0.0):.5f}bohr  '
+                   f'drop_n={getattr(self, "_droplet_active_count", 0)}  '
+                   f'drop_fmax={getattr(self, "_droplet_force_max", 0.0):.3e}Ha/bohr  '
+                   f'E_com={getattr(self, "_solute_com_energy", 0.0):.8f}  '
+                   f'E_kin={ekin:.8f}  '
+                   f'dQ_therm={getattr(self, "_thermostat_exchange", 0.0):+.3e}  '
+                   f'Q_therm={getattr(self, "_thermostat_exchange_cumulative", 0.0):+.3e}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
@@ -2562,9 +3641,13 @@ class NAMD_QMMM(NAMD):
         pdb_file = self._resolve_qmmm_aux_file(q['pdb_file'])
         ff_files = [self._resolve_qmmm_aux_file(s) for s in
                     str(q['forcefield_files']).replace(',', ' ').split() if s]
+        self._qmmm_pdb_file = pdb_file
+        self._qmmm_forcefield_files = ff_files
+        self._qmmm_restart_identity_cache = None
         self.qm_atoms = np.array(_parse_int_list(q['qm_atoms']), dtype=int)
         self.cutoff = _resolve_cutoff(str(q['cutoff']).strip())   # NoCutoff | PME | Ewald | ...
         self.periodic = self.cutoff is not app.NoCutoff
+        _validate_odp_boundary_conditions(self.odp, self.periodic)
         embedding = str(q['embedding']).strip()
         frontier_scheme = str(q.get('frontier_scheme', 'none')).strip()
 
@@ -2584,18 +3667,26 @@ class NAMD_QMMM(NAMD):
 
         # full-system state (atomic units)
         self.natom_all = self.pdb.topology.getNumAtoms()
+        if self.odp is not None:
+            self.odp.validate_atom_count(self.natom_all)
         pos_nm = np.array(self.pdb.positions.value_in_unit(u.nanometer))
         self.r_all = pos_nm * NM_TO_BOHR                       # (natom_all, 3) bohr
         sys0 = self.mm["sys0"]
         self.m_all = np.array([
             sys0.getParticleMass(i).value_in_unit(u.dalton) for i in range(self.natom_all)
         ]) * AMU_TO_AU                                          # electron masses
+        self._restart_system_identity = self._qmmm_restart_system_identity(
+            sys0, q)
+        self._wham_system_identity = self._qmmm_wham_system_identity(sys0, q)
 
         # full-system Maxwell-Boltzmann velocities (a.u.), COM removed
-        sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
-        self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
-        p = (self.m_all[:, None] * self.v_all).sum(axis=0)
-        self.v_all -= p / self.m_all.sum()
+        if self.restart_requested:
+            self.v_all = np.zeros((self.natom_all, 3))
+        else:
+            sig = np.sqrt(KB_HARTREE * self.init_temp / self.m_all)
+            self.v_all = self._counter_normals((self.natom_all, 3)) * sig[:, None]
+            p = (self.m_all[:, None] * self.v_all).sum(axis=0)
+            self.v_all -= p / self.m_all.sum()
 
         # sync the QM Molecule geometry from the pdb QM atoms
         self._sync_positions()
@@ -2603,6 +3694,90 @@ class NAMD_QMMM(NAMD):
         self.qm_mass = self.mass.copy()
         # rigid-water (SHAKE/RATTLE) constraints for the MM region
         self._build_constraints()
+        self._setup_qmmm_restraint_targets()
+
+    # ------------------------------------------------------------------ #
+    def _qmmm_restart_system_identity(self, system, qmmm_config):
+        """Bind QM/MM restarts to atoms, topology, selection, and force field."""
+        atoms = list(self.pdb.topology.atoms())
+        atomic_numbers = [
+            0 if atom.element is None else atom.element.atomic_number
+            for atom in atoms
+        ]
+        atom_metadata = [
+            (atom.name, atom.residue.name, atom.residue.index,
+             atom.residue.chain.id)
+            for atom in atoms
+        ]
+        bonds = np.asarray(sorted(
+            (min(atom1.index, atom2.index), max(atom1.index, atom2.index))
+            for atom1, atom2 in self.pdb.topology.bonds()
+        ), dtype='<i8').reshape((-1, 2))
+        system_xml = self._mm.XmlSerializer.serialize(system)
+        digest = _restart_identity_digest(
+            array_parts=(
+                ('atomic_numbers', atomic_numbers, '<i8'),
+                ('masses_electron', self.m_all, '<f8'),
+                ('initial_coordinates_bohr', self.r_all, '<f8'),
+                ('qm_atoms', self.qm_atoms, '<i8'),
+                ('bonds', bonds, '<i8'),
+            ),
+            text_parts=(
+                ('atom_metadata', json.dumps(
+                    atom_metadata, separators=(',', ':'))),
+                ('qmmm_config', json.dumps(
+                    qmmm_config, sort_keys=True, separators=(',', ':'),
+                    default=str)),
+                ('openmm_system', system_xml),
+            ),
+        )
+        return {
+            'kind': 'qmmm', 'natom': int(self.natom_all),
+            'nqm': int(len(self.qm_atoms)), 'sha256': digest,
+        }
+
+    def _qmmm_wham_system_identity(self, system, qmmm_config):
+        """Hash QM/MM topology and Hamiltonian without initial coordinates."""
+        atoms = list(self.pdb.topology.atoms())
+        atomic_numbers = [
+            0 if atom.element is None else atom.element.atomic_number
+            for atom in atoms
+        ]
+        atom_metadata = [
+            (atom.name, atom.residue.name, atom.residue.index,
+             atom.residue.chain.id)
+            for atom in atoms
+        ]
+        bonds = np.asarray(sorted(
+            (min(atom1.index, atom2.index), max(atom1.index, atom2.index))
+            for atom1, atom2 in self.pdb.topology.bonds()
+        ), dtype='<i8').reshape((-1, 2))
+        hamiltonian_options = {
+            key: qmmm_config.get(key)
+            for key in ('embedding', 'frontier_scheme', 'cutoff',
+                        'nonbondedmethod')
+            if key in qmmm_config
+        }
+        digest = _restart_identity_digest(
+            array_parts=(
+                ('atomic_numbers', atomic_numbers, '<i8'),
+                ('masses_electron', self.m_all, '<f8'),
+                ('qm_atoms', self.qm_atoms, '<i8'),
+                ('bonds', bonds, '<i8'),
+            ),
+            text_parts=(
+                ('atom_metadata', json.dumps(
+                    atom_metadata, separators=(',', ':'))),
+                ('qmmm_hamiltonian', json.dumps(
+                    hamiltonian_options, sort_keys=True, separators=(',', ':'),
+                    default=str)),
+                ('openmm_system', self._mm.XmlSerializer.serialize(system)),
+            ),
+        )
+        return {
+            'kind': 'qmmm', 'natom': int(self.natom_all),
+            'nqm': int(len(self.qm_atoms)), 'sha256': digest,
+        }
 
     # ------------------------------------------------------------------ #
     def _build_constraints(self):
@@ -2683,6 +3858,20 @@ class NAMD_QMMM(NAMD):
             dv = k[:, None] * rij
             np.add.at(v, ci, -inv[ci][:, None] * dv)
             np.add.at(v, cj,  inv[cj][:, None] * dv)
+
+    def _apply_thermostat(self, istep):
+        """Thermostat the full QM/MM system and report constrained dK."""
+        self._thermostat_exchange = 0.0
+        if self.thermostat == 'off':
+            return
+        kinetic_before = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+        self.v_all, _ = self._langevin_update(
+            self.v_all, self.m_all, istep)
+        self._rattle(self.r_all, self.v_all)
+        kinetic_after = 0.5*np.sum(self.m_all[:, None]*self.v_all**2)
+        self._thermostat_exchange = float(kinetic_after - kinetic_before)
+        self._thermostat_exchange_cumulative += self._thermostat_exchange
+        self.vel = self.v_all[self.qm_atoms].copy()
 
     # ------------------------------------------------------------------ #
     def _sync_positions(self):
@@ -2837,7 +4026,8 @@ class NAMD_QMMM(NAMD):
         pchg = np.array(mol.data["OQP::partial_charges"])
 
         if getattr(self.driver, "espf_full", False):
-            return self._total_force_espf(potmm, gqm, pchg)
+            force, epot = self._total_force_espf(potmm, gqm, pchg)
+            return self._apply_odp_to_force_energy(force, epot)
 
         # MM forces with embedded QM charges (OpenMM units)
         emm_q, gmm_q = self.driver.forces_mm(pchg)
@@ -2864,7 +4054,15 @@ class NAMD_QMMM(NAMD):
         znuc = np.array(mol.get_atoms2("charge"))
         eqm -= np.dot(pchg - znuc, potmm)
         epot = eqm + emm
-        return f_all, epot
+        return self._apply_odp_to_force_energy(f_all, epot)
+
+    def _apply_odp_to_force_energy(self, force, epot):
+        """Add the conservative native ODP term to a full QM/MM force."""
+        self._unbiased_potential_energy = float(epot)
+        odp = self._evaluate_odp(self.r_all)
+        if odp is None:
+            return force, float(epot)
+        return force + odp['force'], float(epot) + odp['energy']
 
     def _total_force_espf(self, potmm, gqm, pchg):
         """Full-ESPF force/energy assembly (mirrors OpenQpQMMM._assemble_force_espf,
@@ -2926,6 +4124,10 @@ class NAMD_QMMM(NAMD):
             self._sync_positions()
             potmm0, _ = self._electronic_qmmm(with_overlap=False)
             f_all, epot = self._total_force(potmm0)
+            restraint_force, restraint_energy = self._evaluate_conservative_restraints(
+                self.r_all, self.m_all)
+            f_all = f_all + restraint_force
+            epot = epot + restraint_energy
             accel = f_all / self.m_all[:, None]
             self._rattle(self.r_all, self.v_all)      # constrained velocities
             self._thermalize_initial()
@@ -2953,6 +4155,10 @@ class NAMD_QMMM(NAMD):
             # embedded electronic structure at the new geometry
             potmm, _ = self._electronic_qmmm(with_overlap=True)
             f_all, epot = self._total_force(potmm)
+            restraint_force, restraint_energy = self._evaluate_conservative_restraints(
+                self.r_all, self.m_all)
+            f_all = f_all + restraint_force
+            epot = epot + restraint_energy
             accel_new = f_all / self.m_all[:, None]
 
             # velocity-Verlet velocity update (all atoms) + RATTLE (rigid MM water)
@@ -2965,7 +4171,10 @@ class NAMD_QMMM(NAMD):
             active_old = self.active
             energy_before_transition = (
                 0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
-            if self._prepare_hop_step(istep):
+            hop_ready = self._prepare_hop_step(istep)
+            if getattr(self, '_pending_nacme_gate_error', None) is not None:
+                new_active, hopped = self.active, False
+            elif hop_ready:
                 new_active, hopped = self._hop()
             else:
                 new_active, hopped = self.active, False
@@ -2974,6 +4183,8 @@ class NAMD_QMMM(NAMD):
             if active_changed:
                 self.active = new_active
                 f_all, epot = self._total_force(potmm)
+                f_all, epot = self._add_last_conservative_restraints(
+                    f_all, epot)
                 accel_new = f_all / self.m_all[:, None]
                 energy_after_transition = (
                     0.5*np.sum(self.m_all[:, None]*self.v_all**2) + epot)
@@ -2982,6 +4193,7 @@ class NAMD_QMMM(NAMD):
             else:
                 transition_energy_jump = np.nan
 
+            self._apply_thermostat(istep)
             accel = accel_new
             self.prev_xyz = copy.deepcopy(self.r_all[self.qm_atoms].reshape(-1))
             self.prev_data = copy.deepcopy(mol.get_data())
@@ -3001,7 +4213,16 @@ class NAMD_QMMM(NAMD):
             self.mol,
             title=(f'QMMM-NAMD step {istep:6d}  t={(self._t_fs if self.dt_adaptive else istep*self.dt_fs):9.3f} fs  '
                    f'active={self.active}  E_tot={ekin+epot:.8f}  '
-                   f'E_pot={epot:.8f}  E_kin={ekin:.8f}  '
+                   f'E_pot={epot:.8f}  '
+                   f'U_ODP={(0.0 if self._odp_last is None else self._odp_last["energy"]):.8f}  '
+                   f'E_drop={getattr(self, "_droplet_energy", 0.0):.8f}  '
+                   f'drop_max={getattr(self, "_droplet_max_penetration", 0.0):.5f}bohr  '
+                   f'drop_n={getattr(self, "_droplet_active_count", 0)}  '
+                   f'drop_fmax={getattr(self, "_droplet_force_max", 0.0):.3e}Ha/bohr  '
+                   f'E_com={getattr(self, "_solute_com_energy", 0.0):.8f}  '
+                   f'E_kin={ekin:.8f}  '
+                   f'dQ_therm={getattr(self, "_thermostat_exchange", 0.0):+.3e}  '
+                   f'Q_therm={getattr(self, "_thermostat_exchange_cumulative", 0.0):+.3e}  '
                    f'hop={hopped}  {self._hop_rng_log()}  '
                    f'pop={np.array2string(pops, precision=4)}'),
         )
@@ -3042,7 +4263,7 @@ class NAMD_SOC(NAMD):
         # Generic trajectory/restart machinery follows the propagated SOC
         # basis, rather than one spatial MRSF spin manifold.
         self.nstate = self.nstate_soc
-        self.trajectory_representation = 'soc-spin-adiabatic'
+        self._trajectory_representation = 'soc_adiabatic'
         # active spin-adiabatic state (1-based); [md] active is reused
         self.active = int(mol.config['md']['active'])
         # electronic amplitudes over the spin-adiabatic states
@@ -3095,6 +4316,16 @@ class NAMD_SOC(NAMD):
         if (required['soc_prev_sbvec'].size == 0
                 or required['soc_prev_tbvec'].size == 0):
             raise RuntimeError('empty SOC response-vector history at checkpoint')
+        current_vectors = {
+            'soc_prev_sbvec': np.asarray(self.sbvec),
+            'soc_prev_tbvec': np.asarray(self.tbvec),
+        }
+        for name, current in current_vectors.items():
+            previous = required[name]
+            if previous.shape != current.shape or previous.dtype != current.dtype:
+                raise RuntimeError(
+                    f'{name} does not match the current TD response-vector '
+                    'shape and dtype at checkpoint')
         for name, value in required.items():
             if value.dtype.kind in 'fc' and not np.all(np.isfinite(value)):
                 raise RuntimeError(f'non-finite {name} at checkpoint')
@@ -3106,7 +4337,7 @@ class NAMD_SOC(NAMD):
             'soc_prev_tbvec': required['soc_prev_tbvec'],
         }
 
-    def _load_restart_extra(self, saved):
+    def _load_restart_extra(self, saved, prev_data=None):
         """Validate SOC gauge/history arrays before exposing a checkpoint."""
         names = (
             'soc_prev_u_real', 'soc_prev_u_imag', 'soc_prev_eval',
@@ -3125,8 +4356,25 @@ class NAMD_SOC(NAMD):
             raise RuntimeError('SOC restart checkpoint has invalid eigenvectors')
         if prev_eval.shape != (n,):
             raise RuntimeError('SOC restart checkpoint has invalid energies')
-        if sbvec.size == 0 or tbvec.size == 0:
-            raise RuntimeError('SOC restart checkpoint has empty response vectors')
+        response_tags = {
+            'singlet': (sbvec, 'OQP::td_bvec_mo_s'),
+            'triplet': (tbvec, 'OQP::td_bvec_mo_t'),
+        }
+        if not isinstance(prev_data, dict):
+            raise RuntimeError(
+                'SOC restart checkpoint lacks TD response-vector metadata')
+        for label, (saved_vector, tag) in response_tags.items():
+            if tag not in prev_data:
+                raise RuntimeError(
+                    f'SOC restart checkpoint lacks {label} TD dimensions')
+            expected = np.asarray(prev_data[tag])
+            if (saved_vector.size == 0
+                    or saved_vector.shape != expected.shape
+                    or saved_vector.dtype != expected.dtype
+                    or saved_vector.dtype.kind not in 'fc'):
+                raise RuntimeError(
+                    f'SOC restart checkpoint has incompatible {label} '
+                    'response-vector shape or dtype')
         for value in (u_real, u_imag, prev_eval, sbvec, tbvec):
             if value.dtype.kind in 'fc' and not np.all(np.isfinite(value)):
                 raise RuntimeError('SOC restart checkpoint has non-finite history')
@@ -3366,6 +4614,8 @@ class NAMD_SOC(NAMD):
             fsum = flux.sum()
             if fsum > 1e-30:
                 cmhp = (dp / rho_a) * flux / fsum
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         # energy-based decoherence correction (Granucci-Persico)
         if self.decoherence == 1:
@@ -3692,6 +4942,9 @@ class NAMD_SOC(NAMD):
                    f'dom=({self._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(e_pure)
+        self._trajectory_state_energies = np.asarray(
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(istep, self.mol.get_system().reshape(
             (self.natom, 3)), e_pure, ekin, hopped)
         self._enforce_nve_gate()
@@ -3708,7 +4961,7 @@ class NAMD_SOC_MCH(NAMD_SOC):
 
     def __init__(self, mol):
         super().__init__(mol)
-        self.trajectory_representation = 'soc-mch'
+        self._trajectory_representation = 'soc_mch'
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
 
@@ -3778,6 +5031,8 @@ class NAMD_SOC_MCH(NAMD_SOC):
                 # population through channel a->j becomes a hop probability.
                 loss = 2.0 * np.real(1j * c_old[a].conj() * h_mch[a, j] * c_old[j])
                 cmhp[j] = max(0.0, dt * loss / rho_a)
+        self._last_hop_probabilities = np.zeros((n, n), dtype=float)
+        self._last_hop_probabilities[a, :] = cmhp
 
         if self.decoherence == 1:
             ekin = 0.5 * np.sum(self.mass[:, None] * self.vel ** 2)
@@ -3910,6 +5165,9 @@ class NAMD_SOC_MCH(NAMD_SOC):
                    f'{self._hop_rng_log()}  '
                    f'grad={self._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(e_pure)
+        self._trajectory_state_energies = np.asarray(
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(istep, self.mol.get_system().reshape(
             (self.natom, 3)), e_pure, ekin, hopped)
         self._enforce_nve_gate()
@@ -3958,7 +5216,7 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
         self.nt = self.nstate_mrsf
         self.nstate_soc = self.ns + 3 * self.nt
         self.nstate = self.nstate_soc
-        self.trajectory_representation = 'soc-spin-adiabatic-qmmm'
+        self._trajectory_representation = 'soc_adiabatic'
         self.active = int(mol.config['md']['active'])
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
@@ -4265,6 +5523,9 @@ class NAMD_SOC_QMMM(NAMD_QMMM):
                    f'dom=({NAMD_SOC._mch_label(mult, state)},w={w:.3f})  '
                    f'pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(epot)
+        self._trajectory_state_energies = np.asarray(
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
         self._enforce_nve_gate()
@@ -4280,7 +5541,7 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
 
     def __init__(self, mol):
         super().__init__(mol)
-        self.trajectory_representation = 'soc-mch-qmmm'
+        self._trajectory_representation = 'soc_mch'
         self.coef = np.zeros(self.nstate_soc, dtype=complex)
         self.coef[self.active - 1] = 1.0 + 0.0j
 
@@ -4415,6 +5676,9 @@ class NAMD_SOC_MCH_QMMM(NAMD_SOC_QMMM):
                    f'{self._hop_rng_log()}  '
                    f'grad={NAMD_SOC._mch_label(mult, state)}  pop[S]={pop_s:.4f} pop[T]={pop_t:.4f}'),
         )
+        self._unbiased_potential_energy = float(epot)
+        self._trajectory_state_energies = np.asarray(
+            self._trajectory_energies, dtype=float).reshape(-1)
         self._write_md_trajectory(
             istep, self.r_all, epot, ekin, hopped)
         self._enforce_nve_gate()

@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -161,11 +162,14 @@ def load_namd_with_stubs():
     setattr(tb_backends, "is_tb_method", lambda *_args, **_kwargs: False)
     setattr(tb_backends, "make_tb_adapter", lambda *_args, **_kwargs: None)
     setattr(tb_backends, "tb_section_name", lambda *_args, **_kwargs: "dftb")
+    odp = types.ModuleType("oqp.library.odp")
+    setattr(odp, "odp_from_config", lambda *_args, **_kwargs: None)
 
     modules = {
         "oqp": oqp,
         "oqp.library": library,
         "oqp.library.nac_utils": nac_utils,
+        "oqp.library.odp": odp,
         "oqp.library.single_point": single_point,
         "oqp.utils": utils,
         "oqp.utils.file_utils": file_utils,
@@ -249,6 +253,52 @@ class DummyMol:
 
 
 class SOCNAMDQMMMProductionTests(unittest.TestCase):
+    def test_rank_zero_io_failure_is_broadcast_to_every_mpi_rank(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            root = namd.NAMD.__new__(namd.NAMD)
+
+            class RootManager:
+                rank = 0
+                use_mpi = 1
+
+                @staticmethod
+                def bcast(value, root=0, barrier=True):
+                    self.assertEqual(root, 0)
+                    self.assertTrue(barrier)
+                    return value
+
+            root.mol = types.SimpleNamespace(mpi_manager=RootManager())
+            with self.assertRaisesRegex(OSError, "disk full"):
+                root._run_io_collective(
+                    lambda: (_ for _ in ()).throw(OSError("disk full")))
+
+            follower = namd.NAMD.__new__(namd.NAMD)
+
+            class FollowerManager:
+                rank = 1
+                use_mpi = 1
+
+                @staticmethod
+                def bcast(value, root=0, barrier=True):
+                    self.assertIsNone(value)
+                    self.assertEqual(root, 0)
+                    self.assertTrue(barrier)
+                    return (False, "OSError", "disk full")
+
+            follower.mol = types.SimpleNamespace(mpi_manager=FollowerManager())
+            action_called = False
+
+            def unexpected_action():
+                nonlocal action_called
+                action_called = True
+
+            with self.assertRaisesRegex(OSError, "disk full"):
+                follower._run_io_collective(unexpected_action)
+            self.assertFalse(action_called)
+        finally:
+            cleanup()
+
     def test_soc_basis_mch_dispatches_to_mch_qmmm_class(self):
         runfunc, calls, cleanup = load_runfunc_with_namd_stubs()
         try:
@@ -409,9 +459,15 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             driver.prev_eval = np.array([0.0, 0.01, 0.02, 0.03])
             driver.prev_sbvec = np.arange(6.0).reshape(2, 3)
             driver.prev_tbvec = np.arange(6.0, 12.0).reshape(2, 3)
+            driver.sbvec = driver.prev_sbvec.copy()
+            driver.tbvec = driver.prev_tbvec.copy()
+            prev_data = {
+                'OQP::td_bvec_mo_s': driver.prev_sbvec.copy(),
+                'OQP::td_bvec_mo_t': driver.prev_tbvec.copy(),
+            }
 
             payload = driver._restart_extra_payload()
-            restored = driver._load_restart_extra(payload)
+            restored = driver._load_restart_extra(payload, prev_data)
             target = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
             target._restore_restart_extra(restored)
 
@@ -423,7 +479,18 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             broken = dict(payload)
             broken['soc_prev_u_real'] = np.ones((4, 4))
             with self.assertRaisesRegex(RuntimeError, "not unitary"):
-                driver._load_restart_extra(broken)
+                driver._load_restart_extra(broken, prev_data)
+
+            wrong_shape = dict(payload)
+            wrong_shape['soc_prev_sbvec'] = np.ones((3, 2))
+            with self.assertRaisesRegex(RuntimeError, "singlet.*shape or dtype"):
+                driver._load_restart_extra(wrong_shape, prev_data)
+
+            wrong_dtype = dict(payload)
+            wrong_dtype['soc_prev_tbvec'] = np.asarray(
+                payload['soc_prev_tbvec'], dtype=np.float32)
+            with self.assertRaisesRegex(RuntimeError, "triplet.*shape or dtype"):
+                driver._load_restart_extra(wrong_dtype, prev_data)
         finally:
             cleanup()
 
@@ -459,8 +526,8 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
             dtype = namd._namd_trajectory_dtype(4, 3)
             self.assertIn('state_overlap_imag', dtype.names)
             self.assertIn('overlap_tdc_imag_au', dtype.names)
-            self.assertEqual(namd.NAMD_TRAJECTORY_SCHEMA_VERSION, 6)
-            self.assertEqual(namd.NAMD_RESTART_SCHEMA_VERSION, 7)
+            self.assertEqual(namd.NAMD_TRAJECTORY_SCHEMA_VERSION, 7)
+            self.assertEqual(namd.NAMD_RESTART_SCHEMA_VERSION, 8)
         finally:
             cleanup()
 
@@ -528,6 +595,182 @@ class SOCNAMDQMMMProductionTests(unittest.TestCase):
         self.assertIn("seed must fit in a signed 64-bit integer", src)
         self.assertIn("rng_stream must be a non-negative signed 64-bit integer", src)
         self.assertIn("first_hop_step must be at least 1", src)
+
+    def test_gate_tolerances_reject_nan_inf_and_negative_values(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            namd._validate_gate_tolerances("NVE", (0.0, 1.0e-6, 2.0))
+            for invalid in (np.nan, np.inf, -np.inf, -1.0e-6):
+                with self.assertRaisesRegex(ValueError, "finite and non-negative"):
+                    namd._validate_gate_tolerances("NVE", (0.0, invalid, 1.0))
+        finally:
+            cleanup()
+
+    def test_restart_skips_fresh_velocity_source_initialization(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            driver = namd.NAMD.__new__(namd.NAMD)
+            driver.restart_requested = True
+            driver.natom = 2
+            driver.velocity_source = "/missing/or/moved/velocity.dat"
+            np.testing.assert_array_equal(
+                driver._init_velocities(), np.zeros((2, 3)))
+
+            driver.restart_requested = False
+            with self.assertRaisesRegex(ValueError, "not zero/maxwell"):
+                driver._init_velocities()
+        finally:
+            cleanup()
+
+    def test_restart_manifests_are_job_specific(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                first = namd._restart_manifest_path(
+                    str(Path(tmpdir) / "window-01.log"))
+                second = namd._restart_manifest_path(
+                    str(Path(tmpdir) / "window-02.log"))
+                self.assertEqual(
+                    first, str(Path(tmpdir) / "window-01.namd.restart.oqp"))
+                self.assertEqual(
+                    second, str(Path(tmpdir) / "window-02.namd.restart.oqp"))
+                self.assertNotEqual(first, second)
+        finally:
+            cleanup()
+
+    def test_periodic_odp_is_rejected_until_minimum_images_exist(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            self.assertIsNone(
+                namd._validate_odp_boundary_conditions(object(), False))
+            with self.assertRaisesRegex(NotImplementedError, "minimum-image"):
+                namd._validate_odp_boundary_conditions(object(), True)
+            src = NAMD.read_text()
+            self.assertIn(
+                "_validate_odp_boundary_conditions(self.odp, self.periodic)",
+                src,
+            )
+        finally:
+            cleanup()
+
+    def test_soc_nve_gate_and_restart_are_enabled(self):
+        src = NAMD.read_text()
+
+        self.assertNotIn("nve_gate currently supports same-spin NAMD only", src)
+        self.assertNotIn("restart currently supports same-spin NAMD only", src)
+        self.assertIn("'dt_adaptive', 'dt_min', 'dx_max', 'econs'", src)
+
+    def test_soc_dense_trajectory_uses_full_electronic_state_space(self):
+        namd, _logs, cleanup = load_namd_with_stubs()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                mol = types.SimpleNamespace(
+                    config={
+                        "input": {
+                            "method": "tdhf", "functional": "bhhlyp",
+                            "basis": "sto-3g", "charge": 0,
+                        },
+                        "scf": {"type": "rohf", "multiplicity": 3},
+                        "tdhf": {
+                            "type": "mrsf", "multiplicity": 3,
+                            "nstate": 1, "tlf": 2,
+                        },
+                        "md": {
+                            "soc": True, "soc_basis": "adiabatic",
+                            "econs": False,
+                        },
+                    },
+                    data={"OQP::td_energies": np.array([-1.0])},
+                    get_state_tracking=lambda: {
+                        "order": [0], "phase_step": [1.0],
+                        "matched_overlap": [1.0], "margin": [1.0],
+                    },
+                )
+                driver = namd.NAMD_SOC.__new__(namd.NAMD_SOC)
+                driver.mol = mol
+                driver.nstate = 1
+                driver.coef = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
+                driver._trajectory_state_energies = np.array(
+                    [-1.0, -0.9, -0.9, -0.9])
+                driver._trajectory_representation = "soc_adiabatic"
+                driver.econs = True
+                driver._restart_system_identity = {
+                    "kind": "test", "sha256": "soc-system",
+                }
+                driver._restart_molecular_identity = {
+                    "kind": "test", "sha256": "soc-molecule",
+                }
+                driver.trajectory_file = str(Path(tmpdir) / "soc.namd.trj")
+                driver.trajectory_interval = 1
+                driver.dt_fs = 0.5
+                driver.dt_adaptive = False
+                driver._t_fs = 0.0
+                driver.seed = 1
+                driver.rng_stream = 0
+                driver.init_temp = 300.0
+                driver.active = 1
+                driver.vel = np.zeros((2, 3))
+                driver.odp = None
+                driver._last_hop_random = np.nan
+                driver._unbiased_potential_energy = -1.0
+                driver._last_state_overlap = None
+                driver._last_overlap_tdc = None
+                driver._nacme_reference_tdc = None
+                driver._nacme_reference_mask = None
+                driver._nacme_reference_source = 0
+                driver._nacme_gate_last = None
+                driver._nve_gate_last = None
+                driver._pending_nve_gate_error = None
+                driver._electronic_config_identity = (
+                    namd._electronic_config_identity(mol.config))
+                frozen_signature = driver._restart_signature()
+                mol.config["md"]["econs"] = True
+                self.assertNotEqual(
+                    driver._restart_signature(), frozen_signature)
+                mol.config["md"]["econs"] = False
+                mol.config["tdhf"]["multiplicity"] = 1
+                self.assertNotEqual(
+                    driver._restart_signature(), frozen_signature)
+                mol.config["tdhf"]["multiplicity"] = 3
+                self.assertEqual(
+                    driver._restart_signature(), frozen_signature)
+
+                driver._write_md_trajectory(
+                    0, np.zeros((2, 3)), -1.0, 0.1, False)
+                header, records = namd.read_namd_trajectory(
+                    driver.trajectory_file)
+
+                self.assertEqual(header["nstate"], 4)
+                self.assertEqual(
+                    header["electronic_representation"], "soc_adiabatic")
+                self.assertEqual(
+                    header["ensemble"],
+                    "ENERGY_CONSTRAINED_VELOCITY_RESCALING")
+                self.assertTrue(
+                    header["ensemble_provenance"][
+                        "per_step_velocity_rescaling"])
+                self.assertEqual(
+                    header["ensemble_provenance"]["velocity_rescaling_mode"],
+                    "restore_initial_total_energy")
+                self.assertEqual(header["signature"], frozen_signature)
+                np.testing.assert_allclose(
+                    records["state_energies"][0], driver._trajectory_state_energies)
+                np.testing.assert_allclose(
+                    records["populations"][0], [1.0, 0.0, 0.0, 0.0])
+                self.assertEqual(int(records["tracking_valid"][0]), 0)
+        finally:
+            cleanup()
+
+    def test_all_soc_run_paths_prepare_and_write_dense_trajectories(self):
+        src = NAMD.read_text()
+
+        self.assertEqual(src.count("self._prepare_md_outputs()"), 6)
+        for name in ("_log_soc", "_log_mch", "_log_soc_qmmm", "_log_mch_qmmm"):
+            block = re.search(
+                rf"    def {name}\(.*?(?=\n    def |\n\nclass |\n\ndef )",
+                src, re.S)
+            self.assertIsNotNone(block, name)
+            self.assertIn("self._write_md_trajectory(", block.group(0), name)
 
     def test_qmmm_single_point_inputs_stay_on_runner_path(self):
         src = PYOQP.read_text()

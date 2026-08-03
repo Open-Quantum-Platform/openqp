@@ -1,0 +1,5 @@
+mrsf(nstate=2)/bhhlyp/sto-3g
+namd(T0,nstep=1,dt=0.1,substep=20,init_temp=0,velocity=zero,seed=20260803,first_hop_step=2,nve_gate=warn,nve_gate_abs_tol=0.01,nve_gate_step_tol=0.01,nve_gate_transition_tol=0.001,nve_gate_consecutive=2,trajectory_interval=1,restart_interval=1,trajectory_file="odp-restart.namd.trj",restart_file="odp-restart.namd.restart.npz",decoherence=off,trivial=false)
+guess(type=huckel)
+odp(enabled=true,cv="distance(1,2);asymmetric_distance(1,3,1,4);angle(3,1,4)",scale="0.5,0.5,1.0",reference_r="2.10,-0.10,1.90",reference_p="2.50,0.10,2.20",center=0.5,k_parallel=0.02,k_perpendicular=0.005,window=1)
+geom="CH2O-2bc62dda4b8a.xyz"
