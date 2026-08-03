@@ -27,6 +27,20 @@ def compact(text: str) -> str:
     return re.sub(r"\s+", "", text.lower())
 
 
+def _load_regression():
+    """Load the regression registry without importing the ``oqp`` package.
+
+    ``import oqp`` dlopens liboqp, which is not available in a source-only
+    checkout; regression.py itself has no native dependency.
+    """
+    path = ROOT / "pyoqp" / "oqp" / "utils" / "regression.py"
+    spec = importlib.util.spec_from_file_location("_oqp_regression", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_input_checker():
     """Import input_checker.py in isolation with a minimal MPI stub."""
     sys.modules.setdefault("oqp", types.ModuleType("oqp"))
@@ -164,8 +178,48 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("callget_umrsf_transition_dipole", source)
         self.assertIn("mo_a,mo_b,bvec_mo", source)
         self.assertIn("subroutineget_umrsf_transition_dipole", lib)
-        self.assertIn("c_alpha*t*c_beta^t", lib)
-        self.assertIn("mo_a(:,nocb+1:)", lib)
+        # The substance of the routine is that the AO transition density is
+        # built from BOTH orbital sets (C_alpha on the left, C_beta on the
+        # right) rather than from mo_a alone. Assert that against the code --
+        # not against the prose comment describing it, which would turn any
+        # rewording of a comment into a CI failure.
+        body = lib.split("subroutineget_umrsf_transition_dipole", 1)[1]
+        body = body.split("endsubroutineget_umrsf_transition_dipole", 1)[0]
+        self.assertIn("mo_a(:,nocb+1:)", body)
+        self.assertIn("mo_b(:,nocb+1:)", body)
+        self.assertIn("mo_b", body)
+
+    def test_transition_dipoles_are_exposed_for_umrsf(self):
+        """The UMRSF dipoles are real, so they must reach the tagarray.
+
+        Only the state-interaction DENSITY is a UMRSF placeholder. Bundling the
+        dipole export behind the same ``.not. umrsf`` guard hid the quantity
+        from downstream analysis and from the regression references -- which is
+        precisely why identically zero UMRSF dipoles went unnoticed.
+        """
+        source = compact(ENERGY.read_text())
+        # trden stays MRSF-only ...
+        density_guard = source.split("oqp_td_trans_density_mo", 1)[0]
+        self.assertIn("if(.not.umrsf)then", density_guard)
+        # ... but the dipole export must NOT sit inside a .not.umrsf block.
+        between = source.split("oqp_td_trans_density_mo", 1)[1]
+        between = between.split("oqp_td_trans_dipole", 1)[0]
+        self.assertIn("endif", between,
+                      "OQP_td_trans_dipole must be exported outside the "
+                      ".not. umrsf guard that protects the trden placeholder")
+
+    def test_transition_dipole_is_a_compared_regression_key(self):
+        """Excitation energies alone did not catch all-zero UMRSF dipoles."""
+        regression = _load_regression()
+
+        entry = next((e for e in regression.REGISTRY
+                      if e.key == "td_trans_dipole"), None)
+        self.assertIsNotNone(
+            entry, "td_trans_dipole must be in the regression registry so a "
+                   "regression to zero transition dipoles fails the examples")
+        self.assertTrue(entry.needs_excited)
+        self.assertTrue(entry.phase_invariant)
+        self.assertIn(entry, regression.keys_to_compare("energy", excited=True))
 
     def test_spin_pair_scaling_avoids_hfscale_division_by_zero(self):
         source = compact(ENERGY.read_text())

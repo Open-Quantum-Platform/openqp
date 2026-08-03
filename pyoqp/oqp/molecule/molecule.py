@@ -1352,6 +1352,17 @@ class Molecule:
             except (AttributeError, KeyError, TypeError):
                 pass
 
+        # Transition dipoles between excited states, (3, nstates, nstates) in
+        # a.u.  Without this the oscillator strengths are printed but never
+        # regression-checked, which is how the UMRSF path shipped identically
+        # zero transition dipoles: the energies matched their reference while
+        # every dipole was zero and nothing compared them.
+        try:
+            data['td_trans_dipole'] = np.array(
+                self.data['OQP::td_trans_dipole']).tolist()
+        except (AttributeError, KeyError, TypeError):
+            pass
+
         # save NMR isotropic shielding if available (CGO or GIAO).
         # Flat atom-major array -> (natom, 5) in ppm; columns =
         # [dia, para_uncoupled, para_coupled, total_uncoupled, total_coupled].

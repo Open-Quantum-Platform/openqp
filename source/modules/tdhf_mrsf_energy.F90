@@ -834,9 +834,15 @@ contains
     !     and the AO electric-dipole integrals for downstream Python analysis.
     !     Pure write-out; no physics above is altered (ported to the alloc_or_die
     !     tagarray API of current main).
-    !     Skipped for UMRSF: its printed dipoles are computed by a spin-resolved
-    !     alpha/beta contraction above while trden remains an unpopulated
-    !     placeholder. Exposing trden would publish misleading all-zero tags.
+    !
+    !     Only the state-interaction DENSITY is MRSF-only: for UMRSF trden stays
+    !     an unpopulated placeholder (set identically to zero above), so
+    !     publishing it would advertise all-zero tags as real densities. The
+    !     transition dipoles are genuine on both paths -- UMRSF gets them from
+    !     the spin-resolved alpha/beta contraction -- so they are exposed for
+    !     UMRSF too. Withholding them would leave the quantity this routine
+    !     computes invisible to downstream analysis and to the regression
+    !     references, which is how the all-zero UMRSF dipoles went unnoticed.
     if (.not. umrsf) then
       ! get_mrsf_transition_density / get_transition_dipole only populate the
       ! upper triangle (ist<=jst). Mirror it into the stored copies so reverse
@@ -853,24 +859,29 @@ contains
         (/ nbf, nbf, nstates*nstates /), trden_store, &
         description=OQP_td_trans_density_mo_comment)
       trden_store = reshape(trden(:,:,1:nstates,1:nstates), (/ nbf, nbf, nstates*nstates /))
+    end if
 
-      call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
-        dip_store, description=OQP_td_trans_dipole_comment)
-      dip_store = dip(:,1:nstates,1:nstates)
+    call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
+      dip_store, description=OQP_td_trans_dipole_comment)
+    dip_store = dip(:,1:nstates,1:nstates)
+    if (.not. umrsf) then
+      ! MRSF leaves the lower triangle unpopulated; UMRSF's spin-resolved
+      ! routine fills both, so store those as computed rather than overwriting
+      ! one triangle with the other.
       do jst = 1, nstates
         do ist = jst+1, nstates
           dip_store(:,ist,jst) = dip_store(:,jst,ist)
         end do
       end do
-
-      allocate(mints_exp(nbf2,3), source=0.0_dp)
-      com_exp = basis%atoms%center(weight='mass')
-      call multipole_integrals(basis, mints_exp, com_exp, 1)
-      call infos%dat%alloc_or_die(OQP_td_dip_ao, (/ nbf2, 3 /), dipao_store, &
-        description=OQP_td_dip_ao_comment)
-      dipao_store = mints_exp
-      deallocate(mints_exp)
     end if
+
+    allocate(mints_exp(nbf2,3), source=0.0_dp)
+    com_exp = basis%atoms%center(weight='mass')
+    call multipole_integrals(basis, mints_exp, com_exp, 1)
+    call infos%dat%alloc_or_die(OQP_td_dip_ao, (/ nbf2, 3 /), dipao_store, &
+      description=OQP_td_dip_ao_comment)
+    dipao_store = mints_exp
+    deallocate(mints_exp)
 
     mrsf_energies = eex(1:nstates)
     bvec_mo_out = bvec_mo(:,1:nstates)
