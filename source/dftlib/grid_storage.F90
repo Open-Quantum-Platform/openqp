@@ -341,7 +341,8 @@ contains
     isz = DEFAULT_GRID_CHUNK
     if (present(iSize)) isz = iSize
 
-    allocate (elem_new(list%maxGrids+isz), source=list%elem)
+    allocate (elem_new(list%maxGrids+isz))
+    elem_new(1:list%maxGrids) = list%elem(1:list%maxGrids)
     call move_alloc(from=elem_new, to=list%elem)
     list%maxGrids = list%maxGrids+isz
 
