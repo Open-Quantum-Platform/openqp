@@ -566,6 +566,10 @@ ACTIVE_QMMM_DRIVERS = {"energy", "md", "namd"}
 _STATE_RE = re.compile(r"^([STQ])(\d+)$", re.IGNORECASE)
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 
+#> The `ccsd(t)` route spelling, which has to be recognised before model
+#> options are parsed -- see _parse_route.
+_CCSD_T_ROUTE_RE = re.compile(r"ccsd\s*\(\s*t\s*\)", re.IGNORECASE)
+
 
 def _is_integer(value: Any) -> bool:
     """Return whether *value* is an actual integer, excluding booleans."""
@@ -800,7 +804,17 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
         raise OQPInputError(
             "Route must be model[/functional][/basis], got: %s" % route
         )
-    model_call = _parse_call(parts[0]) if "(" in parts[0] else CallSpec(parts[0])
+    # `ccsd(t)` is the spelling the legacy deck's `method=` and the Python API
+    # both use, so it is the one people try first in a route as well.  Left
+    # alone it parses as the model `ccsd` with a positional option `t` and is
+    # rejected for using a positional option -- an error that describes the
+    # parse rather than the problem, and sends the reader looking for a way to
+    # name the argument.  Normalise it to the route alias before options are
+    # read; `ccsd_t`, `ccsd-t` and `ccsdt` continue through MODEL_ALIASES.
+    head = parts[0].strip()
+    if _CCSD_T_ROUTE_RE.fullmatch(head):
+        head = "ccsd_t"
+    model_call = _parse_call(head) if "(" in head else CallSpec(head)
     alias = model_call.name.lower().replace("_", "-")
     if alias not in MODEL_ALIASES:
         close = difflib.get_close_matches(alias, MODEL_ALIASES, n=1, cutoff=0.6)

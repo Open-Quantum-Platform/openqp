@@ -306,17 +306,22 @@ contains
     ! other hand, is reported per node.  Comparing the two directly lets every
     ! rank on a node pass its own check while their sum is what actually gets
     ! OOM-killed, so charge the node for all the ranks sitting on it.
-    if (.not. open_shell) then
-      nrank_local = pe%local_size()
-      if (nrank_local > 1) then
-        write(iw,'(2X,A,I0,A,A,A)') 'CCSD(T): ', nrank_local, &
-            ' MPI ranks share this node; each needs ', &
-            trim(oqp_mem_str(mem_gb)), ' and the estimate is charged for all.'
-      end if
-      call oqp_memory_check(mem_gb*real(nrank_local, dp), 'CCSD(T)', &
-          'use a smaller basis, freeze more core orbitals, or place fewer ' // &
-          'ranks per node', iw)
+    ! The open-shell path is charged here too, for a smaller thing: its solver
+    ! runs on rank 0 alone and is guarded separately below, but the AO store it
+    ! is fed from is allocated by EVERY rank, because the integral work is
+    ! distributed by shell pair and each rank accumulates its share into a
+    ! full-length buffer before the reduction.  mem_gb is exactly that store on
+    ! this path, and skipping the check let n ranks on a node each take an
+    ! nbf^4/8 array with nothing measuring the sum.
+    nrank_local = pe%local_size()
+    if (nrank_local > 1) then
+      write(iw,'(2X,A,I0,A,A,A)') 'CCSD(T): ', nrank_local, &
+          ' MPI ranks share this node; each needs ', &
+          trim(oqp_mem_str(mem_gb)), ' and the estimate is charged for all.'
     end if
+    call oqp_memory_check(mem_gb*real(nrank_local, dp), 'CCSD(T)', &
+        'use a smaller basis, freeze more core orbitals, or place fewer ' // &
+        'ranks per node', iw)
 
     ! ---- reference orbitals ------------------------------------------------
     call tagarray_get_data(infos%dat, OQP_VEC_MO_A, mo_a)
@@ -388,6 +393,14 @@ contains
       if (pe%rank == 0) then
         call run_open_shell()
       else
+        ! Release the AO store here rather than at the end of the routine.
+        ! Every rank has to allocate it -- the integral work is distributed by
+        ! shell pair and each rank accumulates its own share into a full-length
+        ! buffer before the reduction -- but only rank 0 transforms it, and
+        ! that solve is the longest phase of the run.  Held to the end, an
+        ! n-rank node carries n copies of an nbf^4/8 array throughout it for
+        ! nothing.
+        if (allocated(gao)) deallocate(gao)
         e_ccsd = 0.0_dp; e_t = 0.0_dp; t_ccsd = 0.0_dp; t_trip = 0.0_dp
         niter = 0
         converged = .false.

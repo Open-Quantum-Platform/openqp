@@ -720,7 +720,8 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   real(dp), intent(in), optional :: bvv(:,:)
   integer, intent(in), optional :: nchol
 
-  real(dp), allocatable :: acc(:,:,:,:)
+  !> target so the chunked reduction below can walk it as a flat vector.
+  real(dp), allocatable, target :: acc(:,:,:,:)
   integer :: nblk, bsize
   integer :: no2, nv2
   logical :: use_chol
@@ -878,7 +879,27 @@ subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
   end block
   !$omp end parallel
 
-  if (pe%size > 1) call pe%allreduce(acc, size(acc))
+  ! Reduce in chunks, for the reason cc_eri_parallel_stop already does: the
+  ! allreduce count argument holds 2^31, and acc has (no*nv)^2 elements, so it
+  ! passes that once no*nv exceeds about 46000.  A wrapped count would silently
+  ! reduce the wrong extent -- corrupting the ladder contribution rather than
+  ! failing -- so chunk it whether or not the size is reachable today.
+  if (pe%size > 1) then
+    block
+      real(dp), pointer, contiguous :: flat(:)
+      integer(8) :: ntot, off
+      integer(8), parameter :: CHUNK = 134217728_8   ! 2^27 elements, 1 GB
+      integer :: nthis
+      flat(1:size(acc, kind=8)) => acc
+      ntot = size(acc, kind=8)
+      off = 0
+      do while (off < ntot)
+        nthis = int(min(CHUNK, ntot - off))
+        call pe%allreduce(flat(off+1:off+nthis), nthis)
+        off = off + nthis
+      end do
+    end block
+  end if
 
   t2n = t2n + acc
 

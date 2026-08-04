@@ -1640,6 +1640,22 @@ def test_coupled_cluster_spellings_agree(tmp_path):
         assert legacy["input"]["method"] == "ccsd(t)", alias
 
 
+def test_ccsd_t_route_accepts_the_parenthesised_spelling(tmp_path):
+    """`ccsd(t)` is what `[input] method` and the Python API call it, so it is
+    what people write in a route too.  Without a special case it parses as the
+    model `ccsd` with a positional option `t` and is rejected for the
+    positional, which describes the parse rather than the problem."""
+    for spelling in ("ccsd(t)", "CCSD(T)", "ccsd( t )"):
+        _, legacy = _parse('%s/6-31g geom="h2o.xyz" energy()' % spelling, tmp_path)
+        assert legacy["input"]["method"] == "ccsd(t)", spelling
+
+    # the underscore spelling still carries model options
+    _, legacy = _parse(
+        'ccsd_t(reference=uhf)/6-31g geom="h2o.xyz" energy()', tmp_path)
+    assert legacy["input"]["method"] == "ccsd(t)"
+    assert legacy["scf"]["type"] == "uhf"
+
+
 def test_coupled_cluster_reference_is_route_owned(tmp_path):
     spec, uhf = _parse(
         'ccsd_t(reference=uhf,nfzc=1)/sto-3g geom="ch2.xyz" mult=3 energy()',
