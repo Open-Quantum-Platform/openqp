@@ -981,7 +981,25 @@ def apply_dftb_model_default(config: dict[str, Any]) -> str:
     # comparison) follows the provided parameter set -- it must NOT inherit the
     # LC open-shell preset, or a non-LC SK set (e.g. mio) picks up spurious
     # long-range exchange.  Add model=... explicitly for an LC open-shell run.
-    if _get(config, "dftb", "reference", ""):
+    # Only a *recognized* reference suppresses the preset: a typo (e.g.
+    # reference=ukz) must fall through so the checker rejects it, rather than
+    # silently disabling the model default and running a closed-shell reference.
+    reference = _as_lower(_get(config, "dftb", "reference", ""))
+    if reference in {"rhf", "rks", "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}:
+        # Normalize the effective open-shell multiplicity here (input
+        # normalization) so validation and all pre-run request logging see the
+        # triplet/quintet reference, not the default singlet.
+        if reference in {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}:
+            try:
+                current_mult = int(_get(config, "dftb", "reference_multiplicity", 0) or 0)
+            except (TypeError, ValueError):
+                current_mult = 0
+            if current_mult <= 1:
+                try:
+                    unpaired = int(_get(config, "dftb", "unpaired", 2))
+                except (TypeError, ValueError):
+                    unpaired = 2
+                dftb["reference_multiplicity"] = unpaired + 1
         dftb["model"] = ""
         return ""
     # Presets are resolved inside the native library; the probe backend
@@ -1045,6 +1063,64 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     grad_states = _as_list(_get(config, "properties", "grad", []))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
+
+    # ---- open-shell ground-state reference (reference= / unpaired) guards ----
+    # `reference=` (with `unpaired`) selects an open-shell ground-state reference
+    # (ROKS/CUKS/UKS) for a plain ground SCC.  It is honoured ONLY by the native
+    # DFTB backend on a ground route.  Reject every context that would otherwise
+    # accept the keyword and then silently run a different reference.
+    _VALID_REFERENCE = {
+        "rhf", "rks", "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+    _OPEN_REFERENCE = {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+    reference = _as_lower(_get(config, section, "reference", ""))
+    if reference:
+        if reference not in _VALID_REFERENCE:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "Unrecognized open-shell reference keyword; a typo would "
+                "otherwise silently run a closed-shell reference.",
+                value=reference,
+                expected=", ".join(sorted(_VALID_REFERENCE)),
+                action="Use reference=rhf/rks (closed) or roks/cuks/uks "
+                       "(open-shell; the *hf spellings are accepted too).",
+            )
+        if is_xtb:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                f"{disp} does not implement the reference=/unpaired open-shell "
+                "ground-state selector; it would be silently ignored.",
+                value=reference,
+                expected="omit reference/unpaired",
+                action="Open-shell ground SCC via reference= is a DFTB-native "
+                       "feature; drop [xtb] reference/unpaired.",
+            )
+        elif backend == "probe":
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "The probe backend cannot forward reference=/unpaired to the "
+                "probe executable; the requested reference would be silently "
+                "ignored.",
+                value=reference,
+                expected="native",
+                action=f"Use [{section}] backend=native for an open-shell "
+                       "reference= ground SCC.",
+            )
+        if reference in _OPEN_REFERENCE and \
+                dftb_type_canon not in {"ground", "ground_noscc"}:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "reference= selects a ground-state open-shell reference and is "
+                "valid only on a ground route; it cannot drive an SF/MRSF/TD "
+                "response, which has its own reference handling.",
+                value=f"{reference} with type={dftb_type_canon}",
+                expected="type=dftb or type=dftb0",
+                action="Run the open-shell reference as a ground energy(), or "
+                       "use the SF/MRSF response route instead of reference=.",
+            )
 
     allowed_backends = {"auto", "native"} if is_xtb else DFTB_BACKENDS
     if backend not in allowed_backends:

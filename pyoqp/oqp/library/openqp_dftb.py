@@ -243,30 +243,27 @@ class OpenQPDFTBAdapter:
         #               cuks|cuhf -> constrained-UKS (default open-shell operator)
         #               uks|uhf   -> genuine unrestricted (DFTB+ udftb analogue)
         # `unpaired` (default 2) sets the number of unpaired electrons.
-        # NOTE: the native operator is selected via OPENQP_DFTB_UKS/CUHF, matching
-        # how openqp-dftb exposes its other experimental references.  The env is
-        # reset deterministically here so a driver that loops over molecules with
-        # different references cannot leak a previous setting.  A proper C-API
-        # argument (ABI bump) is the intended follow-up.
         # reference_selector crosses the C-API as an ABI-4 argument (0 default /
-        # 1 UKS / 2 ROKS).  The OPENQP_DFTB_UKS/CUHF env vars are set only as a
-        # fallback for an older (ABI < 4) native library.
+        # 1 UKS / 2 ROKS).  For an older (ABI < 4) native library the selector is
+        # instead driven by the OPENQP_DFTB_UKS/CUHF env vars -- but those are set
+        # *around the native call* (see _run_native) and restored afterwards, NOT
+        # here: setting them in __init__ would leak this molecule's reference into
+        # a later default-reference job sharing the process (adapters may be
+        # constructed before any of them runs, and an ABI<4 default job never
+        # re-enters this branch to clear a previous setting).
+        self._reference = str(self.dftb.get("reference", "")).strip().lower()
         self._reference_selector = 0
-        _ref = str(self.dftb.get("reference", "")).strip().lower()
-        if _ref:
-            _open = _ref in {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+        if self._reference:
+            _open = self._reference in {
+                "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
             if _open and int(self.dftb.get("reference_multiplicity", 0)) <= 1:
-                self.dftb["reference_multiplicity"] = int(self.dftb.get("unpaired", 2)) + 1
-            if _ref in {"uks", "uhf"}:
+                self.dftb["reference_multiplicity"] = (
+                    int(self.dftb.get("unpaired", 2)) + 1
+                )
+            if self._reference in {"uks", "uhf"}:
                 self._reference_selector = 1
-            elif _ref in {"roks", "rohf"}:
+            elif self._reference in {"roks", "rohf"}:
                 self._reference_selector = 2
-            os.environ.pop("OPENQP_DFTB_UKS", None)
-            os.environ.pop("OPENQP_DFTB_CUHF", None)
-            if self._reference_selector == 1:
-                os.environ["OPENQP_DFTB_UKS"] = "1"
-            elif self._reference_selector == 2:
-                os.environ["OPENQP_DFTB_CUHF"] = "0"
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
         # Named operator preset ([dftb] model=...). The published parameter
@@ -674,14 +671,41 @@ class OpenQPDFTBAdapter:
         }
 
         def native_call():
-            if abi_version == 1:
-                self._call_state_gradient_abi1(
-                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
-                )
-            else:
-                self._call_state_gradient_current(
-                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
-                )
+            fn = getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient")
+
+            def _dispatch():
+                if abi_version == 1:
+                    self._call_state_gradient_abi1(fn, **call_kwargs)
+                else:
+                    self._call_state_gradient_current(fn, **call_kwargs)
+
+            # ABI >= 4 carries reference_selector as an explicit C argument, so no
+            # environment is involved.  Only an older library needs the env
+            # fallback -- set it immediately around the call and restore the prior
+            # values afterwards so a UKS/ROKS job cannot leak its reference into a
+            # subsequent default-reference job that shares this process.
+            if abi_version >= 4 or not self._reference:
+                _dispatch()
+                return
+            with _NATIVE_DIAGNOSTIC_LOCK:
+                saved = {
+                    key: os.environ.get(key)
+                    for key in ("OPENQP_DFTB_UKS", "OPENQP_DFTB_CUHF")
+                }
+                os.environ.pop("OPENQP_DFTB_UKS", None)
+                os.environ.pop("OPENQP_DFTB_CUHF", None)
+                if self._reference_selector == 1:
+                    os.environ["OPENQP_DFTB_UKS"] = "1"
+                elif self._reference_selector == 2:
+                    os.environ["OPENQP_DFTB_CUHF"] = "0"
+                try:
+                    _dispatch()
+                finally:
+                    for key, value in saved.items():
+                        if value is None:
+                            os.environ.pop(key, None)
+                        else:
+                            os.environ[key] = value
 
         if abi_version == 1:
             self._validate_abi1_request()
@@ -1877,6 +1901,11 @@ class OpenQPDFTBAdapter:
             bool(self.dftb.get("spin_complete", True)),
             int(self.dftb.get("reference_multiplicity", 0)),
             int(self.dftb.get("target_multiplicity", 1)),
+            # Open-shell ground-state reference: UKS/ROKS/CUKS can share the same
+            # derived multiplicity, so the selector must key the cache too, or a
+            # ROKS result would be reused for a UKS request at the same geometry.
+            getattr(self, "_reference", ""),
+            int(getattr(self, "_reference_selector", 0)),
             str(self.dftb.get("response_solver", "auto")).lower(),
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
