@@ -1620,6 +1620,20 @@ def test_coupled_cluster_route_lowers_the_cholesky_controls(tmp_path):
     assert spec.physical_method == "CCSD(T)"
 
 
+def test_cholesky_accepts_auto_alongside_the_boolean_spellings(tmp_path):
+    """`cholesky` is auto/true/false, not a bool: factorising costs nchol/no^2
+    times the ladder contraction it feeds, so it is worth taking only when the
+    explicit v^4 route will not fit.  `auto` is the default and has to survive
+    the semantic route; `true`/`false` still pin it either way."""
+    _, auto = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(cholesky=auto)', tmp_path)
+    assert auto["cc"]["cholesky"] == "auto"
+
+    _, forced = _parse(
+        'ccsd_t/6-31g geom="h2o.xyz" energy() cc(cholesky=true)', tmp_path)
+    assert forced["cc"]["cholesky"] == "True"
+
+
 def test_coupled_cluster_spellings_agree(tmp_path):
     for alias in ("ccsd_t", "ccsd-t", "ccsdt"):
         _, legacy = _parse('%s/6-31g geom="h2o.xyz" energy()' % alias, tmp_path)

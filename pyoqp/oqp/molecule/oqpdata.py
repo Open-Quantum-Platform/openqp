@@ -164,7 +164,7 @@ OQP_CONFIG_SCHEMA = {
         'conv': {'type': float, 'default': '1e-7'},
         'ndiis': {'type': int, 'default': '8'},
         'nfzc': {'type': int, 'default': '0'},
-        'cholesky': {'type': bool, 'default': 'True'},
+        'cholesky': {'type': string, 'default': 'auto'},
         'cholesky_tol': {'type': float, 'default': '1e-10'},
         'cholesky_direct': {'type': string, 'default': 'auto'},
     },
@@ -1312,9 +1312,26 @@ class OQPData:
         """Set the number of frozen core orbitals excluded from CC."""
         self._data.control.cc_nfzc = int(nfzc)
 
-    def set_cc_cholesky(self, flag):
-        """Enable/disable Cholesky factorisation of the ladder integrals."""
-        self._data.control.cc_cholesky = 1 if flag else 0
+    _cc_cholesky_modes = {"auto": 2, "true": 1, "false": 0}
+
+    def set_cc_cholesky(self, mode):
+        """Select Cholesky factorisation of the ladder integrals: auto, true, false.
+
+        auto takes it only when the explicit v^4 ladder array would not fit.
+        Rebuilding the ladder integrals from the vectors costs nchol/no^2 times
+        the ladder contraction itself, so for the small occupied spaces where
+        v^4 fits comfortably it is the slower route by a wide margin -- as with
+        cholesky_direct, memory is the only reason to pay for it.
+        """
+        key = str(mode).strip().lower()
+        if key in ("1", "yes", "on"):
+            key = "true"
+        elif key in ("0", "no", "off"):
+            key = "false"
+        if key not in OQPData._cc_cholesky_modes:
+            raise ValueError(
+                "[cc] cholesky must be auto, true, or false (got %r)" % mode)
+        self._data.control.cc_cholesky = OQPData._cc_cholesky_modes[key]
 
     def set_cc_cholesky_tol(self, tol):
         """Set the Cholesky truncation threshold."""

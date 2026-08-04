@@ -82,7 +82,7 @@ contains
     real(kind=dp) :: chol_tol, chol_err
     logical :: use_chol, chol_trunc, use_direct
     integer :: chol_npass
-    real(kind=dp) :: packed_gb
+    real(kind=dp) :: packed_gb, avail_gb, vvvv_gb
     integer :: nthr_est
     real(kind=dp) :: lad_blk
     integer :: nthr, niter, nrank_local
@@ -138,7 +138,52 @@ contains
     ! charged for a packed store the direct path never allocates, so exactly
     ! the jobs the direct route exists to rescue were refused before reaching
     ! it.
-    use_chol = infos%control%cc_cholesky /= 0
+    ! auto (the default) takes the vectors only when the explicit v^4 ladder
+    ! array will not fit.  Factorising is not free: the ladder integrals are
+    ! rebuilt from the vectors block by block, which costs nchol/no^2 times the
+    ! ladder contraction it feeds.  nchol tracks nbf while no^2 does not, so for
+    ! the small occupied spaces where v^4 fits comfortably the vectors are much
+    ! the slower route -- measured 52.1 s against 9.3 s for the CCSD iterations
+    ! of H2O/cc-pVQZ (nchol = 1680, no = 4), for the same energy to 1e-10.
+    ! Memory is the only reason to pay for it, exactly as for cholesky_direct.
+    select case (int(infos%control%cc_cholesky))
+    case (0)
+      use_chol = .false.
+    case (1)
+      use_chol = .true.
+    case default
+      ! Only the closed-shell path has the choice; the open-shell solver reads
+      ! the spin-orbital tensor and never touches these blocks.
+      use_chol = .true.
+      if (.not. open_shell) then
+        avail_gb = oqp_available_memory_gb()
+        if (avail_gb > 0.0_dp) then
+          ! Charge the explicit route for its whole peak, not just v^4.  The
+          ! solver intermediates go as o^2v^2 and ov^3, which reach v^4 itself
+          ! once o/v is around a sixth -- benzene/cc-pVDZ is already there --
+          ! so sizing on v^4 alone would pick the explicit route for a job that
+          ! then fails the memory guard a few lines below instead of quietly
+          ! factorising.  Same two peaks the guard compares, with rnv**4 for
+          ! the ladder; kept in step with it.
+          rno = real(no,dp)
+          rnv = real(nv,dp)
+          mem_ao = real(cc_packed_length(nbf),dp) &
+                   + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+          mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3 &
+                   + rnv**4
+          mem_solver = mem_mo + 14.0_dp*rno**2*rnv**2 &
+                     + 4.0_dp*rno*rnv**3 &
+                     + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
+                       * (rno*rnv + rno**2*rnv**2)
+          vvvv_gb = max(mem_ao + mem_mo, mem_solver)*8.0_dp/1.073741824e9_dp
+          use_chol = vvvv_gb > OQP_MEMORY_SAFETY_FRACTION*avail_gb
+        end if
+        if (use_chol) then
+          write(iw,'(2X,A)') 'CCSD(T): the explicit ladder route ('// &
+              trim(oqp_mem_str(vvvv_gb))//') would not fit; factorising.'
+        end if
+      end if
+    end select
     chol_tol = infos%control%cc_cholesky_tol
     if (use_chol) then
       ! A non-positive tolerance never satisfies the `vmax < tol` stop, so the
@@ -200,7 +245,7 @@ contains
       rno = real(no,dp)
       rnv = real(nv,dp)
       mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3
-      if (infos%control%cc_cholesky /= 0) then
+      if (use_chol) then
         ! The ladder integrals are replaced by the vectors and a per-block
         ! assembly buffer.  nchol is not known until the factorisation runs, so
         ! estimate it from the vectors-per-basis-function ratio observed at
