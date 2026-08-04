@@ -1774,10 +1774,59 @@ class Molecule:
 
     @mpi_dump
     def write_molden(self, filename, freqs=None, modes=None, include_dyson=False):
-        """Write SCF MOs, frequencies, and explicitly requested Dyson states."""
+        """Write SCF MOs, frequencies, and explicitly requested Dyson states.
+
+        A basis this writer cannot represent is skipped with a warning rather
+        than aborting the calculation -- the orbitals are a by-product, and
+        losing them should not lose the energy too. The commonest case is a
+        shell beyond g (cc-pV5Z and larger), which used to index past the end
+        of SHELL_TYPES and raise IndexError after the SCF had converged.
+
+        The gate is ``supports_portable_ordering``, which is what
+        ``has_molden_orbitals`` already uses: besides the angular-momentum
+        ceiling it also rejects mixed cartesian/spherical bases and shells with
+        no tabulated reordering, either of which would silently permute the MO
+        coefficients. Checking here rather than at the call sites covers the
+        four unguarded ``write_molden`` calls in single_point.py too.
+
+        No status is returned: this runs under @mpi_dump, which does not call
+        the wrapped function at all on non-zero ranks, so any return value
+        would be meaningless there.
+        """
+
+        basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            bad_l = MoldenWriter.unsupported_angular_momentum(basis)
+            if bad_l is not None:
+                reason = ('the Molden format defines shells only up to %s '
+                          '(l=%d) and this basis contains l=%d'
+                          % (MoldenWriter.SHELL_TYPES[-1],
+                             MoldenWriter.MAX_ANG, bad_l))
+            else:
+                reason = ('this basis has no portable Molden ordering (a mixed '
+                          'cartesian/spherical basis, or a shell with no '
+                          'tabulated reordering)')
+            warnings.warn(
+                'Skipping Molden output for %s: %s. The calculation itself is '
+                'unaffected; set [scf] save_molden=false to silence this.'
+                % (filename, reason)
+            )
+            # A stale file from an earlier run would otherwise survive and look
+            # like valid output for this one.  Failing to remove it must not
+            # abort the run either: the whole point of skipping is that a
+            # by-product should not cost the user the energy they computed.
+            if os.path.exists(filename):
+                try:
+                    os.remove(filename)
+                except OSError as err:
+                    warnings.warn(
+                        'Could not remove the stale Molden file %s (%s). It is '
+                        'left in place and does NOT describe this calculation.'
+                        % (filename, err)
+                    )
+            return
 
         with open(filename, mode='w', encoding='ascii') as fout:
-            basis = self.data.get_basis()
             nat = self.data['natom']
             nbf = basis['nbf']
             mdw = MoldenWriter(fout)
