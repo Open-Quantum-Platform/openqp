@@ -95,7 +95,6 @@ contains
     ! ---- reference checks -------------------------------------------------
     open_shell = infos%control%scftype /= 1
     if (infos%control%hamilton /= 10) then
-      close(iw)
       call show_message('CCSD(T) requires an HF reference; remove the DFT &
                         &functional from [input]', with_abort)
     end if
@@ -108,7 +107,6 @@ contains
     nfzc = int(infos%control%cc_nfzc)
 
     if (nfzc < 0 .or. nfzc >= nocc) then
-      close(iw)
       call show_message('CCSD(T): invalid frozen-core count', with_abort)
     end if
 
@@ -117,7 +115,6 @@ contains
     nv  = nmo - no
 
     if (no <= 0 .or. nv <= 0) then
-      close(iw)
       call show_message('CCSD(T): no correlated occupied or virtual orbitals', with_abort)
     end if
 
@@ -146,6 +143,14 @@ contains
     ! the slower route -- measured 52.1 s against 9.3 s for the CCSD iterations
     ! of H2O/cc-pVQZ (nchol = 1680, no = 4), for the same energy to 1e-10.
     ! Memory is the only reason to pay for it, exactly as for cholesky_direct.
+    ! Every closed-shell store this routine sizes below is replicated per rank
+    ! while the probe reports the node, so both route decisions and the guard
+    ! must charge the node for all the ranks sitting on it.  Deciding per rank
+    ! and guarding per node made the two disagree: a job whose explicit route
+    ! fit one rank but not four kept use_chol false and then aborted at the
+    ! guard, instead of factorising and running.
+    nrank_local = pe%local_size()
+
     select case (int(infos%control%cc_cholesky))
     case (0)
       use_chol = .false.
@@ -184,16 +189,43 @@ contains
                      + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
                        * (rno*rnv + rno**2*rnv**2)
           vvvv_gb = max(mem_ao + mem_mo, mem_solver)*8.0_dp/1.073741824e9_dp
-          use_chol = vvvv_gb > OQP_MEMORY_SAFETY_FRACTION*avail_gb
+          use_chol = vvvv_gb*real(nrank_local,dp) > &
+              OQP_MEMORY_SAFETY_FRACTION*avail_gb
         end if
         ! Only reachable with vvvv_gb set: use_chol starts false here and the
         ! branch above is the only thing that raises it.
         if (use_chol) then
-          write(iw,'(2X,A)') 'CCSD(T): the explicit ladder route ('// &
-              trim(oqp_mem_str(vvvv_gb))//') would not fit; factorising.'
+          write(iw,'(2X,A,I0,A)') 'CCSD(T): the explicit ladder route ('// &
+              trim(oqp_mem_str(vvvv_gb))//' x ', nrank_local, &
+              ' local ranks) would not fit; factorising.'
         end if
       end if
     end select
+
+    ! cholesky_direct=true is an order, not a preference: it exists so a job
+    ! can be run without the packed AO store at all.  With cholesky left at
+    ! auto, a case whose explicit route fit would decline the vectors and the
+    ! direct request below -- gated on use_chol -- was silently ignored, which
+    ! is the one thing an explicit setting must never be.  Promote it to the
+    ! factorised route.  Against an explicit cholesky=false the two settings
+    ! contradict each other outright, and a contradiction acted on either way
+    ! surprises whoever meant the other half; refuse and say so.
+    if (.not. open_shell .and. int(infos%control%cc_cholesky_direct) == 1) then
+      if (.not. use_chol) then
+        if (int(infos%control%cc_cholesky) == 0) then
+          ! No close(iw) here: show_message writes through this very unit, so
+          ! closing it first sends the explanation nowhere and leaves only the
+          ! bare ERROR STOP.
+          call show_message('CCSD(T): [cc] cholesky_direct=true contradicts ' // &
+              'cholesky=false -- the direct factorisation produces the ' // &
+              'Cholesky vectors that cholesky=false refuses. Drop one of them.', &
+              with_abort)
+        end if
+        use_chol = .true.
+        write(iw,'(2X,A)') 'CCSD(T): cholesky_direct=true; factorising even ' // &
+            'though the explicit ladder route would fit.'
+      end if
+    end if
     chol_tol = infos%control%cc_cholesky_tol
     if (use_chol) then
       ! A non-positive tolerance never satisfies the `vmax < tol` stop, so the
@@ -202,7 +234,6 @@ contains
       ! infinite one is worse because it is quiet: it stops at nchol = 0 and
       ! every assembled MO block is zero.  `> 0` also rejects NaN.
       if (.not. (chol_tol > 0.0_dp) .or. .not. (chol_tol < huge(chol_tol))) then
-        close(iw)
         call show_message('CCSD(T): [cc] cholesky_tol must be a positive number', &
                           with_abort)
       end if
@@ -214,14 +245,18 @@ contains
       case (1); use_direct = .true.
       case (2); use_direct = .false.
       case default
+        ! Per node, like the guard: the packed store is allocated by every
+        ! local rank, so one rank's copy against the whole node's budget was
+        ! the wrong comparison for the same reason as above.
         if (oqp_available_memory_gb() > 0.0_dp) then
-          use_direct = packed_gb > &
+          use_direct = packed_gb*real(nrank_local,dp) > &
               OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb()
         end if
       end select
       if (use_direct) then
-        write(iw,'(2X,A)') 'CCSD(T): the packed AO store ('// &
-            trim(oqp_mem_str(packed_gb))//') would not fit; factorising directly.'
+        write(iw,'(2X,A,I0,A)') 'CCSD(T): the packed AO store ('// &
+            trim(oqp_mem_str(packed_gb))//' x ', nrank_local, &
+            ' local ranks) would not fit; factorising directly.'
       end if
     end if
 
@@ -313,7 +348,10 @@ contains
     ! full-length buffer before the reduction.  mem_gb is exactly that store on
     ! this path, and skipping the check let n ranks on a node each take an
     ! nbf^4/8 array with nothing measuring the sum.
-    nrank_local = pe%local_size()
+    !
+    ! nrank_local was resolved above, where the route decisions already
+    ! charged it; the guard and the decisions must count the same ranks or
+    ! they disagree about which jobs fit.
     if (nrank_local > 1) then
       write(iw,'(2X,A,I0,A,A,A)') 'CCSD(T): ', nrank_local, &
           ' MPI ranks share this node; each needs ', &
@@ -521,7 +559,6 @@ contains
     end if
 
     if (.not. converged) then
-      close(iw)
       call show_message('CCSD did not converge; increase [cc] maxit', with_abort)
     end if
 
@@ -561,7 +598,6 @@ contains
           ', beta occ = ', nob, ', spin orbitals = ', nso
 
       if (nob < 0 .or. nocc_so <= 0 .or. nso-nocc_so <= 0) then
-        close(iw)
         call show_message('CCSD(T): no correlated occupied or virtual spin orbitals', &
                           with_abort)
       end if

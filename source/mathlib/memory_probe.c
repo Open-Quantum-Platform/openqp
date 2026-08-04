@@ -87,6 +87,72 @@ static uint64_t cgroup_limit(const char *path)
     if (v >= (1ull << 62)) return 0;
     return (uint64_t) v;
 }
+
+/* Tightest `leaf` limit on the path from this process's own cgroup up to
+ * `mount`.  The effective limit of a nested cgroup is the minimum over its
+ * ancestors, and under Slurm or systemd the job's cgroup IS nested -- probing
+ * only the mount root reads the (usually absent) top-level limit and misses
+ * the allocation that actually binds.  Inside a cgroup namespace, the common
+ * container case, /proc/self/cgroup reports "/" and this walk degenerates to
+ * exactly the root probe it generalises. */
+static uint64_t cgroup_walk(const char *mount, const char *relpath,
+                            const char *leaf)
+{
+    char path[4096];
+    uint64_t best = 0;
+    size_t base;
+
+    if (snprintf(path, sizeof path, "%s%s", mount, relpath)
+            >= (int) sizeof path)
+        return 0;
+    base = strlen(mount);
+
+    for (;;) {
+        char file[4352];
+        char *cut;
+        if (snprintf(file, sizeof file, "%s/%s", path, leaf)
+                < (int) sizeof file)
+            best = tighter(best, cgroup_limit(file));
+        cut = strrchr(path, '/');
+        if (!cut || (size_t)(cut - path) < base) break;
+        *cut = '\0';
+    }
+    return best;
+}
+
+/* The process's own cgroup limit, resolved through /proc/self/cgroup.
+ * v2 lines read "0::<path>"; v1 lists one line per controller and the
+ * memory one reads "<n>:memory:<path>". */
+static uint64_t cgroup_self_limit(void)
+{
+    FILE *f = fopen("/proc/self/cgroup", "r");
+    char line[4096];
+    uint64_t best = 0;
+
+    if (!f) return 0;
+    while (fgets(line, sizeof line, f)) {
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        if (strncmp(line, "0::", 3) == 0) {
+            best = tighter(best,
+                cgroup_walk("/sys/fs/cgroup", line + 3, "memory.max"));
+        } else {
+            char *c1 = strchr(line, ':');
+            if (!c1) continue;
+            char *c2 = strchr(c1 + 1, ':');
+            if (!c2) continue;
+            *c2 = '\0';
+            /* the controller field may list several, comma separated */
+            if (strstr(c1 + 1, "memory")) {
+                best = tighter(best,
+                    cgroup_walk("/sys/fs/cgroup/memory", c2 + 1,
+                                "memory.limit_in_bytes"));
+            }
+        }
+    }
+    fclose(f);
+    return best;
+}
 #endif
 
 uint64_t oqp_available_memory_bytes(void)
@@ -110,6 +176,9 @@ uint64_t oqp_available_memory_bytes(void)
             limit = (uint64_t) pages * (uint64_t) pagesz;
     }
     limit = tighter(limit, meminfo_bytes("MemAvailable"));
+    /* The job's own (possibly nested) cgroup first; the mount-root probes
+     * stay as a fallback for setups where /proc/self/cgroup is unreadable. */
+    limit = tighter(limit, cgroup_self_limit());
     limit = tighter(limit, cgroup_limit("/sys/fs/cgroup/memory.max"));
     limit = tighter(limit,
                     cgroup_limit("/sys/fs/cgroup/memory/memory.limit_in_bytes"));
