@@ -46,7 +46,9 @@
 !> @date    2026-06
 module namd_mod
 
+  use, intrinsic :: iso_c_binding, only: c_double, c_int, c_int64_t
   use precision, only: dp
+  use state_tracking_mod, only: maximum_overlap_assignment
 
   implicit none
 
@@ -64,12 +66,617 @@ module namd_mod
   public :: namd_fssh_decision
   public :: namd_decoherence_edc
   public :: namd_trivial_crossing
+  public :: namd_counter_random
+  public :: namd_counter_normal_fill
+  public :: namd_baeck_an_tdc
+  public :: namd_nacme_gate
+  public :: namd_droplet_boundary
+  public :: namd_com_restraint
+  public :: namd_langevin_thermostat
 
   !> Default empirical decoherence constant C in the energy-based correction
   !> (Granucci & Persico, J. Chem. Phys. 126, 134114 (2007)), in Hartree.
   real(kind=dp), parameter, public :: NAMD_EDC_C_DEFAULT = 0.1_dp
 
 contains
+
+!> @brief Add two 64-bit bit patterns modulo 2^64 without signed overflow.
+  pure function namd_add64_mod(a, b) result(value)
+    integer(c_int64_t), intent(in) :: a, b
+    integer(c_int64_t) :: value
+    integer(c_int64_t) :: total, carry, limb
+    integer(c_int64_t), parameter :: mask16 = int(z'FFFF', c_int64_t)
+    integer(c_int64_t), parameter :: base16 = 65536_c_int64_t
+    integer :: k
+
+    value = 0_c_int64_t
+    carry = 0_c_int64_t
+    do k = 0, 3
+      total = iand(shiftr(a, 16*k), mask16) + &
+              iand(shiftr(b, 16*k), mask16) + carry
+      limb = modulo(total, base16)
+      carry = total/base16
+      value = ior(value, shiftl(limb, 16*k))
+    end do
+  end function namd_add64_mod
+
+!> @brief Multiply two 64-bit bit patterns modulo 2^64 without signed overflow.
+  pure function namd_mul64_mod(a, b) result(value)
+    integer(c_int64_t), intent(in) :: a, b
+    integer(c_int64_t) :: value
+    integer(c_int64_t) :: aa(0:3), bb(0:3)
+    integer(c_int64_t) :: total, carry, limb
+    integer(c_int64_t), parameter :: mask16 = int(z'FFFF', c_int64_t)
+    integer(c_int64_t), parameter :: base16 = 65536_c_int64_t
+    integer :: j, k
+
+    do k = 0, 3
+      aa(k) = iand(shiftr(a, 16*k), mask16)
+      bb(k) = iand(shiftr(b, 16*k), mask16)
+    end do
+    value = 0_c_int64_t
+    carry = 0_c_int64_t
+    do k = 0, 3
+      total = carry
+      do j = 0, k
+        total = total + aa(j)*bb(k - j)
+      end do
+      limb = modulo(total, base16)
+      carry = total/base16
+      value = ior(value, shiftl(limb, 16*k))
+    end do
+  end function namd_mul64_mod
+
+!> @brief Stateless, counter-based uniform random number for NAMD.
+!>
+!> The returned value depends only on (seed, stream, step), not on call order,
+!> process scheduling, or restart history.  The SplitMix64 finalizer is used as
+!> a high-quality integer mixer; its upper 53 bits map exactly to an IEEE-754
+!> double in [0,1).  The helper operations implement modulo-2^64 arithmetic
+!> with 16-bit limbs, avoiding non-standard signed overflow under optimization.
+!>
+!> @param[in] seed    campaign/trajectory seed
+!> @param[in] stream  independent trajectory stream identifier
+!> @param[in] step    physical nuclear-step index
+  pure function namd_counter_random(seed, stream, step) result(rand)
+    integer(c_int64_t), intent(in) :: seed, stream, step
+    real(kind=dp) :: rand
+    integer(c_int64_t) :: z, mantissa
+    integer(c_int64_t), parameter :: gamma = int(z'9E3779B97F4A7C15', c_int64_t)
+    integer(c_int64_t), parameter :: stream_mix = int(z'D2B74407B1CE6E93', c_int64_t)
+    integer(c_int64_t), parameter :: mix1 = int(z'BF58476D1CE4E5B9', c_int64_t)
+    integer(c_int64_t), parameter :: mix2 = int(z'94D049BB133111EB', c_int64_t)
+    real(kind=dp), parameter :: two_to_minus_53 = 1.0_dp/9007199254740992.0_dp
+
+    z = namd_add64_mod(seed, namd_mul64_mod(gamma, &
+        namd_add64_mod(step, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(stream_mix, &
+        namd_add64_mod(stream, 1_c_int64_t)))
+    z = namd_mul64_mod(ieor(z, shiftr(z, 30)), mix1)
+    z = namd_mul64_mod(ieor(z, shiftr(z, 27)), mix2)
+    z = ieor(z, shiftr(z, 31))
+    mantissa = shiftr(z, 11)
+    rand = real(mantissa, dp)*two_to_minus_53
+  end function namd_counter_random
+
+!> @brief C ABI for the stateless NAMD counter RNG.
+  function namd_counter_random_C(seed, stream, step) result(rand) &
+      bind(C, name="oqp_namd_counter_random")
+    integer(c_int64_t), value, intent(in) :: seed, stream, step
+    real(c_double) :: rand
+    rand = real(namd_counter_random(seed, stream, step), c_double)
+  end function namd_counter_random_C
+
+!> @brief Fill an array with deterministic standard-normal deviates.
+!>
+!> Negative counter values form a domain separate from the positive physical
+!> MD steps used for hopping.  Box-Muller pairs are generated wholly in the
+!> resident Fortran layer so rng_stream also separates Maxwell initial
+!> velocities between trajectories.
+  pure subroutine namd_counter_normal_fill(seed, stream, count, values) &
+      bind(C, name="oqp_namd_counter_normal_fill")
+    integer(c_int64_t), value, intent(in) :: seed, stream, count
+    real(c_double), intent(out) :: values(*)
+    integer :: i, nvalue
+    real(kind=dp) :: u1, u2, radius, angle
+    real(kind=dp), parameter :: two_pi = 6.28318530717958647692528676655900577_dp
+
+    nvalue = int(count)
+    do i = 1, nvalue, 2
+      u1 = max(namd_counter_random(seed, stream, -int(i, c_int64_t)), tiny(1.0_dp))
+      u2 = namd_counter_random(seed, stream, -int(i + 1, c_int64_t))
+      radius = sqrt(-2.0_dp*log(u1))
+      angle = two_pi*u2
+      values(i) = radius*cos(angle)
+      if (i + 1 <= nvalue) values(i + 1) = radius*sin(angle)
+    end do
+  end subroutine namd_counter_normal_fill
+
+!> @brief Native finite spherical-droplet boundary energy and force.
+!>
+!> Atom membership is supplied once by the driver as group_index(a).  A zero
+!> index excludes an atom; positive indices define restrained sites.  A
+!> one-atom group gives an atom/oxygen wall, while a multi-atom group gives a
+!> molecular-COM wall whose force is distributed by mass.  All arguments use
+!> atomic units.  The zero-force region is r <= radius.  With x=r-radius and
+!> t=x/buffer, the positive radial derivative is
+!>
+!>   dU/dr = k*x*(3*t**2 - 2*t**3),  0 < x < buffer
+!>         = k*x,                     x >= buffer.
+!>
+!> Integrating that expression gives a C2 onset at the boundary and a
+!> continuous match to a half-harmonic wall outside the buffer.  The returned
+!> Cartesian array is force (-grad U), in atom-major xyz order.
+  function namd_droplet_boundary(natom, ngroup, coordinates, masses, &
+      group_index, center, radius, buffer, force_constant, &
+      max_penetration_limit, energy, forces, max_penetration, active_count) &
+      result(info) bind(C, name="oqp_namd_droplet_boundary")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom, ngroup
+    real(c_double), intent(in) :: coordinates(*), masses(*), center(3)
+    integer(c_int64_t), intent(in) :: group_index(*)
+    real(c_double), value, intent(in) :: radius, buffer, force_constant
+    real(c_double), value, intent(in) :: max_penetration_limit
+    real(c_double), intent(out) :: energy, forces(*)
+    real(c_double), intent(out) :: max_penetration
+    integer(c_int64_t), intent(out) :: active_count
+    integer(c_int) :: info
+    real(kind=dp), allocatable :: group_mass(:), group_com(:,:), group_force(:,:)
+    real(kind=dp) :: displacement(3), distance, penetration, t, switch
+    real(kind=dp) :: radial_derivative, atom_weight
+    integer :: a, g, k, na, ng
+
+    info = -1_c_int
+    energy = 0.0_dp
+    max_penetration = 0.0_dp
+    active_count = 0_c_int64_t
+    if (natom <= 0_c_int64_t .or. ngroup <= 0_c_int64_t) return
+    if (.not. ieee_is_finite(radius) .or. radius <= 0.0_dp .or. &
+        .not. ieee_is_finite(buffer) .or. buffer < 0.0_dp .or. &
+        .not. ieee_is_finite(force_constant) .or. force_constant <= 0.0_dp .or. &
+        .not. ieee_is_finite(max_penetration_limit) .or. &
+        max_penetration_limit < 0.0_dp .or. &
+        any(.not. ieee_is_finite(center))) return
+
+    na = int(natom)
+    ng = int(ngroup)
+    allocate(group_mass(ng), group_com(3, ng), group_force(3, ng))
+    group_mass = 0.0_dp
+    group_com = 0.0_dp
+    group_force = 0.0_dp
+    do a = 1, na
+      do k = 1, 3
+        forces(3*(a - 1) + k) = 0.0_dp
+        if (.not. ieee_is_finite(coordinates(3*(a - 1) + k))) then
+          info = -2_c_int
+          return
+        end if
+      end do
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      g = int(group_index(a))
+      if (g < 0 .or. g > ng) then
+        info = -3_c_int
+        return
+      end if
+      if (g == 0) cycle
+      group_mass(g) = group_mass(g) + masses(a)
+      do k = 1, 3
+        group_com(k, g) = group_com(k, g) + &
+                          masses(a)*coordinates(3*(a - 1) + k)
+      end do
+    end do
+    do g = 1, ng
+      if (group_mass(g) <= 0.0_dp) then
+        info = -3_c_int
+        return
+      end if
+      group_com(:, g) = group_com(:, g)/group_mass(g)
+      displacement = group_com(:, g) - center
+      distance = norm2(displacement)
+      if (.not. ieee_is_finite(distance)) then
+        info = -2_c_int
+        return
+      end if
+      penetration = max(0.0_dp, distance - radius)
+      max_penetration = max(max_penetration, penetration)
+      if (penetration > 0.0_dp) active_count = active_count + 1_c_int64_t
+    end do
+    ! Stop before evaluating an unphysically large polynomial.  The caller can
+    ! checkpoint/report this configuration without propagating another step.
+    if (max_penetration_limit > 0.0_dp .and. &
+        max_penetration > max_penetration_limit) then
+      info = 1_c_int
+      return
+    end if
+
+    do g = 1, ng
+      displacement = group_com(:, g) - center
+      distance = norm2(displacement)
+      penetration = distance - radius
+      if (penetration <= 0.0_dp) cycle
+      if (buffer > 0.0_dp .and. penetration < buffer) then
+        t = penetration/buffer
+        switch = 3.0_dp*t*t - 2.0_dp*t*t*t
+        radial_derivative = force_constant*penetration*switch
+        energy = energy + force_constant*buffer*buffer* &
+                 (0.75_dp*t**4 - 0.4_dp*t**5)
+      else
+        radial_derivative = force_constant*penetration
+        energy = energy + 0.5_dp*force_constant*penetration*penetration
+        if (buffer > 0.0_dp) &
+          energy = energy - 0.15_dp*force_constant*buffer*buffer
+      end if
+      if (.not. ieee_is_finite(energy) .or. &
+          .not. ieee_is_finite(radial_derivative)) then
+        info = -4_c_int
+        return
+      end if
+      group_force(:, g) = -radial_derivative*displacement/distance
+    end do
+    do a = 1, na
+      g = int(group_index(a))
+      if (g == 0) cycle
+      atom_weight = masses(a)/group_mass(g)
+      do k = 1, 3
+        forces(3*(a - 1) + k) = atom_weight*group_force(k, g)
+      end do
+    end do
+    info = 0_c_int
+  end function namd_droplet_boundary
+
+!> @brief Harmonic restraint of a selected solute centre of mass.
+!>
+!> selected(a)=0 excludes atom a.  Force is distributed by mass so the
+!> restrained coordinate and its analytic Cartesian derivative are identical.
+  function namd_com_restraint(natom, coordinates, masses, selected, center, &
+      force_constant, energy, forces, displacement_norm) result(info) &
+      bind(C, name="oqp_namd_com_restraint")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom
+    real(c_double), intent(in) :: coordinates(*), masses(*), center(3)
+    integer(c_int64_t), intent(in) :: selected(*)
+    real(c_double), value, intent(in) :: force_constant
+    real(c_double), intent(out) :: energy, forces(*), displacement_norm
+    integer(c_int) :: info
+    real(kind=dp) :: total_mass, com(3), displacement(3), weight
+    integer :: a, k, na
+
+    info = -1_c_int
+    energy = 0.0_dp
+    displacement_norm = 0.0_dp
+    if (natom <= 0_c_int64_t .or. .not. ieee_is_finite(force_constant) .or. &
+        force_constant <= 0.0_dp .or. any(.not. ieee_is_finite(center))) return
+    na = int(natom)
+    total_mass = 0.0_dp
+    com = 0.0_dp
+    do a = 1, na
+      do k = 1, 3
+        forces(3*(a - 1) + k) = 0.0_dp
+        if (.not. ieee_is_finite(coordinates(3*(a - 1) + k))) then
+          info = -2_c_int
+          return
+        end if
+      end do
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      if (selected(a) == 0_c_int64_t) cycle
+      total_mass = total_mass + masses(a)
+      do k = 1, 3
+        com(k) = com(k) + masses(a)*coordinates(3*(a - 1) + k)
+      end do
+    end do
+    if (total_mass <= 0.0_dp) then
+      info = -3_c_int
+      return
+    end if
+    com = com/total_mass
+    displacement = com - center
+    displacement_norm = norm2(displacement)
+    energy = 0.5_dp*force_constant*displacement_norm*displacement_norm
+    if (.not. ieee_is_finite(energy)) then
+      info = -4_c_int
+      return
+    end if
+    do a = 1, na
+      if (selected(a) == 0_c_int64_t) cycle
+      weight = masses(a)/total_mass
+      do k = 1, 3
+        forces(3*(a - 1) + k) = -weight*force_constant*displacement(k)
+      end do
+    end do
+    info = 0_c_int
+  end function namd_com_restraint
+
+!> @brief Apply one exact Langevin Ornstein-Uhlenbeck velocity step.
+!>
+!> The random vector is a pure function of seed, stream, physical MD step and
+!> Cartesian component, so restart and process scheduling do not affect it.
+!> heat is K_after-K_before: positive values are energy transferred from the
+!> thermostat into the physical system.  The caller may subsequently project
+!> constraints and should then replace heat by the measured constrained dK.
+  function namd_langevin_thermostat(natom, dt, temperature, friction, seed, &
+      stream, step, masses, velocities, heat) result(info) &
+      bind(C, name="oqp_namd_langevin_thermostat")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: natom, seed, stream, step
+    real(c_double), value, intent(in) :: dt, temperature, friction
+    real(c_double), intent(in) :: masses(*)
+    real(c_double), intent(inout) :: velocities(*)
+    real(c_double), intent(out) :: heat
+    integer(c_int) :: info
+    integer :: a, i, ncomponent, na
+    real(kind=dp) :: damping, thermal_scale, u1, u2, radius, angle
+    real(kind=dp) :: kinetic_before, kinetic_after, normal1, normal2
+    real(kind=dp), parameter :: kb_hartree = 3.166811563e-6_dp
+    real(kind=dp), parameter :: two_pi = 6.28318530717958647692528676655900577_dp
+    integer(c_int64_t) :: component
+
+    info = -1_c_int
+    heat = 0.0_dp
+    if (natom <= 0_c_int64_t .or. .not. ieee_is_finite(dt) .or. dt <= 0.0_dp .or. &
+        .not. ieee_is_finite(temperature) .or. temperature < 0.0_dp .or. &
+        .not. ieee_is_finite(friction) .or. friction < 0.0_dp) return
+    na = int(natom)
+    ncomponent = 3*na
+    kinetic_before = 0.0_dp
+    do a = 1, na
+      if (.not. ieee_is_finite(masses(a)) .or. masses(a) <= 0.0_dp) then
+        info = -2_c_int
+        return
+      end if
+      do i = 1, 3
+        if (.not. ieee_is_finite(velocities(3*(a - 1) + i))) then
+          info = -2_c_int
+          return
+        end if
+        kinetic_before = kinetic_before + &
+          0.5_dp*masses(a)*velocities(3*(a - 1) + i)**2
+      end do
+    end do
+    damping = exp(-friction*dt)
+    do i = 1, ncomponent, 2
+      component = int(i, c_int64_t)
+      u1 = max(namd_counter_component_random(seed, stream, step, component), &
+               tiny(1.0_dp))
+      u2 = namd_counter_component_random(seed, stream, step, component + 1_c_int64_t)
+      radius = sqrt(-2.0_dp*log(u1))
+      angle = two_pi*u2
+      normal1 = radius*cos(angle)
+      normal2 = radius*sin(angle)
+      a = (i + 2)/3
+      thermal_scale = sqrt(max(0.0_dp, (1.0_dp - damping*damping)* &
+                           kb_hartree*temperature/masses(a)))
+      velocities(i) = damping*velocities(i) + thermal_scale*normal1
+      if (i + 1 <= ncomponent) then
+        a = (i + 3)/3
+        thermal_scale = sqrt(max(0.0_dp, (1.0_dp - damping*damping)* &
+                             kb_hartree*temperature/masses(a)))
+        velocities(i + 1) = damping*velocities(i + 1) + thermal_scale*normal2
+      end if
+    end do
+    kinetic_after = 0.0_dp
+    do a = 1, na
+      do i = 1, 3
+        kinetic_after = kinetic_after + &
+          0.5_dp*masses(a)*velocities(3*(a - 1) + i)**2
+      end do
+    end do
+    heat = kinetic_after - kinetic_before
+    if (.not. ieee_is_finite(heat)) then
+      info = -3_c_int
+      return
+    end if
+    info = 0_c_int
+  end function namd_langevin_thermostat
+
+!> @brief Counter random variate keyed by a fourth component index.
+  pure function namd_counter_component_random(seed, stream, step, component) &
+      result(rand)
+    integer(c_int64_t), intent(in) :: seed, stream, step, component
+    real(kind=dp) :: rand
+    integer(c_int64_t) :: z, mantissa
+    integer(c_int64_t), parameter :: gamma = int(z'9E3779B97F4A7C15', c_int64_t)
+    integer(c_int64_t), parameter :: stream_mix = int(z'D2B74407B1CE6E93', c_int64_t)
+    integer(c_int64_t), parameter :: component_mix = int(z'CA5A826395121157', c_int64_t)
+    integer(c_int64_t), parameter :: mix1 = int(z'BF58476D1CE4E5B9', c_int64_t)
+    integer(c_int64_t), parameter :: mix2 = int(z'94D049BB133111EB', c_int64_t)
+    real(kind=dp), parameter :: two_to_minus_53 = 1.0_dp/9007199254740992.0_dp
+
+    z = namd_add64_mod(seed, namd_mul64_mod(gamma, &
+        namd_add64_mod(step, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(stream_mix, &
+        namd_add64_mod(stream, 1_c_int64_t)))
+    z = ieor(z, namd_mul64_mod(component_mix, &
+        namd_add64_mod(component, 1_c_int64_t)))
+    z = namd_mul64_mod(ieor(z, shiftr(z, 30)), mix1)
+    z = namd_mul64_mod(ieor(z, shiftr(z, 27)), mix2)
+    z = ieor(z, shiftr(z, 31))
+    mantissa = shiftr(z, 11)
+    rand = real(mantissa, dp)*two_to_minus_53
+  end function namd_counter_component_random
+
+!> @brief Time-dependent Baeck-An TDC from three consecutive energy points.
+!>
+!> The result is centred on energies_center.  dt_left spans old -> center and
+!> dt_right spans center -> current, so the nonuniform three-point curvature is
+!>
+!>   f''(center) = 2 [dt_left*f(current)
+!>                     -(dt_left+dt_right)*f(center)
+!>                     +dt_right*f(old)]
+!>                   / [dt_left*dt_right*(dt_left+dt_right)].
+!>
+!> For each pair, sigma_ij = sign(DeltaE_ij)/2 * sqrt(DeltaE''_ij/DeltaE_ij)
+!> when the radicand is positive and the gap is inside gap_max.  The method is
+!> a magnitude-only diagnostic: its sign convention cannot validate the
+!> wavefunction gauge of an overlap-derived NACME.
+  function namd_baeck_an_tdc(nstate, dt_left, dt_right, gap_max, &
+      energies_old, energies_center, energies_current, tdc_row_major) &
+      result(info) bind(C, name="oqp_namd_baeck_an_tdc")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: nstate
+    real(c_double), value, intent(in) :: dt_left, dt_right, gap_max
+    real(c_double), intent(in) :: energies_old(*), energies_center(*), &
+                                  energies_current(*)
+    real(c_double), intent(out) :: tdc_row_major(*)
+    integer(c_int) :: info
+    integer :: i, j, n
+    real(kind=dp) :: denominator, gap_old, gap_center, gap_current
+    real(kind=dp) :: curvature, radicand, sigma
+
+    info = -1_c_int
+    if (nstate <= 0_c_int64_t .or. dt_left <= 0.0_dp .or. &
+        dt_right <= 0.0_dp .or. .not. ieee_is_finite(gap_max)) return
+    n = int(nstate)
+    denominator = dt_left*dt_right*(dt_left + dt_right)
+    if (.not. ieee_is_finite(denominator) .or. denominator <= 0.0_dp) return
+
+    do i = 1, n*n
+      tdc_row_major(i) = 0.0_dp
+    end do
+    do i = 1, n
+      if (.not. ieee_is_finite(energies_old(i)) .or. &
+          .not. ieee_is_finite(energies_center(i)) .or. &
+          .not. ieee_is_finite(energies_current(i))) then
+        info = -2_c_int
+        return
+      end if
+      do j = i + 1, n
+        gap_old = energies_old(i) - energies_old(j)
+        gap_center = energies_center(i) - energies_center(j)
+        gap_current = energies_current(i) - energies_current(j)
+        if (abs(gap_center) <= tiny(1.0_dp)) cycle
+        if (gap_max > 0.0_dp .and. abs(gap_center) > gap_max) cycle
+        curvature = 2.0_dp*(dt_left*gap_current &
+                    -(dt_left + dt_right)*gap_center &
+                    +dt_right*gap_old)/denominator
+        radicand = curvature/gap_center
+        if (.not. ieee_is_finite(radicand) .or. radicand <= 0.0_dp) cycle
+        sigma = sign(0.5_dp, gap_center)*sqrt(radicand)
+        tdc_row_major((i - 1)*n + j) = sigma
+        tdc_row_major((j - 1)*n + i) = -sigma
+      end do
+    end do
+    info = 0_c_int
+  end function namd_baeck_an_tdc
+
+!> @brief Provider-neutral validation gate for an MD time-derivative coupling.
+!>
+!> Exact matrix invariants (finite values, zero diagonal, antisymmetry) are
+!> checked independently of the optional reference.  Masked state pairs are
+!> then compared either by magnitude (compare_mode=0, appropriate for TD-BA)
+!> or with their signed gauge (compare_mode=1, intended for phase-aligned
+!> analytic d_ij dot velocity values).
+!>
+!> metrics = [candidate diagonal max, candidate antisymmetry max,
+!>            reference diagonal max, reference antisymmetry max,
+!>            pair RMS error, pair max error, max tolerance ratio]
+!> counts  = [compared pairs, invariant failures, reference failures]
+  function namd_nacme_gate(nstate, candidate, reference, reference_mask, &
+      compare_mode, invariant_tol, abs_tol, rel_tol, metrics, counts) &
+      result(info) bind(C, name="oqp_namd_nacme_gate")
+    use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+    integer(c_int64_t), value, intent(in) :: nstate
+    real(c_double), intent(in) :: candidate(*), reference(*)
+    integer(c_int), intent(in) :: reference_mask(*)
+    integer(c_int), value, intent(in) :: compare_mode
+    real(c_double), value, intent(in) :: invariant_tol, abs_tol, rel_tol
+    real(c_double), intent(out) :: metrics(*)
+    integer(c_int64_t), intent(out) :: counts(*)
+    integer(c_int) :: info
+    integer :: i, j, n, ij, ji
+    real(kind=dp) :: cand_i, cand_j, ref_i, ref_j
+    real(kind=dp) :: error, scale, sum_error2
+    logical :: pair_valid
+
+    info = -1_c_int
+    if (nstate <= 0_c_int64_t .or. &
+        .not. ieee_is_finite(invariant_tol) .or. &
+        .not. ieee_is_finite(abs_tol) .or. &
+        .not. ieee_is_finite(rel_tol) .or. &
+        invariant_tol < 0.0_dp .or. abs_tol < 0.0_dp .or. &
+        rel_tol < 0.0_dp) return
+    if (compare_mode /= 0_c_int .and. compare_mode /= 1_c_int) return
+    n = int(nstate)
+    metrics(1:7) = 0.0_dp
+    counts(1:3) = 0_c_int64_t
+    sum_error2 = 0.0_dp
+
+    do i = 1, n
+      ij = (i - 1)*n + i
+      if (.not. ieee_is_finite(candidate(ij))) then
+        info = -2_c_int
+        return
+      end if
+      metrics(1) = max(metrics(1), abs(candidate(ij)))
+      if (abs(candidate(ij)) > invariant_tol) &
+        counts(2) = counts(2) + 1_c_int64_t
+      if (reference_mask(ij) /= 0_c_int) then
+        if (.not. ieee_is_finite(reference(ij))) then
+          info = -3_c_int
+          return
+        end if
+        metrics(3) = max(metrics(3), abs(reference(ij)))
+        if (abs(reference(ij)) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+      end if
+      do j = i + 1, n
+        ij = (i - 1)*n + j
+        ji = (j - 1)*n + i
+        cand_i = candidate(ij)
+        cand_j = candidate(ji)
+        if (.not. ieee_is_finite(cand_i) .or. &
+            .not. ieee_is_finite(cand_j)) then
+          info = -2_c_int
+          return
+        end if
+        metrics(2) = max(metrics(2), abs(cand_i + cand_j))
+        if (abs(cand_i + cand_j) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+
+        if ((reference_mask(ij) /= 0_c_int) .neqv. &
+            (reference_mask(ji) /= 0_c_int)) then
+          info = -4_c_int
+          return
+        end if
+        pair_valid = reference_mask(ij) /= 0_c_int
+        if (.not. pair_valid) cycle
+        ref_i = reference(ij)
+        ref_j = reference(ji)
+        if (.not. ieee_is_finite(ref_i) .or. &
+            .not. ieee_is_finite(ref_j)) then
+          info = -3_c_int
+          return
+        end if
+        metrics(4) = max(metrics(4), abs(ref_i + ref_j))
+        if (abs(ref_i + ref_j) > invariant_tol) &
+          counts(2) = counts(2) + 1_c_int64_t
+
+        if (compare_mode == 0_c_int) then
+          error = abs(abs(cand_i) - abs(ref_i))
+        else
+          error = abs(cand_i - ref_i)
+        end if
+        scale = abs_tol + rel_tol*abs(ref_i)
+        counts(1) = counts(1) + 1_c_int64_t
+        sum_error2 = sum_error2 + error*error
+        metrics(6) = max(metrics(6), error)
+        if (scale > 0.0_dp) then
+          metrics(7) = max(metrics(7), error/scale)
+        else if (error > 0.0_dp) then
+          metrics(7) = huge(1.0_dp)
+        end if
+        if (error > scale) counts(3) = counts(3) + 1_c_int64_t
+      end do
+    end do
+    if (counts(1) > 0_c_int64_t) &
+      metrics(5) = sqrt(sum_error2/real(counts(1), dp))
+    info = 0_c_int
+  end function namd_nacme_gate
 
 !> @brief Time-derivative (nonadiabatic) coupling from state overlaps.
 !>        sigma(i,j) = ( S(i,j) - S(j,i) ) / (2 dt)
@@ -386,25 +993,22 @@ contains
     real(kind=dp), intent(in)    :: thresh
     integer,       intent(inout) :: active
     logical,       intent(out)   :: swapped
-    integer :: j, n, jmax
-    real(kind=dp) :: amax
+    integer, allocatable :: assignment(:)
+    real(kind=dp), allocatable :: signs(:), matched(:), margins(:)
+    integer :: info, n
 
     n = size(stas, 1)
     swapped = .false.
     if (abs(stas(active, active)) >= thresh) return   ! no trivial crossing
 
-    ! Partner = state with the largest |overlap| to the (old) active state.
-    jmax = active
-    amax = abs(stas(active, active))
-    do j = 1, n
-      if (j == active) cycle
-      if (abs(stas(active, j)) > amax) then
-        amax = abs(stas(active, j))
-        jmax = j
-      end if
-    end do
-    if (jmax /= active .and. amax >= thresh) then
-      active = jmax
+    ! Use the same global one-to-one state map as MO/X tracking.  Independent
+    ! row maxima can assign several old states to one new state and lose the
+    ! physical lineage at simultaneous or near-degenerate exchanges.
+    allocate(assignment(n), signs(n), matched(n), margins(n))
+    call maximum_overlap_assignment(stas, assignment, signs, matched, margins, info)
+    if (info == 0 .and. assignment(active) /= active .and. &
+        matched(active) >= thresh) then
+      active = assignment(active)
       swapped = .true.
     end if
   end subroutine namd_trivial_crossing
@@ -430,7 +1034,8 @@ contains
 !>   (1-D, layout-unambiguous):
 !>     in : OQP_td_states_overlap (n x n), OQP_td_energies (n),
 !>          OQP_namd_coef (2n: re1,im1,re2,im2,...), OQP_namd_velocity (3*nat),
-!>          OQP_namd_params (>=12 packed scalars)
+!>          OQP_namd_params (>=14 packed scalars; slot 14 < 0 suppresses
+!>          state changes while retaining coefficient propagation)
 !>     out: OQP_namd_coef, OQP_namd_velocity (rescaled), OQP_namd_params(active,
 !>          hopped, target), OQP_namd_results (n*n cumulative probs + flags)
   subroutine namd_hop(infos)
@@ -445,7 +1050,7 @@ contains
 
     integer :: n, nat, i, a, isub, nsub, active, target, decoherence, trivial_en
     real(kind=dp) :: dt_fs, dt_au, hsub, thrshe, rand, edc_c, triv_thr, ekin
-    logical :: hopped, blocked, swapped
+    logical :: hopped, blocked, swapped, allow_hop
 
     real(kind=dp), allocatable :: tdc(:,:), cmhp(:,:), cr(:), ci(:), eabs(:), vel(:,:)
     real(kind=dp), allocatable :: mass_au(:)
@@ -506,6 +1111,8 @@ contains
     ! params(8) = tdc scheme (0 finite-diff, 1 NPI), handled in the Python driver
     trivial_en  = nint(params(9))
     triv_thr    = params(10)
+    allow_hop   = .true.
+    if (size(params) >= 14) allow_hop = params(14) >= 0.0_dp
     dt_au       = dt_fs*FS_TO_AU
     hsub        = dt_au/real(nsub, dp)
 
@@ -531,7 +1138,9 @@ contains
 
     ! 1) follow diabatic character across trivial/unavoided crossings
     swapped = .false.
-    if (trivial_en == 1) call namd_trivial_crossing(stas2, triv_thr, active, swapped)
+    if (allow_hop .and. trivial_en == 1) then
+      call namd_trivial_crossing(stas2, triv_thr, active, swapped)
+    end if
 
     ! 2) time-derivative couplings: supplied by the Python driver as a flat
     !    row-major (n x n) matrix (finite difference or norm-preserving
@@ -557,8 +1166,13 @@ contains
       call namd_decoherence_edc(cr, ci, eabs, active, ekin, dt_au, edc_c)
 
     ! 5) fewest-switches hop + isotropic velocity rescaling
-    call namd_fssh_decision(cmhp, eabs, rand, thrshe, mass_au, vel, &
-                            active, hopped, target, blocked)
+    hopped = .false.
+    blocked = .false.
+    target = active
+    if (allow_hop) then
+      call namd_fssh_decision(cmhp, eabs, rand, thrshe, mass_au, vel, &
+                              active, hopped, target, blocked)
+    end if
 
     ! pack results back
     do i = 1, n

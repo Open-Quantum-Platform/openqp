@@ -200,6 +200,11 @@ class OQPTester:
     def _project_name_for_input(self, input_file: str) -> str:
         """Return a collision-free project name for a paired legacy input."""
         project_name = os.path.splitext(os.path.basename(input_file))[0]
+        if (input_file.lower().endswith(".restart.oqp")
+                and project_name.lower().endswith(".restart")):
+            # A paired continuation shares the producer project/log and NAMD
+            # sidecars, but is scheduled only after that producer completes.
+            project_name = project_name[:-len(".restart")]
         input_stem, extension = os.path.splitext(input_file)
         if (
             extension.lower() == ".inp"
@@ -219,10 +224,70 @@ class OQPTester:
         """
         project_name = project_name or self._project_name_for_input(input_file)
         real_input = os.path.realpath(os.path.abspath(input_file))
+        if real_input.lower().endswith(".restart.oqp"):
+            real_input = real_input[:-len(".restart.oqp")] + ".oqp"
         digest = hashlib.sha256(os.fsencode(real_input)).hexdigest()[:12]
         return os.path.join(self.output_dir, f"{project_name}__{digest}")
 
-    def run_single_test(self, input_file: str) -> Dict[str, Any]:
+    @staticmethod
+    def _absolutize_caller_relative_inputs(mol, caller_cwd):
+        """Preserve caller-CWD path semantics inside an isolated worker."""
+        caller_cwd = os.path.realpath(os.path.abspath(caller_cwd))
+
+        def runtime_path(value):
+            if not isinstance(value, str) or not value.strip():
+                return value
+            expanded = os.path.expanduser(value.strip())
+            if os.path.isabs(expanded):
+                return os.path.realpath(expanded)
+            return os.path.realpath(os.path.join(caller_cwd, expanded))
+
+        guess = mol.config.get("guess", {})
+        for key in ("file", "file2"):
+            if key in guess:
+                guess[key] = runtime_path(guess[key])
+        md = mol.config.get("md", {})
+        velocity = str(md.get("velocity", "") or "").strip()
+        if velocity.lower() not in {
+            "", "zero", "none", "0", "maxwell", "boltzmann", "random"
+        }:
+            md["velocity"] = runtime_path(velocity)
+        # Tight-binding adapters resolve relative paths first against the
+        # input directory and then against Path.cwd().  Preserve that fallback
+        # when the worker changes cwd to its isolated case directory.  Only
+        # rewrite caller-owned paths that exist there, so input-directory paths
+        # and package/environment defaults retain their normal resolution.
+        for section, keys in (
+            ("dftb", ("parameter_path", "library_path", "executable")),
+            ("xtb", ("parameter_path", "library_path")),
+        ):
+            config = mol.config.get(section, {})
+            for key in keys:
+                value = config.get(key)
+                if isinstance(value, str) and os.path.exists(runtime_path(value)):
+                    config[key] = runtime_path(value)
+        qmmm = mol.config.get("qmmm", {})
+        for key in ("pdb_file", "qm_atoms_xyz"):
+            value = qmmm.get(key)
+            if isinstance(value, str) and os.path.isfile(runtime_path(value)):
+                qmmm[key] = runtime_path(value)
+        for key in ("forcefield", "forcefield_files"):
+            value = qmmm.get(key)
+            if not isinstance(value, str):
+                continue
+            entries = [
+                item for item in value.replace(",", " ").split() if item
+            ]
+            qmmm[key] = " ".join(
+                runtime_path(item)
+                if os.path.isfile(runtime_path(item))
+                else item
+                for item in entries
+            )
+        mol.oqp_runtime_cwd = caller_cwd
+
+    def run_single_test(self, input_file: str,
+                        caller_cwd: str = None) -> Dict[str, Any]:
         """
         Run a single OpenQP test.
 
@@ -257,11 +322,21 @@ class OQPTester:
 
         start_time = time.perf_counter()
         try:
-            runner = Runner(project=project_name,
-                            input_file=input_file,
-                            log=log,
-                            silent=1,
-                            usempi=usempi)
+            worker_cwd = os.getcwd()
+            try:
+                if caller_cwd is not None:
+                    os.chdir(caller_cwd)
+                runner = Runner(project=project_name,
+                                input_file=input_file,
+                                log=log,
+                                silent=1,
+                                usempi=usempi)
+                if caller_cwd is not None:
+                    self._absolutize_caller_relative_inputs(
+                        runner.mol, caller_cwd)
+            finally:
+                if caller_cwd is not None:
+                    os.chdir(worker_cwd)
             runner.run(test_mod=True)
             if self.mpi_manager.rank == 0:
                 message, diff = runner.test()
@@ -348,21 +423,38 @@ class OQPTester:
         that child. We translate a non-zero exit (or a timeout) into an ERROR
         result for that one test rather than letting it crash the whole run.
         """
+        # Native Fortran units such as ``fort.6`` are opened relative to the
+        # process working directory.  Parallel test subprocesses must therefore
+        # have distinct working directories in addition to distinct log paths;
+        # otherwise one Hessian test can consume another test's unit-6 file.
+        input_file = os.path.realpath(os.path.abspath(input_file))
         project_name = self._project_name_for_input(input_file)
         case_output_dir = self._case_output_dir(input_file, project_name)
+        os.makedirs(case_output_dir, exist_ok=True)
         log = os.path.join(case_output_dir, f"{project_name}.log")
         self.log(f"Running test for {project_name}")
 
+        parent_cwd = os.getcwd()
         cmd = [
             sys.executable, "-m", "oqp.utils.oqp_tester",
             "--isolated", input_file,
             "--output-dir", self.output_dir,
             "--omp", str(self.omp_threads),
+            "--caller-cwd", parent_cwd,
         ]
+        child_env = os.environ.copy()
+        inherited_pythonpath = child_env.get("PYTHONPATH")
+        if inherited_pythonpath is not None:
+            child_env["PYTHONPATH"] = os.pathsep.join(
+                os.path.realpath(os.path.abspath(os.path.expanduser(entry)))
+                if entry else parent_cwd
+                for entry in inherited_pythonpath.split(os.pathsep)
+            )
         start_time = time.perf_counter()
         try:
             proc = subprocess.run(
                 cmd, capture_output=True, text=True, timeout=_test_timeout(),
+                cwd=case_output_dir, env=child_env,
             )
             stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
         except subprocess.TimeoutExpired as err:
@@ -441,7 +533,9 @@ class OQPTester:
             )
 
         if self.mpi_manager.use_mpi:
-            for input_file in input_files:
+            primary_inputs, restart_inputs = self._partition_restart_inputs(
+                input_files)
+            for input_file in primary_inputs + restart_inputs:
                 result = self.run_single_test(input_file)
                 self.results.append(result)
                 self._log_result_status(result)
@@ -459,18 +553,46 @@ class OQPTester:
             # tearing down a shared worker pool (BrokenProcessPool) and aborting
             # every still-pending test. A thread pool just supervises the child
             # processes, so the GIL is irrelevant here.
+            primary_inputs, restart_inputs = self._partition_restart_inputs(
+                input_files)
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_file = {
                     executor.submit(self._run_isolated, input_file): input_file
-                    for input_file in input_files
+                    for input_file in primary_inputs
                 }
                 for future in as_completed(future_to_file):
                     result = future.result()
                     self.results.append(result)
                     self._log_result_status(result)
+            # A *.restart.oqp example consumes the checkpoint and sidecars of
+            # its same-stem producer. Run paired continuations only after all
+            # ordinary examples have completed, never concurrently with their
+            # producer.
+            for input_file in restart_inputs:
+                result = self._run_isolated(input_file)
+                self.results.append(result)
+                self._log_result_status(result)
 
         self.results.sort(key=lambda x: x['input_file'])
         self.end_time = time.perf_counter()
+
+    @staticmethod
+    def _partition_restart_inputs(input_files):
+        """Place paired restart examples after their checkpoint producers."""
+        selected = {
+            os.path.realpath(os.path.abspath(path)) for path in input_files
+        }
+        primary = []
+        restart = []
+        for path in input_files:
+            real_path = os.path.realpath(os.path.abspath(path))
+            if real_path.lower().endswith(".restart.oqp"):
+                producer = real_path[:-len(".restart.oqp")] + ".oqp"
+                if producer in selected:
+                    restart.append(path)
+                    continue
+            primary.append(path)
+        return primary, restart
 
     def _get_input_files(self, test_path: str, *,
                          input_format: str = 'auto') -> List[str]:
@@ -767,6 +889,10 @@ def _run_isolated_main(argv=None):
     parser.add_argument("--isolated", required=True, help="input .inp or .oqp file")
     parser.add_argument("--output-dir", required=True, help="shared output dir")
     parser.add_argument("--omp", type=int, default=1, help="OMP threads")
+    parser.add_argument(
+        "--caller-cwd", required=True,
+        help="working directory used to resolve caller-relative input files",
+    )
     args = parser.parse_args(argv)
 
     os.environ["OMP_NUM_THREADS"] = str(args.omp)
@@ -777,7 +903,7 @@ def _run_isolated_main(argv=None):
     tester.output_dir = args.output_dir
     tester.mpi_manager = MPIManager()
 
-    result = tester.run_single_test(args.isolated)
+    result = tester.run_single_test(args.isolated, caller_cwd=args.caller_cwd)
     sys.stdout.flush()
     print(_RESULT_MARKER + json.dumps(result))
     return 0
