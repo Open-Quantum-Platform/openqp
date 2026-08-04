@@ -35,3 +35,20 @@ The directory also retains two more detailed MRSF inputs:
 
 MRSF state convention: physical S0 is singlet response root 1; S1/S2 are
 roots 2/3. The high-spin ROKS determinant is only the auxiliary reference.
+
+## Open-shell ground-state reference (`[dftb] reference=`)
+
+A plain `dftb`/`dftb0` ground SCC can request an open-shell reference — computing
+just the reference energy, no MRSF response — via the `reference` key:
+
+- `reference=roks` — restricted-open-shell (Guest–Saunders)
+- `reference=cuks` — constrained-UKS (default open-shell operator; ≡ ROKS on a
+  common-orbital DFTB reference)
+- `reference=uks`  — genuine unrestricted (independent α/β SCC; the DFTB+ `udftb`
+  analogue). UKS lies at or below ROKS (variational).
+
+`unpaired` (default 2) sets the number of unpaired electrons. The energy prints its
+decomposition (H0 / SCC-gamma / spin / repulsive), for term-by-term comparison with
+DFTB+. Examples: `CH2_UKS-DFTB_ENERGY.oqp`, `CH2_ROKS-DFTB_ENERGY.oqp`,
+`CH2_CUKS-DFTB_ENERGY.oqp` (CH₂ triplet: UKS ≈ −2.5458, ROKS = CUKS ≈ −2.5419 Ha).
+For an LC open-shell reference add `model=ob2` (LC has no closed-shell RHF form).
