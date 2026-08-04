@@ -428,15 +428,56 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     call dgemm('n','t', no2, no2, nv2, 0.25_dp, gmnef, no2, tau, no2, &
                1.0_dp, Wmnij, no2)
 
-    !$omp parallel do collapse(4) default(shared) private(a,b,e,f_,m,n,s_) schedule(static) if(nv2*nv2 > PAR_MIN)
-    do f_ = 1, nv; do e = 1, nv; do b = 1, nv; do a = 1, nv
-      s_ = g(no+a,no+b,no+e,no+f_)
-      do m = 1, no
-        s_ = s_ - t1(m,b)*g(no+a,m,no+e,no+f_) + t1(m,a)*g(no+b,m,no+e,no+f_)
+    ! W(a,b,e,f) = <ab||ef> - sum_m t1(m,b) <am||ef> + sum_m t1(m,a) <bm||ef>
+    !
+    ! The two t1 terms are one contraction read two ways: with
+    !   Y(b,a,e,f) = sum_m t1(m,b) <am||ef>
+    ! the second term is Y with its two virtual labels exchanged.  Forming Y as
+    ! a DGEMM and reading it both ways replaces the scalar inner sum that made
+    ! this the single largest cost of the open-shell iteration -- 70.9 s of
+    ! 141.5 s for OH/cc-pVQZ, at a few percent of the machine's DGEMM rate
+    ! because every m step strode through g by nso.
+    !
+    ! Blocked over f so Y is nv^3 per block instead of a second v^4 array,
+    ! which at this size would have been another 5 GB alongside Wabef.
+    block
+      real(dp), allocatable :: pam(:,:), yba(:,:)
+      integer :: fb, nfb, fblk, ff, ae, be
+      fblk = max(1, min(nv, int(8.0e6_dp/max(1.0_dp, real(nv,dp)**3))))
+      allocate(pam(no, nv*nv*fblk), yba(nv, nv*nv*fblk))
+      do fb = 1, nv, fblk
+        nfb = min(fblk, nv - fb + 1)
+        !$omp parallel do collapse(3) default(shared) private(ff,e,a,m) schedule(static)
+        do ff = 1, nfb
+          do e = 1, nv
+            do a = 1, nv
+              do m = 1, no
+                pam(m, ((ff-1)*nv + e - 1)*nv + a) = g(no+a, m, no+e, no+fb+ff-1)
+              end do
+            end do
+          end do
+        end do
+        !$omp end parallel do
+        ! yba(b, a + (e-1)*nv + (ff-1)*nv^2) = sum_m t1(m,b) <am||e,fb+ff-1>
+        call dgemm('t','n', nv, nv*nv*nfb, no, 1.0_dp, t1, no, pam, no, &
+                   0.0_dp, yba, nv)
+        !$omp parallel do collapse(3) default(shared) private(ff,e,b,a,ae,be) schedule(static)
+        do ff = 1, nfb
+          do e = 1, nv
+            do b = 1, nv
+              be = ((ff-1)*nv + e - 1)*nv + b
+              do a = 1, nv
+                ae = ((ff-1)*nv + e - 1)*nv + a
+                Wabef(a,b,e,fb+ff-1) = g(no+a,no+b,no+e,no+fb+ff-1) &
+                                     - yba(b, ae) + yba(a, be)
+              end do
+            end do
+          end do
+        end do
+        !$omp end parallel do
       end do
-      Wabef(a,b,e,f_) = s_
-    end do; end do; end do; end do
-    !$omp end parallel do
+      deallocate(pam, yba)
+    end block
     ! Wabef(ab,ef) += 1/4 tau(mn,ab)^T <mn||ef>
     call dgemm('t','n', nv2, nv2, no2, 0.25_dp, tau, no2, gmnef, no2, &
                1.0_dp, Wabef, nv2)
