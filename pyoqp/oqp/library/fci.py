@@ -2260,7 +2260,7 @@ def _active_space(
 # are matched against it by tests/test_fci_solve.py, so the two cannot drift.
 _FCI_IOPT = (
     "norb", "nact", "ncore", "nalpha", "nbeta", "nroot", "solver", "maxiter",
-    "subspace", "mult", "maxmemory", "nthreads", "want_s2",
+    "subspace", "mult", "maxmemory", "nthreads", "want_s2", "guess",
 )
 _FCI_DOPT = ("ecore", "eig_tol", "cutoff")
 _FCI_IOPT_INDEX = {name: i for i, name in enumerate(_FCI_IOPT)}

@@ -400,8 +400,16 @@ contains
 
   !> Matrix-free block application Y = 0.5(H+H^T) X from a pre-sorted
   !> determinant list.  X and Y are C-order [ndet, nvec].
+  !>
+  !> The string-driven engine handles the canonical CAS product list -- which is
+  !> every CASCI/CASSCF/FCI solve -- in `O(ndet * nact**2)` BLAS-3 work.  It
+  !> declines any other list (a spin-filtered or restricted determinant set) and
+  !> the determinant-pair walker below then runs exactly as before.  Setting
+  !> `OQP_FCI_SIGMA=walk` forces the walker, which is what the two paths are
+  !> compared with.
   subroutine fci_matvec_apply(nspin, ndet, dets, skeys, sperm, hspin, gspin, &
                               cutoff, nvec, x, y, nthreads)
+    use fci_sigma_strings_mod, only: fci_sigma_strings
     integer, intent(in) :: nspin, nvec, nthreads
     integer(i8), intent(in) :: ndet
     integer(i8), intent(in) :: dets(*), skeys(ndet), sperm(ndet)
@@ -415,6 +423,15 @@ contains
     integer(i8) :: col, i
     integer :: nthr, ns, k
     real(dp) :: dummy(1)
+    character(len=8) :: sigma_mode
+    integer :: env_len, env_stat
+
+    sigma_mode = ' '
+    call get_environment_variable("OQP_FCI_SIGMA", sigma_mode, env_len, env_stat)
+    if (env_stat /= 0 .or. sigma_mode /= 'walk') then
+      if (fci_sigma_strings(nspin, ndet, dets, hspin, gspin, nvec, x, y, &
+                            nthreads) == 0) return
+    end if
 
     ns = nspin
     y(1:ndet * nvec) = 0.0_dp

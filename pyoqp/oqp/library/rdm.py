@@ -25,6 +25,11 @@ def _rdm_backend():
     return _lib_backend()
 
 
+def _rdm_lib_threads() -> int:
+    from oqp.library.fci import _fci_lib_threads
+    return _fci_lib_threads()
+
+
 def _lib_rdm1(coeff, dets, n_spinorb):
     """D1 through the Fortran engine, or None when unavailable."""
     backend = _rdm_backend()
@@ -115,6 +120,44 @@ def _lib_rdm2_spatial(coeff, dets, norb):
     if int(info) != 0:
         return None
     return out
+
+
+def make_rdm12_spatial_strings(coeff, dets, norb):
+    """Spatial (d1, d2) through the string-factorized engine, or ``None``.
+
+    O(ndet nact^2) table work plus one DGEMM against the Gram-matrix walk's
+    O(ndet nelec^2 nact^2) scalar enumeration -- milliseconds against tens of
+    seconds at CAS(12,12).  The result agrees with ``make_rdm1_spatial`` /
+    ``make_rdm2_spatial`` to round-off but NOT bit for bit (the reduction is
+    reassociated), so this is a separate entry point: callers that only need
+    correct RDMs (bulk per-state record storage, optimization loops) opt in,
+    while the bit-pinned seam above stays exactly what it was.  Returns
+    ``None`` for non-product determinant lists or when the engine is absent;
+    callers fall back to the pinned builders.
+    """
+    backend = _rdm_backend()
+    if backend is None or 2 * norb > 62:
+        return None
+    lib, ffi = backend
+    if not hasattr(lib, "rdm12_strings_c"):
+        return None
+    coeff = np.asarray(coeff)
+    if np.iscomplexobj(coeff):
+        return None
+    det_arr = _as_i64c(dets)
+    civec = _as_f64c(coeff)
+    d1 = np.zeros((norb, norb), dtype=np.float64)
+    d2 = np.zeros((norb,) * 4, dtype=np.float64)
+    info = lib.rdm12_strings_c(
+        int(norb), int(det_arr.size),
+        ffi.cast("int64_t *", det_arr.ctypes.data),
+        ffi.cast("double *", civec.ctypes.data),
+        ffi.cast("double *", d1.ctypes.data),
+        ffi.cast("double *", d2.ctypes.data),
+        _rdm_lib_threads())
+    if int(info) != 0:
+        return None
+    return d1, d2
 
 
 def _bit_count(value: int) -> int:

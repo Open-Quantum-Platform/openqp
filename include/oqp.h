@@ -322,7 +322,8 @@ enum {
   FCI_I_MAXMEMORY = 10, /* working-set budget, MiB                        */
   FCI_I_NTHREADS  = 11, /* OpenMP threads for the kernels                 */
   FCI_I_WANT_S2   = 12, /* 1 = also return <S^2> per returned root        */
-  FCI_NIOPT       = 13
+  FCI_I_GUESS     = 13, /* 1 = civecs holds nroot Davidson start vectors  */
+  FCI_NIOPT       = 14
 };
 enum {
   FCI_D_ECORE     = 0,  /* scalar added to every returned root            */
@@ -348,6 +349,11 @@ void rdm1_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, double *d1);
 int64_t rdm2_spatial(int32_t norb, int64_t ndet, const int64_t *dets,
     const double *civec, int64_t cap, double *d2, int32_t nthreads);
+/* String-factorized spatial d1+d2 of one CI vector on the canonical CAS
+ * product determinant list (fci_sigma_strings.F90); nonzero status = the list
+ * is not the canonical product, fall back to the walking kernels above. */
+int64_t rdm12_strings_c(int32_t norb, int64_t ndet, const int64_t *dets,
+    const double *civec, double *d1, double *d2, int32_t nthreads);
 /* Spin-free dm1..dm4 (PySCF make_dm1234 convention) from the determinant CI
  * vector; `upto` selects how many are produced and the caller must have
  * allocated every array it requests. Returns 0, or -1 on allocation failure. */

@@ -580,7 +580,14 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     iopt[_CAS_IOPT_INDEX["nbeta"]] = spec.nbeta
     iopt[_CAS_IOPT_INDEX["nstate"]] = len(roots)
     iopt[_CAS_IOPT_INDEX["nroot"]] = spec.nroot
-    iopt[_CAS_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[spec.solver]
+    # The RAW user choice, not spec.solver: resolve_ci_solve collapses "auto"
+    # to a concrete solver up front (its budget validation still applies), but
+    # the driver wants to see "auto" itself -- fci_solve resolves it with the
+    # identical rule for cold solves, and inside the orbital loop the driver
+    # upgrades auto to a warm-started Davidson seeded from the previous point's
+    # CI vectors, which an already-collapsed "dense" would veto.
+    iopt[_CAS_IOPT_INDEX["solver"]] = _FCI_SOLVER_CODE[
+        str(settings.solver).strip().lower()]
     iopt[_CAS_IOPT_INDEX["maxiter"]] = spec.davidson_maxiter
     iopt[_CAS_IOPT_INDEX["subspace"]] = spec.davidson_subspace
     iopt[_CAS_IOPT_INDEX["mult"]] = spec.target_multiplicity or 0

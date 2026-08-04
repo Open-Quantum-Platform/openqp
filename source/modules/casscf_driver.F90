@@ -112,12 +112,17 @@ module casscf_driver_mod
                             FCI_I_NALPHA, FCI_I_NBETA, FCI_I_NROOT, &
                             FCI_I_SOLVER, FCI_I_MAXITER, FCI_I_SUBSPACE, &
                             FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, &
-                            FCI_I_WANT_S2, FCI_NIOPT, FCI_D_ECORE, &
-                            FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT, &
-                            FCI_MAX_NSPIN
+                            FCI_I_WANT_S2, FCI_I_GUESS, FCI_NIOPT, &
+                            FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, &
+                            FCI_NDOPT, FCI_MAX_NSPIN
   use fci_hamiltonian_mod, only: oqp_dsyevd_f
   use mo_transform_mod, only: mo_transform_h1e, mo_transform_eri
-  use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock
+  use casscf_kernel_mod, only: casscf_gfock_grad, casscf_effective_fock, &
+                               casscf_gfock_grad_w
+  use casscf_fastints_mod, only: cas_partial_eri, cas_ao_density, &
+                                 cas_wmo_from_ao, cas_dmo_to_ao, &
+                                 cas_act_exchange_tensor, cas_act_fock
+  use fci_sigma_strings_mod, only: rdm12_strings
   use casscf_orbrot_mod, only: casscf_orbital_rotate
   use casscf_ah_mod, only: casscf_ah_model_step, casscf_lowest_mode_step, &
                            casscf_diis_coeffs
@@ -269,6 +274,26 @@ module casscf_driver_mod
     ! reusable work buffers -- one allocation per run, not per evaluation
     real(dp), allocatable :: h1e(:), eri(:), civ(:), enci(:), s2w(:)
     real(dp), allocatable :: g1(:), g2(:), fock(:), cvec(:)
+    ! ---- fast-evaluation buffers (AO J/K + partial transforms; see
+    !      casscf_fastints.F90).  The full nbf^4 MO tensor `eri` above is only
+    !      written at the once-per-run call sites (final CI, canonicalization)
+    !      and by the analytic-Hessian build, never per gradient evaluation.
+    real(dp), allocatable :: h1e_act(:)        !< folded active h, C-order [na,na]
+    real(dp), allocatable :: eri_act(:)        !< active ERIs, C-order [na^4]
+    real(dp), allocatable :: eact(:)           !< (j t|u v), Fortran (n, na^3)
+    real(dp), allocatable :: tp1(:), tp2(:), tp3(:)  !< transform scratch
+    real(dp), allocatable :: ytr(:)            !< exchange-slice shuffle scratch
+    real(dp), allocatable :: yten(:)           !< (a v|c w) slice, [na^2 n^2]
+    real(dp), allocatable :: dcore(:,:), dwork(:,:)  !< AO densities
+    real(dp), allocatable :: js(:,:), ks(:,:)        !< AO J/K scratch
+    real(dp), allocatable :: fao(:,:), tmw(:,:)      !< AO Fock / GEMM scratch
+    real(dp), allocatable :: wcore(:,:)              !< core mean field in MO
+    real(dp), allocatable :: wmo(:)            !< per-state W, [nstate*n^2]
+    real(dp), allocatable :: tmpna(:)          !< (na, n) scratch
+    integer(c_int32_t) :: iopt_act(0:FCI_NIOPT-1) = 0_c_int32_t
+    real(dp) :: dopt_act(0:FCI_NDOPT-1) = 0.0_dp
+    integer(c_int32_t), allocatable :: active_act(:), core_act(:)
+    logical :: warm = .false.  !< ctx%civ holds the previous point's CI vectors
     ! ---- orbital-Hessian backend (`[casscf] hessian`)
     integer :: hessmode = 0     !< 0 finite difference, 1 analytic
     integer :: nhess = 0        !< analytic Hessian builds, for the trace
@@ -766,11 +791,15 @@ contains
     type(cas_ctx_t), intent(inout) :: ctx
     integer, intent(out) :: ierr
     integer(i8) :: n2, n4, na2, na4
+    integer(i8) :: n_i8, na_i8
+    integer :: k
 
     n2 = int(ctx%n, i8)**2
     n4 = int(ctx%n, i8)**4
     na2 = int(ctx%na, i8)**2
     na4 = int(ctx%na, i8)**4
+    n_i8 = int(ctx%n, i8)
+    na_i8 = int(ctx%na, i8)
     allocate(ctx%hcore(0:n2-1), ctx%h1e(0:n2-1), ctx%eri(0:n4-1), &
              ctx%civ(0:ctx%ndet*int(ctx%nroot, i8)-1), &
              ctx%enci(0:ctx%nroot-1), ctx%s2w(0:ctx%nroot-1), &
@@ -778,15 +807,46 @@ contains
              ctx%g2(0:int(ctx%nstate, i8)*na4-1), &
              ctx%fock(0:n2-1), ctx%cvec(0:ctx%ndet-1), &
              ctx%dets(ctx%ndet), stat=ierr)
+    if (ierr /= 0) return
+    allocate(ctx%h1e_act(0:na2-1), ctx%eri_act(0:na4-1), &
+             ctx%eact(0:n_i8*na_i8**3-1), &
+             ctx%tp1(0:n_i8**3*na_i8-1), ctx%tp2(0:n_i8**2*na_i8**2-1), &
+             ctx%tp3(0:n_i8*na_i8**3-1), &
+             ctx%ytr(0:n_i8**3*na_i8-1), ctx%yten(0:n_i8**2*na_i8**2-1), &
+             ctx%dcore(0:ctx%n-1, 0:ctx%n-1), ctx%dwork(0:ctx%n-1, 0:ctx%n-1), &
+             ctx%js(0:ctx%n-1, 0:ctx%n-1), ctx%ks(0:ctx%n-1, 0:ctx%n-1), &
+             ctx%fao(0:ctx%n-1, 0:ctx%n-1), ctx%tmw(0:ctx%n-1, 0:ctx%n-1), &
+             ctx%wcore(0:ctx%n-1, 0:ctx%n-1), &
+             ctx%wmo(0:int(ctx%nstate, i8)*n2-1), &
+             ctx%tmpna(0:na_i8*n_i8-1), &
+             ctx%active_act(0:max(ctx%na, 1)-1), ctx%core_act(0:0), stat=ierr)
+    if (ierr /= 0) return
+    do k = 0, ctx%na - 1
+      ctx%active_act(k) = int(k, c_int32_t)
+    end do
+    ctx%core_act(0) = 0_c_int32_t
   end subroutine cas_alloc
 
   !> One energy/gradient evaluation at the orbitals `cbuf`.
   !>
-  !> Reproduces `casscf.py::_optimize`'s `evaluate` closure step for step: the
-  !> AO->MO transform, one `fci_solve`, the per-root spatial RDMs, then the
-  !> weighted generalized Fock and orbital gradient.  `with_g=False` was the
-  !> Python's way of skipping the nbf^4 2-RDM when the Fortran Fock engine is
-  !> present; here it never exists at all.
+  !> Reproduces `casscf.py::_optimize`'s `evaluate` closure -- one CI solve, the
+  !> per-root spatial RDMs, then the weighted generalized Fock and orbital
+  !> gradient -- but never forms the full nbf^4 MO ERI tensor.  The CI runs on
+  !> the frozen-core-folded ACTIVE problem (h from the AO-basis inactive Fock,
+  !> ERIs from the shared partial transformation) and the Fock/gradient build
+  !> gets its per-root mean field W from AO-basis J/K contractions plus a
+  !> one-index back-transform.  Same numbers to rounding, at
+  !> O(nbf^4 nact) + O(nbf^4) per evaluation instead of O(nbf^5) -- and the
+  !> TRAH converger calls this twice per Hessian-vector product, which is what
+  !> made the full transform the dominant cost of every CASSCF run.
+  !>
+  !> After the first solve the CI restarts from the previous point's vectors
+  !> (`ctx%warm`): inside one orbital optimization consecutive CI problems
+  !> differ by O(step), so a warm Davidson converges in a handful of
+  !> applications where a cold start pays the full price.  The warm start only
+  !> replaces the `auto` solver choice -- an explicit `[ci] solver=dense` is
+  !> honored -- and only when no spin filter is active (the filtered window
+  !> logic wants its own root growth).
   subroutine cas_evaluate(ctx, cbuf, objective, grad, ierr)
     type(cas_ctx_t), intent(inout) :: ctx
     real(dp), contiguous, intent(in) :: cbuf(0:,0:)
@@ -794,25 +854,59 @@ contains
     real(dp), contiguous, intent(out) :: grad(0:)
     integer(i8), intent(out) :: ierr
 
-    integer :: k, r, na
-    integer(i8) :: j, cap, rc, off1, off2
+    integer :: k, r, na, n, nc, t, u
+    integer(i8) :: j, cap, rc, off1, off2, a, b
+    real(dp) :: efold
 
     ierr = 0_i8
     ctx%ncall = ctx%ncall + 1
     na = ctx%na
+    n = ctx%n
+    nc = ctx%nc
 
-    call mo_transform_h1e(int(ctx%n, c_int32_t), ctx%hcore, cbuf, ctx%h1e)
-    if (mo_transform_eri(int(ctx%n, c_int32_t), ctx%eri_ao, cbuf, ctx%eri) /= 0_i8) then
-      ierr = CAS_ERR_TRANSFORM
-      return
+    ! ---- inactive Fock in AO, folded core energy, active h
+    call cas_ao_density(n, nc, 0, cbuf, ctx%g1, ctx%dcore, ctx%tmpna)
+    call cas_wmo_from_ao(n, ctx%eri_ao, ctx%hcore, cbuf, ctx%dcore, &
+                         ctx%js, ctx%ks, ctx%fao, ctx%tmw, ctx%wcore)
+    efold = 0.0_dp
+    do b = 0_i8, int(n, i8) - 1_i8
+      do a = 0_i8, int(n, i8) - 1_i8
+        efold = efold + ctx%dcore(a, b) &
+                      * (ctx%hcore(a * int(n, i8) + b) + ctx%fao(a, b))
+      end do
+    end do
+    efold = 0.5_dp * efold
+    do t = 0, na - 1
+      do u = 0, na - 1
+        ctx%h1e_act(int(t, i8) * int(na, i8) + int(u, i8)) = &
+            ctx%wcore(nc + t, nc + u)
+      end do
+    end do
+
+    ! ---- active ERIs and the (j t|u v) slice, one shared partial transform
+    call cas_partial_eri(n, na, nc, ctx%eri_ao, cbuf, ctx%tp1, ctx%tp2, &
+                         ctx%tp3, ctx%eri_act, ctx%eact)
+
+    ! ---- CI on the folded active problem
+    ctx%iopt_act = ctx%iopt_ci
+    ctx%iopt_act(FCI_I_NORB) = int(na, c_int32_t)
+    ctx%iopt_act(FCI_I_NACT) = int(na, c_int32_t)
+    ctx%iopt_act(FCI_I_NCORE) = 0_c_int32_t
+    ctx%iopt_act(FCI_I_NROOT) = int(ctx%nroot, c_int32_t)
+    if (ctx%warm .and. ctx%iopt_ci(FCI_I_SOLVER) == 0_c_int32_t .and. &
+        ctx%iopt_ci(FCI_I_MULT) == 0_c_int32_t) then
+      ctx%iopt_act(FCI_I_SOLVER) = 2_c_int32_t
+      ctx%iopt_act(FCI_I_GUESS) = 1_c_int32_t
     end if
-
-    ctx%iopt_ci(FCI_I_NROOT) = int(ctx%nroot, c_int32_t)
-    if (fci_solve(ctx%iopt_ci, ctx%dopt_ci, ctx%active, ctx%core, ctx%h1e, &
-                  ctx%eri, ctx%enci, ctx%civ, ctx%s2w) < 0_i8) then
+    ctx%dopt_act = ctx%dopt_ci
+    ctx%dopt_act(FCI_D_ECORE) = ctx%dopt_ci(FCI_D_ECORE) + efold
+    if (fci_solve(ctx%iopt_act, ctx%dopt_act, ctx%active_act, ctx%core_act, &
+                  ctx%h1e_act, ctx%eri_act, ctx%enci, ctx%civ, &
+                  ctx%s2w) < 0_i8) then
       ierr = CAS_ERR_CI
       return
     end if
+    ctx%warm = .true.
 
     cap = ctx%ndet * int(2 * na, i8)**2 + 1_i8
     do k = 0, ctx%nstate - 1
@@ -823,20 +917,39 @@ contains
       end do
       off1 = int(k, i8) * int(na, i8)**2
       off2 = int(k, i8) * int(na, i8)**4
-      call rdm1_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
-                        ctx%g1(off1))
-      rc = rdm2_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
-                        cap, ctx%g2(off2), 0_c_int32_t)
-      if (rc /= 0_i8) then
-        ierr = CAS_ERR_ALLOC
-        return
+      ! string-factorized RDMs (one DGEMM); the walking kernels remain the
+      ! numerical pin and the fallback for non-product determinant lists
+      if (rdm12_strings(na, ctx%ndet, ctx%dets, ctx%cvec, ctx%g1(off1), &
+                        ctx%g2(off2), ctx%nthreads) /= 0) then
+        call rdm1_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
+                          ctx%g1(off1))
+        rc = rdm2_spatial(int(na, c_int32_t), ctx%ndet, ctx%dets, ctx%cvec, &
+                          cap, ctx%g2(off2), 0_c_int32_t)
+        if (rc /= 0_i8) then
+          ierr = CAS_ERR_ALLOC
+          return
+        end if
       end if
     end do
 
-    call casscf_gfock_grad(int(ctx%n, c_int32_t), int(ctx%nc, c_int32_t), &
-                           int(na, c_int32_t), int(ctx%nstate, c_int32_t), &
-                           ctx%weights, ctx%g1, ctx%g2, ctx%h1e, ctx%eri, &
-                           ctx%fock, grad)
+    ! ---- per-state mean field W = C^T [F_core + J(D_act) - K(D_act)/2] C.
+    ! The active-density J/K come from the partial-transform slices (t2 and
+    ! the exchange-shaped yten), so nothing past the core build and the shared
+    ! pass-1 transform ever streams the nbf^4 tensor again -- per-state cost
+    ! is O(nbf^2 nact^2) regardless of how many states are averaged.
+    call cas_act_exchange_tensor(n, na, nc, cbuf, ctx%tp1, ctx%ytr, ctx%yten)
+    do k = 0, ctx%nstate - 1
+      off1 = int(k, i8) * int(na, i8)**2
+      call cas_act_fock(n, na, ctx%tp2, ctx%yten, ctx%g1(off1), ctx%fao, &
+                        ctx%js, ctx%ks, ctx%dwork)
+      ! W_k = C^T F_k C
+      call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%dwork(0, 0), &
+                 n, 0.0_dp, ctx%tmw(0, 0), n)
+      call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+                 0.0_dp, ctx%wmo(int(k, i8) * int(n, i8)**2), n)
+    end do
+    call casscf_gfock_grad_w(n, nc, na, ctx%nstate, ctx%weights, ctx%g1, &
+                             ctx%g2, ctx%wmo, ctx%eact, ctx%fock, grad)
 
     objective = 0.0_dp
     do k = 0, ctx%nstate - 1
@@ -1093,8 +1206,15 @@ contains
       end do
     end do
 
-    call casscf_effective_fock(int(n, c_int32_t), this%dscr, this%ctx%h1e, &
-                               this%ctx%eri, this%fscr)
+    ! The mean field of `dscr` used to come from `casscf_effective_fock` over
+    ! `ctx%h1e`/`ctx%eri` -- which cas_evaluate no longer fills (and which,
+    ! after a rejected extrapolation, belonged to the wrong point anyway).
+    ! Build it from the AO integrals at the CURRENT orbitals instead: same
+    ! matrix, no nbf^4 MO tensor, no staleness.
+    call cas_dmo_to_ao(n, this%cbuf, this%dscr, this%ctx%tmw, this%ctx%dwork)
+    call cas_wmo_from_ao(n, this%ctx%eri_ao, this%ctx%hcore, this%cbuf, &
+                         this%ctx%dwork, this%ctx%js, this%ctx%ks, &
+                         this%ctx%fao, this%ctx%tmw, this%fscr)
 
     do l = 0, this%ctx%npar - 1
       p = int(this%ctx%pairs(2*l))

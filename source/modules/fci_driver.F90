@@ -82,6 +82,7 @@ module fci_driver_mod
   public :: FCI_I_NORB, FCI_I_NACT, FCI_I_NCORE, FCI_I_NALPHA, FCI_I_NBETA
   public :: FCI_I_NROOT, FCI_I_SOLVER, FCI_I_MAXITER, FCI_I_SUBSPACE
   public :: FCI_I_MULT, FCI_I_MAXMEMORY, FCI_I_NTHREADS, FCI_I_WANT_S2
+  public :: FCI_I_GUESS
   public :: FCI_NIOPT, FCI_D_ECORE, FCI_D_EIG_TOL, FCI_D_CUTOFF, FCI_NDOPT
   public :: FCI_MAX_NSPIN
 
@@ -104,7 +105,9 @@ module fci_driver_mod
   integer, parameter :: FCI_I_MAXMEMORY  = 10  ! working-set budget, MiB
   integer, parameter :: FCI_I_NTHREADS   = 11  ! OpenMP threads for the kernels
   integer, parameter :: FCI_I_WANT_S2    = 12  ! 1 = also return <S^2> per root
-  integer, parameter :: FCI_NIOPT        = 13
+  integer, parameter :: FCI_I_GUESS      = 13  ! 1 = civecs holds nroot Davidson
+                                               !     start vectors on entry
+  integer, parameter :: FCI_NIOPT        = 14
   !
   ! dopt (double):
   integer, parameter :: FCI_D_ECORE      = 0   ! scalar added to every root
@@ -152,7 +155,7 @@ contains
     integer(i8) :: status
 
     integer :: norb, nact, ncore, na, nb, nroot, solver, maxiter, subspace
-    integer :: mult, maxmem, nthreads, want_s2, nspin, ierr
+    integer :: mult, maxmem, nthreads, want_s2, nspin, ierr, nguess
     real(dp) :: ecore, eig_tol, cutoff
     integer(i8) :: ndet, dense_bytes, budget_bytes
 
@@ -179,6 +182,8 @@ contains
     maxmem   = int(iopt(FCI_I_MAXMEMORY))
     nthreads = int(iopt(FCI_I_NTHREADS))
     want_s2  = int(iopt(FCI_I_WANT_S2))
+    nguess   = 0
+    if (int(iopt(FCI_I_GUESS)) /= 0) nguess = int(iopt(FCI_I_NROOT))
     ecore    = dopt(FCI_D_ECORE)
     eig_tol  = dopt(FCI_D_EIG_TOL)
     cutoff   = dopt(FCI_D_CUTOFF)
@@ -248,7 +253,7 @@ contains
     else
       call solve_iterative(ndet, nspin, dets, skeys, sperm, hspin, gspin, &
                            cutoff, nroot, mult, eig_tol, maxiter, subspace, &
-                           budget_bytes, nthreads, &
+                           budget_bytes, nthreads, nguess, civecs, &
                            evals, evecs, s2_win, keep, nsel, status)
     end if
     if (status < 0_i8) return
@@ -307,6 +312,7 @@ contains
     integer(i8), intent(inout) :: status
 
     real(dp), allocatable :: hmat(:), work(:)
+    real(dp) :: dummy_g(1)
     integer :: ierr, k, limit, nact
     logical :: have_roots, hsym
     real(dp) :: worst
@@ -338,7 +344,7 @@ contains
         end if
         call ci_davidson(1, hmat, hsym, nspin, ndet, dets, skeys, sperm, &
                          hspin, gspin, cutoff, nroot, 0.1_dp * eig_tol, &
-                         maxiter, 0, nthreads, evals, evecs, ierr)
+                         maxiter, 0, nthreads, 0, dummy_g, evals, evecs, ierr)
         if (ierr == 0) then
           ! _davidson can also bail out early, so re-check rather than let the
           ! residual assertion below turn a solvable case into a hard failure
@@ -409,11 +415,13 @@ contains
   !> uses when a spin filter is active.
   subroutine solve_iterative(ndet, nspin, dets, skeys, sperm, hspin, gspin, &
                              cutoff, nroot, mult, eig_tol, maxiter, subspace, &
-                             budget_bytes, nthreads, &
+                             budget_bytes, nthreads, nguess, guess, &
                              evals, evecs, s2_win, keep, nsel, status)
     integer(i8), intent(in) :: ndet, budget_bytes
     integer, intent(in) :: nspin, nroot, mult, maxiter, subspace, nthreads
+    integer, intent(in) :: nguess
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
+    real(dp), intent(in) :: guess(*)
     real(dp), intent(in) :: hspin(*), gspin(*), cutoff, eig_tol
     real(dp), allocatable, intent(out) :: evals(:), evecs(:), s2_win(:)
     integer, allocatable, intent(out) :: keep(:)
@@ -447,7 +455,8 @@ contains
       call ci_davidson(2, dummy, .false., nspin, ndet, dets, skeys, sperm, &
                        hspin, gspin, &
                        cutoff, solve_nroot, eig_tol, maxiter, eff_sub, &
-                       nthreads, evals, evecs, ierr)
+                       nthreads, merge(nguess, 0, solve_nroot == nguess), &
+                       guess, evals, evecs, ierr)
       if (ierr /= 0) then
         if (ierr == 2) then
           status = FCI_ERR_ALLOC
@@ -504,12 +513,15 @@ contains
   !> ierr: 0 ok, 1 not converged, 2 allocation failure, 3 eigensolver failure.
   subroutine ci_davidson(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, &
                          hspin, gspin, cutoff, nroot, tol, max_iter, &
-                         max_subspace_in, nthreads, theta_out, ritz_out, ierr)
+                         max_subspace_in, nthreads, nguess, guess, &
+                         theta_out, ritz_out, ierr)
     integer, intent(in) :: mode, nspin, nroot, max_iter, max_subspace_in, nthreads
+    integer, intent(in) :: nguess
     logical, intent(in) :: hsym
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: hmat(*)
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
+    real(dp), intent(in) :: guess(*)
     real(dp), intent(in) :: hspin(*), gspin(*), cutoff, tol
     real(dp), intent(out) :: theta_out(*), ritz_out(*)
     integer, intent(out) :: ierr
@@ -562,15 +574,26 @@ contains
 
     call fci_diag_build(nspin, ndet, dets, hspin, gspin, diag)
 
-    ! Initial guess: unit vectors on the nroot lowest diagonal elements.  They
-    ! are already orthonormal, so the reference's QR of them is the identity up
-    ! to column signs, which the subspace does not see.  Ties go to the lower
-    ! index, matching a stable argsort.
-    call lowest_indices(ndet, diag, nroot, order)
-    basis(:, 1:nroot) = 0.0_dp
-    do i = 1, nroot
-      basis(order(i), i) = 1.0_dp
-    end do
+    ! Initial guess: the caller's start vectors when provided (a warm start
+    ! from the previous CI solve of an orbital optimization -- eigenvectors,
+    ! so already near-orthonormal; one Gram-Schmidt pass makes them exactly
+    ! so), otherwise unit vectors on the nroot lowest diagonal elements.
+    ! Ties go to the lower index, matching a stable argsort.
+    if (nguess == nroot) then
+      ! guess is C-order [ndet, nroot]; repack the strided columns
+      do i = 1, nroot
+        do j = 1, int(ndet)
+          basis(j, i) = guess((int(j, i8) - 1_i8) * int(nroot, i8) + int(i, i8))
+        end do
+      end do
+      call orthonormalize(ndet, nroot, basis(:, 1:nroot))
+    else
+      call lowest_indices(ndet, diag, nroot, order)
+      basis(:, 1:nroot) = 0.0_dp
+      do i = 1, nroot
+        basis(order(i), i) = 1.0_dp
+      end do
+    end if
     nbas = nroot
     call apply_h(mode, hmat, hsym, nspin, ndet, dets, skeys, sperm, hspin, &
                  gspin, cutoff, nthreads, nbas, basis(:, 1:nbas), &

@@ -132,6 +132,7 @@ class CASCI(FCI):
         from oqp.library.rdm import (
             determinant_basis,
             make_rdm1_spatial,
+            make_rdm12_spatial_strings,
             make_rdm2_spatial,
             natural_orbital_occupations,
         )
@@ -148,8 +149,17 @@ class CASCI(FCI):
             raise ValueError("CI vectors must have shape (ndet,) or (ndet, nroot)")
 
         determinants = determinant_basis(active_h1e.shape[0], active_nelec)
+        # Bulk per-root record storage: the string-factorized engine (round-off
+        # equivalent, orders of magnitude faster at wide active spaces) with
+        # the bit-pinned builders as the fallback for non-product lists.
+        pair_roots = [
+            make_rdm12_spatial_strings(
+                ci_vectors[:, root], determinants, active_h1e.shape[0])
+            for root in range(ci_vectors.shape[1])
+        ]
         rdm1_roots = np.stack(
             [
+                pair_roots[root][0] if pair_roots[root] is not None else
                 make_rdm1_spatial(ci_vectors[:, root], determinants, active_h1e.shape[0])
                 for root in range(ci_vectors.shape[1])
             ],
@@ -157,6 +167,7 @@ class CASCI(FCI):
         )
         rdm2_roots = np.stack(
             [
+                pair_roots[root][1] if pair_roots[root] is not None else
                 make_rdm2_spatial(ci_vectors[:, root], determinants, active_h1e.shape[0])
                 for root in range(ci_vectors.shape[1])
             ],

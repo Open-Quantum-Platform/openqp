@@ -55,6 +55,7 @@ module casscf_kernel_mod
   integer, parameter :: dp = c_double
 
   public :: casscf_gfock_grad, casscf_effective_fock
+  public :: build_jkw, casscf_gfock_grad_w
 
 contains
 
@@ -309,5 +310,118 @@ contains
     deallocate(dmat, jmat, kmat, wmat, fwork)
     if (allocated(eact)) deallocate(eact, dgmat)
   end subroutine casscf_gfock_grad
+
+  !> `casscf_gfock_grad` with the expensive inputs precomputed by the caller.
+  !>
+  !> Identical math to `casscf_gfock_grad`, but the full nbf^4 MO ERI tensor
+  !> never exists: the per-root mean field `W = h + J - K/2` arrives as `wmo`
+  !> (built from AO-basis J/K in the CASSCF driver) and the active ERI slice
+  !> `(j t | u v)` arrives as `eact` (from the partial AO->MO transformation).
+  !> Those are the only two things the original build read the nbf^4 tensor
+  !> for, so the gradient is unchanged to rounding.
+  !>
+  !> @param[in]  wmo   per-root mean field, Fortran (nbf, nbf, nroot):
+  !>                   wmo(i,j,root) = W_root[i,j]
+  !> @param[in]  eact  Fortran (nbf, nact^3): eact(j, (t*na+u)*na+v) = (j t|u v)
+  subroutine casscf_gfock_grad_w(nbf, ncore, nact, nroot, weights, gamma, &
+                                 gamma2, wmo, eact, fock, grad)
+    integer, intent(in) :: nbf, ncore, nact, nroot
+    real(dp), intent(in) :: weights(0:*), gamma(0:*), gamma2(0:*)
+    real(dp), intent(in) :: wmo(0:*), eact(0:*)
+    real(dp), intent(inout) :: fock(0:*), grad(0:*)
+
+    integer :: n, nc, na, nr, na3, n2
+    integer :: i, j, p, t, u, v, m, root, k
+    real(dp) :: w, dsep
+    real(dp), allocatable :: dmat(:,:), fwork(:,:), dgmat(:,:)
+
+    n = nbf
+    nc = ncore
+    na = nact
+    nr = nroot
+    na3 = na * na * na
+    n2 = n * n
+
+    do i = 0, n2 - 1
+      fock(i) = 0.0_dp
+    end do
+
+    allocate(dmat(0:n-1, 0:n-1), fwork(0:n-1, 0:n-1))
+    if (na > 0) allocate(dgmat(0:na3-1, 0:na-1))
+
+    do root = 0, nr - 1
+      w = weights(root)
+
+      ! ---- D for this root: 2 on the inactive diagonal, gamma on the active block
+      dmat = 0.0_dp
+      do i = 0, nc - 1
+        dmat(i, i) = 2.0_dp
+      end do
+      do t = 0, na - 1
+        do u = 0, na - 1
+          dmat(nc + t, nc + u) = gamma(int(root, i8)*int(na, i8)*int(na, i8) &
+                                       + int(t, i8)*int(na, i8) + int(u, i8))
+        end do
+      end do
+
+      ! ---- F_sep[m,j] = sum_q D[m,q] W[j,q], with W supplied by the caller.
+      call dgemm('N', 'N', n, n, n, 1.0_dp, wmo(int(root, i8)*int(n2, i8)), n, &
+                 dmat, n, 0.0_dp, fwork, n)
+
+      ! ---- all-active correction  F[m,j] += sum_tuv dG[m,t,u,v] (j t|u v)
+      if (na > 0) then
+        do m = 0, na - 1
+          do t = 0, na - 1
+            do u = 0, na - 1
+              do v = 0, na - 1
+                dsep = dmat(nc + m, nc + t) * dmat(nc + u, nc + v) &
+                     - 0.5_dp * dmat(nc + m, nc + v) * dmat(nc + u, nc + t)
+                dgmat((t*na + u)*na + v, m) = &
+                    gamma2((((int(root, i8)*int(na, i8) + int(m, i8))*int(na, i8) &
+                            + int(t, i8))*int(na, i8) + int(u, i8))*int(na, i8) &
+                            + int(v, i8)) - dsep
+              end do
+            end do
+          end do
+        end do
+        call dgemm('N', 'N', n, na, na3, 1.0_dp, eact, n, dgmat, na3, &
+                   1.0_dp, fwork(0, nc), n)
+      end if
+
+      do m = 0, n - 1
+        do j = 0, n - 1
+          fock(int(m, i8)*int(n, i8) + int(j, i8)) = &
+              fock(int(m, i8)*int(n, i8) + int(j, i8)) + w * fwork(j, m)
+        end do
+      end do
+    end do
+
+    ! ---- gradient over the non-redundant pairs, in casscf.py's ordering
+    k = 0
+    do t = nc, nc + na - 1
+      do i = 0, nc - 1
+        grad(k) = 2.0_dp * (fock(int(i, i8)*int(n, i8) + int(t, i8)) &
+                          - fock(int(t, i8)*int(n, i8) + int(i, i8)))
+        k = k + 1
+      end do
+    end do
+    do p = nc + na, n - 1
+      do i = 0, nc - 1
+        grad(k) = 2.0_dp * (fock(int(i, i8)*int(n, i8) + int(p, i8)) &
+                          - fock(int(p, i8)*int(n, i8) + int(i, i8)))
+        k = k + 1
+      end do
+    end do
+    do p = nc + na, n - 1
+      do t = nc, nc + na - 1
+        grad(k) = 2.0_dp * (fock(int(t, i8)*int(n, i8) + int(p, i8)) &
+                          - fock(int(p, i8)*int(n, i8) + int(t, i8)))
+        k = k + 1
+      end do
+    end do
+
+    deallocate(dmat, fwork)
+    if (allocated(dgmat)) deallocate(dgmat)
+  end subroutine casscf_gfock_grad_w
 
 end module casscf_kernel_mod
