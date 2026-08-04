@@ -153,9 +153,17 @@ contains
       use_chol = .true.
     case default
       ! Only the closed-shell path has the choice; the open-shell solver reads
-      ! the spin-orbital tensor and never touches these blocks.
-      use_chol = .true.
+      ! the spin-orbital tensor and never touches these blocks, so it keeps the
+      ! vectors it would have had before this was a choice at all.
+      use_chol = open_shell
+      vvvv_gb = 0.0_dp
       if (.not. open_shell) then
+        ! Start from the explicit route and factorise only on evidence.  The
+        ! probe returns negative when it could not determine anything, and the
+        ! documented contract for that is to let the job proceed rather than
+        ! act on a number nobody has -- the same way cholesky_direct's auto
+        ! leaves use_direct false below.  Defaulting the other way would put
+        ! every job on an unprobeable platform on the slow path silently.
         avail_gb = oqp_available_memory_gb()
         if (avail_gb > 0.0_dp) then
           ! Charge the explicit route for its whole peak, not just v^4.  The
@@ -178,6 +186,8 @@ contains
           vvvv_gb = max(mem_ao + mem_mo, mem_solver)*8.0_dp/1.073741824e9_dp
           use_chol = vvvv_gb > OQP_MEMORY_SAFETY_FRACTION*avail_gb
         end if
+        ! Only reachable with vvvv_gb set: use_chol starts false here and the
+        ! branch above is the only thing that raises it.
         if (use_chol) then
           write(iw,'(2X,A)') 'CCSD(T): the explicit ladder route ('// &
               trim(oqp_mem_str(vvvv_gb))//') would not fit; factorising.'
@@ -250,8 +260,15 @@ contains
         ! assembly buffer.  nchol is not known until the factorisation runs, so
         ! estimate it from the vectors-per-basis-function ratio observed at
         ! this tolerance; the log prints the actual count afterwards.
-        mem_mo = mem_mo + real(nbf*(nbf+1)/2,dp)*15.0_dp*real(nbf,dp) &
-                        + rnv**2*15.0_dp*real(nbf,dp)
+        !
+        ! lvec is the exception: it is allocated at the CAPACITY the
+        ! factorisation may need, not at the rank it turns out to have, so the
+        ! guard has to charge that same capacity or it waves through a job that
+        ! then fails in this very allocation.  The MO blocks below really are
+        ! sized by the rank, so they keep the estimate.
+        mem_mo = mem_mo &
+               + real(nbf*(nbf+1)/2,dp)*real(cholesky_eri_max_vectors(nbf,20),dp) &
+               + rnv**2*15.0_dp*real(nbf,dp)
       else
         mem_mo = mem_mo + rnv**4
       end if
