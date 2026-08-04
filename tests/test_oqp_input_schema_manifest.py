@@ -180,7 +180,8 @@ def test_all_generic_schema_keys_survive_parse_render_reparse_and_lower():
                 )
             checked.append((section, key))
 
-    assert len(checked) == 217
+    # main's generic keys + the [dftb] open-shell reference/unpaired pair.
+    assert len(checked) == 219
 
 
 def test_geometric_backend_is_canonical_only_through_opt_driver_options():

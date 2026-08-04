@@ -1,0 +1,1 @@
+dftb charge=0 dftb(backend=native,reference=roks,parameter_path="") geom="../geometries/CH2-e41258125cee.xyz" energy()
