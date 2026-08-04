@@ -42,7 +42,7 @@ contains
     ok = (nbuild > 0) .and. (nbuild <= cap)
   end function mp2_build_is_affordable
 
-  subroutine mp2_correlation(infos, e_mp2, e_aa, e_bb, e_ab, computed)
+  subroutine mp2_correlation(infos, e_mp2, e_aa, e_bb, e_ab, e_s, computed)
 
     use types, only: information
     use basis_tools, only: basis_set
@@ -54,6 +54,9 @@ contains
 
     type(information), target, intent(inout) :: infos
     real(kind=dp), intent(out) :: e_mp2, e_aa, e_bb, e_ab
+    !> Second-order singles energy.  Zero for RHF and for canonical UHF;
+    !> non-zero for ROHF, where it is a required part of E(2).
+    real(kind=dp), intent(out) :: e_s
     logical, intent(out) :: computed
 
     type(basis_set), pointer :: basis
@@ -71,7 +74,7 @@ contains
     real(kind=dp) :: ss_scale, os_scale
     logical :: restricted_ref, need_same_spin, need_opposite_spin
 
-    e_mp2 = 0.0_dp; e_aa = 0.0_dp; e_bb = 0.0_dp; e_ab = 0.0_dp
+    e_mp2 = 0.0_dp; e_aa = 0.0_dp; e_bb = 0.0_dp; e_ab = 0.0_dp; e_s = 0.0_dp
     computed = .false.
 
     basis => infos%basis
@@ -112,6 +115,21 @@ contains
     call semicanonicalize(nbf, nocca, mo_a, fock_a, mo_a_sc, e_a_sc)
     call semicanonicalize(nbf, noccb, mo_b, fock_b, mo_b_sc, e_b_sc)
 
+    ! Second-order singles.  Semicanonicalisation diagonalises the occ-occ and
+    ! vir-vir Fock blocks but leaves the occupied-virtual block alone, and for
+    ! ROHF that block does not vanish: the ROHF stationarity condition fixes
+    ! only one combination of the two spins, not each spin separately.  The
+    ! resulting singles contribution
+    !
+    !   E_S = sum_(ia,sigma) |f^sigma_ia|^2 / (e^sigma_i - e^sigma_a)
+    !
+    ! is a genuine part of the second-order energy on such a reference -- this
+    ! is what makes the treatment ROHF-MBPT(2) rather than a doubles-only
+    ! truncation of it.  It is identically zero for RHF and for canonical UHF,
+    ! where f_ia vanishes, so no reference type needs special-casing here.
+    e_s = mp2_singles(nbf, nocca, mo_a_sc, fock_a, e_a_sc) &
+        + mp2_singles(nbf, noccb, mo_b_sc, fock_b, e_b_sc)
+
     call int2_driver%init(basis, infos)
     call int2_driver%set_screening()
 
@@ -137,7 +155,9 @@ contains
 
     call int2_driver%clean()
 
-    e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab
+    ! The spin-component scales are defined for the doubles components; the
+    ! singles term is neither same- nor opposite-spin, so it enters unscaled.
+    e_mp2 = ss_scale * (e_aa + e_bb) + os_scale * e_ab + e_s
     computed = .true.
 
   end subroutine mp2_correlation
@@ -278,6 +298,53 @@ contains
       end do
     end do
   end subroutine rank1_sym_density
+
+!> @brief Second-order singles energy in the semicanonical basis.
+!>
+!>   E_S = sum_ia |f_ia|^2 / (e_i - e_a)
+!>
+!> @param[in] cmo_sc       semicanonical MO coefficients for this spin
+!> @param[in] fock_packed  the same spin's Fock matrix, packed, in the AO basis
+!> @param[in] e_sc         semicanonical orbital energies for this spin
+!>
+!> Returns zero whenever the occupied-virtual Fock block vanishes, which
+!> covers RHF and canonical UHF; only an ROHF reference makes it non-zero.
+  function mp2_singles(nbf, nocc, cmo_sc, fock_packed, e_sc) result(e_s)
+
+    use mathlib, only: unpack_matrix
+
+    integer, intent(in) :: nbf, nocc
+    real(kind=dp), intent(in) :: cmo_sc(nbf,nbf)
+    real(kind=dp), intent(in) :: fock_packed(:)
+    real(kind=dp), intent(in) :: e_sc(nbf)
+    real(kind=dp) :: e_s
+
+    real(kind=dp), allocatable :: fao(:,:), scr(:,:), fmo(:,:)
+    real(kind=dp) :: d
+    integer :: i, a
+
+    e_s = 0.0_dp
+    if (nocc <= 0 .or. nocc >= nbf) return
+
+    allocate(fao(nbf,nbf), scr(nbf,nbf), fmo(nbf,nbf), source=0.0_dp)
+
+    call unpack_matrix(fock_packed, fao, 'U')
+    call dgemm('n','n', nbf, nbf, nbf, 1.0_dp, fao, nbf, cmo_sc, nbf, 0.0_dp, scr, nbf)
+    call dgemm('t','n', nbf, nbf, nbf, 1.0_dp, cmo_sc, nbf, scr, nbf, 0.0_dp, fmo, nbf)
+
+    do a = nocc+1, nbf
+      do i = 1, nocc
+        d = e_sc(i) - e_sc(a)
+        if (abs(d) < 1.0e-12_dp) cycle
+        e_s = e_s + fmo(i,a)*fmo(i,a)/d
+      end do
+    end do
+
+    deallocate(fao, scr, fmo)
+
+  end function mp2_singles
+
+!###############################################################################
 
   subroutine semicanonicalize(nbf, nocc, cmo, fock_packed, cmo_sc, e_sc)
 
