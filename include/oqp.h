@@ -271,6 +271,43 @@ void electric_moments_excited(struct oqp_handle_t *inf);
 void get_structures_ao_overlap(struct oqp_handle_t *inf);
 void get_states_overlap(struct oqp_handle_t *inf);
 void mrsf_namd_hop(struct oqp_handle_t *inf);
+double oqp_namd_counter_random(int64_t seed, int64_t stream, int64_t step);
+void oqp_namd_counter_normal_fill(int64_t seed, int64_t stream, int64_t count,
+        double *values);
+int oqp_namd_baeck_an_tdc(int64_t nstate, double dt_left, double dt_right,
+        double gap_max, const double *energies_old,
+        const double *energies_center, const double *energies_current,
+        double *tdc_row_major);
+int oqp_namd_nacme_gate(int64_t nstate, const double *candidate,
+        const double *reference, const int *reference_mask, int compare_mode,
+        double invariant_tol, double abs_tol, double rel_tol, double *metrics,
+        int64_t *counts);
+/* Native ODP CV types: 1 distance, 2 d(a,b)-d(c,d), 3 angle a-b-c. */
+int oqp_odp_umbrella_evaluate(int64_t natom, int64_t ncv,
+        const int *cv_types, const int64_t *cv_atoms,
+        const double *cv_scales, const double *reference_r,
+        const double *reference_p, double center, double k_parallel,
+        double k_perpendicular, const double *coordinates, double *energy,
+        double *force, double *xi, double *cv_raw, double *cv_scaled,
+        double *cv_perpendicular, double *perpendicular_norm,
+        double *energy_parallel, double *energy_perpendicular);
+int oqp_namd_droplet_boundary(int64_t natom, int64_t ngroup,
+        const double *coordinates, const double *masses,
+        const int64_t *group_index, const double *center, double radius,
+        double buffer, double force_constant, double max_penetration_limit,
+        double *energy, double *forces, double *max_penetration,
+        int64_t *active_count);
+int oqp_namd_com_restraint(int64_t natom, const double *coordinates,
+        const double *masses, const int64_t *selected, const double *center,
+        double force_constant, double *energy, double *forces,
+        double *displacement_norm);
+int oqp_namd_langevin_thermostat(int64_t natom, double dt,
+        double temperature, double friction, int64_t seed, int64_t stream,
+        int64_t step, const double *masses, double *velocities, double *heat);
+int oqp_maximum_overlap_assignment(int n, const double *overlap_row_major,
+        int *assignment, double *signs, double *matched, double *margins);
+int oqp_diagonal_phase_tracking(int n, const double *overlap_row_major,
+        double *signs, double *matched, double *margins);
 void resp_charges(struct oqp_handle_t *inf);
 void mulliken(struct oqp_handle_t *inf);
 void mulliken_excited(struct oqp_handle_t *inf);

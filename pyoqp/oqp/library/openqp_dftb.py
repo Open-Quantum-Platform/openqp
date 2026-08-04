@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import importlib
 import itertools
 import os
 from pathlib import Path
@@ -140,6 +141,9 @@ def _state_gradient_argtypes(abi_version: int) -> list[object]:
         controls.extend([
             *([f64] * 9), ctypes.c_char_p, i32,
         ])
+    if abi_version >= 4:
+        # ABI v4 appended the reference_selector (0 default / 1 UKS / 2 ROKS).
+        controls.append(i64)
     # n_ext_pot/ext_potential followed by the result/output tail.
     tail = [
         i64, p_f64,
@@ -224,13 +228,43 @@ class OpenQPDFTBAdapter:
     # library (no version symbol) as the stable v1 layout. OpenQP-xTB overrides
     # these (its first released layout carries the model block, so an
     # unversioned probe must resolve to the current layout, not legacy v1).
-    _SUPPORTED_ABI = (1, 2, 3)
+    _SUPPORTED_ABI = (1, 2, 3, 4)
     _UNVERSIONED_ABI_FALLBACK = 1
 
     def __init__(self, mol):
         self.mol = mol
         self.config = mol.config
         self.dftb = self.config.get(self.SECTION, {})
+        # Open-shell ground-state reference selection ([dftb] reference=...).
+        # Lets a plain `dftb`/`dftb0` ground SCC run an open-shell reference
+        # (ROKS / CUKS / UKS) WITHOUT the MRSF response -- the reference energy
+        # decomposition (H0/gamma/repulsive/spin) is what one compares to DFTB+.
+        #   reference = rhf|rks   -> closed-shell (default)
+        #               roks|rohf -> restricted-open (plain Guest-Saunders)
+        #               cuks|cuhf -> constrained-UKS (default open-shell operator)
+        #               uks|uhf   -> genuine unrestricted (DFTB+ udftb analogue)
+        # `unpaired` (default 2) sets the number of unpaired electrons.
+        # reference_selector crosses the C-API as an ABI-4 argument (0 default /
+        # 1 UKS / 2 ROKS).  For an older (ABI < 4) native library the selector is
+        # instead driven by the OPENQP_DFTB_UKS/CUHF env vars -- but those are set
+        # *around the native call* (see _run_native) and restored afterwards, NOT
+        # here: setting them in __init__ would leak this molecule's reference into
+        # a later default-reference job sharing the process (adapters may be
+        # constructed before any of them runs, and an ABI<4 default job never
+        # re-enters this branch to clear a previous setting).
+        self._reference = str(self.dftb.get("reference", "")).strip().lower()
+        self._reference_selector = 0
+        if self._reference:
+            _open = self._reference in {
+                "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+            if _open and int(self.dftb.get("reference_multiplicity", 0)) <= 1:
+                self.dftb["reference_multiplicity"] = (
+                    int(self.dftb.get("unpaired", 2)) + 1
+                )
+            if self._reference in {"uks", "uhf"}:
+                self._reference_selector = 1
+            elif self._reference in {"roks", "rohf"}:
+                self._reference_selector = 2
         self.natom = int(mol.data["natom"])
         self.nstate = self._effective_nstate()
         # Named operator preset ([dftb] model=...). The published parameter
@@ -638,14 +672,41 @@ class OpenQPDFTBAdapter:
         }
 
         def native_call():
-            if abi_version == 1:
-                self._call_state_gradient_abi1(
-                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
-                )
-            else:
-                self._call_state_gradient_current(
-                    getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient"), **call_kwargs
-                )
+            fn = getattr(lib, f"{self.SYMBOL_PREFIX}_state_gradient")
+
+            def _dispatch():
+                if abi_version == 1:
+                    self._call_state_gradient_abi1(fn, **call_kwargs)
+                else:
+                    self._call_state_gradient_current(fn, **call_kwargs)
+
+            # ABI >= 4 carries reference_selector as an explicit C argument, so no
+            # environment is involved.  Only an older library needs the env
+            # fallback -- set it immediately around the call and restore the prior
+            # values afterwards so a UKS/ROKS job cannot leak its reference into a
+            # subsequent default-reference job that shares this process.
+            if abi_version >= 4 or not self._reference:
+                _dispatch()
+                return
+            with _NATIVE_DIAGNOSTIC_LOCK:
+                saved = {
+                    key: os.environ.get(key)
+                    for key in ("OPENQP_DFTB_UKS", "OPENQP_DFTB_CUHF")
+                }
+                os.environ.pop("OPENQP_DFTB_UKS", None)
+                os.environ.pop("OPENQP_DFTB_CUHF", None)
+                if self._reference_selector == 1:
+                    os.environ["OPENQP_DFTB_UKS"] = "1"
+                elif self._reference_selector == 2:
+                    os.environ["OPENQP_DFTB_CUHF"] = "0"
+                try:
+                    _dispatch()
+                finally:
+                    for key, value in saved.items():
+                        if value is None:
+                            os.environ.pop(key, None)
+                        else:
+                            os.environ[key] = value
 
         if abi_version == 1:
             self._validate_abi1_request()
@@ -1308,6 +1369,9 @@ class OpenQPDFTBAdapter:
             ctypes.c_double(float(self.dftb.get("onsite_pp", 0.0))),
             self._preset_bytes,
             ctypes.c_int32(len(self._preset_bytes)),
+            *([ctypes.c_int64(getattr(self, "_reference_selector", 0))]
+              if int(getattr(self.mol, self.CACHE_ATTR)[
+                  "__native_abi_version__"]) >= 4 else []),
             *self._state_gradient_output_arguments(values),
         )
 
@@ -1438,10 +1502,9 @@ class OpenQPDFTBAdapter:
         # pip-installed openqp-dftb wheel bundles the library next to its
         # locator package: the most robust default when nothing is configured.
         try:
-            import openqp_dftb  # noqa: PLC0415
-
-            return Path(openqp_dftb.library_path())
-        except (ImportError, FileNotFoundError):
+            locator = importlib.import_module(self.PIP_LOCATOR)
+            return Path(locator.library_path())
+        except (ImportError, AttributeError, FileNotFoundError):
             pass
         # The -DENABLE_OPENQP_DFTB=ON hook stages libopenqp_dftb_c next to the
         # liboqp that the Python package already resolved. Self-locating installs
@@ -1463,11 +1526,11 @@ class OpenQPDFTBAdapter:
             if found:
                 return Path(found)
         message = (
-            "openqp-dftb not found: could not locate libopenqp_dftb_c. "
-            "Install it with `pip install openqp-dftb` (or `pip install "
-            "git+https://github.com/Open-Quantum-Platform/openqp-dftb.git`), "
-            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP "
-            "with -DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
+            f"{self.BACKEND_NAME} not found: could not locate "
+            f"{self.LIB_BASENAMES[0]}. Install the {self.BACKEND_NAME} "
+            f"package, set [{self.SECTION}] library_path / {self.ENV_LIBRARY}, "
+            "or build OpenQP with the matching optional backend enabled to "
+            "stage it next to liboqp."
         )
         dump_log(
             self.mol,
@@ -1838,6 +1901,11 @@ class OpenQPDFTBAdapter:
             bool(self.dftb.get("spin_complete", True)),
             int(self.dftb.get("reference_multiplicity", 0)),
             int(self.dftb.get("target_multiplicity", 1)),
+            # Open-shell ground-state reference: UKS/ROKS/CUKS can share the same
+            # derived multiplicity, so the selector must key the cache too, or a
+            # ROKS result would be reused for a UKS request at the same geometry.
+            getattr(self, "_reference", ""),
+            int(getattr(self, "_reference_selector", 0)),
             str(self.dftb.get("response_solver", "auto")).lower(),
             int(self.dftb.get("response_max_subspace", 100)),
             int(self.dftb.get("response_max_iterations", 50)),
@@ -1864,15 +1932,24 @@ class OpenQPDFTBAdapter:
         return atoms, coords.tobytes(), option_key
 
     def _parameter_path(self) -> str:
-        raw = self.dftb.get("parameter_path") or os.environ.get("OPENQP_DFTB_PARAMETER_PATH")
+        raw = self.dftb.get("parameter_path") or os.environ.get(self.ENV_PARAMETER)
         if raw:
             return str(self._resolve_user_path(raw))
-        bundled = _bundled_parameter_path()
+        if self.PIP_LOCATOR == "openqp_dftb":
+            # Retain the public test seam used by the DFTB adapter tests.
+            bundled = _bundled_parameter_path()
+        else:
+            try:
+                locator = importlib.import_module(self.PIP_LOCATOR)
+                bundled = locator.default_parameter_path()
+            except (ImportError, AttributeError, FileNotFoundError):
+                bundled = None
         if bundled:
-            return bundled
+            return str(bundled)
         raise ValueError(
-            "Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH "
-            "(this openqp-dftb installation ships no bundled parameter set)."
+            f"Set [{self.SECTION}] parameter_path or {self.ENV_PARAMETER} "
+            f"(this {self.BACKEND_NAME} installation ships no bundled "
+            "parameter set)."
         )
 
     def _probe_executable(self) -> str:
@@ -1899,7 +1976,8 @@ class OpenQPDFTBAdapter:
         path = Path(str(raw_path)).expanduser()
         if path.is_absolute():
             return path
-        input_file = getattr(self.mol, "input_file", "") or ""
+        input_file = (getattr(self.mol, "oqp_input_source", "")
+                      or getattr(self.mol, "input_file", "") or "")
         base = Path(input_file).resolve().parent if input_file else Path.cwd()
         resolved = base / path
         return resolved if resolved.exists() else Path.cwd() / path

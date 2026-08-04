@@ -7,10 +7,12 @@
 #
 # Minimal demonstration: nstep=1 runs a single nuclear step (one embedded
 # singlet + triplet MRSF + SOC evaluation with the weighted-MCH diagonal
-# gradient) so it finishes quickly.  Requires the optional OpenMM backend and
-# the companion files formaldehyde_water.pdb, formaldehyde.xml, tip3p.xml (read
-# relative to this file).  It is part of `openqp --run_tests all`, and is
-# reported SKIPPED when OpenMM is not installed.
+# gradient) so it finishes quickly.  The final step writes a packed trajectory,
+# restart checkpoint, and runnable restart manifest while the default NVE gate
+# records an energy-conservation warning instead of stopping the run.  Requires
+# the optional OpenMM backend and the companion files formaldehyde_water.pdb,
+# formaldehyde.xml, tip3p.xml (read relative to this file).  It is part of
+# `openqp --run_tests all`, and is reported SKIPPED when OpenMM is not installed.
 [input]
 system=
    6   0.000000   0.000000   0.000000
@@ -46,11 +48,16 @@ active=5
 substep=50
 init_temp=300
 velocity=maxwell
-seed=3
 decoherence=edc
 trivial=True
 soc=True
-thrshe=0.1
+# Baeck-An is a same-spin diagnostic; SOC propagation stores the full complex
+# spin-adiabatic overlap/TDC in the packed trajectory instead.
+nacme_check=off
+trajectory_interval=1
+restart_interval=1
+trajectory_file=H2CO-water-SOC.namd.trj
+restart_file=H2CO-water-SOC.namd.restart.npz
 
 [qmmm]
 pdb_file=formaldehyde_water.pdb
