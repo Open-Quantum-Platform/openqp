@@ -65,7 +65,9 @@ end function cc_uhf_spinorb_gb
 !>   * assembly -- the three spatial spin-block tensors (3 nmo^4) are still
 !>     alive while the spin-orbital tensor (nso^4) is being filled;
 !>   * solution -- the spin-orbital tensor stays, and the solver adds the
-!>     ladder intermediate Wabef (nv^4), Wmbej (no^2 nv^2), Wmnij (no^4),
+!>     ladder intermediate over index pairs ((nv(nv-1)/2)^2, a quarter of
+!>     nv^4) with the three pair-packed arrays contracted against it,
+!>     Wmbej (no^2 nv^2), Wmnij (no^4),
 !>     gmnef and the six amplitude arrays (~7 no^2 nv^2), the ten (ov)^2
 !>     panels the ring and Wmbej contractions are grouped into, and a DIIS
 !>     history of 2*ndiis vectors of no*nv + no^2 nv^2 each;
@@ -97,7 +99,13 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads) result(gb)
   assembly = 3.0_dp*real(nmo,dp)**4 + nso**4
 
   amp   = no*nv + no**2*nv**2
-  solve = nso**4 + nv**4 + no**4 + 2.0_dp*no**2*nv**2 &
+  ! The ladder intermediate is held over index pairs, (nv(nv-1)/2)^2 rather
+  ! than nv^4, and the three pair-packed arrays contracted with it add
+  ! 3 (no(no-1)/2)(nv(nv-1)/2).  Charging the full v^4 here overstated the
+  ! peak by about a factor of four on virtual-heavy cases.
+  solve = nso**4 + (nv*(nv-1.0_dp)/2.0_dp)**2 &
+        + 3.0_dp*(no*(no-1.0_dp)/2.0_dp)*(nv*(nv-1.0_dp)/2.0_dp) &
+        + no**4 + 2.0_dp*no**2*nv**2 &
         + 7.0_dp*no**2*nv**2 + 10.0_dp*no**2*nv**2 &
         + 2.0_dp*real(max(ndiis,0),dp)*amp
 
@@ -279,7 +287,14 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   real(dp), allocatable :: Fae(:,:), Fmi(:,:), Fme(:,:)
   ! Fock intermediates with the t1-dependent inner sums folded in (see T2).
   real(dp), allocatable :: FaeT(:,:), FmiT(:,:)
-  real(dp), allocatable :: Wmnij(:,:,:,:), Wabef(:,:,:,:), Wmbej(:,:,:,:)
+  real(dp), allocatable :: Wmnij(:,:,:,:), Wmbej(:,:,:,:)
+  ! The ladder intermediate and everything contracted with it, over the strict
+  ! upper index pairs it is antisymmetric in: npo = no(no-1)/2 occupied pairs,
+  ! npv = nv(nv-1)/2 virtual ones.  Wp alone is a quarter of the v^4 array it
+  ! replaces.  gmnefp is packed once -- <mn||ef> does not change with the
+  ! amplitudes -- while taup is repacked each iteration.
+  real(dp), allocatable :: Wp(:,:), taup(:,:), t2np(:,:), gmnefp(:,:)
+  integer :: npo, npv
   real(dp), allocatable :: gmnef(:,:,:,:), f_ov(:,:)
   ! Reordered panels for the (T) correction, packed once by triples() and read
   ! by build_q().  Declared here so both see them by host association:
@@ -298,6 +313,8 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   integer, allocatable :: ipiv(:)
   integer :: no2, nv2, namp, ndiis, ndim, nvec, pos, ii, jj, info
   integer  :: no, nv, i, j, k, a, b, c, m, n, e, f_, it
+  !> Pair indices into the packed ladder arrays: ij = (j-1)(j-2)/2 + i, i < j.
+  integer  :: ij, ab
   real(dp) :: s_, d, eold, rms, dia, dijab
   real(dp) :: tw0, tw1
 
@@ -325,7 +342,11 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   allocate(t1(no,nv), t2(no,no,nv,nv), t1n(no,nv), t2n(no,no,nv,nv))
   allocate(tau(no,no,nv,nv), taut(no,no,nv,nv))
   allocate(Fae(nv,nv), Fmi(no,no), Fme(no,nv), FaeT(nv,nv), FmiT(no,no))
-  allocate(Wmnij(no,no,no,no), Wabef(nv,nv,nv,nv), Wmbej(no,nv,nv,no))
+  allocate(Wmnij(no,no,no,no), Wmbej(no,nv,nv,no))
+  npo = (no*(no-1))/2
+  npv = (nv*(nv-1))/2
+  allocate(Wp(max(1,npv), max(1,npv)), taup(max(1,npo), max(1,npv)), &
+           t2np(max(1,npo), max(1,npv)), gmnefp(max(1,npo), max(1,npv)))
   allocate(t2ring(no*nv, no*nv), wring(no*nv, no*nv), zring(no*nv, no*nv))
   allocate(wjbnf(no*nv, no*nv), gnfme(no*nv, no*nv), wjbme(no*nv, no*nv))
   allocate(gring(nv,no,nv,no), hring(no,no,nv,no), hringp(no,no,nv,no), &
@@ -341,6 +362,9 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
     gmnef(i,j,a,b) = g(i,j,no+a,no+b)
   end do; end do; end do; end do
+  ! ... and the same thing over pair indices, for the ladder intermediate.
+  if (npo > 0 .and. npv > 0) &
+    call cc_uhf_pack_pairs(no, nv, npo, npv, gmnef, gmnefp)
 
   ! MP1 amplitudes: t1 vanishes for a semicanonical reference.
   t1 = 0.0_dp
@@ -438,49 +462,56 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     ! 141.5 s for OH/cc-pVQZ, at a few percent of the machine's DGEMM rate
     ! because every m step strode through g by nso.
     !
-    ! Blocked over f so Y is nv^3 per block instead of a second v^4 array,
-    ! which at this size would have been another 5 GB alongside Wabef.
+    ! W is antisymmetric in (a,b) and in (e,f), so only the strict upper pairs
+    ! are independent and it is held as Wp(ab_pair, ef_pair) -- a quarter of
+    ! v^4.  Y is needed for e < f only, which halves it in turn, and one DGEMM
+    ! per f keeps the panel at nv^2 columns instead of a second v^4 array.
+    !
+    ! Everything downstream of W is a pair-index contraction too, so the packed
+    ! form is not unpacked anywhere: the sum over all e,f of two antisymmetric
+    ! factors is twice the sum over e < f, which is what turns the ladder's 1/2
+    ! and the gmnef term's 1/4 into 1 and 1/2 below.
     block
       real(dp), allocatable :: pam(:,:), yba(:,:)
-      integer :: fb, nfb, fblk, ff, ae, be
-      fblk = max(1, min(nv, int(8.0e6_dp/max(1.0_dp, real(nv,dp)**3))))
-      allocate(pam(no, nv*nv*fblk), yba(nv, nv*nv*fblk))
-      do fb = 1, nv, fblk
-        nfb = min(fblk, nv - fb + 1)
-        !$omp parallel do collapse(3) default(shared) private(ff,e,a,m) schedule(static)
-        do ff = 1, nfb
-          do e = 1, nv
+      integer :: ep, ab, ef
+      if (npv > 0) then
+        allocate(pam(no, nv*max(1,nv-1)), yba(nv, nv*max(1,nv-1)))
+        do f_ = 2, nv
+          ! <am||e,f> for every a and every e < f
+          !$omp parallel do collapse(2) default(shared) private(ep,a,m) schedule(static)
+          do ep = 1, f_-1
             do a = 1, nv
               do m = 1, no
-                pam(m, ((ff-1)*nv + e - 1)*nv + a) = g(no+a, m, no+e, no+fb+ff-1)
+                pam(m, (ep-1)*nv + a) = g(no+a, m, no+ep, no+f_)
               end do
             end do
           end do
-        end do
-        !$omp end parallel do
-        ! yba(b, a + (e-1)*nv + (ff-1)*nv^2) = sum_m t1(m,b) <am||e,fb+ff-1>
-        call dgemm('t','n', nv, nv*nv*nfb, no, 1.0_dp, t1, no, pam, no, &
-                   0.0_dp, yba, nv)
-        !$omp parallel do collapse(3) default(shared) private(ff,e,b,a,ae,be) schedule(static)
-        do ff = 1, nfb
-          do e = 1, nv
-            do b = 1, nv
-              be = ((ff-1)*nv + e - 1)*nv + b
-              do a = 1, nv
-                ae = ((ff-1)*nv + e - 1)*nv + a
-                Wabef(a,b,e,fb+ff-1) = g(no+a,no+b,no+e,no+fb+ff-1) &
-                                     - yba(b, ae) + yba(a, be)
+          !$omp end parallel do
+          ! yba(b, a + (e-1)*nv) = sum_m t1(m,b) <am||e,f>
+          call dgemm('t','n', nv, nv*(f_-1), no, 1.0_dp, t1, no, pam, no, &
+                     0.0_dp, yba, nv)
+          !$omp parallel do collapse(2) default(shared) private(ep,b,a,ab,ef) schedule(static)
+          do ep = 1, f_-1
+            do b = 2, nv
+              ef = ((f_-1)*(f_-2))/2 + ep
+              do a = 1, b-1
+                ab = ((b-1)*(b-2))/2 + a
+                Wp(ab, ef) = g(no+a,no+b,no+ep,no+f_) &
+                           - yba(b, (ep-1)*nv + a) + yba(a, (ep-1)*nv + b)
               end do
             end do
           end do
+          !$omp end parallel do
         end do
-        !$omp end parallel do
-      end do
-      deallocate(pam, yba)
+        deallocate(pam, yba)
+      end if
     end block
-    ! Wabef(ab,ef) += 1/4 tau(mn,ab)^T <mn||ef>
-    call dgemm('t','n', nv2, nv2, no2, 0.25_dp, tau, no2, gmnef, no2, &
-               1.0_dp, Wabef, nv2)
+    ! Wp(ab,ef) += 1/4 sum_mn tau(mn,ab) <mn||ef> = 1/2 sum_{m<n} ...
+    if (npv > 0 .and. npo > 0) then
+      call cc_uhf_pack_pairs(no, nv, npo, npv, tau, taup)
+      call dgemm('t','n', npv, npv, npo, 0.5_dp, taup, npo, gmnefp, npo, &
+                 1.0_dp, Wp, npv)
+    end if
 
     !$omp parallel do collapse(4) default(shared) private(m,b,e,j,f_,n,s_) schedule(static) if(no2*nv2 > PAR_MIN)
     do j = 1, no; do e = 1, nv; do b = 1, nv; do m = 1, no
@@ -647,10 +678,33 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     end do; end do; end do; end do
     !$omp end parallel do
 
-    ! Ladder: t2n(ij,ab) += 1/2 tau(ij,ef) Wabef(ab,ef).  This is the
-    ! O(o^2 v^4) bottleneck and the one term worth a DGEMM above all others.
-    call dgemm('n','t', no2, nv2, nv2, 0.5_dp, tau, no2, Wabef, nv2, &
-               1.0_dp, t2n, no2)
+    ! Ladder: t2n(ij,ab) += 1/2 sum_ef tau(ij,ef) W(ab,ef).  The O(o^2 v^4)
+    ! bottleneck, run over pair indices: both factors are antisymmetric in
+    ! (e,f), so their product is symmetric and the full sum is twice the one
+    ! over e < f -- which cancels the 1/2.  The result is antisymmetric in
+    ! (i,j) and (a,b) for the same reason, so one pair drives all four signed
+    ! elements and the terms with a repeated index are zero, as they must be.
+    if (npv > 0 .and. npo > 0) then
+      call dgemm('n','t', npo, npv, npv, 1.0_dp, taup, npo, Wp, npv, &
+                 0.0_dp, t2np, npo)
+      !$omp parallel do collapse(2) default(shared) private(a,b,i,j,ij,ab,s_) schedule(static)
+      do b = 2, nv
+        do j = 2, no
+          ab = ((b-1)*(b-2))/2
+          do a = 1, b-1
+            do i = 1, j-1
+              ij = ((j-1)*(j-2))/2 + i
+              s_ = t2np(ij, ab + a)
+              t2n(i,j,a,b) = t2n(i,j,a,b) + s_
+              t2n(j,i,a,b) = t2n(j,i,a,b) - s_
+              t2n(i,j,b,a) = t2n(i,j,b,a) - s_
+              t2n(j,i,b,a) = t2n(j,i,b,a) + s_
+            end do
+          end do
+        end do
+      end do
+      !$omp end parallel do
+    end if
 
     do b = 1, nv; do a = 1, nv; do j = 1, no; do i = 1, no
       dijab = eso(i) + eso(j) - eso(no+a) - eso(no+b)
@@ -739,7 +793,8 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     if (present(time_triples)) time_triples = tw1 - tw0
   end if
 
-  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wabef, Wmbej, gmnef, f_ov)
+  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wmbej, gmnef, f_ov)
+  deallocate(Wp, taup, t2np, gmnefp)
   deallocate(t2ring, wring, zring, gring, hring, hringp, yring, FaeT, FmiT)
   deallocate(wjbnf, gnfme, wjbme)
   if (allocated(dv)) deallocate(dv, de)
@@ -928,5 +983,40 @@ subroutine cc_uhf_wall_time(t)
   call system_clock(c, r)
   t = real(c, kind=dp)/real(r, kind=dp)
 end subroutine cc_uhf_wall_time
+
+
+!###############################################################################
+
+!> @brief Pack an antisymmetric (no,no,nv,nv) array over its strict upper pairs.
+!>
+!> @details `a(i,j,e,f)` is antisymmetric in (i,j) and in (e,f), so the strict
+!>   upper pairs i < j and e < f carry all of it.  The pair index is the usual
+!>   column-major triangular one, ij = (j-1)(j-2)/2 + i, which is what the
+!>   ladder's DGEMMs index Wp and gmnefp by.
+subroutine cc_uhf_pack_pairs(no, nv, npo, npv, a, ap)
+
+
+
+  integer, intent(in) :: no, nv, npo, npv
+  real(dp), intent(in) :: a(no,no,nv,nv)
+  real(dp), intent(out) :: ap(npo,npv)
+
+  integer :: i, j, e, f, ij, ef
+
+  !$omp parallel do collapse(2) default(shared) private(f,j,e,i,ef,ij) schedule(static)
+  do f = 2, nv
+    do j = 2, no
+      do e = 1, f-1
+        ef = ((f-1)*(f-2))/2 + e
+        do i = 1, j-1
+          ij = ((j-1)*(j-2))/2 + i
+          ap(ij, ef) = a(i,j,e,f)
+        end do
+      end do
+    end do
+  end do
+  !$omp end parallel do
+
+end subroutine cc_uhf_pack_pairs
 
 end module cc_uhf_lib
