@@ -856,6 +856,7 @@ class OpenQP:
 
     def ccsd(self, reference="rhf", runtype=None, multiplicity=None,
              basis=None, nfzc=None, conv=None, maxit=None, ndiis=None,
+             cholesky=None, cholesky_tol=None, cholesky_direct=None,
              triples=False, **scf_keywords):
         """Compact coupled-cluster setup for energy-only post-SCF jobs.
 
@@ -888,9 +889,16 @@ class OpenQP:
         if scf_updates:
             self.scf(**scf_updates)
 
+        # The factorisation controls belong to [cc] like the rest.  Left out of
+        # this list they fall through to **scf_keywords and are applied to
+        # [scf], so job.ccsd_t(cholesky=False) failed with an unknown scf
+        # keyword rather than configuring the route it names.
         cc_updates = {}
         for key, value in (("nfzc", nfzc), ("conv", conv),
-                           ("maxit", maxit), ("ndiis", ndiis)):
+                           ("maxit", maxit), ("ndiis", ndiis),
+                           ("cholesky", cholesky),
+                           ("cholesky_tol", cholesky_tol),
+                           ("cholesky_direct", cholesky_direct)):
             if value is not None:
                 cc_updates[key] = value
         if cc_updates:

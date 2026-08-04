@@ -551,7 +551,8 @@ MP2_MODEL_OPTIONS = {
 # Coupled cluster takes the reference plus the [cc] solver controls inline,
 # the same shape MP2 uses for its spin-scaling knobs.
 CC_MODELS = {"ccsd", "ccsd_t"}
-CC_MODEL_OPTIONS = {"reference", "nfzc", "conv", "maxit", "ndiis"}
+CC_MODEL_OPTIONS = {"reference", "nfzc", "conv", "maxit", "ndiis",
+                    "cholesky", "cholesky_tol", "cholesky_direct"}
 RESPONSE_MODELS = {
     "mrsf", "mrsf-hf", "mrsf-dftb", "umrsf", "umrsf-hf", "sf", "sf-hf",
     "sf-dftb", "tddft", "tda", "tda-hf", "tdhf", "tddftb", "tda-dftb"

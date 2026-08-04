@@ -32,6 +32,9 @@ SCHEMA = {
         "conv": {"type": float, "default": "1e-7"},
         "ndiis": {"type": int, "default": "8"},
         "nfzc": {"type": int, "default": "0"},
+        "cholesky": {"type": str, "default": "auto"},
+        "cholesky_tol": {"type": float, "default": "1e-10"},
+        "cholesky_direct": {"type": str, "default": "auto"},
     },
     "qmmm": {
         "forcefield_files": {"type": str, "default": ""},
@@ -321,6 +324,25 @@ $$$$
         self.assertEqual(config["input"]["runtype"], "energy")
         self.assertEqual(config["scf"]["type"], "rhf")
         self.assertEqual(config["cc"]["nfzc"], "1")
+
+    def test_ccsd_helper_routes_the_factorisation_controls_to_cc(self):
+        """The Cholesky controls belong to [cc].  Absent from the helper's own
+        signature they land in **scf_keywords and are applied to [scf], so the
+        call fails on an unknown scf keyword instead of configuring the route
+        it names."""
+        openqp = load_openqp_module()
+
+        job = (
+            openqp.OpenQP(project="h2o_ccsd_t_chol")
+            .molecule(geometry="water", basis="cc-pvdz")
+            .ccsd_t(reference="rhf", cholesky=False, cholesky_tol=1.0e-8,
+                    cholesky_direct=True)
+        )
+
+        config = job.to_input_dict()
+        self.assertEqual(config["cc"]["cholesky"], "False")
+        self.assertEqual(config["cc"]["cholesky_direct"], "True")
+        self.assertNotIn("cholesky", config.get("scf", {}))
 
     def test_ccsd_t_helper_selects_the_triples_method(self):
         openqp = load_openqp_module()

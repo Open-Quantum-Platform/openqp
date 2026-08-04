@@ -42,15 +42,24 @@ requires a Hartree–Fock reference.
 The closed-shell (RHF) path is the fast one: spin-adapted, every O(N^6)/O(N^7)
 contraction cast as a DGEMM, OpenMP threaded and MPI distributed. It holds the
 AO integrals in memory, so the practical ceiling is a few hundred basis
-functions; the module prints the storage it needs and refuses above 64 GB.
+functions. The ladder integrals are kept as an explicit v^4 array when that
+fits and as Cholesky vectors when it does not — `[cc] cholesky` selects it, and
+the default `auto` decides on memory, because rebuilding the integrals from the
+vectors costs arithmetic that is only worth paying to save space.
 
 Open-shell references (UHF, ROHF) go through a spin-orbital solver that stores
 the full (2*nmo)^4 antisymmetrised tensor — sixteen times the spatial one — and
-is OpenMP-only, with no MPI decomposition. It is meant for small systems; the
-module prints its projected peak and refuses above 32 GB. An ROHF reference is
-semicanonicalised first, and with `nfzc > 0` the core is removed *before* that
-rotation, so the correlated space is the span of the reference orbitals that
-were kept.
+is OpenMP-only, with no MPI decomposition. It is meant for small systems. An
+ROHF reference is semicanonicalised first, and with `nfzc > 0` the core is
+removed *before* that rotation, so the correlated space is the span of the
+reference orbitals that were kept.
+
+Neither path uses a fixed memory ceiling. Each prints the storage it projects
+and refuses when that exceeds what the machine can give, measured at run time
+from physical RAM, the kernel's `MemAvailable`, and the cgroup limit — whichever
+binds — so the same build sizes itself on a laptop and on a large node, and sees
+a batch allocation rather than the whole node. `OQP_MEMORY_LIMIT_GB` overrides
+the probe.
 
 Reference energies for both paths, checked against PySCF, live in
 `tests/data/ccsd_t_pyscf_validation.json` and

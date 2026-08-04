@@ -1640,6 +1640,21 @@ def test_coupled_cluster_spellings_agree(tmp_path):
         assert legacy["input"]["method"] == "ccsd(t)", alias
 
 
+def test_cc_route_accepts_the_factorisation_controls(tmp_path):
+    """The inline route whitelist gated which [cc] keys a model call may carry.
+    Leaving the factorisation controls out of it meant the lowering below would
+    have placed them correctly, but the route rejected them first."""
+    _, legacy = _parse(
+        'ccsd_t(nfzc=1,cholesky=false,cholesky_tol=1e-8,cholesky_direct=true)'
+        '/sto-3g geom="h2o.xyz" energy()',
+        tmp_path,
+    )
+    assert legacy["cc"]["cholesky"] == "False"
+    assert legacy["cc"]["cholesky_tol"] == "1e-08"
+    assert legacy["cc"]["cholesky_direct"] == "True"
+    assert legacy["cc"]["nfzc"] == "1"
+
+
 def test_ccsd_t_route_accepts_the_parenthesised_spelling(tmp_path):
     """`ccsd(t)` is what `[input] method` and the Python API call it, so it is
     what people write in a route too.  Without a special case it parses as the
