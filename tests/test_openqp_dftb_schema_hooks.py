@@ -207,5 +207,91 @@ spc = 0.5
         self.assertNotIn("except _NativeUnavailable", text)
 
 
+class OpenShellReferenceKeywordGuardTests(unittest.TestCase):
+    """The [dftb] reference=/unpaired open-shell ground SCC selector must be
+    honoured only by the native DFTB backend on a ground route, and every other
+    context must be rejected rather than silently run a different reference."""
+
+    def _checker(self):
+        return _import_or_skip("oqp.utils.input_checker")
+
+    @staticmethod
+    def _ground_config(section="dftb", **overrides):
+        sec = {
+            "backend": "native",
+            "type": "dftb",
+            "parameter_path": "/tmp/minimal.opdftb",
+        }
+        sec.update(overrides)
+        return {
+            "input": {
+                "method": section,
+                "runtype": "energy",
+                "system": "\nH 0.0 0.0 0.0\nH 0.0 0.0 0.7",
+                "basis": "6-31g*",
+                "functional": "",
+            },
+            section: sec,
+        }
+
+    def _reference_errors(self, config):
+        checker = self._checker()
+        report = checker.check_input_values(config, raise_error=False, emit=False)
+        return [item for item in report.errors if item.path.endswith(".reference")]
+
+    def test_valid_open_shell_reference_on_ground_route_is_accepted(self):
+        for reference in ("roks", "cuks", "uks", "rohf", "cuhf", "uhf"):
+            with self.subTest(reference=reference):
+                self.assertEqual(
+                    [], self._reference_errors(
+                        self._ground_config(reference=reference)))
+
+    def test_open_shell_reference_normalizes_multiplicity(self):
+        checker = self._checker()
+        config = self._ground_config(reference="roks", unpaired="4")
+        checker.apply_dftb_model_default(config)
+        # unpaired + 1; also suppresses the LC preset default.
+        self.assertEqual(5, int(config["dftb"]["reference_multiplicity"]))
+        self.assertEqual("", config["dftb"]["model"])
+
+    def test_unrecognized_reference_is_rejected(self):
+        errors = self._reference_errors(self._ground_config(reference="ukz"))
+        self.assertTrue(errors, "a reference typo must be rejected")
+
+    def test_typo_reference_does_not_suppress_model_default(self):
+        checker = self._checker()
+        # On an open-shell ground route (mult>1) the preset default is non-empty.
+        # A recognized reference deliberately suppresses it; a typo must NOT --
+        # otherwise the run silently drops the LC operator.  The typo config must
+        # resolve to the same model as the no-reference config.
+        typo = self._ground_config(reference="ukz", reference_multiplicity="3")
+        clean = self._ground_config(reference_multiplicity="3")
+        typo_model = checker.apply_dftb_model_default(typo)
+        clean_model = checker.apply_dftb_model_default(clean)
+        self.assertNotEqual("", clean_model)
+        self.assertEqual(clean_model, typo_model)
+
+    def test_reference_rejected_for_xtb(self):
+        errors = self._reference_errors(
+            self._ground_config(section="xtb", reference="uks"))
+        self.assertTrue(errors, "xTB does not honour reference=")
+
+    def test_reference_rejected_for_probe_backend(self):
+        errors = self._reference_errors(
+            self._ground_config(backend="probe", reference="uks"))
+        self.assertTrue(errors, "probe backend cannot carry reference=")
+
+    def test_reference_rejected_on_response_route(self):
+        for route in ("mrsf", "sf", "tddftb"):
+            with self.subTest(route=route):
+                errors = self._reference_errors(
+                    self._ground_config(type=route, reference="uks"))
+                self.assertTrue(
+                    errors, "reference= is a ground-only selector")
+
+    def test_plain_ground_run_has_no_reference_error(self):
+        self.assertEqual([], self._reference_errors(self._ground_config()))
+
+
 if __name__ == "__main__":
     unittest.main()
