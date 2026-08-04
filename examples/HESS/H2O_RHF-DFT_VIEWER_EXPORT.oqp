@@ -1,0 +1,5 @@
+rks/bhhlyp/6-31g*
+hess(S0,type=analytical,clean=true)
+geom="../geometries/H2O-781cba5cd72b.xyz"
+guess(save_mol=true)
+scf(save_molden=true)

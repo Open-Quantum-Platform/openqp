@@ -128,6 +128,28 @@ OQP_CONFIG_SCHEMA = {
         # rc | z1 (optional redistribution refinements).
         'frontier_scheme': {'type': str, 'default': 'none'},
     },
+    # Finite nonperiodic solvent containment.  Lengths are angstrom and the
+    # force constant is kcal mol^-1 angstrom^-2 at the user boundary; the NAMD
+    # driver converts once before calling the resident atomic-unit kernel.
+    'droplet': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'radius': {'type': float, 'default': '20.0'},
+        'buffer': {'type': float, 'default': '1.0'},
+        'force_constant': {'type': float, 'default': '10.0'},
+        'target': {'type': string, 'default': 'water_com'},
+        'atoms': {'type': str, 'default': ''},
+        'water_resnames': {'type': sarray, 'default': 'hoh,wat,sol,tip3,tip3p'},
+        'max_penetration': {'type': float, 'default': '10.0'},
+    },
+    # Independent fixed-centre solute COM restraint.  This is deliberately not
+    # implied by droplet.enabled and is not part of ODP.
+    'solute_com': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'center': {'type': farray, 'default': '0.0,0.0,0.0'},
+        'force_constant': {'type': float, 'default': '5.0'},
+        'atoms': {'type': str, 'default': ''},
+    },
     'input': {
         'charge': {'type': int, 'default': '0'},
         'basis': {'type': string, 'default': '6-31g*'},
@@ -446,6 +468,18 @@ OQP_CONFIG_SCHEMA = {
         # penalty and escalate to BaekA only when needed; multistate searches
         # select BaekA directly. Other backends map auto to their penalty path.
         'meci_search': {'type': str, 'default': 'auto'},
+        # MECP objective.  ``auto`` selects SQP on the native optimizer, which
+        # it replaces outright, and the augmented Lagrangian on the backends
+        # that supply their own optimizer.  Both converge the energy gap; the
+        # legacy fixed-weight quadratic penalty (quad) does not, because its
+        # residual gap is of order 1/gap_weight.
+        'mecp_search': {'type': str, 'default': 'auto'},
+        # Strength of the auglag gap term relative to the projected mean
+        # gradient.  1.0 reproduces the plain Bearpark projection; the larger
+        # default reaches the seam faster and keeps the quasi-Newton history
+        # consistent, which matters because the projected gradient is not the
+        # derivative of the reported objective.
+        'gap_sigma': {'type': float, 'default': '10.0'},
         'pen_sigma': {'type': float, 'default': '1.0'},
         'pen_alpha': {'type': float, 'default': '0.0'},
         'pen_incre': {'type': float, 'default': '1.0'},
@@ -549,14 +583,43 @@ OQP_CONFIG_SCHEMA = {
         'substep': {'type': int, 'default': '200'},         # electronic sub-steps per nuclear step
         'decoherence': {'type': string, 'default': 'edc'},  # 'edc' | 'off'
         'edc_c': {'type': float, 'default': '0.1'},         # EDC constant C (Hartree)
-        'thrshe': {'type': float, 'default': '1.0e9'},      # energy-gap hop gate (Hartree); large = off; recommended 0.1 for SOC-NAMD (blocks large-gap S0 hops at FC geometry)
+        'thrshe': {'type': float, 'default': '0.1'},        # energy-gap hop gate (Hartree)
         'tdc': {'type': string, 'default': 'fd'},           # 'fd' (finite diff) | 'npi' (pending)
-        'trivial': {'type': bool, 'default': 'True'},       # trivial-crossing diabatic following
+        # Opt in only: an overlap-triggered root relabel is a method-specific
+        # heuristic, not part of standard FSSH, and can otherwise be mistaken
+        # for a stochastic hop at a genuine conical intersection.
+        'trivial': {'type': bool, 'default': 'False'},      # trivial-crossing diabatic following
         'trivial_thresh': {'type': float, 'default': '0.5'},
         'init_temp': {'type': float, 'default': '300.0'},   # K, for Maxwell-Boltzmann velocities
         'velocity': {'type': str, 'default': 'maxwell'},    # 'maxwell' | 'zero' | <file path>
-        'seed': {'type': int, 'default': '1'},
+        # Zero is a runtime sentinel resolved once to the local YYYYMMDD date;
+        # the runnable restart manifest freezes the resulting integer seed.
+        'seed': {'type': int, 'default': '0'},
+        'rng_stream': {'type': int, 'default': '1'},        # independent counter-RNG stream / trajectory id
+        'first_hop_step': {'type': int, 'default': '1'},    # first overlap-defined interval
+        'nacme_check': {'type': str, 'default': 'baeck_an'}, # 'off' | 'baeck_an' magnitude-only TD-BA audit
+        'ba_gap_max': {'type': float, 'default': '0.0734986443513'}, # Ha (2 eV), TD-BA pair gate
+        'nacme_gate': {'type': str, 'default': 'off'},      # 'off' | 'warn' | 'error'
+        'nacme_gate_invariant_tol': {'type': float, 'default': '1.0e-10'},
+        'nacme_gate_abs_tol': {'type': float, 'default': '1.0e-4'}, # au^-1
+        'nacme_gate_rel_tol': {'type': float, 'default': '1.0'},
+        'nacme_gate_consecutive': {'type': int, 'default': '3'},
+        'nve_gate': {'type': str, 'default': 'warn'},      # 'off' | 'warn' | 'error'
+        'nve_gate_abs_tol': {'type': float, 'default': '5.0e-3'}, # total drift, Ha
+        'nve_gate_step_tol': {'type': float, 'default': '1.0e-3'}, # step change, Ha
+        'nve_gate_transition_tol': {'type': float, 'default': '1.0e-6'}, # hop/trivial jump, Ha
+        'nve_gate_consecutive': {'type': int, 'default': '3'},
+        'trajectory_interval': {'type': int, 'default': '0'}, # 0 = automatic, approximately every 10 fs
+        'restart_interval': {'type': int, 'default': '0'},    # 0 = automatic, approximately every 10 fs
+        'trajectory_file': {'type': str, 'default': ''},
+        'restart_file': {'type': str, 'default': ''},
         'restart': {'type': bool, 'default': 'False'},
+        # NAMD owns its ensemble control: qmmm.ensemble belongs to the separate
+        # ground-state OpenMM MD driver and must not silently thermostat FSSH.
+        'ensemble': {'type': string, 'default': 'nve'},
+        'thermostat': {'type': string, 'default': 'off'},
+        'thermostat_temperature': {'type': float, 'default': '300.0'}, # K
+        'thermostat_friction': {'type': float, 'default': '1.0'},     # ps^-1
         'soc': {'type': bool, 'default': 'False'},          # ISC: spin-adiabatic SOC-NAMD
         'soc_basis': {'type': string, 'default': 'adiabatic'}, # SOC: 'adiabatic' (SHARC) | 'mch' (spin-pure exact-gradient)
         'soc_du_dt_corr': {'type': bool, 'default': 'False'}, # SOC adiabatic: add finite-difference dU/dt force correction
@@ -567,6 +630,17 @@ OQP_CONFIG_SCHEMA = {
         'dt_adaptive': {'type': bool, 'default': 'False'},  # adaptive timestep: shrink dt when atoms move fast/stiff
         'dt_min': {'type': float, 'default': '0.05'},       # fs, minimum adaptive timestep
         'dx_max': {'type': float, 'default': '0.02'},       # bohr, max per-step atomic displacement (adaptive dt criterion)
+    },
+    'odp': {
+        'enabled': {'type': bool, 'default': 'False'},
+        'cv': {'type': str, 'default': ''},
+        'scale': {'type': farray, 'default': ''},
+        'reference_r': {'type': farray, 'default': ''},
+        'reference_p': {'type': farray, 'default': ''},
+        'center': {'type': float, 'default': '0.0'},
+        'k_parallel': {'type': float, 'default': '0.0'},
+        'k_perpendicular': {'type': float, 'default': '0.0'},
+        'window': {'type': int, 'default': '0'},
     },
     'json': {
             'scf_type': {'type': string, 'default': ''},

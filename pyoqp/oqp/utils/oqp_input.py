@@ -233,7 +233,8 @@ BARE_MODIFIER_CALLS = {"pcm", "nmr", "ir", "raman", "d4"}
 SECTION_NAMES = {
     "input", "mp2", "guess", "pcm", "dftb", "symmetry", "scf",
     "dftgrid", "tdhf", "ekt", "properties", "optimize", "geometric",
-    "oqp", "neb", "hess", "nac", "md", "qmmm", "json", "tests",
+    "oqp", "neb", "hess", "nac", "md", "odp", "qmmm", "droplet",
+    "solute_com", "json", "tests",
 }
 
 
@@ -256,6 +257,11 @@ GENERIC_SCHEMA_KEYS = {
         trajectory_format trajectory_file log_file report_interval energy_file
         qm_atoms_xyz qm_list frontier_scheme
     """),
+    "droplet": _keys("""
+        enabled center radius buffer force_constant target atoms water_resnames
+        max_penetration
+    """),
+    "solute_com": _keys("enabled center force_constant atoms"),
     "input": _keys("library perf ispher d4 qmmm_flag soc_2e omp_threads"),
     "mp2": _keys("variant same_spin_scale opposite_spin_scale"),
     "guess": _keys("type file file2 save_mol continue_geom swapmo"),
@@ -320,8 +326,8 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "properties": _keys("grad"),
     "optimize": _keys("""
         lib maxit rmsd_grad rmsd_step max_grad max_step istate jstate kstate states
-        imult jmult energy_shift energy_gap meci_search pen_sigma pen_alpha
-        pen_incre pen_delta pen_jump gap_weight init_scf
+        imult jmult energy_shift energy_gap meci_search mecp_search gap_sigma
+        pen_sigma pen_alpha pen_incre pen_delta pen_jump gap_weight init_scf
     """),
     "neb": _keys("product nimage"),
     "oqp": _keys("""
@@ -334,10 +340,18 @@ ROUTE_DRIVER_SCHEMA_KEYS = {
     "nac": _keys("type dt dx bp nproc restart clean states align"),
     "md": _keys("""
         nstep dt active substep decoherence edc_c thrshe tdc trivial
-        trivial_thresh init_temp velocity seed restart soc soc_basis
+        trivial_thresh init_temp velocity seed rng_stream first_hop_step
+        nacme_check ba_gap_max nacme_gate nacme_gate_invariant_tol
+        nacme_gate_abs_tol nacme_gate_rel_tol nacme_gate_consecutive
+        nve_gate nve_gate_abs_tol nve_gate_step_tol nve_gate_transition_tol
+        nve_gate_consecutive
+        trajectory_interval restart_interval trajectory_file
+        restart_file restart ensemble thermostat thermostat_temperature
+        thermostat_friction soc soc_basis
         soc_du_dt_corr soc_tdc_grad_corr grad_wthr init_state econs
         dt_adaptive dt_min dx_max
     """),
+    "odp": _keys("enabled cv scale reference_r reference_p center k_parallel k_perpendicular window"),
 }
 
 # Traditional sectioned ``.inp`` files and the Python workflow API retain
@@ -455,6 +469,13 @@ _OPT_OPTIONS = {
     "energy_shift", "energy_gap", "meci_search", "pen_sigma",
     "pen_alpha", "pen_incre", "pen_delta", "pen_jump", "gap_weight", "init_scf",
 }
+# gap_sigma tunes the auglag objective, so only the crossing drivers accept it;
+# mecp_search belongs to MECP alone.  Both are [optimize] schema keys, so the
+# route-driver manifest still owns them, but the driver option sets keep them
+# out of optimize/ts/irc/neb where nothing reads them.
+_CROSSING_OPTIONS = {"gap_sigma"}
+_MECP_ONLY_OPTIONS = {"mecp_search"}
+_MECI_ONLY_OPTIONS = {"meci_search", "pen_delta", "pen_jump"}
 _NATIVE_ENGINE_OPTIONS = {
     "coordsys", "trust", "trust_max",
     "auto_recovery", "recovery_maxit", "recovery_trust",
@@ -478,13 +499,25 @@ _MECI_OPTION_ALIASES = {
     "beta_schedule": "pen_jump",
     "gap": "energy_gap",
 }
+_MECP_PUBLIC_OPTIONS = {"algorithm", "sigma", "alpha", "gap"}
+_MECP_OPTION_ALIASES = {
+    "algorithm": "mecp_search",
+    "sigma": "pen_sigma",
+    "alpha": "pen_alpha",
+    "gap": "energy_gap",
+}
 _TCI_OPTIONS = set(_OPT_OPTIONS) - {"meci_search", "pen_delta", "pen_jump"}
 DRIVER_OPTIONS = {
     "energy": set(),
     "grad": {"td_prop", "export", "title"},
     "optimize": set(_OPT_OPTIONS) | set(_OPTIMIZER_BACKEND_OPTIONS),
-    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
-    "mecp": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    "meci": set(_OPT_OPTIONS) | set(_MECI_PUBLIC_OPTIONS) | set(_CROSSING_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
+    # MECP reads none of the MECI-only controls, and silently ignoring them
+    # would run a different objective than the input asks for.
+    "mecp": ((set(_OPT_OPTIONS) - _MECI_ONLY_OPTIONS)
+             | set(_MECP_PUBLIC_OPTIONS)
+             | set(_MECP_ONLY_OPTIONS) | set(_CROSSING_OPTIONS)
+             | set(_NATIVE_ENGINE_OPTIONS)),
     "tci": set(_TCI_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS),
     "mep": {"maxit", "points", "step", "mep_step", "gtol"},
     "ts": set(_OPT_OPTIONS) | set(_NATIVE_ENGINE_OPTIONS) | {"follow", "hessian"},
@@ -506,7 +539,15 @@ DRIVER_OPTIONS = {
     "namd": {
         "nstep", "dt", "active", "substep", "decoherence", "edc_c",
         "thrshe", "tdc", "trivial", "trivial_thresh", "init_temp",
-        "velocity", "seed", "restart", "soc", "soc_basis",
+        "velocity", "seed", "rng_stream", "first_hop_step", "nacme_check",
+        "ba_gap_max", "nacme_gate", "nacme_gate_invariant_tol",
+        "nacme_gate_abs_tol", "nacme_gate_rel_tol", "nacme_gate_consecutive",
+        "nve_gate", "nve_gate_abs_tol", "nve_gate_step_tol",
+        "nve_gate_transition_tol", "nve_gate_consecutive",
+        "trajectory_interval", "restart_interval", "trajectory_file",
+        "restart_file", "restart", "soc", "soc_basis",
+        "ensemble", "thermostat", "thermostat_temperature",
+        "thermostat_friction",
         "soc_du_dt_corr", "soc_tdc_grad_corr", "grad_wthr", "init_state",
         "econs", "dt_adaptive", "dt_min", "dx_max",
     },
@@ -783,6 +824,13 @@ def _parse_call(text: str) -> CallSpec:
     return CallSpec(name=name, args=tuple(args), kwargs=kwargs)
 
 
+def _normalize_basis_value(value: str) -> str:
+    """Normalize a basis name while preserving file-path case."""
+    if value.lower().startswith('file:'):
+        return 'file:' + value[len('file:'):]
+    return value.lower()
+
+
 def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
     parts = _split_top_level(route, "/")
     if not parts or len(parts) > 3:
@@ -847,7 +895,8 @@ def _parse_route(route: str) -> Tuple[str, Dict[str, Any], str, str]:
         functional, basis = parts[1], parts[2]
     if model in {"dft", "rks", "uks", "roks", "tddft", "tda", "mrsf", "umrsf", "sf"} and not functional:
         raise OQPInputError("%s requires a functional in the route" % model)
-    return model, model_options, functional.lower(), basis.lower()
+    normalized_basis = _normalize_basis_value(basis)
+    return model, model_options, functional.lower(), normalized_basis
 
 
 def looks_canonical(text: str) -> bool:
@@ -963,7 +1012,7 @@ def parse_canonical_oqp(text: str) -> CalculationSpec:
             raise OQPInputError("Conflicting functional values in route and options")
         functional = flat
     if "basis" in options:
-        flat = str(options.pop("basis")).lower()
+        flat = _normalize_basis_value(str(options.pop("basis")))
         if basis and flat != basis:
             raise OQPInputError("Conflicting basis values in route and options")
         basis = flat
@@ -1188,15 +1237,27 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     if driver.name == "prop" and model not in {"mrsf", "mrsf-hf"}:
         raise OQPInputError("prop([STATE]) currently requires MRSF-TDDFT or MRSF-TDHF")
 
-    options = (_normalized_meci_options(driver)
-               if driver.name == "meci" else _driver_options(driver))
+    if driver.name == "meci":
+        options = _normalized_meci_options(driver)
+    elif driver.name == "mecp":
+        options = _normalized_mecp_options(driver)
+    else:
+        options = _driver_options(driver)
+    if driver.name == "mecp":
+        algorithm = str(options.get("mecp_search", "auto")).strip().lower()
+        if algorithm not in {"auto", "auglag", "sqp", "penalty", "quad"}:
+            raise OQPInputError(
+                "mecp algorithm must be auto, sqp, auglag, penalty, or quad"
+            )
+
     if driver.name == "meci":
         algorithm = str(options.get(
             "meci_search", "baeka" if len(states) > 2 else "auto"
         )).strip().lower()
-        if algorithm not in {"auto", "penalty", "ubp", "hybrid", "baeka"}:
+        if algorithm not in {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}:
             raise OQPInputError(
-                "meci algorithm must be auto, penalty, ubp, hybrid, or baeka"
+                "meci algorithm must be auto, penalty, ubp, auglag, hybrid, "
+                "or baeka"
             )
         if len(states) > 2 and algorithm not in {"auto", "baeka"}:
             raise OQPInputError(
@@ -1504,6 +1565,19 @@ def _validate_semantics(spec: CalculationSpec) -> None:
     qmmm_section = next(
         (call for call in spec.modifiers if call.name == "qmmm"), None
     )
+    odp_section = next(
+        (call for call in spec.modifiers if call.name == "odp"), None
+    )
+    for independent_control in ("droplet", "solute_com"):
+        control = next(
+            (call for call in spec.modifiers if call.name == independent_control),
+            None,
+        )
+        if control is not None and driver.name != "namd":
+            raise OQPInputError(
+                "%s(...) is currently connected only to namd(...)" %
+                independent_control
+            )
     input_section = next(
         (call for call in spec.modifiers if call.name == "input"), None
     )
@@ -1538,6 +1612,21 @@ def _validate_semantics(spec: CalculationSpec) -> None:
             "%s is not connected and would otherwise run without the requested QM/MM forces."
             % driver.name
         )
+    if odp_section is not None:
+        if odp_section.args:
+            raise OQPInputError("odp accepts keyword arguments only")
+        if (driver.name != "namd"
+                and requested(odp_section.kwargs.get("enabled", False))):
+            raise OQPInputError(
+                "odp(...) currently requires the NVE namd(...) workflow"
+            )
+        if (driver.name == "namd"
+                and requested(odp_section.kwargs.get("enabled", False))
+                and str(options.get("ensemble", "nve")).strip().lower()
+                != "nve"):
+            raise OQPInputError(
+                "odp(...) currently requires ensemble=nve in namd(...)"
+            )
     if states and set(_driver_options(driver)).intersection({"active", "init_state"}):
         key = sorted(set(_driver_options(driver)).intersection({"active", "init_state"}))[0]
         raise OQPInputError(
@@ -1961,6 +2050,29 @@ def _normalized_meci_options(driver: CallSpec) -> Dict[str, Any]:
     return normalized
 
 
+def _normalized_mecp_options(driver: CallSpec) -> Dict[str, Any]:
+    """Return MECP options using their configuration key names.
+
+    ``algorithm`` is the public spelling of ``mecp_search``, matching the MECI
+    surface.  Both spellings are accepted, but supplying them together is an
+    error rather than a last-one-wins ambiguity.
+    """
+
+    options = _driver_options(driver)
+    normalized: Dict[str, Any] = {}
+    sources: Dict[str, str] = {}
+    for key, value in options.items():
+        target = _MECP_OPTION_ALIASES.get(key, key)
+        if target in normalized:
+            raise OQPInputError(
+                "MECP option '%s' is specified twice through %s and %s"
+                % (target, sources[target], key)
+            )
+        normalized[target] = value
+        sources[target] = key
+    return normalized
+
+
 def _validate_freeze_spec(value: Any) -> str:
     """Validate the concise native frozen-distance expression."""
 
@@ -2067,7 +2179,7 @@ def _resolve_search_path_list(value: Any, source_dir: Optional[Path]) -> Any:
     if source_dir is None or not isinstance(value, str):
         return value
     resolved: List[str] = []
-    for raw in value.split(","):
+    for raw in re.split(r"[\s,]+", value):
         item = raw.strip()
         if not item:
             continue
@@ -2078,6 +2190,71 @@ def _resolve_search_path_list(value: Any, source_dir: Optional[Path]) -> Any:
         # searchable unless a same-named local file actually exists.
         resolved.append(str(local) if explicit or local.exists() else item)
     return ",".join(resolved)
+
+
+def _resolve_velocity_source(value: Any, source_dir: Optional[Path]) -> Any:
+    """Resolve file-backed NAMD velocities while preserving built-in modes."""
+
+    if not isinstance(value, str) or value.strip().lower() in {
+        "zero", "none", "0", "maxwell", "boltzmann", "random",
+    }:
+        return value
+    return _resolve_path(value, source_dir)
+
+
+def rebase_calculation_paths(
+    spec: CalculationSpec, *, source_dir: Optional[Path]
+) -> CalculationSpec:
+    """Return a canonical request whose input paths no longer depend on CWD.
+
+    This is primarily used for restart manifests written somewhere other than
+    the source ``.oqp`` directory.  It mirrors the path ownership used by
+    :func:`lower_to_legacy` without changing inline geometries or package
+    search names such as ``amber14/tip3p.xml``.
+    """
+
+    if source_dir is None:
+        return spec
+    source_dir = Path(source_dir).resolve()
+    options = dict(spec.options)
+    for key in ("geom", "geom2"):
+        if key in options:
+            options[key] = _normalize_geometry(options[key], source_dir)
+
+    def rebase_call(call: CallSpec) -> CallSpec:
+        kwargs = dict(call.kwargs)
+        for key, value in tuple(kwargs.items()):
+            if (call.name, key) == ("input", "system2"):
+                kwargs[key] = _normalize_geometry(value, source_dir)
+            elif (call.name, key) in {
+                ("neb", "product"), ("guess", "file"), ("guess", "file2"),
+                ("dftb", "parameter_path"), ("dftb", "library_path"),
+                ("geometric", "constraints_file"), ("oqp", "neb_output"),
+            }:
+                kwargs[key] = _resolve_path(value, source_dir)
+            elif call.name == "qmmm" and key in {
+                "pdb_file", "qm_atoms_xyz", "trajectory_file", "log_file",
+                "energy_file",
+            }:
+                kwargs[key] = _resolve_path(value, source_dir)
+            elif call.name == "qmmm" and key in {
+                "forcefield", "forcefield_files",
+            }:
+                kwargs[key] = _resolve_search_path_list(value, source_dir)
+            elif call.name == "namd" and key == "velocity":
+                kwargs[key] = _resolve_velocity_source(value, source_dir)
+        return CallSpec(call.name, call.args, kwargs, call.explicit)
+
+    return CalculationSpec(
+        spec.model,
+        spec.functional,
+        spec.basis,
+        spec.model_options,
+        options,
+        rebase_call(spec.driver),
+        tuple(rebase_call(call) for call in spec.modifiers),
+        spec.source_text,
+    )
 
 
 def lower_to_legacy(
@@ -2333,6 +2510,13 @@ def lower_to_legacy(
         if name == "mecp":
             put("optimize", "imult", states[0].multiplicity)
             put("optimize", "jmult", states[1].multiplicity)
+            # emit mecp_search rather than the public algorithm spelling, and
+            # normalize its case so the objective lookup finds it
+            driver_options = _normalized_mecp_options(spec.driver)
+            if "mecp_search" in driver_options:
+                driver_options["mecp_search"] = str(
+                    driver_options["mecp_search"]
+                ).strip().lower()
         if name == "meci":
             driver_options = _normalized_meci_options(spec.driver)
             algorithm = str(driver_options.get(
@@ -2369,6 +2553,8 @@ def lower_to_legacy(
             else:
                 put("md", "active", roots[0])
         for key, value in driver_options.items():
+            if key == "velocity":
+                value = _resolve_velocity_source(value, source_dir)
             put("md", key, value)
     elif name == "ekt":
         if roots:
@@ -2454,12 +2640,16 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
         "umrsf-hf": "umrsf-tdhf", "sf-hf": "sf-tdhf", "tda-hf": "tda-tdhf",
     }.get(spec.model, spec.model)
     route = display_model + (("(" + model_args + ")") if model_args else "")
+    basis_as_option = (
+        spec.basis.lower().startswith('file:')
+        and re.fullmatch(r'[A-Za-z0-9_.:+-]+', spec.basis) is None)
+    route_basis = "" if basis_as_option else spec.basis
     if spec.functional:
         route += "/" + spec.functional
-        if spec.basis:
-            route += "/" + spec.basis
-    elif spec.basis:
-        route += "/" + spec.basis
+        if route_basis:
+            route += "/" + route_basis
+    elif route_basis:
+        route += "/" + route_basis
     option_order = (
         "charge", "mult", "library", "ispher", "perf", "d4", "qmmm_flag",
         "omp_threads",
@@ -2480,6 +2670,8 @@ def render_canonical_oqp(spec: CalculationSpec) -> str:
             and spec.options[key] == 1
         )
     ]
+    if basis_as_option:
+        option_parts.insert(0, "basis=%s" % _render_value(spec.basis))
     extra = sorted(set(spec.options) - set(option_order) - {"geom", "geom2"})
     option_parts.extend("%s=%s" % (key, _render_value(spec.options[key])) for key in extra)
     driver = _normalize_driver_defaults(spec.model, spec.driver)
@@ -2801,6 +2993,7 @@ __all__ = [
     "looks_canonical",
     "lower_to_legacy",
     "parse_canonical_oqp",
+    "rebase_calculation_paths",
     "render_canonical_oqp",
     "resolve_oqp_file",
     "resolve_oqp_text",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+import importlib
 import itertools
 import os
 from pathlib import Path
@@ -1501,10 +1502,9 @@ class OpenQPDFTBAdapter:
         # pip-installed openqp-dftb wheel bundles the library next to its
         # locator package: the most robust default when nothing is configured.
         try:
-            import openqp_dftb  # noqa: PLC0415
-
-            return Path(openqp_dftb.library_path())
-        except (ImportError, FileNotFoundError):
+            locator = importlib.import_module(self.PIP_LOCATOR)
+            return Path(locator.library_path())
+        except (ImportError, AttributeError, FileNotFoundError):
             pass
         # The -DENABLE_OPENQP_DFTB=ON hook stages libopenqp_dftb_c next to the
         # liboqp that the Python package already resolved. Self-locating installs
@@ -1526,11 +1526,11 @@ class OpenQPDFTBAdapter:
             if found:
                 return Path(found)
         message = (
-            "openqp-dftb not found: could not locate libopenqp_dftb_c. "
-            "Install it with `pip install openqp-dftb` (or `pip install "
-            "git+https://github.com/Open-Quantum-Platform/openqp-dftb.git`), "
-            "set [dftb] library_path / OPENQP_DFTB_LIBRARY, or build OpenQP "
-            "with -DENABLE_OPENQP_DFTB=ON to stage it next to liboqp."
+            f"{self.BACKEND_NAME} not found: could not locate "
+            f"{self.LIB_BASENAMES[0]}. Install the {self.BACKEND_NAME} "
+            f"package, set [{self.SECTION}] library_path / {self.ENV_LIBRARY}, "
+            "or build OpenQP with the matching optional backend enabled to "
+            "stage it next to liboqp."
         )
         dump_log(
             self.mol,
@@ -1932,15 +1932,24 @@ class OpenQPDFTBAdapter:
         return atoms, coords.tobytes(), option_key
 
     def _parameter_path(self) -> str:
-        raw = self.dftb.get("parameter_path") or os.environ.get("OPENQP_DFTB_PARAMETER_PATH")
+        raw = self.dftb.get("parameter_path") or os.environ.get(self.ENV_PARAMETER)
         if raw:
             return str(self._resolve_user_path(raw))
-        bundled = _bundled_parameter_path()
+        if self.PIP_LOCATOR == "openqp_dftb":
+            # Retain the public test seam used by the DFTB adapter tests.
+            bundled = _bundled_parameter_path()
+        else:
+            try:
+                locator = importlib.import_module(self.PIP_LOCATOR)
+                bundled = locator.default_parameter_path()
+            except (ImportError, AttributeError, FileNotFoundError):
+                bundled = None
         if bundled:
-            return bundled
+            return str(bundled)
         raise ValueError(
-            "Set [dftb] parameter_path or OPENQP_DFTB_PARAMETER_PATH "
-            "(this openqp-dftb installation ships no bundled parameter set)."
+            f"Set [{self.SECTION}] parameter_path or {self.ENV_PARAMETER} "
+            f"(this {self.BACKEND_NAME} installation ships no bundled "
+            "parameter set)."
         )
 
     def _probe_executable(self) -> str:
@@ -1967,7 +1976,8 @@ class OpenQPDFTBAdapter:
         path = Path(str(raw_path)).expanduser()
         if path.is_absolute():
             return path
-        input_file = getattr(self.mol, "input_file", "") or ""
+        input_file = (getattr(self.mol, "oqp_input_source", "")
+                      or getattr(self.mol, "input_file", "") or "")
         base = Path(input_file).resolve().parent if input_file else Path.cwd()
         resolved = base / path
         return resolved if resolved.exists() else Path.cwd() / path

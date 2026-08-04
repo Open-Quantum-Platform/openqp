@@ -214,6 +214,32 @@ class _WorkflowEktProxy(_WorkflowMrsfSectionProxy):
         return super().__call__(**kwargs)
 
 
+class _WorkflowNAMDProxy(_WorkflowMrsfSectionProxy):
+    """NAMD workflow proxy with early same-spin diagnostic validation."""
+
+    def __init__(self, owner):
+        super().__init__(owner, "md", runtype="namd", workflow_name="NAMD")
+
+    def __call__(self, **kwargs):
+        current = self._owner.config_typed.get("md", {})
+        soc = kwargs.get("soc", current.get("soc", False))
+        nacme_explicit = "nacme_check" in kwargs
+        nacme_check = kwargs.get(
+            "nacme_check", current.get("nacme_check", "baeck_an"))
+        soc_requested = (soc is True) or (
+            str(soc).strip().lower() in {"true", "1", "on", "yes"})
+        if (soc_requested and nacme_explicit
+                and str(nacme_check).strip().lower() != "off"):
+            raise ValueError(
+                "SOC NAMD does not support nacme_check; use nacme_check='off'."
+            )
+        if soc_requested and not nacme_explicit:
+            # The global default is the same-spin Baeck-An diagnostic.  SOC
+            # stores its complex spin-adiabatic overlap/TDC instead.
+            kwargs["nacme_check"] = "off"
+        return super().__call__(**kwargs)
+
+
 class _WorkflowSocProxy:
     """SOC workflow proxy grouped under job.workflow."""
 
@@ -326,7 +352,7 @@ class _WorkflowProxy:
         # Nonadiabatic MD (Tully surface hopping); MRSF-TDDFT only, [md] section.
         # Gas-phase by default; combine with job.qmmm(...) for QM/MM NAMD and
         # pass soc=True (with optional soc_basis) for SOC-NAMD.
-        object.__setattr__(self, "namd", _WorkflowMrsfSectionProxy(owner, "md", "namd", "NAMD"))
+        object.__setattr__(self, "namd", _WorkflowNAMDProxy(owner))
 
     def __call__(self, runtype=None, **kwargs):
         return self._owner._control(
@@ -1174,8 +1200,14 @@ class OpenQP:
     def _set_optimize_options(self, **kwargs):
         """Set optimizer options, routing backend-specific keys by lib."""
         requested = dict(kwargs)
+        active_runtype = str(
+            self.config_typed.get("input", {}).get("runtype", "energy")
+        ).lower()
         public_aliases = {
-            "algorithm": "meci_search",
+            # the crossing driver decides which search key algorithm names
+            "algorithm": (
+                "mecp_search" if active_runtype == "mecp" else "meci_search"
+            ),
             "sigma": "pen_sigma",
             "alpha": "pen_alpha",
             "delta_beta": "pen_delta",

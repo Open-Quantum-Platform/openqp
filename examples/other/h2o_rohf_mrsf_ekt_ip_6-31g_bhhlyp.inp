@@ -12,7 +12,7 @@ d4=False
 
 [guess]
 type=huckel
-save_mol=False
+save_mol=True
 
 [scf]
 type=rohf
@@ -20,7 +20,7 @@ maxit=30
 maxdiis=5
 multiplicity=3
 conv=1.0e-8
-save_molden=False
+save_molden=True
 
 [dftgrid]
 rad_npts=96
