@@ -90,24 +90,29 @@ def _umrsf_guard_errors(report):
 
 
 class UMRSFEnergyRegressionTests(unittest.TestCase):
-    def test_umrsf_mixed_exchange_channels_follow_mrsf_permutation_pattern(self):
+    def test_umrsf_mixed_exchange_channels_use_gamess_compatible_permutation(self):
         source = compact(LIB.read_text())
-        self.assertIn(
+        expected_updates = (
+            "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,k,j)",
+            "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,j,k)",
+            "f3(:nf,9:10,k,j)=f3(:nf,9:10,k,j)-xval*d3(:nf,9:10,i,l)",
+            "f3(:nf,9:10,j,k)=f3(:nf,9:10,j,k)-xval*d3(:nf,9:10,l,i)",
+            "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,l,j)",
+            "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,j,l)",
+            "f3(:nf,9:10,l,j)=f3(:nf,9:10,l,j)-xval*d3(:nf,9:10,i,k)",
+            "f3(:nf,9:10,j,l)=f3(:nf,9:10,j,l)-xval*d3(:nf,9:10,k,i)",
+        )
+        bad_head_updates = (
             "f3(:nf,9:10,i,k)=f3(:nf,9:10,i,k)-xval*d3(:nf,9:10,j,l)",
-            source,
-        )
-        self.assertIn(
             "f3(:nf,9:10,k,i)=f3(:nf,9:10,k,i)-xval*d3(:nf,9:10,l,j)",
-            source,
-        )
-        self.assertIn(
             "f3(:nf,9:10,i,l)=f3(:nf,9:10,i,l)-xval*d3(:nf,9:10,j,k)",
-            source,
-        )
-        self.assertIn(
             "f3(:nf,9:10,l,i)=f3(:nf,9:10,l,i)-xval*d3(:nf,9:10,k,j)",
-            source,
         )
+
+        for update in expected_updates:
+            self.assertIn(update, source)
+        for update in bad_head_updates:
+            self.assertNotIn(update, source)
 
     def test_umrsf_flag_is_scoped_to_umrsf_entry_point(self):
         source = compact(ENERGY.read_text())
