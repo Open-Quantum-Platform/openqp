@@ -129,7 +129,9 @@ contains
           'on a machine with more memory.'
       write(iw,'(2X,A)') 'If this machine really has more memory than reported ' // &
           '(some batch systems do not expose it), set OQP_MEMORY_LIMIT_GB.'
-      close(iw)
+      ! No close(iw) before the abort: show_message writes through this same
+      ! unit, and closing it first would discard the one-line summary in the
+      ! exact low-memory scenario the message exists for.
       call show_message(trim(msg)//' Reduce the cost ('//trim(advice)// &
           '), use a larger machine, or set OQP_MEMORY_LIMIT_GB if the ' // &
           'probe under-reports.', with_abort)

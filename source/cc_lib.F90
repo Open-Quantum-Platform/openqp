@@ -94,7 +94,12 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   real(dp), intent(in) :: oovv(no,no,nv,nv)  !< (ij|ab)
   real(dp), intent(in) :: ovov(no,nv,no,nv)  !< (ia|jb)
   real(dp), intent(in) :: ovvv(no,nv,nv,nv)  !< (ia|bc)
-  real(dp), intent(in) :: vvvv(nv,nv,nv,nv)  !< (ab|cd)
+  !> (ab|cd) as (a,c,b,d).  Assumed shape, because the Cholesky route passes a
+  !> one-element placeholder it promises never to read: an explicit-shape dummy
+  !> would make that call illegal (and bounds-checked builds abort on it) even
+  !> though no element is ever touched.  The explicit route passes the full
+  !> (nv,nv,nv,nv) array.
+  real(dp), intent(in) :: vvvv(:,:,:,:)
   type(par_env_t), intent(inout) :: pe
   type(cc_options_t), intent(in) :: opts
   real(dp), intent(out) :: e_ccsd
@@ -104,7 +109,7 @@ subroutine cc_ccsd_t_energy(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, 
   real(dp), optional, intent(out) :: time_ccsd, time_triples
   !> Cholesky vectors over the virtual pair block.  Supplying them makes the
   !> ladder rebuild its integrals instead of reading @p vvvv, so the caller may
-  !> pass a zero-sized vvvv and never pay for the v^4 array.
+  !> pass a one-element placeholder there and never pay for the v^4 array.
   real(dp), optional, intent(in) :: bvv(:,:)
   integer, optional, intent(in) :: nchol
 
@@ -181,7 +186,9 @@ subroutine ccsd_iterate(no, nv, eo, ev, oooo, ooov, oovv, ovov, ovvv, vvvv, &
   integer, intent(in) :: no, nv
   real(dp), intent(in) :: eo(no), ev(nv)
   real(dp), intent(in) :: oooo(no,no,no,no), ooov(no,no,no,nv), oovv(no,no,nv,nv)
-  real(dp), intent(in) :: ovov(no,nv,no,nv), ovvv(no,nv,nv,nv), vvvv(nv,nv,nv,nv)
+  real(dp), intent(in) :: ovov(no,nv,no,nv), ovvv(no,nv,nv,nv)
+  !> Assumed shape for the Cholesky placeholder; see cc_ccsd_t_energy.
+  real(dp), intent(in) :: vvvv(:,:,:,:)
   type(par_env_t), intent(inout) :: pe
   type(cc_options_t), intent(in) :: opts
   real(dp), intent(out) :: t1(no,nv), t2(no,no,nv,nv)
@@ -709,7 +716,10 @@ end subroutine ccsd_t1_equation
 subroutine ladder_contraction(no, nv, vvvv, ovvv, t1, tau, pe, t2n, bvv, nchol)
 
   integer, intent(in) :: no, nv
-  real(dp), intent(in) :: vvvv(nv,nv,nv,nv), ovvv(no,nv,nv,nv)
+  !> Assumed shape for the Cholesky placeholder; see cc_ccsd_t_energy.  Read
+  !> only when @p bvv is absent, where the caller passes the full array.
+  real(dp), intent(in) :: vvvv(:,:,:,:)
+  real(dp), intent(in) :: ovvv(no,nv,nv,nv)
   real(dp), intent(in) :: t1(no,nv), tau(no,no,nv,nv)
   type(par_env_t), intent(inout) :: pe
   real(dp), intent(inout) :: t2n(no,no,nv,nv)

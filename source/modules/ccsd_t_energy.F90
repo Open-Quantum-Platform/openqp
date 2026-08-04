@@ -202,6 +202,28 @@ contains
       end if
     end select
 
+    ! The factorisation exists on the closed-shell path only: the spin-orbital
+    ! solver builds its tensor from the packed AO store and never reads the
+    ! vectors.  An explicit request for it on an open-shell reference cannot be
+    ! honoured, and honouring it silently with a conventional high-memory run
+    ! is the worst answer for exactly the user who set it -- someone trying to
+    ! fit a job.  Refuse and say why.  cholesky=true merely gets a note: it is
+    ! a preference the path has no use for, not an order it must obey.
+    if (open_shell) then
+      if (int(infos%control%cc_cholesky_direct) == 1) then
+        call show_message('CCSD(T): [cc] cholesky_direct is not available for ' // &
+            'open-shell references -- the spin-orbital solver never uses the ' // &
+            'Cholesky vectors, so the run would take the conventional ' // &
+            'high-memory route the setting exists to avoid. Remove it.', &
+            with_abort)
+      end if
+      if (int(infos%control%cc_cholesky) == 1) then
+        write(iw,'(2X,A)') 'CCSD(T): NOTE: [cc] cholesky is ignored for ' // &
+            'open-shell references; the spin-orbital solver has no ' // &
+            'factorised route.'
+      end if
+    end if
+
     ! cholesky_direct=true is an order, not a preference: it exists so a job
     ! can be run without the packed AO store at all.  With cholesky left at
     ! auto, a case whose explicit route fit would decline the vectors and the
