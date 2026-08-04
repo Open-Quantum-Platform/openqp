@@ -66,7 +66,15 @@ contains
 !>    * it does nothing inside an OpenMP parallel region, where mutating a
 !>      global thread count from several threads at once would be a race.
 !>
-!>  Override with OQP_EIGEN_ROWS_PER_THREAD; <= 0 disables the policy.
+!>  Override with OQP_EIGEN_ROWS_PER_THREAD; <= 0 disables the policy.  It is
+!>  read once at first use and cached for the run.
+!>
+!>  The measurements above are OpenBLAS, whose LAPACK is largely the netlib
+!>  reference.  MKL and BLIS thread these routines properly, and
+!>  blas_thread_ctl resolves their setters too, so on those backends the cap
+!>  can leave real speed unclaimed on large matrices -- set
+!>  OQP_EIGEN_ROWS_PER_THREAD=0 there.  Backends with no recognised setter
+!>  (Apple Accelerate, reference LAPACK) report -1 and the policy is inert.
   function eigen_blas_threads(n, navail) result(nuse)
 !$  use omp_lib, only: omp_in_parallel
     integer, intent(in) :: n
@@ -75,16 +83,34 @@ contains
     character(32) :: env
     integer :: rows, stat_
 
+!   Read OQP_EIGEN_ROWS_PER_THREAD once per process rather than once per
+!   eigensolve.  The lookup measures ~0.08 us, which is only ~0.1% of the
+!   smallest solve this policy wraps (a ~20x20 TRAH Rayleigh matrix, ~70 us)
+!   -- but it sits squarely in the path the policy exists to make faster, and
+!   a CASSCF run performs thousands of these.  Paying it once is free.
+!
+!   A plain saved variable is safe here without a lock: the OpenMP guard above
+!   returns before this point, so only a serial caller ever reaches the
+!   initialisation.  The consequence is that the variable is sampled at first
+!   use and fixed for the run -- which is also the more predictable behaviour,
+!   since a policy that changed mid-run would make timings irreproducible.
+    logical, save :: rows_cached = .false.
+    integer, save :: rows_value = EIGEN_ROWS_PER_THREAD_DEFAULT
+
     nuse = navail
     if (navail <= 1) return
 !$  if (omp_in_parallel()) return
 
-    rows = EIGEN_ROWS_PER_THREAD_DEFAULT
-    call get_environment_variable('OQP_EIGEN_ROWS_PER_THREAD', env, status=stat_)
-    if (stat_ == 0) then
-      read(env, *, iostat=stat_) rows
-      if (stat_ /= 0) rows = EIGEN_ROWS_PER_THREAD_DEFAULT
+    if (.not. rows_cached) then
+      rows_value = EIGEN_ROWS_PER_THREAD_DEFAULT
+      call get_environment_variable('OQP_EIGEN_ROWS_PER_THREAD', env, status=stat_)
+      if (stat_ == 0) then
+        read(env, *, iostat=stat_) rows_value
+        if (stat_ /= 0) rows_value = EIGEN_ROWS_PER_THREAD_DEFAULT
+      end if
+      rows_cached = .true.
     end if
+    rows = rows_value
     if (rows <= 0) return          ! policy disabled
 
     nuse = max(1_c_int64_t, min(navail, int(n, c_int64_t) / int(rows, c_int64_t)))

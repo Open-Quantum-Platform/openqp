@@ -87,6 +87,27 @@ Two safety properties, both worth knowing if you are reading the code:
   mutates process-global state, so calling it at all from several workers would
   race even when they all write the same value.
 
+`OQP_EIGEN_ROWS_PER_THREAD` is read **once at first use** and cached for the
+run. Changing it mid-process has no effect; that also keeps timings within a
+run reproducible.
+
+### Which BLAS this applies to
+
+The measurements above are OpenBLAS, whose LAPACK is largely the netlib
+reference implementation — that is *why* the eigensolvers do not scale.
+`blas_thread_ctl.c` resolves a thread-count setter for OpenBLAS, **MKL and
+BLIS**, so the policy applies to all three, but MKL and BLIS thread these
+routines properly and the cap can cost real speed there on large matrices. On
+those backends set `OQP_EIGEN_ROWS_PER_THREAD=0` to disable it, or measure your
+own crossover with the recipe below.
+
+Backends with no recognised setter — Apple Accelerate, plain reference LAPACK —
+make `blas_thread_count()` return `-1`, and both the getter and setter become
+no-ops, so the policy is completely inert. That is worth knowing when reading
+CI results: the macOS legs exercise none of this, and a Linux leg linked
+against the *serial* `libopenblas64` reports one thread and short-circuits
+before the policy does anything either.
+
 ### What it buys
 
 The methods that gain are the ones doing many small eigensolves. H2O/cc-pVTZ
