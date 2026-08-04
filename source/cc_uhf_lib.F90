@@ -82,15 +82,21 @@ end function cc_uhf_spinorb_gb
 !> Reporting only nso^4 understated the real requirement by roughly a factor
 !> of three, which is worse than useless in a guard: it waves through jobs
 !> that then die in the allocator.
-pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads) result(gb)
+pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples) result(gb)
   integer, intent(in) :: nmo    !< correlated spatial MOs
   integer, intent(in) :: nocc   !< occupied spin orbitals
   integer, intent(in) :: ndiis  !< DIIS subspace size (0 = no DIIS)
   !> OpenMP threads the (T) loop will run with; each takes its own nv^3 panel.
   integer, intent(in), optional :: nthreads
+  !> Whether the (T) correction will run.  method=ccsd never enters the
+  !> triples, and its panels plus the per-thread nv^3 buffers are the largest
+  !> stage on virtual-heavy cases -- charging them for a doubles-only run
+  !> refused jobs that fit by a wide margin.
+  logical, intent(in), optional :: triples
   real(dp) :: gb
   real(dp) :: nso, no, nv, assembly, solve, trip, amp
   integer :: nthr
+  logical :: do_t
 
   nso = 2.0_dp*real(nmo,dp)
   no  = real(nocc,dp)
@@ -111,8 +117,19 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads) result(gb)
 
   nthr = 1
   if (present(nthreads)) nthr = max(1, nthreads)
-  trip = nso**4 + nv**3*no + no**2*nv**2 + no**2*nv**2 + no**3*nv &
-       + real(nthr,dp)*nv**3
+  do_t = .true.
+  if (present(triples)) do_t = triples
+  ! The solver frees its intermediates before entering the triples (see
+  ! cc_uhf_ccsd_t), so solve and trip genuinely compete rather than stack:
+  ! at (T) time the live set is the tensor, t1/t2, the five reordered panels
+  ! (gvv nv^3 no; t2o, t2v and gvvp no^2 nv^2 each; gov no^3 nv) and one
+  ! nv^3 panel per thread.
+  trip = 0.0_dp
+  if (do_t) then
+    trip = nso**4 + no*nv + no**2*nv**2 &
+         + nv**3*no + 3.0_dp*no**2*nv**2 + no**3*nv &
+         + real(nthr,dp)*nv**3
+  end if
 
   gb = max(assembly, max(solve, trip)) * 8.0_dp / 1.073741824e9_dp
 end function cc_uhf_peak_gb
@@ -783,6 +800,19 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
   call cc_uhf_wall_time(tw1)
   if (present(time_ccsd)) time_ccsd = tw1 - tw0
 
+  ! Everything from here on reads only t1, t2, g, eso and f_ov, so the
+  ! iteration's working set goes now rather than at the end of the routine.
+  ! The point is the triples: their reordered panels are allocated next, and
+  ! stacked on top of the solver intermediates and the DIIS history they
+  ! pushed the real peak past the max(solve, trip) the guard charges --
+  ! admitting jobs whose iterations fit and whose (T) then died allocating.
+  ! Freeing first is what makes those two stages genuinely compete.
+  deallocate(t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wmbej, gmnef)
+  deallocate(Wp, taup, t2np, gmnefp)
+  deallocate(t2ring, wring, zring, gring, hring, hringp, yring, FaeT, FmiT)
+  deallocate(wjbnf, gnfme, wjbme)
+  if (allocated(dv)) deallocate(dv, de)
+
   ! --- (T) -----------------------------------------------------------------
   ! Same reasoning as cc_lib: a non-converged CCSD is going to abort, so do
   ! not spend the dominant cost of the job on triples built from it.
@@ -793,11 +823,7 @@ subroutine cc_uhf_ccsd_t(nso, nocc, eso, g, maxit, conv, do_triples, &
     if (present(time_triples)) time_triples = tw1 - tw0
   end if
 
-  deallocate(t1, t2, t1n, t2n, tau, taut, Fae, Fmi, Fme, Wmnij, Wmbej, gmnef, f_ov)
-  deallocate(Wp, taup, t2np, gmnefp)
-  deallocate(t2ring, wring, zring, gring, hring, hringp, yring, FaeT, FmiT)
-  deallocate(wjbnf, gnfme, wjbme)
-  if (allocated(dv)) deallocate(dv, de)
+  deallocate(t1, t2, f_ov)
   if (nblas_save > 0) call blas_thread_set(nblas_save)
 
 contains

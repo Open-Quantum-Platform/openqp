@@ -320,12 +320,18 @@ contains
             OQP_MEMORY_SAFETY_FRACTION*oqp_available_memory_gb() &
             *1.073741824e9_dp/8.0_dp/3.0_dp/real(nthr_est,dp)))
       end if
+      ! On the Cholesky route each thread's block is not one buffer but three:
+      ! the dressed integrals Wblk, the assembled Vblk of the same shape, and
+      ! the Bsub gather -- which is why ladder_contraction divides the runtime
+      ! budget by 3 before sizing them.  Charging one buffer per thread let
+      ! the guard pass jobs that failed as soon as the ladder's parallel
+      ! region allocated its private storage.
       mem_solver = mem_mo &
                  + 14.0_dp*rno**2*rnv**2 &
                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
                    * (rno*rnv + rno**2*rnv**2) &
-                 + real(nthr_est,dp)*lad_blk
+                 + merge(3.0_dp, 1.0_dp, use_chol)*real(nthr_est,dp)*lad_blk
       mem_gb = max(mem_ao + mem_mo, mem_solver) * 8.0_dp / 1.073741824e9_dp
     end if
     write(iw,'(/2X,A,I0,A,I0,A,I0)') 'CCSD(T): nbf = ', nbf, &
@@ -607,7 +613,7 @@ contains
       ! a guard that ignores them waves jobs through that then die allocating.
       so_gb = cc_uhf_spinorb_gb(nmo)
       peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis), &
-                               nthreads=nthr)
+                               nthreads=nthr, triples=do_t)
       write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
       call oqp_memory_check(peak_gb, 'CCSD(T) open shell', &
           'freeze more core orbitals or use a smaller basis', iw)
