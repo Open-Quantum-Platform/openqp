@@ -12,6 +12,7 @@ LIB = ROOT / "source" / "tdhf_mrsf_lib.F90"
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
+MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
 
 # Every UMRSF runtype other than "energy" eventually drives a gradient,
 # Hessian, or Z-vector, none of which are implemented for UMRSF. ("thermo"
@@ -25,6 +26,20 @@ UMRSF_BLOCKED_RUNTYPES = (
 
 def compact(text: str) -> str:
     return re.sub(r"\s+", "", text.lower())
+
+
+def _load_regression():
+    """Load the regression registry without importing the ``oqp`` package.
+
+    ``import oqp`` dlopens liboqp, which is not available in a source-only
+    checkout; regression.py itself has no native dependency.
+    """
+    path = ROOT / "pyoqp" / "oqp" / "utils" / "regression.py"
+    spec = importlib.util.spec_from_file_location("_oqp_regression", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_input_checker():
@@ -162,6 +177,71 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("trden=0.0_dp", source)
         self.assertIn("else", source)
         self.assertIn("callget_mrsf_transition_density", source)
+
+    def test_umrsf_energy_uses_spin_resolved_transition_dipoles(self):
+        source = compact(ENERGY.read_text())
+        lib = compact(LIB.read_text())
+        self.assertIn("callget_umrsf_transition_dipole", source)
+        self.assertIn("mo_a,mo_b,bvec_mo", source)
+        self.assertIn("subroutineget_umrsf_transition_dipole", lib)
+        # The substance of the routine is that the AO transition density is
+        # built from BOTH orbital sets (C_alpha on the left, C_beta on the
+        # right) rather than from mo_a alone. Assert that against the code --
+        # not against the prose comment describing it, which would turn any
+        # rewording of a comment into a CI failure.
+        body = lib.split("subroutineget_umrsf_transition_dipole", 1)[1]
+        body = body.split("endsubroutineget_umrsf_transition_dipole", 1)[0]
+        self.assertIn("mo_a(:,nocb+1:)", body)
+        self.assertIn("mo_b(:,nocb+1:)", body)
+        self.assertIn("mo_b", body)
+
+    def test_transition_dipoles_are_exposed_for_umrsf(self):
+        """The UMRSF dipoles are real, so they must reach the tagarray.
+
+        Only the state-interaction DENSITY is a UMRSF placeholder. Bundling the
+        dipole export behind the same ``.not. umrsf`` guard hid the quantity
+        from downstream analysis and from the regression references -- which is
+        precisely why identically zero UMRSF dipoles went unnoticed.
+        """
+        source = compact(ENERGY.read_text())
+        # trden stays MRSF-only ...
+        density_guard = source.split("oqp_td_trans_density_mo", 1)[0]
+        self.assertIn("if(.not.umrsf)then", density_guard)
+        # ... but the dipole export must NOT sit inside a .not.umrsf block.
+        between = source.split("oqp_td_trans_density_mo", 1)[1]
+        between = between.split("oqp_td_trans_dipole", 1)[0]
+        self.assertIn("endif", between,
+                      "OQP_td_trans_dipole must be exported outside the "
+                      ".not. umrsf guard that protects the trden placeholder")
+
+    def test_transition_dipole_export_mirrors_reverse_pairs_for_umrsf(self):
+        """Reverse transition pairs must not expose different magnitudes."""
+        source = compact(ENERGY.read_text())
+        export = source.split("oqp_td_trans_dipole", 1)[1]
+        export = export.split("oqp_td_dip_ao", 1)[0]
+        self.assertIn("dip_store(:,ist,jst)=dip_store(:,jst,ist)", export)
+        self.assertNotIn("if(.not.umrsf)then", export)
+
+    def test_transition_dipole_json_uses_fortran_order(self):
+        """The tag is allocated as Fortran (3,nstates,nstates)."""
+        source = compact(MOLECULE.read_text())
+        block = source.split("oqp::td_trans_dipole", 1)[1]
+        block = block.split("nmr_shielding", 1)[0]
+        self.assertIn("ravel(order='c')", block)
+        self.assertIn("reshape((3,nstates,nstates),order='f')", block)
+
+    def test_transition_dipole_is_a_compared_regression_key(self):
+        """Excitation energies alone did not catch all-zero UMRSF dipoles."""
+        regression = _load_regression()
+
+        entry = next((e for e in regression.REGISTRY
+                      if e.key == "td_trans_dipole"), None)
+        self.assertIsNotNone(
+            entry, "td_trans_dipole must be in the regression registry so a "
+                   "regression to zero transition dipoles fails the examples")
+        self.assertTrue(entry.needs_excited)
+        self.assertTrue(entry.phase_invariant)
+        self.assertIn(entry, regression.keys_to_compare("energy", excited=True))
 
     def test_spin_pair_scaling_avoids_hfscale_division_by_zero(self):
         source = compact(ENERGY.read_text())
