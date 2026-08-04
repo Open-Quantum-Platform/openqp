@@ -106,6 +106,41 @@ def test_molecule_write_molden_clears_stale_output(tmp_path):
     assert any("Skipping Molden output" in str(w.message) for w in caught)
 
 
+def test_molecule_write_molden_skips_any_unportable_basis(tmp_path):
+    """The gate is supports_portable_ordering, not just the l ceiling.
+
+    A mixed cartesian/spherical basis has every l <= g, so the angular-momentum
+    check alone would wave it through -- but there is no portable reordering
+    for it and the MO coefficients would come out silently permuted. The
+    warning has no single offending l to name, so it must fall back to the
+    generic reason rather than formatting ``l=None``.
+    """
+    import types
+    import warnings as _warnings
+    from oqp.molecule.molecule import Molecule
+
+    mixed = _basis([0, 1, 2, 3, 4])
+    mixed["nbf"] += 1          # matches neither the cartesian nor spherical count
+    assert MoldenWriter.unsupported_angular_momentum(mixed) is None
+    assert not MoldenWriter.supports_portable_ordering(mixed)
+
+    out = tmp_path / "mixed.molden"
+    mol = Molecule.__new__(Molecule)
+    mol.usempi = False
+    mol.data = types.SimpleNamespace(get_basis=lambda: mixed)
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter("always")
+        Molecule.write_molden.__wrapped__(mol, str(out)) \
+            if hasattr(Molecule.write_molden, "__wrapped__") \
+            else Molecule.write_molden(mol, str(out))
+
+    messages = [str(w.message) for w in caught]
+    assert not out.exists(), "an unportable basis must not produce a Molden file"
+    assert any("no portable Molden ordering" in m for m in messages), messages
+    assert not any("l=None" in m for m in messages), messages
+
+
 def test_molecule_write_molden_survives_unremovable_stale_output(tmp_path, monkeypatch):
     """An undeletable stale file must not take the calculation down with it.
 

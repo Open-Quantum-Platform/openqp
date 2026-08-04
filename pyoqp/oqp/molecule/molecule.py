@@ -98,6 +98,10 @@ class Molecule:
         self.raman_mode_polarizability_derivatives = np.zeros((0, 3, 3))
         self.symmetry_metadata = {}
         self.mrsf_ekt_results_by_kind = {}
+        # State-tracking tags loaded from a guess are transport history, not a
+        # result of the new calculation.  NACME.align_x sets this only after it
+        # has refreshed the mapping and gauge in the current run.
+        self._state_tracking_fresh = False
 
         self.tag = [
             'OQP::DM_A', 'OQP::DM_B',
@@ -116,6 +120,13 @@ class Molecule:
             'OQP::namd_tdc', 'OQP::namd_eabs', 'OQP::namd_stas',
             'OQP::td_singlet_energies', 'OQP::td_triplet_energies',
             'OQP::td_bvec_mo_s', 'OQP::td_bvec_mo_t',
+            'OQP::mo_tracking_order', 'OQP::mo_tracking_phase',
+            'OQP::mo_tracking_overlap', 'OQP::mo_tracking_margin',
+            'OQP::state_tracking_order', 'OQP::state_tracking_lineage',
+            'OQP::state_tracking_raw_order', 'OQP::state_tracking_output_reordered',
+            'OQP::state_tracking_phase_step', 'OQP::state_tracking_phase_initial',
+            'OQP::state_tracking_previous_phase_initial',
+            'OQP::state_tracking_overlap', 'OQP::state_tracking_margin',
             'OQP::soc_eval',
             'OQP::soc_evec_re', 'OQP::soc_evec_im',
             'OQP::soc_hsoc_re', 'OQP::soc_hsoc_im',
@@ -1392,6 +1403,14 @@ class Molecule:
         data['hess'] = np.array(self.get_hess()).tolist()
         data.update(self.get_mrsf_ekt_results())
 
+        # Keep the programmatic API and the on-disk JSON on the same public
+        # state-tracking contract.  External dynamics drivers (notably
+        # PyRAI2MD) must be able to tell that root/phase transport has already
+        # been applied without depending on the chosen I/O mode.
+        state_tracking = self.get_state_tracking()
+        if state_tracking is not None:
+            data['state_tracking'] = state_tracking
+
         # OpenQP-DFTB backend results.  The DFTB adapter is pure Python, so
         # liboqp's mol_energy struct (the 'energy' scalar above) is never
         # populated on this path; surface the adapter results explicitly:
@@ -1413,6 +1432,46 @@ class Molecule:
                     data[key] = value
 
         return data
+
+    def get_state_tracking(self):
+        """Return the JSON-safe public root/phase transport record, if any."""
+        if not getattr(self, '_state_tracking_fresh', False):
+            return None
+        try:
+            return {
+                'schema_version': 1,
+                'index_base': 0,
+                'order_semantics': 'current_root_to_previous_root',
+                'order': np.asarray(
+                    self.data['OQP::state_tracking_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'raw_order': np.asarray(
+                    self.data['OQP::state_tracking_raw_order'], dtype=int
+                ).reshape(-1).tolist(),
+                'output_reordered': bool(np.asarray(
+                    self.data['OQP::state_tracking_output_reordered'], dtype=int
+                ).reshape(-1)[0]),
+                'lineage': np.asarray(
+                    self.data['OQP::state_tracking_lineage'], dtype=int
+                ).reshape(-1).tolist(),
+                'phase_step': np.asarray(
+                    self.data['OQP::state_tracking_phase_step'], dtype=float
+                ).reshape(-1).tolist(),
+                'phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'previous_phase_initial': np.asarray(
+                    self.data['OQP::state_tracking_previous_phase_initial'], dtype=float
+                ).reshape(-1).tolist(),
+                'matched_overlap': np.asarray(
+                    self.data['OQP::state_tracking_overlap'], dtype=float
+                ).reshape(-1).tolist(),
+                'margin': np.asarray(
+                    self.data['OQP::state_tracking_margin'], dtype=float
+                ).reshape(-1).tolist(),
+            }
+        except (AttributeError, KeyError, TypeError, ValueError, IndexError):
+            return None
 
     @mpi_get_attr
     def get_coord(self, coordinates):
@@ -1513,14 +1572,206 @@ class Molecule:
             scf_conv=self.config.get("scf", {}).get("conv"),
             zv_conv=self.config.get("tdhf", {}).get("zvconv"))
 
-    @mpi_dump
-    def write_molden(self, filename):
-        """Write calculation results in Molden format.
+    def has_molden_orbitals(self):
+        """Return whether the current molecule has an AO basis and SCF MOs."""
+        try:
+            basis = self.data.get_basis()
+            nbf = int(basis['nbf'])
+            return (
+                MoldenWriter.supports_portable_ordering(basis)
+                and np.asarray(self.data['OQP::VEC_MO_A']).size == nbf * nbf
+            )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            return False
 
-        Basis sets with shells beyond g cannot be expressed in the Molden
-        format, so those are skipped with a warning rather than aborting the
-        calculation -- the orbitals are a by-product, and losing them should
-        not lose the energy too.
+    def _viewer_basis_data(self):
+        """Portable AO basis metadata used by OpenqpView JSON readers."""
+        basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
+        shells = []
+        primitive_offset = 0
+        for center, angular_momentum, nprimitive in zip(
+                basis['centers'], basis['angs'], basis['ncontr']):
+            angular_momentum = int(angular_momentum)
+            nprimitive = int(nprimitive)
+            exponents = np.asarray(
+                basis['alpha'][primitive_offset:primitive_offset + nprimitive], dtype=float)
+            coefficients = np.asarray(
+                basis['coef'][primitive_offset:primitive_offset + nprimitive], dtype=float)
+            shells.append({
+                'atom_index': int(center),
+                'angular_momentum': angular_momentum,
+                'shell': MoldenWriter.SHELL_TYPES[angular_momentum],
+                'exponents': exponents.tolist(),
+                'coefficients': [
+                    MoldenWriter.molden_primitive_coefficient(
+                        angular_momentum, exponent, coefficient)
+                    for exponent, coefficient in zip(exponents, coefficients)
+                ],
+            })
+            primitive_offset += nprimitive
+
+        return {
+            'format': 'OpenQP portable basis v1',
+            'coefficient_convention': 'molden',
+            'basis_function_order': 'molden',
+            'spherical_harmonics': MoldenWriter._is_spherical(basis),
+            'nbf': int(basis['nbf']),
+            'shells': shells,
+        }
+
+    def _viewer_orbital_data(self):
+        """Portable, renderer-ready SCF orbitals in Molden AO ordering."""
+        if not self.has_molden_orbitals():
+            return {}
+
+        basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
+        nbf = int(basis['nbf'])
+        reorder = MoldenWriter.orbital_reorder(basis)
+        scf_type = self.config['scf']['type']
+
+        def spin_data(suffix, noccupied, occupancy):
+            orbitals = np.asarray(
+                self.data[f'OQP::VEC_MO_{suffix}'], dtype=float).reshape((nbf, nbf))
+            energies = np.asarray(self.data[f'OQP::E_MO_{suffix}'], dtype=float).reshape(-1)
+            return {
+                'energies_hartree': energies.tolist(),
+                'occupancies': [occupancy if index < int(noccupied) else 0.0
+                                for index in range(nbf)],
+                'coefficients': orbitals[:, reorder].tolist(),
+            }
+
+        orbitals = {
+            'format': 'OpenQP portable orbitals v1',
+            'basis_function_order': 'molden',
+        }
+        if scf_type == 'rhf':
+            orbitals['alpha'] = spin_data('A', self.data['nocc'], 2.0)
+        else:
+            orbitals['alpha'] = spin_data('A', self.data['nelec_A'], 1.0)
+            orbitals['beta'] = spin_data('B', self.data['nelec_B'], 1.0)
+
+        return {
+            'basis_set': self._viewer_basis_data(),
+            'molecular_orbitals': orbitals,
+        }
+
+    @staticmethod
+    def _dyson_mo_state_rows(records, nbf):
+        """Normalize saved EKT coefficients to ``(state, SCF MO)``."""
+        orbitals = np.asarray(records.get('dyson_orbitals_mo', []), dtype=float)
+        if orbitals.ndim != 2:
+            return np.zeros((0, nbf), dtype=float)
+        if orbitals.shape[1] == nbf:
+            return orbitals
+        if orbitals.shape[0] == nbf:
+            return orbitals.T
+        return np.zeros((0, nbf), dtype=float)
+
+    def _viewer_dyson_data(self):
+        """State-specific MRSF-EKT Dyson orbitals in renderer-ready AO form."""
+        if not self.has_molden_orbitals():
+            return {}
+
+        records_by_kind = dict(self.mrsf_ekt_results_by_kind)
+        if not records_by_kind:
+            tdhf_type = str(self.config.get('tdhf', {}).get('type', '')).strip().lower()
+            runtype = str(self.config.get('input', {}).get('runtype', '')).strip().lower()
+            if runtype != 'ekt' and tdhf_type not in ('mrsf_ekt_ip', 'mrsf_ekt_ea'):
+                return {}
+            records = self._read_mrsf_ekt_records()
+            if records is None:
+                return {}
+            if tdhf_type == 'mrsf_ekt_ea':
+                kind = 'ea'
+            elif tdhf_type == 'mrsf_ekt_ip':
+                kind = 'ip'
+            else:
+                ekt = self.config.get('ekt', {})
+                kind = 'ea' if ekt.get('ea') else 'ip'
+            records_by_kind[kind] = records
+
+        basis = self.data.get_basis()
+        if not MoldenWriter.supports_portable_ordering(basis):
+            return {}
+        nbf = int(basis['nbf'])
+        reorder = MoldenWriter.orbital_reorder(basis)
+        scf_orbitals = np.asarray(
+            self.data['OQP::VEC_MO_A'], dtype=float).reshape((nbf, nbf))
+        target_state = self.config.get('tdhf', {}).get('target')
+        states = []
+
+        for kind in ('ip', 'ea'):
+            records = records_by_kind.get(kind)
+            if not records:
+                continue
+            dyson_mo = self._dyson_mo_state_rows(records, nbf)
+            eigenvalues = np.asarray(records.get('eigenvalues_hartree', []), dtype=float)
+            ebe = np.asarray(records.get('ebe_ev', []), dtype=float)
+            strengths = np.asarray(records.get('pole_strengths', []), dtype=float)
+            nstate = min(len(dyson_mo), len(eigenvalues), len(strengths))
+            dyson_ao = np.matmul(dyson_mo[:nstate], scf_orbitals)[:, reorder]
+            for index in range(nstate):
+                state_number = index + 1
+                state = {
+                    'kind': kind.upper(),
+                    'state_index': state_number,
+                    'label': f'Dyson {kind.upper()} state {state_number}',
+                    'parent_state': target_state,
+                    'eigenvalue_hartree': float(eigenvalues[index]),
+                    'pole_strength': float(strengths[index]),
+                    'coefficients': dyson_ao[index].tolist(),
+                }
+                if index < len(ebe):
+                    state['electron_binding_energy_ev'] = float(ebe[index])
+                states.append(state)
+
+        if not states:
+            return {}
+        return {
+            'dyson_orbitals': {
+                'format': 'OpenQP MRSF-EKT Dyson orbitals v1',
+                'basis_function_order': 'molden',
+                'states': states,
+            }
+        }
+
+    def _viewer_frequency_data(self):
+        """Portable normal modes shared by normal and Hessian JSON files."""
+        frequencies = np.asarray(self.freqs, dtype=float).reshape(-1)
+        if frequencies.size == 0:
+            return {}
+        modes = np.asarray(self.modes, dtype=float).reshape((len(frequencies), -1))
+        return {
+            'frequency_modes': {
+                'format': 'OpenQP normal modes v1',
+                'frequencies_cm-1': frequencies.tolist(),
+                'normal_mode_eigenvectors': modes.tolist(),
+                'normal_mode_eigenvectors_units': (
+                    'Cartesian displacement, mass-unweighted, row-major by vibrational mode'
+                ),
+            }
+        }
+
+    @mpi_dump
+    def write_molden(self, filename, freqs=None, modes=None, include_dyson=False):
+        """Write SCF MOs, frequencies, and explicitly requested Dyson states.
+
+        A basis this writer cannot represent is skipped with a warning rather
+        than aborting the calculation -- the orbitals are a by-product, and
+        losing them should not lose the energy too. The commonest case is a
+        shell beyond g (cc-pV5Z and larger), which used to index past the end
+        of SHELL_TYPES and raise IndexError after the SCF had converged.
+
+        The gate is ``supports_portable_ordering``, which is what
+        ``has_molden_orbitals`` already uses: besides the angular-momentum
+        ceiling it also rejects mixed cartesian/spherical bases and shells with
+        no tabulated reordering, either of which would silently permute the MO
+        coefficients. Checking here rather than at the call sites covers the
+        four unguarded ``write_molden`` calls in single_point.py too.
 
         No status is returned: this runs under @mpi_dump, which does not call
         the wrapped function at all on non-zero ranks, so any return value
@@ -1528,15 +1779,21 @@ class Molecule:
         """
 
         basis = self.data.get_basis()
-        bad_l = MoldenWriter.unsupported_angular_momentum(basis)
-        if bad_l is not None:
+        if not MoldenWriter.supports_portable_ordering(basis):
+            bad_l = MoldenWriter.unsupported_angular_momentum(basis)
+            if bad_l is not None:
+                reason = ('the Molden format defines shells only up to %s '
+                          '(l=%d) and this basis contains l=%d'
+                          % (MoldenWriter.SHELL_TYPES[-1],
+                             MoldenWriter.MAX_ANG, bad_l))
+            else:
+                reason = ('this basis has no portable Molden ordering (a mixed '
+                          'cartesian/spherical basis, or a shell with no '
+                          'tabulated reordering)')
             warnings.warn(
-                'Skipping Molden output for %s: the Molden format defines '
-                'shells only up to %s (l=%d) and this basis contains l=%d. '
-                'The calculation itself is unaffected; set [scf] save_molden='
-                'false to silence this.'
-                % (filename, MoldenWriter.SHELL_TYPES[-1],
-                   MoldenWriter.MAX_ANG, bad_l)
+                'Skipping Molden output for %s: %s. The calculation itself is '
+                'unaffected; set [scf] save_molden=false to silence this.'
+                % (filename, reason)
             )
             # A stale file from an earlier run would otherwise survive and look
             # like valid output for this one.  Failing to remove it must not
@@ -1584,6 +1841,24 @@ class Molecule:
                 occupancies = (1.0 if i < nocc else 0.0 for i in range(nbf))
                 mdw.write_mo(basis, orbitals, eorbitals,
                              occupancies, spin='Beta', header=False)
+
+            if include_dyson:
+                dyson = self._viewer_dyson_data().get('dyson_orbitals', {})
+                states = dyson.get('states', [])
+                if states:
+                    mdw.write_mo(
+                        basis,
+                        np.asarray([state['coefficients'] for state in states]),
+                        [state['eigenvalue_hartree'] for state in states],
+                        [state['pole_strength'] for state in states],
+                        spin='Alpha',
+                        header=False,
+                        symmetries=[state['label'].replace(' ', '-') for state in states],
+                        already_reordered=True,
+                    )
+
+            if freqs is not None and modes is not None:
+                mdw.write_frequency(self, freqs, modes)
 
     def set_log(self):
         """
@@ -1656,6 +1931,9 @@ class Molecule:
         data = {key: json_array(key, value) for key, value in data.items()}
         data.update(self.get_results())
         data.update(self.set_config_json())
+        data.update(self._viewer_orbital_data())
+        data.update(self._viewer_dyson_data())
+        data.update(self._viewer_frequency_data())
 
         if lean is None:
             lean = _env_wants_lean_json()
@@ -1727,6 +2005,7 @@ class Molecule:
             'freqs': self.freqs.tolist(),
             'modes': self.modes.tolist(),
             'frequency_modes': {
+                'format': 'OpenQP normal modes v1',
                 'frequencies_cm-1': self.freqs.tolist(),
                 'normal_mode_eigenvectors': self.modes.tolist(),
                 'normal_mode_eigenvectors_units': 'Cartesian displacement, mass-unweighted, row-major by vibrational mode',
@@ -1739,6 +2018,8 @@ class Molecule:
             'raman_mode_polarizability_derivatives': self.raman_mode_polarizability_derivatives.tolist(),
             'symmetry_metadata': self.symmetry_metadata,
         }
+        data.update(self._viewer_orbital_data())
+        data.update(self._viewer_dyson_data())
 
         with open(jsonfile, 'w') as outdata:
             json.dump(data, outdata, indent=2)
@@ -1784,6 +2065,9 @@ class Molecule:
 
     def put_data(self, data):
         # convert list to data
+        # Keep loaded tracking arrays available as history for a subsequent
+        # overlap calculation, but never publish them as this run's result.
+        self._state_tracking_fresh = False
         for key in self.tag:
             try:
                 self.data[key] = np.array(data[key])
