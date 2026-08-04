@@ -12,6 +12,7 @@ LIB = ROOT / "source" / "tdhf_mrsf_lib.F90"
 SINGLE_POINT = ROOT / "pyoqp" / "oqp" / "library" / "single_point.py"
 OQPDATA = ROOT / "pyoqp" / "oqp" / "molecule" / "oqpdata.py"
 INPUT_CHECKER = ROOT / "pyoqp" / "oqp" / "utils" / "input_checker.py"
+MOLECULE = ROOT / "pyoqp" / "oqp" / "molecule" / "molecule.py"
 
 # Every UMRSF runtype other than "energy" eventually drives a gradient,
 # Hessian, or Z-vector, none of which are implemented for UMRSF. ("thermo"
@@ -212,6 +213,22 @@ class UMRSFEnergyRegressionTests(unittest.TestCase):
         self.assertIn("endif", between,
                       "OQP_td_trans_dipole must be exported outside the "
                       ".not. umrsf guard that protects the trden placeholder")
+
+    def test_transition_dipole_export_mirrors_reverse_pairs_for_umrsf(self):
+        """Reverse transition pairs must not expose different magnitudes."""
+        source = compact(ENERGY.read_text())
+        export = source.split("oqp_td_trans_dipole", 1)[1]
+        export = export.split("oqp_td_dip_ao", 1)[0]
+        self.assertIn("dip_store(:,ist,jst)=dip_store(:,jst,ist)", export)
+        self.assertNotIn("if(.not.umrsf)then", export)
+
+    def test_transition_dipole_json_uses_fortran_order(self):
+        """The tag is allocated as Fortran (3,nstates,nstates)."""
+        source = compact(MOLECULE.read_text())
+        block = source.split("oqp::td_trans_dipole", 1)[1]
+        block = block.split("nmr_shielding", 1)[0]
+        self.assertIn("ravel(order='c')", block)
+        self.assertIn("reshape((3,nstates,nstates),order='f')", block)
 
     def test_transition_dipole_is_a_compared_regression_key(self):
         """Excitation energies alone did not catch all-zero UMRSF dipoles."""

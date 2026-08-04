@@ -864,16 +864,16 @@ contains
     call infos%dat%alloc_or_die(OQP_td_trans_dipole, (/ 3, nstates, nstates /), &
       dip_store, description=OQP_td_trans_dipole_comment)
     dip_store = dip(:,1:nstates,1:nstates)
-    if (.not. umrsf) then
-      ! MRSF leaves the lower triangle unpopulated; UMRSF's spin-resolved
-      ! routine fills both, so store those as computed rather than overwriting
-      ! one triangle with the other.
-      do jst = 1, nstates
-        do ist = jst+1, nstates
-          dip_store(:,ist,jst) = dip_store(:,jst,ist)
-        end do
+
+    ! Store a symmetric public transition-dipole tensor. UMRSF computes the
+    ! forward pairs with a spin-resolved contraction, but the reverse pairs are
+    ! the same real transitions up to state phase and should not expose a
+    ! different magnitude to downstream oscillator-strength analysis.
+    do jst = 1, nstates
+      do ist = jst+1, nstates
+        dip_store(:,ist,jst) = dip_store(:,jst,ist)
       end do
-    end if
+    end do
 
     allocate(mints_exp(nbf2,3), source=0.0_dp)
     com_exp = basis%atoms%center(weight='mass')

@@ -1369,9 +1369,14 @@ class Molecule:
         # zero transition dipoles: the energies matched their reference while
         # every dipole was zero and nothing compared them.
         try:
-            data['td_trans_dipole'] = np.array(
-                self.data['OQP::td_trans_dipole']).tolist()
-        except (AttributeError, KeyError, TypeError):
+            raw = np.asarray(self.data['OQP::td_trans_dipole'],
+                             dtype=float).ravel(order='C')
+            nstates = int(round((raw.size / 3) ** 0.5))
+            if 3 * nstates * nstates != raw.size:
+                raise ValueError('unexpected td_trans_dipole tag shape')
+            data['td_trans_dipole'] = raw.reshape(
+                (3, nstates, nstates), order='F').tolist()
+        except (AttributeError, KeyError, TypeError, ValueError):
             pass
 
         # save NMR isotropic shielding if available (CGO or GIAO).
