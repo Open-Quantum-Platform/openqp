@@ -184,10 +184,23 @@ contains
                    + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
           mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3 &
                    + rnv**4
+          ! The per-thread ladder buffers too: the guard charges them below,
+          ! and any term the decision leaves out but the guard counts is a
+          ! band where auto keeps the explicit route and then aborts at the
+          ! guard it was sized against.  One buffer per thread here -- the
+          ! explicit route is what is being sized; only the Cholesky ladder
+          ! carries three.
+          nthr_est = 1
+          !$ nthr_est = omp_get_max_threads()
+          lad_blk = 8.0e6_dp
+          lad_blk = min(lad_blk, max(rnv**3, &
+              OQP_MEMORY_SAFETY_FRACTION*avail_gb &
+              *1.073741824e9_dp/8.0_dp/3.0_dp/real(nthr_est,dp)))
           mem_solver = mem_mo + 14.0_dp*rno**2*rnv**2 &
                      + 4.0_dp*rno*rnv**3 &
                      + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
-                       * (rno*rnv + rno**2*rnv**2)
+                       * (rno*rnv + rno**2*rnv**2) &
+                     + real(nthr_est,dp)*lad_blk
           vvvv_gb = max(mem_ao + mem_mo, mem_solver)*8.0_dp/1.073741824e9_dp
           use_chol = vvvv_gb*real(nrank_local,dp) > &
               OQP_MEMORY_SAFETY_FRACTION*avail_gb
