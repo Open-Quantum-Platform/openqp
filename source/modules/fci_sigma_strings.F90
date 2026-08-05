@@ -272,16 +272,19 @@ contains
     real(dp), intent(inout) :: d1(*), d2(*)
     integer :: status
 
-    integer :: na, nb, nkl, nlink_a, nlink_b, nthr
+    integer :: na, nb, nkl, nlink_a, nthr, maxper_b
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer :: p, q, r, s, pq, rs, t
     real(dp) :: sgn
     integer(i8), allocatable :: astr(:), bstr(:)
-    integer, allocatable :: ntab_a(:), ntab_b(:)
-    integer, allocatable :: kl_a(:, :), kl_b(:, :)
-    integer(i8), allocatable :: src_a(:, :), src_b(:, :)
-    real(dp), allocatable :: sgn_a(:, :), sgn_b(:, :)
+    integer, allocatable :: ntab_a(:)
+    integer, allocatable :: kl_a(:, :)
+    integer(i8), allocatable :: src_a(:, :)
+    real(dp), allocatable :: sgn_a(:, :)
+    integer, allocatable :: cnt_b(:)
+    integer(i8), allocatable :: tgt_b(:, :), src_bk(:, :)
+    real(dp), allocatable :: sgn_bk(:, :)
     real(dp), allocatable :: tmat(:, :), gram(:, :)
 
     status = 1
@@ -314,17 +317,30 @@ contains
     end do
 
     nlink_a = max(1, na * (norb - na) + na)
-    nlink_b = max(1, nb * (norb - nb) + nb)
     allocate(ntab_a(nastr), kl_a(nlink_a, nastr), src_a(nlink_a, nastr), &
              sgn_a(nlink_a, nastr))
-    allocate(ntab_b(nbstr), kl_b(nlink_b, nbstr), src_b(nlink_b, nbstr), &
-             sgn_b(nlink_b, nbstr))
     call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a)
-    call build_link_table(norb, nbstr, bstr, nlink_b, ntab_b, kl_b, src_b, sgn_b)
+    ! Beta uses the kl-major table for the same reason the sigma does: a beta
+    ! excitation moves a single row, so a target-indexed walk writes tmat with
+    ! stride ndet and read-modify-writes every element.  Grouped by the
+    ! excitation label the inner loop walks ONE tmat column with ascending
+    ! rows, and the civec reads stay inside one alpha block.
+    maxper_b = int(min(nbstr, binom(norb - 1, nb - 1) + binom(norb - 2, nb - 1)))
+    allocate(cnt_b(nkl), tgt_b(max(maxper_b, 1), nkl), &
+             src_bk(max(maxper_b, 1), nkl), sgn_bk(max(maxper_b, 1), nkl))
+    call build_link_bykl(norb, nbstr, bstr, nkl, max(maxper_b, 1), cnt_b, &
+                         tgt_b, src_bk, sgn_bk)
 
     allocate(tmat(ndet, nkl), gram(nkl, nkl))
-    tmat = 0.0_dp
     nthr = max(1, nthreads)
+    ! T is (ndet, nact^2) and reaches gigabytes on a wide active space, so the
+    ! clear is bandwidth-bound and worth spreading over the same team that
+    ! fills it; a whole-array assignment here ran single-threaded.
+    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
+    do t = 1, nkl
+      tmat(:, t) = 0.0_dp
+    end do
+    !$omp end parallel do
 
     ! alpha channel of E_pq: rows of one target alpha string are the
     ! contiguous run (ia-1)*nbstr + 1 .. ia*nbstr
@@ -343,17 +359,17 @@ contains
     end do
     !$omp end parallel do
 
-    ! beta channel: excitations stay inside one alpha block
+    ! beta channel: excitations stay inside one alpha block, so the alpha index
+    ! partitions the writes.  kl-major, so each (t) run walks one column down.
     !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-    !$omp private(ia, ib, base, e, srow, drow, t, sgn)
+    !$omp private(ia, base, e, srow, drow, t)
     do ia = 1_i8, nastr
       base = (ia - 1_i8) * nbstr
-      do ib = 1_i8, nbstr
-        drow = base + ib
-        do e = 1_i8, int(ntab_b(ib), i8)
-          srow = base + src_b(e, ib)
-          t = kl_b(e, ib) + 1
-          tmat(drow, t) = tmat(drow, t) + sgn_b(e, ib) * civec(srow)
+      do t = 1, nkl
+        do e = 1_i8, int(cnt_b(t), i8)
+          drow = base + tgt_b(e, t)
+          srow = base + src_bk(e, t)
+          tmat(drow, t) = tmat(drow, t) + sgn_bk(e, t) * civec(srow)
         end do
       end do
     end do
@@ -362,9 +378,19 @@ contains
     ! d1 = T^T c
     call dgemv('T', int(ndet), nkl, 1.0_dp, tmat, int(ndet), civec, 1, &
                0.0_dp, d1, 1)
-    ! gram = T^T T
-    call dgemm('T', 'N', nkl, nkl, int(ndet), 1.0_dp, tmat, int(ndet), &
-               tmat, int(ndet), 0.0_dp, gram, nkl)
+    ! gram = T^T T.  Both operands are the same matrix, so the product is
+    ! symmetric by construction and DSYRK computes it in exactly half the
+    ! flops of the equivalent DGEMM -- the dominant cost of the whole RDM
+    ! build, which runs once per state per CASSCF macroiteration.  DSYRK
+    ! writes one triangle; the d2 unpacking below indexes gram(pq, rs) over
+    ! the full square, so the upper triangle is mirrored down afterwards.
+    call dsyrk('U', 'T', nkl, int(ndet), 1.0_dp, tmat, int(ndet), &
+               0.0_dp, gram, nkl)
+    do t = 2, nkl
+      do pq = 1, t - 1
+        gram(t, pq) = gram(pq, t)
+      end do
+    end do
 
     ! d2[p,q,r,s] = <E_pq E_rs> - delta_qr d1[p,s].  The bra side enters
     ! through <0|E_pq|D> = <D|E_qp|0> (real CI vectors), so the Gram row is
@@ -389,7 +415,7 @@ contains
     end do
 
     deallocate(astr, bstr, ntab_a, kl_a, src_a, sgn_a, &
-               ntab_b, kl_b, src_b, sgn_b, tmat, gram)
+               cnt_b, tgt_b, src_bk, sgn_bk, tmat, gram)
     status = 0
   end function rdm12_strings
 
