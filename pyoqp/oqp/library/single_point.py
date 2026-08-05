@@ -479,6 +479,13 @@ class SinglePoint(Calculator):
         # guess/basis stage; stage the maps once the basis exists.
         symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
                            self.mol.symmetry_metadata.get('use_integral_symmetry'))
+        # Start every reference from the reduction OFF. The enable flag lives in
+        # the tag store, which survives across jobs sharing a Molecule, so a run
+        # that reoriented once could otherwise leave it set for a later job whose
+        # maps were never staged -- petite quartet weights against a shell map
+        # for a different geometry. stage_integral_symmetry_maps turns it back
+        # on when, and only when, the reduction is genuinely active.
+        self._set_petite_enabled(False)
         if symmetry_on:
             self.mol.reorient_for_integral_symmetry()
 
