@@ -426,10 +426,20 @@ class Molecule:
                 meta['mo_labels'] = {'status': skip_reason}
                 return None
 
-            # Defense in depth, mirroring the integral path: the AO maps these
-            # labels are computed from must leave the real overlap matrix
-            # invariant, T S T^T = S.  Any shell-convention or frame mistake
-            # shows up here.  This is not hypothetical -- tagging s and p
+            # Defense in depth, mirroring the integral path: the operator
+            # these labels are computed from must leave the real overlap matrix
+            # invariant, T^T S T = S.  Any shell-convention or frame mistake
+            # shows up here.
+            #
+            # T^T S T, not T S T^T: T is metric-orthogonal but not orthogonal
+            # once a spherical shell with l >= 2 mixes components under a
+            # rotation. The two forms coincide for a signed permutation, which
+            # is why a test restricted to axis-aligned frames -- or to
+            # Cartesian d shells -- cannot tell them apart. Verified where they
+            # DO differ: water in a generic three-angle rotated frame labels
+            # identically to the standard frame under 6-31G* (Cartesian d,
+            # control), cc-pVDZ (spherical d) and cc-pVTZ (spherical d and f),
+            # with no orbital coming back 'mixed'.  This is not hypothetical -- tagging s and p
             # shells as spherical (fixed in the previous commit) produced
             # confidently WRONG p-shell signs, and this check is what would
             # have caught it.  Labels are metadata, so a failure records the
