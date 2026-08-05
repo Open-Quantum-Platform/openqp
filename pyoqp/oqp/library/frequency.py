@@ -279,6 +279,13 @@ def thermal_analysis(
         'st_vib': st_vib,
         'sigma': int(sigma),
         'linear': bool(linear),
+        # The printer must mark the SAME moments the entropy code selected
+        # against, or the two disagree about which rotational constant is
+        # meaningful. Testing isfinite() there is not equivalent: a tilted
+        # linear rotor's vanishing moment comes back as a tiny finite number,
+        # which is exactly the case this PR exists to handle.
+        'rot_significant': [bool(x) for x in significant],
+        'monatomic': len(atoms) == 1,
     }
 
     return thermo_data

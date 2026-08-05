@@ -732,13 +732,22 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         g = g_el + el
 
         # A linear rotor has a vanishing principal moment, so one rotational
-        # constant/temperature is infinite; print it as a dash rather than inf.
-        def _rot_entry(value):
-            return '         ---' if not np.isfinite(value) else '%12.4f' % value
+        # constant/temperature is meaningless; print it as a dash. Use the mask
+        # the entropy code actually selected with (1e-8 on the INERTIA) rather
+        # than testing isfinite here -- a tilted linear rotor's vanishing
+        # moment comes back as a tiny finite number, so isfinite would print a
+        # spurious enormous constant next to a correct entropy.
+        significant = info.get('rot_significant')
+        if significant is None or len(significant) != len(np.asarray(rc).ravel()):
+            significant = [bool(np.isfinite(x)) for x in np.asarray(rc).ravel()]
 
-        rc_text = ''.join(_rot_entry(x) for x in rc)
-        rt_text = ''.join(_rot_entry(x) for x in rt)
-        top_text = 'linear' if linear else 'nonlinear'
+        def _rot_entry(value, keep):
+            return '%12.4f' % value if keep else '         ---'
+
+        rc_text = ''.join(_rot_entry(x, k) for x, k in zip(rc, significant))
+        rt_text = ''.join(_rot_entry(x, k) for x, k in zip(rt, significant))
+        top_text = ('atom' if info.get('monatomic')
+                    else ('linear' if linear else 'nonlinear'))
 
         loginfo += """
    temperature K:                    %16.2f

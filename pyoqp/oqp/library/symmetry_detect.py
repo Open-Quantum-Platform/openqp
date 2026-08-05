@@ -677,9 +677,33 @@ def rotational_symmetry_number(
                                           tolerance=tolerance)
     except Exception:
         return 1
-    proper = sum(1 for op in operations
-                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0)
-    return max(1, int(proper))
+    rotations = [np.asarray(op['matrix'], dtype=float) for op in operations
+                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0]
+    if not rotations:
+        return 1
+
+    # sigma is the ORDER OF A GROUP, so the set it is counted from has to be
+    # one. enumerate_full_group does not always return a closed set: when
+    # closure runs past max_order -- tolerance artifacts can make it run away --
+    # it falls back to the unclosed seed list. Counting that gives a number
+    # that is not a group order at all, and sigma appears in G as R*T*ln(sigma),
+    # so a wrong one is a wrong free energy rather than a caught error.
+    #
+    # Verify closure of the proper subset directly. Rotations are closed under
+    # multiplication among themselves (det is multiplicative), so the product
+    # of any two must already be present.
+    stack = np.asarray(rotations)
+    for a in rotations:
+        products = np.einsum('ij,kjl->kil', a, stack)
+        # Nearest stored element, per product. Compared with a tolerance, not
+        # by exact keys: the elements are built by different multiplication
+        # orders, so a genuinely closed group still differs in the last bits.
+        gaps = np.max(np.abs(products[:, None, :, :] - stack[None, :, :, :]),
+                      axis=(2, 3))
+        if float(np.max(np.min(gaps, axis=1))) > 1.0e-6:
+            return 1
+
+    return max(1, len(rotations))
 
 
 def attach_detection_metadata(
