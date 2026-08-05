@@ -62,8 +62,10 @@ end function cc_uhf_spinorb_gb
 !>
 !> Two stages compete for the peak and the larger one wins:
 !>
-!>   * assembly -- the three spatial spin-block tensors (3 nmo^4) are still
-!>     alive while the spin-orbital tensor (nso^4) is being filled;
+!>   * assembly -- first the packed AO store is still live while the three
+!>     spatial spin-block tensors (3 nmo^4) are transformed out of it, then
+!>     those three are still alive while the spin-orbital tensor (nso^4) is
+!>     being filled; the larger of the two phases counts;
 !>   * solution -- the spin-orbital tensor stays, and the solver adds the
 !>     ladder intermediate over index pairs ((nv(nv-1)/2)^2, a quarter of
 !>     nv^4) with the three pair-packed arrays contracted against it,
@@ -82,7 +84,7 @@ end function cc_uhf_spinorb_gb
 !> Reporting only nso^4 understated the real requirement by roughly a factor
 !> of three, which is worse than useless in a guard: it waves through jobs
 !> that then die in the allocator.
-pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples) result(gb)
+pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples, nbf) result(gb)
   integer, intent(in) :: nmo    !< correlated spatial MOs
   integer, intent(in) :: nocc   !< occupied spin orbitals
   integer, intent(in) :: ndiis  !< DIIS subspace size (0 = no DIIS)
@@ -93,8 +95,15 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples) result(gb)
   !> stage on virtual-heavy cases -- charging them for a doubles-only run
   !> refused jobs that fit by a wide margin.
   logical, intent(in), optional :: triples
+  !> Basis functions behind the packed AO store.  The store is still live
+  !> while the three spatial spin-block tensors are transformed out of it, so
+  !> the assembly stage has an earlier peak of gao + 3 nmo^4 before the
+  !> spin-orbital tensor exists.  For realistic frozen cores the later
+  !> 3 nmo^4 + nso^4 phase dominates, but "realistic" is not a guard; charge
+  !> both and let max decide.  Omitted, nbf falls back to nmo.
+  integer, intent(in), optional :: nbf
   real(dp) :: gb
-  real(dp) :: nso, no, nv, assembly, solve, trip, amp
+  real(dp) :: nso, no, nv, assembly, solve, trip, amp, gao_len
   integer :: nthr
   logical :: do_t
 
@@ -102,7 +111,14 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples) result(gb)
   no  = real(nocc,dp)
   nv  = nso - no
 
-  assembly = 3.0_dp*real(nmo,dp)**4 + nso**4
+  gao_len = real(nmo,dp)
+  if (present(nbf)) gao_len = real(nbf,dp)
+  ! packed eightfold AO store, ~ nbf^4/8 at large nbf
+  gao_len = (gao_len*(gao_len+1.0_dp)/2.0_dp)
+  gao_len = gao_len*(gao_len+1.0_dp)/2.0_dp
+
+  assembly = max(gao_len + 3.0_dp*real(nmo,dp)**4, &
+                 3.0_dp*real(nmo,dp)**4 + nso**4)
 
   amp   = no*nv + no**2*nv**2
   ! The ladder intermediate is held over index pairs, (nv(nv-1)/2)^2 rather

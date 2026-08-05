@@ -291,8 +291,16 @@ contains
     if (use_direct) then
       mem_ao = 0.0_dp
     else
-      mem_ao = real(cc_packed_length(nbf),dp) &
-               + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+      mem_ao = real(cc_packed_length(nbf),dp)
+      ! The half-transformed intermediate belongs to cc_build_mo_blocks alone.
+      ! The stored-Cholesky route factorises the packed array in place and
+      ! assembles its MO blocks from the vectors, and the open-shell transforms
+      ! go through cc_build_full_mo whose scratch is O(nbf^2) -- charging
+      ! either of them for a workspace only the explicit ladder allocates
+      ! refused jobs that fit.
+      if (.not. use_chol .and. .not. open_shell) then
+        mem_ao = mem_ao + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
+      end if
     end if
 
     if (open_shell) then
@@ -635,7 +643,7 @@ contains
       ! a guard that ignores them waves jobs through that then die allocating.
       so_gb = cc_uhf_spinorb_gb(nmo)
       peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis), &
-                               nthreads=nthr, triples=do_t)
+                               nthreads=nthr, triples=do_t, nbf=nbf)
       write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
       call oqp_memory_check(peak_gb, 'CCSD(T) open shell', &
           'freeze more core orbitals or use a smaller basis', iw)
