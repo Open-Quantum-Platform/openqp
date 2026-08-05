@@ -23,8 +23,28 @@ import os
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _runtime_available():
+    """True when the compiled OpenQP runtime can actually be driven.
+
+    These are live calculations, so without this guard setUpClass raises
+    during collection in a source-only or dependency-light checkout, turning
+    an environment limitation into a test failure.
+    """
+    try:
+        os.environ.setdefault("OPENQP_ROOT", str(ROOT))
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        import oqp  # noqa: F401
+        from oqp.pyoqp import Runner  # noqa: F401
+        return True
+    except Exception:
+        return False
 
 INPUT = """\
 [input]
@@ -64,6 +84,7 @@ def _run(workdir, name, basis, symmetry):
     return runner.mol
 
 
+@unittest.skipUnless(_runtime_available(), "compiled OpenQP runtime not available")
 class PetiteEngagesOnSphericalBasisTests(unittest.TestCase):
     """Water/C2v, cc-pVDZ (spherical d) -- the case that silently ran C1."""
 
