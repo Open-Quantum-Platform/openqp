@@ -615,8 +615,17 @@ class Molecule:
             # abelian tier, which is already exact (dE = 0 for both a hybrid
             # and a pure GGA) and already delivers 3.4-3.7x.
             #
-            # So: fall back to the abelian tier and say so. Nothing of value is
-            # lost. Joint finding with @karmachoi.
+            # So: fall back to the abelian tier and say so.
+            #
+            # This is not free, and the first version of this comment wrongly
+            # said it was. Measured on benzene HF/cc-pVTZ, whole-job wall
+            # clock: C1 41.6 s, abelian 22.2 s (1.87x), full 11.6 s (3.59x).
+            # The 3.6x quoted for this work is the FULL tier; abelian is 1.9x.
+            # So DFT gives up about a factor of 1.9 here. The decision stands
+            # anyway -- the full tier produces a WRONG DFT energy and a wrong
+            # number is not a tradeoff against speed -- but a maintainer
+            # weighing a symmetry-adapted DFT grid should see the real size of
+            # the prize. Joint finding with @karmachoi.
             if want_full and str(self.config.get('input', {})
                                  .get('functional', '')).strip():
                 want_full = False
