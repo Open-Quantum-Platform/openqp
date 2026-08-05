@@ -62,15 +62,35 @@ class FailureExitsRestoreTheGeometry(unittest.TestCase):
         source = (ROOT / 'pyoqp/oqp/library/single_point.py').read_text()
         self.assertIn("meta.pop('_reorient_input_coords', None)", source)
 
-    def test_the_caller_refreshes_the_guess_after_restoring(self):
-        """The 1e integrals were built in the rotated frame."""
+    def test_the_caller_rebuilds_the_integrals_after_restoring(self):
+        """The 1e integrals were built in the rotated frame, so they must be
+        rebuilt -- but only they.
+
+        This asserted `self._prep_guess()` until the self-review pointed out
+        that a full guess re-run also discards the orbitals from [scf]
+        init_scf, so a bail-out was silently changing the SCF starting point as
+        well as the frame. Only what the moved coordinates invalidate is
+        rebuilt now.
+        """
         source = (ROOT / 'pyoqp/oqp/library/single_point.py').read_text()
         restore = source.index("meta.pop('_reorient_input_coords', None)")
-        window = source[restore:restore + 900]
+        window = source[restore:restore + 1400]
         self.assertIn('self.mol.update_system(', window)
-        self.assertIn('self._prep_guess()', window)
+        self.assertIn('oqp.library.set_basis(self.mol)', window)
+        self.assertIn('oqp.library.ints_1e(self.mol)', window)
+        self.assertNotIn('self._prep_guess()', window,
+                         'a full guess re-run would discard init_scf orbitals')
         self.assertLess(window.index('self.mol.update_system('),
-                        window.index('self._prep_guess()'))
+                        window.index('oqp.library.ints_1e(self.mol)'))
+
+    def test_the_caller_redetects_after_restoring(self):
+        """The stored detection describes the frame just moved out of."""
+        source = (ROOT / 'pyoqp/oqp/library/single_point.py').read_text()
+        restore = source.index("meta.pop('_reorient_input_coords', None)")
+        window = source[restore:restore + 1400]
+        self.assertIn('self.mol._detect_symmetry_metadata()', window)
+        self.assertLess(window.index('self.mol.update_system('),
+                        window.index('self.mol._detect_symmetry_metadata()'))
 
 
 class PropDoesNotGetReoriented(unittest.TestCase):
