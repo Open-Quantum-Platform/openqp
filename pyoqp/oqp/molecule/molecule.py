@@ -339,6 +339,33 @@ class Molecule:
         # so transpose to (n_ao, n_mo).
         return np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
 
+    def _labelling_overlap_deviation(self, shells, smat, detection):
+        """max |T S T^T - S| over the symmetry operations, or None if it
+        cannot be formed.  Same test the integral path already applies to its
+        petite maps; here it validates the shells the MO labels come from."""
+        try:
+            import numpy as np
+            from oqp.library.symmetry import build_reduction_maps
+
+            if smat is None:
+                return None
+            maps = build_reduction_maps(shells, detection['operations'])
+            n_ao = int(maps['n_ao'])
+            if n_ao != int(np.asarray(smat).shape[0]):
+                return None
+            identity = np.arange(n_ao)
+            worst = 0.0
+            for iop in range(int(maps['n_operations'])):
+                transform = np.zeros((n_ao, n_ao))
+                transform[np.array(maps['ao_target'][iop]), identity] = \
+                    np.array(maps['ao_sign'][iop], dtype=float)
+                worst = max(worst, float(np.max(np.abs(
+                    transform @ smat @ transform.T - smat))))
+            return worst
+        except Exception:
+            # A guard that cannot be evaluated must not block labelling.
+            return None
+
     def label_molecular_orbitals(self):
         """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
 
@@ -360,6 +387,25 @@ class Molecule:
             shells, smat, nbf, skip_reason = self._symmetry_labeling_inputs()
             if shells is None:
                 meta['mo_labels'] = {'status': skip_reason}
+                return None
+
+            # Defense in depth, mirroring the integral path: the AO maps these
+            # labels are computed from must leave the real overlap matrix
+            # invariant, T S T^T = S.  Any shell-convention or frame mistake
+            # shows up here.  This is not hypothetical -- tagging s and p
+            # shells as spherical (fixed in the previous commit) produced
+            # confidently WRONG p-shell signs, and this check is what would
+            # have caught it.  Labels are metadata, so a failure records the
+            # reason and declines to label rather than aborting the run; the
+            # consumers (stage_response_symmetry -> OQP::sym_pair_irrep ->
+            # the Davidson seeding) then stay inert, which is the safe state.
+            deviation = self._labelling_overlap_deviation(shells, smat,
+                                                          detection)
+            if deviation is not None and deviation > 1.0e-6:
+                meta['mo_labels'] = {
+                    'status': 'skipped_overlap_invariance',
+                    'deviation': deviation,
+                }
                 return None
 
             tolerance = float(meta.get('tolerance', 1.0e-5))
