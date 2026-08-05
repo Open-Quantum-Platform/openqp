@@ -441,7 +441,17 @@ class Molecule:
         # NEB, ...) must not have the frame rotated under them; the petite
         # reduction is restricted to single-point runtypes for now.
         runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
-        if runtype not in ('energy', 'grad', 'prop', 'properties'):
+        # 'prop' is deliberately NOT here. It is the only admitted runtype that
+        # consumes an EXTERNALLY supplied geometry, expressed in the caller's
+        # frame: load_previous_data writes OQP::xyz_old from it, and
+        # get_basis_overlap then overlaps that against the current -- by then
+        # rotated and translated -- structure. Because the standard frame is
+        # centred on the charge-weighted centroid, the two structures are
+        # physically displaced by a few bohr, so the cross-geometry MO overlap,
+        # the phase/reorder alignment built on it, and NACME are all wrong.
+        # That is PR #319's finite-difference failure mode one level up.
+        # ('properties' was never a run_func key, so it admitted nothing.)
+        if runtype not in ('energy', 'grad'):
             meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
             return False
 
@@ -476,6 +486,12 @@ class Molecule:
                 coords = (coords - origin) @ rotation.T
                 self.update_system(coords.ravel())
             if not converged:
+                # Put the molecule back. `input_coords` was captured above and
+                # never used, so every failure exit left the geometry rotated --
+                # and translated, since the standard frame is centred on the
+                # charge-weighted centroid, which moves EVERY molecule including
+                # C1 where the rotation is exactly the identity.
+                self.update_system(input_coords.ravel())
                 meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
                 return False
 
@@ -491,8 +507,15 @@ class Molecule:
                     'origin': total_origin.tolist(),
                 },
             }
+            # Kept for the second phase, and deliberately OUTSIDE the
+            # integral_symmetry block: every bail in
+            # stage_integral_symmetry_maps replaces that block wholesale, which
+            # would take the coordinates with it. The caller pops this key
+            # immediately after staging, so it never reaches save_data.
+            meta['_reorient_input_coords'] = input_coords.tolist()
             return True
         except Exception as exc:
+            self.update_system(input_coords.ravel())
             meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
             return False
 

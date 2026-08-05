@@ -527,6 +527,22 @@ class SinglePoint(Calculator):
 
         if symmetry_on:
             self.mol.stage_integral_symmetry_maps()
+            # Staging can decline for reasons only visible once the basis
+            # exists (shell/AO mismatch, overlap invariance, non-abelian
+            # closure). Those runs were changing frame for no benefit at all:
+            # reorientation had already rotated AND translated the molecule,
+            # and nothing put it back. Undo it, and refresh the guess -- the
+            # 1e integrals were built in the rotated frame, so the coordinates
+            # cannot go back without them. The cost lands only on a path that
+            # is already getting no reduction.
+            meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+            restore = meta.pop('_reorient_input_coords', None)
+            status = (meta.get('integral_symmetry') or {}).get('status')
+            if restore is not None and status != 'active':
+                self.mol.update_system(
+                    np.asarray(restore, dtype=float).ravel())
+                self._set_petite_enabled(False)
+                self._prep_guess()
 
         scf_flag = self._run_scf()
 
