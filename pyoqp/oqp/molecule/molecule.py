@@ -198,7 +198,7 @@ class Molecule:
         requested_point_group = requested_point_group if isinstance(requested_point_group, str) and requested_point_group else 'auto'
         requested_subgroup = requested_subgroup if isinstance(requested_subgroup, str) and requested_subgroup else 'auto'
 
-        enabled = self._parse_enabled_mode(symmetry.get('enabled', 'false'))
+        enabled = self._parse_enabled_mode(symmetry.get('enabled', 'true'))
 
         if enabled == 'auto':
             status = 'auto'
@@ -230,7 +230,7 @@ class Molecule:
             'strict': self._parse_bool_like(symmetry.get('strict', False)),
             'tolerance': float(symmetry.get('tolerance', 1.0e-5)),
             'raw': {
-                'enabled': symmetry.get('enabled', 'false'),
+                'enabled': symmetry.get('enabled', 'true'),
                 'point_group': requested_point_group,
                 'subgroup': requested_subgroup,
                 'label_mo': symmetry.get('label_mo', True),
@@ -285,14 +285,41 @@ class Molecule:
         pairs = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
         if any(l > 4 for _, l in pairs):
             return None, None, 0, 'skipped_unsupported_shells_beyond_g'
-        if sum(_cartesian_shell_size(l) for _, l in pairs) == nbf:
+        # Prefer the library's own per-shell flag over any dimension test.
+        # The merged integral-path fix exports it (oqp_get_basis_spherical ->
+        # basis['spherical']), and it is authoritative in a way a dimension
+        # test cannot be: Cartesian and spherical sizes agree for l <= 1, so
+        # the AO total alone cannot tell "all shells pure" -- which applies the
+        # spherical component order to p shells and yields WRONG irrep labels
+        # rather than 'mixed' ones -- from OpenQP's real convention. The
+        # dimension branches below stay as a fallback for a runtime that
+        # predates the export.
+        spherical = basis.get('spherical')
+        if spherical is not None and len(spherical) == len(pairs):
+            shells = [(at, l, bool(p)) for (at, l), p in zip(pairs, spherical)]
+            if any(p for p in spherical):
+                self.symmetry_metadata['spherical_order_assumed'] = \
+                    'cca_m_ascending'
+        elif sum(_cartesian_shell_size(l) for _, l in pairs) == nbf:
             shells = [(at, l, False) for at, l in pairs]
         elif sum(_spherical_shell_size(l) for _, l in pairs) == nbf:
             # Pure spherical-harmonic basis (ISPHER=1). The component order
             # is assumed to be CCA/libint (m = -l..+l); record the
             # assumption so runs are auditable until the runtime spherical
             # path is validated end-to-end.
-            shells = [(at, l, True) for at, l in pairs]
+            # OpenQP only makes l >= 2 spherical: source/integrals/cart2sph.F90
+            # c2s_ncomp transforms a shell when (pure == 1 .and. l >= 2), so s
+            # and p AOs stay Cartesian (x, y, z) even in a spherical basis.
+            # Tagging them pure applied the spherical component permutation
+            # [1,2,0] to p shells, which produced WRONG irrep labels rather
+            # than 'mixed' ones -- e.g. under C2z a p_z-dominant MO picked up
+            # chi = -1 where it must be +1.  Those labels feed
+            # stage_response_symmetry -> OQP::sym_pair_irrep -> the Davidson
+            # seeding, so the error was silent and landed on exactly the
+            # spherical families (cc-pVXZ, def2) most production runs use.
+            # The dimension test above is unaffected: cart and spherical sizes
+            # agree for l <= 1.
+            shells = [(at, l, l >= 2) for at, l in pairs]
             self.symmetry_metadata['spherical_order_assumed'] = 'cca_m_ascending'
         else:
             return None, None, 0, 'skipped_unrecognized_basis_dimension'
@@ -327,6 +354,55 @@ class Molecule:
         # so transpose to (n_ao, n_mo).
         return np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
 
+    def _labelling_overlap_deviation(self, shells, smat, detection):
+        """max |T^T S T - S| over the symmetry operations, or None if it
+        cannot be formed.
+
+        Built from ``matrix_input_frame`` -- the SAME operator
+        ``assign_mo_irreps`` labels with -- because that is the only thing this
+        guard is entitled to validate. The overlap it is tested against is the
+        run's real AO overlap, which lives in the INPUT frame: nothing
+        reorients the geometry unless ``use_integral_symmetry`` is set, and
+        that is off by default.
+
+        The first version used ``build_reduction_maps``, which hard-codes
+        ``op['matrix']`` -- the sign-diagonal operation in the symmetry
+        STANDARD orientation. Against an input-frame overlap that is O(1)
+        wrong for any molecule not already in the standard frame, so the guard
+        fired, labelling was refused, ``OQP::sym_pair_irrep`` was never staged
+        and the Davidson coverage fix silently did nothing. Measured over the
+        shipped decks: 211 of the 241 with a non-C1 abelian subgroup, including
+        every H2O deck. It looked correct only because the two geometries it
+        was validated on happen to be in the standard frame already.
+
+        The twin guard in ``stage_integral_symmetry_maps`` may keep using the
+        standard-frame maps: that path returns early unless the geometry has
+        actually been reoriented, so there the two frames coincide.
+        """
+        try:
+            import numpy as np
+            from oqp.library.symmetry import _ao_operator_matrix, _normalize_shells
+
+            if smat is None:
+                return None
+            smat = np.asarray(smat, dtype=float)
+            norm_shells = _normalize_shells(shells)
+            worst = 0.0
+            for op in detection['operations']:
+                transform = _ao_operator_matrix(norm_shells, op,
+                                                matrix_key='matrix_input_frame')
+                if transform.shape[0] != smat.shape[0]:
+                    return None
+                # Functions transform with T as columns, so invariance of the
+                # metric reads T^T S T = S -- not T S T^T, which is the
+                # signed-permutation convention the integral path uses.
+                worst = max(worst, float(np.max(np.abs(
+                    transform.T @ smat @ transform - smat))))
+            return worst
+        except Exception:
+            # A guard that cannot be evaluated must not block labelling.
+            return None
+
     def label_molecular_orbitals(self):
         """Assign abelian irrep labels to converged MOs (metadata only, non-fatal).
 
@@ -348,6 +424,35 @@ class Molecule:
             shells, smat, nbf, skip_reason = self._symmetry_labeling_inputs()
             if shells is None:
                 meta['mo_labels'] = {'status': skip_reason}
+                return None
+
+            # Defense in depth, mirroring the integral path: the operator
+            # these labels are computed from must leave the real overlap matrix
+            # invariant, T^T S T = S.  Any shell-convention or frame mistake
+            # shows up here.
+            #
+            # T^T S T, not T S T^T: T is metric-orthogonal but not orthogonal
+            # once a spherical shell with l >= 2 mixes components under a
+            # rotation. The two forms coincide for a signed permutation, which
+            # is why a test restricted to axis-aligned frames -- or to
+            # Cartesian d shells -- cannot tell them apart. Verified where they
+            # DO differ: water in a generic three-angle rotated frame labels
+            # identically to the standard frame under 6-31G* (Cartesian d,
+            # control), cc-pVDZ (spherical d) and cc-pVTZ (spherical d and f),
+            # with no orbital coming back 'mixed'.  This is not hypothetical -- tagging s and p
+            # shells as spherical (fixed in the previous commit) produced
+            # confidently WRONG p-shell signs, and this check is what would
+            # have caught it.  Labels are metadata, so a failure records the
+            # reason and declines to label rather than aborting the run; the
+            # consumers (stage_response_symmetry -> OQP::sym_pair_irrep ->
+            # the Davidson seeding) then stay inert, which is the safe state.
+            deviation = self._labelling_overlap_deviation(shells, smat,
+                                                          detection)
+            if deviation is not None and deviation > 1.0e-6:
+                meta['mo_labels'] = {
+                    'status': 'skipped_overlap_invariance',
+                    'deviation': deviation,
+                }
                 return None
 
             tolerance = float(meta.get('tolerance', 1.0e-5))
@@ -500,14 +605,33 @@ class Molecule:
         """Stage petite-list maps for the Fortran SCF (requires the basis).
 
         Fail-safe: any inconsistency leaves the run on the C1 path with the
-        reason recorded in the metadata.
+        reason recorded in the metadata -- and, unlike before, printed. The
+        fallback produces an identical energy, so a silent one is invisible:
+        the reduction was disabled on every spherical basis for as long as it
+        existed and no output said so.
         """
         meta = self.symmetry_metadata
         if not meta or not meta.get('use_integral_symmetry'):
             return False
+        staged = self._stage_integral_symmetry_maps(meta)
+        if not staged and not meta.get('integral_symmetry', {}).get('status', '').startswith('skipped'):
+            meta.setdefault('integral_symmetry', {})
+            meta['integral_symmetry'].setdefault('status', 'skipped_unknown')
+        try:
+            self._dump_symmetry_log()
+        except Exception:
+            pass
+        return staged
+
+    def _stage_integral_symmetry_maps(self, meta):
+        """Body of :meth:`stage_integral_symmetry_maps`; records a status and
+        returns True only when the reduction is actually active."""
         detection = meta.get('detection')
         if not detection:
+            meta['integral_symmetry'] = {'status': 'skipped_no_detection'}
             return False
+        # reorient_for_integral_symmetry records its own reason (a runtype the
+        # allow-list rejects, a frame that would not converge, ...); keep it.
         if meta.get('integral_symmetry', {}).get('status') != 'reoriented':
             return False
 
@@ -518,10 +642,30 @@ class Molecule:
             if not basis:
                 meta['integral_symmetry'] = {'status': 'skipped_no_basis'}
                 return False
-            shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+            # Per-shell sphericity comes from the library (OQP::basis
+            # 'spherical'), which reports the EFFECTIVE flag including the
+            # l >= 2 rule. Passing (atom, l) pairs without it makes
+            # _normalize_shells default to pure=False, so n_ao is the
+            # Cartesian count and every spherical basis -- cc-pVXZ, def2 and
+            # the whole 6-311G family -- failed the check below and silently
+            # ran C1. Do not reintroduce a dimension-matching guess here: the
+            # Cartesian and spherical sizes agree for l <= 1, so the AO total
+            # cannot distinguish "all shells pure" (wrong: it applies the
+            # spherical component order to p shells) from OpenQP's real
+            # convention.
+            spherical = basis.get('spherical')
+            if spherical is None:
+                meta['integral_symmetry'] = {'status': 'skipped_no_shell_purity'}
+                return False
+            shells = [(int(at), int(l), bool(p)) for at, l, p
+                      in zip(basis['centers'], basis['angs'], spherical)]
             maps = build_reduction_maps(shells, detection['operations'])
             if maps['n_ao'] != int(basis['nbf']):
-                meta['integral_symmetry'] = {'status': 'skipped_basis_mismatch'}
+                meta['integral_symmetry'] = {
+                    'status': 'skipped_basis_mismatch',
+                    'n_ao': int(maps['n_ao']),
+                    'nbf': int(basis['nbf']),
+                }
                 return False
 
             # Defense-in-depth: the maps must leave the real overlap matrix
@@ -700,10 +844,6 @@ class Molecule:
                 'reoriented': True,
                 'input_to_standard': input_to_standard,
             }
-            try:
-                self._dump_symmetry_log()
-            except Exception:
-                pass
             return True
         except Exception as exc:
             # Fail safe to the C1 path.
@@ -714,6 +854,18 @@ class Molecule:
                 pass
             return False
 
+    def _clear_response_symmetry_tags(self):
+        """Drop any previously staged response-symmetry tables.
+
+        See stage_response_symmetry: the tag store survives across steps of a
+        multi-geometry job, so a stale table is worse than none.
+        """
+        for tag in ('OQP::sym_pair_irrep', 'OQP::sym_response_project_enable'):
+            try:
+                del self.data[tag]
+            except Exception:
+                pass
+
     def stage_response_symmetry(self):
         """Stage per-pair irrep indices for response-space blocking.
 
@@ -723,7 +875,18 @@ class Molecule:
         unblocked solver on any 'mixed' orbital or inconsistency.
         """
         meta = self.symmetry_metadata
-        if not meta or not meta.get('use_response_symmetry'):
+        # Invalidate FIRST, before any bail can return. The table is consumed
+        # by the Fortran Davidson guess, and the tag store outlives a single
+        # step: an optimiser, IRC or NAMD run that staged a table at step N and
+        # bails at step N+1 -- lower symmetry, a 'mixed' orbital, labels
+        # refused -- would otherwise leave the previous step's table in place
+        # and seed the guess from irreps that belong to a different geometry.
+        # Nothing downstream can detect that: the table is well formed, just
+        # stale. Deleting it makes a bail mean "no table", which mrinivec
+        # already handles by falling back to the historical seeds.
+        self._clear_response_symmetry_tags()
+
+        if not meta:
             return False
         detection = meta.get('detection')
         if not detection:
@@ -775,7 +938,42 @@ class Molecule:
                     pair_irrep[idx] = irreps.index(label) + 1
                     idx += 1
 
+            if td_type == 'mrsf' and na - nb >= 2:
+                # The three open-open slots do not carry the plain
+                # Gamma_i (x) Gamma_a label of their (i, a) indices, because
+                # MRSF stores that sector spin-adapted and folded (SI Fig. S2
+                # and Sec. 8 of JCP 149, 104101).  With O1 = na-2, O2 = na-1
+                # (0-based) and the slot convention "annihilate alpha in i,
+                # create beta in a" acting on |O1a O2a>:
+                #   (O1,O1) holds the folded (L -/+ R)/sqrt2, whose two
+                #     determinants are both the open-shell {O1,O2} pair, so it
+                #     transforms as Gamma_O1 (x) Gamma_O2;
+                #   (O2,O1) is G = |O1 O1> and (O1,O2) is D = |O2 O2>, both
+                #     doubly occupied and therefore totally symmetric.
+                # Labelling them by the raw index product puts all three in the
+                # wrong blocks, which defeats the coverage the Davidson guess
+                # and the response projection both rely on.
+                o1, o2 = na - 2, na - 1
+                v_o1, v_o2 = o1 - nb, o2 - nb
+                n_occ = len(occ_labels)
+                if 0 <= v_o1 and v_o2 < len(vir_labels):
+                    oo_label = product_irrep(
+                        [occ_labels[o1], vir_labels[v_o2]], table)
+                    if oo_label != 'mixed':
+                        pair_irrep[o1 + v_o1*n_occ] = irreps.index(oo_label) + 1
+                    # irreps[0] is the totally symmetric representation
+                    pair_irrep[o2 + v_o1*n_occ] = 1
+                    pair_irrep[o1 + v_o2*n_occ] = 1
+
             self.data['OQP::sym_pair_irrep'] = pair_irrep
+            # The table itself is staged whenever it can be built: the Davidson
+            # initial trial vectors need it to guarantee that every irreducible
+            # representation is represented, without which an unseeded irrep
+            # contributes no roots and every state index shifts.  Confining
+            # residuals to a dominant irrep is a separate, experimental
+            # behaviour and stays behind use_response_symmetry.
+            self.data['OQP::sym_response_project_enable'] = np.array(
+                [1 if meta.get('use_response_symmetry') else 0], dtype=np.int64)
             meta['response_symmetry'] = {
                 'status': 'active',
                 'td_type': td_type,
@@ -1000,11 +1198,23 @@ class Molecule:
             if full:
                 lines.append(f"   full group order     : {full.get('n_operations')}")
             if active:
-                lines.append(f"   integral reduction   : {active.get('status')}"
+                status = active.get('status')
+                lines.append(f"   integral reduction   : {status}"
                              + (f" (|G| = {active.get('n_operations')}"
                                 + (', full group' if active.get('full_group')
                                    else ', abelian subgroup') + ')'
-                                if active.get('status') == 'active' else ''))
+                                if status == 'active' else ''))
+                if status != 'active':
+                    # The C1 fallback gives a numerically identical answer, so
+                    # without this line a user who explicitly asked for the
+                    # reduction has no way to discover it never ran.
+                    lines.append('   *** the petite-list reduction is NOT active:'
+                                 ' this run used the full (C1) integral list ***')
+                    if status == 'skipped_basis_mismatch':
+                        lines.append(f"   AO count from the symmetry maps ({active.get('n_ao')})"
+                                     f" disagrees with the basis ({active.get('nbf')})")
+                    elif active.get('error'):
+                        lines.append(f"   reason: {active.get('error')}")
                 if active.get('reoriented'):
                     lines.append('   geometry reoriented to the symmetry standard orientation')
             response = meta.get('response_symmetry')

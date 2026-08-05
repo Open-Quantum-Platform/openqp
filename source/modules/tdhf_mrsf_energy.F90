@@ -263,6 +263,20 @@ contains
 
     infos%tddft%nstate = nstates
 
+    ! Trial-set dimension.  Deliberately UNCHANGED from the historical value:
+    ! raising it globally perturbs the Krylov path of every calculation, which
+    ! moves converged results at the 1e-5 level and is enough to break tight
+    ! reference comparisons (SOC between near-degenerate states is especially
+    ! sensitive).  Symmetry-block coverage is instead handled inside mrinivec,
+    ! where it costs nothing when every irrep is already represented.
+    ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
+    ! Every attempt to enlarge it perturbed converged results.  Raising the
+    ! floor to 16 moved four example references; reserving just nirr-1 extra
+    ! vectors still moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to
+    ! 5.224000 eV, fully converged and wrong -- and there with NO substitution
+    ! taking place, so the trial-set size alone was responsible.  Symmetry-block
+    ! coverage is therefore confined to whatever room already exists beyond the
+    ! requested states, which is where it costs nothing.
     nvec = min(max(nstates,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
@@ -481,7 +495,7 @@ contains
       end if
 
     else if (mrst==5) then
-      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
+      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec,infos)
     end if
 
     ! ---- OQP_ROUTEC_SIG pre-loop gate (decide use_sig ONCE) ----------------
@@ -898,6 +912,5 @@ contains
     close(iw)
 
   end subroutine tdhf_mrsf_energy
-
 
 end module tdhf_mrsf_energy_mod
