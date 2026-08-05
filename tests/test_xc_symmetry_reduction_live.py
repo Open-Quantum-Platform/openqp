@@ -29,8 +29,14 @@ GRIDINT_ENERGY = ROOT / 'source/dftlib/dft_gridint_energy.F90'
 
 
 def subroutine_body(path, name):
-    """Text of `subroutine <name>` up to its `end subroutine`."""
-    source = path.read_text()
+    """Text of `subroutine <name>` up to its `end subroutine`, comments stripped.
+
+    Comments are removed so that no structural test in this file can be
+    satisfied by prose. The projector test below passed on a COMMENT naming
+    symmetrize_skeleton_signed rather than on the call, which meant it would
+    have gone on passing if the call were reverted.
+    """
+    source = re.sub(r'!.*', '', path.read_text())
     start = re.search(r'^\s*subroutine\s+%s\b' % name, source,
                       flags=re.IGNORECASE | re.MULTILINE)
     assert start, f'{name} not found in {path.name}'
@@ -73,7 +79,12 @@ class ReducedGridsAreProjected(unittest.TestCase):
         body = subroutine_body(SCF_ADDONS, 'calc_dft_xc_density')
         reduced = body[body.index('if (present(sym_atom_weight)) then'):]
         cut = reduced.index('else')
-        self.assertIn('symmetrize_skeleton_fock', reduced[:cut],
+        # The abelian projector specifically -- see
+        # test_the_projector_matches_the_group_the_weights_use. This assertion
+        # named symmetrize_skeleton_fock until the projector changed, and went
+        # on passing because the replacement's explanatory COMMENT still
+        # contained that word; stripping comments is what exposed it.
+        self.assertIn('call symmetrize_skeleton_signed(', reduced[:cut],
                       'the reduced branch must project its skeleton')
 
     def test_the_projector_matches_the_group_the_weights_use(self):
@@ -91,13 +102,16 @@ class ReducedGridsAreProjected(unittest.TestCase):
         for name in ('calc_dft_xc_density', 'calc_dft_xc'):
             with self.subTest(subroutine=name):
                 body = subroutine_body(SCF_ADDONS, name)
-                self.assertIn('symmetrize_skeleton_signed', body)
-                self.assertNotIn('call symmetrize_skeleton_fock', body)
+                # Assert on the executable form, and on the ABSENCE of the
+                # wrong projector in the same text.
+                self.assertIn('call symmetrize_skeleton_signed(', body)
+                self.assertNotIn('call symmetrize_skeleton_fock(', body)
 
     def test_the_unreduced_branch_does_not_project(self):
         body = subroutine_body(SCF_ADDONS, 'calc_dft_xc_density')
         after_else = body[body.rindex('else'):]
-        self.assertNotIn('symmetrize_skeleton_fock', after_else)
+        self.assertNotIn('call symmetrize_skeleton_signed(', after_else)
+        self.assertNotIn('call symmetrize_skeleton_fock(', after_else)
 
 
 class PhiCacheCannotServeReducedWeights(unittest.TestCase):

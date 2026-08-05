@@ -1514,6 +1514,13 @@ contains
     call tagarray_get_data(infos%dat, OQP_sym_atom_weight, weight, status=status)
     active = status == TA_OK
     if (active) active = size(weight) == infos%mol_prop%natom
+
+    ! A weight of all ones reduces nothing: every atom is its own orbit (C1, or
+    ! a group whose every atom sits on a special position). Reporting that as
+    ! active costs real work for no saving -- it disables the cross-iteration
+    ! Phi cache, which the reduction is incompatible with, and runs a
+    ! skeleton projection that is the identity. Report inactive instead.
+    if (active) active = any(weight == 0.0_dp)
     if (.not. active) weight => null()
   end subroutine get_sym_atom_weight
 
