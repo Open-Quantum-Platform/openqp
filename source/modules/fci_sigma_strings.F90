@@ -284,6 +284,9 @@ contains
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
     integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
+    integer(i8) :: grow0, growlen
+    integer :: gi
+    real(dp), allocatable :: gloc(:, :), dloc(:)
     integer :: p, q, r, s, pq, rs, t
     real(dp) :: sgn
     integer(i8), allocatable :: astr(:), bstr(:)
@@ -405,13 +408,38 @@ contains
       end do
       !$omp end parallel do
 
-      ! d1 += T_blk^T c_blk
-      call dgemv('T', int(nrow), nkl, 1.0_dp, tmat, int(nrow_max), &
-                 civec(cbase + 1_i8), 1, 1.0_dp, d1, 1)
-      ! gram += T_blk^T T_blk -- symmetric by construction, so DSYRK does it in
-      ! half the flops of the equivalent DGEMM.  beta=1 accumulates the blocks.
-      call dsyrk('U', 'T', nkl, int(nrow), 1.0_dp, tmat, int(nrow_max), &
-                 1.0_dp, gram, nkl)
+      ! d1 += T_blk^T c_blk and gram += T_blk^T T_blk, threaded over row
+      ! blocks BY US -- the linked BLAS is a serial build, so these ran on one
+      ! core.  Both contract OVER rows, so unlike the sigma's product each
+      ! thread needs private partials that are summed at the end.  The partials
+      ! are only nact^2 (plus nact^4 for the Gram), which is negligible beside
+      ! T itself.
+      !$omp parallel num_threads(nthr) default(shared) &
+      !$omp   private(gi, grow0, growlen, gloc, dloc)
+      allocate(gloc(nkl, nkl), dloc(nkl))
+      gloc = 0.0_dp
+      dloc = 0.0_dp
+      !$omp do schedule(static)
+      do gi = 0, nthr - 1
+        grow0 = (nrow * int(gi, i8)) / int(nthr, i8)
+        growlen = (nrow * int(gi + 1, i8)) / int(nthr, i8) - grow0
+        if (growlen > 0_i8) then
+          call dgemv('T', int(growlen), nkl, 1.0_dp, tmat(grow0 + 1_i8, 1), &
+                     int(nrow_max), civec(cbase + grow0 + 1_i8), 1, &
+                     1.0_dp, dloc, 1)
+          call dsyrk('U', 'T', nkl, int(growlen), 1.0_dp, &
+                     tmat(grow0 + 1_i8, 1), int(nrow_max), 1.0_dp, gloc, nkl)
+        end if
+      end do
+      !$omp end do
+      !$omp critical(rdm_reduce)
+      do t = 1, nkl
+        d1(int(t, i8)) = d1(int(t, i8)) + dloc(t)
+        gram(1:t, t) = gram(1:t, t) + gloc(1:t, t)
+      end do
+      !$omp end critical(rdm_reduce)
+      deallocate(gloc, dloc)
+      !$omp end parallel
 
       blk_start = blk_start + blk_len
     end do
@@ -637,6 +665,8 @@ contains
     real(dp), allocatable :: emat(:, :)
     real(dp), allocatable :: t1(:), t2(:)
     integer(i8) :: nblk, blk_start, blk_len, nrow, inner, nrow_max
+    integer(i8) :: grow0, growlen
+    integer :: gi
     integer(i8) :: bytes_per_alpha
 
     status = 1
@@ -719,8 +749,33 @@ contains
                   nlink_a, ntab_a, kl_a, src_a, sgn_a, &
                   maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, x, nrow, t1)
 
-      call dgemm('N', 'N', int(nrow), nkl, nkl, 1.0_dp, t1, int(nrow), &
-                 emat, nkl, 0.0_dp, t2, int(nrow))
+      ! t2 = t1 * emat, threaded over row blocks BY US.
+      !
+      ! This is the single largest cost in a CASSCF run, and it was being left
+      ! on one core: the BLAS OpenQP links here is a serial build
+      ! (openblas-serial64, `SINGLE_THREADED`), so the call threaded nothing no
+      ! matter what OMP_NUM_THREADS said.  Rows of t1 are independent -- each
+      ! output row depends only on the matching input row -- so the product
+      ! splits exactly over `nrow` with no reduction.  Passing the row offset
+      ! with the block's leading dimension keeps each thread's slice in place;
+      ! no packing, no copies.
+      !
+      ! If a threaded BLAS is ever linked instead, this region would nest.  The
+      ! num_threads clause is the FCI team's own count, and the common BLAS
+      ! implementations run serially when called from inside a parallel region,
+      ! so the work is done once either way.
+      !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
+      !$omp   private(gi, grow0, growlen)
+      do gi = 0, nthr - 1
+        grow0 = (nrow * int(gi, i8)) / int(nthr, i8)
+        growlen = (nrow * int(gi + 1, i8)) / int(nthr, i8) - grow0
+        if (growlen > 0_i8) then
+          call dgemm('N', 'N', int(growlen), nkl, nkl, 1.0_dp, &
+                     t1(grow0 + 1_i8), int(nrow), emat, nkl, 0.0_dp, &
+                     t2(grow0 + 1_i8), int(nrow))
+        end if
+      end do
+      !$omp end parallel do
 
       call scatter(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
                     nlink_a, ntab_a, kl_a, src_a, sgn_a, &
