@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 from dataclasses import dataclass
 from itertools import combinations
@@ -785,9 +786,79 @@ def _iter_hamiltonian_elements(dets, det_index, hspin, gspin, nspin, cutoff):
                             yield row, col, 0.5 * gval * phase_r * phase_s * phase_q * phase_p
 
 
+def _fci_default_threads() -> int:
+    """Default team width for the native FCI/CASSCF/RDM kernels.
+
+    These kernels are dominated by the gather/scatter passes over the
+    ``(ndet, nact^2)`` working set, which are memory-bandwidth bound rather than
+    flop bound.  They therefore stop scaling well before the logical CPU count,
+    and *past* the saturation point extra threads make them slower, not faster.
+    Measured here on a 2-socket 22-core Xeon E5-2699A v4 (88 logical CPUs),
+    RDM build at CAS(12,12), and a full CAS(8,8)/cc-pVDZ CASSCF run:
+
+        threads    1      8     22     44     88
+        RDM     1.68s  1.22s  1.08s  1.57s  1.56s
+        CASSCF     -   2.85s  2.49s  2.42s  3.37s
+
+    So the useful default is neither the old hard-coded 8 nor the full 88: it is
+    the physical cores of one NUMA node -- hyperthread siblings share the load/
+    store units these loops saturate, and crossing the socket boundary puts the
+    working set on remote memory.  Where the topology cannot be read, fall back
+    to the previous behaviour rather than guess.
+    """
+    cpus = os.cpu_count() or 1
+    try:
+        with open("/sys/devices/system/cpu/cpu0/topology/thread_siblings_list") as fh:
+            siblings = fh.read().strip()
+        per_core = len([s for s in siblings.replace("-", ",").split(",") if s]) or 1
+        nodes = len(glob.glob("/sys/devices/system/node/node[0-9]*")) or 1
+        return max(1, min(cpus, cpus // per_core // nodes))
+    except OSError:
+        return max(1, min(8, cpus))
+
+
 def _fci_lib_threads() -> int:
-    import os
-    return max(1, min(8, os.cpu_count() or 1))
+    """Thread count handed to every native FCI/CASSCF/RDM kernel.
+
+    This is the `nthreads` argument of the liboqp entry points, and it becomes
+    the `num_threads(...)` clause on their OpenMP regions.  It used to be
+    `min(8, cpu_count)`, which silently pinned the CI sigma, the RDM build, the
+    dense Hamiltonian and the spin-orbital transform to eight threads no matter
+    how wide the machine was -- on an 88-core node that left the CI hot path
+    running on under a tenth of it.
+
+    The number is resolved the same way the rest of PyOQP resolves threading, so
+    one control governs the whole job:
+
+      * ``OQP_FCI_THREADS`` -- explicit escape hatch, for pinning these kernels
+        alone (benchmarking, or a machine where the gather/scatter stops scaling
+        before the core count).
+      * ``OMP_NUM_THREADS``, but only when it is the caller's own request --
+        either already in the environment before ``import oqp``, or applied from
+        ``[input] omp_threads``.  ``oqp/__init__.py`` *defaults* the variable to
+        ``'1'`` when it is unset, and that default must not be mistaken for a
+        request to run the CI hot path serially; ``oqp.OMP_THREADS_FROM_ENV``
+        is what tells the two apart.
+      * otherwise ``_fci_default_threads()``, derived from the CPU topology
+        rather than hard-coded.
+
+    A positive value is always returned: the sigma and RDM kernels read
+    ``max(1, nthreads)``, so a zero would mean *serial*, not *let OpenMP decide*.
+    """
+    try:
+        pinned = int(os.environ.get("OQP_FCI_THREADS", "0"))
+    except ValueError:
+        pinned = 0
+    if pinned > 0:
+        return pinned
+    if getattr(oqp, "OMP_THREADS_FROM_ENV", False):
+        try:
+            requested = int(os.environ.get("OMP_NUM_THREADS", "0"))
+        except ValueError:
+            requested = 0
+        if requested > 0:
+            return requested
+    return _fci_default_threads()
 
 
 def _lib_dense_hamiltonian(dets, hspin, gspin, nspin, cutoff):

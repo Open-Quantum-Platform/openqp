@@ -370,6 +370,10 @@ class Runner:
             if oqp.lib.oqp_have_openmp():
                 oqp.lib.oqp_omp_set_num_threads(int(_omp))
                 os.environ["OMP_NUM_THREADS"] = str(int(_omp))
+                # The input asked for this count, so the kernels that take an
+                # explicit thread argument must use it rather than their own
+                # default (see oqp.library.fci._fci_lib_threads).
+                oqp.OMP_THREADS_FROM_ENV = True
             elif not self.mol.silent:
                 print(f"PyOQP WARNING: omp_threads={_omp} requested but this "
                       "OpenQP build has no OpenMP support; running serially.")
