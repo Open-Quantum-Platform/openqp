@@ -276,6 +276,35 @@ class TestSymmetryMetadata(unittest.TestCase):
         self.assertNotIn('detection', molecule.symmetry_metadata)
         self.assertNotIn('integral_symmetry', molecule.symmetry_metadata)
 
+    def test_staging_state_is_never_restored_from_a_guess_file(self):
+        """These have a Fortran-side half that put_data does not restore.
+
+        Inheriting the Python half alone claims a reduction that is not staged
+        in this process: symmetrize_gradient gates on status == 'active' and
+        would project with the producer's operations, and _petite_is_staged
+        would let the stability path switch the Fortran flag on with no maps.
+        A job that never asked for integral symmetry could pick both up.
+        """
+        coord = [0.0, 0.0, 0.0, 0.0, 0.0, 1.4]
+        molecule = self._molecule_for_put_data(coord)
+
+        molecule.put_data({
+            'coord': coord,  # same geometry -- the permissive case
+            'symmetry_metadata': {
+                'integral_symmetry': {'status': 'active'},
+                'reduction_maps': {'n_operations': 8},
+                'reduction_maps_full': {'n_operations': 24},
+                'detection': {'point_group': 'c2v'},
+            },
+        })
+
+        for key in ('integral_symmetry', 'reduction_maps',
+                    'reduction_maps_full'):
+            self.assertNotIn(key, molecule.symmetry_metadata, key)
+        # Descriptive geometry data still comes across when it matches.
+        self.assertEqual(
+            molecule.symmetry_metadata['detection']['point_group'], 'c2v')
+
     def test_guess_file_never_overrides_this_job_symmetry_switches(self):
         """The bug this pins: a numerical-Hessian child reoriented itself even
         though its own input said use_integral_symmetry=false, because the

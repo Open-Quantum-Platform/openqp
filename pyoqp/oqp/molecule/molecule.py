@@ -2088,6 +2088,19 @@ class Molecule:
 
         if guess_geom:
             self.update_system(np.array(data['coord']))
+            # The geometry just changed under the metadata. Without this, the
+            # point group, operations and labels still describe the coordinates
+            # the job was CONSTRUCTED with, not the ones it will run at -- they
+            # are reported in the log and consumed by the MO/state/mode
+            # labellers, all with exit status 0.
+            #
+            # Re-detecting is the right repair rather than letting the guess
+            # file's own block through: that block also carries staging state
+            # whose Fortran side is not restored (see _SYMMETRY_STAGING_KEYS),
+            # so importing it would claim a reduction this process never made.
+            if (self.symmetry_metadata or {}).get('status', 'disabled') \
+                    != 'disabled':
+                self._detect_symmetry_metadata()
 
     def update_config_json(self):
         # Update the configuration from JSON
@@ -2110,6 +2123,19 @@ class Molecule:
         'label_mo', 'label_states', 'label_modes',
         'use_integral_symmetry', 'use_response_symmetry',
         'strict', 'tolerance', 'raw',
+    })
+
+    #: Live staging state, never taken from a guess file at all. These have a
+    #: Fortran-side counterpart (OQP::sym_shell_map, sym_ao_target, sym_ao_sign,
+    #: sym_atom_weight, sym_petite_enable) that put_data does NOT restore, so
+    #: inheriting the Python half alone claims a reduction that is not staged in
+    #: this process: symmetrize_gradient gates on status == 'active' and would
+    #: project a gradient with the producer's operations, and _petite_is_staged
+    #: would let the stability path switch the Fortran flag on with no maps.
+    #: A job that never asked for integral symmetry could pick both up from a
+    #: guess file.
+    _SYMMETRY_STAGING_KEYS = frozenset({
+        'integral_symmetry', 'reduction_maps', 'reduction_maps_full',
     })
 
     #: Entries derived from a particular geometry, valid only for it.
@@ -2175,6 +2201,7 @@ class Molecule:
             merged.update({
                 key: value for key, value in restored.items()
                 if key not in self._SYMMETRY_CONFIG_KEYS
+                and key not in self._SYMMETRY_STAGING_KEYS
             })
         return merged
 
