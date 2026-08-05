@@ -76,6 +76,24 @@ class ReducedGridsAreProjected(unittest.TestCase):
         self.assertIn('symmetrize_skeleton_fock', reduced[:cut],
                       'the reduced branch must project its skeleton')
 
+    def test_the_projector_matches_the_group_the_weights_use(self):
+        """The XC weights stay on the ABELIAN subgroup on purpose.
+
+        Lebedev angular grids are invariant under the axis-aligned octahedral
+        operations but not under C3/C6 rotations, so pyoqp deliberately does
+        not upgrade the atom weights when the full tier stages non-abelian
+        operator blocks. `symmetrize_skeleton_fock` prefers those blocks, which
+        would project this skeleton over a larger group than the quadrature
+        that produced it. `symmetrize_skeleton_signed` reads only the AO maps,
+        which stay abelian on both tiers.
+        """
+        source = SCF_ADDONS.read_text()
+        for name in ('calc_dft_xc_density', 'calc_dft_xc'):
+            with self.subTest(subroutine=name):
+                body = subroutine_body(SCF_ADDONS, name)
+                self.assertIn('symmetrize_skeleton_signed', body)
+                self.assertNotIn('call symmetrize_skeleton_fock', body)
+
     def test_the_unreduced_branch_does_not_project(self):
         body = subroutine_body(SCF_ADDONS, 'calc_dft_xc_density')
         after_else = body[body.rindex('else'):]

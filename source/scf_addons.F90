@@ -1574,7 +1574,9 @@ contains
       end if
       ! The reduced-grid XC matrix is a skeleton: project onto the totally
       ! symmetric component (the XC energy/electron count are already exact).
-      call symmetrize_skeleton_fock(infos, basis, pfxc)
+      ! Same abelian-only projector as the live branch above, so the two cannot
+      ! drift apart again.
+      call symmetrize_skeleton_signed(infos, basis%nbf, pfxc)
     else if (scf_type == scf_rhf) then
       ! Restricted calculation - same matrix for alpha and beta
       call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
@@ -1640,7 +1642,21 @@ contains
       ! symmetric component. Without this the SCF converges to a wrong energy.
       ! (The XC energy and electron count are already exact -- run_xc scales the
       ! surviving slices by the orbit size.)
-      call symmetrize_skeleton_fock(infos, basis, pfxc)
+      ! Project with the ABELIAN operations, not symmetrize_skeleton_fock.
+      !
+      ! The XC weights are built on the abelian subgroup on purpose -- pyoqp
+      ! keeps them there because Lebedev angular grids are invariant under the
+      ! axis-aligned octahedral operations but NOT under C3/C6 rotations, so a
+      ! full-group grid reduction would be inexact. symmetrize_skeleton_fock
+      ! prefers the staged FULL-group operator blocks when the 'full' tier is
+      ! active, which would project this skeleton over a larger group than the
+      ! quadrature that produced it: the SCF would then use a Vxc that does not
+      ! correspond to the grid actually evaluated.
+      !
+      ! symmetrize_skeleton_signed reads only OQP::sym_ao_target / sym_ao_sign,
+      ! which the full tier leaves on the abelian maps, so the projector and
+      ! the weights stay on the same group by construction.
+      call symmetrize_skeleton_signed(infos, basis%nbf, pfxc)
     else
       call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
                             eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
