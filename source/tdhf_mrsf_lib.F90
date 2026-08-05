@@ -578,16 +578,17 @@ contains
             ! missed -- measured on CH2O, where covering every irrep once
             ! repairs the triplet but not the singlet.  Give each irrep depth
             ! up to the number of requested states, budget permitting.
-            ! Substitute ONLY into trial vectors beyond the requested state
-            ! count.  When nvec == nstates every seed is already needed to
-            ! reach the requested roots, and replacing one costs a root: on
-            ! CH3Br-BHHLYP-SOC (nstate=6, nvec=6) an unguarded substitution
-            ! moved the 6th singlet from 0.191632 to 0.191978 Ha, i.e. it
-            ! MISSED the true root that the historical guess had found.
-            nper = max(1, min(nstates_req, nvec/max(1,nirr)))
-            kpos = nvec
+            ! Substitution rule.  The energy-ordered seeds are not
+            ! interchangeable: whichever one is the ONLY representative of its
+            ! irrep is the only route to that block's roots, and overwriting it
+            ! loses them.  Measured on CH3Br-BHHLYP-SOC, where a substitution
+            ! that displaced such a seed moved the 6th singlet from 5.214562 to
+            ! 5.224000 eV -- fully converged, and wrong.
+            !
+            ! So: only ever displace a seed whose irrep still has another
+            ! representative, and take the highest-lying such seed.  This can
+            ! only add block coverage, never remove it.
             nadd = 0
-            if (nvec <= nstates_req) nirr = 0    ! no slack: leave the guess alone
             do ir = 1, nirr
               ncur = 0
               do k = 1, nvec
@@ -595,26 +596,39 @@ contains
                   if (int(pair_irrep(itmp(k))) == ir) ncur = ncur + 1
                 end if
               end do
-              do while (ncur < nper)
-                best_idx = 0
-                do kk = 1, xvec_dim
-                  if (int(pair_irrep(kk)) /= ir) cycle
-                  if (xm(kk) > 1.0d90) cycle     ! redundant/masked slot
-                  if (any(itmp(1:nvec) == kk)) cycle
-                  if (best_idx == 0) then
-                    best_idx = kk
-                  else if (xm(kk) < xm(best_idx)) then
-                    best_idx = kk
+              if (ncur > 0) cycle                ! irrep already represented
+              best_idx = 0
+              do kk = 1, xvec_dim
+                if (int(pair_irrep(kk)) /= ir) cycle
+                if (xm(kk) > 1.0d90) cycle       ! redundant/masked slot
+                if (best_idx == 0) then
+                  best_idx = kk
+                else if (xm(kk) < xm(best_idx)) then
+                  best_idx = kk
+                end if
+              end do
+              if (best_idx == 0) cycle           ! irrep has no live pair
+              ! pick a victim whose irrep keeps a representative without it
+              kpos = 0
+              do k = 1, nvec
+                if (itmp(k) < 1 .or. itmp(k) > xvec_dim) cycle
+                ncur = 0
+                do kk = 1, nvec
+                  if (itmp(kk) >= 1 .and. itmp(kk) <= xvec_dim) then
+                    if (int(pair_irrep(itmp(kk))) == &
+                        int(pair_irrep(itmp(k)))) ncur = ncur + 1
                   end if
                 end do
-                if (best_idx == 0) exit          ! irrep exhausted
-                if (kpos <= nadd) exit           ! no room left
-                itmp(kpos) = best_idx
-                kpos = kpos - 1
-                nadd = nadd + 1
-                ncur = ncur + 1
+                if (ncur < 2) cycle              ! last of its block: keep it
+                if (kpos == 0) then
+                  kpos = k
+                else if (xm(itmp(k)) > xm(itmp(kpos))) then
+                  kpos = k
+                end if
               end do
-              if (kpos <= nadd) exit
+              if (kpos == 0) cycle               ! nothing safe to displace
+              itmp(kpos) = best_idx
+              nadd = nadd + 1
             end do
             if (nadd > 0 .and. debug_mode) then
               write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
