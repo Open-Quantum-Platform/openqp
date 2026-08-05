@@ -643,6 +643,30 @@ def rotational_symmetry_number(
     On failure returns 1, which reproduces today's (over-counted) entropy
     rather than inventing symmetry. Because that failure is silent and biases
     G, callers are expected to *print* the value they got.
+
+    Two documented limits, both of which under-count sigma (i.e. fall back
+    towards today's behaviour) rather than inventing symmetry:
+
+    **Isotopes.** Atom equivalence is keyed on nuclear charge, so this is exact
+    only while every same-Z atom carries the same mass. An isotopologue such as
+    HDO would be given the parent molecule's sigma. Unreachable today -- both
+    geometry readers compute mass as a pure Z-indexed table lookup and there is
+    no isotope symbol or per-atom mass input -- but the Fortran ABI already
+    accepts per-atom masses, so adding such an input must revisit this
+    function. The repair is small: enumerate_full_group already returns a
+    permutation per operation, so skip any operation that does not preserve
+    the mass vector (use a tolerance near 1e-3 amu, not equality -- the QM/MM
+    path mixes link-atom H at 1.00782503223 with force-field H at 1.007947).
+
+    **Proper axes above order 8.** The element survey only tries orders 2..8,
+    so a C10 axis is recorded as C5 and a C11 as C1. In practice group closure
+    recovers them: two perpendicular C2 axes, or two mirror planes, separated
+    by pi/n multiply to C_n, so any molecule with a C_n axis and any second
+    element regenerates the whole C_n. Measured -- a D10h decagon returns
+    sigma = 20, ferrocene 10, and D9h/D11h/D12h/D16h rings 18/22/24/32, all
+    correct. The gap is a CHIRAL C_n (n > 8) with no mirror and no
+    perpendicular C2, where closure has nothing to work with; such a molecule
+    gets a divisor of n.
     """
 
     coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)

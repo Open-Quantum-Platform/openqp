@@ -146,6 +146,25 @@ class TestRotationalSymmetryNumber(unittest.TestCase):
                 self.assertEqual(
                     detect.rotational_symmetry_number(charges, coords), expected)
 
+    def test_high_order_axes_are_recovered_by_group_closure(self):
+        """The element survey stops at order 8, but closure rebuilds the rest.
+
+        Two perpendicular C2 axes -- or two mirror planes -- separated by pi/n
+        multiply to C_n, so a ring with any second symmetry element regenerates
+        its full C_n even though the survey recorded only a divisor.
+        """
+        detect = load_symmetry_detect_module()
+
+        def ring(n, radius=1.4):
+            return [[radius * np.cos(2 * np.pi * i / n),
+                     radius * np.sin(2 * np.pi * i / n), 0.0] for i in range(n)]
+
+        for n, expected in ((9, 18), (10, 20), (11, 22), (12, 24)):
+            with self.subTest(ring=f'D{n}h'):
+                coords = np.asarray(ring(n), dtype=float) * ANGSTROM_TO_BOHR
+                self.assertEqual(
+                    detect.rotational_symmetry_number([6] * n, coords), expected)
+
     def test_a_single_atom_is_sigma_one(self):
         detect = load_symmetry_detect_module()
         self.assertEqual(
