@@ -355,27 +355,49 @@ class Molecule:
         return np.asarray(self.data[tag], dtype=float).reshape(nbf, nbf).T
 
     def _labelling_overlap_deviation(self, shells, smat, detection):
-        """max |T S T^T - S| over the symmetry operations, or None if it
-        cannot be formed.  Same test the integral path already applies to its
-        petite maps; here it validates the shells the MO labels come from."""
+        """max |T^T S T - S| over the symmetry operations, or None if it
+        cannot be formed.
+
+        Built from ``matrix_input_frame`` -- the SAME operator
+        ``assign_mo_irreps`` labels with -- because that is the only thing this
+        guard is entitled to validate. The overlap it is tested against is the
+        run's real AO overlap, which lives in the INPUT frame: nothing
+        reorients the geometry unless ``use_integral_symmetry`` is set, and
+        that is off by default.
+
+        The first version used ``build_reduction_maps``, which hard-codes
+        ``op['matrix']`` -- the sign-diagonal operation in the symmetry
+        STANDARD orientation. Against an input-frame overlap that is O(1)
+        wrong for any molecule not already in the standard frame, so the guard
+        fired, labelling was refused, ``OQP::sym_pair_irrep`` was never staged
+        and the Davidson coverage fix silently did nothing. Measured over the
+        shipped decks: 211 of the 241 with a non-C1 abelian subgroup, including
+        every H2O deck. It looked correct only because the two geometries it
+        was validated on happen to be in the standard frame already.
+
+        The twin guard in ``stage_integral_symmetry_maps`` may keep using the
+        standard-frame maps: that path returns early unless the geometry has
+        actually been reoriented, so there the two frames coincide.
+        """
         try:
             import numpy as np
-            from oqp.library.symmetry import build_reduction_maps
+            from oqp.library.symmetry import _ao_operator_matrix, _normalize_shells
 
             if smat is None:
                 return None
-            maps = build_reduction_maps(shells, detection['operations'])
-            n_ao = int(maps['n_ao'])
-            if n_ao != int(np.asarray(smat).shape[0]):
-                return None
-            identity = np.arange(n_ao)
+            smat = np.asarray(smat, dtype=float)
+            norm_shells = _normalize_shells(shells)
             worst = 0.0
-            for iop in range(int(maps['n_operations'])):
-                transform = np.zeros((n_ao, n_ao))
-                transform[np.array(maps['ao_target'][iop]), identity] = \
-                    np.array(maps['ao_sign'][iop], dtype=float)
+            for op in detection['operations']:
+                transform = _ao_operator_matrix(norm_shells, op,
+                                                matrix_key='matrix_input_frame')
+                if transform.shape[0] != smat.shape[0]:
+                    return None
+                # Functions transform with T as columns, so invariance of the
+                # metric reads T^T S T = S -- not T S T^T, which is the
+                # signed-permutation convention the integral path uses.
                 worst = max(worst, float(np.max(np.abs(
-                    transform @ smat @ transform.T - smat))))
+                    transform.T @ smat @ transform - smat))))
             return worst
         except Exception:
             # A guard that cannot be evaluated must not block labelling.
@@ -770,6 +792,18 @@ class Molecule:
                 pass
             return False
 
+    def _clear_response_symmetry_tags(self):
+        """Drop any previously staged response-symmetry tables.
+
+        See stage_response_symmetry: the tag store survives across steps of a
+        multi-geometry job, so a stale table is worse than none.
+        """
+        for tag in ('OQP::sym_pair_irrep', 'OQP::sym_response_project_enable'):
+            try:
+                del self.data[tag]
+            except Exception:
+                pass
+
     def stage_response_symmetry(self):
         """Stage per-pair irrep indices for response-space blocking.
 
@@ -779,6 +813,17 @@ class Molecule:
         unblocked solver on any 'mixed' orbital or inconsistency.
         """
         meta = self.symmetry_metadata
+        # Invalidate FIRST, before any bail can return. The table is consumed
+        # by the Fortran Davidson guess, and the tag store outlives a single
+        # step: an optimiser, IRC or NAMD run that staged a table at step N and
+        # bails at step N+1 -- lower symmetry, a 'mixed' orbital, labels
+        # refused -- would otherwise leave the previous step's table in place
+        # and seed the guess from irreps that belong to a different geometry.
+        # Nothing downstream can detect that: the table is well formed, just
+        # stale. Deleting it makes a bail mean "no table", which mrinivec
+        # already handles by falling back to the historical seeds.
+        self._clear_response_symmetry_tags()
+
         if not meta:
             return False
         detection = meta.get('detection')

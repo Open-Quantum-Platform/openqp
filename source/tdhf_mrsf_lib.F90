@@ -651,7 +651,7 @@ contains
                 &"state N may not be the physical state N.  There is no room ", &
                 &"to fix it at nstate=",I0,": raise nstate (16 suffices for ", &
                 &"every case measured so far) and check that the energies of ", &
-                &"the states you care about do not move.",/)') nmiss, nvec
+                &"the states you care about do not move.",/)') nmiss, nstates_req
             end if
             if (nadd > 0 .and. debug_mode) then
               write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
