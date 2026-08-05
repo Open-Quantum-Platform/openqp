@@ -542,7 +542,20 @@ class SinglePoint(Calculator):
                 self.mol.update_system(
                     np.asarray(restore, dtype=float).ravel())
                 self._set_petite_enabled(False)
-                self._prep_guess()
+                # The stored detection describes the STANDARD frame the
+                # geometry has just been moved out of. Its operations feed the
+                # MO/state/mode labellers, so leaving it would label the
+                # restored geometry with the wrong frame's operators -- the
+                # same defect the continue_geom path had. Re-detect.
+                if (getattr(self.mol, 'symmetry_metadata', None) or {}) \
+                        .get('status', 'disabled') != 'disabled':
+                    self.mol._detect_symmetry_metadata()
+                # Rebuild only the integrals the moved coordinates invalidate.
+                # A full _prep_guess() would also throw away the orbitals from
+                # [scf] init_scf and re-run the guess, so a bail-out silently
+                # changed the SCF starting point as well as the frame.
+                oqp.library.set_basis(self.mol)
+                oqp.library.ints_1e(self.mol)
 
         scf_flag = self._run_scf()
 
@@ -1445,17 +1458,29 @@ class Hessian(Calculator):
         after the reduced jobs have already been paid for.
         """
         meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+        requested = self.mol._parse_bool_like(
+            self.mol.config.get('hess', {}).get('symmetry_unique', False))
+
+        def decline(reason):
+            # A silently ignored request is the failure mode this whole PR
+            # family is about, so say which of the seven exits was taken.
+            if requested:
+                meta['hess_symmetry_unique'] = {'status': reason}
+                print('   PyOQP NOTE: [hess] symmetry_unique requested but '
+                      'declined (%s); using the full 6N displacement set.'
+                      % reason)
+            return None, None
+
+        if not requested:
+            return None, None
         if meta.get('status', 'disabled') == 'disabled':
-            return None, None
-        if not self.mol._parse_bool_like(
-                self.mol.config.get('hess', {}).get('symmetry_unique', False)):
-            return None, None
+            return decline('symmetry_disabled')
         tolerance = float(meta.get('tolerance', 1.0e-5))
         # A detection tolerance looser than the displacement cannot tell a
         # displaced geometry from the reference, which is exactly when images
         # must NOT be trusted.
         if tolerance > dx / 10.0:
-            return None, None
+            return decline('tolerance_too_loose_for_dx')
         try:
             from oqp.library.symmetry_detect import detect_point_group
             detection = detect_point_group(
@@ -1463,17 +1488,17 @@ class Hessian(Calculator):
                 np.asarray(origin_coord, dtype=float).reshape(-1, 3),
                 tolerance=tolerance)
         except Exception:
-            return None, None
+            return decline('detection_failed')
         ops = detection.get('operations') or []
         if len(ops) < 2:
-            return None, None
+            return decline('no_symmetry_at_this_geometry')
 
         natom = len(np.asarray(origin_coord).ravel()) // 3
         perms = np.array([op['permutation'] for op in ops], dtype=int)
         rep = perms.min(axis=0)
         uniq = sorted(set(rep.tolist()))
         if len(uniq) >= natom:
-            return None, None
+            return decline('every_atom_is_its_own_orbit')
 
         # Prove coverage from the permutations alone, before spending jobs.
         filled = np.zeros(natom, dtype=bool)
@@ -1482,7 +1507,12 @@ class Hessian(Calculator):
             for a in uniq:
                 filled[perm[a]] = True
         if not filled.all():
-            return None, None
+            return decline('orbit_coverage_incomplete')
+        meta['hess_symmetry_unique'] = {
+            'status': 'active',
+            'unique_atoms': [int(a) for a in uniq],
+            'n_operations': len(ops),
+        }
         return uniq, ops
 
     def numerical_hess(self):
