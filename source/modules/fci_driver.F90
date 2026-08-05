@@ -522,6 +522,7 @@ contains
     logical, intent(in) :: hsym
     integer(i8), intent(in) :: ndet
     real(dp), intent(in) :: hmat(*)
+    real(dp) :: acc
     integer(i8), intent(in) :: dets(*), skeys(*), sperm(*)
     real(dp), intent(in) :: guess(*)
     real(dp), intent(in) :: hspin(*), gspin(*), cutoff, tol
@@ -574,7 +575,7 @@ contains
       return
     end if
 
-    call fci_diag_build(nspin, ndet, dets, hspin, gspin, diag)
+    call fci_diag_build(nspin, ndet, dets, hspin, gspin, diag, nthreads)
 
     ! Initial guess: the caller's start vectors when provided (a warm start
     ! from the previous CI solve of an orbital optimization -- eigenvectors,
@@ -639,9 +640,19 @@ contains
                  subv, nbas, 0.0_dp, ritz, int(ndet))
       call dgemm('N', 'N', int(ndet), nroot, nbas, 1.0_dp, sigma, int(ndet), &
                  subv, nbas, 0.0_dp, resid, int(ndet))
+      ! resid <- resid - theta*ritz and its norm, over ndet per root.  Serial
+      ! array syntax here left the machine idle between the threaded sigma and
+      ! the threaded GEMMs above.
       do i = 1, nroot
-        resid(:, i) = resid(:, i) - theta(i) * ritz(:, i)
-        rnorm(i) = sqrt(sum(resid(:, i) * resid(:, i)))
+        acc = 0.0_dp
+        !$omp parallel do num_threads(max(1, nthreads)) schedule(static) &
+        !$omp   default(shared) private(j) reduction(+:acc)
+        do j = 1, int(ndet)
+          resid(j, i) = resid(j, i) - theta(i) * ritz(j, i)
+          acc = acc + resid(j, i) * resid(j, i)
+        end do
+        !$omp end parallel do
+        rnorm(i) = sqrt(acc)
       end do
       if (maxval(rnorm) < tol) then
         theta_out(1:nroot) = theta(1:nroot)
@@ -654,11 +665,14 @@ contains
       do i = 1, nroot
         if (rnorm(i) < tol) cycle
         nadd = nadd + 1
+        !$omp parallel do num_threads(max(1, nthreads)) schedule(static) &
+        !$omp   default(shared) private(j, denom)
         do j = 1, int(ndet)
           denom = theta(i) - diag(j)
           if (abs(denom) < 1.0e-12_dp) denom = 1.0e-12_dp
           corr(j, nadd) = resid(j, i) / denom
         end do
+        !$omp end parallel do
       end do
 
       ! restart from the current Ritz vectors when the subspace would overflow

@@ -27,6 +27,7 @@
 !> det*nvec + k on both sides.
 module fci_hamiltonian_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
+!$ use omp_lib
   implicit none
   private
 
@@ -338,17 +339,32 @@ contains
   end subroutine fci_hamiltonian_diag
 
   !> <D|H|D> over the determinant list -- the Davidson preconditioner.
-  subroutine fci_diag_build(nspin, ndet, dets, hspin, gspin, diag)
+  !>
+  !> One determinant per iteration and nothing shared but the integrals, so the
+  !> loop is embarrassingly parallel.  It used to run serially, and it is not
+  !> cheap: O(ndet * nocc^2) with two random `gspin` lookups per occupied pair,
+  !> once per CI solve.  At CAS(12,12) that is ~123M inner iterations on one
+  !> core while the other 21 idle -- visible on a compute node as a periodic
+  !> collapse of CPU utilisation between the parallel sigma builds.
+  subroutine fci_diag_build(nspin, ndet, dets, hspin, gspin, diag, nthreads)
     integer, intent(in) :: nspin
     integer(i8), intent(in) :: ndet
     integer(i8), intent(in) :: dets(*)
     real(dp), intent(in) :: hspin(*), gspin(*)
     real(dp), intent(out) :: diag(*)
+    integer, intent(in), optional :: nthreads
     integer(i8) :: col
-    integer :: occ(nspin), nocc, p, io, jo, ns
+    integer :: occ(nspin), nocc, p, io, jo, ns, nthr
     integer(i8) :: det
     real(dp) :: e
     ns = nspin
+    nthr = 1
+!$  nthr = omp_get_max_threads()
+    if (present(nthreads)) then
+      if (nthreads > 0) nthr = nthreads
+    end if
+    !$omp parallel do num_threads(max(1, nthr)) schedule(static) &
+    !$omp   default(shared) private(col, det, nocc, p, io, jo, e, occ)
     do col = 1, ndet
       det = dets(col)
       nocc = 0
@@ -373,6 +389,7 @@ contains
       end do
       diag(col) = e
     end do
+    !$omp end parallel do
   end subroutine fci_diag_build
 
   !----------------------------------------------------------- matvec block
