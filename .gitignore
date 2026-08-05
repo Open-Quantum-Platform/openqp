@@ -15,7 +15,7 @@ __pycache__/
 .pytest_cache/
 _build/
 build/
-openqp_test_tmp_*/
+openqp_*test_tmp_*/
 f90deps.mk
 objdir*
 external/*
@@ -32,7 +32,7 @@ build/
 __pycache__/
 *.py[cod]
 build_*/
-openqp_test_tmp_*
+openqp_*test_tmp_*
 tools/_grad_validation_scratch/
 tools/_stress_scratch/
 tools/_example_grad_scratch/
@@ -47,4 +47,4 @@ fort.6
 *.analytic_hess.pyscf
 .venv-symmetry/
 build_dev/
-openqp_test_tmp_*/
+openqp_*test_tmp_*/

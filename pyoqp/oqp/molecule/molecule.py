@@ -579,6 +579,49 @@ class Molecule:
             # non-abelian orbit members is still under investigation).
             want_full = str(self.config.get('symmetry', {})
                             .get('use_integral_symmetry', '')).strip().lower() == 'full'
+
+            # The full (non-abelian) tier is incompatible with DFT, and not by
+            # an oversight that can be patched.
+            #
+            # It reduces and projects the two halves of the Fock with DIFFERENT
+            # groups: J/K with the full group, Vxc with the abelian subgroup.
+            # The latter is deliberate -- Lebedev angular grids are invariant
+            # under the axis-aligned octahedral operations but NOT under C3/C6.
+            # So the JK half is forced exactly symmetric under the full group
+            # while the XC half can only ever be abelian-symmetric, and the SCF
+            # converges to a density that satisfies neither.
+            #
+            # Measured on benzene 6-31G* at an exact D6h geometry, |G| = 24,
+            # against the C1 reference:
+            #
+            #     pure HF                            dE = 5.9e-09
+            #     hfscale = 1.0 with a BLYP Vxc      dE = 1.6e-03
+            #     BHHLYP                             dE = 3.1e-04
+            #     BLYP                               dE = 1.9e-03
+            #
+            # The second row is the discriminating one: exchange is treated
+            # bit-identically to the case that works, and merely putting a Vxc
+            # into the Fock costs six orders. So the variable is the presence
+            # of an abelian-projected Vxc beside a full-group-projected JK, not
+            # the exchange fraction.
+            #
+            # All three repairs are closed. Projecting both halves with the
+            # full group is impossible while the grid is not C3/C6 invariant --
+            # and note this is the GRID, not the grid reduction, so withdrawing
+            # the XC atom weights does not help (measured: dE unchanged to
+            # every digit). Projecting both halves with the abelian group is
+            # wrong because the JK skeleton was reduced with 24 operations
+            # (measured: dE = 7.2e+05). Reducing JK with 8 operations IS the
+            # abelian tier, which is already exact (dE = 0 for both a hybrid
+            # and a pure GGA) and already delivers 3.4-3.7x.
+            #
+            # So: fall back to the abelian tier and say so. Nothing of value is
+            # lost. Joint finding with @karmachoi.
+            if want_full and str(self.config.get('input', {})
+                                 .get('functional', '')).strip():
+                want_full = False
+                meta['full_group_declined'] = 'dft_grid_not_invariant'
+
             full_group = False
             full_ops = None
             try:
