@@ -292,7 +292,19 @@ class Molecule:
             # is assumed to be CCA/libint (m = -l..+l); record the
             # assumption so runs are auditable until the runtime spherical
             # path is validated end-to-end.
-            shells = [(at, l, True) for at, l in pairs]
+            # OpenQP only makes l >= 2 spherical: source/integrals/cart2sph.F90
+            # c2s_ncomp transforms a shell when (pure == 1 .and. l >= 2), so s
+            # and p AOs stay Cartesian (x, y, z) even in a spherical basis.
+            # Tagging them pure applied the spherical component permutation
+            # [1,2,0] to p shells, which produced WRONG irrep labels rather
+            # than 'mixed' ones -- e.g. under C2z a p_z-dominant MO picked up
+            # chi = -1 where it must be +1.  Those labels feed
+            # stage_response_symmetry -> OQP::sym_pair_irrep -> the Davidson
+            # seeding, so the error was silent and landed on exactly the
+            # spherical families (cc-pVXZ, def2) most production runs use.
+            # The dimension test above is unaffected: cart and spherical sizes
+            # agree for l <= 1.
+            shells = [(at, l, l >= 2) for at, l in pairs]
             self.symmetry_metadata['spherical_order_assumed'] = 'cca_m_ascending'
         else:
             return None, None, 0, 'skipped_unrecognized_basis_dimension'
