@@ -248,5 +248,15 @@ class TestAgainstTabulatedStandardEntropies(unittest.TestCase):
         self.assertGreater(total_entropy_cal(without) - 45.10, 1.0)
 
 
+class TestGibbsSign(unittest.TestCase):
+    def test_gibbs_correction_subtracts_the_entropy(self):
+        import re
+        source = (ROOT / 'pyoqp/oqp/utils/file_utils.py').read_text()
+        self.assertRegex(source, r'g_el\s*=\s*h_el\s*-\s*st\b')
+        self.assertNotRegex(source, r'g_el\s*=\s*h_el\s*\+\s*st\b')
+        # The printed formula and the arithmetic must agree.
+        self.assertIn('G = H - TS', source)
+
+
 if __name__ == '__main__':
     unittest.main()

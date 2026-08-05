@@ -725,7 +725,10 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         h_el = u_el + pv
         h = h_el + el
         st = st_el + st_trans + st_rot + st_vib
-        g_el = h_el + st
+        # G = H - TS, as printed below. This read `h_el + st`, which made the
+        # reported Gibbs correction wrong by 2*TS (H2O: +0.046369 instead of
+        # +0.002234 Ha) ever since the release commit.
+        g_el = h_el - st
         g = g_el + el
 
         # A linear rotor has a vanishing principal moment, so one rotational
