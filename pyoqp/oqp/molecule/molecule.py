@@ -285,7 +285,22 @@ class Molecule:
         pairs = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
         if any(l > 4 for _, l in pairs):
             return None, None, 0, 'skipped_unsupported_shells_beyond_g'
-        if sum(_cartesian_shell_size(l) for _, l in pairs) == nbf:
+        # Prefer the library's own per-shell flag over any dimension test.
+        # The merged integral-path fix exports it (oqp_get_basis_spherical ->
+        # basis['spherical']), and it is authoritative in a way a dimension
+        # test cannot be: Cartesian and spherical sizes agree for l <= 1, so
+        # the AO total alone cannot tell "all shells pure" -- which applies the
+        # spherical component order to p shells and yields WRONG irrep labels
+        # rather than 'mixed' ones -- from OpenQP's real convention. The
+        # dimension branches below stay as a fallback for a runtime that
+        # predates the export.
+        spherical = basis.get('spherical')
+        if spherical is not None and len(spherical) == len(pairs):
+            shells = [(at, l, bool(p)) for (at, l), p in zip(pairs, spherical)]
+            if any(p for p in spherical):
+                self.symmetry_metadata['spherical_order_assumed'] = \
+                    'cca_m_ascending'
+        elif sum(_cartesian_shell_size(l) for _, l in pairs) == nbf:
             shells = [(at, l, False) for at, l in pairs]
         elif sum(_spherical_shell_size(l) for _, l in pairs) == nbf:
             # Pure spherical-harmonic basis (ISPHER=1). The component order
