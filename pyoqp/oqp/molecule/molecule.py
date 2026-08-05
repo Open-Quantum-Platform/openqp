@@ -500,14 +500,33 @@ class Molecule:
         """Stage petite-list maps for the Fortran SCF (requires the basis).
 
         Fail-safe: any inconsistency leaves the run on the C1 path with the
-        reason recorded in the metadata.
+        reason recorded in the metadata -- and, unlike before, printed. The
+        fallback produces an identical energy, so a silent one is invisible:
+        the reduction was disabled on every spherical basis for as long as it
+        existed and no output said so.
         """
         meta = self.symmetry_metadata
         if not meta or not meta.get('use_integral_symmetry'):
             return False
+        staged = self._stage_integral_symmetry_maps(meta)
+        if not staged and not meta.get('integral_symmetry', {}).get('status', '').startswith('skipped'):
+            meta.setdefault('integral_symmetry', {})
+            meta['integral_symmetry'].setdefault('status', 'skipped_unknown')
+        try:
+            self._dump_symmetry_log()
+        except Exception:
+            pass
+        return staged
+
+    def _stage_integral_symmetry_maps(self, meta):
+        """Body of :meth:`stage_integral_symmetry_maps`; records a status and
+        returns True only when the reduction is actually active."""
         detection = meta.get('detection')
         if not detection:
+            meta['integral_symmetry'] = {'status': 'skipped_no_detection'}
             return False
+        # reorient_for_integral_symmetry records its own reason (a runtype the
+        # allow-list rejects, a frame that would not converge, ...); keep it.
         if meta.get('integral_symmetry', {}).get('status') != 'reoriented':
             return False
 
@@ -518,10 +537,30 @@ class Molecule:
             if not basis:
                 meta['integral_symmetry'] = {'status': 'skipped_no_basis'}
                 return False
-            shells = [(int(at), int(l)) for at, l in zip(basis['centers'], basis['angs'])]
+            # Per-shell sphericity comes from the library (OQP::basis
+            # 'spherical'), which reports the EFFECTIVE flag including the
+            # l >= 2 rule. Passing (atom, l) pairs without it makes
+            # _normalize_shells default to pure=False, so n_ao is the
+            # Cartesian count and every spherical basis -- cc-pVXZ, def2 and
+            # the whole 6-311G family -- failed the check below and silently
+            # ran C1. Do not reintroduce a dimension-matching guess here: the
+            # Cartesian and spherical sizes agree for l <= 1, so the AO total
+            # cannot distinguish "all shells pure" (wrong: it applies the
+            # spherical component order to p shells) from OpenQP's real
+            # convention.
+            spherical = basis.get('spherical')
+            if spherical is None:
+                meta['integral_symmetry'] = {'status': 'skipped_no_shell_purity'}
+                return False
+            shells = [(int(at), int(l), bool(p)) for at, l, p
+                      in zip(basis['centers'], basis['angs'], spherical)]
             maps = build_reduction_maps(shells, detection['operations'])
             if maps['n_ao'] != int(basis['nbf']):
-                meta['integral_symmetry'] = {'status': 'skipped_basis_mismatch'}
+                meta['integral_symmetry'] = {
+                    'status': 'skipped_basis_mismatch',
+                    'n_ao': int(maps['n_ao']),
+                    'nbf': int(basis['nbf']),
+                }
                 return False
 
             # Defense-in-depth: the maps must leave the real overlap matrix
@@ -648,10 +687,6 @@ class Molecule:
                 'reoriented': True,
                 'input_to_standard': input_to_standard,
             }
-            try:
-                self._dump_symmetry_log()
-            except Exception:
-                pass
             return True
         except Exception as exc:
             # Fail safe to the C1 path.
@@ -948,11 +983,23 @@ class Molecule:
             if full:
                 lines.append(f"   full group order     : {full.get('n_operations')}")
             if active:
-                lines.append(f"   integral reduction   : {active.get('status')}"
+                status = active.get('status')
+                lines.append(f"   integral reduction   : {status}"
                              + (f" (|G| = {active.get('n_operations')}"
                                 + (', full group' if active.get('full_group')
                                    else ', abelian subgroup') + ')'
-                                if active.get('status') == 'active' else ''))
+                                if status == 'active' else ''))
+                if status != 'active':
+                    # The C1 fallback gives a numerically identical answer, so
+                    # without this line a user who explicitly asked for the
+                    # reduction has no way to discover it never ran.
+                    lines.append('   *** the petite-list reduction is NOT active:'
+                                 ' this run used the full (C1) integral list ***')
+                    if status == 'skipped_basis_mismatch':
+                        lines.append(f"   AO count from the symmetry maps ({active.get('n_ao')})"
+                                     f" disagrees with the basis ({active.get('nbf')})")
+                    elif active.get('error'):
+                        lines.append(f"   reason: {active.get('error')}")
                 if active.get('reoriented'):
                     lines.append('   geometry reoriented to the symmetry standard orientation')
             response = meta.get('response_symmetry')
