@@ -651,6 +651,97 @@ class Molecule:
                 pass
             return False
 
+    def stage_mo_irreps(self):
+        """Stage per-MO abelian irrep indices for correlated methods.
+
+        Writes ``OQP::sym_mo_irrep_a`` (and ``_b`` when the reference is
+        open shell): one 1-based irrep index per molecular orbital, 0 where
+        the orbital could not be classified. ``symmetry_metadata`` records
+        the irrep names in the same order, so a consumer can report labels
+        without re-deriving them.
+
+        This is descriptive data, not a reduction. The petite list changes
+        what the integral engine computes and is therefore gated behind its
+        own opt-in; an irrep index changes nothing until a method chooses to
+        block something by it, so it is staged whenever MO labels exist.
+
+        A 'mixed' orbital -- one the labeller could not assign, e.g. a
+        near-degenerate pair rotated by the SCF -- becomes 0 rather than
+        failing the whole array: a consumer can then decline per orbital
+        instead of losing symmetry for the whole molecule.
+
+        Returns True when something was staged.
+        """
+        meta = self.symmetry_metadata
+        if not meta or meta.get('status', 'disabled') == 'disabled':
+            return False
+        detection = meta.get('detection')
+        if not detection:
+            return False
+
+        try:
+            mo_labels = meta.get('mo_labels')
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                mo_labels = self.label_molecular_orbitals()
+            if not mo_labels or mo_labels.get('status') != 'ok':
+                meta['mo_irreps'] = {'status': 'skipped_no_mo_labels'}
+                return False
+
+            table = detection['character_table']
+            irreps = list(table.keys())
+            index = {name: i + 1 for i, name in enumerate(irreps)}
+
+            # Abelian irreps have characters +-1, so encoding each one as the
+            # bitmask of the operations where its character is negative makes
+            # the direct product exactly a bitwise XOR. That is what lets a
+            # consumer get the irrep of a determinant, or of an amplitude
+            # block, with one XOR per occupied orbital instead of a table
+            # lookup per pair.
+            codes = np.zeros(len(irreps) + 1, dtype=np.int64)
+            for i, name in enumerate(irreps):
+                code = 0
+                for op, chi in enumerate(table[name]):
+                    if chi < 0:
+                        code |= (1 << op)
+                codes[i + 1] = code
+            if len(set(codes[1:].tolist())) != len(irreps):
+                # Not a faithful +-1 encoding (a non-abelian table slipped
+                # through). Better to stage nothing than a product rule that
+                # silently gives the wrong irrep.
+                meta['mo_irreps'] = {'status': 'skipped_non_abelian_table'}
+                return False
+            self.data['OQP::sym_irrep_xor'] = codes
+
+            staged = {}
+            for spin, tag in (('alpha', 'OQP::sym_mo_irrep_a'),
+                              ('beta', 'OQP::sym_mo_irrep_b')):
+                block = mo_labels.get(spin)
+                if not block:
+                    continue
+                labels = block['labels']
+                arr = np.array([index.get(str(x), 0) for x in labels],
+                               dtype=np.int64)
+                self.data[tag] = arr
+                staged[spin] = {
+                    'n_mo': int(arr.size),
+                    'n_unclassified': int((arr == 0).sum()),
+                }
+
+            if not staged:
+                meta['mo_irreps'] = {'status': 'skipped_no_labels'}
+                return False
+
+            meta['mo_irreps'] = {
+                'status': 'active',
+                'irreps': irreps,
+                'xor_codes': codes[1:].tolist(),
+                'spins': staged,
+            }
+            return True
+        except Exception as exc:
+            meta['mo_irreps'] = {'status': 'error', 'error': str(exc)}
+            return False
+
     def stage_response_symmetry(self):
         """Stage per-pair irrep indices for response-space blocking.
 

@@ -127,6 +127,17 @@ module oqp_tagarray_driver
   character(len=*), parameter, public :: OQP_sym_atom_weight = OQP_prefix // "sym_atom_weight"
   character(len=*), parameter, public :: OQP_sym_pair_irrep = OQP_prefix // "sym_pair_irrep"
   character(len=*), parameter, public :: OQP_sym_op_blocks = OQP_prefix // "sym_op_blocks"
+  ! Per-MO abelian irrep index (1-based; 0 = not classifiable). Written by
+  ! pyoqp whenever MO labels exist, so any correlated method can block its
+  ! amplitudes, CI vectors or integral blocks by irrep. Unlike the petite
+  ! list this is DESCRIPTIVE: reading it changes nothing on its own.
+  character(len=*), parameter, public :: OQP_sym_mo_irrep_a = OQP_prefix // "sym_mo_irrep_a"
+  character(len=*), parameter, public :: OQP_sym_mo_irrep_b = OQP_prefix // "sym_mo_irrep_b"
+  ! XOR code per irrep index (element 0 unused, so it is indexed by the
+  ! 1-based irrep index directly). Abelian characters are +-1, so the code is
+  ! the bitmask of operations with character -1 and the direct product is a
+  ! bitwise XOR of codes.
+  character(len=*), parameter, public :: OQP_sym_irrep_xor = OQP_prefix // "sym_irrep_xor"
 
   character(len=*), parameter, public :: OQP_DM_A_comment = "Alpha-spin triangle Density matrix"
   character(len=*), parameter, public :: OQP_DM_B_comment = "Beta-spin triangle Density matrix"

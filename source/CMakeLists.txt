@@ -24,6 +24,7 @@ list(APPEND SOURCES
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fock_deriv_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/hess1_selftest.F90"
   "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/grd2_hess_selftest.F90"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../tests/fortran/fci_symmetry_selftest.F90"
 )
 
 message(STATUS ${SOURCES})
