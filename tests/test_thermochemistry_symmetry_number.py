@@ -229,8 +229,15 @@ class TestLinearRotorsAreFinite(unittest.TestCase):
         frequency = load_frequency_module()
         atoms, mass, geometry, freqs = CARBON_DIOXIDE
         linear = thermo(frequency, atoms, mass, geometry, freqs, 2, True)
-        treated_as_nonlinear = thermo(
-            frequency, atoms, mass, geometry, freqs, 2, False)
+        # Deliberately inconsistent: a linear molecule declared nonlinear, so
+        # that u_rot can be compared across the two branches. That drives the
+        # nonlinear entropy formula onto a vanishing moment and legitimately
+        # divides by zero -- contained here rather than allowed to escape as a
+        # RuntimeWarning from the entropy code, which is alarming to read in a
+        # PR that exists to fix -inf entropies. Only u_rot is asserted on.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            treated_as_nonlinear = thermo(
+                frequency, atoms, mass, geometry, freqs, 2, False)
         self.assertAlmostEqual(
             linear['u_rot'] * 1.5, treated_as_nonlinear['u_rot'], places=12)
 
