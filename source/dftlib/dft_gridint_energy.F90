@@ -408,7 +408,8 @@ contains
 
   subroutine dmatd_density_blk(basis, molGrid, dena, denb, fa, fb, &
                        exc, totele, totkin, &
-                       mxAngMom, nbf, dft_threshold, urohf, infos)
+                       mxAngMom, nbf, dft_threshold, urohf, infos, &
+                       sym_atom_weight)
     use mod_dft_molgrid, only: dft_grid_t
     use basis_tools, only: basis_set
     use mod_dft_gridint, only: xc_options_t, run_xc
@@ -424,6 +425,8 @@ contains
     real(kind=fp), target, intent(in) :: dena(nbf,nbf), denb(nbf,nbf)
     real(kind=fp), intent(inout) :: fa(*), fb(*)
     real(kind=fp), intent(in) :: dft_threshold
+    !> Optional symmetry-reduction atom weights (orbit size or zero).
+    real(kind=fp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
 
     type(xc_consumer_ks_t) :: dat
     type(xc_options_t) :: xc_opts
@@ -468,10 +471,20 @@ contains
     xc_opts%ao_threshold = infos%dft%grid_ao_threshold
     xc_opts%ao_sparsity_ratio = 0.0_fp
 
+    if (present(sym_atom_weight)) xc_opts%symAtomWeight => sym_atom_weight
+
     ! Opt 1: the SCF Fock build reaches the grid through this density-driven path
     ! (calc_fock passes the packed density as dens_in). Enable the cross-iteration
     ! Phi cache from [scf] xc_phi_cache (infos%control%xc_phi_cache).
     xc_opts%use_phi_cache = (infos%control%xc_phi_cache /= 0)
+
+    ! ...but never together with the symmetry reduction. run_xc bakes symw into
+    ! the grid weights BEFORE they are stored in the cache, and replay
+    ! deliberately does not re-apply it, while the cache validity signature
+    ! carries no symmetry key. The petite gate is toggled off mid-run at a fixed
+    ! geometry by the stability/TRAH stage, so a cached slice built under the
+    ! reduction would be replayed unreduced -- silently wrong E_xc.
+    if (associated(xc_opts%symAtomWeight)) xc_opts%use_phi_cache = .false.
 
     call dat%pe%init(infos%mpiinfo%comm, infos%mpiinfo%usempi)
     call run_xc(xc_opts, dat, basis)
