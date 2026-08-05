@@ -1422,6 +1422,69 @@ class Hessian(Calculator):
         # symmetrize (the FD asymmetry is O(dx**2))
         return 0.5 * (hess + hess.T)
 
+    def _symmetry_unique_displacements(self, origin_coord, dx):
+        """Atoms whose displaced gradients determine the whole Hessian.
+
+        Returns (uniq, ops) or (None, None) when the full 6N path must run.
+        Opt-in via [hess] symmetry_unique; the shipped path is untouched
+        otherwise.
+
+        The Hessian of a symmetric molecule obeys
+        H[P(a), P(c)] = M H[a, c] M^T for every operation (M, P), so only one
+        atom per orbit needs displacing; the other rows are images. The orbit
+        list is derived FRESH from the current geometry rather than from
+        symmetry_metadata -- a TS search or IRC hands this function a geometry
+        the stored detection no longer describes.
+
+        Only the abelian D2h-family operations are used. Every one of them is
+        an involution (P[a] = b implies P[b] = a), which is what guarantees
+        that each non-representative atom is the image of a representative
+        under some listed operation. The coverage is still proven from the
+        permutations alone BEFORE any gradient job is launched: if anything
+        were uncovered we run the full path, rather than discovering a hole
+        after the reduced jobs have already been paid for.
+        """
+        meta = getattr(self.mol, 'symmetry_metadata', None) or {}
+        if meta.get('status', 'disabled') == 'disabled':
+            return None, None
+        if not self.mol._parse_bool_like(
+                self.mol.config.get('hess', {}).get('symmetry_unique', False)):
+            return None, None
+        tolerance = float(meta.get('tolerance', 1.0e-5))
+        # A detection tolerance looser than the displacement cannot tell a
+        # displaced geometry from the reference, which is exactly when images
+        # must NOT be trusted.
+        if tolerance > dx / 10.0:
+            return None, None
+        try:
+            from oqp.library.symmetry_detect import detect_point_group
+            detection = detect_point_group(
+                self.mol.get_atoms(),
+                np.asarray(origin_coord, dtype=float).reshape(-1, 3),
+                tolerance=tolerance)
+        except Exception:
+            return None, None
+        ops = detection.get('operations') or []
+        if len(ops) < 2:
+            return None, None
+
+        natom = len(np.asarray(origin_coord).ravel()) // 3
+        perms = np.array([op['permutation'] for op in ops], dtype=int)
+        rep = perms.min(axis=0)
+        uniq = sorted(set(rep.tolist()))
+        if len(uniq) >= natom:
+            return None, None
+
+        # Prove coverage from the permutations alone, before spending jobs.
+        filled = np.zeros(natom, dtype=bool)
+        filled[uniq] = True
+        for perm in perms:
+            for a in uniq:
+                filled[perm[a]] = True
+        if not filled.all():
+            return None, None
+        return uniq, ops
+
     def numerical_hess(self):
         dir_hess = f'{self.mol.log_path}/{self.mol.project_name}_num_hess'
         nproc = self.mol.config['hess']['nproc']
@@ -1431,11 +1494,21 @@ class Hessian(Calculator):
         # prepare scratch folder
         os.makedirs(dir_hess, exist_ok=True)
 
-        # shift origin 3N coord with 6N displacement
+        # shift origin 3N coord with 6N displacement -- or, when the
+        # symmetry-unique reduction is opted in, displace one atom per orbit
+        # and reconstruct the remaining Hessian rows as images afterwards.
         ncoord = len(origin_coord)
-        shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
+        uniq, sym_ops = self._symmetry_unique_displacements(origin_coord, dx)
+        if uniq is not None:
+            cols = [3 * a + g for a in uniq for g in range(3)]
+            shift = np.zeros((len(cols), ncoord))
+            shift[np.arange(len(cols)), cols] = dx
+        else:
+            cols = list(range(ncoord))
+            shift = np.diag(np.ones(ncoord) * dx).reshape(ncoord, ncoord)
         shifted_coord = np.concatenate((origin_coord + shift, origin_coord - shift), axis=0)
         ndim = len(shifted_coord)
+        nred = len(cols)
 
         # prepare grad calculations
         self.mol.save_data()
@@ -1445,6 +1518,12 @@ class Hessian(Calculator):
         variables_wrapper = [
             {
                 'idx': idx,
+                # Scratch files are keyed by WHICH coordinate was displaced and
+                # in which direction, never by list position: a restart whose
+                # unique-atom list differs (symmetry_unique toggled, geometry
+                # perturbed) then simply misses and recomputes instead of
+                # silently reading a gradient for a different displacement.
+                'tag': f'c{cols[idx % nred]}{"p" if idx < nred else "m"}',
                 'atoms': atoms,
                 'coord': coord,
                 'dir_hess': dir_hess,
@@ -1488,9 +1567,37 @@ class Hessian(Calculator):
 
         grads = self.mpi_manager.bcast(grads)
         # compute hessian
-        forward = np.array(grads[0:ncoord])
-        backward = np.array(grads[ncoord:])
-        hessian = (forward - backward) / (2 * dx)
+        forward = np.array(grads[0:nred])
+        backward = np.array(grads[nred:])
+        rows = (forward - backward) / (2 * dx)
+
+        if uniq is None:
+            hessian = rows
+        else:
+            # Images: H[P(a), P(c)] = M H[a, c] M^T. matrix_input_frame is the
+            # operation expressed in the frame the job actually runs in; the
+            # abelian operations are involutions, so P[a] = b covers b from a.
+            natom = ncoord // 3
+            hessian = np.zeros((ncoord, ncoord))
+            filled = np.zeros(natom, dtype=bool)
+            for k, a in enumerate(uniq):
+                hessian[3 * a:3 * a + 3, :] = rows[3 * k:3 * k + 3, :]
+                filled[a] = True
+            for op in sym_ops:
+                matrix = np.asarray(
+                    op.get('matrix_input_frame', op['matrix']), dtype=float)
+                perm = np.asarray(op['permutation'], dtype=int)
+                for a in uniq:
+                    b = int(perm[a])
+                    if filled[b]:
+                        continue
+                    for c in range(natom):
+                        hessian[3 * b:3 * b + 3, 3 * perm[c]:3 * perm[c] + 3] = \
+                            matrix @ hessian[3 * a:3 * a + 3, 3 * c:3 * c + 3] \
+                            @ matrix.T
+                    filled[b] = True
+            # Guaranteed by the pre-launch coverage proof.
+            assert filled.all()
 
         # symmetrize hessian
         hessian = (hessian + hessian.T) / 2
@@ -1534,11 +1641,15 @@ def grad_wrapper(key_dict):
     state = key_dict['state']
     restart = key_dict['restart']
 
-    # prepare log files
-    inp = f'{dir_hess}/{project_name}.{idx}.tmp.inp'
-    xyz = f'{dir_hess}/{project_name}.{idx}.tmp.xyz'
-    dat = f'{dir_hess}/{project_name}.{idx}.grad_{state}'
-    log = f'{dir_hess}/{project_name}.{idx}.tmp.log'
+    # prepare log files -- all keyed by the coordinate-identity tag, so the
+    # writer (the child's properties.title below) and the reader (dat) can
+    # never disagree, and a restart with a different displacement list misses
+    # cleanly instead of reading a gradient for a different displacement.
+    tag = key_dict.get('tag', str(idx))
+    inp = f'{dir_hess}/{project_name}.{tag}.tmp.inp'
+    xyz = f'{dir_hess}/{project_name}.{tag}.tmp.xyz'
+    dat = f'{dir_hess}/{project_name}.{tag}.grad_{state}'
+    log = f'{dir_hess}/{project_name}.{tag}.tmp.log'
 
     # attempt to read computed data
     if restart and os.path.exists(dat):
@@ -1555,7 +1666,7 @@ def grad_wrapper(key_dict):
         config['guess']['continue_geom'] = 'false'
         config['properties']['grad'] = config['hess']['state']
         config['properties']['export'] = 'True'
-        config['properties']['title'] = f'{project_name}.{idx}'
+        config['properties']['title'] = f'{project_name}.{tag}'
         config['hess']['temperature'] = ','.join([str(x) for x in config['hess']['temperature']])
         config['tests']['exception'] = 'false'
 
