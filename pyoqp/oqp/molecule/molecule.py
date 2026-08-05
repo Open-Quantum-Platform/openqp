@@ -542,6 +542,32 @@ class Molecule:
         if not detection:
             return False
 
+        # [symmetry] move_to_standard_frame = false: do the reduction where the
+        # molecule already is.
+        #
+        # The move exists to make the AO-level operator a SIGNED PERMUTATION.
+        # In the standard frame each symmetry operation sends an AO to plus or
+        # minus one other AO, which is a cheap scatter; in a tilted frame the
+        # same operation mixes components within a shell and the operator is a
+        # dense block. That is a performance choice, not a correctness
+        # requirement -- and it is the reason build_reduction_maps refuses a
+        # dense matrix outright.
+        #
+        # What the reduction actually needs is the SHELL PERMUTATION, and that
+        # is frame-independent: which shell maps to which is a property of the
+        # atom permutation. petite_quartet_weight reads nothing else.
+        #
+        # So the no-move path keeps the same shell map and stages dense
+        # input-frame operator blocks for the projection instead of signed
+        # permutations. Everything the move was introduced to avoid goes away
+        # with it: no back-transform of outputs, no runtype allow-list, no C1
+        # molecule translated several bohr for a reduction it never gets.
+        if not self._parse_bool_like(
+                self.config.get('symmetry', {}).get(
+                    'move_to_standard_frame', True)):
+            meta['integral_symmetry'] = {'status': 'input_frame'}
+            return True
+
         # Geometry-displacing drivers (optimizers, numerical Hessians, MEP,
         # NEB, ...) must not have the frame rotated under them; the petite
         # reduction is restricted to single-point runtypes for now.
@@ -632,8 +658,12 @@ class Molecule:
             return False
         # reorient_for_integral_symmetry records its own reason (a runtype the
         # allow-list rejects, a frame that would not converge, ...); keep it.
-        if meta.get('integral_symmetry', {}).get('status') != 'reoriented':
+        frame_status = meta.get('integral_symmetry', {}).get('status')
+        if frame_status not in ('reoriented', 'input_frame'):
             return False
+        # No move: the AO-level operator is dense, so the signed-permutation
+        # maps cannot be built. The shell map is the same either way.
+        input_frame = frame_status == 'input_frame'
 
         try:
             from oqp.library.symmetry import build_reduction_maps
@@ -659,6 +689,45 @@ class Molecule:
                 return False
             shells = [(int(at), int(l), bool(p)) for at, l, p
                       in zip(basis['centers'], basis['angs'], spherical)]
+            if input_frame:
+                # Same shell permutation, dense input-frame blocks in place of
+                # the signed AO maps. symmetrize_skeleton_fock already prefers
+                # the blocked projector whenever OQP::sym_op_blocks is staged,
+                # so nothing downstream changes.
+                from oqp.library.symmetry import build_full_group_blocks
+                dense = build_full_group_blocks(
+                    shells, detection['operations'],
+                    matrix_key='matrix_input_frame')
+                if int(dense['n_ao']) != int(basis['nbf']):
+                    meta['integral_symmetry'] = {
+                        'status': 'skipped_basis_mismatch',
+                        'n_ao': int(dense['n_ao']),
+                        'nbf': int(basis['nbf']),
+                    }
+                    return False
+                self.data['OQP::sym_shell_map'] = \
+                    (np.asarray(dense['shell_permutation'], dtype=np.int64) + 1).ravel()
+                self.data['OQP::sym_op_blocks'] = \
+                    np.asarray(dense['blocks'], dtype=np.float64)
+                self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
+                meta['reduction_maps'] = {
+                    'n_operations': int(dense['n_operations']),
+                    'n_ao': int(dense['n_ao']),
+                }
+                meta['integral_symmetry'] = {
+                    'status': 'active',
+                    'group': meta.get('subgroup'),
+                    'n_operations': int(dense['n_operations']),
+                    'full_group': False,
+                    'reoriented': False,
+                    'frame': 'input',
+                }
+                try:
+                    self._dump_symmetry_log()
+                except Exception:
+                    pass
+                return True
+
             maps = build_reduction_maps(shells, detection['operations'])
             if maps['n_ao'] != int(basis['nbf']):
                 meta['integral_symmetry'] = {

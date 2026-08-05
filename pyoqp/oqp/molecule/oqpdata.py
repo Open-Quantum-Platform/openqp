@@ -311,6 +311,7 @@ OQP_CONFIG_SCHEMA = {
         'label_states': {'type': bool, 'default': 'True'},
         'label_modes': {'type': bool, 'default': 'True'},
         'use_integral_symmetry': {'type': string, 'default': 'False'},
+        'move_to_standard_frame': {'type': bool, 'default': 'True'},
         'use_response_symmetry': {'type': bool, 'default': 'False'},
         'tolerance': {'type': float, 'default': '1.0e-5'},
         'strict': {'type': bool, 'default': 'False'},
