@@ -602,8 +602,9 @@ contains
     integer, allocatable :: cnt_b(:)
     integer(i8), allocatable :: tgt_b(:, :), src_bk(:, :)
     real(dp), allocatable :: sgn_bk(:, :)
-    real(dp), allocatable :: emat(:, :), t1(:, :), t2(:, :)
-    integer(i8) :: nblk, blk_start, blk_len, nrow, inner
+    real(dp), allocatable :: emat(:, :)
+    real(dp), allocatable :: t1(:), t2(:)
+    integer(i8) :: nblk, blk_start, blk_len, nrow, inner, nrow_max
     integer(i8) :: bytes_per_alpha
 
     status = 1
@@ -661,13 +662,26 @@ contains
     nblk = max(1_i8, work_bytes_cap / max(bytes_per_alpha, 1_i8))
     nblk = min(nblk, nastr)
 
-    y(1:ndet * int(nvec, i8)) = 0.0_dp
+    ! Same story as t1 below: ndet*nvec doubles, cleared once per sigma call.
+    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(k)
+    do k = 1_i8, ndet * int(nvec, i8)
+      y(k) = 0.0_dp
+    end do
+    !$omp end parallel do
+
+    ! One allocation for the whole run of blocks.  These buffers reach
+    ! hundreds of megabytes, and allocating/freeing them per block cost more
+    ! than the gather itself: every fresh allocation faults its pages back in.
+    ! Only the last block is shorter, and a shorter block simply uses a prefix
+    ! of the buffer -- the leading dimension is passed explicitly, so the
+    ! layout is defined by `nrow`, not by the buffer's size.
+    nrow_max = nblk * inner
+    allocate(t1(nrow_max * int(nkl, i8)), t2(nrow_max * int(nkl, i8)))
 
     blk_start = 1_i8
     do while (blk_start <= nastr)
       blk_len = min(nblk, nastr - blk_start + 1_i8)
       nrow = blk_len * inner
-      allocate(t1(nrow, nkl), t2(nrow, nkl))
 
       call gather(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
                   nlink_a, ntab_a, kl_a, src_a, sgn_a, &
@@ -680,9 +694,9 @@ contains
                     nlink_a, ntab_a, kl_a, src_a, sgn_a, &
                     maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, nrow, t2, y)
 
-      deallocate(t1, t2)
       blk_start = blk_start + blk_len
     end do
+    deallocate(t1, t2)
 
     deallocate(emat, astr, bstr)
     deallocate(ntab_a, kl_a, src_a, sgn_a, cnt_b, tgt_b, src_bk, sgn_bk)
@@ -765,7 +779,16 @@ contains
     real(dp) :: s
 
     nv = int(nvec, i8)
-    t1 = 0.0_dp
+    ! t1 is (nrow, nact^2) and runs to hundreds of megabytes -- the whole-array
+    ! assignment that used to stand here was single-threaded, and on a wide
+    ! active space it cost more than the gather, the DGEMM and the scatter put
+    ! together.  Clear it on the same team that fills it, one column per
+    ! iteration so each thread walks a contiguous nrow-long run.
+    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
+    do t = 1, nkl
+      t1(:, t) = 0.0_dp
+    end do
+    !$omp end parallel do
 
     ! alpha: every write lands in the target string's own row slice
     !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
