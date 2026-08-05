@@ -47,7 +47,7 @@ def _load_os():
     return doc["tolerance"], doc["cases"]
 
 
-def _write_input(path, case, triples=True):
+def _write_input(path, case, triples=True, symmetry=False):
     atoms = "\n".join(
         "   %d   %.10f   %.10f   %.10f" % (a[0], a[1], a[2], a[3])
         for a in case["atoms"]
@@ -61,12 +61,14 @@ def _write_input(path, case, triples=True):
         "[scf]\nmultiplicity=%d\ntype=%s\nconv=1.0e-11\n\n"
         "[cc]\nnfzc=%d\nconv=1e-9\n"
         % (atoms, case["basis"], method, mult, scf_type, case["nfzc"])
+        + ("\n[symmetry]\nenabled=true\nuse_integral_symmetry=true\n"
+           if symmetry else "")
     )
 
 
-def _run(tmp_path, case, triples=True):
+def _run(tmp_path, case, triples=True, symmetry=False):
     inp = tmp_path / "case.inp"
-    _write_input(inp, case, triples)
+    _write_input(inp, case, triples, symmetry)
     log = inp.with_suffix(".log")
     if log.exists():
         log.unlink()
@@ -96,6 +98,7 @@ def _run(tmp_path, case, triples=True):
         "scf": grab(r"Final \w+ energy is\s+(-?[\d.]+)"),
         "ccsd": grab(r"E\(CCSD, correlation\)\s*=\s*(-?[\d.]+)"),
         "triples": grab(r"E\(\(T\), correction\)\s*=\s*(-?[\d.]+)"),
+        "reduction_active": "integral reduction   : active" in text,
     }
 
 
@@ -143,3 +146,52 @@ def test_open_shell_ccsd_t_matches_pyscf(tmp_path, case):
     assert abs(got["triples"] - case["e_triples"]) < case.get(
         "triples_tolerance", tol["triples"]
     )
+
+
+def test_symmetry_does_not_perturb_the_correlation_energy(tmp_path):
+    """[symmetry] use_integral_symmetry must not reach the CC integrals.
+
+    The petite list produces a SKELETON Fock: quartets outside the orbit
+    representative are skipped and the survivor carries the orbit weight.
+    That is only valid contracted against a totally symmetric density and
+    symmetrized afterwards -- int2_compute_t deliberately does not load it in
+    init(), so a caller has to opt in with enable_petite(), which the CC
+    integral consumer does not do.
+
+    The reduction therefore has to stay confined to the SCF, and the
+    correlated energies must come out bit-for-bit identical. If it ever
+    reaches the CC pass the packed store silently becomes the wrong tensor --
+    a wrong answer with no error -- and this test is what says so.
+
+    The geometry is exactly C2v on purpose. The validation cases are not: their
+    two O-H distances differ in the fifth decimal, which is below chemical
+    interest but above the 1e-5 detection tolerance, so no reduction happens
+    and the comparison would be vacuous.
+    """
+    case = {
+        "name": "H2O/6-31G (C2v)",
+        "basis": "6-31g",
+        "nfzc": 1,
+        "atoms": [
+            [8,  0.0000000000, 0.0000000000, -0.0410615540],
+            [1, -0.5331943294, 0.5331943294, -0.6144692230],
+            [1,  0.5331943294, -0.5331943294, -0.6144692230],
+        ],
+    }
+
+    c1_dir, sym_dir = tmp_path / "c1", tmp_path / "sym"
+    c1_dir.mkdir()
+    sym_dir.mkdir()
+    plain = _run(c1_dir, case)
+    sym = _run(sym_dir, case, symmetry=True)
+
+    # Vacuous unless the reduction really switched on -- C2v water, |G| = 4.
+    assert sym["reduction_active"], (
+        "the petite reduction did not activate, so this test proves nothing "
+        "about its interaction with the CC integrals"
+    )
+    assert not plain["reduction_active"]
+
+    assert sym["scf"] == plain["scf"], "the SCF reference itself moved"
+    assert sym["ccsd"] == plain["ccsd"]
+    assert sym["triples"] == plain["triples"]
