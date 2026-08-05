@@ -83,6 +83,41 @@ MP2_VARIANT_SCALES = {
 }
 
 
+def _no_integral_symmetry_in_child(config):
+    """Force ``[symmetry] use_integral_symmetry`` off in a child job config.
+
+    Finite-difference drivers (numerical Hessian, IR/Raman properties, NACME)
+    run each displaced geometry as its own job and assemble the results in the
+    PARENT's frame.  Those children carry runtype 'grad'/'energy', which passes
+    the allow-list in ``Molecule.reorient_for_integral_symmetry``, so each one
+    rotates itself into the standard frame of ITS OWN geometry -- and a
+    displaced geometry generally has lower symmetry and therefore a different
+    standard frame than the reference.  Measured on water: a displacement that
+    reduces C2v to Cs picks up a rotation of |R - I| = 1.0, an O(1) reorientation
+    of the returned gradient.
+
+    The parent then files those rotated gradients into Hessian rows as if they
+    were input-frame vectors.  Water/6-31G HF numerical frequencies, in cm^-1:
+
+        use_integral_symmetry=false   1828.86   3906.50   4001.54
+        use_integral_symmetry=true   -2675.60    697.64   2728.85
+
+    -- a spurious imaginary mode and no usable number anywhere, reported with
+    exit status 0.
+
+    Turning the reduction off in the children is the correct scope: it is a
+    per-job speed optimisation, never part of the definition of the result, so
+    disabling it can only cost time.  Making the children instead share one
+    fixed parent frame is the better long-term answer, but it needs the
+    input_to_standard back-transform to actually be applied to the outputs
+    (that transform is currently computed and stored but consumed nowhere), so
+    it is deliberately not attempted here.
+    """
+    symmetry = config.setdefault('symmetry', {})
+    symmetry['use_integral_symmetry'] = 'false'
+    return config
+
+
 class Calculator:
     """
     OQP calculator base class
@@ -1160,6 +1195,7 @@ class Hessian(Calculator):
             for section, values in raw_config.items()
         }
         config['input']['runtype'] = 'energy'
+        _no_integral_symmetry_in_child(config)
         if config.get('guess', {}).get('type') == 'json':
             config['guess']['type'] = 'huckel'
         config['guess']['save_mol'] = 'false'
@@ -1496,6 +1532,7 @@ def grad_wrapper(key_dict):
 
         # modify config
         config['input']['runtype'] = 'grad'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
@@ -2214,6 +2251,7 @@ def nacme_wrapper(key_dict):
 
         # modify config
         config['input']['runtype'] = 'nacme'
+        _no_integral_symmetry_in_child(config)
         config['input']['system'] = xyz
         config['guess']['type'] = 'json'
         config['guess']['file'] = guess_file
