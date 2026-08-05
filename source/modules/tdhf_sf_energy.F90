@@ -284,7 +284,7 @@ contains
 
   ! Construct TD trial vector
     call inivec(mo_energy_a,mo_energy_b,bvec_mo,xm, &
-                nocca,noccb,nvec)
+                nocca,noccb,nvec,infos)
 
     ist = 1
     istart = 1

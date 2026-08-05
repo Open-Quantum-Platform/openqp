@@ -495,7 +495,7 @@ contains
       end if
 
     else if (mrst==5) then
-      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
+      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec,infos)
     end if
 
     ! ---- OQP_ROUTEC_SIG pre-loop gate (decide use_sig ONCE) ----------------

@@ -326,8 +326,9 @@ contains
 
 
   subroutine inivec(eiga,eigb,bvec_mo,xm, &
-                    nocca,noccb,nvec)
+                    nocca,noccb,nvec,infos)
     use precision, only: dp
+    use types, only: information
 
     implicit none
 
@@ -336,6 +337,9 @@ contains
     real(kind=dp), intent(out), dimension(:) :: xm
     integer, intent(in) :: nocca, noccb
     integer, intent(in) :: nvec
+    !> Optional: enables the symmetry-coverage diagnostic below. Absent means
+    !> the check is skipped; no vector depends on it either way.
+    type(information), target, intent(inout), optional :: infos
 
     integer :: i, ij, j, k, nbf, mxvec
 
@@ -376,7 +380,82 @@ contains
       bvec_mo(itmp(k),k) = 1.0_dp
     end do
 
+  ! -- Symmetry coverage diagnostic. REPORTS ONLY; changes nothing.
+  !
+  ! Each start vector is a unit vector, so it lies entirely inside one
+  ! symmetry block of the response matrix, and the Davidson expansion
+  ! (preconditioned residual + Gram-Schmidt, no randomisation) never leaves
+  ! the blocks it starts in. A block that receives no seed therefore
+  ! contributes NO roots -- they are absent, not unconverged -- and the
+  ! surviving Ritz values are renumbered, so "state N" silently becomes a
+  ! higher root for every state-indexed consumer.
+  !
+  ! Unlike the MRSF guess, this routine has no spare vectors to redistribute:
+  ! TDA/RPA sets nvec == nstates exactly. So there is nothing safe to do here
+  ! but say so. Enlarging the trial set is NOT a fix and must not be added
+  ! later: it changes converged results. Measured on CH3Br-BHHLYP-SOC with the
+  ! coverage substitution held off, so that only the dimension varied --
+  ! nvec 6 -> 7 moved the 6th singlet 0.191632 -> 0.191978 Ha (5.214562 ->
+  ! 5.224000 eV), fully converged and disagreeing with the shipped reference.
+  ! The same 2x2 showed the substitution itself changed nothing.
+    if (present(infos)) call report_seed_irrep_coverage(infos, itmp, nvec, &
+                                                        ubound(xm,1))
+
   end subroutine inivec
+
+!> @brief Warn when the start vectors leave a symmetry block unseeded.
+!> @detail Diagnostic only. It reads the per-pair irrep table staged by pyoqp
+!>         and reports blocks that no start vector touches, because those
+!>         blocks cannot contribute a root. It deliberately does not alter the
+!>         trial set: see the measurement quoted in inivec.
+  subroutine report_seed_irrep_coverage(infos, seeds, nvec, xvec_dim)
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+    use io_constants, only: iw
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    integer, intent(in) :: seeds(:)
+    integer, intent(in) :: nvec, xvec_dim
+
+    integer(8), contiguous, pointer :: pair_irrep(:)
+    integer(4) :: ta_status
+    integer :: nirr, ir, k, ncur, nmiss
+
+    call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                           status=ta_status)
+    if (ta_status /= TA_OK) return
+    if (size(pair_irrep) /= xvec_dim) return
+
+    nirr = int(maxval(pair_irrep))
+    if (nirr < 2) return
+
+    nmiss = 0
+    do ir = 1, nirr
+      ncur = 0
+      do k = 1, nvec
+        if (seeds(k) >= 1 .and. seeds(k) <= xvec_dim) then
+          if (int(pair_irrep(seeds(k))) == ir) ncur = ncur + 1
+        end if
+      end do
+      if (ncur == 0) nmiss = nmiss + 1
+    end do
+
+    if (nmiss > 0) then
+      write(iw,'(/,2X,"WARNING: ",I0," of ",I0," symmetry block(s) get no ", &
+        &"start vector.")') nmiss, nirr
+      write(iw,'(2X,"Those blocks contribute NO roots, so the reported state ", &
+        &"numbering may skip states")')
+      write(iw,'(2X,"and every state-indexed result (gradients, optimisation, ", &
+        &"MECP, NAMD, NMR) may refer")')
+      write(iw,'(2X,"to a different state than you asked for. Re-run with a ", &
+        &"larger nstate and check")')
+      write(iw,'(2X,"the energy of your target state does not move.",/)')
+    end if
+
+  end subroutine report_seed_irrep_coverage
 
   subroutine iatogen(pv,av,nocca,noccb)
     use precision, only: dp
