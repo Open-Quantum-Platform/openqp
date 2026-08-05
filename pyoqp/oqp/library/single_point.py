@@ -827,10 +827,11 @@ class SinglePoint(Calculator):
         if is_tb_method(self.method):
             return make_tb_adapter(self.mol).excitation(ref_energy)
 
-        # Response-space symmetry blocking (no-op unless
-        # [symmetry] use_response_symmetry is enabled).
-        if getattr(self.mol, 'symmetry_metadata', None) and \
-                self.mol.symmetry_metadata.get('use_response_symmetry'):
+        # Stage the per-pair irrep table whenever symmetry detection produced
+        # usable orbital labels.  The Davidson guess needs it for irrep
+        # coverage; the experimental residual projection is gated separately
+        # by [symmetry] use_response_symmetry inside stage_response_symmetry.
+        if getattr(self.mol, 'symmetry_metadata', None):
             self.mol.stage_response_symmetry()
 
         self.tddft()

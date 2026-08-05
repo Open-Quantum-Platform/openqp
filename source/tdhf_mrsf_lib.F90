@@ -436,7 +436,7 @@ contains
 
     implicit none
 
-    type(information), intent(in) :: infos
+    type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in), dimension(:) :: ea, eb
     real(kind=dp), intent(out), dimension(:,:) :: bvec_mo
     real(kind=dp), intent(out), dimension(:) :: xm
@@ -517,12 +517,6 @@ contains
       end do
     end if
 
-    ! Get initial vectors: bvec(xvec_dim, nvec)
-    bvec_mo = 0.0_dp
-    do k = 1, nvec
-      bvec_mo(itmp(k),k) = 1.0_dp
-    end do
-
     ! set xm(xvec_dim) again
     ij = 0
     do j = lr1, nbf
@@ -544,6 +538,90 @@ contains
           xm(ij) = 9d99
         end if
       end do
+    end do
+
+    ! ---- IRREP COVERAGE OF THE INITIAL TRIAL-VECTOR SET --------------------
+    ! Each |Phi_ia> above transforms as a definite irreducible representation,
+    ! Gamma_i (x) Gamma_a.  With point-group symmetry the response matrix is
+    ! block diagonal in those irreps, and Davidson expands with preconditioned
+    ! residuals, which stay inside the block they start in.  An irrep that
+    ! receives no initial trial vector is therefore never reached and its roots
+    ! are ABSENT from the spectrum, so the remaining Ritz values are numbered
+    ! 1, 2, 3, ... and every state index silently shifts.
+    !
+    ! With OQP::sym_pair_irrep staged (per-pair irrep index, same xvec layout,
+    ! MRSF open-open slots relabelled for the folded sector), replace the
+    ! highest-lying members of the energy-ordered selection by the lowest-lying
+    ! representative of each irrep that would otherwise be unrepresented.  The
+    ! low-lying vectors that drive convergence are never displaced.  Without the
+    ! table -- C1, mixed orbitals, detection disabled -- this is inert and the
+    ! trial-set dimension chosen by the caller is the weaker mitigation.
+    block
+      use oqp_tagarray_driver
+      use tagarray, only: TA_OK
+      integer(8), contiguous, pointer :: pair_irrep(:)
+      integer(4) :: ta_status
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, nper, ncur
+      integer :: nstates_req
+
+      call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                             status=ta_status)
+      if (ta_status == TA_OK) then
+        if (size(pair_irrep) == xvec_dim) then
+          nirr = int(maxval(pair_irrep))
+          if (nirr >= 1) then
+            nstates_req = int(infos%tddft%nstate)
+            if (nstates_req < 1) nstates_req = 1
+            ! A block can only yield as many roots as it has trial vectors,
+            ! so covering each irrep once guarantees only its LOWEST root.
+            ! When two requested roots share a block the second is still
+            ! missed -- measured on CH2O, where covering every irrep once
+            ! repairs the triplet but not the singlet.  Give each irrep depth
+            ! up to the number of requested states, budget permitting.
+            nper = max(1, min(nstates_req, nvec/max(1,nirr)))
+            kpos = nvec
+            nadd = 0
+            do ir = 1, nirr
+              ncur = 0
+              do k = 1, nvec
+                if (itmp(k) >= 1 .and. itmp(k) <= xvec_dim) then
+                  if (int(pair_irrep(itmp(k))) == ir) ncur = ncur + 1
+                end if
+              end do
+              do while (ncur < nper)
+                best_idx = 0
+                do kk = 1, xvec_dim
+                  if (int(pair_irrep(kk)) /= ir) cycle
+                  if (xm(kk) > 1.0d90) cycle     ! redundant/masked slot
+                  if (any(itmp(1:nvec) == kk)) cycle
+                  if (best_idx == 0) then
+                    best_idx = kk
+                  else if (xm(kk) < xm(best_idx)) then
+                    best_idx = kk
+                  end if
+                end do
+                if (best_idx == 0) exit          ! irrep exhausted
+                if (kpos <= nadd) exit           ! no room left
+                itmp(kpos) = best_idx
+                kpos = kpos - 1
+                nadd = nadd + 1
+                ncur = ncur + 1
+              end do
+              if (kpos <= nadd) exit
+            end do
+            if (nadd > 0 .and. debug_mode) then
+              write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
+                &cover otherwise unrepresented irreps")') nadd
+            end if
+          end if
+        end if
+      end if
+    end block
+
+    ! Get initial vectors: bvec(xvec_dim, nvec)
+    bvec_mo = 0.0_dp
+    do k = 1, nvec
+      bvec_mo(itmp(k),k) = 1.0_dp
     end do
 
     if (debug_mode) then

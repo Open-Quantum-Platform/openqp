@@ -162,7 +162,7 @@ def load_molecule_module():
 
 
 class TestSymmetryMetadata(unittest.TestCase):
-    def test_symmetry_metadata_defaults_to_c1(self):
+    def test_symmetry_metadata_defaults_to_detection_enabled(self):
         molecule_module = load_molecule_module()
         molecule = molecule_module.Molecule.__new__(molecule_module.Molecule)
         molecule.config = {}
@@ -170,9 +170,13 @@ class TestSymmetryMetadata(unittest.TestCase):
 
         metadata = molecule.initialize_symmetry_metadata()
 
+        # Detection is on by default and the point group is resolved from the
+        # geometry later; with no geometry supplied here it stays at the c1
+        # placeholder.  What matters is that the status is no longer 'disabled'
+        # and that neither reduction flag has been switched on with it.
         self.assertEqual(metadata['point_group'], 'c1')
         self.assertEqual(metadata['subgroup'], 'c1')
-        self.assertEqual(metadata['status'], 'disabled')
+        self.assertNotEqual(metadata['status'], 'disabled')
         self.assertFalse(metadata['use_integral_symmetry'])
         self.assertFalse(metadata['use_response_symmetry'])
         self.assertEqual(metadata['label_mo'], True)

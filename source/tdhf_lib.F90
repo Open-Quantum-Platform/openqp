@@ -1289,9 +1289,20 @@ contains
     integer, intent(in) :: nstates
 
     integer(8), contiguous, pointer :: pair_irrep(:)
+    integer(8), contiguous, pointer :: proj_flag(:)
     integer(4) :: status
     integer :: istate, ipair, best, nirr, xvec_dim
     real(kind=dp), allocatable :: weight(:)
+
+    ! The pair-irrep table is staged whenever symmetry detection produced
+    ! usable orbital labels, because the Davidson initial trial vectors use it
+    ! for irrep coverage.  Confining residuals to a dominant irrep is a
+    ! separate, experimental behaviour and stays behind
+    ! [symmetry] use_response_symmetry.
+    call tagarray_get_data(infos%dat, OQP_sym_resp_proj, proj_flag, status=status)
+    if (status /= TA_OK) return
+    if (size(proj_flag) < 1) return
+    if (proj_flag(1) == 0) return
 
     call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, status=status)
     if (status /= TA_OK) return

@@ -263,44 +263,13 @@ contains
 
     infos%tddft%nstate = nstates
 
-    ! DIMENSION OF THE INITIAL DAVIDSON TRIAL-VECTOR SET, AND SYMMETRY BLOCKS.
-    !
-    ! mrinivec builds the initial trial vectors as single excitations
-    ! |Phi_ia>, selected by the smallest orbital-energy difference (the
-    ! diagonal approximation to A).  When the molecule has point-group
-    ! symmetry the response matrix is block diagonal by irreducible
-    ! representation,
-    !     A_{ia,jb} = 0  unless  Gamma_i (x) Gamma_a = Gamma_j (x) Gamma_b ,
-    ! and each such trial vector lies entirely inside ONE block.  Davidson
-    ! expands with preconditioned residuals, which stay in the same invariant
-    ! subspace, so an irrep that receives no initial trial vector is never
-    ! reached: its roots are ABSENT from the computed spectrum -- not merely
-    ! unconverged.  The remaining Ritz values are then numbered 1, 2, 3, ...
-    ! and every state index shifts, silently.
-    !
-    ! Measured on CH2O 6-31G (ROHF triplet reference, conv 1e-10) with the
-    ! previous floor of 6:
-    !   singlet nstate=3   "S2" = 6.888078 eV   true S2 = 5.797267 eV
-    !   triplet nstate=3   "T2" = 6.465861 eV   true T2 = 4.770778 eV
-    ! recovered only once the trial set reached 16.  Two runtype=grad runs with
-    ! grad=3, identical except for nstate, gave C-O stretch components 5.2x
-    ! apart with H_z opposite in sign, both labelled "S2" and both reporting
-    ! convergence.
-    !
-    ! Raising the floor represents more irreps at the cost of a larger subspace
-    ! per iteration.  It is a mitigation, not a proof of completeness -- only
-    ! symmetry-adapted initial vectors, one per irrep, would be that -- so when
-    ! the subspace cap forces fewer vectors than asked for, say so.
-    nvec = min(max(nstates, mrsf_guess_nvec_floor()), mxvec)
-    if (nvec < min(max(nstates, mrsf_guess_nvec_floor()), xvec_dim)) then
-      write(iw,'(/,2X,"MRSF warning: the Davidson subspace cap allows only ",&
-        &I0," initial trial vectors where ",I0," were requested for &
-        &symmetry-block coverage.  An irreducible representation may receive &
-        &none, in which case its roots are absent and the reported state &
-        &ordering shifts.  Raise maxvec (or nstate) if a state looks &
-        &misassigned.",/)') &
-        nvec, min(max(nstates, mrsf_guess_nvec_floor()), xvec_dim)
-    end if
+    ! Trial-set dimension.  Deliberately UNCHANGED from the historical value:
+    ! raising it globally perturbs the Krylov path of every calculation, which
+    ! moves converged results at the 1e-5 level and is enough to break tight
+    ! reference comparisons (SOC between near-degenerate states is especially
+    ! sensitive).  Symmetry-block coverage is instead handled inside mrinivec,
+    ! where it costs nothing when every irrep is already represented.
+    nvec = min(max(nstates,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
     call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
@@ -935,21 +904,5 @@ contains
     close(iw)
 
   end subroutine tdhf_mrsf_energy
-
-!> Floor on the dimension of the initial Davidson trial-vector set.
-!>
-!> 16 covers every case measured so far; OQP_MRSF_GUESS_NVEC overrides it, both
-!> to restore the historical value of 6 for comparison and to raise it further
-!> on a system whose irreducible representations are still not all represented.
-  integer function mrsf_guess_nvec_floor()
-    character(len=32) :: value
-    integer :: length, status, ios, override
-    mrsf_guess_nvec_floor = 16
-    call get_environment_variable('OQP_MRSF_GUESS_NVEC', value, length, status)
-    if (status == 0 .and. length > 0) then
-      read(value, *, iostat=ios) override
-      if (ios == 0 .and. override >= 1) mrsf_guess_nvec_floor = override
-    end if
-  end function mrsf_guess_nvec_floor
 
 end module tdhf_mrsf_energy_mod

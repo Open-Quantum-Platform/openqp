@@ -198,7 +198,7 @@ class Molecule:
         requested_point_group = requested_point_group if isinstance(requested_point_group, str) and requested_point_group else 'auto'
         requested_subgroup = requested_subgroup if isinstance(requested_subgroup, str) and requested_subgroup else 'auto'
 
-        enabled = self._parse_enabled_mode(symmetry.get('enabled', 'false'))
+        enabled = self._parse_enabled_mode(symmetry.get('enabled', 'true'))
 
         if enabled == 'auto':
             status = 'auto'
@@ -230,7 +230,7 @@ class Molecule:
             'strict': self._parse_bool_like(symmetry.get('strict', False)),
             'tolerance': float(symmetry.get('tolerance', 1.0e-5)),
             'raw': {
-                'enabled': symmetry.get('enabled', 'false'),
+                'enabled': symmetry.get('enabled', 'true'),
                 'point_group': requested_point_group,
                 'subgroup': requested_subgroup,
                 'label_mo': symmetry.get('label_mo', True),
@@ -671,7 +671,7 @@ class Molecule:
         unblocked solver on any 'mixed' orbital or inconsistency.
         """
         meta = self.symmetry_metadata
-        if not meta or not meta.get('use_response_symmetry'):
+        if not meta:
             return False
         detection = meta.get('detection')
         if not detection:
@@ -723,7 +723,42 @@ class Molecule:
                     pair_irrep[idx] = irreps.index(label) + 1
                     idx += 1
 
+            if td_type == 'mrsf' and na - nb >= 2:
+                # The three open-open slots do not carry the plain
+                # Gamma_i (x) Gamma_a label of their (i, a) indices, because
+                # MRSF stores that sector spin-adapted and folded (SI Fig. S2
+                # and Sec. 8 of JCP 149, 104101).  With O1 = na-2, O2 = na-1
+                # (0-based) and the slot convention "annihilate alpha in i,
+                # create beta in a" acting on |O1a O2a>:
+                #   (O1,O1) holds the folded (L -/+ R)/sqrt2, whose two
+                #     determinants are both the open-shell {O1,O2} pair, so it
+                #     transforms as Gamma_O1 (x) Gamma_O2;
+                #   (O2,O1) is G = |O1 O1> and (O1,O2) is D = |O2 O2>, both
+                #     doubly occupied and therefore totally symmetric.
+                # Labelling them by the raw index product puts all three in the
+                # wrong blocks, which defeats the coverage the Davidson guess
+                # and the response projection both rely on.
+                o1, o2 = na - 2, na - 1
+                v_o1, v_o2 = o1 - nb, o2 - nb
+                n_occ = len(occ_labels)
+                if 0 <= v_o1 and v_o2 < len(vir_labels):
+                    oo_label = product_irrep(
+                        [occ_labels[o1], vir_labels[v_o2]], table)
+                    if oo_label != 'mixed':
+                        pair_irrep[o1 + v_o1*n_occ] = irreps.index(oo_label) + 1
+                    # irreps[0] is the totally symmetric representation
+                    pair_irrep[o2 + v_o1*n_occ] = 1
+                    pair_irrep[o1 + v_o2*n_occ] = 1
+
             self.data['OQP::sym_pair_irrep'] = pair_irrep
+            # The table itself is staged whenever it can be built: the Davidson
+            # initial trial vectors need it to guarantee that every irreducible
+            # representation is represented, without which an unseeded irrep
+            # contributes no roots and every state index shifts.  Confining
+            # residuals to a dominant irrep is a separate, experimental
+            # behaviour and stays behind use_response_symmetry.
+            self.data['OQP::sym_response_project_enable'] = np.array(
+                [1 if meta.get('use_response_symmetry') else 0], dtype=np.int64)
             meta['response_symmetry'] = {
                 'status': 'active',
                 'td_type': td_type,

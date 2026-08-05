@@ -304,7 +304,7 @@ OQP_CONFIG_SCHEMA = {
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {
-        'enabled': {'type': string, 'default': 'false'},
+        'enabled': {'type': string, 'default': 'true'},
         'point_group': {'type': string, 'default': 'auto'},
         'subgroup': {'type': string, 'default': 'auto'},
         'label_mo': {'type': bool, 'default': 'True'},
