@@ -717,6 +717,8 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         st_trans = info['st_trans']
         st_rot = info['st_rot']
         st_vib = info['st_vib']
+        sigma = int(info.get('sigma', 1))
+        linear = bool(info.get('linear', False))
 
         u_el = u_trans + u_rot + u_vib + zpe
         u = u_el + el
@@ -726,12 +728,23 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
         g_el = h_el + st
         g = g_el + el
 
+        # A linear rotor has a vanishing principal moment, so one rotational
+        # constant/temperature is infinite; print it as a dash rather than inf.
+        def _rot_entry(value):
+            return '         ---' if not np.isfinite(value) else '%12.4f' % value
+
+        rc_text = ''.join(_rot_entry(x) for x in rc)
+        rt_text = ''.join(_rot_entry(x) for x in rt)
+        top_text = 'linear' if linear else 'nonlinear'
+
         loginfo += """
    temperature K:                    %16.2f
    pressure atm:                     %16.2f
    total mass amu:                   %16.2f
-   rotational constant cm-1:   %12.4f %12.4f %12.4f 
-   rotational temperature K:   %12.4f %12.4f %12.4f 
+   rotational constant cm-1:   %s
+   rotational temperature K:   %s
+   rotor type:                       %16s
+   rotational symmetry number:       %16d
 
    ====================================================
    summary of internal energy (U)
@@ -785,8 +798,9 @@ def dump_log(mol, title=None, section=None, info=None, must_print=False):
 
 """ % (
             temp, 1.0, mass,
-            rc[0], rc[1], rc[2],
-            rt[0], rt[1], rt[2],
+            rc_text,
+            rt_text,
+            top_text, sigma,
             el, u_trans, u_rot, u_vib, zpe,
             u_el, u,
             el, u_el, pv,

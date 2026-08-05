@@ -140,6 +140,7 @@ def thermal_analysis(
         energy, atoms, mass, freqs, inertia,
         temperature=298.15,
         linear=False,
+        sigma=1,
         mult=0,
         freq_scale_factor=1,
         freq_cutoff=100,
@@ -196,21 +197,33 @@ def thermal_analysis(
     st_trans = GAS_CONSTANT * (2.5 + np.log(r ** 3 / den)) * temperature * J_TO_AU
 
     # rotational entropy, 0 (atomic) ; R(Ln(q)+1) * T (linear); R(Ln(q)+3/2) * T (non-linear) in Hartree
-    rc = PLANCK_CONSTANT / (8 * np.pi ** 2 * inertia * AMU_to_KG * BOHR ** 2)
+    # A linear rotor has a vanishing principal moment, so this legitimately
+    # produces an infinite rotational constant; both consumers below handle it
+    # explicitly. Silence the divide warning rather than let it reach the user.
+    with np.errstate(divide='ignore'):
+        rc = PLANCK_CONSTANT / (8 * np.pi ** 2 * inertia * AMU_to_KG * BOHR ** 2)
     rt = rc * PLANCK_CONSTANT / BOLTZMANN_CONSTANT
+
+    # sigma is the rotational symmetry number: the rotational partition function
+    # counts each indistinguishable orientation once, so q_rot carries a 1/sigma
+    # that was missing here. Omitting it inflates S_rot by R*ln(sigma) -- 1.38
+    # cal/mol/K for water, 4.94 for benzene -- and every S and G derived from it.
+    sigma = max(1, int(sigma))
 
     if len(atoms) == 1:
         st_rot = 0.0
+    elif linear:
+        # A linear rotor has one vanishing principal moment, so rt holds one
+        # infinity; the old code indexed rt[0], which numpy sorts ascending and
+        # is therefore exactly that infinity -- every diatomic printed -inf.
+        # Use the doubly degenerate finite rotational temperature instead.
+        finite_rt = rt[np.isfinite(rt) & (rt > 0.0)]
+        theta = float(finite_rt[0]) if finite_rt.size else np.nan
+        qr = temperature / (sigma * theta)
+        st_rot = GAS_CONSTANT * (np.log(qr) + 1) * temperature * J_TO_AU
     else:
-        if len(atoms) == 2:
-            qr = temperature / rt[0]
-        else:
-            qr = (np.pi * temperature ** 3 / (rt[0] * rt[1] * rt[2])) ** 0.5
-
-        if linear:
-            st_rot = GAS_CONSTANT * (np.log(qr) + 1) * temperature * J_TO_AU
-        else:
-            st_rot = GAS_CONSTANT * (np.log(qr) + 1.5) * temperature * J_TO_AU
+        qr = (np.pi * temperature ** 3 / (rt[0] * rt[1] * rt[2])) ** 0.5 / sigma
+        st_rot = GAS_CONSTANT * (np.log(qr) + 1.5) * temperature * J_TO_AU
 
     # vibrational entropy,
     # quasi-harmonic model, Grimme, S. (2012), Chem. Eur. J., 18: 9955-9964. DOI.org/10.1002/chem.201200497
@@ -219,7 +232,14 @@ def thermal_analysis(
     st_rrho_vib = s_rrho_vib * GAS_CONSTANT * temperature * J_TO_AU
 
     # free-rotor Sv = R(1/2 + 1/2ln((8π^3u'kT/h^2)) * T in Hartree
-    av_rc = sum(rc) / len(rc)  # s-1
+    # Grimme's free-rotor term needs an average rotational constant. For a
+    # linear rotor rc carries an infinity from the vanishing principal moment,
+    # and averaging it in gives bav = 0 -> log(0) -> st_vib = -inf, which is
+    # why linear molecules printed -inf for the TOTAL entropy even once st_rot
+    # was fixed. Average the finite constants only.
+    finite_rc = rc[np.isfinite(rc)] if isinstance(rc, np.ndarray) else np.asarray(
+        [x for x in rc if np.isfinite(x)])
+    av_rc = float(np.sum(finite_rc) / finite_rc.size) if finite_rc.size else np.inf  # s-1
     bav = PLANCK_CONSTANT / av_rc  # kg m^2
     mu = PLANCK_CONSTANT / (8 * np.pi ** 2 * freqs * SPEED_OF_LIGHT * freq_scale_factor)
     mu_p = bav / (mu + bav)
@@ -244,6 +264,8 @@ def thermal_analysis(
         'st_trans': st_trans,
         'st_rot': st_rot,
         'st_vib': st_vib,
+        'sigma': int(sigma),
+        'linear': bool(linear),
     }
 
     return thermo_data

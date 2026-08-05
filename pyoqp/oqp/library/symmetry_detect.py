@@ -617,6 +617,47 @@ def enumerate_full_group(
     return operations
 
 
+def rotational_symmetry_number(
+    atomic_numbers: Any,
+    coordinates: Any,
+    tolerance: float = 1.0e-5,
+) -> int:
+    """Rotational symmetry number sigma for rigid-rotor thermochemistry.
+
+    sigma is the order of the *rotational* subgroup -- the number of proper
+    operations (det = +1) -- and it divides the rotational partition function.
+    Omitting it inflates S_rot by R*ln(sigma): 1.38 cal/mol/K for water,
+    4.94 for benzene or methane.
+
+    Deliberately computed from the geometry here rather than read out of
+    ``symmetry_metadata``: that block is forced to C1 whenever ``[symmetry]``
+    is not enabled, and detection is skipped entirely, so a metadata-sourced
+    sigma would silently be 1 on a default run -- reproducing the bug this
+    exists to fix. Thermochemistry needs no reorientation and no petite maps,
+    so it has no reason to inherit that gate.
+
+    Linear molecules need no special case: the seed set collapses to the two
+    permutation classes a linear geometry admits, giving 2 proper operations
+    for D-inf-h and 1 for C-inf-v.
+
+    On failure returns 1, which reproduces today's (over-counted) entropy
+    rather than inventing symmetry. Because that failure is silent and biases
+    G, callers are expected to *print* the value they got.
+    """
+
+    coords = np.asarray(coordinates, dtype=float).reshape(-1, 3)
+    if coords.shape[0] < 2:
+        return 1
+    try:
+        operations = enumerate_full_group(atomic_numbers, coords,
+                                          tolerance=tolerance)
+    except Exception:
+        return 1
+    proper = sum(1 for op in operations
+                 if np.linalg.det(np.asarray(op['matrix'], dtype=float)) > 0.0)
+    return max(1, int(proper))
+
+
 def attach_detection_metadata(
     symmetry_metadata: MutableMapping[str, Any],
     atomic_numbers: Any,
