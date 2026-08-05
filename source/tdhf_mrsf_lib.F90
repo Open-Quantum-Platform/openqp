@@ -578,9 +578,16 @@ contains
             ! missed -- measured on CH2O, where covering every irrep once
             ! repairs the triplet but not the singlet.  Give each irrep depth
             ! up to the number of requested states, budget permitting.
+            ! Substitute ONLY into trial vectors beyond the requested state
+            ! count.  When nvec == nstates every seed is already needed to
+            ! reach the requested roots, and replacing one costs a root: on
+            ! CH3Br-BHHLYP-SOC (nstate=6, nvec=6) an unguarded substitution
+            ! moved the 6th singlet from 0.191632 to 0.191978 Ha, i.e. it
+            ! MISSED the true root that the historical guess had found.
             nper = max(1, min(nstates_req, nvec/max(1,nirr)))
             kpos = nvec
             nadd = 0
+            if (nvec <= nstates_req) nirr = 0    ! no slack: leave the guess alone
             do ir = 1, nirr
               ncur = 0
               do k = 1, nvec
