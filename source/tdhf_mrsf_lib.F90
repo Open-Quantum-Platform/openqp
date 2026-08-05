@@ -561,7 +561,7 @@ contains
       use tagarray, only: TA_OK
       integer(8), contiguous, pointer :: pair_irrep(:)
       integer(4) :: ta_status
-      integer :: nirr, ir, kk, best_idx, kpos, nadd, nper, ncur
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, nper, ncur, nmiss
       integer :: nstates_req
 
       call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
@@ -572,6 +572,7 @@ contains
           if (nirr >= 1) then
             nstates_req = int(infos%tddft%nstate)
             if (nstates_req < 1) nstates_req = 1
+            nmiss = 0
             ! A block can only yield as many roots as it has trial vectors,
             ! so covering each irrep once guarantees only its LOWEST root.
             ! When two requested roots share a block the second is still
@@ -626,10 +627,32 @@ contains
                   kpos = k
                 end if
               end do
-              if (kpos == 0) cycle               ! nothing safe to displace
+              if (kpos == 0) then
+                nmiss = nmiss + 1                ! nothing safe to displace
+                cycle
+              end if
               itmp(kpos) = best_idx
               nadd = nadd + 1
             end do
+
+            ! A block left without any trial vector contributes NO roots -- they
+            ! are absent, not unconverged -- so the surviving Ritz values are
+            ! renumbered and every state index shifts.  That must never happen
+            ! silently.  We cannot enlarge the trial set here to fix it: the
+            ! solver is not stable against that dimension (raising it globally
+            ! moved four example references, and one extra vector alone moved
+            ! CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to 5.224000 eV,
+            ! converged and wrong).  So say plainly what is happening and what
+            ! the user should do about it.
+            if (nmiss > 0) then
+              write(iw,'(/,2X,"MRSF WARNING: ",I0," symmetry block(s) get no ", &
+                &"initial trial vector, so their roots are ABSENT from the ", &
+                &"spectrum and the reported state numbering is shifted -- ", &
+                &"state N may not be the physical state N.  There is no room ", &
+                &"to fix it at nstate=",I0,": raise nstate (16 suffices for ", &
+                &"every case measured so far) and check that the energies of ", &
+                &"the states you care about do not move.",/)') nmiss, nvec
+            end if
             if (nadd > 0 .and. debug_mode) then
               write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
                 &cover otherwise unrepresented irreps")') nadd
