@@ -47,6 +47,7 @@ module c_interop
   integer(c_int64_t), allocatable, target :: basis_am_i64(:)
   integer(c_int64_t), allocatable, target :: basis_origin_i64(:)
   integer(c_int64_t), allocatable, target :: basis_ncontr_i64(:)
+  integer(c_int64_t), allocatable, target :: basis_spherical_i64(:)
 
 contains
 
@@ -273,6 +274,57 @@ contains
     am   = c_loc(basis_am_i64)
     at   = c_loc(basis_origin_i64)
     cdeg = c_loc(basis_ncontr_i64)
+
+    ret = 0
+
+  end function
+
+!--------------------------------------------------------------------------------
+
+!> @brief Export the per-shell "stored as spherical harmonics" flag.
+!> @detail This is the EFFECTIVE flag, deliberately not a raw copy of
+!>   `bas%harmonic`. OpenQP transforms a shell to the solid-harmonic set only
+!>   when the run is harmonic, the shell is tagged pure, AND l >= 2 -- see
+!>   c2s_ncomp in source/integrals/cart2sph.F90, which keeps s and p Cartesian
+!>   (x, y, z) even in a spherical basis.
+!>
+!>   Consumers need that exact combination to know the AO layout, and deriving
+!>   it outside this file has already gone wrong twice: tagging every shell
+!>   pure applies the spherical component permutation to p shells and produces
+!>   confidently WRONG signs, while tagging none pure (the previous state of
+!>   the symmetry staging code) miscounts the AOs and silently disables the
+!>   reduction on every spherical basis. Export the answer, not the ingredients.
+!> @param[out] nsh        number of shells
+!> @param[out] spherical  address of an nsh-long int64 array, 1 = spherical
+!> @return 0 on success, -1 if the handle or the basis is not usable
+  function oqp_get_basis_spherical(c_handle, nsh, spherical) result(ret) &
+      bind(C, name='oqp_get_basis_spherical')
+    use basis_tools, only: basis_set
+    use constants, only: HARMONIC_ACTIVE
+    type(oqp_handle_t) :: c_handle
+    integer(c_int64_t) :: nsh
+    type(c_ptr), intent(out) :: spherical
+    integer(c_int64_t) :: ret
+
+    type(information), pointer :: inf
+    type(basis_set), pointer :: bas
+
+    ret = -1
+    nsh = 0
+    if (.not.c_associated(c_handle%inf)) return
+    call c_f_pointer(c_handle%inf, inf)
+
+    bas => inf%basis
+    nsh = bas%nshell
+    if (nsh <= 0) return
+    if (.not. allocated(bas%harmonic)) return
+    if (.not. allocated(bas%am)) return
+
+    basis_spherical_i64 = merge(1_c_int64_t, 0_c_int64_t, &
+        HARMONIC_ACTIVE .and. &
+        bas%harmonic(1:bas%nshell) == 1 .and. &
+        bas%am(1:bas%nshell) >= 2)
+    spherical = c_loc(basis_spherical_i64)
 
     ret = 0
 

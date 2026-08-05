@@ -1485,6 +1485,45 @@ contains
   !> @param[inout] mo_b    AO→MO coefficients for β (nbf×nbf). For ROHF, set to mo_a.
   !> @author Mohsen Mazaherifar
   !> @date August 2025
+  !> @brief Fetch the symmetry XC atom-orbit weights, if the reduction is live.
+  !> @detail Shared by both XC dispatch branches. It used to be inline in
+  !>         calc_dft_xc, which is dead code -- its only caller sits in the
+  !>         `else` of `if (use_density_xc)`, and every calc_fock call site in
+  !>         the tree passes a density, so use_density_xc is always true. The
+  !>         XC reduction therefore never executed at all: it landed live in
+  !>         PR #184 and was orphaned by the density branch added in PR #202.
+  subroutine get_sym_atom_weight(infos, weight, active)
+    use precision, only: dp
+    use types, only: information
+    use oqp_tagarray_driver
+    use tagarray, only: TA_OK
+    implicit none
+
+    type(information), intent(inout) :: infos
+    real(kind=dp), contiguous, pointer, intent(out) :: weight(:)
+    logical, intent(out) :: active
+
+    integer(8), contiguous, pointer :: petite_flag(:)
+    integer(4) :: status
+
+    active = .false.
+    weight => null()
+    call tagarray_get_data(infos%dat, OQP_sym_petite, petite_flag, status=status)
+    if (status /= TA_OK) return
+    if (petite_flag(1) == 0) return
+    call tagarray_get_data(infos%dat, OQP_sym_atom_weight, weight, status=status)
+    active = status == TA_OK
+    if (active) active = size(weight) == infos%mol_prop%natom
+
+    ! A weight of all ones reduces nothing: every atom is its own orbit (C1, or
+    ! a group whose every atom sits on a special position). Reporting that as
+    ! active costs real work for no saving -- it disables the cross-iteration
+    ! Phi cache, which the reduction is incompatible with, and runs a
+    ! skeleton projection that is the identity. Report inactive instead.
+    if (active) active = any(weight == 0.0_dp)
+    if (.not. active) weight => null()
+  end subroutine get_sym_atom_weight
+
   subroutine calc_dft_xc(infos, basis, molgrid, pfxc, eexc, totele, totkin, mo_a, mo_b)
     use precision, only: dp
     use types, only: information
@@ -1525,17 +1564,7 @@ contains
     ! (orbit-weighted) and symmetrize the resulting skeleton XC matrix.
     ! Gated by the same petite flag as the two-electron reduction, so the
     ! stability-stage fail-safe applies here as well.
-    sym_active = .false.
-    sym_atom_weight => null()
-    call tagarray_get_data(infos%dat, OQP_sym_petite, sym_petite_flag, status=sym_status)
-    if (sym_status == TA_OK) then
-      if (sym_petite_flag(1) /= 0) then
-        call tagarray_get_data(infos%dat, OQP_sym_atom_weight, sym_atom_weight, &
-                               status=sym_status)
-        sym_active = sym_status == TA_OK
-        if (sym_active) sym_active = size(sym_atom_weight) == infos%mol_prop%natom
-      end if
-    end if
+    call get_sym_atom_weight(infos, sym_atom_weight, sym_active)
 
     ! Calculate exchange-correlation based on SCF type
     if (sym_active) then
@@ -1552,7 +1581,9 @@ contains
       end if
       ! The reduced-grid XC matrix is a skeleton: project onto the totally
       ! symmetric component (the XC energy/electron count are already exact).
-      call symmetrize_skeleton_fock(infos, basis, pfxc)
+      ! Same abelian-only projector as the live branch above, so the two cannot
+      ! drift apart again.
+      call symmetrize_skeleton_signed(infos, basis%nbf, pfxc)
     else if (scf_type == scf_rhf) then
       ! Restricted calculation - same matrix for alpha and beta
       call dftexcor(basis, molgrid, 1, pfxc, pfxc, mo_a, mo_a, &
@@ -1572,7 +1603,8 @@ contains
   end subroutine calc_dft_xc
 
   !> @brief Computes DFT exchange-correlation contributions from explicit AO density matrices.
-  subroutine calc_dft_xc_density(infos, basis, molgrid, dmat, pfxc, eexc, totele, totkin)
+  subroutine calc_dft_xc_density(infos, basis, molgrid, dmat, pfxc, eexc, totele, totkin, &
+                                 sym_atom_weight)
     use precision, only: dp
     use types, only: information
     use mod_dft_molgrid, only: dft_grid_t
@@ -1587,6 +1619,8 @@ contains
     real(kind=dp), intent(in) :: dmat(:,:)
     real(kind=dp), intent(out) :: pfxc(:,:)
     real(kind=dp), intent(out) :: eexc, totele, totkin
+    !> Symmetry-reduction atom weights. Present => integrate unique atoms only.
+    real(kind=dp), intent(in), optional, contiguous, target :: sym_atom_weight(:)
 
     integer :: scf_type, nbf, nbf_tri, nang
     logical :: urohf
@@ -1607,9 +1641,34 @@ contains
     end if
 
     pfxc = 0.0_dp
-    call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
-                          eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
-                          urohf, infos)
+    if (present(sym_atom_weight)) then
+      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
+                            eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
+                            urohf, infos, sym_atom_weight)
+      ! The reduced-grid XC matrix is a skeleton: project onto the totally
+      ! symmetric component. Without this the SCF converges to a wrong energy.
+      ! (The XC energy and electron count are already exact -- run_xc scales the
+      ! surviving slices by the orbit size.)
+      ! Project with the ABELIAN operations, not symmetrize_skeleton_fock.
+      !
+      ! The XC weights are built on the abelian subgroup on purpose -- pyoqp
+      ! keeps them there because Lebedev angular grids are invariant under the
+      ! axis-aligned octahedral operations but NOT under C3/C6 rotations, so a
+      ! full-group grid reduction would be inexact. symmetrize_skeleton_fock
+      ! prefers the staged FULL-group operator blocks when the 'full' tier is
+      ! active, which would project this skeleton over a larger group than the
+      ! quadrature that produced it: the SCF would then use a Vxc that does not
+      ! correspond to the grid actually evaluated.
+      !
+      ! symmetrize_skeleton_signed reads only OQP::sym_ao_target / sym_ao_sign,
+      ! which the full tier leaves on the abelian maps, so the projector and
+      ! the weights stay on the same group by construction.
+      call symmetrize_skeleton_signed(infos, basis%nbf, pfxc)
+    else
+      call dmatd_density_blk(basis, molgrid, da, db, pfxc(:,1), pfxc(:,min(2,size(pfxc,2))), &
+                            eexc, totele, totkin, nang, nbf, infos%dft%grid_density_cutoff, &
+                            urohf, infos)
+    end if
 
     deallocate(da, db)
   end subroutine calc_dft_xc_density
@@ -1677,6 +1736,8 @@ contains
     integer :: ii
     real(dp), allocatable :: pfxc(:,:)
     logical :: is_dft = .false., use_density_xc
+    real(dp), contiguous, pointer :: xc_sym_weight(:)
+    logical :: xc_sym_active
     logical :: xc_reused
     logical :: xc_diverted
     ! Env-gated (OQP_XC_TIMING) per-iteration wall split: J/K vs XC build.
@@ -1783,7 +1844,15 @@ contains
       end if
       if (.not. xc_diverted) then
         if (use_density_xc) then
-          call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+          ! The live path. It had no symmetry gate at all, which is how the
+          ! XC reduction came to be dead code -- see get_sym_atom_weight.
+          call get_sym_atom_weight(infos, xc_sym_weight, xc_sym_active)
+          if (xc_sym_active) then
+            call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, &
+                                     E%totkin, xc_sym_weight)
+          else
+            call calc_dft_xc_density(infos, basis, molgrid, d, pfxc, E%eexc, E%totele, E%totkin)
+          end if
         else
           call calc_dft_xc(infos, basis, molgrid, pfxc, E%eexc, E%totele, E%totkin, mo_a, mo_b)
         end if

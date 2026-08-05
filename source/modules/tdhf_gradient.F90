@@ -331,7 +331,14 @@ contains
       call gcomp%build_cart(basis)
     end select
 
-    call grd2_driver(infos, basis, de, gcomp)
+    ! Opt in to the petite reduction: the density contracted here is the
+    ! (totally symmetric) converged one, and the skeleton gradient this
+    ! produces is projected afterwards by Molecule.symmetrize_gradient. The
+    ! opt-in set and the projection set are the same four sites by
+    ! construction. Callers that contract a NON-symmetric density -- the CPHF
+    ! probes in fock_deriv, and hf_hessian's displaced-geometry resp_grad --
+    ! deliberately do not opt in.
+    call grd2_driver(infos, basis, de, gcomp, petite=.true.)
     infos%atoms%grad = infos%atoms%grad + de
 
     call gcomp%clean()
