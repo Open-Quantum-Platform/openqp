@@ -1152,7 +1152,18 @@ class Hessian(Calculator):
             hessian, flags = self.hess_func()
             if 'failed' in flags:
                 dump_log(self.mol, title='PyOQP: numerical hessian calculations failed')
-                return None
+                # Raise, do not just return None. The failure was detected and
+                # acted on internally -- the scratch directory is deliberately
+                # kept below -- but it never reached the exit status, so a run
+                # in which EVERY displacement failed exited 0 and any CI job,
+                # queue script or geometry scan driving OpenQP by exit code
+                # recorded it as a success. Silent success is worse than a
+                # wrong number: nothing downstream can catch it. Matches how a
+                # non-converged SCF already behaves.
+                nfailed = sum(1 for f in flags if f == 'failed')
+                raise RuntimeError(
+                    'numerical Hessian: %d of %d displacement gradients '
+                    'failed; scratch kept for inspection' % (nfailed, len(flags)))
             else:
                 self.mol.hessian = np.asarray(hessian, dtype=float)
                 if not analysis:
@@ -1644,11 +1655,20 @@ def _run_oqp_external(inp, env_overrides=None):
     # console script; fall back to invoking the same entry point
     # (oqp.pyoqp:main) via the current interpreter so this works when OpenQP
     # is run from source without a pip install.
-    openqp_exe = shutil.which('openqp')
-    if openqp_exe:
-        cmd = [openqp_exe, inp, '--silent']
-    else:
-        cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
+    # Prefer the running interpreter, NOT whatever `openqp` is first on PATH.
+    # sys.executable is guaranteed consistent with the parent; PATH is not.
+    # Invoking a venv's openqp by absolute path without putting that venv on
+    # PATH -- exactly what a side-by-side comparison of two builds does -- had
+    # the parent running one OpenQP while every displacement child ran another.
+    # Reproduced: with the venv off PATH the children resolved to a different
+    # install and all 12 displacements died on an option that build did not
+    # have; with the venv first on PATH the same input completed.
+    #
+    # Silent in the ordinary case, because parent and child agree whenever
+    # there is one install -- which is every developer machine and CI. It bites
+    # only when two builds coexist, i.e. precisely when someone is comparing
+    # them and most needs the answer to be trustworthy.
+    cmd = [sys.executable, '-m', 'oqp.pyoqp', inp, '--silent']
     env = os.environ.copy()
     if env_overrides:
         env.update(env_overrides)
@@ -2210,7 +2230,12 @@ class NAC(Calculator):
         nacv, dcv, flags = self.nac_func()
         if 'failed' in flags:
             dump_log(self.mol, title='PyOQP: numerical nac calculations failed')
-            return None
+            # Same reasoning as the numerical Hessian above: a detected failure
+            # that does not reach the exit status is a silent success.
+            nfailed = sum(1 for f in flags if f == 'failed')
+            raise RuntimeError(
+                'numerical NAC: %d of %d displacement calculations failed; '
+                'scratch kept for inspection' % (nfailed, len(flags)))
         else:
             self.mol.nac = nacv
 
