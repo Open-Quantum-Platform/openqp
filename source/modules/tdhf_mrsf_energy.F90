@@ -85,7 +85,8 @@ contains
       mrinivec, mrsfcbc, umrsfcbc, mrsfmntoia, umrsfmntoia, mrsfesum, &
       mrsfqroesum, get_mrsf_transitions, &
       get_mrsf_transition_density, get_umrsf_transition_dipole, &
-      get_jacobi, umrsfssqu, mrsf_set_fp32
+      get_jacobi, umrsfssqu, mrsf_set_fp32, &
+      mrsf_uncovered_irreps
     use mathlib, only: orthogonal_transform, orthogonal_transform_sym, &
       unpack_matrix
     use routec_sig, only: routec_sig_available, routec_sig_begin, &
@@ -263,21 +264,37 @@ contains
 
     infos%tddft%nstate = nstates
 
-    ! Trial-set dimension.  Deliberately UNCHANGED from the historical value:
-    ! raising it globally perturbs the Krylov path of every calculation, which
-    ! moves converged results at the 1e-5 level and is enough to break tight
-    ! reference comparisons (SOC between near-degenerate states is especially
-    ! sensitive).  Symmetry-block coverage is instead handled inside mrinivec,
-    ! where it costs nothing when every irrep is already represented.
-    ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
-    ! Every attempt to enlarge it perturbed converged results.  Raising the
-    ! floor to 16 moved four example references; reserving just nirr-1 extra
-    ! vectors still moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to
-    ! 5.224000 eV, fully converged and wrong -- and there with NO substitution
-    ! taking place, so the trial-set size alone was responsible.  Symmetry-block
-    ! coverage is therefore confined to whatever room already exists beyond the
-    ! requested states, which is where it costs nothing.
+    ! TRIAL-SET DIMENSION AND SYMMETRY-BLOCK COVERAGE.
+    !
+    ! A unit trial vector lies entirely inside one irrep block of A, and
+    ! Davidson never leaves the blocks it starts in.  A block that receives no
+    ! trial vector therefore contributes NO roots -- they are absent, not
+    ! unconverged -- the survivors are renumbered, and every state-indexed
+    ! consumer silently works on the wrong state.  Dropping a state is not an
+    ! acceptable outcome, so if the energy-ordered selection would leave a block
+    ! unseeded the trial set is enlarged until it cannot, and the run says so.
+    !
+    ! The enlargement is deliberately minimal -- exactly the number of blocks
+    ! that would be missed -- because the solver is NOT stable against this
+    ! dimension: raising it globally to 16 moved four example references, and
+    ! even one extra vector moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562
+    ! to 5.224000 eV, fully converged and wrong.  So it is paid only where a
+    ! state would otherwise be lost, which is the strictly worse outcome.
     nvec = min(max(nstates,6), mxvec)
+    block
+      integer :: n_uncovered
+      n_uncovered = mrsf_uncovered_irreps(infos, mo_energy_a, mo_energy_a, nvec)
+      if (n_uncovered > 0) then
+        write(iw,'(/,2X,"MRSF: ",I0," symmetry block(s) would receive no ", &
+          &"initial trial vector, so their roots would be absent from the ", &
+          &"spectrum and the reported state ordering would shift.  Enlarging ", &
+          &"the trial set from ",I0," to ",I0," vectors to prevent it.  If ", &
+          &"the requested nstate is small, raise it as well so the recovered ", &
+          &"states are actually reported.",/)') &
+          n_uncovered, nvec, min(nvec + n_uncovered, mxvec)
+        nvec = min(nvec + n_uncovered, mxvec)
+      end if
+    end block
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
     call infos%dat%alloc_or_die(OQP_td_t, (/ nbf2, 2 /), td_t, description=OQP_td_t_comment)
