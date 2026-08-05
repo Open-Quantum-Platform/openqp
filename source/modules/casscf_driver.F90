@@ -121,7 +121,8 @@ module casscf_driver_mod
                                casscf_gfock_grad_w
   use casscf_fastints_mod, only: cas_partial_eri, cas_ao_density, &
                                  cas_wmo_from_ao, cas_dmo_to_ao, &
-                                 cas_act_exchange_tensor, cas_act_fock
+                                 cas_act_exchange_tensor, cas_act_fock, &
+                                 cas_fused_core_sweep, cas_partial_eri_from_t1
   use fci_sigma_strings_mod, only: rdm12_strings
   use casscf_orbrot_mod, only: casscf_orbital_rotate
   use casscf_ah_mod, only: casscf_ah_model_step, casscf_lowest_mode_step, &
@@ -864,10 +865,16 @@ contains
     n = ctx%n
     nc = ctx%nc
 
-    ! ---- inactive Fock in AO, folded core energy, active h
+    ! ---- inactive Fock in AO, folded core energy, active h, and the pass-1
+    ! quarter transform, all from ONE blocked sweep of the AO tensor
     call cas_ao_density(n, nc, 0, cbuf, ctx%g1, ctx%dcore, ctx%tmpna)
-    call cas_wmo_from_ao(n, ctx%eri_ao, ctx%hcore, cbuf, ctx%dcore, &
-                         ctx%js, ctx%ks, ctx%fao, ctx%tmw, ctx%wcore)
+    call cas_fused_core_sweep(n, na, nc, ctx%eri_ao, ctx%hcore, cbuf, &
+                              ctx%dcore, ctx%js, ctx%ks, ctx%fao, ctx%tp1)
+    ! W_core = C^T F_core C
+    call dgemm('N', 'N', n, n, n, 1.0_dp, cbuf(0, 0), n, ctx%fao(0, 0), n, &
+               0.0_dp, ctx%tmw(0, 0), n)
+    call dgemm('N', 'T', n, n, n, 1.0_dp, ctx%tmw(0, 0), n, cbuf(0, 0), n, &
+               0.0_dp, ctx%wcore(0, 0), n)
     efold = 0.0_dp
     do b = 0_i8, int(n, i8) - 1_i8
       do a = 0_i8, int(n, i8) - 1_i8
@@ -883,9 +890,9 @@ contains
       end do
     end do
 
-    ! ---- active ERIs and the (j t|u v) slice, one shared partial transform
-    call cas_partial_eri(n, na, nc, ctx%eri_ao, cbuf, ctx%tp1, ctx%tp2, &
-                         ctx%tp3, ctx%eri_act, ctx%eact)
+    ! ---- active ERIs and the (j t|u v) slice from the shared pass-1 tensor
+    call cas_partial_eri_from_t1(n, na, nc, cbuf, ctx%tp1, ctx%tp2, &
+                                 ctx%tp3, ctx%eri_act, ctx%eact)
 
     ! ---- CI on the folded active problem
     ctx%iopt_act = ctx%iopt_ci
@@ -1261,16 +1268,16 @@ contains
     t = this%fdstep / nv
     this%sv = t * v
 
+    ! Forward difference against the gradient ALREADY known at the current
+    ! point (`gcur`, stored by grad_hdiag at these same orbitals): one
+    ! energy/gradient evaluation per product instead of the central
+    ! difference's two.  The truncation error grows from O(t^2) to O(t), but
+    ! the product only steers a trust-region CG whose step is validated by an
+    ! exact trial ENERGY afterwards, so the fixed point is untouched -- the
+    ! whole suite converges to the same energies with roughly the same
+    ! macroiteration counts at half the dominant cost per product.
     call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
     if (rc >= 0_i8) call cas_evaluate(this%ctx, this%ctry, obj, this%gp, rc)
-    if (rc < 0_i8) then
-      this%status = rc
-      ierr = -1
-      return
-    end if
-    this%sv = -this%sv
-    call cas_rotate(this%ctx, this%cbuf, this%sv, this%ctry, rc)
-    if (rc >= 0_i8) call cas_evaluate(this%ctx, this%ctry, obj, this%gm, rc)
     if (rc < 0_i8) then
       this%status = rc
       ierr = -1
@@ -1279,7 +1286,7 @@ contains
     this%nmatvec = this%nmatvec + 1
 
     do l = 0, npar - 1
-      hv(l + 1) = (this%gp(l) - this%gm(l)) / (2.0_dp * t)
+      hv(l + 1) = (this%gp(l) - this%gcur(l)) / t
     end do
 
     ! R = K(v) G - G K(v); subtract the antisymmetric BCH part.

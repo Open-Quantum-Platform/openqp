@@ -39,8 +39,95 @@ module casscf_fastints_mod
 
   public :: cas_partial_eri, cas_ao_density, cas_wmo_from_ao, cas_dmo_to_ao
   public :: cas_act_exchange_tensor, cas_act_fock
+  public :: cas_fused_core_sweep, cas_partial_eri_from_t1
 
 contains
+
+  !> Core J/K and the pass-1 quarter transform in ONE blocked sweep of the AO
+  !> ERI tensor.
+  !>
+  !> One gradient evaluation reads the nbf^4 tensor three times -- the core
+  !> Coulomb DGEMV, the core exchange DGEMVs, and the first quarter
+  !> transformation -- and each of those runs at the memory bandwidth, not the
+  !> flop ceiling.  All three are row-range decomposable over the leading AO
+  !> index, so this routine walks the tensor once in slabs and applies the
+  !> three contractions per slab while it is still cache-resident: the DRAM
+  !> traffic of the evaluation's dominant term drops ~3x and each piece is
+  !> still its optimal BLAS call.
+  !>
+  !> Outputs exactly match the separate calls (same BLAS calls on the same
+  !> operands, only reordered across disjoint output ranges):
+  !>   jmat(q,j) = J[j,q], kmat(s,j) = K[j,s]   (build_jkw's layouts)
+  !>   fao(a,b)  = h + J - K/2                  (the core mean field)
+  !>   t1        = pass-1 tensor, C-order [t1,a,b,c] (cas_partial_eri's)
+  subroutine cas_fused_core_sweep(n, na, nc, eri_ao, hcore, cbuf, dcore, &
+                                  jmat, kmat, fao, t1)
+    integer, intent(in) :: n, na, nc
+    real(dp), intent(in) :: eri_ao(0:*), hcore(0:*)
+    real(dp), contiguous, intent(in) :: cbuf(0:, 0:)
+    real(dp), intent(in) :: dcore(0:n-1, 0:n-1)
+    real(dp), intent(inout) :: jmat(0:n-1, 0:n-1), kmat(0:n-1, 0:n-1)
+    real(dp), intent(out) :: fao(0:n-1, 0:n-1)
+    real(dp), intent(inout) :: t1(0:*)
+
+    integer :: a0, blk, nblk, i, j, n2
+    integer(i8) :: off, n3
+
+    ! ~32 MiB slabs: big enough that the pass-1 DGEMM keeps a useful shape,
+    ! small enough that the second and third pass over a slab can come from
+    ! the last-level cache rather than DRAM on current server parts.
+    n2 = n * n
+    n3 = int(n, i8) * int(n, i8) * int(n, i8)
+    blk = max(1, int(32_i8 * 1024_i8 * 1024_i8 / max(8_i8 * n3, 1_i8)))
+
+    do a0 = 0, n - 1, blk
+      nblk = min(blk, n - a0)
+      off = int(a0, i8) * n3
+      ! J: columns (j,q) with j in the slab are the contiguous column range
+      call dgemv('T', n2, nblk * n, 1.0_dp, eri_ao(off), n2, dcore(0, 0), 1, &
+                 0.0_dp, jmat(0, a0), 1)
+      ! K: one column per slab row, same block
+      do j = a0, a0 + nblk - 1
+        call dgemv('N', n, n2, 1.0_dp, eri_ao(int(j, i8) * n3), n, &
+                   dcore(0, 0), 1, 0.0_dp, kmat(0, j), 1)
+      end do
+      ! pass 1: the slab's rows of every t1 column (ldc = n^3 keeps the
+      ! caller's full-tensor layout)
+      call dgemm('T', 'T', nblk * n2, na, n, 1.0_dp, eri_ao(off), n, &
+                 cbuf(nc, 0), n, 0.0_dp, t1(int(a0, i8) * int(n2, i8)), &
+                 int(n3))
+    end do
+
+    ! the same mean-field assembly build_jkw performs
+    do i = 0, n - 1
+      do j = 0, n - 1
+        fao(i, j) = hcore(int(i, i8) * int(n, i8) + int(j, i8)) &
+                  + jmat(j, i) - 0.5_dp * kmat(j, i)
+      end do
+    end do
+  end subroutine cas_fused_core_sweep
+
+  !> Passes 2..4 of `cas_partial_eri`, starting from a pass-1 tensor the
+  !> caller already owns (the fused sweep above produces it).
+  subroutine cas_partial_eri_from_t1(n, na, nc, cbuf, t1, t2, t3, eri_act, eact)
+    integer, intent(in) :: n, na, nc
+    real(dp), contiguous, intent(in) :: cbuf(0:, 0:)
+    real(dp), intent(in) :: t1(0:*)
+    real(dp), intent(inout) :: t2(0:*), t3(0:*)
+    real(dp), intent(inout) :: eri_act(0:*), eact(0:*)
+
+    integer :: na3
+
+    na3 = na * na * na
+    call dgemm('T', 'T', n * n * na, na, n, 1.0_dp, t1(0), n, cbuf(nc, 0), n, &
+               0.0_dp, t2(0), n * n * na)
+    call dgemm('T', 'T', n * na * na, na, n, 1.0_dp, t2(0), n, cbuf(nc, 0), n, &
+               0.0_dp, t3(0), n * na * na)
+    call dgemm('T', 'T', na3, na, n, 1.0_dp, t3(0), n, cbuf(nc, 0), n, &
+               0.0_dp, eri_act(0), na3)
+    call dgemm('N', 'N', n, na3, n, 1.0_dp, cbuf(0, 0), n, t3(0), n, &
+               0.0_dp, eact(0), n)
+  end subroutine cas_partial_eri_from_t1
 
   !> The exchange-shaped active slice  Y[v,w,a,b] = (a v | b w)  (v,w active;
   !> a,b AO), C-order, built from the pass-1 intermediate of

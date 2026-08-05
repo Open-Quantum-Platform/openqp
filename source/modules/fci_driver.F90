@@ -56,6 +56,7 @@ module fci_driver_mod
   use, intrinsic :: iso_c_binding, only: c_int32_t, c_int64_t, c_double
   use fci_hamiltonian_mod, only: fci_sort_dets, fci_dense_build, &
                                  fci_diag_build, fci_matvec_apply, oqp_dsyevd_f
+  use fci_sigma_strings_mod, only: spin_square_strings
   use fci_setup_mod, only: fci_spin_orbital_integrals, fci_fold_core, &
                            fci_spin_square
   ! DGEMM/DGEMV through the ILP64 wrapper layer (AGENTS.md rule 1).  `only:`
@@ -278,7 +279,8 @@ contains
         do k = 1, nroot
           s2(k - 1) = s2_win(keep(k))
         end do
-      else
+      else if (spin_square_strings(nact, ndet, dets, nroot, civecs, s2, &
+                                   nthreads) /= 0) then
         status = fci_spin_square(int(nact, c_int32_t), ndet, &
                                  int(nroot, c_int32_t), dets, civecs, &
                                  int(na - nb, c_int32_t), s2, &
@@ -587,6 +589,21 @@ contains
         end do
       end do
       call orthonormalize(ndet, nroot, basis(:, 1:nroot))
+    else if (mode == 2) then
+      ! Cold start on the matrix-free path: diagonalize the Hamiltonian over
+      ! the lowest-diagonal determinants (the p-space) and start from those
+      ! eigenvectors.  Against bare unit vectors this typically halves the
+      ! Davidson iteration count -- each iteration is a full sigma, and at
+      ! p ~ a few hundred the p-space build is noise next to one of them.
+      call pspace_guess(nspin, ndet, dets, hspin, gspin, diag, nroot, &
+                        basis(:, 1:nroot), info)
+      if (info /= 0) then
+        call lowest_indices(ndet, diag, nroot, order)
+        basis(:, 1:nroot) = 0.0_dp
+        do i = 1, nroot
+          basis(order(i), i) = 1.0_dp
+        end do
+      end if
     else
       call lowest_indices(ndet, diag, nroot, order)
       basis(:, 1:nroot) = 0.0_dp
@@ -966,6 +983,209 @@ contains
   !> Indices of the `k` smallest entries of `v`, ascending, ties to the lower
   !> index.  A selection rather than a full argsort: k is the root count, so
   !> this is O(k*n) against O(n log n) plus an n-sized permutation.
+  !> Davidson start vectors from the p-space: the Hamiltonian over the
+  !> `p` lowest-diagonal determinants, diagonalized exactly.
+  !>
+  !> `basis` receives the `nroot` lowest p-space eigenvectors scattered into
+  !> the full determinant space (orthonormal by construction).  `info /= 0`
+  !> means the caller should fall back to unit-vector seeding.
+  subroutine pspace_guess(nspin, ndet, dets, hspin, gspin, diag, nroot, &
+                          basis, info)
+    integer, intent(in) :: nspin, nroot
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*)
+    real(dp), intent(in) :: hspin(*), gspin(*), diag(*)
+    real(dp), intent(out) :: basis(ndet, nroot)
+    integer, intent(out) :: info
+
+    integer :: p, i, j
+    integer, allocatable :: porder(:)
+    real(dp), allocatable :: hp(:), theta(:)
+
+    p = int(min(ndet, int(max(200, 20 * nroot), i8)))
+    if (p < nroot) then
+      info = 1
+      return
+    end if
+
+    allocate(porder(p), hp(p * p), theta(p), stat=info)
+    if (info /= 0) then
+      info = 1
+      return
+    end if
+    call partial_lowest(ndet, diag, p, porder)
+
+    do j = 1, p
+      hp((j - 1) * p + j) = diag(porder(j))
+      do i = j + 1, p
+        hp((j - 1) * p + i) = sc_element(nspin, dets(int(porder(i), i8)), &
+                                         dets(int(porder(j), i8)), hspin, gspin)
+        hp((i - 1) * p + j) = hp((j - 1) * p + i)
+      end do
+    end do
+
+    call oqp_dsyevd_f(p, hp, theta, info)
+    if (info /= 0) then
+      info = 1
+      return
+    end if
+
+    basis = 0.0_dp
+    do j = 1, nroot
+      do i = 1, p
+        basis(porder(i), j) = hp((j - 1) * p + i)
+      end do
+    end do
+    info = 0
+    deallocate(porder, hp, theta)
+  end subroutine pspace_guess
+
+  !> Indices of the `k` smallest elements of `v`, ascending, in O(n log k):
+  !> a size-k max-heap over (value, index), replacing the root while scanning.
+  !> Ties resolve to the lower index (the candidate must be strictly smaller
+  !> than the heap root to displace it), matching `lowest_indices`.
+  subroutine partial_lowest(n, v, k, idx)
+    integer(i8), intent(in) :: n
+    real(dp), intent(in) :: v(n)
+    integer, intent(in) :: k
+    integer, intent(out) :: idx(k)
+
+    real(dp), allocatable :: hval(:)
+    integer(i8), allocatable :: hidx(:)
+    integer, allocatable :: order(:)
+    integer(i8) :: i, tmp_i
+    integer :: m, j, c
+    real(dp) :: tmp_v
+
+    allocate(hval(k), hidx(k), order(k))
+    ! fill with the first k entries, then heapify (max-heap on value; on equal
+    ! values the LARGER index sits nearer the root so it is displaced first)
+    do j = 1, k
+      hval(j) = v(int(j, i8))
+      hidx(j) = int(j, i8)
+    end do
+    do j = k / 2, 1, -1
+      m = j
+      do
+        c = 2 * m
+        if (c > k) exit
+        if (c < k) then
+          if (hval(c + 1) > hval(c) .or. &
+              (hval(c + 1) == hval(c) .and. hidx(c + 1) > hidx(c))) c = c + 1
+        end if
+        if (hval(c) > hval(m) .or. &
+            (hval(c) == hval(m) .and. hidx(c) > hidx(m))) then
+          tmp_v = hval(m); hval(m) = hval(c); hval(c) = tmp_v
+          tmp_i = hidx(m); hidx(m) = hidx(c); hidx(c) = tmp_i
+          m = c
+        else
+          exit
+        end if
+      end do
+    end do
+    do i = int(k, i8) + 1_i8, n
+      if (v(i) > hval(1)) cycle
+      if (v(i) == hval(1) .and. i > hidx(1)) cycle
+      hval(1) = v(i)
+      hidx(1) = i
+      m = 1
+      do
+        c = 2 * m
+        if (c > k) exit
+        if (c < k) then
+          if (hval(c + 1) > hval(c) .or. &
+              (hval(c + 1) == hval(c) .and. hidx(c + 1) > hidx(c))) c = c + 1
+        end if
+        if (hval(c) > hval(m) .or. &
+            (hval(c) == hval(m) .and. hidx(c) > hidx(m))) then
+          tmp_v = hval(m); hval(m) = hval(c); hval(c) = tmp_v
+          tmp_i = hidx(m); hidx(m) = hidx(c); hidx(c) = tmp_i
+          m = c
+        else
+          exit
+        end if
+      end do
+    end do
+    ! ascending (value, index) order for a deterministic p-space
+    do j = 1, k
+      order(j) = j
+    end do
+    do j = 2, k
+      m = order(j)
+      c = j - 1
+      do while (c >= 1)
+        if (hval(order(c)) < hval(m) .or. &
+            (hval(order(c)) == hval(m) .and. hidx(order(c)) < hidx(m))) exit
+        order(c + 1) = order(c)
+        c = c - 1
+      end do
+      order(c + 1) = m
+    end do
+    do j = 1, k
+      idx(j) = int(hidx(order(j)))
+    end do
+    deallocate(hval, hidx, order)
+  end subroutine partial_lowest
+
+  !> Slater-Condon matrix element <d1|H|d2> between two spin-orbital
+  !> determinant keys of excitation degree 1 or 2 (0 is the caller's diagonal;
+  !> higher degrees are zero).  Conventions match the walker in
+  !> fci_hamiltonian.F90: `hspin` is C-order [nspin,nspin] and
+  !> `gspin[p,q,r,s] = <pq|rs>` (physicists'), so the antisymmetrized element
+  !> is g(p,q,r,s) - g(p,q,s,r).
+  function sc_element(nspin, d1, d2, hspin, gspin) result(val)
+    integer, intent(in) :: nspin
+    integer(i8), intent(in) :: d1, d2
+    real(dp), intent(in) :: hspin(*), gspin(*)
+    real(dp) :: val
+
+    integer(i8) :: x, common, t, ns
+    integer :: h1, h2, p1, p2, k, nd
+    real(dp) :: ph
+
+    val = 0.0_dp
+    ns = int(nspin, i8)
+    x = ieor(d1, d2)
+    nd = popcnt(x)
+
+    if (nd == 2) then
+      ! single h1 -> p1
+      h1 = trailz(iand(x, d2))
+      p1 = trailz(iand(x, d1))
+      ph = 1.0_dp
+      if (mod(popcnt(iand(d2, shiftl(1_i8, h1) - 1_i8)), 2) /= 0) ph = -ph
+      t = ibclr(d2, h1)
+      if (mod(popcnt(iand(t, shiftl(1_i8, p1) - 1_i8)), 2) /= 0) ph = -ph
+      val = hspin(int(p1, i8) * ns + h1 + 1_i8)
+      common = iand(d1, d2)
+      do k = 0, nspin - 1
+        if (.not. btest(common, k)) cycle
+        val = val + gspin(((int(p1, i8) * ns + k) * ns + h1) * ns + k + 1_i8) &
+                  - gspin(((int(p1, i8) * ns + k) * ns + k) * ns + h1 + 1_i8)
+      end do
+      val = ph * val
+    else if (nd == 4) then
+      ! double (h1 < h2) -> (p1 < p2)
+      t = iand(x, d2)
+      h1 = trailz(t)
+      h2 = trailz(ibclr(t, h1))
+      t = iand(x, d1)
+      p1 = trailz(t)
+      p2 = trailz(ibclr(t, p1))
+      ! phase of a+_p2 a+_p1 a_h1 a_h2 |d2> against |d1>
+      ph = 1.0_dp
+      if (mod(popcnt(iand(d2, shiftl(1_i8, h2) - 1_i8)), 2) /= 0) ph = -ph
+      t = ibclr(d2, h2)
+      if (mod(popcnt(iand(t, shiftl(1_i8, h1) - 1_i8)), 2) /= 0) ph = -ph
+      t = ibclr(t, h1)
+      if (mod(popcnt(iand(t, shiftl(1_i8, p1) - 1_i8)), 2) /= 0) ph = -ph
+      t = ibset(t, p1)
+      if (mod(popcnt(iand(t, shiftl(1_i8, p2) - 1_i8)), 2) /= 0) ph = -ph
+      val = ph * (gspin(((int(p1, i8) * ns + p2) * ns + h1) * ns + h2 + 1_i8) &
+                - gspin(((int(p1, i8) * ns + p2) * ns + h2) * ns + h1 + 1_i8))
+    end if
+  end function sc_element
+
   subroutine lowest_indices(n, v, k, idx)
     integer(i8), intent(in) :: n
     real(dp), intent(in) :: v(n)

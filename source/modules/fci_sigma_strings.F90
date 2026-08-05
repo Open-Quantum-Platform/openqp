@@ -41,9 +41,194 @@ module fci_sigma_strings_mod
   !> blocks rather than an allocation failure.
   integer(i8), parameter :: work_bytes_cap = 512_i8 * 1024_i8 * 1024_i8
 
-  public :: fci_sigma_strings, rdm12_strings
+  public :: fci_sigma_strings, rdm12_strings, spin_square_strings
 
 contains
+
+  !> Column-major (kl-major) single-excitation table for one string set.
+  !>
+  !> The target-indexed table of `build_link_table` makes every WRITE of one
+  !> target contiguous, which is what the alpha channel wants (a target owns a
+  !> `nbstr`-long row run).  The beta channel's runs are one element long, so
+  !> target order degenerates into ~ndet*nlink scattered read-modify-writes --
+  !> the dominant cost of a big sigma.  Grouping the same entries by the
+  !> excitation label kl instead makes the inner loop walk ONE t1/t2 column
+  !> with ascending row index: sequential writes, and the source reads stay
+  !> inside one alpha block (L1-resident for any realistic active space).
+  !>
+  !> Entries per kl are emitted in ascending target order by construction
+  !> (the outer loop below runs over targets in order).
+  subroutine build_link_bykl(norb, nstr, strs, nkl, maxper, cnt, tgt, src, sgn)
+    integer, intent(in) :: norb, nkl, maxper
+    integer(i8), intent(in) :: nstr
+    integer(i8), intent(in) :: strs(nstr)
+    integer, intent(out) :: cnt(nkl)
+    integer(i8), intent(out) :: tgt(maxper, nkl), src(maxper, nkl)
+    real(dp), intent(out) :: sgn(maxper, nkl)
+
+    integer(i8), allocatable :: skeys(:), sperm(:)
+    integer(i8) :: t, det1, src_key, s_idx
+    integer :: a, i, kl, slot
+    real(dp) :: ph
+
+    allocate(skeys(nstr), sperm(nstr))
+    call sorted_index(nstr, strs, skeys, sperm)
+
+    cnt = 0
+    ! outer loop over TARGETS in ascending index, so each kl list is sorted
+    ! by target and the consumer's writes walk forward.
+    ! |t> = a+_a a_i |src>: diagonal (a == i) means src = t with i occupied;
+    ! off-diagonal means a occupied in t, i empty in t, src = t - a + i.
+    do t = 1_i8, nstr
+      do i = 0, norb - 1
+        if (.not. btest(strs(t), i)) cycle
+        kl = i * norb + i + 1
+        slot = cnt(kl) + 1
+        cnt(kl) = slot
+        tgt(slot, kl) = t
+        src(slot, kl) = t
+        sgn(slot, kl) = 1.0_dp
+      end do
+      do a = 0, norb - 1
+        if (.not. btest(strs(t), a)) cycle
+        do i = 0, norb - 1
+          if (i == a) cycle
+          if (btest(strs(t), i)) cycle
+          src_key = ibset(ibclr(strs(t), a), i)
+          s_idx = lookup(nstr, skeys, sperm, src_key)
+          if (s_idx == 0_i8) cycle
+          ! phase of a+_a a_i |src>: annihilate i out of src, create a into
+          ! the i-annihilated string -- build_link_table's convention exactly
+          det1 = ibclr(src_key, i)
+          ph = 1.0_dp
+          if (mod(popcnt(iand(src_key, shiftl(1_i8, i) - 1_i8)), 2) /= 0) ph = -ph
+          if (mod(popcnt(iand(det1, shiftl(1_i8, a) - 1_i8)), 2) /= 0) ph = -ph
+          kl = a * norb + i + 1
+          slot = cnt(kl) + 1
+          cnt(kl) = slot
+          tgt(slot, kl) = t
+          src(slot, kl) = s_idx
+          sgn(slot, kl) = ph
+        end do
+      end do
+    end do
+
+    deallocate(skeys, sperm)
+  end subroutine build_link_bykl
+
+  !> <S^2> per CI root on the canonical CAS product determinant list, via
+  !>
+  !>     <S^2> = S_z^2 + S_z + |S_+ c|^2,   S_+ = sum_p a+_{p alpha} a_{p beta}
+  !>
+  !> The general kernel (`fci_spin_square`) walks determinant pairs; this one
+  !> materialises S_+ c in the (na+1, nb-1) product space -- one pass of
+  !> O(ndet*norb) index arithmetic -- and takes its norm.  Declines (nonzero
+  !> status) for non-product lists; the caller falls back to the walker.
+  function spin_square_strings(norb, ndet, dets, nroot, civecs, s2, nthreads) &
+      result(status)
+    integer, intent(in) :: norb, nroot, nthreads
+    integer(i8), intent(in) :: ndet
+    integer(i8), intent(in) :: dets(*)
+    real(dp), intent(in) :: civecs(*)
+    real(dp), intent(inout) :: s2(*)
+    integer :: status
+
+    integer :: na, nb, p, r
+    integer(i8) :: nastr, nbstr, mastr, mbstr, ia, ib, k, ja, jb
+    integer(i8), allocatable :: astr(:), bstr(:), wastr(:), wbstr(:)
+    integer(i8), allocatable :: akeys(:), aperm(:), bkeys(:), bperm(:)
+    real(dp), allocatable :: w(:)
+    real(dp) :: sz, ph, c, ssum
+    integer :: ierr
+
+    status = 1
+    if (norb <= 0 .or. ndet <= 0_i8 .or. nroot < 1) return
+    na = popcnt(iand(dets(1), shiftl(1_i8, norb) - 1_i8))
+    nb = popcnt(shiftr(dets(1), norb))
+    nastr = binom(norb, na)
+    nbstr = binom(norb, nb)
+    if (nastr <= 0_i8 .or. nbstr <= 0_i8 .or. nastr * nbstr /= ndet) return
+
+    allocate(astr(nastr), bstr(nbstr))
+    call string_basis(norb, na, nastr, astr)
+    call string_basis(norb, nb, nbstr, bstr)
+    k = 0_i8
+    do ia = 1_i8, nastr
+      do ib = 1_i8, nbstr
+        k = k + 1_i8
+        if (dets(k) /= ior(astr(ia), shiftl(bstr(ib), norb))) then
+          deallocate(astr, bstr)
+          return
+        end if
+      end do
+    end do
+
+    sz = 0.5_dp * real(na - nb, dp)
+
+    if (nb == 0 .or. na == norb) then
+      ! S_+ annihilates the reference space
+      do r = 1, nroot
+        s2(r) = sz * (sz + 1.0_dp)
+      end do
+      deallocate(astr, bstr)
+      status = 0
+      return
+    end if
+
+    mastr = binom(norb, na + 1)
+    mbstr = binom(norb, nb - 1)
+    ! decline (walker fallback) rather than abort if the S_+ space is too
+    ! large to hold
+    allocate(wastr(mastr), wbstr(max(mbstr, 1_i8)), stat=ierr)
+    if (ierr /= 0) then
+      deallocate(astr, bstr)
+      return
+    end if
+    call string_basis(norb, na + 1, mastr, wastr)
+    call string_basis(norb, nb - 1, mbstr, wbstr)
+    allocate(akeys(mastr), aperm(mastr), bkeys(max(mbstr, 1_i8)), &
+             bperm(max(mbstr, 1_i8)), w(mastr * mbstr), stat=ierr)
+    if (ierr /= 0) then
+      deallocate(astr, bstr, wastr, wbstr)
+      return
+    end if
+    call sorted_index(mastr, wastr, akeys, aperm)
+    call sorted_index(mbstr, wbstr, bkeys, bperm)
+
+    do r = 1, nroot
+      w = 0.0_dp
+      do ia = 1_i8, nastr
+        do ib = 1_i8, nbstr
+          c = civecs((((ia - 1_i8) * nbstr + ib) - 1_i8) * int(nroot, i8) + r)
+          if (c == 0.0_dp) cycle
+          do p = 0, norb - 1
+            if (.not. btest(bstr(ib), p)) cycle
+            if (btest(astr(ia), p)) cycle
+            ! a+_{p alpha} a_{p beta}: the beta annihilation crosses the whole
+            ! alpha string (constant (-1)^na, irrelevant to the norm) plus the
+            ! beta bits below p; the alpha creation crosses alpha bits below p.
+            ph = 1.0_dp
+            if (mod(popcnt(iand(bstr(ib), shiftl(1_i8, p) - 1_i8)) &
+                  + popcnt(iand(astr(ia), shiftl(1_i8, p) - 1_i8)), 2) /= 0) &
+                ph = -1.0_dp
+            ja = lookup(mastr, akeys, aperm, ibset(astr(ia), p))
+            jb = lookup(mbstr, bkeys, bperm, ibclr(bstr(ib), p))
+            if (ja == 0_i8 .or. jb == 0_i8) cycle
+            w((ja - 1_i8) * mbstr + jb) = w((ja - 1_i8) * mbstr + jb) + ph * c
+          end do
+        end do
+      end do
+      ssum = 0.0_dp
+      do k = 1_i8, mastr * mbstr
+        ssum = ssum + w(k) * w(k)
+      end do
+      s2(r) = sz * (sz + 1.0_dp) + ssum
+    end do
+
+    deallocate(astr, bstr, wastr, wbstr, akeys, aperm, bkeys, bperm, w)
+    status = 0
+    if (nthreads < 0) status = 0  ! nthreads reserved for future threading
+  end function spin_square_strings
 
   !> bind(C) face of `rdm12_strings`, for the test pins.
   function rdm12_strings_c(norb, ndet, dets, civec, d1, d2, nthreads) &
@@ -381,13 +566,16 @@ contains
     real(dp), intent(inout) :: y(*)
     integer :: status
 
-    integer :: norb, na, nb, nkl, nlink_a, nlink_b, nthr
+    integer :: norb, na, nb, nkl, nlink_a, nthr, maxper_b
     integer(i8) :: nastr, nbstr, ia, ib, k, ns
     integer(i8), allocatable :: astr(:), bstr(:)
-    integer, allocatable :: ntab_a(:), ntab_b(:)
-    integer, allocatable :: kl_a(:, :), kl_b(:, :)
-    integer(i8), allocatable :: src_a(:, :), src_b(:, :)
-    real(dp), allocatable :: sgn_a(:, :), sgn_b(:, :)
+    integer, allocatable :: ntab_a(:)
+    integer, allocatable :: kl_a(:, :)
+    integer(i8), allocatable :: src_a(:, :)
+    real(dp), allocatable :: sgn_a(:, :)
+    integer, allocatable :: cnt_b(:)
+    integer(i8), allocatable :: tgt_b(:, :), src_bk(:, :)
+    real(dp), allocatable :: sgn_bk(:, :)
     real(dp), allocatable :: emat(:, :), t1(:, :), t2(:, :)
     integer(i8) :: nblk, blk_start, blk_len, nrow, inner
     integer(i8) :: bytes_per_alpha
@@ -425,14 +613,17 @@ contains
 
     nkl = norb * norb
     nlink_a = max(1, na * (norb - na) + na)
-    nlink_b = max(1, nb * (norb - nb) + nb)
 
     allocate(ntab_a(nastr), kl_a(nlink_a, nastr), src_a(nlink_a, nastr), &
              sgn_a(nlink_a, nastr))
-    allocate(ntab_b(nbstr), kl_b(nlink_b, nbstr), src_b(nlink_b, nbstr), &
-             sgn_b(nlink_b, nbstr))
     call build_link_table(norb, nastr, astr, nlink_a, ntab_a, kl_a, src_a, sgn_a)
-    call build_link_table(norb, nbstr, bstr, nlink_b, ntab_b, kl_b, src_b, sgn_b)
+    ! beta runs are one element long, so the beta channel uses the kl-major
+    ! table: the inner loops then walk one t1/t2 column with ascending rows
+    maxper_b = int(min(nbstr, binom(norb - 1, nb - 1) + binom(norb - 2, nb - 1)))
+    allocate(cnt_b(nkl), tgt_b(max(maxper_b, 1), nkl), &
+             src_bk(max(maxper_b, 1), nkl), sgn_bk(max(maxper_b, 1), nkl))
+    call build_link_bykl(norb, nbstr, bstr, nkl, max(maxper_b, 1), cnt_b, &
+                         tgt_b, src_bk, sgn_bk)
 
     allocate(emat(nkl, nkl))
     call build_emat(norb, ns, na + nb, hspin, gspin, nkl, emat)
@@ -454,21 +645,21 @@ contains
 
       call gather(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
                   nlink_a, ntab_a, kl_a, src_a, sgn_a, &
-                  nlink_b, ntab_b, kl_b, src_b, sgn_b, nthr, x, nrow, t1)
+                  maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, x, nrow, t1)
 
       call dgemm('N', 'N', int(nrow), nkl, nkl, 1.0_dp, t1, int(nrow), &
                  emat, nkl, 0.0_dp, t2, int(nrow))
 
       call scatter(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
-                   nlink_a, ntab_a, kl_a, src_a, sgn_a, &
-                   nlink_b, ntab_b, kl_b, src_b, sgn_b, nthr, nrow, t2, y)
+                    nlink_a, ntab_a, kl_a, src_a, sgn_a, &
+                    maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, nrow, t2, y)
 
       deallocate(t1, t2)
       blk_start = blk_start + blk_len
     end do
 
     deallocate(emat, astr, bstr)
-    deallocate(ntab_a, kl_a, src_a, sgn_a, ntab_b, kl_b, src_b, sgn_b)
+    deallocate(ntab_a, kl_a, src_a, sgn_a, cnt_b, tgt_b, src_bk, sgn_bk)
     status = 0
   end function fci_sigma_strings
 
@@ -530,13 +721,16 @@ contains
   !> determinant, of the signed CI coefficient of the source determinant.
   subroutine gather(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
                     nlink_a, ntab_a, kl_a, src_a, sgn_a, &
-                    nlink_b, ntab_b, kl_b, src_b, sgn_b, nthr, x, nrow, t1)
-    integer, intent(in) :: norb, nvec, nkl, nlink_a, nlink_b, nthr
+                    maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, x, nrow, t1)
+    integer, intent(in) :: norb, nvec, nkl, nlink_a, maxper_b, nthr
     integer(i8), intent(in) :: nastr, nbstr, blk_start, blk_len, inner, nrow
-    integer, intent(in) :: ntab_a(nastr), ntab_b(nbstr)
-    integer, intent(in) :: kl_a(nlink_a, nastr), kl_b(nlink_b, nbstr)
-    integer(i8), intent(in) :: src_a(nlink_a, nastr), src_b(nlink_b, nbstr)
-    real(dp), intent(in) :: sgn_a(nlink_a, nastr), sgn_b(nlink_b, nbstr)
+    integer, intent(in) :: ntab_a(nastr)
+    integer, intent(in) :: kl_a(nlink_a, nastr)
+    integer(i8), intent(in) :: src_a(nlink_a, nastr)
+    real(dp), intent(in) :: sgn_a(nlink_a, nastr)
+    integer, intent(in) :: cnt_b(nkl)
+    integer(i8), intent(in) :: tgt_b(maxper_b, nkl), src_bk(maxper_b, nkl)
+    real(dp), intent(in) :: sgn_bk(maxper_b, nkl)
     real(dp), intent(in) :: x(*)
     real(dp), intent(out) :: t1(nrow, nkl)
 
@@ -564,18 +758,19 @@ contains
     !$omp end parallel do
 
     ! beta: excitations stay inside one alpha string, so the alpha index
-    ! partitions the writes
+    ! partitions the writes.  kl-major: for each excitation label the inner
+    ! loop walks ONE t1 column with ascending rows (sequential writes), and
+    ! the x reads stay inside the alpha block.
     !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-    !$omp private(ia, ib, e, sa, so, srow, drow, t, s, m)
+    !$omp private(ia, e, sa, so, srow, drow, t, s, m)
     do ia = blk_start, blk_start + blk_len - 1_i8
       sa = (ia - blk_start) * inner
       so = (ia - 1_i8) * inner
-      do ib = 1_i8, nbstr
-        drow = sa + (ib - 1_i8) * nv
-        do e = 1_i8, int(ntab_b(ib), i8)
-          srow = so + (src_b(e, ib) - 1_i8) * nv
-          t = kl_b(e, ib) + 1
-          s = sgn_b(e, ib)
+      do t = 1, nkl
+        do e = 1_i8, int(cnt_b(t), i8)
+          drow = sa + (tgt_b(e, t) - 1_i8) * nv
+          srow = so + (src_bk(e, t) - 1_i8) * nv
+          s = sgn_bk(e, t)
           do m = 1_i8, nv
             t1(drow + m, t) = t1(drow + m, t) + s * x(srow + m)
           end do
@@ -593,13 +788,16 @@ contains
   !> Indexed by target for the same reason the gather is: disjoint writes.
   subroutine scatter(norb, nastr, nbstr, nvec, blk_start, blk_len, inner, nkl, &
                      nlink_a, ntab_a, kl_a, src_a, sgn_a, &
-                     nlink_b, ntab_b, kl_b, src_b, sgn_b, nthr, nrow, t2, y)
-    integer, intent(in) :: norb, nvec, nkl, nlink_a, nlink_b, nthr
+                     maxper_b, cnt_b, tgt_b, src_bk, sgn_bk, nthr, nrow, t2, y)
+    integer, intent(in) :: norb, nvec, nkl, nlink_a, maxper_b, nthr
     integer(i8), intent(in) :: nastr, nbstr, blk_start, blk_len, inner, nrow
-    integer, intent(in) :: ntab_a(nastr), ntab_b(nbstr)
-    integer, intent(in) :: kl_a(nlink_a, nastr), kl_b(nlink_b, nbstr)
-    integer(i8), intent(in) :: src_a(nlink_a, nastr), src_b(nlink_b, nbstr)
-    real(dp), intent(in) :: sgn_a(nlink_a, nastr), sgn_b(nlink_b, nbstr)
+    integer, intent(in) :: ntab_a(nastr)
+    integer, intent(in) :: kl_a(nlink_a, nastr)
+    integer(i8), intent(in) :: src_a(nlink_a, nastr)
+    real(dp), intent(in) :: sgn_a(nlink_a, nastr)
+    integer, intent(in) :: cnt_b(nkl)
+    integer(i8), intent(in) :: tgt_b(maxper_b, nkl), src_bk(maxper_b, nkl)
+    real(dp), intent(in) :: sgn_bk(maxper_b, nkl)
     real(dp), intent(in) :: t2(nrow, nkl)
     real(dp), intent(inout) :: y(*)
 
@@ -629,16 +827,15 @@ contains
     !$omp end parallel do
 
     !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-    !$omp private(ia, ib, e, sa, so, srow, drow, t, s, m)
+    !$omp private(ia, e, sa, so, srow, drow, t, s, m)
     do ia = blk_start, blk_end
       sa = (ia - blk_start) * inner
       so = (ia - 1_i8) * inner
-      do ib = 1_i8, nbstr
-        drow = so + (ib - 1_i8) * nv
-        do e = 1_i8, int(ntab_b(ib), i8)
-          srow = sa + (src_b(e, ib) - 1_i8) * nv
-          t = kl_b(e, ib) + 1
-          s = sgn_b(e, ib)
+      do t = 1, nkl
+        do e = 1_i8, int(cnt_b(t), i8)
+          drow = so + (tgt_b(e, t) - 1_i8) * nv
+          srow = sa + (src_bk(e, t) - 1_i8) * nv
+          s = sgn_bk(e, t)
           do m = 1_i8, nv
             y(drow + m) = y(drow + m) + s * t2(srow + m, t)
           end do
