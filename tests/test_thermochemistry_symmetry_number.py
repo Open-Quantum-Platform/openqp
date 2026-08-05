@@ -222,6 +222,57 @@ class TestLinearRotorsAreFinite(unittest.TestCase):
         self.assertTrue(np.isfinite(total_entropy_cal(data)))
 
 
+class TestLinearRotorsAreOrientationIndependent(unittest.TestCase):
+    """The vanishing moment must be selected against on the INERTIA.
+
+    `eigh` returns it as exactly 0.0 only when the molecular axis happens to lie
+    along a coordinate axis. Tilt the molecule and it comes back as a tiny value
+    of either sign, and a test on the derived rotational constants lets it
+    through:
+
+        CO2 along (1,1,1)   moment -5.4e-31  ->  S_vib = NaN
+        CO2 tilted in xy    moment +5.3e-15  ->  S_rot = -62.26 cal/mol/K
+
+    Both used to pass an isfinite-and-positive filter. The threshold now matches
+    the one normal_mode uses to decide `linear`.
+    """
+
+    ORIENTATIONS = {
+        'along z': [0.0, 0.0, 1.0],
+        'along (1,1,1)': [1.0, 1.0, 1.0],
+        'tilted in xy': [0.9319, 0.3626, 0.0],
+        'arbitrary axis': [0.31, -0.77, 0.55],
+    }
+
+    def test_entropy_does_not_depend_on_the_molecular_axis(self):
+        frequency = load_frequency_module()
+        _, mass, _, freqs = CARBON_DIOXIDE
+
+        reference = None
+        for name, axis in self.ORIENTATIONS.items():
+            with self.subTest(orientation=name):
+                unit = np.asarray(axis, dtype=float)
+                unit = unit / np.linalg.norm(unit)
+                geometry = np.array([-1.16 * unit, [0.0, 0.0, 0.0], 1.16 * unit])
+                data = thermo(frequency, [8, 6, 8], mass, geometry, freqs, 2, True)
+
+                self.assertTrue(np.isfinite(data['st_rot']), name)
+                self.assertTrue(np.isfinite(data['st_vib']), name)
+                total = total_entropy_cal(data)
+                if reference is None:
+                    reference = total
+                self.assertAlmostEqual(total, reference, places=9,
+                                       msg=f'{name} disagrees with "along z"')
+
+    def test_a_nonlinear_molecule_keeps_all_three_moments(self):
+        """The selection must not quietly drop a moment from a real top."""
+        frequency = load_frequency_module()
+        atoms, mass, geometry, freqs = WATER
+        data = thermo(frequency, atoms, mass, geometry, freqs, 2, False)
+        self.assertAlmostEqual(data['st_rot'] * HARTREE_TS_TO_CAL, 10.4497,
+                               places=3)
+
+
 class TestAgainstTabulatedStandardEntropies(unittest.TestCase):
     """The external gate. Internal identities cannot catch a missing sigma."""
 
