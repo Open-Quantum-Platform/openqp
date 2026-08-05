@@ -786,6 +786,35 @@ def _iter_hamiltonian_elements(dets, det_index, hspin, gspin, nspin, cutoff):
                             yield row, col, 0.5 * gval * phase_r * phase_s * phase_q * phase_p
 
 
+def _apply_work_bytes_cap(max_memory: int) -> None:
+    """Hand the declared ``max_memory`` budget to the native blocked kernels.
+
+    ``[cas]``/``[fci]``/``[pt2] max_memory`` is in MiB and already governs the
+    Python-side dense-vs-Davidson choice.  The string-driven sigma and RDM
+    (``fci_sigma_strings.F90``) block their alpha-string range against a
+    working-set ceiling that used to be a compile-time 512 MiB constant, so the
+    keyword reached them not at all: a large budget could not buy bigger blocks,
+    and a small one was not respected.
+
+    Half the budget, not all of it -- the ceiling covers only the blocked
+    scratch, while the same budget also has to hold the CI vectors, the RDMs and
+    the folded active integrals.  A missing symbol is not an error; an older
+    liboqp simply keeps its built-in default.
+    """
+    backend = _lib_backend()
+    if backend is None:
+        return
+    lib, _ = backend
+    setter = getattr(lib, "fci_set_work_bytes_cap", None)
+    if setter is None:
+        return
+    try:
+        budget = int(max_memory) * 1024 * 1024
+    except (TypeError, ValueError):
+        return
+    setter(max(budget // 2, 0))
+
+
 def _fci_default_threads() -> int:
     """Default team width for the native FCI/CASSCF/RDM kernels.
 
@@ -1494,6 +1523,7 @@ def resolve_ci_solve(
     # needs a sparse Hamiltonian plus a handful of length-ndet vectors.
     dense_bytes = 8 * ndet * ndet
     budget_bytes = max_memory * 1024 * 1024
+    _apply_work_bytes_cap(max_memory)
     if solver == "auto":
         solver = "dense" if dense_bytes <= budget_bytes else "davidson"
     if solver == "dense" and dense_bytes > budget_bytes:

@@ -259,6 +259,15 @@ void fci_spin_orbital_integrals(int32_t norb, const double *h1e,
 void fci_fold_core(int32_t norb, int32_t nact, int32_t ncore,
     const int32_t *active, const int32_t *core, const double *h1e,
     const double *eri, double *h_act, double *eref);
+/* Working-set ceiling for the blocked scratch of the string-driven sigma and
+ * RDM (fci_sigma_strings.F90), in bytes.  Set from the `[cas]`/`[fci]`/`[pt2]`
+ * max_memory budget; without it the kernels use a built-in 512 MiB default.
+ * The value is clamped to a 16 MiB floor, and a non-positive value restores
+ * the default.  Both kernels block their alpha-string range to stay under it,
+ * so this bounds scratch rather than deciding whether they can run at all. */
+void fci_set_work_bytes_cap(int64_t bytes);
+int64_t fci_get_work_bytes_cap(void);
+
 /* <S^2> per root from the determinant CI vectors (fci_setup.F90). `dets` is in
  * CI order, so it is sorted internally with a permutation back to CI position
  * rather than searched directly. Returns 0, or -1 on allocation failure. */

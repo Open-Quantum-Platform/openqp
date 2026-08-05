@@ -94,6 +94,7 @@ from oqp.library.fci import (
     _lib_backend,
     _as_f64c,
     _fci_lib_threads,
+    _apply_work_bytes_cap,
     _FCI_MAX_NSPIN,
     _FCI_SOLVER_CODE,
 )
@@ -592,6 +593,9 @@ def _lib_casscf_energy(mol, settings, options, nbf, ncore, nact, active_nelec,
     iopt[_CAS_IOPT_INDEX["subspace"]] = spec.davidson_subspace
     iopt[_CAS_IOPT_INDEX["mult"]] = spec.target_multiplicity or 0
     iopt[_CAS_IOPT_INDEX["maxmemory"]] = spec.max_memory
+    # The one-call driver reaches the same string-driven sigma and RDM as the
+    # Python path, so give them the declared budget here too.
+    _apply_work_bytes_cap(spec.max_memory)
     iopt[_CAS_IOPT_INDEX["nthreads"]] = _fci_lib_threads()
     iopt[_CAS_IOPT_INDEX["maxmacro"]] = maxmacro
     iopt[_CAS_IOPT_INDEX["optimizer"]] = _CAS_OPTIMIZER_CODE[options.optimizer]

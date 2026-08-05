@@ -36,12 +36,20 @@ module fci_sigma_strings_mod
   integer, parameter :: i8 = c_int64_t
   integer, parameter :: dp = c_double
 
-  !> Working-set ceiling for the (t1, t2) pair, in bytes.  The alpha-string
-  !> range is blocked to stay under it, so a wide active space costs more
-  !> blocks rather than an allocation failure.
-  integer(i8), parameter :: work_bytes_cap = 512_i8 * 1024_i8 * 1024_i8
+  !> Working-set ceiling for the blocked scratch of the sigma and the RDM, in
+  !> bytes.  The alpha-string range is blocked to stay under it, so a wide
+  !> active space costs more blocks rather than an allocation failure.
+  !>
+  !> This used to be a compile-time `parameter` fixed at 512 MiB, which meant
+  !> the `[cas]`/`[fci]`/`[pt2] max_memory` keyword -- the budget the user
+  !> actually declares -- reached nothing in the native kernels.  It is now set
+  !> from that budget through `fci_set_work_bytes_cap`; the initial value is
+  !> the old constant, so a Fortran-only caller that never sets it behaves
+  !> exactly as before.
+  integer(i8), save :: work_bytes_cap = 512_i8 * 1024_i8 * 1024_i8
 
   public :: fci_sigma_strings, rdm12_strings, spin_square_strings
+  public :: fci_set_work_bytes_cap, fci_get_work_bytes_cap
 
 contains
 
@@ -275,6 +283,7 @@ contains
     integer :: na, nb, nkl, nlink_a, nthr, maxper_b
     integer(i8) :: nastr, nbstr, ia, ib, k, base, srow, drow
     integer(i8) :: e, m
+    integer(i8) :: nblk, blk_start, blk_len, nrow, nrow_max, cbase
     integer :: p, q, r, s, pq, rs, t
     real(dp) :: sgn
     integer(i8), allocatable :: astr(:), bstr(:)
@@ -298,9 +307,6 @@ contains
     if (nastr * nbstr /= ndet) return
 
     nkl = norb * norb
-    ! T is (ndet, nact^2) dense; decline (Python-fallback semantics) rather
-    ! than thrash when it would not fit comfortably.
-    if (ndet * int(nkl, i8) * 8_i8 > work_bytes_cap * 4_i8) return
 
     allocate(astr(nastr), bstr(nbstr))
     call string_basis(norb, na, nastr, astr)
@@ -331,61 +337,87 @@ contains
     call build_link_bykl(norb, nbstr, bstr, nkl, max(maxper_b, 1), cnt_b, &
                          tgt_b, src_bk, sgn_bk)
 
-    allocate(tmat(ndet, nkl), gram(nkl, nkl))
     nthr = max(1, nthreads)
-    ! T is (ndet, nact^2) and reaches gigabytes on a wide active space, so the
-    ! clear is bandwidth-bound and worth spreading over the same team that
-    ! fills it; a whole-array assignment here ran single-threaded.
-    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
-    do t = 1, nkl
-      tmat(:, t) = 0.0_dp
-    end do
-    !$omp end parallel do
 
-    ! alpha channel of E_pq: rows of one target alpha string are the
-    ! contiguous run (ia-1)*nbstr + 1 .. ia*nbstr
-    !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-    !$omp private(ia, e, srow, drow, t, sgn, m)
-    do ia = 1_i8, nastr
-      drow = (ia - 1_i8) * nbstr
-      do e = 1_i8, int(ntab_a(ia), i8)
-        srow = (src_a(e, ia) - 1_i8) * nbstr
-        t = kl_a(e, ia) + 1
-        sgn = sgn_a(e, ia)
-        do m = 1_i8, nbstr
-          tmat(drow + m, t) = tmat(drow + m, t) + sgn * civec(srow + m)
-        end do
-      end do
-    end do
-    !$omp end parallel do
+    ! T is (ndet, nact^2) and reaches tens of gigabytes on a wide active space.
+    ! It used to be built whole, and the routine simply DECLINED above 2 GiB --
+    ! handing CAS(14,14) and larger back to the per-determinant Python walker,
+    ! i.e. the cases that need the fast path most.  Both consumers of T reduce
+    ! over its rows (d1 = T^T c, gram = T^T T), so the row range can be blocked
+    ! over alpha strings exactly as the sigma blocks it, and the two BLAS calls
+    ! accumulate across blocks.  Nothing declines any more, and peak scratch is
+    ! bounded by the working-set ceiling instead of by ndet.
+    nblk = max(1_i8, work_bytes_cap / max(nbstr * int(nkl, i8) * 8_i8, 1_i8))
+    nblk = min(nblk, nastr)
+    nrow_max = nblk * nbstr
+    allocate(tmat(nrow_max, nkl), gram(nkl, nkl))
 
-    ! beta channel: excitations stay inside one alpha block, so the alpha index
-    ! partitions the writes.  kl-major, so each (t) run walks one column down.
-    !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-    !$omp private(ia, base, e, srow, drow, t)
-    do ia = 1_i8, nastr
-      base = (ia - 1_i8) * nbstr
+    ! The leading dimension stays nrow_max for every block; a short final block
+    ! just passes a smaller row count to BLAS, which reads A(1:k, :) with the
+    ! stated lda.
+    d1(1:int(nkl, i8)) = 0.0_dp
+    gram = 0.0_dp
+
+    blk_start = 1_i8
+    do while (blk_start <= nastr)
+      blk_len = min(nblk, nastr - blk_start + 1_i8)
+      nrow = blk_len * nbstr
+      cbase = (blk_start - 1_i8) * nbstr
+
+      !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
       do t = 1, nkl
-        do e = 1_i8, int(cnt_b(t), i8)
-          drow = base + tgt_b(e, t)
-          srow = base + src_bk(e, t)
-          tmat(drow, t) = tmat(drow, t) + sgn_bk(e, t) * civec(srow)
+        tmat(1:nrow, t) = 0.0_dp
+      end do
+      !$omp end parallel do
+
+      ! alpha channel of E_pq: rows of one target alpha string are the
+      ! contiguous run (ia-1)*nbstr + 1 .. ia*nbstr.  The SOURCE row may sit
+      ! outside the block, which is fine -- civec is whole, only T is blocked.
+      !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
+      !$omp private(ia, e, srow, drow, t, sgn, m)
+      do ia = blk_start, blk_start + blk_len - 1_i8
+        drow = (ia - blk_start) * nbstr
+        do e = 1_i8, int(ntab_a(ia), i8)
+          srow = (src_a(e, ia) - 1_i8) * nbstr
+          t = kl_a(e, ia) + 1
+          sgn = sgn_a(e, ia)
+          do m = 1_i8, nbstr
+            tmat(drow + m, t) = tmat(drow + m, t) + sgn * civec(srow + m)
+          end do
         end do
       end do
-    end do
-    !$omp end parallel do
+      !$omp end parallel do
 
-    ! d1 = T^T c
-    call dgemv('T', int(ndet), nkl, 1.0_dp, tmat, int(ndet), civec, 1, &
-               0.0_dp, d1, 1)
-    ! gram = T^T T.  Both operands are the same matrix, so the product is
-    ! symmetric by construction and DSYRK computes it in exactly half the
-    ! flops of the equivalent DGEMM -- the dominant cost of the whole RDM
-    ! build, which runs once per state per CASSCF macroiteration.  DSYRK
-    ! writes one triangle; the d2 unpacking below indexes gram(pq, rs) over
-    ! the full square, so the upper triangle is mirrored down afterwards.
-    call dsyrk('U', 'T', nkl, int(ndet), 1.0_dp, tmat, int(ndet), &
-               0.0_dp, gram, nkl)
+      ! beta channel: excitations stay inside one alpha string, so the alpha
+      ! index partitions the writes.  kl-major, so each (t) run walks one
+      ! column down.
+      !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
+      !$omp private(ia, base, e, srow, drow, t)
+      do ia = blk_start, blk_start + blk_len - 1_i8
+        base = (ia - blk_start) * nbstr
+        do t = 1, nkl
+          do e = 1_i8, int(cnt_b(t), i8)
+            drow = base + tgt_b(e, t)
+            srow = base + src_bk(e, t)
+            tmat(drow, t) = tmat(drow, t) + sgn_bk(e, t) * civec(srow + cbase)
+          end do
+        end do
+      end do
+      !$omp end parallel do
+
+      ! d1 += T_blk^T c_blk
+      call dgemv('T', int(nrow), nkl, 1.0_dp, tmat, int(nrow_max), &
+                 civec(cbase + 1_i8), 1, 1.0_dp, d1, 1)
+      ! gram += T_blk^T T_blk -- symmetric by construction, so DSYRK does it in
+      ! half the flops of the equivalent DGEMM.  beta=1 accumulates the blocks.
+      call dsyrk('U', 'T', nkl, int(nrow), 1.0_dp, tmat, int(nrow_max), &
+                 1.0_dp, gram, nkl)
+
+      blk_start = blk_start + blk_len
+    end do
+
+    ! DSYRK wrote one triangle; the d2 unpacking below indexes gram(pq, rs)
+    ! over the full square, so mirror the upper triangle down.
     do t = 2, nkl
       do pq = 1, t - 1
         gram(t, pq) = gram(pq, t)
@@ -897,5 +929,27 @@ contains
       if (norb < 0 .or. nkl < 0) continue
     end if
   end subroutine scatter
+
+  !> Set the blocked-scratch ceiling used by the sigma and the RDM.
+  !>
+  !> `bytes` is clamped to at least 16 MiB: the blocking divides by it, and a
+  !> pathologically small budget would otherwise produce one block per alpha
+  !> string and turn the core DGEMM into a stream of tiny calls.  A
+  !> non-positive value restores the built-in default.
+  subroutine fci_set_work_bytes_cap(bytes) bind(C, name="fci_set_work_bytes_cap")
+    integer(c_int64_t), value :: bytes
+    integer(i8), parameter :: floor_bytes = 16_i8 * 1024_i8 * 1024_i8
+    if (bytes <= 0_i8) then
+      work_bytes_cap = 512_i8 * 1024_i8 * 1024_i8
+    else
+      work_bytes_cap = max(int(bytes, i8), floor_bytes)
+    end if
+  end subroutine fci_set_work_bytes_cap
+
+  !> The ceiling currently in force, in bytes.
+  function fci_get_work_bytes_cap() result(bytes) bind(C, name="fci_get_work_bytes_cap")
+    integer(c_int64_t) :: bytes
+    bytes = int(work_bytes_cap, c_int64_t)
+  end function fci_get_work_bytes_cap
 
 end module fci_sigma_strings_mod
