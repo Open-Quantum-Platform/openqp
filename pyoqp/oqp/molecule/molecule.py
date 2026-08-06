@@ -709,6 +709,9 @@ class Molecule:
                     (np.asarray(dense['shell_permutation'], dtype=np.int64) + 1).ravel()
                 self.data['OQP::sym_op_blocks'] = \
                     np.asarray(dense['blocks'], dtype=np.float64)
+                # Dense operator, abelian group: screen as the standard-frame
+                # abelian path does, not as the non-abelian tier.
+                self.data['OQP::sym_nonabelian'] = np.array([0], dtype=np.int64)
                 self.data['OQP::sym_petite_enable'] = np.array([1], dtype=np.int64)
                 meta['reduction_maps'] = {
                     'n_operations': int(dense['n_operations']),
@@ -892,6 +895,8 @@ class Molecule:
                         # octahedral operations but NOT under C3/C6
                         # rotations, so full-group grid reduction would be
                         # inexact.
+                        self.data['OQP::sym_nonabelian'] = \
+                            np.array([1], dtype=np.int64)
                         full_group = True
                         meta['reduction_maps_full'] = {
                             'n_operations': full['n_operations'],

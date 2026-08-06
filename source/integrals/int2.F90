@@ -321,8 +321,24 @@ contains
 
     block
       real(kind=dp), contiguous, pointer :: blocks(:)
+      ! sym_full means the NON-ABELIAN tier, which is what line ~707 keys on to
+      ! loosen the Schwarz test by a factor nops. Dense operator blocks are no
+      ! longer sufficient evidence for that: the no-reorient path stages them
+      ! for an ABELIAN group, because there the operator is dense while the
+      ! group, the shell map and the orbit weights are the standard-frame
+      ! abelian ones -- so it must screen exactly as that path does.
+      !
+      ! Reading block presence as "full tier" loosened screening eightfold on
+      ! the no-move path and cost more than the reduction saved: benzene
+      ! cc-pVTZ went 14.1 s -> 23.5 s at an identical 12 iterations.
       call tagarray_get_data(infos%dat, OQP_sym_op_blocks, blocks, status=status)
-      this%sym_full = status == TA_OK
+      block
+        integer(8), contiguous, pointer :: nonab(:)
+        integer(4) :: st_na
+        this%sym_full = .false.
+        call tagarray_get_data(infos%dat, OQP_sym_nonabelian, nonab, status=st_na)
+        if (st_na == TA_OK) this%sym_full = nonab(1) /= 0
+      end block
     end block
 
   end subroutine int2_compute_t_enable_petite
