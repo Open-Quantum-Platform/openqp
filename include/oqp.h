@@ -220,6 +220,14 @@ int64_t oqp_get_basis(struct oqp_handle_t *c_handle,
         int64_t *nsh, int64_t *nprim, int64_t *nbf,
         int64_t **bt, int64_t **at, int64_t **cdeg, double **ex, double **cc);
 
+/* Per-shell "stored as spherical harmonics" flag, 1 = spherical.
+   This is the EFFECTIVE flag: a shell is spherical only when the run is
+   harmonic, the shell is tagged pure, and l >= 2 (s and p stay Cartesian
+   even in a spherical basis). Needed to know the AO layout; do not try to
+   reconstruct it from the angular momenta alone. */
+int64_t oqp_get_basis_spherical(struct oqp_handle_t *c_handle,
+        int64_t *nsh, int64_t **spherical);
+
 /* `mass` is optional, pass NULL if not needed */
 int oqp_set_atoms(struct oqp_handle_t * c_handle, int64_t natoms, double * x, double * y, double * z, double * q, double * mass);
 void oqp_set_harmonic_active(bool flag);

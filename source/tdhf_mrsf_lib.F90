@@ -436,7 +436,7 @@ contains
 
     implicit none
 
-    type(information), intent(in) :: infos
+    type(information), target, intent(inout) :: infos
     real(kind=dp), intent(in), dimension(:) :: ea, eb
     real(kind=dp), intent(out), dimension(:,:) :: bvec_mo
     real(kind=dp), intent(out), dimension(:) :: xm
@@ -517,12 +517,6 @@ contains
       end do
     end if
 
-    ! Get initial vectors: bvec(xvec_dim, nvec)
-    bvec_mo = 0.0_dp
-    do k = 1, nvec
-      bvec_mo(itmp(k),k) = 1.0_dp
-    end do
-
     ! set xm(xvec_dim) again
     ij = 0
     do j = lr1, nbf
@@ -544,6 +538,172 @@ contains
           xm(ij) = 9d99
         end if
       end do
+    end do
+
+    ! ---- IRREP COVERAGE OF THE INITIAL TRIAL-VECTOR SET --------------------
+    ! Each |Phi_ia> above transforms as a definite irreducible representation,
+    ! Gamma_i (x) Gamma_a.  With point-group symmetry the response matrix is
+    ! block diagonal in those irreps, and Davidson expands with preconditioned
+    ! residuals, which stay inside the block they start in.  An irrep that
+    ! receives no initial trial vector is therefore never reached and its roots
+    ! are ABSENT from the spectrum, so the remaining Ritz values are numbered
+    ! 1, 2, 3, ... and every state index silently shifts.
+    !
+    ! With OQP::sym_pair_irrep staged (per-pair irrep index, same xvec layout,
+    ! MRSF open-open slots relabelled for the folded sector), replace the
+    ! highest-lying members of the energy-ordered selection by the lowest-lying
+    ! representative of each irrep that would otherwise be unrepresented.  The
+    ! low-lying vectors that drive convergence are never displaced.  Without the
+    ! table -- C1, mixed orbitals, detection disabled -- this is inert and the
+    ! trial-set dimension chosen by the caller is the weaker mitigation.
+    block
+      use oqp_tagarray_driver
+      use tagarray, only: TA_OK
+      integer(8), contiguous, pointer :: pair_irrep(:)
+      integer(4) :: ta_status
+      integer :: nirr, ir, kk, best_idx, kpos, nadd, ncur, nmiss
+      integer :: nstates_req
+
+      call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
+                             status=ta_status)
+      if (ta_status == TA_OK) then
+        if (size(pair_irrep) == xvec_dim) then
+          nirr = int(maxval(pair_irrep))
+          if (nirr >= 1) then
+            nstates_req = int(infos%tddft%nstate)
+            if (nstates_req < 1) nstates_req = 1
+            nmiss = 0
+            ! A block can only yield as many roots as it has trial vectors,
+            ! so covering each irrep once guarantees only its LOWEST root.
+            ! When two requested roots share a block the second is still
+            ! missed -- measured on CH2O, where covering every irrep once
+            ! repairs the triplet but not the singlet.  Give each irrep depth
+            ! up to the number of requested states, budget permitting.
+            ! Substitution rule.  The energy-ordered seeds are not
+            ! interchangeable: whichever one is the ONLY representative of its
+            ! irrep is the only route to that block's roots, and overwriting it
+            ! loses them.  Measured on CH3Br-BHHLYP-SOC, where a substitution
+            ! that displaced such a seed moved the 6th singlet from 5.214562 to
+            ! 5.224000 eV -- fully converged, and wrong.
+            !
+            ! So: only ever displace a seed whose irrep still has another
+            ! representative, and take the highest-lying such seed.  This can
+            ! only add block coverage, never remove it.
+            nadd = 0
+            do ir = 1, nirr
+              ncur = 0
+              do k = 1, nvec
+                if (itmp(k) >= 1 .and. itmp(k) <= xvec_dim) then
+                  if (int(pair_irrep(itmp(k))) == ir) ncur = ncur + 1
+                end if
+              end do
+              if (ncur > 0) cycle                ! irrep already represented
+              best_idx = 0
+              do kk = 1, xvec_dim
+                if (int(pair_irrep(kk)) /= ir) cycle
+                if (xm(kk) > 1.0d90) cycle       ! redundant/masked slot
+                if (best_idx == 0) then
+                  best_idx = kk
+                else if (xm(kk) < xm(best_idx)) then
+                  best_idx = kk
+                end if
+              end do
+              if (best_idx == 0) cycle           ! irrep has no live pair
+              ! Pick a victim: the HIGHEST-lying seed whose irrep still has
+              ! another representative.  One rule, deliberately, and the scan
+              ! covers all of 1..nvec rather than only the slack beyond the
+              ! requested states.
+              !
+              ! Read tdhf_mrsf_energy's claim that coverage "is confined to
+              ! whatever room already exists beyond the requested states" as
+              ! describing an intent that measurement did not support.  A guard
+              ! enforcing it was added (908496c0) on the strength of one deck --
+              ! CH3Br-BHHLYP-SOC nstate=6, where a substitution was seen to move
+              ! the 6th singlet 0.191632 -> 0.191978 Ha -- then dropped, then
+              ! restored in review, then measured properly on both sides:
+              !
+              !   CH3Br-BHHLYP-SOC   unconfined, reproduces its shipped
+              !                      td_singlet_energies to 9.8e-10
+              !   H2O_BHHLYP_SOC     unconfined, 1.6e-13
+              !   CH2O 6-31G nstate=6  unconfined gives all six states including
+              !                      5.788160 eV; CONFINED loses that state
+              !                      entirely and reports 6.803920 in its place
+              !
+              ! So the harm the guard was built to prevent no longer occurs on
+              ! the deck that motivated it -- both SOC anchors now detect Cs,
+              ! where two irreps and six seeds leave nothing to repair -- while
+              ! the guard's own cost is reproducible and is exactly the failure
+              ! this whole mechanism exists to stop.  Since nvec =
+              ! min(max(nstates,6), mxvec), confinement disables the repair
+              ! outright for every nstate >= 6, which is where blocks go
+              ! unseeded in the first place.
+              !
+              ! What actually protects the requested roots is the choice of
+              ! victim, not a range restriction: taking the highest-lying seed
+              ! of an over-represented irrep spends the vector least likely to
+              ! be some root's true starting point, and refusing to take the
+              ! last representative of an irrep means the substitution can only
+              ! ever add block coverage, never remove it.
+              !
+              ! If a future deck does show a requested root lost to substitution,
+              ! the fix is a sharper victim rule, not a range guard -- a range
+              ! guard trades a rare regression for a systematic one.
+              kpos = 0
+              do k = 1, nvec
+                if (itmp(k) < 1 .or. itmp(k) > xvec_dim) cycle
+                ncur = 0
+                do kk = 1, nvec
+                  if (itmp(kk) >= 1 .and. itmp(kk) <= xvec_dim) then
+                    if (int(pair_irrep(itmp(kk))) == &
+                        int(pair_irrep(itmp(k)))) ncur = ncur + 1
+                  end if
+                end do
+                if (ncur < 2) cycle              ! last of its block: keep it
+                if (kpos == 0) then
+                  kpos = k
+                else if (xm(itmp(k)) > xm(itmp(kpos))) then
+                  kpos = k
+                end if
+              end do
+              if (kpos == 0) then
+                nmiss = nmiss + 1                ! nothing safe to displace
+                cycle
+              end if
+              itmp(kpos) = best_idx
+              nadd = nadd + 1
+            end do
+
+            ! A block left without any trial vector contributes NO roots -- they
+            ! are absent, not unconverged -- so the surviving Ritz values are
+            ! renumbered and every state index shifts.  That must never happen
+            ! silently.  We cannot enlarge the trial set here to fix it: the
+            ! solver is not stable against that dimension (raising it globally
+            ! moved four example references, and one extra vector alone moved
+            ! CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to 5.224000 eV,
+            ! converged and wrong).  So say plainly what is happening and what
+            ! the user should do about it.
+            if (nmiss > 0) then
+              write(iw,'(/,2X,"MRSF WARNING: ",I0," symmetry block(s) get no ", &
+                &"initial trial vector, so their roots are ABSENT from the ", &
+                &"spectrum and the reported state numbering is shifted -- ", &
+                &"state N may not be the physical state N.  There is no room ", &
+                &"to fix it at nstate=",I0,": raise nstate (16 suffices for ", &
+                &"every case measured so far) and check that the energies of ", &
+                &"the states you care about do not move.",/)') nmiss, nstates_req
+            end if
+            if (nadd > 0 .and. debug_mode) then
+              write(iw,'(2X,"MRSF guess: added ",I0," trial vector(s) to &
+                &cover otherwise unrepresented irreps")') nadd
+            end if
+          end if
+        end if
+      end if
+    end block
+
+    ! Get initial vectors: bvec(xvec_dim, nvec)
+    bvec_mo = 0.0_dp
+    do k = 1, nvec
+      bvec_mo(itmp(k),k) = 1.0_dp
     end do
 
     if (debug_mode) then

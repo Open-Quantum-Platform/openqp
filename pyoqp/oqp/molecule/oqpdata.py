@@ -313,7 +313,7 @@ OQP_CONFIG_SCHEMA = {
         'timeout': {'type': int, 'default': '300'},
     },
     'symmetry': {
-        'enabled': {'type': string, 'default': 'false'},
+        'enabled': {'type': string, 'default': 'true'},
         'point_group': {'type': string, 'default': 'auto'},
         'subgroup': {'type': string, 'default': 'auto'},
         'label_mo': {'type': bool, 'default': 'True'},
@@ -1583,9 +1583,24 @@ class OQPData:
             alpha = np.frombuffer(ffi.buffer(pex[0], ffi.sizeof('double') * nprim))
             coef = np.frombuffer(ffi.buffer(pcc[0], ffi.sizeof('double') * nprim))
 
+            # Per-shell "stored as spherical harmonics" flag. This cannot be
+            # derived from angs/nbf: the Cartesian and spherical sizes agree
+            # for l <= 1, so the AO total alone cannot say whether s and p are
+            # pure -- and in OpenQP they never are, even in a spherical basis.
+            # The library answers that question directly; anything else is a
+            # guess that fails silently.
+            pspher = ffi.new('int64_t **')
+            pnsh_s = ffi.new('int64_t *')
+            spherical = None
+            if lib.oqp_get_basis_spherical(self._data, pnsh_s, pspher) == 0:
+                spherical = np.copy(np.frombuffer(
+                    ffi.buffer(pspher[0], ffi.sizeof('int64_t') * pnsh_s[0]),
+                    dtype=np.int64))
+
             basis = {
                 'centers': np.copy(centers) - 1,  # make zero-based indexing of atoms
                 'angs': np.copy(angs),
+                'spherical': spherical,
                 'ncontr': np.copy(ncontr),
                 'alpha': np.copy(alpha),
                 'coef': np.copy(coef),
