@@ -196,7 +196,7 @@ contains
     if (dft) scale_exch = infos%dft%HFscale
 
   ! Construct TD trial vector
-    call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,nocc,nocc,nvec)
+    call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,nocc,nocc,nvec,infos)
 
     ist = 1
     istart = 1

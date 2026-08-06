@@ -263,6 +263,23 @@ contains
 
     infos%tddft%nstate = nstates
 
+    ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
+    ! Every attempt to enlarge it perturbed converged results.  Raising the
+    ! floor to 16 moved four example references; reserving just nirr-1 extra
+    ! vectors still moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to
+    ! 5.224000 eV, fully converged and wrong -- and there with NO substitution
+    ! taking place, so the trial-set size alone was responsible.
+    !
+    ! Symmetry-block coverage is therefore handled inside mrinivec, which
+    ! reassigns vectors within this fixed set rather than asking for more.  It
+    ! is NOT restricted to the room beyond the requested states: an earlier
+    ! version of this comment claimed that, and measuring it showed the
+    ! restriction costs more than it buys.  Since nvec = min(max(nstates,6),
+    ! mxvec) there is no such room for any nstate >= 6, which is exactly where
+    ! blocks go unseeded -- CH2O 6-31G at nstate=6 loses its 5.788160 eV state
+    ! outright under the restriction and reports all six correctly without it,
+    ! while both SOC anchors reproduce their references either way (CH3Br
+    ! 9.8e-10, H2O 1.6e-13).  See the victim-selection comment in mrinivec.
     nvec = min(max(nstates,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)
@@ -473,6 +490,32 @@ contains
 
 
   ! Construct TD trial vector
+    !
+    ! KNOWN DEFECT, left in place deliberately -- do not "fix" this in one line.
+    ! On the ROHF path the SAME array goes in as both ea and eb, and it holds
+    ! the ROHF canonical eigenvalues, i.e. the Guest-Saunders 0.5/0.5 average
+    ! 0.5*(fa(p,p)+fb(p,p)) -- not the alpha and beta Fock diagonals the sigma
+    ! actually uses. UMRSF above does it correctly from fa(i,i)/fb(i,i).
+    ! So mrinivec's xm, which orders the seeds and preconditions the residuals,
+    ! is not the diagonal of the operator being solved. The clearest symptom:
+    ! with ea == eb the open-open entry xm = 0.5*(eb(lr1)-ea(lr1)
+    ! +eb(lr2)-ea(lr2)) is IDENTICALLY ZERO for every ROHF MRSF run, while the
+    ! true one-electron value is not. Instrumented on CH2O 6-31G: the folded
+    ! open-open seed came out at exactly 0.00000000 and its two partners at
+    ! -0.19359070 / +0.19359070, perfectly antisymmetric, which is what ea == eb
+    ! forces. (xm also omits the two-electron part of the sigma entirely, on
+    ! every path -- that part is a preconditioner approximation, not a bug.)
+    !
+    ! Correcting it MEASURABLY HELPS AND MEASURABLY HURTS. Filling both arrays
+    ! from fa/fb on the ROHF path makes H2O_BHHLYP_SOC at nstate=12 return
+    ! 0.60340877 as its 11th singlet -- a genuine root, stable at nstate=20 and
+    ! 30, that the shipped reference skips (already noted in 908496c0). The same
+    ! change also breaks six shipped tests, including SOC couplings by 9694 on
+    ! that very deck, numerical frequencies by 0.133, and it makes triplet MRSF
+    ! fail to converge outright on h2o_rohf_mrsf-t with bhhlyp and cam-b3lyp.
+    !
+    ! So a real repair has to come with the reference regeneration and the
+    ! triplet convergence failure understood, not as a swap of two arguments.
     if (mrst==1 .or. mrst==3) then
       if (.not. umrsf) then
         call mrinivec(infos, mo_energy_work_a, mo_energy_work_a, bvec_mo, xm, nvec)
@@ -481,7 +524,7 @@ contains
       end if
 
     else if (mrst==5) then
-      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec)
+      call inivec(mo_energy_a,mo_energy_a,bvec_mo,xm,noccb,nocca,nvec,infos)
     end if
 
     ! ---- OQP_ROUTEC_SIG pre-loop gate (decide use_sig ONCE) ----------------
@@ -898,6 +941,5 @@ contains
     close(iw)
 
   end subroutine tdhf_mrsf_energy
-
 
 end module tdhf_mrsf_energy_mod
