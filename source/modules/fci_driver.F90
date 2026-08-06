@@ -646,7 +646,7 @@ contains
       do i = 1, nroot
         acc = 0.0_dp
         !$omp parallel do num_threads(max(1, nthreads)) schedule(static) &
-        !$omp   default(shared) private(j) reduction(+:acc)
+        !$omp   default(shared) private(j) reduction(+:acc) if(ndet >= 4096_i8)
         do j = 1, int(ndet)
           resid(j, i) = resid(j, i) - theta(i) * ritz(j, i)
           acc = acc + resid(j, i) * resid(j, i)
@@ -666,7 +666,7 @@ contains
         if (rnorm(i) < tol) cycle
         nadd = nadd + 1
         !$omp parallel do num_threads(max(1, nthreads)) schedule(static) &
-        !$omp   default(shared) private(j, denom)
+        !$omp   default(shared) private(j, denom) if(ndet >= 4096_i8)
         do j = 1, int(ndet)
           denom = theta(i) - diag(j)
           if (abs(denom) < 1.0e-12_dp) denom = 1.0e-12_dp

@@ -363,8 +363,11 @@ contains
     if (present(nthreads)) then
       if (nthreads > 0) nthr = nthreads
     end if
+    ! Guarded like fci_setup.F90: a small determinant space does not repay the
+    ! team fork/join, and CASSCF on a narrow active space calls this often.
     !$omp parallel do num_threads(max(1, nthr)) schedule(static) &
-    !$omp   default(shared) private(col, det, nocc, p, io, jo, e, occ)
+    !$omp   default(shared) private(col, det, nocc, p, io, jo, e, occ) &
+    !$omp   if(ndet >= 4096_i8)
     do col = 1, ndet
       det = dets(col)
       nocc = 0

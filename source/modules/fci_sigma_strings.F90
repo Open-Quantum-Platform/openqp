@@ -48,6 +48,29 @@ module fci_sigma_strings_mod
   !> exactly as before.
   integer(i8), save :: work_bytes_cap = 512_i8 * 1024_i8 * 1024_i8
 
+  !> Below this many elements a parallel region costs more than it saves.
+  !>
+  !> Forking and joining a team costs tens of microseconds, while touching N
+  !> doubles serially costs about N*8/1e10 seconds, so a team only repays
+  !> itself from roughly 64k elements up.  A CAS(4,4) sigma works on 576
+  !> elements -- two orders of magnitude below that -- and would pay the team
+  !> overhead on every block of every sigma call.
+  !>
+  !> Honest note on the evidence: measured on xeon (2x Xeon Gold 6338, 16
+  !> threads) this guard is NEUTRAL at every active space tested -- C4H6
+  !> CAS(4,4) 15.5s guarded vs 15.7s unguarded, H2O CAS(8,8) 4.4 vs 5.2, N2
+  !> CAS(12,12) 8.4 vs 8.5, all within run-to-run scatter.  It is kept as
+  !> protection for pathologically small active spaces rather than because a
+  !> regression was demonstrated at these sizes; an earlier apparent 18%
+  !> C4H6 regression turned out to be convergence-path noise from comparing
+  !> runs with different macroiteration counts, not fork/join cost.  The
+  !> threshold must stay BELOW ndet*nact^2 for a CAS(8,8) (313,600): an
+  !> earlier 1048576 cut sat above it and cost H2O a 2.5x speedup.
+  !>
+  !> Same idiom as fci_setup.F90, which guards with if(ns4 >= 1048576_i8)
+  !> and if(ndet >= 512_i8).
+  integer(i8), parameter :: par_min_elems = 65536_i8
+
   public :: fci_sigma_strings, rdm12_strings, spin_square_strings
   public :: fci_set_work_bytes_cap, fci_get_work_bytes_cap
 
@@ -367,7 +390,8 @@ contains
       nrow = blk_len * nbstr
       cbase = (blk_start - 1_i8) * nbstr
 
-      !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
+      !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       do t = 1, nkl
         tmat(1:nrow, t) = 0.0_dp
       end do
@@ -377,7 +401,8 @@ contains
       ! contiguous run (ia-1)*nbstr + 1 .. ia*nbstr.  The SOURCE row may sit
       ! outside the block, which is fine -- civec is whole, only T is blocked.
       !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-      !$omp private(ia, e, srow, drow, t, sgn, m)
+      !$omp private(ia, e, srow, drow, t, sgn, m) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       do ia = blk_start, blk_start + blk_len - 1_i8
         drow = (ia - blk_start) * nbstr
         do e = 1_i8, int(ntab_a(ia), i8)
@@ -395,7 +420,8 @@ contains
       ! index partitions the writes.  kl-major, so each (t) run walks one
       ! column down.
       !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-      !$omp private(ia, base, e, srow, drow, t)
+      !$omp private(ia, base, e, srow, drow, t) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       do ia = blk_start, blk_start + blk_len - 1_i8
         base = (ia - blk_start) * nbstr
         do t = 1, nkl
@@ -415,7 +441,8 @@ contains
       ! are only nact^2 (plus nact^4 for the Gram), which is negligible beside
       ! T itself.
       !$omp parallel num_threads(nthr) default(shared) &
-      !$omp   private(gi, grow0, growlen, gloc, dloc)
+      !$omp   private(gi, grow0, growlen, gloc, dloc) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       allocate(gloc(nkl, nkl), dloc(nkl))
       gloc = 0.0_dp
       dloc = 0.0_dp
@@ -725,7 +752,8 @@ contains
     nblk = min(nblk, nastr)
 
     ! Same story as t1 below: ndet*nvec doubles, cleared once per sigma call.
-    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(k)
+    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(k) &
+    !$omp   if(ndet * int(nvec, i8) >= par_min_elems)
     do k = 1_i8, ndet * int(nvec, i8)
       y(k) = 0.0_dp
     end do
@@ -765,7 +793,8 @@ contains
       ! implementations run serially when called from inside a parallel region,
       ! so the work is done once either way.
       !$omp parallel do num_threads(nthr) schedule(static) default(shared) &
-      !$omp   private(gi, grow0, growlen)
+      !$omp   private(gi, grow0, growlen) &
+      !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
       do gi = 0, nthr - 1
         grow0 = (nrow * int(gi, i8)) / int(nthr, i8)
         growlen = (nrow * int(gi + 1, i8)) / int(nthr, i8) - grow0
@@ -871,7 +900,8 @@ contains
     ! active space it cost more than the gather, the DGEMM and the scatter put
     ! together.  Clear it on the same team that fills it, one column per
     ! iteration so each thread walks a contiguous nrow-long run.
-    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t)
+    !$omp parallel do num_threads(nthr) schedule(static) default(shared) private(t) &
+    !$omp   if(nrow * int(nkl, i8) >= par_min_elems)
     do t = 1, nkl
       t1(:, t) = 0.0_dp
     end do
