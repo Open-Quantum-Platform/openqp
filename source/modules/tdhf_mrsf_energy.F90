@@ -263,20 +263,23 @@ contains
 
     infos%tddft%nstate = nstates
 
-    ! Trial-set dimension.  Deliberately UNCHANGED from the historical value:
-    ! raising it globally perturbs the Krylov path of every calculation, which
-    ! moves converged results at the 1e-5 level and is enough to break tight
-    ! reference comparisons (SOC between near-degenerate states is especially
-    ! sensitive).  Symmetry-block coverage is instead handled inside mrinivec,
-    ! where it costs nothing when every irrep is already represented.
     ! Trial-set dimension: deliberately UNCHANGED from the historical rule.
     ! Every attempt to enlarge it perturbed converged results.  Raising the
     ! floor to 16 moved four example references; reserving just nirr-1 extra
     ! vectors still moved CH3Br-BHHLYP-SOC's 6th singlet from 5.214562 to
     ! 5.224000 eV, fully converged and wrong -- and there with NO substitution
-    ! taking place, so the trial-set size alone was responsible.  Symmetry-block
-    ! coverage is therefore confined to whatever room already exists beyond the
-    ! requested states, which is where it costs nothing.
+    ! taking place, so the trial-set size alone was responsible.
+    !
+    ! Symmetry-block coverage is therefore handled inside mrinivec, which
+    ! reassigns vectors within this fixed set rather than asking for more.  It
+    ! is NOT restricted to the room beyond the requested states: an earlier
+    ! version of this comment claimed that, and measuring it showed the
+    ! restriction costs more than it buys.  Since nvec = min(max(nstates,6),
+    ! mxvec) there is no such room for any nstate >= 6, which is exactly where
+    ! blocks go unseeded -- CH2O 6-31G at nstate=6 loses its 5.788160 eV state
+    ! outright under the restriction and reports all six correctly without it,
+    ! while both SOC anchors reproduce their references either way (CH3Br
+    ! 9.8e-10, H2O 1.6e-13).  See the victim-selection comment in mrinivec.
     nvec = min(max(nstates,6), mxvec)
 
     call infos%dat%alloc_or_die(OQP_td_bvec_mo, (/xvec_dim, nstates/), bvec_mo_out, description=OQP_td_bvec_mo_comment)

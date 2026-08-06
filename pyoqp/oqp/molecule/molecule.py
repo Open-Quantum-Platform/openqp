@@ -818,9 +818,14 @@ class Molecule:
         """Stage per-pair irrep indices for response-space blocking.
 
         Builds OQP::sym_pair_irrep (1-based irrep index per excitation
-        pair, occupied index fastest) from the converged MO labels. Only
-        acts when ``use_response_symmetry`` is enabled; bails to the
-        unblocked solver on any 'mixed' orbital or inconsistency.
+        pair, occupied index fastest) from the converged MO labels, and
+        bails to the unblocked solver on any 'mixed' orbital or
+        inconsistency.
+
+        The table itself is staged whenever it can be built, NOT only under
+        ``use_response_symmetry`` -- the Davidson guess needs it for irrep
+        coverage regardless. That flag gates only the separate, experimental
+        residual projection, via OQP::sym_response_project_enable.
         """
         meta = self.symmetry_metadata
         # Invalidate FIRST, before any bail can return. The table is consumed
@@ -886,32 +891,51 @@ class Molecule:
                     pair_irrep[idx] = irreps.index(label) + 1
                     idx += 1
 
-            if td_type == 'mrsf' and na - nb >= 2:
-                # The three open-open slots do not carry the plain
-                # Gamma_i (x) Gamma_a label of their (i, a) indices, because
-                # MRSF stores that sector spin-adapted and folded (SI Fig. S2
-                # and Sec. 8 of JCP 149, 104101).  With O1 = na-2, O2 = na-1
-                # (0-based) and the slot convention "annihilate alpha in i,
-                # create beta in a" acting on |O1a O2a>:
-                #   (O1,O1) holds the folded (L -/+ R)/sqrt2, whose two
-                #     determinants are both the open-shell {O1,O2} pair, so it
-                #     transforms as Gamma_O1 (x) Gamma_O2;
-                #   (O2,O1) is G = |O1 O1> and (O1,O2) is D = |O2 O2>, both
-                #     doubly occupied and therefore totally symmetric.
-                # Labelling them by the raw index product puts all three in the
-                # wrong blocks, which defeats the coverage the Davidson guess
-                # and the response projection both rely on.
-                o1, o2 = na - 2, na - 1
-                v_o1, v_o2 = o1 - nb, o2 - nb
-                n_occ = len(occ_labels)
-                if 0 <= v_o1 and v_o2 < len(vir_labels):
-                    oo_label = product_irrep(
-                        [occ_labels[o1], vir_labels[v_o2]], table)
-                    if oo_label != 'mixed':
-                        pair_irrep[o1 + v_o1*n_occ] = irreps.index(oo_label) + 1
-                    # irreps[0] is the totally symmetric representation
-                    pair_irrep[o2 + v_o1*n_occ] = 1
-                    pair_irrep[o1 + v_o2*n_occ] = 1
+            # NO special case for the three MRSF open-open slots. There used to
+            # be one: it relabelled (O1,O1) as Gamma_O1 (x) Gamma_O2 and both
+            # (O2,O1) and (O1,O2) as totally symmetric, on the grounds that the
+            # determinants those slots build are respectively open-shell and
+            # doubly occupied. The reasoning is sound about DETERMINANTS and
+            # wrong about this table.
+            #
+            # Every other entry here is Gamma_i (x) Gamma_a -- the symmetry of
+            # the transition density the amplitude generates, not of the
+            # resulting determinant. The two differ by the constant reference
+            # factor Gamma_ref = Gamma_O1 (x) Gamma_O2, uniformly, open-open
+            # slots included. Both consumers use only the PARTITION (which
+            # pairs share a label): mrinivec counts representatives per label,
+            # sym_response_project zeroes components whose label differs from
+            # the dominant one. A uniform twist by Gamma_ref leaves the
+            # partition alone and is harmless. Twisting three slots and not the
+            # rest is not: it swaps A1 <-> Gamma_ref on exactly those three and
+            # puts them in the wrong blocks. It is invisible when the two SOMOs
+            # share an irrep -- then Gamma_ref = A1 and the override is inert --
+            # and bites whenever they do not.
+            #
+            # The folded slot survives this: (O1,O1) and (O2,O2) both carry raw
+            # Gamma_O1 (x) Gamma_O1 = A1, so folding them is intra-block either
+            # way.
+            #
+            # MEASURED. With the override, use_response_symmetry is not merely
+            # imperfect, it is destructive -- the response is no longer block
+            # diagonal in the staged labelling, so zeroing "out-of-block"
+            # components deletes real ones:
+            #
+            #   deck                  with override            without
+            #   CH2O 6-31G n=3        87 iters, NOT converged  8 iters, exact
+            #                         states 1-2 frozen at
+            #                         their iteration-1 values
+            #   CH2O 6-31G n=6        51 iters, NOT converged  9 iters, exact
+            #   H2O 6-31G* n=3        24 iters, NOT converged  3 iters, exact
+            #   H2O 6-31G* n=6        33 iters, NOT converged  4 iters, exact
+            #                         state 1 = -230.47 eV
+            #
+            # "exact" means bit-identical to the same deck with
+            # use_response_symmetry off, which is what a correct projection
+            # must be: if the labelling really block-diagonalises the response,
+            # unit trial vectors start pure, stay pure, and the projection can
+            # only remove noise. That it changed anything at all was the
+            # evidence the labelling was wrong.
 
             self.data['OQP::sym_pair_irrep'] = pair_irrep
             # The table itself is staged whenever it can be built: the Davidson
