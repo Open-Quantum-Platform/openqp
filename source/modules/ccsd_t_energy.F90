@@ -77,7 +77,8 @@ contains
 
     integer :: nbf, nocc, nfzc, no, nv, nmo, i, p, ok
     real(kind=dp) :: e_ref, e_ccsd, e_t, mem_gb, t_ccsd, t_trip
-    real(kind=dp) :: mem_ao, mem_mo, mem_solver, rno, rnv
+    real(kind=dp) :: mem_ao, mem_mo, mem_mo_solver, mem_solver, rno, rnv
+    real(kind=dp) :: chol_cap
     real(kind=dp), allocatable :: lvec(:,:), bvv(:,:), boo(:,:), bov(:,:)
     integer :: nchol, maxchol
     real(kind=dp) :: chol_tol, chol_err
@@ -333,7 +334,10 @@ contains
       ! o v^3 / v^3 o ones, plus a DIIS history of 2*ndiis amplitude pairs.
       rno = real(no,dp)
       rnv = real(nv,dp)
+      ! The six MO integral blocks persist into the solver, so they seed both
+      ! windows; what differs is the factorisation storage added below.
       mem_mo = rno**4 + rno**3*rnv + 2.0_dp*rno**2*rnv**2 + rno*rnv**3
+      mem_mo_solver = mem_mo
       if (use_chol) then
         ! The ladder integrals are replaced by the vectors and a per-block
         ! assembly buffer.  nchol is not known until the factorisation runs, so
@@ -347,21 +351,26 @@ contains
         ! Sizing them on the observed ~15/nbf ratio waves through a job that
         ! then dies in the allocation at the bottom of this routine.
         !
-        ! All four are live together: lvec is not released until after the three
-        ! MO blocks are built from it, and the packed AO store is still held
-        ! alongside them.  So they add rather than compete.
+        ! Two windows, not one, and they hold different things.
         !
-        ! bvv was charged here before but boo and bov were not, which is the
-        ! larger of the two errors on an occupied-heavy case: boo goes as no^2
-        ! and bov as no*nv per vector.  Bounding all three by the cap costs some
-        ! conservatism when the rank comes in low, and that is the right way to
-        ! be wrong for a guard whose whole purpose is to refuse before the
-        ! allocator does.
+        ! Transformation: lvec is allocated before the MO blocks and released
+        ! only after they have been built FROM it, so lvec, boo, bov and bvv are
+        ! all live at once, with the packed AO store still held alongside them.
+        ! bvv was charged here before but boo and bov were not -- the larger
+        ! omission on an occupied-heavy case, since boo goes as no^2 and bov as
+        ! no*nv per vector.
+        !
+        ! Solver: by then lvec and boo/bov have been deallocated and only bvv is
+        ! carried in.  Charging the solver for all four overstates its peak and
+        ! refuses jobs that fit, which is the mirror of the bug above and just
+        ! as wrong.
+        chol_cap = real(cholesky_eri_max_vectors(nbf,20),dp)
         mem_mo = mem_mo &
-               + (real(nbf*(nbf+1)/2,dp) + rno**2 + rno*rnv + rnv**2) &
-                 * real(cholesky_eri_max_vectors(nbf,20),dp)
+               + (real(nbf*(nbf+1)/2,dp) + rno**2 + rno*rnv + rnv**2)*chol_cap
+        mem_mo_solver = mem_mo_solver + rnv**2*chol_cap
       else
         mem_mo = mem_mo + rnv**4
+        mem_mo_solver = mem_mo_solver + rnv**4
       end if
       ! The ladder gives every thread a dressed-integral block, so this part of
       ! the cost scales with the thread count and not with the problem alone.
@@ -382,7 +391,7 @@ contains
       ! budget by 3 before sizing them.  Charging one buffer per thread let
       ! the guard pass jobs that failed as soon as the ladder's parallel
       ! region allocated its private storage.
-      mem_solver = mem_mo &
+      mem_solver = mem_mo_solver &
                  + 14.0_dp*rno**2*rnv**2 &
                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
@@ -537,9 +546,22 @@ contains
             'CCSD(T): Cholesky vectors = ', nchol, ' (residual ', chol_err, &
             ', ', real(nchol,dp)/real(nbf,dp), ' per basis function)'
         if (chol_trunc) then
-          write(iw,'(2X,A)') 'CCSD(T): WARNING: Cholesky truncated at the vector ' // &
-              'cap before reaching the tolerance; the correlation energy is ' // &
-              'less accurate than [cc] cholesky_tol requests.'
+          ! Refuse rather than warn.  A truncated factorisation means the
+          ! requested residual was never reached, so cholesky_tol has stopped
+          ! being an accuracy control and the correlation energy carries an
+          ! integral error of unknown size.  Returning it as a successful
+          ! result publishes a number nobody can bound -- and a warning in a
+          ! log is not a bound.  Every other "cannot honour what you asked"
+          ! case on this path aborts (an unusable cholesky_tol, cholesky_direct
+          ! on an open-shell reference); this is the same kind of case and the
+          ! only one that was quiet about it.
+          write(iw,'(2X,A)') 'CCSD(T): the Cholesky decomposition hit its vector ' // &
+              'cap before reaching [cc] cholesky_tol.'
+          call show_message('CCSD(T): the Cholesky decomposition reached the ' // &
+              'vector cap without converging to [cc] cholesky_tol, so the ' // &
+              'correlation energy would carry an unbounded integral error. ' // &
+              'Loosen cholesky_tol, or set [cc] cholesky=false to use the ' // &
+              'explicit ladder route.', with_abort)
         end if
         allocate(boo(no*no, nchol), bov(no*nv, nchol), bvv(nv*nv, nchol), stat=ok)
         if (ok /= 0) call show_message('CCSD(T): cannot allocate the MO Cholesky &
