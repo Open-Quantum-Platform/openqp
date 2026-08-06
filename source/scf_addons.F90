@@ -1112,9 +1112,32 @@ contains
     ! Initialize ERI calculations
     call int2_driver%init(basis, infos)
     if (present(petite)) then
-      ! Petite-list reduction: only valid for totally symmetric densities
-      ! (SCF Fock); the skeleton matrix is symmetrized below.
-      if (petite) call int2_driver%enable_petite(infos)
+      ! Petite-list reduction: only valid for a density invariant under the
+      ! staged group. Verify that on the density in hand rather than assume it.
+      if (petite) then
+        call int2_driver%enable_petite(infos)
+        if (int2_driver%petite) then
+          block
+            real(kind=dp) :: dasym
+            real(kind=dp), parameter :: dtol = 1.0e-6_dp
+            call petite_density_asymmetry(infos, basis, d, dasym)
+            if (dasym > dtol) then
+              ! Do not reduce this build. Loud, because a silent fallback here
+              ! is indistinguishable from a correct run: the C1 path gives the
+              ! right answer, just slower, and the user would never learn that
+              ! their system is symmetry-broken.
+              write(*,'(/,2X,"WARNING: the SCF density is not invariant under ", &
+                &"the detected symmetry (residual ",ES10.3," > ",ES10.3,").")') &
+                dasym, dtol
+              write(*,'(2X,"The integral reduction is not valid for it and has ", &
+                &"been switched off for this build.")')
+              write(*,'(2X,"This is expected for a broken-symmetry solution; ", &
+                &"the result is unaffected, only the speed.",/)')
+              call int2_driver%disable_petite()
+            end if
+          end block
+        end if
+      end if
     end if
     call int2_driver%set_screening()
 
@@ -1166,6 +1189,61 @@ contains
 !>   signed AO permutation of each abelian symmetry operation (standard
 !>   orientation), using the maps written by pyoqp. No-op if the maps are
 !>   missing.
+  !> @brief How far the density is from totally symmetric, relative to its own size
+  !> @detail The petite reduction is exact only for a density that is invariant
+  !>         under the staged group. Nothing has ever checked that. A
+  !>         broken-symmetry SCF -- Jahn-Teller, pseudo-JT, an explicitly broken
+  !>         guess, a restart whose orbitals predate a reorientation -- converges
+  !>         to a density that is not, and the reduced Fock is then not the
+  !>         symmetry-constrained Fock either: it is that plus an artifact that
+  !>         has been measured at 117% of the Fock's own magnitude. The run is
+  !>         then solving no variational problem at all, and the energy it
+  !>         prints is bounded by nothing.
+  !>
+  !>         The test applies the SAME projector the reduction relies on to the
+  !>         density itself: for an invariant density P[D] = D exactly, so the
+  !>         residual is precisely the symmetry breaking. Using the actual
+  !>         projector rather than an independent one means the check cannot
+  !>         disagree with the thing it is guarding.
+  !>
+  !>         Costs one projector pass -- the same loop the code already runs
+  !>         once per Fock build -- against a quartet loop that is four orders
+  !>         larger.
+  !>
+  !>         What it does NOT catch: an SCF that never leaves the symmetric
+  !>         manifold and converges to a symmetric but unstable stationary
+  !>         point. There D really is symmetric, so no density test can see it;
+  !>         that needs stability analysis. This guard covers every density the
+  !>         reduction is actually handed, which is a different and answerable
+  !>         question.
+  subroutine petite_density_asymmetry(infos, basis, d, residual)
+    use precision, only: dp
+    use types, only: information
+    use basis_tools, only: basis_set
+
+    implicit none
+
+    type(information), target, intent(inout) :: infos
+    type(basis_set), intent(in) :: basis
+    real(kind=dp), intent(in) :: d(:,:)
+    real(kind=dp), intent(out) :: residual
+
+    real(kind=dp), allocatable :: probe(:,:)
+    real(kind=dp) :: scale
+
+    residual = 0.0_dp
+    scale = maxval(abs(d))
+    if (scale <= 0.0_dp) return
+
+    allocate(probe, source=d)
+    call symmetrize_skeleton_fock(infos, basis, probe)
+    residual = maxval(abs(probe - d))/scale
+    deallocate(probe)
+
+  end subroutine petite_density_asymmetry
+
+!-------------------------------------------------------------------------------
+
   subroutine symmetrize_skeleton_fock(infos, basis, f)
     use precision, only: dp
     use types, only: information

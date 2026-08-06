@@ -172,6 +172,7 @@ module int2_compute
 !    procedure, pass :: storeints => int2_compute_data_t_storeints
     procedure, public, pass :: init => int2_compute_t_init
     procedure, public, pass :: enable_petite => int2_compute_t_enable_petite
+    procedure, public, pass :: disable_petite => int2_compute_t_disable_petite
     procedure, public, pass :: set_screening => int2_compute_t_set_screening
     procedure, public, pass :: set_cutoff => int2_compute_t_set_cutoff
     procedure, public, pass :: clean => int2_compute_t_clean
@@ -288,6 +289,20 @@ contains
 !> @detail Loads the shell map written by pyoqp when use_integral_symmetry
 !>   is enabled. Only valid when the contracted density is totally
 !>   symmetric and the caller symmetrizes the resulting skeleton matrix.
+  !> @brief Withdraw the petite reduction after enable_petite already accepted it
+  !> @detail Used when a check that needs data enable_petite does not have --
+  !>         the density's symmetry -- decides the reduction is not valid.
+  subroutine int2_compute_t_disable_petite(this)
+    implicit none
+    class(int2_compute_t), intent(inout) :: this
+    this%petite = .false.
+    this%sym_shell_map => null()
+    this%sym_nops = 0
+    this%sym_full = .false.
+  end subroutine int2_compute_t_disable_petite
+
+!###############################################################################
+
   subroutine int2_compute_t_enable_petite(this, infos)
     use types, only: information
     use oqp_tagarray_driver
