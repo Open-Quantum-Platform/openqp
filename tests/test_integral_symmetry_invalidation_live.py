@@ -172,5 +172,53 @@ class IntegralSymmetryInvalidationTests(unittest.TestCase):
                              f'{tag} survived a load_config() that disabled the reduction')
 
 
+    def test_tags_are_gone_before_the_initial_scf_runs(self):
+        """Ordering, not just end state.
+
+        With `init_scf != 'no'`, `_init_convergence()` runs a full
+        two-electron SCF -- possibly in a DIFFERENT basis (`init_basis`) --
+        before the staging call further down. Clearing only at staging time
+        hands that initial SCF the previous run's maps with
+        `sym_petite_enable=1`: a corrupted starting solution, and potentially a
+        target SCF converged into a different basin.
+
+        Asserting the final state cannot catch this, because the tags are gone
+        by the end either way. So capture what was live at the moment
+        `_init_convergence()` was entered.
+        """
+        from oqp.library.single_point import SinglePoint
+        mol = self._run('sym_order', 'true')
+        self.assertTrue(_has(mol, 'OQP::sym_petite_enable'))
+
+        case = os.path.join(self.workdir, 'sym_order')
+        off = os.path.join(case, 'off.inp')
+        with open(off, 'w', encoding='utf-8') as handle:
+            handle.write(INPUT.format(use='false'))
+        mol.load_config(off)
+        self.assertTrue(mol.has_staged_integral_symmetry(),
+                        'precondition: tags live before reference()')
+
+        sp = SinglePoint(mol)
+        seen = {}
+        original = sp._init_convergence
+
+        def spy():
+            seen['staged_at_entry'] = mol.has_staged_integral_symmetry()
+            return original()
+
+        sp._init_convergence = spy
+        # The deck is RHF; 'no' would skip _init_convergence entirely and
+        # the spy would never fire, which the assertion below catches.
+        if sp.init_scf == 'no':
+            sp.init_scf = 'rhf'
+        sp.reference(do_init_scf=True)
+
+        self.assertIn('staged_at_entry', seen,
+                      '_init_convergence did not run; the test proves nothing')
+        self.assertFalse(
+            seen['staged_at_entry'],
+            'stale petite maps were still live when the initial SCF started')
+
+
 if __name__ == '__main__':
     unittest.main()

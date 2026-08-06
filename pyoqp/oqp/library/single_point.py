@@ -479,6 +479,27 @@ class SinglePoint(Calculator):
         # guess/basis stage; stage the maps once the basis exists.
         symmetry_on = bool(getattr(self.mol, 'symmetry_metadata', None) and
                            self.mol.symmetry_metadata.get('use_integral_symmetry'))
+
+        # Invalidate any PREVIOUSLY staged reduction here, at the very top,
+        # before anything can consume it.
+        #
+        # Staging happens further down, once the basis exists, and clearing
+        # only there is too late: with init_scf != 'no', _init_convergence()
+        # below runs a full two-electron SCF first, and it may do so in a
+        # DIFFERENT basis (`init_basis`). A reused molecule whose geometry or
+        # basis has changed would hand that initial SCF the previous run's
+        # maps with sym_petite_enable=1 -- a corrupted starting solution, and
+        # potentially a target SCF converged into a different basin.
+        #
+        # Asks the TAG STORE, not the metadata: load_config() replaces the
+        # metadata dict wholesale, so a status-based check answers False in
+        # exactly the case that strands tags. getattr keeps the lightweight
+        # stand-in molecules used across the test suite working.
+        previously_staged = getattr(
+            self.mol, 'has_staged_integral_symmetry', lambda: False)()
+        if previously_staged:
+            self.mol.clear_integral_symmetry_state()
+
         if symmetry_on:
             self.mol.reorient_for_integral_symmetry()
 
@@ -490,25 +511,10 @@ class SinglePoint(Calculator):
 
         self.swapmo()
 
-        # Reached when symmetry is on, AND when it is off but a PREVIOUS step
-        # left the reduction active. The method gates itself, but it also
-        # invalidates the previously staged maps ahead of those gates, and that
-        # invalidation is exactly what a run which has just turned symmetry off
-        # needs -- the reusable OPENQP API reloads configuration into the same
-        # molecule, so `sym_petite_enable` and the old maps would otherwise stay
-        # live for a new geometry or basis.
-        #
-        # Not called unconditionally: `reference()` is driven with lightweight
-        # stand-in molecules in the test suite, and a bare call breaks every one
-        # of them. Keying off the recorded status means the extra call happens
-        # only for a molecule that really did stage something.
-        # Asks the TAG STORE, not the metadata. load_config() replaces the
-        # metadata dict wholesale, so a status-based check answers False in
-        # exactly the case that strands tags: reconfiguring one molecule and
-        # turning the reduction off. getattr keeps the lightweight stand-in
-        # molecules used across the test suite working.
-        previously_staged = getattr(
-            self.mol, 'has_staged_integral_symmetry', lambda: False)()
+        # Stage fresh maps now that the basis exists. `previously_staged` is
+        # still consulted so that a molecule which HAD a reduction and has now
+        # turned it off still reaches the method's own bookkeeping (status and
+        # log), even though its tags were already dropped above.
         if symmetry_on or previously_staged:
             self.mol.stage_integral_symmetry_maps()
 

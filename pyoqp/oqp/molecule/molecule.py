@@ -750,6 +750,14 @@ class Molecule:
                 continue
         return False
 
+    def clear_integral_symmetry_state(self):
+        """Public entry point for dropping the staged petite reduction.
+
+        Callers need this BEFORE anything that can consume the maps, not just
+        before re-staging them.
+        """
+        self._clear_integral_symmetry_tags()
+
     def _clear_integral_symmetry_tags(self, meta=None):
         """Drop every staged petite-list / skeleton-symmetrisation artefact.
 
