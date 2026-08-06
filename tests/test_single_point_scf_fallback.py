@@ -85,6 +85,28 @@ def install_single_point_stubs():
     library.__path__ = []
     sys.modules["oqp.library"] = library
 
+    state_tracking = types.ModuleType("oqp.library.state_tracking")
+    setattr(state_tracking, "diagonal_phase_tracking", lambda *args, **kwargs: None)
+    setattr(state_tracking, "maximum_overlap_assignment", lambda *args, **kwargs: None)
+    sys.modules["oqp.library.state_tracking"] = state_tracking
+
+    nac_utils = types.ModuleType("oqp.library.nac_utils")
+    for name in (
+        "canonical_state_overlap",
+        "hst_derivative_coupling",
+        "interstate_coupling",
+        "load_numerical_nac_cache",
+        "write_numerical_nac_cache_marker",
+    ):
+        setattr(nac_utils, name, lambda *args, **kwargs: None)
+    sys.modules["oqp.library.nac_utils"] = nac_utils
+
+    tb_backends = types.ModuleType("oqp.utils.tb_backends")
+    setattr(tb_backends, "is_tb_method", lambda method: False)
+    setattr(tb_backends, "make_tb_adapter", lambda mol: None)
+    setattr(tb_backends, "tb_config", lambda config: {})
+    sys.modules["oqp.utils.tb_backends"] = tb_backends
+
     frequency = types.ModuleType("oqp.library.frequency")
     setattr(frequency, "normal_mode", lambda *args, **kwargs: None)
     setattr(frequency, "thermal_analysis", lambda *args, **kwargs: None)

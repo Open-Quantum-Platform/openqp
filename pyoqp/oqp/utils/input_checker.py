@@ -155,7 +155,8 @@ PCM_BACKEND_MODELS = {
 }
 OPT_LIBS = {"scipy", "geometric", "oqp"}
 SCIPY_OPTIMIZERS = {"bfgs", "cg", "l-bfgs-b", "newton-cg"}
-MECI_SEARCH = {"auto", "penalty", "ubp", "hybrid", "baeka"}
+MECI_SEARCH = {"auto", "penalty", "ubp", "auglag", "hybrid", "baeka"}
+MECP_SEARCH = {"auto", "auglag", "sqp", "penalty", "quad"}
 SCF_PROPS = {"el_mom", "mulliken", "lowdin", "resp", "nmr"}
 NMR_GAUGES = {"cgo", "giao"}
 INIT_SCF_TYPES = {"no", "rhf", "uhf", "rohf", "rks", "uks", "roks"}
@@ -736,6 +737,13 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
     guess_file2 = _get(config, "guess", "file2", "")
     continue_geom = _get(config, "guess", "continue_geom", False)
     swapmo = _get(config, "guess", "swapmo", "")
+    restart_namd_mutable_guess = (
+        _as_lower(_get(config, "input", "runtype", "")) == "namd"
+        and str(_get(config, "md", "restart", False)).strip().lower()
+        in _TRUE_BOOL
+        and str(_get(config, "guess", "save_mol", False)).strip().lower()
+        in _TRUE_BOOL
+    )
 
     if guess_type not in GUESS_TYPES:
         report.add(
@@ -759,7 +767,8 @@ def _check_guess(config: dict[str, Any], report: CheckReport) -> None:
             )
         else:
             resolved = _norm_path(guess_file, _get(config, "input", "system", ""))
-            if not os.path.exists(resolved):
+            if (not os.path.exists(resolved)
+                    and not restart_namd_mutable_guess):
                 report.add(
                     "ERROR",
                     "guess.file",
@@ -978,6 +987,31 @@ def apply_dftb_model_default(config: dict[str, Any]) -> str:
         return ""
     if model:
         return model
+    # An explicit [dftb] reference= (open-shell ground SCC for cross-code
+    # comparison) follows the provided parameter set -- it must NOT inherit the
+    # LC open-shell preset, or a non-LC SK set (e.g. mio) picks up spurious
+    # long-range exchange.  Add model=... explicitly for an LC open-shell run.
+    # Only a *recognized* reference suppresses the preset: a typo (e.g.
+    # reference=ukz) must fall through so the checker rejects it, rather than
+    # silently disabling the model default and running a closed-shell reference.
+    reference = _as_lower(_get(config, "dftb", "reference", ""))
+    if reference in {"rhf", "rks", "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}:
+        # Normalize the effective open-shell multiplicity here (input
+        # normalization) so validation and all pre-run request logging see the
+        # triplet/quintet reference, not the default singlet.
+        if reference in {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}:
+            try:
+                current_mult = int(_get(config, "dftb", "reference_multiplicity", 0) or 0)
+            except (TypeError, ValueError):
+                current_mult = 0
+            if current_mult <= 1:
+                try:
+                    unpaired = int(_get(config, "dftb", "unpaired", 2))
+                except (TypeError, ValueError):
+                    unpaired = 2
+                dftb["reference_multiplicity"] = unpaired + 1
+        dftb["model"] = ""
+        return ""
     # Presets are resolved inside the native library; the probe backend
     # cannot carry them, so it keeps the explicit-keys route.
     if _as_lower(_get(config, "dftb", "backend", "native")) not in {
@@ -1039,6 +1073,64 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
     grad_states = _as_list(_get(config, "properties", "grad", []))
     istate = _get(config, "optimize", "istate", 0)
     jstate = _get(config, "optimize", "jstate", 0)
+
+    # ---- open-shell ground-state reference (reference= / unpaired) guards ----
+    # `reference=` (with `unpaired`) selects an open-shell ground-state reference
+    # (ROKS/CUKS/UKS) for a plain ground SCC.  It is honoured ONLY by the native
+    # DFTB backend on a ground route.  Reject every context that would otherwise
+    # accept the keyword and then silently run a different reference.
+    _VALID_REFERENCE = {
+        "rhf", "rks", "roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+    _OPEN_REFERENCE = {"roks", "rohf", "cuks", "cuhf", "uks", "uhf"}
+    reference = _as_lower(_get(config, section, "reference", ""))
+    if reference:
+        if reference not in _VALID_REFERENCE:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "Unrecognized open-shell reference keyword; a typo would "
+                "otherwise silently run a closed-shell reference.",
+                value=reference,
+                expected=", ".join(sorted(_VALID_REFERENCE)),
+                action="Use reference=rhf/rks (closed) or roks/cuks/uks "
+                       "(open-shell; the *hf spellings are accepted too).",
+            )
+        if is_xtb:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                f"{disp} does not implement the reference=/unpaired open-shell "
+                "ground-state selector; it would be silently ignored.",
+                value=reference,
+                expected="omit reference/unpaired",
+                action="Open-shell ground SCC via reference= is a DFTB-native "
+                       "feature; drop [xtb] reference/unpaired.",
+            )
+        elif backend == "probe":
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "The probe backend cannot forward reference=/unpaired to the "
+                "probe executable; the requested reference would be silently "
+                "ignored.",
+                value=reference,
+                expected="native",
+                action=f"Use [{section}] backend=native for an open-shell "
+                       "reference= ground SCC.",
+            )
+        if reference in _OPEN_REFERENCE and \
+                dftb_type_canon not in {"ground", "ground_noscc"}:
+            report.add(
+                "ERROR",
+                f"{section}.reference",
+                "reference= selects a ground-state open-shell reference and is "
+                "valid only on a ground route; it cannot drive an SF/MRSF/TD "
+                "response, which has its own reference handling.",
+                value=f"{reference} with type={dftb_type_canon}",
+                expected="type=dftb or type=dftb0",
+                action="Run the open-shell reference as a ground energy(), or "
+                       "use the SF/MRSF response route instead of reference=.",
+            )
 
     allowed_backends = {"auto", "native"} if is_xtb else DFTB_BACKENDS
     if backend not in allowed_backends:
@@ -1153,7 +1245,10 @@ def _check_tb(config: dict[str, Any], report: CheckReport, *, section: str) -> N
                 reference_multiplicity = int(reference_multiplicity)
             except (TypeError, ValueError):
                 reference_multiplicity = 0
-            if reference_multiplicity <= 1:
+            open_shell_reference = _as_lower(
+                _get(config, "dftb", "reference", "")) in {
+                    "uks", "uhf", "roks", "rohf", "cuks", "cuhf"}
+            if reference_multiplicity <= 1 and not open_shell_reference:
                 report.add(
                     "ERROR",
                     "dftb.model",
@@ -2139,6 +2234,28 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
     runtype = _as_lower(_get(config, "input", "runtype", "energy"))
     method = _as_lower(_get(config, "input", "method", "hf"))
 
+    odp_enabled = _parse_bool_like(
+        _get(config, "odp", "enabled", False), "odp.enabled", report)
+    if odp_enabled is True and runtype != "namd":
+        report.add(
+            "ERROR",
+            "odp.enabled",
+            "ODP umbrella sampling currently requires the NVE NAMD workflow.",
+            value=f"enabled=True/runtype={runtype}",
+            expected="odp.enabled=False, or input.runtype=namd",
+            action="Disable [odp] for this calculation or use runtype=namd.",
+        )
+    if (odp_enabled is True and runtype == "namd"
+            and _as_lower(_get(config, "md", "ensemble", "nve")) != "nve"):
+        report.add(
+            "ERROR",
+            "md.ensemble",
+            "ODP umbrella sampling currently supports NVE NAMD only.",
+            value=_get(config, "md", "ensemble", "nve"),
+            expected="nve",
+            action="Set [md] ensemble=nve when [odp] enabled=True.",
+        )
+
     if runtype not in ALL_RUNTYPES:
         report.add(
             "ERROR",
@@ -2161,6 +2278,20 @@ def _check_runtype(config: dict[str, Any], report: CheckReport,
             wiki=WIKI_HELP["input.runtype"],
         )
         return
+
+    for section in ("droplet", "solute_com"):
+        enabled = str(_get(config, section, "enabled", False)).strip().lower()
+        if enabled in _TRUE_BOOL and runtype != "namd":
+            report.add(
+                "ERROR",
+                f"{section}.enabled",
+                f"[{section}] is currently connected only to NAMD.",
+                value=True,
+                expected="input.runtype=namd",
+                action=(
+                    f"Set [input] runtype=namd or disable [{section}]."
+                ),
+            )
 
     if method in CC_METHODS and runtype != "energy":
         report.add(
@@ -2567,7 +2698,7 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
                 "Unknown MECI search algorithm.",
                 value=meci_search,
                 expected=", ".join(sorted(MECI_SEARCH)),
-                action="Use auto (recommended), penalty, ubp, hybrid, or baeka.",
+                action="Use auto (recommended), penalty, ubp, auglag, hybrid, or baeka.",
             )
         elif meci_search in {"auto", "baeka"}:
             selected = meci_states or [istate, jstate]
@@ -2686,6 +2817,173 @@ def _check_optimize(config: dict[str, Any], report: CheckReport) -> None:
             expected="imult != jmult",
             action="Choose different multiplicities for the two crossing states.",
         )
+
+    if runtype in {"meci", "mecp"}:
+        # Only auglag consumes gap_sigma, so an inherited or deliberately
+        # disabled value must not block a run that never reads it.
+        if runtype == "mecp":
+            effective_search = _as_lower(
+                _get(config, "optimize", "mecp_search", "auto"))
+            if effective_search == "auto":
+                # auto is SQP natively and auglag on the other backends
+                effective_search = "auglag" if lib != "oqp" else "sqp"
+        else:
+            effective_search = _as_lower(
+                _get(config, "optimize", "meci_search", "auto"))
+            if effective_search == "auto":
+                # auto is auglag for two states and BaekA for three or more
+                auto_states = _as_list(_get(config, "optimize", "states", []))
+                effective_search = (
+                    "baeka" if len(auto_states) > 2 else "auglag")
+        raw_gap_sigma = _get(config, "optimize", "gap_sigma", 10.0)
+        try:
+            gap_sigma = float(raw_gap_sigma)
+            valid_sigma = math.isfinite(gap_sigma) and gap_sigma > 0.0
+        except (TypeError, ValueError):
+            valid_sigma = False
+        if effective_search == "auglag" and not valid_sigma:
+            report.add(
+                "ERROR",
+                "optimize.gap_sigma",
+                "The auglag gap term must be scaled by a positive factor; zero "
+                "removes the gap term entirely and a negative value drives the "
+                "search away from the seam.",
+                value=raw_gap_sigma,
+                expected="> 0",
+                action="Use gap_sigma=10 (default) or another positive value.",
+            )
+
+    if runtype == "mecp":
+        mecp_search = _as_lower(_get(config, "optimize", "mecp_search", "auto"))
+        effective_mecp = mecp_search
+        if effective_mecp == "auto":
+            effective_mecp = "sqp" if lib == "oqp" else "auglag"
+        if effective_mecp == "sqp":
+            # The schema injects all three, so only a value that differs from
+            # its default says anything about the user's intent.
+            recovery_defaults = {
+                "auto_recovery": True,
+                "recovery_maxit": 30,
+                "recovery_trust": 0.02,
+            }
+            ignored = []
+            for key, default in recovery_defaults.items():
+                value = _get(config, "oqp", key, default)
+                try:
+                    changed = (bool(value) != bool(default)
+                               if isinstance(default, bool)
+                               else float(value) != float(default))
+                except (TypeError, ValueError):
+                    changed = True
+                if changed:
+                    ignored.append(key)
+            if ignored:
+                report.add(
+                    "WARNING",
+                    "oqp.%s" % ignored[0],
+                    "MECP SQP brings its own trust-region step control and does "
+                    "not run through the native recovery ladder, so %s "
+                    "%s no effect."
+                    % (", ".join(ignored), "have" if len(ignored) > 1 else "has"),
+                    value=", ".join(ignored),
+                    expected="unset for mecp_search=sqp",
+                    action="Remove them, or select mecp_search=auglag to use "
+                           "the native optimizer and its recovery ladder.",
+                )
+        if mecp_search == "sqp" and lib != "oqp":
+            report.add(
+                "ERROR",
+                "optimize.lib",
+                "MECP SQP replaces the outer optimizer with its own KKT step "
+                "control, so it does not run under another backend.",
+                value=lib, expected="oqp",
+                action="Set [optimize] lib=oqp.",
+            )
+        if mecp_search not in MECP_SEARCH:
+            report.add(
+                "ERROR",
+                "optimize.mecp_search",
+                "Unknown MECP search algorithm.",
+                value=mecp_search,
+                expected=", ".join(sorted(MECP_SEARCH)),
+                action="Use auto (default), sqp, auglag, penalty, or quad.",
+            )
+        elif mecp_search == "penalty":
+            penalty_controls = {
+                "pen_sigma": (1.0, "penalty multiplier", False),
+                "pen_alpha": (0.0, "penalty smoothing energy", True),
+                # the objective scales by gap_weight * pen_sigma, so a zero or
+                # negative weight removes or inverts the gap term just as a
+                # bad pen_sigma would
+                "gap_weight": (1.0, "gap weight", False),
+            }
+            for key, (default, label, allow_zero) in penalty_controls.items():
+                raw = _get(config, "optimize", key, default)
+                try:
+                    value = float(raw)
+                    ok = math.isfinite(value) and (
+                        value > 0.0 or (allow_zero and value == 0.0)
+                    )
+                except (TypeError, ValueError):
+                    ok = False
+                if not ok:
+                    report.add(
+                        "ERROR",
+                        f"optimize.{key}",
+                        f"The MECP penalty {label} must be positive; a "
+                        "nonpositive value removes or inverts the gap term.",
+                        value=raw,
+                        expected=">= 0" if allow_zero else "> 0",
+                        action=("Use pen_alpha=0.02, or 0 to select it."
+                                if allow_zero else "Use a positive value."),
+                    )
+            raw_incre = _get(config, "optimize", "pen_incre", 1.0)
+            try:
+                incre_ignored = float(raw_incre) != 1.0
+            except (TypeError, ValueError):
+                incre_ignored = True
+            if incre_ignored:
+                report.add(
+                    "WARNING",
+                    "optimize.pen_incre",
+                    "The MECP penalty holds sigma fixed, so pen_incre is not "
+                    "applied. Every backend evaluates the objective at trial "
+                    "geometries, so a ramp driven from inside it would advance "
+                    "on rejected steps as well.",
+                    value=raw_incre,
+                    expected="1.0",
+                    action="Use mecp_search=auglag, which converges without a "
+                           "ramp, or meci_search=baeka for an adaptive one.",
+                )
+
+        elif mecp_search == "quad":
+            raw_weight = _get(config, "optimize", "gap_weight", 1.0)
+            try:
+                weight = float(raw_weight)
+                weight_ok = math.isfinite(weight) and weight > 0.0
+            except (TypeError, ValueError):
+                weight_ok = False
+            if not weight_ok:
+                report.add(
+                    "ERROR",
+                    "optimize.gap_weight",
+                    "The quad objective scales its gap term by gap_weight; a "
+                    "nonpositive value removes or inverts it.",
+                    value=raw_weight,
+                    expected="> 0",
+                    action="Use a positive gap_weight.",
+                )
+            report.add(
+                "WARNING",
+                "optimize.mecp_search",
+                "The quad objective balances the mean gradient against the gap "
+                "term, so it settles at a residual gap of order 1/gap_weight "
+                "and generally cannot reach energy_gap.",
+                value=mecp_search,
+                expected="auglag",
+                action="Use mecp_search=auglag unless you are reproducing an "
+                       "earlier run.",
+            )
 
     if lib == "scipy" and runtype in {"ts", "irc"}:
         report.add(

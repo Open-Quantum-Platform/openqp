@@ -228,7 +228,10 @@ contains
     res = record_info%count
     if (present(type_id)) type_id = record_info%type_id
     if (present(ndims  )) ndims   = int(record_info%ndims, c_int32_t)
-    if (present(dims   )) dims(1:record_info%ndims) = record_info%dims
+    ! record_info%dims is a pointer of extent ndims (null for scalar records);
+    ! slice both sides so the assignment conforms for every ndims, incl. 0
+    if (present(dims) .and. record_info%ndims > 0) &
+      dims(1:record_info%ndims) = record_info%dims(1:record_info%ndims)
     if (present(data_size   )) data_size = record_info%count
 
   end function tagarray_get_cptr

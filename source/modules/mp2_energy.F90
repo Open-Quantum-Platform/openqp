@@ -41,7 +41,7 @@ contains
     implicit none
 
     type(information), target, intent(inout) :: infos
-    real(kind=dp) :: e_mp2, e_aa, e_bb, e_ab, e_ref, e_ss
+    real(kind=dp) :: e_mp2, e_aa, e_bb, e_ab, e_ref, e_ss, e_s
     logical :: computed
 
     open(unit=iw, file=infos%log_filename, position="append")
@@ -49,7 +49,7 @@ contains
 
     e_ref = infos%mol_energy%energy
 
-    call mp2_correlation(infos, e_mp2, e_aa, e_bb, e_ab, computed)
+    call mp2_correlation(infos, e_mp2, e_aa, e_bb, e_ab, e_s, computed)
 
     write(iw,'(/,2X,60("="))')
     write(iw,'(2X,A)') 'MP2  (Moller-Plesset second order, ground state)'
@@ -63,6 +63,11 @@ contains
       write(iw,'(2X,A,F20.10)') 'E(MP2, opp-spin  ab)   = ', e_ab
       write(iw,'(2X,A,F20.10)') 'MP2 same-spin scale    = ', infos%dft%MP2SS_Scale
       write(iw,'(2X,A,F20.10)') 'MP2 opp-spin scale     = ', infos%dft%MP2OS_Scale
+      ! Only an ROHF reference makes this non-zero; printing it always would
+      ! put a line of zeros in every RHF and UHF log.
+      if (abs(e_s) > 1.0e-12_dp) then
+        write(iw,'(2X,A,F20.10)') 'E(MP2, singles)        = ', e_s
+      end if
       write(iw,'(2X,A,F20.10)') 'E(MP2, correlation)    = ', e_mp2
       write(iw,'(2X,A,F20.10)') 'E(MP2, total)          = ', e_ref + e_mp2
       ! Report the MP2 total as the molecular energy for downstream consumers.
