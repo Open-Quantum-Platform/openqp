@@ -623,6 +623,34 @@ class Molecule:
             pass
         return staged
 
+    def _full_group_decline_reason(self):
+        """Why the non-abelian 'full' integral tier must not be used, or None.
+
+        The full tier and the XC grid reduce over DIFFERENT groups by
+        construction: ``stage_integral_symmetry_maps`` deliberately keeps the
+        atom weights on the abelian sign operations, because Lebedev angular
+        grids are invariant under the axis-aligned octahedral operations but
+        NOT under C3/C6. That mismatch costs nothing for HF, which has no
+        grid. With a functional it is a measured error -- ``benzene_full_dft``
+        is out by 3.14e-04 against the tier's own 5e-7 tolerance
+        (docs/planned/integral-symmetry.md, "Still open").
+
+        The combination used to be unreachable on the bases DFT is normally
+        run in: before per-shell purity was exported, staging bailed with
+        ``skipped_basis_mismatch`` on every cc-pVXZ, def2 and 6-311G input.
+        Widening engagement to spherical bases without this guard would turn a
+        documented, cornered defect into a new way to get a wrong energy. So
+        DFT stays on the exact abelian tier until the non-abelian XC path is
+        understood -- the user still gets the reduction, just the tier that is
+        machine-exact.
+
+        Split out from the staging body so the decision can be tested without
+        a live SCF: it is a pure function of the configuration.
+        """
+        if str(self.config.get('input', {}).get('functional', '')).strip():
+            return 'dft_functional'
+        return None
+
     def _stage_integral_symmetry_maps(self, meta):
         """Body of :meth:`stage_integral_symmetry_maps`; records a status and
         returns True only when the reduction is actually active."""
@@ -723,6 +751,11 @@ class Molecule:
             # non-abelian orbit members is still under investigation).
             want_full = str(self.config.get('symmetry', {})
                             .get('use_integral_symmetry', '')).strip().lower() == 'full'
+            full_declined = None
+            if want_full:
+                full_declined = self._full_group_decline_reason()
+                if full_declined:
+                    want_full = False
             full_group = False
             full_ops = None
             try:
@@ -789,6 +822,7 @@ class Molecule:
                 'n_operations': (meta['reduction_maps_full']['n_operations']
                                  if full_group else maps['n_operations']),
                 'full_group': full_group,
+                'full_group_declined': full_declined,
                 'reoriented': True,
                 'input_to_standard': input_to_standard,
             }
@@ -944,10 +978,19 @@ class Molecule:
             # contributes no roots and every state index shifts.  Confining
             # residuals to a dominant irrep is a separate, experimental
             # behaviour and stays behind use_response_symmetry.
+            projection = bool(meta.get('use_response_symmetry'))
             self.data['OQP::sym_response_project_enable'] = np.array(
-                [1 if meta.get('use_response_symmetry') else 0], dtype=np.int64)
+                [1 if projection else 0], dtype=np.int64)
+            # Report what is actually running. 'active' has always meant the
+            # residual projection, and _dump_symmetry_log prints it as
+            # "response blocking : <status>". Now that the table is staged on
+            # every TD run, saying 'active' there would have every default run
+            # claim a blocking it is not doing -- the projection returns
+            # immediately on proj_flag == 0. The staged table feeds only the
+            # Davidson guess, so it gets its own status.
             meta['response_symmetry'] = {
-                'status': 'active',
+                'status': 'active' if projection else 'pair_table_staged',
+                'projection': projection,
                 'td_type': td_type,
                 'n_pairs': int(pair_irrep.size),
                 'irreps': irreps,
@@ -1187,11 +1230,29 @@ class Molecule:
                                      f" disagrees with the basis ({active.get('nbf')})")
                     elif active.get('error'):
                         lines.append(f"   reason: {active.get('error')}")
+                if active.get('full_group_declined') == 'dft_functional':
+                    # The user asked for 'full' and did not get it; saying so
+                    # is the whole point of the not-silent-fallback rule above.
+                    lines.append('   use_integral_symmetry=full was declined for a DFT'
+                                 ' run and the exact abelian')
+                    lines.append('   tier used instead: the XC grid reduces over the'
+                                 ' abelian operations only,')
+                    lines.append('   and the non-abelian mismatch is a measured'
+                                 ' 3e-04 error (see docs/planned/')
+                    lines.append('   integral-symmetry.md). Set method=hf to use the'
+                                 ' full group.')
                 if active.get('reoriented'):
                     lines.append('   geometry reoriented to the symmetry standard orientation')
             response = meta.get('response_symmetry')
             if response:
                 lines.append(f"   response blocking    : {response.get('status')}")
+                if response.get('status') == 'pair_table_staged':
+                    # Spell out what was and was not done, so the line is not
+                    # read as the experimental projection having run.
+                    lines.append('   (per-pair irrep table staged for Davidson'
+                                 ' guess coverage only; the residual')
+                    lines.append('    projection stays off --'
+                                 ' [symmetry] use_response_symmetry)')
             lines.append('')
             with open(self.log, 'a', encoding='utf-8') as fout:
                 fout.write('\n'.join(lines))
@@ -2474,6 +2535,17 @@ class Molecule:
         self.vibrational_intensity_metadata = data.get('vibrational_intensity_metadata', {})
         self.infrared_mode_dipole_derivatives = infrared_derivatives
         self.raman_mode_polarizability_derivatives = raman_derivatives
+
+        # Re-derive the normal-mode irreps for the cached modes. The frequency
+        # table now carries a Symmetry column, and it is driven by
+        # symmetry_metadata['mode_labels'] -- which nothing above restores, so
+        # a [hess] read=true run would print the table without the column and
+        # look as though symmetry had not been detected. Recomputing is
+        # cheaper and safer than trusting a cached label list: the modes were
+        # just validated against the current geometry and masses, so the
+        # labels follow from data this method has already checked. Non-fatal
+        # by construction (label_normal_modes swallows its own errors).
+        self.label_normal_modes()
 
         return energy, hessian, freqs, modes, inertia
 

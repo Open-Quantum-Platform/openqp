@@ -422,7 +422,7 @@ contains
 
     integer(8), contiguous, pointer :: pair_irrep(:)
     integer(4) :: ta_status
-    integer :: nirr, ir, k, ncur, nmiss
+    integer :: nirr, ir, k, ncur, nmiss, nblock
 
     call tagarray_get_data(infos%dat, OQP_sym_pair_irrep, pair_irrep, &
                            status=ta_status)
@@ -432,8 +432,24 @@ contains
     nirr = int(maxval(pair_irrep))
     if (nirr < 2) return
 
+    ! Count only irreps the excitation space ACTUALLY contains.
+    !
+    ! pair_irrep holds an index into the group's FULL character table --
+    ! stage_response_symmetry builds it as `irreps.index(label) + 1` over
+    ! `list(table.keys())` -- and the products Gamma_i (x) Gamma_a generally
+    ! span a subset of it. Gaps are the normal case, not a defect: C2v pairs
+    ! that span only a1 and b2 leave indices 2 (a2) and 3 (b1) with no
+    ! configurations at all. Such a block holds no roots, so no seed can be
+    ! missing from it; walking 1..maxval and counting the empty ones warned
+    ! that the state numbering was shifted on spectra that were complete --
+    ! and, with detection now on by default, it did so on ordinary runs.
+    ! mrinivec's copy of this loop is already immune: it looks for a live
+    ! pair first and cycles when there is none.
     nmiss = 0
+    nblock = 0
     do ir = 1, nirr
+      if (.not. any(pair_irrep == int(ir, 8))) cycle
+      nblock = nblock + 1
       ncur = 0
       do k = 1, nvec
         if (seeds(k) >= 1 .and. seeds(k) <= xvec_dim) then
@@ -443,9 +459,13 @@ contains
       if (ncur == 0) nmiss = nmiss + 1
     end do
 
+    ! One populated block is the C1-like case: every seed couples to the whole
+    ! space and nothing can be unreachable.
+    if (nblock < 2) return
+
     if (nmiss > 0) then
       write(iw,'(/,2X,"WARNING: ",I0," of ",I0," symmetry block(s) get no ", &
-        &"start vector.")') nmiss, nirr
+        &"start vector.")') nmiss, nblock
       write(iw,'(2X,"Those blocks contribute NO roots, so the reported state ", &
         &"numbering may skip states")')
       write(iw,'(2X,"and every state-indexed result (gradients, optimisation, ", &
