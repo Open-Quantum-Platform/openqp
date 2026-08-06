@@ -48,3 +48,7 @@ fort.6
 .venv-symmetry/
 build_dev/
 openqp_*test_tmp_*/
+openqp_test_tmp_*/
+
+# SOC tester scratch output (accidentally committed once)
+openqp_soc_test_tmp_*/

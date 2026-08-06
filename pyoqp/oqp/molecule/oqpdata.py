@@ -568,6 +568,7 @@ OQP_CONFIG_SCHEMA = {
         'restart': {'type': bool, 'default': 'False'},
         'temperature': {'type': farray, 'default': '298.15'},
         'clean': {'type': bool, 'default': 'False'},
+        'symmetry_unique': {'type': bool, 'default': 'False'},
     },
     'nac': {
         'type': {'type': string, 'default': 'numerical'},

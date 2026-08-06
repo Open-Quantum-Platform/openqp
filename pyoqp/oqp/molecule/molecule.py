@@ -572,7 +572,17 @@ class Molecule:
         # NEB, ...) must not have the frame rotated under them; the petite
         # reduction is restricted to single-point runtypes for now.
         runtype = str(self.config.get('input', {}).get('runtype', 'energy')).lower()
-        if runtype not in ('energy', 'grad', 'prop', 'properties'):
+        # 'prop' is deliberately NOT here. It is the only admitted runtype that
+        # consumes an EXTERNALLY supplied geometry, expressed in the caller's
+        # frame: load_previous_data writes OQP::xyz_old from it, and
+        # get_basis_overlap then overlaps that against the current -- by then
+        # rotated and translated -- structure. Because the standard frame is
+        # centred on the charge-weighted centroid, the two structures are
+        # physically displaced by a few bohr, so the cross-geometry MO overlap,
+        # the phase/reorder alignment built on it, and NACME are all wrong.
+        # That is PR #319's finite-difference failure mode one level up.
+        # ('properties' was never a run_func key, so it admitted nothing.)
+        if runtype not in ('energy', 'grad'):
             meta['integral_symmetry'] = {'status': f'skipped_runtype_{runtype}'}
             return False
 
@@ -607,6 +617,12 @@ class Molecule:
                 coords = (coords - origin) @ rotation.T
                 self.update_system(coords.ravel())
             if not converged:
+                # Put the molecule back. `input_coords` was captured above and
+                # never used, so every failure exit left the geometry rotated --
+                # and translated, since the standard frame is centred on the
+                # charge-weighted centroid, which moves EVERY molecule including
+                # C1 where the rotation is exactly the identity.
+                self.update_system(input_coords.ravel())
                 meta['integral_symmetry'] = {'status': 'skipped_orientation_not_converged'}
                 return False
 
@@ -622,8 +638,15 @@ class Molecule:
                     'origin': total_origin.tolist(),
                 },
             }
+            # Kept for the second phase, and deliberately OUTSIDE the
+            # integral_symmetry block: every bail in
+            # stage_integral_symmetry_maps replaces that block wholesale, which
+            # would take the coordinates with it. The caller pops this key
+            # immediately after staging, so it never reaches save_data.
+            meta['_reorient_input_coords'] = input_coords.tolist()
             return True
         except Exception as exc:
+            self.update_system(input_coords.ravel())
             meta['integral_symmetry'] = {'status': 'error', 'error': str(exc)}
             return False
 
@@ -2452,6 +2475,19 @@ class Molecule:
 
         if guess_geom:
             self.update_system(np.array(data['coord']))
+            # The geometry just changed under the metadata. Without this, the
+            # point group, operations and labels still describe the coordinates
+            # the job was CONSTRUCTED with, not the ones it will run at -- they
+            # are reported in the log and consumed by the MO/state/mode
+            # labellers, all with exit status 0.
+            #
+            # Re-detecting is the right repair rather than letting the guess
+            # file's own block through: that block also carries staging state
+            # whose Fortran side is not restored (see _SYMMETRY_STAGING_KEYS),
+            # so importing it would claim a reduction this process never made.
+            if (self.symmetry_metadata or {}).get('status', 'disabled') \
+                    != 'disabled':
+                self._detect_symmetry_metadata()
 
     def update_config_json(self):
         # Update the configuration from JSON
@@ -2465,6 +2501,96 @@ class Molecule:
         self.config['scf']['init_scf'] = self.config['json']['scf_type']
         self.config['scf']['init_basis'] = self.config['json']['basis']
         self.config['scf']['init_library'] = self.config['json']['library']
+
+    #: Entries owned by this job's own ``[symmetry]`` section. A guess file is
+    #: a wavefunction guess, not a configuration source, so these are never
+    #: taken from it -- see ``_merge_restored_symmetry_metadata``.
+    _SYMMETRY_CONFIG_KEYS = frozenset({
+        'status', 'enabled', 'requested_point_group', 'requested_subgroup',
+        'label_mo', 'label_states', 'label_modes',
+        'use_integral_symmetry', 'use_response_symmetry',
+        'strict', 'tolerance', 'raw',
+    })
+
+    #: Live staging state, never taken from a guess file at all. These have a
+    #: Fortran-side counterpart (OQP::sym_shell_map, sym_ao_target, sym_ao_sign,
+    #: sym_atom_weight, sym_petite_enable) that put_data does NOT restore, so
+    #: inheriting the Python half alone claims a reduction that is not staged in
+    #: this process: symmetrize_gradient gates on status == 'active' and would
+    #: project a gradient with the producer's operations, and _petite_is_staged
+    #: would let the stability path switch the Fortran flag on with no maps.
+    #: A job that never asked for integral symmetry could pick both up from a
+    #: guess file.
+    _SYMMETRY_STAGING_KEYS = frozenset({
+        'integral_symmetry', 'reduction_maps', 'reduction_maps_full',
+    })
+
+    #: Entries derived from a particular geometry, valid only for it.
+    _SYMMETRY_GEOMETRY_KEYS = frozenset({
+        'point_group', 'subgroup', 'detected_point_group', 'detected_subgroup',
+        'detection', 'integral_symmetry', 'reduction_maps',
+        'mo_labels', 'state_labels', 'mode_labels', 'sym_pair_irrep',
+    })
+
+    def _merge_restored_symmetry_metadata(self, restored, stored_coord=None):
+        """Merge symmetry metadata from a guess file into this job's own.
+
+        Restoring the producer's block wholesale was silently overriding the
+        reader's configuration, which is how a numerical-Hessian child job
+        ended up running with the parent's ``use_integral_symmetry`` even
+        though its own input file said ``false``.  Each child then reoriented
+        into the standard frame of its own displaced geometry while the parent
+        assembled the gradients in the input frame.  Water/6-31G HF numerical
+        frequencies, in cm^-1:
+
+            parent use_integral_symmetry=false   1828.86   3906.50   4001.54
+            parent use_integral_symmetry=true   -2675.60    697.64   2728.85
+
+        -- a spurious imaginary mode, reported with exit status 0.
+
+        Two rules, both following from what the guess file actually is:
+
+        * Configuration switches belong to the job being run, never to the job
+          that produced the guess.
+        * Geometry-derived entries (the detected group, its operations, the
+          standard-frame transform, AO maps, labels) describe the producer's
+          geometry.  A guess is routinely read at a *different* geometry --
+          every optimiser step, every finite-difference displacement -- and a
+          displaced geometry generally has lower symmetry than the reference,
+          so carrying them over asserts symmetry the molecule does not have.
+          They are kept only when the coordinates match, and recomputed from
+          the current geometry otherwise.
+        """
+        local = self.symmetry_metadata
+        if not isinstance(local, dict):
+            local = {}
+
+        same_geometry = False
+        if stored_coord is not None:
+            try:
+                stored = np.asarray(stored_coord, dtype=float).reshape(-1)
+                current = np.asarray(self.get_system(), dtype=float).reshape(-1)
+                same_geometry = (stored.shape == current.shape
+                                 and np.allclose(stored, current,
+                                                 rtol=0.0, atol=1.0e-10))
+            except Exception:
+                same_geometry = False
+
+        # Start from what this job worked out for itself: its own [symmetry]
+        # settings and its own detection of its own geometry. That is always a
+        # complete, self-consistent block, so nothing downstream can end up
+        # missing a key it used to be able to rely on.
+        merged = dict(local)
+        if same_geometry:
+            # Same molecule in the same frame: the producer's block may hold
+            # results this job has not computed yet (labels, AO maps), so take
+            # them -- but never its configuration switches.
+            merged.update({
+                key: value for key, value in restored.items()
+                if key not in self._SYMMETRY_CONFIG_KEYS
+                and key not in self._SYMMETRY_STAGING_KEYS
+            })
+        return merged
 
     def put_data(self, data):
         # convert list to data
@@ -2485,8 +2611,9 @@ class Molecule:
                     print(f"Warning: Key {key} not found in data")
                 except Exception as e:
                     print(f"Error: {e}")
-        if isinstance(data, dict) and 'symmetry_metadata' in data:
-            self.symmetry_metadata = data['symmetry_metadata']
+        if isinstance(data, dict) and isinstance(data.get('symmetry_metadata'), dict):
+            self.symmetry_metadata = self._merge_restored_symmetry_metadata(
+                data['symmetry_metadata'], data.get('coord'))
 
 
     def read_freqs(self):
