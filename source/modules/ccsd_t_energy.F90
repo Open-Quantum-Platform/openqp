@@ -54,7 +54,8 @@ contains
                             cholesky_assemble_mo_blocks
     use parallel, only: par_env_t
     use memory_info, only: oqp_memory_check, oqp_available_memory_gb, &
-                           oqp_mem_str, OQP_MEMORY_SAFETY_FRACTION
+                           oqp_mem_str, OQP_MEMORY_SAFETY_FRACTION, &
+                           oqp_budget_includes_resident
 !$  use omp_lib, only: omp_get_max_threads
     use oqp_tagarray_driver, only: tagarray_get_data, OQP_VEC_MO_A, OQP_E_MO_A
 
@@ -636,7 +637,7 @@ contains
       integer, allocatable :: ord(:)
       integer :: nso, noa, nob, nocc_so, p, q, i, j, ok2
       integer :: nocc_seen, nvir_seen
-      real(kind=dp) :: so_gb, peak_gb
+      real(kind=dp) :: so_gb, peak_gb, resident_gb
 
       noa = int(infos%mol_prop%nelec_a) - nfzc
       nob = int(infos%mol_prop%nelec_b) - nfzc
@@ -657,8 +658,25 @@ contains
       so_gb = cc_uhf_spinorb_gb(nmo)
       peak_gb = cc_uhf_peak_gb(nmo, nocc_so, int(infos%control%cc_ndiis), &
                                nthreads=nthr, triples=do_t, nbf=nbf)
+      ! peak_gb is the whole path's live high-water mark, packed AO store
+      ! included -- the store is still resident while the spin-block tensors
+      ! are transformed out of it, so the assembly stage genuinely holds both.
+      ! But the probe reports what is left AFTER that store was allocated
+      ! (MemAvailable, or the cgroup limit minus current usage), and gao was
+      ! allocated well before this point.  Charging the full peak against it
+      ! counts the store twice and refuses open-shell jobs that fit.  Compare
+      ! only what is still to be allocated.  The replicated cost across local
+      ! ranks is already charged by the guard before the dispatch above.
+      !
+      ! OQP_MEMORY_LIMIT_GB is the exception: it is a flat budget for the whole
+      ! job with nothing subtracted, so against it the store still has to be
+      ! paid for and the full peak is the right number.
+      resident_gb = 0.0_dp
+      if (allocated(gao) .and. .not. oqp_budget_includes_resident()) &
+          resident_gb = packed_gb
       write(iw,'(2X,A,F8.2,A)') 'CCSD(T): spin-orbital tensor  ~', so_gb, ' GB'
-      call oqp_memory_check(peak_gb, 'CCSD(T) open shell', &
+      call oqp_memory_check(max(peak_gb - resident_gb, 0.0_dp), &
+          'CCSD(T) open shell', &
           'freeze more core orbitals or use a smaller basis', iw)
 
       call tagarray_get_data(infos%dat, OQP_VEC_MO_B, mo_b)

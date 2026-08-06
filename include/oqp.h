@@ -204,6 +204,11 @@ struct electron_shell {
 oqp_handle_t *oqp_init();
 int oqp_clean(oqp_handle_t * c_handle);
 int oqp_have_openmp(void);
+
+/* 1 when the memory budget is a flat OQP_MEMORY_LIMIT_GB that still has to
+   cover memory already allocated; 0 when it is the live probe, which reports
+   what remains and has therefore already subtracted it. */
+int oqp_memory_budget_includes_resident(void);
 void oqp_omp_set_num_threads(int n);
 int64_t oqp_get(struct oqp_handle_t *c_handle, char *code,
         int32_t *type_id, int32_t *ndims, int64_t *dims, void **v);

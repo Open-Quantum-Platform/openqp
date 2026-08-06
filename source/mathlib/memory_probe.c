@@ -37,8 +37,67 @@
 #include <sys/types.h>
 #endif
 
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#include <mach/mach_host.h>
+#endif
+
 #if !defined(_WIN32)
 #include <unistd.h>
+#endif
+
+#if defined(__APPLE__)
+/* Pages the kernel can hand out without evicting anything that is still in
+ * use: free, inactive (clean, first to be reclaimed) and purgeable.  This is
+ * the BSD analogue of Linux's MemAvailable; total RAM is not, and using it
+ * let the guard admit a job on a busy machine that then swapped or failed to
+ * allocate.  Returns 0 if the port cannot be queried. */
+static uint64_t darwin_available(void)
+{
+    mach_port_t host = mach_host_self();
+    vm_statistics64_data_t vm;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    vm_size_t pagesz = 0;
+
+    if (host_page_size(host, &pagesz) != KERN_SUCCESS || pagesz == 0)
+        return 0;
+    if (host_statistics64(host, HOST_VM_INFO64,
+                          (host_info64_t) &vm, &count) != KERN_SUCCESS)
+        return 0;
+
+    return ((uint64_t) vm.free_count
+          + (uint64_t) vm.inactive_count
+          + (uint64_t) vm.purgeable_count) * (uint64_t) pagesz;
+}
+#endif
+
+#if defined(__FreeBSD__)
+/* Same intent as darwin_available(): free + inactive + cache pages. */
+static uint64_t freebsd_available(void)
+{
+    const char *keys[3] = { "vm.stats.vm.v_free_count",
+                            "vm.stats.vm.v_inactive_count",
+                            "vm.stats.vm.v_cache_count" };
+    uint64_t pages = 0;
+    int pagesz = 0;
+    size_t len;
+    int i;
+
+    len = sizeof pagesz;
+    if (sysctlbyname("hw.pagesize", &pagesz, &len, NULL, 0) != 0 || pagesz <= 0)
+        return 0;
+
+    for (i = 0; i < 3; i++) {
+        unsigned int v = 0;
+        len = sizeof v;
+        /* v_cache_count is gone on FreeBSD 12+; a missing key just contributes
+         * nothing rather than invalidating the estimate. */
+        if (sysctlbyname(keys[i], &v, &len, NULL, 0) == 0)
+            pages += (uint64_t) v;
+    }
+    if (pages == 0) return 0;
+    return pages * (uint64_t) pagesz;
+}
 #endif
 
 /* Smaller of two limits, treating 0 as "no information". */
@@ -181,6 +240,32 @@ static uint64_t cgroup_self_limit(void)
 }
 #endif
 
+/*
+ * Whether the number oqp_available_memory_bytes() returns already accounts for
+ * memory this process has allocated.
+ *
+ * The probe reports what REMAINS -- MemAvailable, or a cgroup limit minus
+ * current usage -- so anything already allocated has been subtracted from it,
+ * and a caller sizing a future peak must not charge those bytes a second time.
+ * OQP_MEMORY_LIMIT_GB is the opposite: a flat budget for the whole job, with
+ * nothing subtracted, so against it the caller must charge the full peak.
+ *
+ * Returns 1 for the override (resident memory still counts against it),
+ * 0 for the live probe (resident memory is already excluded).
+ */
+int oqp_memory_budget_includes_resident(void)
+{
+    const char *env = getenv("OQP_MEMORY_LIMIT_GB");
+
+    if (env && *env) {
+        char *end = NULL;
+        double gb = strtod(env, &end);
+        if (end != env && gb > 0.0)
+            return 1;
+    }
+    return 0;
+}
+
 uint64_t oqp_available_memory_bytes(void)
 {
     uint64_t limit = 0;
@@ -214,6 +299,7 @@ uint64_t oqp_available_memory_bytes(void)
 #elif defined(__APPLE__) || defined(__FreeBSD__)
     {
         uint64_t bytes = 0;
+        uint64_t avail;
         size_t len = sizeof bytes;
 #if defined(HW_MEMSIZE)
         int mib[2] = { CTL_HW, HW_MEMSIZE };
@@ -222,6 +308,22 @@ uint64_t oqp_available_memory_bytes(void)
 #endif
         if (sysctl(mib, 2, &bytes, &len, NULL, 0) == 0)
             limit = bytes;
+
+        /* HW_MEMSIZE/HW_PHYSMEM is the machine's total RAM, which says nothing
+         * about what is free right now.  The Linux branch above reports what
+         * remains (MemAvailable, cgroup limit minus current usage), and the
+         * callers assume that meaning on every platform: a guard fed total RAM
+         * on a busy 64 GB Mac accepts a job whose additional allocation does
+         * not fit.  Tighten to a real remaining-memory estimate, and if the
+         * kernel will not give one, report unknown (0) rather than pretending
+         * an idle machine -- callers skip the check on 0, which is the
+         * documented contract and the safer of the two wrong answers. */
+#if defined(__APPLE__)
+        avail = darwin_available();
+#else
+        avail = freebsd_available();
+#endif
+        limit = avail == 0 ? 0 : tighter(limit, avail);
     }
 
 #elif !defined(_WIN32)

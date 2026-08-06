@@ -18,7 +18,7 @@
 module memory_info
 
   use precision, only: dp
-  use, intrinsic :: iso_c_binding, only: c_int64_t
+  use, intrinsic :: iso_c_binding, only: c_int64_t, c_int
 
   implicit none
 
@@ -26,6 +26,7 @@ module memory_info
   public :: oqp_available_memory_gb
   public :: oqp_memory_check
   public :: oqp_mem_str
+  public :: oqp_budget_includes_resident
 
   !> Fraction of the probed memory a single estimate may claim.  The
   !> estimates cover a module's own dominant arrays, not the SCF data
@@ -40,9 +41,25 @@ module memory_info
       import :: c_int64_t
       integer(c_int64_t) :: n
     end function
+
+    function oqp_memory_budget_includes_resident() &
+        bind(c, name="oqp_memory_budget_includes_resident") result(n)
+      import :: c_int
+      integer(c_int) :: n
+    end function
   end interface
 
 contains
+
+!> @brief Does the budget still have to cover memory already allocated?
+!>
+!> False for the live probe, which reports what remains and has therefore
+!> already subtracted this process's allocations -- a caller sizing what is
+!> still to come must not charge them twice.  True for OQP_MEMORY_LIMIT_GB,
+!> a flat budget for the whole job against which every byte counts.
+  logical function oqp_budget_includes_resident() result(yes)
+    yes = oqp_memory_budget_includes_resident() /= 0_c_int
+  end function oqp_budget_includes_resident
 
 !> @brief Format a size in GB for humans, picking the unit from the magnitude.
 !>

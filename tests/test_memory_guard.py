@@ -96,3 +96,34 @@ def test_estimate_is_reported_even_on_a_run_that_proceeds(tmp_path):
     line = [ln for ln in log.splitlines() if "estimated peak memory" in ln]
     assert line, log[-2000:]
     assert "available" in line[0]
+
+
+def test_budget_says_whether_resident_memory_still_counts(monkeypatch):
+    """The two budget sources mean different things, and callers depend on it.
+
+    The live probe reports what REMAINS -- MemAvailable, or a cgroup limit
+    minus current usage -- so memory this process already holds has been
+    subtracted from it.  A caller sizing a future peak that includes an
+    already-allocated array (the open-shell CC guard charges the packed AO
+    store) must not charge those bytes twice against such a budget.
+    OQP_MEMORY_LIMIT_GB is the opposite: a flat number for the whole job with
+    nothing subtracted, so there the full peak is the right comparison.
+
+    Getting this backwards is silent in both directions -- refusing jobs that
+    fit, or admitting ones that do not -- so pin which is which.
+    """
+    import oqp
+
+    monkeypatch.delenv("OQP_MEMORY_LIMIT_GB", raising=False)
+    assert oqp.lib.oqp_memory_budget_includes_resident() == 0, \
+        "the live probe already excludes resident memory"
+
+    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "64")
+    assert oqp.lib.oqp_memory_budget_includes_resident() == 1, \
+        "an explicit budget still has to cover memory already allocated"
+
+    # Unparseable values fall through to the probe, so they follow its meaning.
+    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "not-a-number")
+    assert oqp.lib.oqp_memory_budget_includes_resident() == 0
+    monkeypatch.setenv("OQP_MEMORY_LIMIT_GB", "-8")
+    assert oqp.lib.oqp_memory_budget_includes_resident() == 0
