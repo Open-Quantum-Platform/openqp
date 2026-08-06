@@ -203,11 +203,80 @@ static uint64_t cgroup_walk(const char *mount, const char *relpath,
     return best;
 }
 
+/* The `root` field of the mount at `mountpoint`, from /proc/self/mountinfo.
+ *
+ * Line format is: id parent major:minor ROOT MOUNTPOINT options... so the two
+ * fields wanted are the fourth and fifth.  Returns 0 when the mount is not
+ * listed, which leaves the caller with the unmodified path. */
+static int cgroup_mount_root(const char *mountpoint, char *out, size_t outsz)
+{
+    FILE *f = fopen("/proc/self/mountinfo", "r");
+    char line[4096];
+    int found = 0;
+
+    if (!f) return 0;
+    /* Hand-split on spaces rather than strtok_r: that is POSIX, and under a
+     * strict -std=c11 compile it is an implicit declaration.  Mountinfo escapes
+     * spaces in paths as \040, which cannot occur in the cgroup mount points
+     * looked up here, so plain fields are enough. */
+    while (fgets(line, sizeof line, f)) {
+        const char *p = line, *root = NULL, *mnt = NULL;
+        size_t rootlen = 0, mntlen = 0;
+        int field;
+
+        for (field = 1; field <= 5; field++) {
+            const char *start;
+            while (*p == ' ') p++;
+            start = p;
+            while (*p && *p != ' ' && *p != '\n') p++;
+            if (p == start) break;
+            if (field == 4) { root = start; rootlen = (size_t)(p - start); }
+            if (field == 5) { mnt  = start; mntlen  = (size_t)(p - start); }
+        }
+        if (!root || !mnt) continue;
+        if (strlen(mountpoint) != mntlen ||
+            strncmp(mnt, mountpoint, mntlen) != 0) continue;
+        if (rootlen < outsz) {
+            memcpy(out, root, rootlen);
+            out[rootlen] = '\0';
+            found = 1;
+        }
+        break;
+    }
+    fclose(f);
+    return found;
+}
+
+/* Drop the mount's hierarchy root from a /proc/self/cgroup path.
+ *
+ * /proc/self/cgroup reports paths relative to the hierarchy root, not to the
+ * mount point.  Those coincide only when the cgroup filesystem is mounted with
+ * root "/".  A container that bind-mounts its own pod or service cgroup at
+ * /sys/fs/cgroup has a non-root mount root, and concatenating the two then
+ * yields a doubled path that does not exist -- so the walk falls back to the
+ * looser ancestor cap and can admit an allocation past the process's real
+ * limit.  Strip the prefix so the join lands inside the mount. */
+static const char *cgroup_relative(const char *cgpath, const char *mountpoint,
+                                   char *rootbuf, size_t rootsz)
+{
+    size_t rlen;
+
+    if (!cgroup_mount_root(mountpoint, rootbuf, rootsz)) return cgpath;
+    if (rootbuf[0] == '/' && rootbuf[1] == '\0') return cgpath;
+
+    rlen = strlen(rootbuf);
+    if (strncmp(cgpath, rootbuf, rlen) != 0) return cgpath;
+    if (cgpath[rlen] == '\0') return "/";
+    if (cgpath[rlen] != '/') return cgpath;   /* only a partial name match */
+    return cgpath + rlen;
+}
+
 /* The process's own cgroup limit, resolved through /proc/self/cgroup.
  * v2 lines read "0::<path>"; v1 lists one line per controller and the
  * memory one reads "<n>:memory:<path>". */
 static uint64_t cgroup_self_limit(void)
 {
+    char rootbuf[4096];
     FILE *f = fopen("/proc/self/cgroup", "r");
     char line[4096];
     uint64_t best = 0;
@@ -218,7 +287,9 @@ static uint64_t cgroup_self_limit(void)
         if (nl) *nl = '\0';
         if (strncmp(line, "0::", 3) == 0) {
             best = tighter(best,
-                cgroup_walk("/sys/fs/cgroup", line + 3,
+                cgroup_walk("/sys/fs/cgroup",
+                            cgroup_relative(line + 3, "/sys/fs/cgroup",
+                                            rootbuf, sizeof rootbuf),
                             "memory.max", "memory.current"));
         } else {
             char *c1 = strchr(line, ':');
@@ -229,7 +300,9 @@ static uint64_t cgroup_self_limit(void)
             /* the controller field may list several, comma separated */
             if (strstr(c1 + 1, "memory")) {
                 best = tighter(best,
-                    cgroup_walk("/sys/fs/cgroup/memory", c2 + 1,
+                    cgroup_walk("/sys/fs/cgroup/memory",
+                                cgroup_relative(c2 + 1, "/sys/fs/cgroup/memory",
+                                                rootbuf, sizeof rootbuf),
                                 "memory.limit_in_bytes",
                                 "memory.usage_in_bytes"));
             }

@@ -59,6 +59,20 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _run_raw(tmp_path, name, deck_text):
+    """Run a deck and return (returncode, log text) without demanding success."""
+    inp = tmp_path / f"{name}.inp"
+    inp.write_text(deck_text)
+    for xyz in EXAMPLES.glob("*.xyz"):
+        (tmp_path / xyz.name).write_bytes(xyz.read_bytes())
+    proc = subprocess.run(
+        [sys.executable, "-m", "oqp.pyoqp", str(inp)],
+        capture_output=True, cwd=str(tmp_path), env=dict(os.environ), timeout=1800,
+    )
+    log_path = inp.with_suffix(".log")
+    return proc.returncode, (log_path.read_text() if log_path.exists() else "")
+
+
 def _run(tmp_path, name, deck_text):
     """Run a deck and return (log text, total CCSD(T) energy)."""
     inp = tmp_path / f"{name}.inp"
@@ -119,3 +133,21 @@ def test_cholesky_direct_control_actually_skips_the_stored_integrals(tmp_path):
         "cholesky_direct=false still took the direct route"
 
     assert abs(on_e - off_e) < 1e-8, (on_e, off_e)
+
+
+def test_a_factorisation_that_produced_nothing_is_refused(tmp_path):
+    """cholesky_tol above the largest integral diagonal must not "succeed".
+
+    Neither backend calls this truncation -- it met the tolerance, in its own
+    terms -- so nothing flagged it. The zero-width MO blocks then reconstruct
+    every two-electron block as zero and the run reports a converged CCSD(T)
+    energy that is nothing of the kind. A silent HF-like answer to a CCSD(T)
+    request is the worst failure mode on this path, so it must abort.
+    """
+    deck = STORED.read_text().replace("cholesky_tol=1.0e-10", "cholesky_tol=1.0e6")
+    rc, log = _run_raw(tmp_path, "empty_factorisation", deck)
+
+    assert rc != 0, f"a zero-vector factorisation must not report success:\n{log[-3000:]}"
+    assert "produced no vectors" in log, log[-3000:]
+    # And it must not have gone on to publish a correlated energy.
+    assert "E(CCSD(T), total)" not in log, log[-3000:]

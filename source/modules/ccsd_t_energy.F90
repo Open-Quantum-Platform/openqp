@@ -307,12 +307,16 @@ contains
       mem_ao = 0.0_dp
     else
       mem_ao = real(cc_packed_length(nbf),dp)
-      ! The half-transformed intermediate belongs to cc_build_mo_blocks alone.
-      ! The stored-Cholesky route factorises the packed array in place and
-      ! assembles its MO blocks from the vectors, and the open-shell transforms
-      ! go through cc_build_full_mo whose scratch is O(nbf^2) -- charging
-      ! either of them for a workspace only the explicit ladder allocates
-      ! refused jobs that fit.
+      ! The half-transformed intermediate charged here belongs to
+      ! cc_build_mo_blocks alone.  The stored-Cholesky route factorises the
+      ! packed array in place and assembles its MO blocks from the vectors, so
+      ! it never allocates one, and charging it refused jobs that fit.
+      !
+      ! Open shell is excluded here for a different reason, not because it has
+      ! no such workspace: cc_build_full_mo allocates half(nmopair, npair),
+      ! which is fourth order rather than the O(nbf^2) an earlier version of
+      ! this comment claimed.  It is charged in cc_uhf_peak_gb instead, where
+      ! the rest of that path's accounting lives.
       if (.not. use_chol .and. .not. open_shell) then
         mem_ao = mem_ao + 0.25_dp*real(nmo,dp)**2*real(nbf,dp)**2
       end if
@@ -391,7 +395,14 @@ contains
       ! budget by 3 before sizing them.  Charging one buffer per thread let
       ! the guard pass jobs that failed as soon as the ladder's parallel
       ! region allocated its private storage.
+      ! The o^2v^2-shaped allowance below cannot stand in for the occupied-heavy
+      ! shapes: ccsd_iterate allocates Woooo(no^4) and both Looov and tmp2b at
+      ! no^3*nv, concurrently with the oooo/ooov blocks it was handed.  When
+      ! no >> nv -- a large minimal-basis case -- 14*o^2v^2 is nowhere near
+      ! them, and the job passed here and then failed allocating the solver
+      ! workspace.  Charge them at their own dimensions.
       mem_solver = mem_mo_solver &
+                 + rno**4 + 2.0_dp*rno**3*rnv &
                  + 14.0_dp*rno**2*rnv**2 &
                  + 2.0_dp*rno*rnv**3 + 2.0_dp*rnv**3*rno &
                  + 2.0_dp*real(max(int(infos%control%cc_ndiis),0),dp) &
@@ -545,6 +556,21 @@ contains
         write(iw,'(2X,A,I0,A,ES9.2,A,F5.1,A)') &
             'CCSD(T): Cholesky vectors = ', nchol, ' (residual ', chol_err, &
             ', ', real(nchol,dp)/real(nbf,dp), ' per basis function)'
+        if (nchol == 0) then
+          ! A tolerance above the largest AO-integral diagonal stops the
+          ! decomposition before it takes a single vector, and neither backend
+          ! calls that truncation -- it reached the tolerance, in its own terms.
+          ! Left alone, the zero-width blocks below reconstruct every
+          ! two-electron block as zero and the run reports a converged
+          ! correlated energy that is nothing of the kind.  Silently returning
+          ! an HF-like number for a CCSD(T) request is the worst of the
+          ! failure modes on this path, so refuse it explicitly.
+          call show_message('CCSD(T): the Cholesky decomposition produced no ' // &
+              'vectors -- [cc] cholesky_tol is larger than the largest ' // &
+              'integral diagonal, so every reconstructed two-electron block ' // &
+              'would be zero. Tighten cholesky_tol (1e-10 is a sane default).', &
+              with_abort)
+        end if
         if (chol_trunc) then
           ! Refuse rather than warn.  A truncated factorisation means the
           ! requested residual was never reached, so cholesky_tol has stopped

@@ -104,6 +104,7 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples, nbf) result(gb
   integer, intent(in), optional :: nbf
   real(dp) :: gb
   real(dp) :: nso, no, nv, assembly, solve, trip, amp, gao_len
+  real(dp) :: rnbf, npair, half_ws
   integer :: nthr
   logical :: do_t
 
@@ -111,13 +112,21 @@ pure function cc_uhf_peak_gb(nmo, nocc, ndiis, nthreads, triples, nbf) result(gb
   no  = real(nocc,dp)
   nv  = nso - no
 
-  gao_len = real(nmo,dp)
-  if (present(nbf)) gao_len = real(nbf,dp)
+  rnbf = real(nmo,dp)
+  if (present(nbf)) rnbf = real(nbf,dp)
+  npair = rnbf*(rnbf+1.0_dp)/2.0_dp
   ! packed eightfold AO store, ~ nbf^4/8 at large nbf
-  gao_len = (gao_len*(gao_len+1.0_dp)/2.0_dp)
-  gao_len = gao_len*(gao_len+1.0_dp)/2.0_dp
+  gao_len = npair*(npair+1.0_dp)/2.0_dp
 
-  assembly = max(gao_len + 3.0_dp*real(nmo,dp)**4, &
+  ! cc_build_full_mo's half-transformed workspace, half(nmopair, npair).  It is
+  ! fourth order -- nmo^2*nbf^2/4 at large nbf -- not the O(nbf^2) scratch the
+  ! caller's comment used to claim, and it is live inside each of the three
+  ! spatial transforms while gao and the already-built tensors are held.  Left
+  ! out, an aggressively frozen-core open-shell job passed this guard and then
+  ! failed inside the transformation.
+  half_ws = (real(nmo,dp)*(real(nmo,dp)+1.0_dp)/2.0_dp)*npair
+
+  assembly = max(gao_len + 3.0_dp*real(nmo,dp)**4 + half_ws, &
                  3.0_dp*real(nmo,dp)**4 + nso**4)
 
   amp   = no*nv + no**2*nv**2
