@@ -2320,7 +2320,8 @@ contains
     use blas_thread, only: blas_thread_count, blas_thread_set
     use, intrinsic :: iso_c_binding, only: c_int64_t
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
-!$                     omp_get_max_threads, omp_get_num_procs, omp_get_wtime
+!$                     omp_get_max_threads, omp_get_num_procs, omp_get_wtime, &
+!$                     omp_set_num_threads
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2350,6 +2351,7 @@ contains
     integer :: myThread, numThreads
 
     integer(c_int64_t) :: nBlasThreads
+    integer :: nOmpThreads
 
     ! Opt 1: collocation-Phi cache (geometry-only reuse across SCF iterations)
     integer, parameter :: nAOVecs_tbl(0:3) = [1, 4, 10, 20]
@@ -2373,12 +2375,25 @@ contains
 !   when all cores are already busy with OpenMP threads it oversubscribes
 !   the machine and serializes on its pool lock.  Cap the BLAS threads
 !   such that OpenMP x BLAS does not exceed the core count.
+!
+!   ON AN OpenMP BUILD OF OpenBLAS THE BLAS SETTER IS omp_set_num_threads.
+!   libopenblaso64's openblas_set_num_threads is goto_set_num_threads, whose
+!   USE_OPENMP body calls omp_set_num_threads, so capping "BLAS" to
+!   num_procs/num_threads also capped OPENMP to that ratio -- and the region
+!   below is the one the cap exists to protect.  With OMP_NUM_THREADS at the
+!   core count the ratio is 1 and the whole grid build ran SERIAL.  Same
+!   defect, same cause and same fix as int2_twoei (see source/integrals/
+!   int2.F90): take the count BEFORE the cap (after it, omp_get_max_threads
+!   already reads the capped value) and DECLARE the region's width with
+!   num_threads, which no global setter can undo.
+    nOmpThreads = 1
+!$  nOmpThreads = omp_get_max_threads()
     nBlasThreads = -1
-!$  if (omp_get_max_threads() > 1) then
+!$  if (nOmpThreads > 1) then
 !$    nBlasThreads = blas_thread_count()
 !$    if (nBlasThreads > 0) then
 !$      call blas_thread_set(int(max(1, &
-!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$               omp_get_num_procs()/nOmpThreads), c_int64_t))
 !$    end if
 !$  end if
 
@@ -2422,6 +2437,7 @@ contains
          tenv(1:1) == 'o' .or. tenv(1:1) == 'O'))
 
 !$omp parallel &
+!$omp   num_threads(nOmpThreads) &
 !$omp   private(iChunk, chunkSize, numThreads, done) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
@@ -2565,6 +2581,9 @@ contains
     end if
 
     call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
+    ! ...and put the OpenMP count back to exactly what this routine found.  On
+    ! an OpenMP OpenBLAS the line above has just moved it to the BLAS count.
+!$  call omp_set_num_threads(nOmpThreads)
 
     call xc_dat%parallel_stop()
     call xc_dat%pe%allreduce(exc, 1)
@@ -2593,7 +2612,8 @@ contains
     use blas_thread, only: blas_thread_count, blas_thread_set
     use, intrinsic :: iso_c_binding, only: c_int64_t
 !$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num, &
-!$                     omp_get_max_threads, omp_get_num_procs
+!$                     omp_get_max_threads, omp_get_num_procs, &
+!$                     omp_set_num_threads
 
     implicit none
     class(xc_consumer_t), intent(inout) :: xc_dat
@@ -2609,14 +2629,18 @@ contains
     integer :: iChunk, chunkSize
     integer :: myThread, numThreads
     integer(c_int64_t) :: nBlasThreads
+    integer :: nOmpThreads
 
-!   Cap BLAS threads inside the slice-parallel region, see run_xc
+!   Cap BLAS threads inside the slice-parallel region, and declare the width of
+!   that region so the cap cannot shrink it -- see run_xc for why it could.
+    nOmpThreads = 1
+!$  nOmpThreads = omp_get_max_threads()
     nBlasThreads = -1
-!$  if (omp_get_max_threads() > 1) then
+!$  if (nOmpThreads > 1) then
 !$    nBlasThreads = blas_thread_count()
 !$    if (nBlasThreads > 0) then
 !$      call blas_thread_set(int(max(1, &
-!$               omp_get_num_procs()/omp_get_max_threads()), c_int64_t))
+!$               omp_get_num_procs()/nOmpThreads), c_int64_t))
 !$    end if
 !$  end if
 
@@ -2628,6 +2652,7 @@ contains
     if (dftthr > 1.1d-15) wcutoff = 1.0d-08/npt
 
 !$omp parallel &
+!$omp   num_threads(nOmpThreads) &
 !$omp   private(iChunk, chunkSize, numThreads) &
 !$omp   private(iSlice, numNzPts, xce) &
 !$omp   private(myThread), &
@@ -2699,6 +2724,8 @@ contains
 !$omp end parallel
 
     call blas_thread_set(nBlasThreads)  ! no-op if nBlasThreads == -1
+    ! ...and put the OpenMP count back, see run_xc
+!$  call omp_set_num_threads(nOmpThreads)
 
     call xc_dat%parallel_stop()
 
